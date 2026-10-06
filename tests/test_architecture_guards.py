@@ -24,8 +24,10 @@ one SKIPS its test with the reason (it is never counted as zero).
 from __future__ import annotations
 
 import ast
+import configparser
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -267,10 +269,20 @@ def _duplicate_clusters() -> list[str]:
         timeout=300,
         check=False,
     )
-    # pylint's exit status is a bit mask of message categories; 32 is a usage error.
-    assert not proc.returncode & 32, proc.stdout + proc.stderr
-    clusters, current = [], None
-    for line in proc.stdout.splitlines():
+    return _parse_duplicates(proc.returncode, proc.stdout + proc.stderr)
+
+
+def _parse_duplicates(returncode: int, output: str) -> list[str]:
+    """The R0801 clusters in pylint's text output, each as its `module:[lines]` members.
+
+    pylint's exit status is a bit mask: 1 fatal, 2 error, 32 usage error; 4, 8 and 16
+    only say which message categories were emitted. A run with any of the first three
+    did not measure anything, and its empty output must not read as "no clusters" (the
+    ratchet would then ask for a baseline of 0 and stop guarding)."""
+    assert not returncode & (1 | 2 | 32), f"pylint could not run (exit {returncode}):\n{output}"
+    clusters: list[list[str]] = []
+    current: list[str] | None = None
+    for line in output.splitlines():
         if "R0801" in line:
             current = []
             clusters.append(current)
@@ -278,6 +290,7 @@ def _duplicate_clusters() -> list[str]:
             current.append(line[2:])
         else:
             current = None
+    assert all(clusters), f"an R0801 message without its members:\n{output}"
     return [" ~ ".join(c) for c in clusters]
 
 
@@ -307,10 +320,33 @@ def test_ratchet(kind: str) -> None:
     )
 
 
+#: The contracts `.importlinter` must hold: a missing section is a guard removed, and
+#: import-linter itself reports success for a file with no contracts at all.
+CONTRACTS = frozenset(
+    {
+        "layers",
+        "surfaces-through-api",
+        "subprocess-home",
+        "fsio-home",
+        "digest-home",
+        "extras-one-adapter",
+    }
+)
+
+
+def _contracts() -> dict[str, configparser.SectionProxy]:
+    ini = configparser.ConfigParser()
+    ini.read(ROOT / ".importlinter", encoding="utf-8")
+    prefix = "importlinter:contract:"
+    return {name[len(prefix) :]: ini[name] for name in ini.sections() if name.startswith(prefix)}
+
+
 def test_import_contracts() -> None:
-    """The contracts in `.importlinter` are kept, and none of their allowlist entries is
-    stale (`unmatched_ignore_imports_alerting = error`)."""
+    """The contracts in `.importlinter` are all there, each one is kept, and none of their
+    allowlist entries is stale (`unmatched_ignore_imports_alerting = error`)."""
     pytest.importorskip("importlinter", reason="import-linter (a dev dependency) is not installed")
+    contracts = _contracts()
+    assert CONTRACTS <= set(contracts), f"contracts missing: {sorted(CONTRACTS - set(contracts))}"
     proc = subprocess.run(
         [
             sys.executable,
@@ -325,11 +361,14 @@ def test_import_contracts() -> None:
         timeout=300,
         check=False,
     )
+    output = proc.stdout + proc.stderr
     assert proc.returncode == 0, (
         "an architecture contract in .importlinter is broken. Fix the import, or -- when "
         "a refactor moved an allowed import -- move its ignore_imports entry; never add "
-        "one for new code.\n" + proc.stdout + proc.stderr
+        "one for new code.\n" + output
     )
+    not_kept = [c["name"] for c in contracts.values() if f"{c['name']} KEPT" not in output]
+    assert not not_kept, f"contracts import-linter did not report as kept: {not_kept}\n{output}"
 
 
 #: Extra -> the top-level import names its packages provide.
@@ -344,24 +383,14 @@ _EXTRA_MODULES: dict[str, list[str]] = {
 def test_every_extra_has_a_contract() -> None:
     """Each optional extra pyproject declares is named in the one-adapter contract, so an
     extra cannot be added without its import being confined to one module."""
-    import tomllib
-
     extras = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"].get(
         "optional-dependencies", {}
     )
-    contract = (
-        (ROOT / ".importlinter")
-        .read_text("utf-8")
-        .split("[importlinter:contract:extras-one-adapter]", 1)[1]
-    )
-    forbidden = contract.split("forbidden_modules =", 1)[1].split("allow_indirect_imports", 1)[0]
-    named = {line.strip() for line in forbidden.splitlines() if line.strip()}
-    missing = {
-        extra: [m for m in modules if m not in named] for extra, modules in _EXTRA_MODULES.items()
-    }
     assert set(extras) == set(_EXTRA_MODULES), (
         f"pyproject declares extras {sorted(extras)}; this test knows {sorted(_EXTRA_MODULES)}"
     )
+    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
+    missing = {e: [m for m in mods if m not in named] for e, mods in _EXTRA_MODULES.items()}
     assert not any(missing.values()), f"extras whose import names are not forbidden: {missing}"
 
 
@@ -396,3 +425,17 @@ def test_counter_counts_what_it_says(source: str, kind: str, expected: int) -> N
     visitor = _Sites("ddflow.services.example", False)
     visitor.visit(ast.parse(source))
     assert len(visitor.sites[kind]) == expected, visitor.sites[kind]
+
+
+def test_duplicate_parser_refuses_a_run_that_measured_nothing() -> None:
+    """A crashed pylint prints no R0801 lines; that is "could not run", never zero."""
+    with pytest.raises(AssertionError, match="could not run"):
+        _parse_duplicates(1, "astroid crashed")
+    with pytest.raises(AssertionError, match="could not run"):
+        _parse_duplicates(2, "")
+    sample = (
+        "x.py:1:0: R0801: Similar lines in 2 files\n==a.b:[1:9]\n==a.c:[4:12]\n    code\n"
+        "y.py:1:0: R0801: Similar lines in 2 files\n==a.d:[1:9]\n==a.e:[2:10]\n"
+    )
+    assert _parse_duplicates(8, sample) == ["a.b:[1:9] ~ a.c:[4:12]", "a.d:[1:9] ~ a.e:[2:10]"]
+    assert _parse_duplicates(0, "") == []
