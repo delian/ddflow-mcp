@@ -202,6 +202,26 @@ def globs_overlap(a: str, b: str) -> bool:
     return pa.startswith(pb) or pb.startswith(pa)
 
 
+def path_in_glob(path: str, glob: str) -> bool:
+    """Is the concrete ``path`` INSIDE the claim glob ``glob``?
+
+    Not `globs_overlap`, whose literal-prefix rule is right for "could two patterns
+    share a file" and wrong here: a staged `a.md` counted as covered by a claim on
+    `a.md.bak` (B1997c64c5a). Inside means: the glob itself, a file under a directory
+    glob (`src/a` or `src/a/`), an fnmatch match (whose `*` crosses `/`, as the claims
+    written so far assume), or -- for a glob with a `/` -- git's match, where a `**/` on
+    a path boundary is zero or more directories (`src/**/*.py` covers `src/b.py`).
+    """
+    if path == glob or path.startswith(glob.rstrip("/") + "/") or fnmatch(path, glob):
+        return True
+    if "/" not in glob.rstrip("/"):
+        return False  # git would match a bare name at any depth; a claim on `a.md` is one file
+    try:
+        return bool(_gitattributes_re(glob).match(path))
+    except re.error:
+        return False
+
+
 def shared_globs(cfg: Config) -> list[str]:
     """`[lease] shared_globs` and `append_only_globs`: paths many items may hold at once
     (D-shared-globs), plus every SELECTED export target (D-export (2)): a generated document
