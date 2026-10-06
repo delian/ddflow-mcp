@@ -26,7 +26,6 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, overload
 
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
@@ -211,14 +210,6 @@ def ensure_ignored_dir(d: Path | str, *, comment: str = "", mode: int | None = N
     return d
 
 
-@overload
-def repo_rel(
-    repo: Path | str, path: Path | str, *, as_given: bool = ..., strict: Literal[True] = ...
-) -> str | None: ...
-@overload
-def repo_rel(
-    repo: Path | str, path: Path | str, *, as_given: bool = ..., strict: Literal[False]
-) -> str: ...
 def repo_rel(
     repo: Path | str, path: Path | str, *, as_given: bool = False, strict: bool = True
 ) -> str | None:
