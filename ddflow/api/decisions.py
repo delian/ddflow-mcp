@@ -122,6 +122,13 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
         "supersedes": csv_list(draft.supersedes),
     }
     with log.transaction():
+        minted = IDS.confirm(
+            cfg,
+            "decision",
+            minted,
+            used=IDS.used_now(log),
+            hash_parts=(draft.title, draft.decision),
+        )
         log.append("decision.recorded", did, fields | IDS.key_field(minted) | chk.fields)
         DD.after_add(log, cfg, did, chk)
     return O.ok(

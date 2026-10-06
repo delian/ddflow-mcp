@@ -66,22 +66,25 @@ def _not_held(log, cfg, it) -> O.Outcome | None:
 def _record(log, cfg, st, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
     from ..services import jobs as J
 
-    minted = IDS.mint(cfg, st, "job", events=log.read_all, hash_parts=(item, command, str(pid)))
+    parts = (item, command, str(pid))
+    minted = IDS.mint(cfg, st, "job", events=log.read_all, hash_parts=parts)
     jid = minted.id
-    log.append(
-        "job.started",
-        jid,
-        {
-            **IDS.key_field(minted),
-            "item": item,
-            "command": command,
-            "pid": pid,
-            "host": J.host(),
-            "proc_start": J.proc_start(pid),
-            "log": log_path,
-            "cwd": cwd,
-        },
-    )
+    with log.transaction():
+        minted = IDS.confirm(cfg, "job", minted, used=IDS.used_now(log), hash_parts=parts)
+        log.append(
+            "job.started",
+            jid,
+            {
+                **IDS.key_field(minted),
+                "item": item,
+                "command": command,
+                "pid": pid,
+                "host": J.host(),
+                "proc_start": J.proc_start(pid),
+                "log": log_path,
+                "cwd": cwd,
+            },
+        )
     return jid
 
 

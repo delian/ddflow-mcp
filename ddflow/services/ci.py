@@ -241,11 +241,15 @@ def bug_id(check: str, cfg: Config | None = None) -> str:
 
 
 def is_filing_of(bug: str, base: str) -> bool:
-    """Whether ``bug`` is ``base`` itself or one of its re-filings (`refile_id`)."""
-    return bug == base or bug.startswith(base + "-")
+    """Whether ``bug`` is ``base`` itself or one of its re-filings (the id service's)."""
+    from ..core import ids as IDS
+
+    return IDS.is_filing_of(bug, base)
 
 
 def refile_id(base: str, sha: str) -> str:
-    """A failing check's bug filed AGAIN after its first bug was fixed: the stable id with
-    the failing commit's short sha, so it is a new bug and not a reopening."""
-    return "-".join((base, sha[:7]))
+    """A failing check's bug filed AGAIN after its first bug was fixed: a new bug, not a
+    reopening, minted by the id service (`ids.refile`)."""
+    from ..core import ids as IDS
+
+    return IDS.refile(base, sha)
