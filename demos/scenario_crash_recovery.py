@@ -38,11 +38,12 @@ SCAFFOLD = {
 }
 
 
-def _while_live(sc: Scenario, check):
-    """Run ``check`` inside DELTA's live lease and return what it returned.
+def _while_live(sc: Scenario, check, holder: str = "delta"):
+    """Run ``check`` inside ``holder``'s live lease (DELTA's unless said) and return what
+    it returned.
 
     Judged against the LEASE'S OWN CLOCK, not a margin: the check counts only when it
-    FINISHED before the lease that DELTA's last heartbeat started could expire -- an
+    FINISHED before the lease that the holder's last heartbeat started could expire -- an
     upper bound on when it looked. At load average 100-190 one process could outlive an
     8 s lease, and the scenario failed on a correct answer (B11e64b1e8c, after
     Bdc7fe4dbbb widened the margin once). So a check that ran too late is re-observed
@@ -50,11 +51,13 @@ def _while_live(sc: Scenario, check):
     window: two in a row would put the second one's start beyond the bound.
     """
     for attempt in range(1, LIVE_ATTEMPTS + 1):
-        sc.ddflow("heartbeat", "P1.T1", agent="delta")  # DELTA's last one
+        sc.ddflow("heartbeat", "P1.T1", agent=holder)  # the holder's last one
         # Read BEFORE the check, so nothing the check does can move the bound. Defensive:
         # neither a refused claim nor a read-only recover renews the lease today.
         lease = sc.jddflow("show", "P1.T1")["lease"]
-        sc.check("the live lease is DELTA's", lease["holder"] == "delta", json.dumps(lease))
+        sc.check(
+            f"the live lease is {holder.upper()}'s", lease["holder"] == holder, json.dumps(lease)
+        )
         renewed = lease["renewed_at"]
         result = check()
         done = time.time()
@@ -250,7 +253,10 @@ def run(sc: Scenario) -> None:
     sc.check("T2 stayed available throughout the whole incident", "P1.T2" in ready, str(ready))
 
     sc.step("The event log tells the full story of the incident")
-    _, out, _ = sc.ddflow("doctor")
+    # Inside EPSILON's live lease (8 s): under load the steps since its claim outlived it,
+    # and doctor rightly reported the expired lease as a problem (bug Bfb0e454b49).
+    code, out, err = _while_live(sc, lambda: sc.ddflow("doctor", expect=None), holder="epsilon")
+    sc.check("doctor exits 0 inside the live lease", code == 0, out + err)
     sc.check(
         "doctor reports a healthy log after recovery",
         "Healthy" in out or "problem" not in out.lower(),
