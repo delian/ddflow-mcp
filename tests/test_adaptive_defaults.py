@@ -154,10 +154,20 @@ def test_gate_failure_ratio_without_a_baseline_is_unavailable(events):
     assert FS.gate_failure_ratio(events, T0) is None
 
 
-def test_a_clean_baseline_counts_as_one_failure():
-    # 40 baseline outcomes, none failed: the rate is taken as 1/40, so half failing now is 20x
+def test_a_clean_baseline_is_floored_not_ignored():
+    # 40 baseline outcomes, none failed: the rate is floored at 1/20, so half failing now is 10x
     events = _outcomes(T0 - 2 * DAY, 40, 0) + _outcomes(T0 - 10 * MIN, 5, 5)
-    assert FS.gate_failure_ratio(events, T0) == pytest.approx(20.0)
+    assert FS.gate_failure_ratio(events, T0) == pytest.approx(10.0)
+
+
+def test_one_failure_after_a_long_clean_week_does_not_shrink():
+    # 2000 clean baseline outcomes: without the floor this read as 200x
+    events = _outcomes(T0 - 2 * DAY, 2000, 0) + _outcomes(T0 - 10 * MIN, 9, 1)
+    ratio = FS.gate_failure_ratio(events, T0)
+    assert ratio == pytest.approx(2.0)
+    assert not ratio > SHIPPED_MARKS["gate_failure_ratio"]["high"]  # not over: no shrink
+    events = _outcomes(T0 - 2 * DAY, 2000, 0) + _outcomes(T0 - 10 * MIN, 8, 2)
+    assert FS.gate_failure_ratio(events, T0) > SHIPPED_MARKS["gate_failure_ratio"]["high"]
 
 
 def test_the_strictest_fallback_ignores_a_partial_table():
