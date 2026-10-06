@@ -109,8 +109,10 @@ def hit_origin(table: str, row: dict) -> Origin | None:
 
 
 def hit_kind(table: str, row: dict) -> str:
-    """The kind a recalled hit is fenced as: a note is a note, not a prompt."""
-    return "note" if row.get("role") == "note" else TABLE_KIND[table]
+    """The kind a recalled hit is fenced as: a note is a note and a session summary a
+    summary, not the operator's prompt."""
+    role = row.get("role")
+    return role if table == "prompts" and role in ("note", "summary") else TABLE_KIND[table]
 
 
 def clean(value: str) -> str:
