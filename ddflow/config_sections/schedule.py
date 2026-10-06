@@ -19,6 +19,7 @@ FLOW_SIGNALS: tuple[str, ...] = (
     "disk_pressure",
     "reviewer_latency_ratio",
     "gate_failure_rate",
+    "gate_failure_ratio",
     "merge_failure_rate",
     "loop_findings",
     "independent_ready",
@@ -26,13 +27,52 @@ FLOW_SIGNALS: tuple[str, ...] = (
 #: The marks a signal may carry, higher always worse: at or under `low` healthy, over
 #: `high` bad, at or over `critical` (optional) pauses admission.
 SIGNAL_MARKS = ("low", "high", "critical")
+#: The knob's dotted name.
+SIGNALS = "schedule.signals"
+
+
+#: The shipped marks (D-adaptive-flow-accepted for load; D-unify 8 for the rest). Memory and
+#: disk are pressures, `1 - free fraction`: free memory under 15% shrinks the limit and
+#: under 5% pauses admission; free disk under 10% shrinks and under 3% pauses. The two
+#: ratios are to the project's own baseline: over 2x shrinks. Each `low` is where the
+#: signal counts as healthy again (a hysteresis band below `high`), so a value hovering
+#: at the mark neither grows nor shrinks the limit.
+SHIPPED_MARKS: dict[str, dict[str, float]] = {
+    "load_per_core": {"low": 0.15, "high": 0.75},
+    "memory_pressure": {"low": 0.75, "high": 0.85, "critical": 0.95},
+    "disk_pressure": {"low": 0.85, "high": 0.90, "critical": 0.97},
+    "reviewer_latency_ratio": {"low": 1.5, "high": 2.0},
+    "gate_failure_ratio": {"low": 1.5, "high": 2.0},
+}
 
 
 def default_signals() -> dict[str, Any]:
-    """The shipped `[schedule.signals]`: every signal enabled, and the marks the
-    controller ships with (`flowcontrol.Params`): load per core 0.15 / 0.75. A signal
-    with no marks is read but never moves the limit until marks are set for it."""
-    return {"enabled": list(FLOW_SIGNALS), "load_per_core": {"low": 0.15, "high": 0.75}}
+    """The shipped `[schedule.signals]`: every signal enabled, with `SHIPPED_MARKS`. A
+    signal with no marks (gate_failure_rate, merge_failure_rate, loop_findings,
+    independent_ready) is read but never moves the limit until marks are set for it."""
+    return {"enabled": list(FLOW_SIGNALS), **{k: dict(v) for k, v in SHIPPED_MARKS.items()}}
+
+
+def strictest_signals(base: dict[str, Any]) -> dict[str, Any]:
+    """What a `[schedule.signals]` table that is not valid in a config FILE falls back to
+    (D-enum-fallback-strict: a typo can only make ddflow more careful): every signal
+    enabled, and per signal the lower of each mark from the layers below (`base`) and the
+    shipped default. The bad table's own numbers are not trusted at all.
+
+    Lower marks are stricter (higher is always worse), and the result is valid: the
+    lowest low is under the lowest high, and the lowest critical is not under it."""
+    out: dict[str, Any] = {"enabled": list(FLOW_SIGNALS)}
+    shipped = default_signals()
+    for name in FLOW_SIGNALS:
+        tables = [t for t in (base.get(name), shipped.get(name)) if isinstance(t, dict)]
+        marks = {
+            m: min(vals)
+            for m in SIGNAL_MARKS
+            if (vals := [t[m] for t in tables if _number(t.get(m))])
+        }
+        if "low" in marks and "high" in marks:
+            out[name] = marks
+    return out
 
 
 def merge_signals(base: dict[str, Any], layer: dict[str, Any]) -> dict[str, Any]:
@@ -169,7 +209,7 @@ _doc(
 _doc(
     "schedule",
     "signals",
-    "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, merge_failure_rate, loop_findings, independent_ready), and per signal a table of marks, higher always worse: `low` (at or under it healthy), `high` (over it bad; between the two is the hysteresis band) and an optional `critical` (pauses admission for that evaluation). Shipped marks: load_per_core low 0.15, high 0.75; a signal with no marks is read but never moves the limit. Layers merge mark by mark: `ddflow config --set schedule.signals.load_per_core.high 0.8` keeps the low mark. An unknown signal name is refused with this list.",
+    "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, gate_failure_ratio, merge_failure_rate, loop_findings, independent_ready), and per signal a table of marks, higher always worse: `low` (at or under it healthy), `high` (over it bad; between the two is the hysteresis band) and an optional `critical` (pauses admission for that evaluation). Shipped marks: load_per_core low 0.15, high 0.75; memory_pressure (1 - free memory) low 0.75, high 0.85, critical 0.95 -- free memory under 15% shrinks the limit, under 5% pauses admission; disk_pressure low 0.85, high 0.90, critical 0.97 -- free disk under 10% shrinks, under 3% pauses; reviewer_latency_ratio and gate_failure_ratio (each over the project's own 7-day baseline) low 1.5, high 2.0 -- over twice the usual shrinks. A signal with no marks (gate_failure_rate, merge_failure_rate, loop_findings, independent_ready) is read but never moves the limit. Layers merge mark by mark: `ddflow config --set schedule.signals.load_per_core.high 0.8` keeps the low mark. An unknown signal name is refused with this list by `config --set`; a table that is not valid in a config FILE does not stop ddflow loading: it is reported (stderr, doctor) and the strictest fallback applies -- every signal enabled, each mark the lower of the layers below and the shipped one.",
 )
 _doc(
     "schedule",

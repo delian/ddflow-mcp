@@ -2813,6 +2813,25 @@ How many items may be in flight adapts by default (decision D-adaptive-flow-acce
 | `signal_interval_s` | `60` | seconds between two samples (taken by next, brief, claim and heartbeat; no daemon) |
 | `[schedule.signals]` | all enabled; `load_per_core` low 0.15, high 0.75 | `enabled = [...]` switches signals; per signal `low` / `high` / optional `critical` marks, higher worse |
 
+The shipped marks (decisions D-adaptive-flow-accepted and D-unify 8); `high` shrinks the limit,
+`critical` pauses admission, and at or under `low` the signal counts as healthy again:
+
+| Signal | `low` | `high` | `critical` | In words |
+|---|---|---|---|---|
+| `load_per_core` | 0.15 | 0.75 | -- | load average per core |
+| `memory_pressure` | 0.75 | 0.85 | 0.95 | free memory under 15% shrinks, under 5% pauses |
+| `disk_pressure` | 0.85 | 0.90 | 0.97 | free disk under 10% shrinks, under 3% pauses |
+| `reviewer_latency_ratio` | 1.5 | 2.0 | -- | reviews taking over twice the project's usual time shrink |
+| `gate_failure_ratio` | 1.5 | 2.0 | -- | gates failing at over twice the project's usual rate shrink |
+
+`gate_failure_rate`, `merge_failure_rate`, `loop_findings` and `independent_ready` ship with
+no marks: they are read and recorded but never move the limit until marks are set. A
+`[schedule.signals]` table in a config FILE that is not valid (an unknown signal, a missing or
+non-numeric mark, `low` over `high`) does not stop ddflow: it is reported on stderr and by
+`doctor`, and the strictest table applies instead -- every signal enabled, each mark the lower
+of the layers below and the shipped one, the bad table's own numbers ignored
+(D-enum-fallback-strict). `config --set` and `ddflow_configure` still refuse it.
+
 `worktree.max_parallel` defaults to `0`, which **follows the schedule limit** -- it is not
 unlimited; there is no unlimited setting, the ceiling always bounds it. A nonzero value stays
 an independent hard cap on worktrees. `ddflow init` and `adopt` no longer write the old
@@ -2885,11 +2904,12 @@ raising it.
 |---|---|---|---|
 | `reviewer_latency_ratio` | median seconds from `gate.started` to a review gate's outcome, over the project's median for the 7 days before the window | last 30 minutes | under 5 recent or under 20 baseline reviews |
 | `gate_failure_rate` | `gate.failed / (passed + failed)` | last 60 minutes | under 10 outcomes |
+| `gate_failure_ratio` | `gate_failure_rate` over the project's own rate for the 7 days before the window | last 60 minutes | under 10 recent or 20 baseline outcomes, or no failure in the baseline |
 | `merge_failure_rate` | failed merge-gate outcomes over merge attempts | last 2 hours | no merge attempt |
 | `loop_findings` | findings of `ddflow loops` | now | never (0 when none) |
 | `independent_ready` | ready items overlapping neither anything in flight nor each other, by the same selection `ddflow next` offers (parallelism caps lifted) | now | never (0 when none) |
 
-A fresh project simply reports the first three as unavailable until it has history; nothing
+A fresh project simply reports the first four as unavailable until it has history; nothing
 needs configuring. A merge git tried and failed (a conflict) is recorded as a failed `merge` gate
 outcome, which is what `merge_failure_rate` counts; a merge refused before git tried (target
 checked out elsewhere, another merge in progress) is not. Reviewer latency is the time from the
