@@ -160,3 +160,38 @@ def test_a_tiny_budget_is_still_a_budget(repo):
     text = M.brief(st, cfg, plan(st, cfg), item="MINE", lessons=lessons, reserve=29)
     # budget 1 token: nothing but the truncation note survives
     assert text.startswith("\n\n_[brief truncated at 1 tokens"), text[:200]
+
+
+def test_a_floor_holds_without_overrunning_the_room():
+    """Critic: shares first left the small sections under their floor whenever the big
+    ones wanted their whole share. Floors are met and the total still fits."""
+    from ddflow.views import markdown as M
+
+    sections = [(n, ["z" * 5000]) for n in M._SECTION_SHARE]
+    sizes = [5001] * len(sections)
+    allow = M._allowances(sections, sizes, 2000)
+    assert sum(allow) <= 2000
+    assert min(allow) >= M._SECTION_FLOOR
+    # floors that cannot all fit: plain shares, still inside the room
+    tiny = M._allowances(sections, sizes, 900)
+    assert sum(tiny) <= 900
+
+
+def test_the_agents_own_job_outranks_other_running_jobs(repo, monkeypatch):
+    from ddflow.services import jobs as J
+    from ddflow.views import markdown as M
+
+    _project(repo)
+    log = EventLog(repo, "a1")
+    log.append("job.started", "Jzz-mine", {"item": "OTHER5", "command": "x", "pid": 0})
+    from ddflow.core.model import fold
+
+    st = fold(EventLog(repo, "a1").read_all(), strict=False)
+    real = J.status
+    monkeypatch.setattr(
+        J, "status", lambda j: J.Status("running", "pid 1 running") if j.by == "a2" else real(j)
+    )
+    out: list[str] = []
+    M._brief_jobs(out, st, "MINE", "a1")
+    listed = [ln for ln in out if ln.startswith("- **")]
+    assert "Jzz-mine" in listed[0], listed[:3]
