@@ -1,7 +1,8 @@
 """Fold handlers: item definition and lifecycle: added, updated, removed, state changes, reopen, unblock.
 
-Each `_h_*` is a `(State, Event) -> None` fold handler, assembled into `model.HANDLERS`;
-the other functions here are the helpers they share. All of it is pure."""
+The `_h_*` functions are fold handlers (`(State, Event) -> None`; `_h_added`/`_updated`/
+`_removed` also take the record kind) or handler factories (`_h_gate`, `_h_state`), assembled
+into `model.HANDLERS`; the other functions are the helpers they share. All of it is pure."""
 
 from __future__ import annotations
 

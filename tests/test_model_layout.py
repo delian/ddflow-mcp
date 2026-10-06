@@ -71,6 +71,14 @@ def _model_imports(n: ast.AST) -> list[str]:
     return [h for h in hits if h and h.split(".")[-1] == "model"]
 
 
+def test_the_event_helpers_model_imported_are_still_re_exported():
+    """model.py imported these from `events` before the split; callers may import them."""
+    from ddflow.core import events
+
+    for name in ("Event", "changelog_of", "version_key", "SEEN_KIND", "SKEW_OVERRIDDEN_KIND"):
+        assert getattr(model, name) is getattr(events, name), name
+
+
 def test_no_handler_module_imports_the_model():
     """`model` imports the handlers; the reverse edge would be a cycle. Every spelling:
     `from ..model import x`, `from .. import model`, `from ddflow.core import model`,
