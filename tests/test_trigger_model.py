@@ -317,3 +317,65 @@ def test_the_cli_verbs(proj, capsys):
     assert code == OK and "disabled" in out
     code, out = run("schedule", "trigger", "evaluate", "--dry-run")
     assert code == NOTHING and "no trigger condition is met" in out
+
+
+def test_the_window_is_anchored_on_the_events_so_a_debounce_does_not_starve_it():
+    """rubber-duck on B-trigger-model: anchored on `now`, the older event aged out of a
+    5-minute window during a 5-minute debounce, and the met condition never fired."""
+    trig = _trig(count=2, window=5, debounce=5)
+    evs = [_ev("gate.failed", "T1", 0), _ev("gate.failed", "T1", 1)]
+    assert _run(evs, trig, 2)[0].reason == "debounce"
+    assert _run(evs, trig, 7)[0].fire
+    spread = [_ev("gate.failed", "T1", 0), _ev("gate.failed", "T1", 9)]
+    assert _run(spread, trig, 20) == []  # never two within 5 minutes of each other
+
+
+def test_the_filed_item_carries_the_key_and_the_triggers_own_tags():
+    job = Schedule(id="fix", title="Fix it", mode="report")
+    d = TR.Decision("t", "T1", True, events=["e1"], hop=1)
+    item = TR.item_for(_trig(tags=["nightly"]), job, d, set(), fold([]))
+    assert item["data"]["tags"] == [
+        "trigger:t",
+        "schedule:fix",
+        "mode:report",
+        "key:T1",
+        "nightly",
+    ]
+
+
+def test_fires_keep_a_tail_but_every_keys_latest_fire_is_kept():
+    """critic on B-trigger-model: the fire list grew without bound."""
+    from ddflow.core.model import TRIGGER_FIRES_KEPT
+
+    evs = []
+    for i in range(TRIGGER_FIRES_KEPT + 5):
+        evs += _fired(f"R{i}", f"k{i}", i)
+    st = fold(evs)
+    assert len(st.trigger_fires["t"]) == TRIGGER_FIRES_KEPT
+    assert len(st.trigger_keys["t"]) == TRIGGER_FIRES_KEPT + 5
+    # the oldest key's remediation is still open, and still holds its key
+    evs += [_ev("gate.failed", "x", 500, k="k0")]
+    [d] = _run(evs, _trig(key="{data.k}", max_open=10_000), 600)
+    assert (d.reason, d.detail) == ("open", "R0")
+
+
+def test_a_suppression_keeps_the_events_that_met_the_condition():
+    evs = [_ev("trigger.suppressed", "t", 0, key="", reason="disabled", detail="d", events=["e9"])]
+    assert fold(evs).trigger_suppressed["t"][0]["events"] == ["e9"]
+
+
+def test_the_evaluator_decides_under_the_log_lock(proj, monkeypatch):
+    """rubber-duck and roborev on B-trigger-model: the read and the decision were taken
+    outside the lock, so two evaluators could both file for one key."""
+    from ddflow.infra import log as L
+
+    seen = []
+    real = TR.evaluate
+
+    def spy(*a, **k):
+        seen.append(any(v for v in L._HELD.values()))
+        return real(*a, **k)
+
+    monkeypatch.setattr(TR, "evaluate", spy)
+    A.trigger_evaluate(proj)
+    assert seen == [True]
