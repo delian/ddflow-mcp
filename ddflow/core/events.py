@@ -318,10 +318,16 @@ class Event:
     @staticmethod
     def from_json(line: str) -> Event:
         d = json.loads(line)
+        data = d.get("data", {})
+        if not isinstance(data, dict):
+            # Not an event: every reader of a payload (the fold, doctor, the stamp guard)
+            # takes it as a mapping. The log reader counts the line as unreadable, which
+            # doctor reports, instead of one bad line breaking every one of those readers.
+            raise TypeError(f"event data is {type(data).__name__}, not an object")
         return Event(
             kind=d["kind"],
             subject=d.get("subject", ""),
-            data=d.get("data", {}),
+            data=data,
             agent=d.get("agent", ""),
             lamport=int(d.get("lamport", 0)),
             ts=d.get("ts", ""),

@@ -1,0 +1,781 @@
+{
+ "format": 1,
+ "kinds": {
+  "approval.granted": {
+   "fields": {
+    "digest": ["str"],
+    "host": ["str"],
+    "human": ["bool"],
+    "note": ["str"],
+    "subject": ["str"],
+    "token_hash": ["str"],
+    "user": ["str"]
+   },
+   "v": 1
+  },
+  "approval.used": {
+   "fields": {
+    "digest": ["str"],
+    "subject": ["str"],
+    "token_hash": ["str"]
+   },
+   "v": 1
+  },
+  "backmerge.recorded": {
+   "fields": {
+    "forge": ["str"],
+    "into": ["str"],
+    "number": ["int"],
+    "url": ["str"]
+   },
+   "v": 1
+  },
+  "bug.fixed": {
+   "fields": {
+    "changelog": ["dict"],
+    "lesson": ["str"],
+    "regression_test": ["str"],
+    "regression_tests": ["list"],
+    "regression_verified": ["str"],
+    "regression_verify": ["dict"],
+    "sha": ["str"]
+   },
+   "v": 1
+  },
+  "bug.found": {
+   "fields": {
+    "dedupe": ["dict"],
+    "duplicate_of": ["str"],
+    "extends": ["str"],
+    "fix_task": ["str"],
+    "item": ["str"],
+    "key": ["str"],
+    "related": ["str"],
+    "scope": ["str"],
+    "score": ["float"],
+    "severity": ["str"],
+    "summary": ["str"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "bug.invalid": {
+   "fields": {
+    "evidence": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "bug.reopened": {
+   "fields": {
+    "fix_task": ["str"],
+    "reason": ["str"],
+    "was": ["str"]
+   },
+   "v": 1
+  },
+  "bug.reported_upstream": {
+   "fields": {},
+   "v": 1
+  },
+  "cadence.ran": {
+   "fields": {
+    "evidence": ["dict"],
+    "result": ["str"]
+   },
+   "v": 1
+  },
+  "ci.result": {
+   "fields": {
+    "checks": ["list"],
+    "ok": ["bool"],
+    "sha": ["str"],
+    "stage": ["str"],
+    "status": ["str"]
+   },
+   "v": 1
+  },
+  "ddflow.seen": {
+   "fields": {
+    "install": ["str"],
+    "version": ["str"]
+   },
+   "v": 1
+  },
+  "decision.recorded": {
+   "fields": {
+    "alternatives": ["str"],
+    "consequences": ["str"],
+    "context": ["str"],
+    "decided_by": ["str"],
+    "decision": ["str"],
+    "dedupe": ["dict"],
+    "extends": ["str"],
+    "globs": ["list"],
+    "item": ["str"],
+    "related": ["str"],
+    "sources": ["list"],
+    "status": ["str"],
+    "supersedes": ["list"],
+    "tags": ["list"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "decision.superseded": {
+   "fields": {
+    "by": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "def.merged": {
+   "fields": {
+    "digest": ["str"],
+    "id": ["str"],
+    "kind": ["str"],
+    "provenance": ["dict"],
+    "reason": ["str"],
+    "source": ["str"],
+    "successor": ["str"]
+   },
+   "v": 1
+  },
+  "def.recorded": {
+   "fields": {
+    "dedupe": ["dict"],
+    "digest": ["str"],
+    "fields": ["dict"],
+    "id": ["str"],
+    "kind": ["str"],
+    "provenance": ["dict"],
+    "source": ["str"]
+   },
+   "v": 1
+  },
+  "def.retired": {
+   "fields": {
+    "digest": ["str"],
+    "id": ["str"],
+    "kind": ["str"],
+    "provenance": ["dict"],
+    "reason": ["str"],
+    "source": ["str"]
+   },
+   "v": 1
+  },
+  "def.superseded": {
+   "fields": {
+    "digest": ["str"],
+    "id": ["str"],
+    "kind": ["str"],
+    "provenance": ["dict"],
+    "reason": ["str"],
+    "source": ["str"],
+    "successor": ["str"]
+   },
+   "v": 1
+  },
+  "def.updated": {
+   "fields": {
+    "digest": ["str"],
+    "fields": ["dict"],
+    "id": ["str"],
+    "kind": ["str"],
+    "provenance": ["dict"],
+    "source": ["str"]
+   },
+   "v": 1
+  },
+  "deploy.recorded": {
+   "fields": {
+    "env": ["str"],
+    "sha": ["str"]
+   },
+   "v": 1
+  },
+  "export.acknowledged": {
+   "fields": {},
+   "v": 1
+  },
+  "export.disabled": {
+   "fields": {
+    "by": ["str"],
+    "document": ["str"],
+    "human": ["bool"],
+    "local": ["bool"],
+    "locked": ["bool"]
+   },
+   "v": 1
+  },
+  "export.enabled": {
+   "fields": {
+    "by": ["str"],
+    "document": ["str"],
+    "human": ["bool"],
+    "local": ["bool"],
+    "locked": ["bool"],
+    "mode": ["str"],
+    "path": ["str"]
+   },
+   "v": 1
+  },
+  "external.observed": {
+   "fields": {},
+   "v": 1
+  },
+  "flow.chosen": {
+   "fields": {
+    "by": ["str"],
+    "knob": ["str"],
+    "reason": ["str"],
+    "user": ["str"],
+    "value": ["str"]
+   },
+   "v": 1
+  },
+  "gate.failed": {
+   "fields": {
+    "by": ["str"],
+    "evidence": ["dict"],
+    "gate": ["str"],
+    "kind": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "gate.out_of_order": {
+   "fields": {
+    "ahead": ["list"],
+    "gate": ["str"],
+    "policy": ["str"]
+   },
+   "v": 1
+  },
+  "gate.partial": {
+   "fields": {
+    "by": ["str"],
+    "evidence": ["dict"],
+    "gate": ["str"],
+    "outcome": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "gate.passed": {
+   "fields": {
+    "by": ["str"],
+    "evidence": ["dict"],
+    "gate": ["str"],
+    "kind": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "gate.skipped": {
+   "fields": {
+    "by": ["str"],
+    "evidence": ["dict"],
+    "gate": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "gate.started": {
+   "fields": {
+    "gate": ["str"]
+   },
+   "v": 1
+  },
+  "gate.unavailable": {
+   "fields": {
+    "by": ["str"],
+    "evidence": ["dict"],
+    "gate": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "item.abandoned": {
+   "fields": {
+    "kind": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "item.blocked": {
+   "fields": {
+    "imported": ["bool"],
+    "kind": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "item.completed": {
+   "fields": {
+    "changelog": ["dict", "str"],
+    "evidence": ["str"],
+    "forced": ["bool"],
+    "imported": ["bool"],
+    "kind": ["str"],
+    "ledger": ["dict"],
+    "overridden": ["list"],
+    "sha": ["str"]
+   },
+   "v": 1
+  },
+  "item.reopened": {
+   "fields": {
+    "claims": ["list"],
+    "forced": ["bool"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "item.resolved": {
+   "fields": {
+    "at": ["float"],
+    "claim": ["dict"],
+    "definition": ["dict"],
+    "keep": ["str"],
+    "kind": ["str"],
+    "ttl_s": ["int"]
+   },
+   "v": 1
+  },
+  "item.started": {
+   "fields": {},
+   "v": 1
+  },
+  "item.unblocked": {
+   "fields": {
+    "kind": ["str"],
+    "note": ["str"],
+    "was": ["str"]
+   },
+   "v": 1
+  },
+  "job.ended": {
+   "fields": {
+    "exit_code": ["int"],
+    "note": ["str"]
+   },
+   "v": 1
+  },
+  "job.started": {
+   "fields": {
+    "command": ["str"],
+    "cwd": ["str"],
+    "host": ["str"],
+    "item": ["str"],
+    "log": ["str"],
+    "pid": ["int"],
+    "proc_start": ["str"]
+   },
+   "v": 1
+  },
+  "lease.acquired": {
+   "fields": {
+    "agent": ["str"],
+    "at": ["float"],
+    "branch": ["str"],
+    "expires_at": ["int"],
+    "globs": ["list"],
+    "holder": ["str"],
+    "kind": ["str"],
+    "note": ["str"],
+    "resources": ["list"],
+    "ttl_s": ["int"],
+    "worktree": ["str"]
+   },
+   "v": 1
+  },
+  "lease.expired": {
+   "fields": {
+    "event": ["str"],
+    "holder": ["str"],
+    "reason": ["str"],
+    "worktree": ["str"]
+   },
+   "v": 1
+  },
+  "lease.released": {
+   "fields": {
+    "agent": ["str"],
+    "by": ["str"],
+    "event": ["str"],
+    "holder": ["str"],
+    "note": ["str"],
+    "reason": ["str"],
+    "transfer": ["bool"]
+   },
+   "v": 1
+  },
+  "lease.renewed": {
+   "fields": {
+    "at": ["float"],
+    "branch": ["str"],
+    "globs": ["list"],
+    "holder": ["str"],
+    "resources": ["list"],
+    "worktree": ["str"]
+   },
+   "v": 1
+  },
+  "lesson.recorded": {
+   "fields": {
+    "dedupe": ["dict"],
+    "extends": ["str"],
+    "globs": ["list"],
+    "how": ["str"],
+    "pattern": ["str"],
+    "related": ["str"],
+    "rule": ["str"],
+    "seen_in": ["list"],
+    "sites": ["list"],
+    "summary": ["str"],
+    "supersedes": ["list"],
+    "tags": ["list"],
+    "title": ["str"],
+    "why": ["str"]
+   },
+   "v": 1
+  },
+  "link.recorded": {
+   "fields": {
+    "by": ["str"],
+    "relation": ["str"],
+    "target": ["str"]
+   },
+   "v": 1
+  },
+  "memory.forgotten": {
+   "fields": {
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "memory.recorded": {
+   "fields": {
+    "dedupe": ["dict"],
+    "origin_at": ["str"],
+    "related": ["str"],
+    "source": ["str"],
+    "tags": ["list"],
+    "text": ["str"]
+   },
+   "v": 1
+  },
+  "phase.added": {
+   "fields": {
+    "body": ["str"],
+    "dedupe": ["dict"],
+    "globs": ["list"],
+    "kind": ["str"],
+    "line": ["str"],
+    "needs": ["list"],
+    "priority": ["int"],
+    "related": ["str"],
+    "source": ["str"],
+    "tags": ["list"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "phase.removed": {
+   "fields": {},
+   "v": 1
+  },
+  "phase.updated": {
+   "fields": {
+    "body": ["str"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "port.applied": {
+   "fields": {},
+   "v": 1
+  },
+  "pr.changes_requested": {
+   "fields": {},
+   "v": 1
+  },
+  "pr.closed": {
+   "fields": {},
+   "v": 1
+  },
+  "pr.merged": {
+   "fields": {},
+   "v": 1
+  },
+  "pr.opened": {
+   "fields": {
+    "number": ["int"],
+    "url": ["str"]
+   },
+   "v": 1
+  },
+  "pr.synced": {
+   "fields": {
+    "base": ["str"],
+    "checks": ["str"],
+    "feedback": ["str"],
+    "forge": ["str"],
+    "head": ["str"],
+    "head_sha": ["str"],
+    "kind": ["str"],
+    "merge_sha": ["str"],
+    "number": ["int"],
+    "queue": ["str"],
+    "queue_known": ["bool"],
+    "queue_position": ["int"],
+    "queue_state": ["str"],
+    "review": ["str"],
+    "state": ["str"],
+    "url": ["str"]
+   },
+   "v": 1
+  },
+  "record.extended": {
+   "fields": {
+    "auto": ["bool"],
+    "dedupe": ["dict"],
+    "relation": ["str"],
+    "score": ["float", "null"],
+    "text": ["str"],
+    "who": ["str"]
+   },
+   "v": 1
+  },
+  "release.closed": {
+   "fields": {},
+   "v": 1
+  },
+  "release.opened": {
+   "fields": {},
+   "v": 1
+  },
+  "release.tagged": {
+   "fields": {},
+   "v": 1
+  },
+  "research.recorded": {
+   "fields": {
+    "budget": ["str"],
+    "claim": ["str"],
+    "dedupe": ["dict"],
+    "falsifier": ["str"],
+    "item": ["str"],
+    "mechanism": ["str"],
+    "probe": ["str"],
+    "probe_output": ["str"],
+    "question": ["str"],
+    "related": ["str"],
+    "sources": ["list"],
+    "tags": ["list"],
+    "verdict": ["str"]
+   },
+   "v": 1
+  },
+  "review.triaged": {
+   "fields": {
+    "digest": ["str"],
+    "finding": ["int"],
+    "gate": ["str"],
+    "location": ["str"],
+    "probe": ["str"],
+    "severity": ["str"],
+    "title": ["str"],
+    "verdict": ["str"]
+   },
+   "v": 1
+  },
+  "reviewer.approved": {
+   "fields": {},
+   "v": 1
+  },
+  "reviewer.configured": {
+   "fields": {
+    "digest": ["str"],
+    "kind": ["str"],
+    "person": ["bool"],
+    "user": ["str"]
+   },
+   "v": 1
+  },
+  "schedule.defined": {
+   "fields": {
+    "cadence": ["dict"],
+    "concurrency_group": ["str"],
+    "enabled": ["bool"],
+    "needs": ["list"],
+    "scope_globs": ["list"],
+    "tags": ["list"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "schedule.removed": {
+   "fields": {
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "schedule.updated": {
+   "fields": {},
+   "v": 1
+  },
+  "session.ended": {
+   "fields": {
+    "summary": ["str"]
+   },
+   "v": 1
+  },
+  "session.note": {
+   "fields": {
+    "at": ["str"],
+    "item": ["str"],
+    "source": ["str"],
+    "text": ["str"]
+   },
+   "v": 1
+  },
+  "session.prompt": {
+   "fields": {
+    "item": ["str"],
+    "redactions": ["int"],
+    "text": ["str"]
+   },
+   "v": 1
+  },
+  "session.started": {
+   "fields": {
+    "cwd": ["str"],
+    "implicit": ["bool"],
+    "model": ["str"],
+    "tool": ["str"]
+   },
+   "v": 1
+  },
+  "skew.overridden": {
+   "fields": {
+    "log_version": ["str"],
+    "reason": ["str"],
+    "running": ["str"],
+    "session": ["str"]
+   },
+   "v": 1
+  },
+  "task.added": {
+   "fields": {
+    "body": ["str"],
+    "dedupe": ["dict"],
+    "extends": ["str"],
+    "fixes": ["list"],
+    "globs": ["list"],
+    "kind": ["str"],
+    "line": ["str"],
+    "needs": ["list"],
+    "parent": ["str"],
+    "port_from": ["str"],
+    "port_of": ["str"],
+    "port_strategy": ["str"],
+    "priority": ["int"],
+    "related": ["str"],
+    "resources": ["list"],
+    "source": ["str"],
+    "tags": ["list"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "task.removed": {
+   "fields": {
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "task.updated": {
+   "fields": {
+    "body": ["str"],
+    "globs": ["list"],
+    "needs": ["list"],
+    "parent": ["str"],
+    "priority": ["int"],
+    "resources": ["list"],
+    "tags": ["list"],
+    "title": ["str"]
+   },
+   "v": 1
+  },
+  "trigger.evaluated": {
+   "fields": {
+    "errors": ["list"],
+    "fired": ["int"],
+    "now": ["str"],
+    "suppressed": ["int"],
+    "triggers": ["list"]
+   },
+   "v": 1
+  },
+  "trigger.fired": {
+   "fields": {
+    "digest": ["str"],
+    "events": ["list"],
+    "hop": ["int"],
+    "items": ["list"],
+    "job": ["str"],
+    "key": ["str"]
+   },
+   "v": 1
+  },
+  "trigger.suppressed": {
+   "fields": {
+    "detail": ["str"],
+    "events": ["list"],
+    "key": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
+  "upgrade.applied": {
+   "fields": {},
+   "v": 1
+  },
+  "worktree.adopted": {
+   "fields": {
+    "base": ["str"],
+    "branch": ["str"],
+    "path": ["str"]
+   },
+   "v": 1
+  },
+  "worktree.created": {
+   "fields": {
+    "base": ["str"],
+    "branch": ["str"],
+    "path": ["str"]
+   },
+   "v": 1
+  },
+  "worktree.merged": {
+   "fields": {
+    "borrowed": ["bool"],
+    "branch": ["str"],
+    "branch_head": ["str"],
+    "landed_after": ["str"],
+    "landed_before": ["str"],
+    "outside_globs": ["list"],
+    "sha": ["str"]
+   },
+   "v": 1
+  },
+  "worktree.removed": {
+   "fields": {
+    "path": ["str"]
+   },
+   "v": 1
+  }
+ }
+}

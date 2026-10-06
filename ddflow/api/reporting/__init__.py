@@ -28,6 +28,7 @@ from .health import (  # noqa: F401
     _SHARDS_NAMED,
     _SHARDS_SHOWN,
     _UNTITLED_SHOWN,
+    FOLD_PROBLEMS_SHOWN,
     _dependency_findings,
     _driver_drift_notes,
     _dupe_note,
@@ -41,6 +42,7 @@ from .health import (  # noqa: F401
     _unknown_author_notes,
     _untitled,
     doctor,
+    fold_problem_notes,
     recover,
 )
 from .overview import (  # noqa: F401
