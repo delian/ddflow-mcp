@@ -69,7 +69,8 @@ def test_the_delta_counts_only_the_items_own_commits(merged):
 
 
 def test_a_change_made_while_resolving_the_merge_is_sent(merged, tmp_path):
-    """What the item did to main's file in the merge is its own change."""
+    """What the item does to main's file after merging it is its own change; the rest of
+    main's file is not."""
     repo, tree, head = merged
     (tree / "theirs.py").write_text("y0 = 'edited by the item'\n")
     _git(tree, "commit", "-qam", "item: touch theirs")
@@ -89,8 +90,8 @@ def test_without_a_main_merge_the_delta_is_unchanged(repo, tmp_path):
 
 def test_a_conflicted_merge_still_sends_none_of_mains_other_work(repo, tmp_path):
     """Reviewed head and main both changed one file; the item resolved the conflict. The
-    two do not merge cleanly again, so the delta is the item's whole own change on top of
-    main -- still without main's unrelated work."""
+    baseline keeps main's side of that conflict, so the delta is where the resolution
+    departs from it -- and none of main's unrelated work."""
     tree = tmp_path / "item"
     _commit(repo, "shared.py", "v = 0\n", "base")
     _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
@@ -170,3 +171,34 @@ def test_two_incoming_merge_bases_are_both_merged_onto_the_head(repo, tmp_path):
     _commit(tree, "own.py", "x = 2\n", "item: after")
     diff = RV._delta_diff(repo, _item(tree), "", head)
     assert "theirs.py" not in diff and "+x = 2" in diff
+
+
+def test_a_diff_that_cannot_run_is_never_nothing_changed(merged, monkeypatch):
+    """The branch path: when the diff from the merged start fails it falls back to the
+    whole range since head; when that fails too the delta is refused with the reason, not
+    reported as 'nothing changed'."""
+    repo, _tree, head = merged
+    real = RV.W.git
+
+    def failing(where, *args, **kw):
+        if args[:1] == ("diff",) and f"{head}...item" not in args:
+            return RV.W.GitResult(1, "", "simulated failure")
+        return real(where, *args, **kw)
+
+    monkeypatch.setattr(RV.W, "git", failing)
+    diff = RV._delta_diff(repo, _item(Path("/nonexistent")), "item", head)
+    assert "+x = 2" in diff  # the fallback: everything since head
+
+    monkeypatch.setattr(
+        RV.W, "git",
+        lambda where, *a, **k: RV.W.GitResult(1, "", "boom") if a[:1] == ("diff",) else real(where, *a, **k),
+    )  # fmt: skip
+    it = SimpleNamespace(id="T1", worktree="", branch="item")
+
+    class _Log:
+        def read_all(self):
+            return []
+
+    monkeypatch.setattr(RV, "_last_head", lambda *a, **k: head)
+    diff, _how, why = RV._delta_scope(repo, it, _Log(), "critic", "item", "main")
+    assert diff == "" and "could not be produced" in why and "boom" in why
