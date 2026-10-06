@@ -22,7 +22,10 @@ and cost something:
 
 # The operations live one module per area in this package; every name -- public, private
 # and the modules the single file imported (`L`, `W`, `O` ...) -- is re-exported, so
-# `from ddflow.api import lifecycle as L; L.claim(...)` and `L.L` keep working.
+# `from ddflow.api import lifecycle as L; L.claim(...)` and `L.L` keep working. A REBINDING is
+# not shared: each function reads names from its own module, so to replace a helper or a
+# default in a test, patch the module that defines it (`lifecycle.wait.DEFAULT_WAIT_TIMEOUT_S`),
+# not this package. (Nothing patched the single module's names when it was split.)
 
 from __future__ import annotations
 
