@@ -2093,6 +2093,20 @@ prompt or note — runs the same check against the log **before it writes**, wit
   result lists the candidates.
 - **Every answer is recorded** on the add event (`dedupe`: the answer, the score, the
   candidates shown), `new` included, and an automatic merge is marked `auto`.
+- **A lesson captured by `bug fixed --lesson-title`** runs the same check. Nobody can be
+  asked there (the bug is already closed), so the answer is automatic and marked `auto`:
+  identical text goes onto the open lesson it copies (`lesson_extended` in the result, no
+  new id), and a lesson that merely reads like one is filed **linked** to it (`related`), so
+  the pair meets in the next sweep rather than drifting apart.
+- **Rules** (`rule add`, `ddflow_rule_add`) are files, not log records, and run their own
+  check against the other rules: content against content, and title against title for
+  rules with no content (two title-only rules no longer read as copies of each other).
+  `--related ID` files the rule and reports `related` (a rule carries no link).
+- **Where the check does not run, a test says why.** `tests/test_coherence_coverage.py`
+  classifies every event kind, every function that appends an add kind, and every CLI
+  verb and MCP tool that records text as checked or exempt with a reason (a split's parts,
+  a bug's own fix task, the importers' own check, the operator's verbatim words); a new add
+  path fails it until somebody decides.
 
 **Seeing what was added.** `ddflow show X` (an item or a bug id; `--json` carries the same
 data as `additions`, `links` and `linked_from`) lists the additions on X verbatim with who,
