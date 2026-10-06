@@ -537,7 +537,25 @@ def test_a_state_built_from_the_binding_mac_is_refused_not_a_crash(repo):
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
+    # The preimage IS the one `b` was computed over: drift in `_binding` must fail here, not
+    # quietly turn this into a test of a token that was never close to valid.
+    assert P._b64(P._mac(b"binding", preimage)) == payload["b"] == P._binding(params, "tools/call")
     forged = base64.urlsafe_b64encode(preimage).decode().rstrip("=") + "." + payload["b"]
     reply = M.Server(repo, agent="conformance").handle(_retry(params, forged))
     check_reply(MODERN[0], "tools/call", reply)
+    assert reply["error"]["code"] == -32602
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b'["tools/call", {}, ""]', b'{"b": 1, "x": 1, "s": 1}', b'{"b": "x"}', b"not json", b'"s"'],
+)
+def test_a_sealed_body_of_the_wrong_shape_is_refused_not_a_crash(repo, body):
+    """Behind the seal: a body with a valid state MAC that is not the issued shape (only
+    this process could make one) is a -32602 refusal, never an exception."""
+    params = _modern_params()
+    token = f"{P._b64(body)}.{P._b64(P._mac(b'state', body))}"
+    with pytest.raises(ValueError, match="not a state this server issued"):
+        P.round_trip({**params, "requestState": token}, "tools/call")
+    reply = M.Server(repo, agent="conformance").handle(_retry(params, token))
     assert reply["error"]["code"] == -32602
