@@ -46,6 +46,26 @@ def test_a_value_whose_inner_bracket_meets_a_separator_stays_one_entry(node):
     assert _split_outside_brackets(f"{node};tests/b.py::u") == [node, "tests/b.py::u"]
 
 
+@pytest.mark.parametrize(
+    "spec,entries",
+    [
+        # a value holding a path-like token after a comma stays inside its brackets
+        ("tests/a.py::t[a],b.py]", ["tests/a.py::t[a],b.py]"]),
+        ("tests/a.py::t[a.py,b.py]", ["tests/a.py::t[a.py,b.py]"]),
+        ("tests/a.py::t[a,tests/b.py]", ["tests/a.py::t[a,tests/b.py]"]),
+        # a command after a bracketed id is still its own entry
+        ("tests/a.py::t[x], pytest tests/b.py", ["tests/a.py::t[x]", "pytest tests/b.py"]),
+        ("tests/a.py::t[1], pytest -k x", ["tests/a.py::t[1]", "pytest -k x"]),
+        # two bracketed ids, the second one's value holding a bracket of its own
+        ("tests/a.py::t[a],b],tests/c.py::d[e]", ["tests/a.py::t[a],b]", "tests/c.py::d[e]"]),
+    ],
+)
+def test_third_review_cases(spec, entries):
+    """Third review of Bfc9daca269: a value holding a `.py` token, and a command after a
+    bracketed id."""
+    assert _split_outside_brackets(spec) == entries
+
+
 def test_entries_without_brackets_split_as_before():
     assert _split_outside_brackets("tests/a.py::t, pytest -k x ;tests/b.py") == [
         "tests/a.py::t",
