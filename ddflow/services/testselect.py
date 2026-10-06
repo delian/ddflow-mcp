@@ -27,20 +27,20 @@ What it misses, stated so nobody mistakes it for the suite -- the gate runs all 
 * a test more than `MAX_HOPS` imports away from the change (it imports C, C imports B,
   B imports the changed A);
 * a test that reaches the change only through a re-exporting package ``__init__``;
-* a test that reads a data file under a name it builds at run time, when another test
-  spells out that file's name and directory without reading it (the most specific
-  match wins).
+* a test that builds a changed data file's path at run time, when another test spells
+  the file's name together with its directory: only that most specific match is taken.
+
+The two import bounds are chosen: unbounded, the layer that imports everything (a CLI,
+an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
+Precision for fast feedback, recall at the gate.
 
 And what it over-selects, by choice: when no test spells a changed data file's name with
 one of its directories, every test that spells the bare name or the nearest directory is
 taken -- the reader that gets the directory from a constant (`FIXTURES / "corpus.jsonl"`),
 and also a test that only writes a `corpus.jsonl` of its own or reads another file in
 `fixtures/`. Text cannot tell them apart; a missed reader hides breakage until the gate,
-an extra test costs seconds.
-
-The last two are the bound, chosen: unbounded, the layer that imports everything (a CLI,
-an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
-Precision for fast feedback, recall at the gate.
+an extra test costs seconds. Taking every spelling always would cost more than it saves:
+a nearest directory like `dedupe` is also a gate name in dozens of tests here.
 """
 
 from __future__ import annotations
