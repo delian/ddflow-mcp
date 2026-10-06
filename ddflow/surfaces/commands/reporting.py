@@ -42,7 +42,7 @@ def _queue_lines(r) -> list[str]:
         out.append("")
         out.append("In flight:")
         for t in r["running"]:
-            held = f"  — {t.lease.holder}{taken_over_note(t)}" if t.lease else ""
+            held = f"  — {t.lease.holder}" if t.lease else ""
             out.append(f"  [~] {t.id:<12} {t.title}{held}")
     if r["ready"]:
         out.append("")
@@ -57,7 +57,22 @@ def _queue_lines(r) -> list[str]:
         out.append(f"{cap_held(len(r['capped']), bool(r['ready']))} {r['cap']}: {held}")
     if r["blocked"]:
         out.append("")
-        out.append("Blocked: " + _first([f"{b.item} ({b.reason})" for b in r["blocked"]]))
+        taken = r.get("taken_over", {})
+        out.append(
+            "Blocked: "
+            + _first(
+                [
+                    f"{b.item} ({b.reason}"
+                    + (
+                        f"; previously taken over, first by {taken[b.item]}"
+                        if b.item in taken
+                        else ""
+                    )
+                    + ")"
+                    for b in r["blocked"]
+                ]
+            )
+        )
     return out
 
 
