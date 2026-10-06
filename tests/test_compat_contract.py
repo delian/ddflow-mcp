@@ -55,8 +55,26 @@ def test_the_readme_points_to_the_contract():
     assert "(docs/ddflow/compatibility.md)" in (ROOT / "README.md").read_text("utf-8")
 
 
-def test_every_enforcing_task_the_contract_names_exists_in_the_doc_table():
-    # the Enforcement table names the tasks that complete the contract; each row says where
+#: Where each part of the contract is enforced (the doc's Enforcement table).
+ENFORCED_BY = (
+    "tests/test_compat_contract.py",
+    "B-uni-compat-aliases",
+    "B-uni-compat-config",
+    "B-uni-compat-events",
+    "B-uni-compat-artifacts",
+    "B-uni-compat-json",
+    "B-uni-compat-tests",
+    "B-uni-compat-release-gate",
+)
+
+
+def test_the_enforcement_table_names_every_check():
     table = _doc().split("## Enforcement", 1)[1]
-    assert "tests/test_compat_contract.py" in table
-    assert "B-uni-compat-release-gate" in table
+    missing = [t for t in ENFORCED_BY if t not in table]
+    assert not missing, f"the Enforcement table no longer names: {missing}"
+
+
+def test_every_change_class_has_a_version_bump():
+    numbering = _doc().split("## Version numbers", 1)[1].split("##", 1)[0]
+    for cls in ("additive", "deprecating", "breaking"):
+        assert cls in numbering, f"no version bump stated for {cls} changes"

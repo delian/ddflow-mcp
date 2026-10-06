@@ -48,7 +48,8 @@ and it is a minor-version bump while ddflow is 0.x.
 
 A release is numbered by the impact of its changes, not bumped by patch automatically:
 
-- only fixes and additive changes: patch (`0.1.18` -> `0.1.19`);
+- only fixes, additive and deprecating changes (nothing stops working): patch (`0.1.18` ->
+  `0.1.19`);
 - any breaking change, while 0.x: minor (`0.1.x` -> `0.2.0`);
 - 1.0 is the release that drops the deprecation aliases.
 
