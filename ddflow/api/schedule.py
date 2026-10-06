@@ -178,7 +178,12 @@ def _trigger_row(st, t) -> dict[str, Any]:
     return {
         **asdict(t),
         "fires": len(fires),
-        "open": sorted(i for f in fires for i in f.get("items", []) if TR.outcome(st, i) == "open"),
+        "open": sorted(
+            i
+            for f in st.trigger_keys.get(t.id, {}).values()
+            for i in f.get("items", [])
+            if TR.outcome(st, i) == "open"
+        ),
         "held": TR._held(st, t) >= t.breaker,
     }
 
@@ -216,63 +221,71 @@ def trigger_evaluate(
     """Evaluate every trigger against the log NOW and act: a met condition files its
     remediation items (`trigger.fired` + `task.added`) or is recorded as suppressed with
     the reason; the run itself is `trigger.evaluated`. `dry_run` writes nothing. Exit 2
-    when no condition is met (nothing recorded but the run)."""
-    log, _cfg, st, defs, trigs, errors = _triggers(repo, agent)
+    when no condition is met (nothing recorded but the run).
+
+    The read, the decision and the writes happen under ONE log lock: two evaluators
+    started at once would otherwise both see a key with no open remediation, or the
+    hourly cap not yet reached, and both file (rubber-duck and roborev on B-trigger-model)."""
+    from ..core.model import fold
+
+    log, cfg, _st = _load(repo, agent)
     at = TR.ts(now) if now else datetime.now(UTC)
     if at is None:
         return O.failed("trigger.evaluated", f"--now {now!r} is not an ISO timestamp")
-    decisions = TR.evaluate(st, log.read_all(), trigs, at)
-    fired = [d for d in decisions if d.fire]
-    rows = [asdict(d) for d in decisions]
-    if dry_run:
-        if not rows:
-            return O.nothing(
-                "trigger.evaluated",
-                "no trigger condition is met",
-                dry_run=True,
-                decisions=[],
-                errors=errors,
-            )
-        return O.ok("trigger.evaluated", dry_run=True, decisions=rows, errors=errors)
-    taken = set(st.items)
     with log.transaction():
-        for d in decisions:
-            if not d.fire:
-                log.append(
-                    "trigger.suppressed",
-                    d.trigger,
-                    {"key": d.key, "reason": d.reason, "detail": d.detail, "events": d.events},
-                )
-                continue
-            trig = trigs[d.trigger]
-            item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
-            taken.add(item["id"])
-            log.append("task.added", item["id"], item["data"])
-            log.append(
-                "trigger.fired",
-                d.trigger,
-                {
-                    "key": d.key,
-                    "items": [item["id"]],
-                    "hop": d.hop,
-                    "digest": trig.digest(),
-                    "job": trig.action["job"],
-                    "events": d.events,
-                },
-            )
-            d.items = [item["id"]]
-        log.append(
-            "trigger.evaluated",
-            "triggers",
-            {
-                "now": at.isoformat(),
-                "triggers": sorted(trigs),
-                "fired": len(fired),
-                "suppressed": len(decisions) - len(fired),
-                "errors": errors,
-            },
-        )
-    data = {"decisions": [asdict(d) for d in decisions], "errors": errors, "fired": len(fired)}
+        events = log.read_all()
+        st = fold(events)
+        defs = SV.definitions(repo, cfg, st)
+        trigs, errors = TR.load(repo, defs.jobs)
+        decisions = TR.evaluate(st, events, trigs, at)
+        if not dry_run:
+            _apply(log, st, defs, trigs, decisions, at, errors)
+    fired = sum(1 for d in decisions if d.fire)
+    data = {"decisions": [asdict(d) for d in decisions], "errors": errors, "fired": fired}
+    if dry_run:
+        data["dry_run"] = True
     if not decisions:
         return O.nothing("trigger.evaluated", "no trigger condition is met", **data)
     return O.ok("trigger.evaluated", **data)
+
+
+def _apply(log, st, defs, trigs, decisions, at, errors) -> None:
+    """Write what `decisions` decided: each fire's item and `trigger.fired`, each
+    suppression, then the run. The caller holds the log lock."""
+    taken = set(st.items)
+    for d in decisions:
+        if not d.fire:
+            log.append(
+                "trigger.suppressed",
+                d.trigger,
+                {"key": d.key, "reason": d.reason, "detail": d.detail, "events": d.events},
+            )
+            continue
+        trig = trigs[d.trigger]
+        item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
+        taken.add(item["id"])
+        log.append("task.added", item["id"], item["data"])
+        log.append(
+            "trigger.fired",
+            d.trigger,
+            {
+                "key": d.key,
+                "items": [item["id"]],
+                "hop": d.hop,
+                "digest": trig.digest(),
+                "job": trig.action["job"],
+                "events": d.events,
+            },
+        )
+        d.items = [item["id"]]
+    log.append(
+        "trigger.evaluated",
+        "triggers",
+        {
+            "now": at.isoformat(),
+            "triggers": sorted(trigs),
+            "fired": sum(1 for d in decisions if d.fire),
+            "suppressed": sum(1 for d in decisions if not d.fire),
+            "errors": errors,
+        },
+    )

@@ -3756,7 +3756,8 @@ title = "A gate keeps failing on one item"
 event = "gate.failed"              # an event kind, or a glob over kinds; never trigger.*
 match = { subject = "B-*" }        # optional: subject / agent / kind / a data field -> glob
 count = 3                          # N matching events ...
-window = 120                       # ... within this many minutes (0: since the key last fired)
+window = 120                       # ... within this many minutes of each other (0: any
+                                   # since the key last fired)
 key = "{subject}"                  # dedupe key: {subject} {agent} {kind} {data.X}; one open
                                    # remediation per key ("" = one per trigger)
 debounce = 10                      # minutes of quiet before it fires
@@ -3767,6 +3768,7 @@ breaker = 3                        # consecutive failed or empty remediations th
 action = { job = "bug-audit" }     # the scheduled job whose template the item is filed from
                                    # (phase = "P-x" files it under a phase)
 enabled = true                     # a new trigger starts DISABLED until the operator says so
+tags = ["ci"]                      # added to the items it files
 ```
 
 Every evaluation that finds a condition met is an event: `trigger.fired` (with the items
@@ -3777,8 +3779,9 @@ trigger) -- and each run is a `trigger.evaluated`. A trigger never counts `trigg
 or events about the items it filed itself, and a remediation's own failure can re-trigger
 only up to `hop_limit`. A remediation that was abandoned or removed, or finished without a
 merge, counts against the breaker; after `breaker` of them in a row the trigger is held
-until its definition changes. The items carry the tags `trigger:<id>`, `schedule:<job>` and
-`mode:<mode>`.
+until its definition changes. The items carry the tags `trigger:<id>`, `schedule:<job>`,
+`mode:<mode>`, `key:<key>` and the trigger's own `tags`. One evaluation reads, decides and
+writes under the log lock, so two evaluators started at once cannot both file for a key.
 
 The verbs are `trigger list`, `trigger show <id>` and `trigger evaluate [--now ISO]
 [--dry-run]` under the `schedule` group (`api.schedule.trigger_list`, `trigger_show`,

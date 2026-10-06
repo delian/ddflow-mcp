@@ -136,7 +136,10 @@ def test_n_events_within_the_window_fire_and_fewer_or_older_do_not():
     [d] = _run(evs, trig, 30)
     assert d.fire and d.key == "" and len(d.events) == 3
     assert _run(evs[:2], trig, 30) == []
-    assert _run(evs, trig, 70) == []  # the first is outside the hour now
+    # the window bounds how far apart the events are, not how old they are now
+    assert _run(evs, trig, 70)[0].fire
+    apart = [_ev("gate.failed", "T1", m) for m in (0, 10, 61)]
+    assert _run(apart, trig, 70) == []
 
 
 def test_the_key_and_the_match_split_and_filter_events():

@@ -731,10 +731,14 @@ class State:
     #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
     #: file and `[cadence]` sources over these).
     schedules: dict[str, Schedule] = field(default_factory=dict)
-    #: trigger id -> its fires, oldest first: {"at", "key", "items", "hop", "digest", "job",
-    #: "events"} (`trigger.fired`). What `services.triggers` reads for the cooldown, open
-    #: remediations, the breaker and the global hourly cap.
+    #: trigger id -> its last TRIGGER_FIRES_KEPT fires, oldest first: {"at", "key", "items",
+    #: "hop", "digest", "job", "events"} (`trigger.fired`). Every fire is in the log; this
+    #: tail is what the breaker and the global hourly cap read.
     trigger_fires: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: trigger id -> dedupe key -> that key's LATEST fire (same shape). Kept whole while
+    #: `trigger_fires` keeps a tail: the cooldown and "one open remediation per key" read
+    #: this, the breaker and the hourly cap read the tail.
+    trigger_keys: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     #: trigger id -> its last TRIGGER_SUPPRESSIONS_KEPT suppressions: {"at", "key", "reason",
     #: "detail"} (`trigger.suppressed`). Every one is in the log; the state keeps the tail.
     trigger_suppressed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
@@ -2299,6 +2303,7 @@ def _h_schedule_removed(st: State, ev: Event) -> None:
     job.removed = ev.data.get("reason", "") or "removed"
 
 
+TRIGGER_FIRES_KEPT = 200
 TRIGGER_SUPPRESSIONS_KEPT = 50
 TRIGGER_RUNS_KEPT = 20
 
@@ -2315,7 +2320,10 @@ def _h_trigger_fired(st: State, ev: Event) -> None:
         "job": str(d.get("job", "")),
         "events": list(d.get("events", [])),
     }
-    st.trigger_fires.setdefault(ev.subject, []).append(fire)
+    tail = st.trigger_fires.setdefault(ev.subject, [])
+    tail.append(fire)
+    del tail[:-TRIGGER_FIRES_KEPT]
+    st.trigger_keys.setdefault(ev.subject, {})[fire["key"]] = fire
     for item in fire["items"]:
         st.trigger_items[item] = {"trigger": ev.subject, "key": fire["key"], "hop": fire["hop"]}
 
@@ -2328,6 +2336,7 @@ def _h_trigger_suppressed(st: State, ev: Event) -> None:
             "key": str(ev.data.get("key", "")),
             "reason": str(ev.data.get("reason", "")),
             "detail": str(ev.data.get("detail", "")),
+            "events": list(ev.data.get("events", [])),
         }
     )
     del tail[:-TRIGGER_SUPPRESSIONS_KEPT]
@@ -2335,7 +2344,11 @@ def _h_trigger_suppressed(st: State, ev: Event) -> None:
 
 def _h_trigger_evaluated(st: State, ev: Event) -> None:
     st.trigger_runs.append(
-        {"at": ev.ts, "by": ev.agent, **{k: ev.data.get(k) for k in ("now", "fired", "suppressed")}}
+        {
+            "at": ev.ts,
+            "by": ev.agent,
+            **{k: ev.data.get(k) for k in ("now", "fired", "suppressed", "triggers", "errors")},
+        }
     )
     del st.trigger_runs[:-TRIGGER_RUNS_KEPT]
 
