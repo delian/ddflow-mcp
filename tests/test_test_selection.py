@@ -312,18 +312,37 @@ def test_an_unreadable_test_names_nothing_and_does_not_fail_the_selection(data):
 
 def test_a_farther_directory_alone_is_not_evidence(data):
     """Rereview of B20b7744905: only the NEAREST directory stands in for a file name the
-    test builds at run time. `fixtures` is in every test that reads any fixture, and a
-    bare file name is in every test that writes one of its own."""
+    test builds at run time; `fixtures` is in every test that reads any fixture."""
     (data / "tests/fixtures/deep/report.json").parent.mkdir(parents=True)
     (data / "tests/fixtures/deep/report.json").write_text("{}\n")
-    (data / "tests/other/COPYING").parent.mkdir(parents=True)
-    (data / "tests/other/COPYING").write_text("MIT\n")
     (data / "tests/test_other_fixture.py").write_text('F = "fixtures/elsewhere.json"\n')
     _git(data, "add", "-A")
     _git(data, "commit", "-qm", "more data")
     (data / "tests/fixtures/deep/report.json").write_text('{"x": 1}\n')
-    (data / "tests/other/COPYING").write_text("BSD\n")
-    assert _picked(data) == {}, "neither file is named with its directory, nor is `deep`"
+    assert _picked(data) == {}, "nothing names report.json or `deep`"
+
+
+def test_a_file_named_alone_is_the_last_resort(data):
+    """`FIXTURES / "corpus.jsonl"` with FIXTURES from a conftest: the test spells the
+    name and no directory, and still reads the file -- once nothing more specific does."""
+    (data / "tests/fixtures/sets/corpus.jsonl").parent.mkdir(parents=True)
+    (data / "tests/fixtures/sets/corpus.jsonl").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "corpus.jsonl"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "corpus")
+    (data / "tests/fixtures/sets/corpus.jsonl").write_text('{"x": 1}\n')
+    assert _picked(data) == {
+        "tests/test_run_time_path.py": "names data file tests/fixtures/sets/corpus.jsonl"
+    }
+
+
+def test_a_data_file_directly_in_a_test_directory_is_matched_by_its_name(data):
+    (data / "tests/expected.json").write_text("{}\n")
+    (data / "tests/test_beside.py").write_text('E = HERE / "expected.json"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "expected")
+    (data / "tests/expected.json").write_text('{"x": 1}\n')
+    assert _picked(data) == {"tests/test_beside.py": "names data file tests/expected.json"}
 
 
 @pytest.mark.parametrize(
