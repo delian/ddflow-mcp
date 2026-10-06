@@ -197,7 +197,10 @@ def test_a_bad_table_in_a_file_loads_with_the_strictest_fallback(repo):
     assert sig["load_per_core"] == {"low": 0.15, "high": 0.5}  # the committed, stricter mark
     assert sig["memory_pressure"] == SHIPPED_MARKS["memory_pressure"]  # 0.99/0.98 not trusted
     assert cfg.sources["schedule.signals"].endswith("(strictest fallback)")
-    assert any("schedule.signals" in n and "strictest" in n for n in cfg.unknown_knobs)
+    (note,) = [n for n in cfg.unknown_knobs if n.startswith("schedule.signals")]
+    # the note names what the local file wrote, not the table merged over the layers below
+    assert note.startswith("schedule.signals = {'enabled': ['load_per_core'], 'memory_pressure'")
+    assert "'high': 0.5" not in note.split("in effect")[0] and "the strictest" in note
     assert _signals_problem(sig) == ""
 
 
