@@ -630,3 +630,20 @@ def test_an_untracked_file_named_like_an_option_is_hashed_not_obeyed(repo):
     assert _objects(repo) == before, "the fingerprint wrote to the object store"
     (repo / "-w").write_text("two\n")
     assert G._untracked_digest(repo) != first, "the -w file's content is not covered"
+
+
+def test_ddflows_own_untracked_files_do_not_count_against_the_cap(repo, monkeypatch):
+    """Bug Bf0c754ec45: worktree_entries compared ALL untracked files with the cap before
+    dropping `.ddflow/`, so ddflow's own bookkeeping turned content evidence off
+    (source_tree '') though none of those files is ever hashed."""
+    monkeypatch.setattr(G.evidence, "MAX_UNTRACKED_HASHED", 3)
+    (repo / ".ddflow").mkdir()
+    for i in range(5):
+        (repo / ".ddflow" / f"f{i}").write_text(f"{i}\n")
+    (repo / "work.py").write_text("x = 1\n")
+    entries = G.worktree_entries(repo)
+    assert entries is not None and "work.py" in entries
+    assert G.source_tree(repo) != ""
+    for i in range(4):
+        (repo / f"w{i}.py").write_text(f"{i}\n")
+    assert G.worktree_entries(repo) is None, "the cap still applies to the work's own files"
