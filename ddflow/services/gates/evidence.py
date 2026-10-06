@@ -62,7 +62,9 @@ def _untracked_digest(cwd: Path) -> str:
         # fingerprint that quietly stopped covering content would make `stale_evidence`
         # go quiet for the repositories that need it most.
         return f"names-only:{len(paths)}:" + digest("\n".join(sorted(paths)))
-    hashed = W.git(cwd, "hash-object", *paths)
+    # `--`: an untracked file named `-w` is a path, never the option that WRITES the
+    # object (Bc63747e0a4).
+    hashed = W.git(cwd, "hash-object", "--", *paths)
     ids = hashed.out.splitlines()
     # A short or long reply must not be zipped silently: `zip` would truncate to the
     # shorter list, pairing hashes with the wrong paths and producing a fingerprint
@@ -283,6 +285,9 @@ def worktree_entries(cwd: Path | str) -> TreeEntries | None:
     untracked = _git_z(root, "ls-files", "--others", "--exclude-standard", "-z")
     if index is None or changed is None or untracked is None:
         return None
+    # The cap counts the work's own files: `.ddflow/` is never hashed, so its untracked
+    # bookkeeping must not turn content evidence off (Bf0c754ec45).
+    untracked = [p for p in untracked if not _ours(p)]
     if len(untracked) > MAX_UNTRACKED_HASHED:
         return None
     out = _index_entries(index)

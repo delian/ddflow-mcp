@@ -13,6 +13,10 @@ Windows (all ending at ``now``):
   before that window. None under 5 recent or 20 baseline samples.
 * ``gate_failure_rate``: ``gate.failed / (passed + failed)`` over the last 60 minutes.
   None under 10 outcomes.
+* ``gate_failure_ratio``: that rate divided by the project's own rate over the 7 days
+  before the window, so its marks mean "N times the usual" (D-unify 8: shrink at 2x).
+  None under 10 recent or 20 baseline outcomes. A clean baseline counts as one failure; a
+  single recent failure counts as at most the usual rate (1.0), since one is not a burst.
 * ``merge_failure_rate``: failed merge-gate outcomes over merge attempts in the last
   2 hours. None with no attempt.
 * ``loop_findings``: how many findings the loops detector reports now.
@@ -25,7 +29,7 @@ from __future__ import annotations
 
 import copy
 import statistics
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from ..config import Config
@@ -39,6 +43,8 @@ MIN_RECENT_REVIEWS = 5
 MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0
 MIN_GATE_OUTCOMES = 10
+MIN_BASELINE_GATE_OUTCOMES = 20
+MIN_RECENT_FAILURES = 2
 MERGE_WINDOW_S = 120 * 60.0
 MERGE_GATE = "merge"
 
@@ -52,12 +58,14 @@ class Signals:
     merge_failure_rate: float | None = None
     loop_findings: int = 0
     independent_ready: int = 0
+    gate_failure_ratio: float | None = None
 
     def as_signals(self) -> dict[str, float | None]:
         """The mapping a ``flowcontrol.Sample`` carries."""
         return {
             "reviewer_latency_ratio": self.reviewer_latency_ratio,
             "gate_failure_rate": self.gate_failure_rate,
+            "gate_failure_ratio": self.gate_failure_ratio,
             "merge_failure_rate": self.merge_failure_rate,
             "loop_findings": float(self.loop_findings),
             "independent_ready": float(self.independent_ready),
@@ -104,7 +112,10 @@ def reviewer_latency_ratio(events: Sequence[Event], now: float) -> float | None:
     return statistics.median(recent) / base
 
 
-def _failure_rate(events: Sequence[Event], now: float, window: float, gate: str | None):
+def _failure_rate(
+    events: Sequence[Event], now: float, window: float, gate: str | None
+) -> tuple[int, int]:
+    """(passed, failed) outcomes, of ``gate`` or of every gate, in ``(now - window, now]``."""
     passed = failed = 0
     for ev in events:
         out = _outcome(ev)
@@ -126,6 +137,23 @@ def gate_failure_rate(events: Sequence[Event], now: float) -> float | None:
     passed, failed = _failure_rate(events, now, GATE_WINDOW_S, None)
     total = passed + failed
     return failed / total if total >= MIN_GATE_OUTCOMES else None
+
+
+def gate_failure_ratio(events: Sequence[Event], now: float) -> float | None:
+    """The last hour's gate failure rate over the project's rate in the 7 days before it."""
+    passed, failed = _failure_rate(events, now, GATE_WINDOW_S, None)
+    if passed + failed < MIN_GATE_OUTCOMES:
+        return None
+    start = now - GATE_WINDOW_S  # the baseline ends where the recent window begins
+    b_passed, b_failed = _failure_rate(events, start, BASELINE_S, None)
+    if b_passed + b_failed < MIN_BASELINE_GATE_OUTCOMES:
+        return None
+    # The measured baseline, as it is; a clean one counts as one failure, the smallest rate
+    # it could have shown, so a burst after a clean week still registers.
+    ratio = (failed / (passed + failed)) / (max(b_failed, 1) / (b_passed + b_failed))
+    # One failure is not a burst: against a clean busy week it would read as 100x and
+    # shrink the limit for a whole hour, so a lone failure counts as the usual rate at most.
+    return ratio if failed >= MIN_RECENT_FAILURES else min(ratio, 1.0)
 
 
 def merge_failure_rate(events: Sequence[Event], now: float) -> float | None:
@@ -154,14 +182,32 @@ def compute(events: Sequence[Event], state: State, cfg: Config, now: float) -> S
         merge_failure_rate=merge_failure_rate(evs, now),
         loop_findings=len(PR.detect(evs, state, cfg)),
         independent_ready=independent_ready(state, cfg, now),
+        gate_failure_ratio=gate_failure_ratio(evs, now),
     )
 
 
-def history_notes(signals: Signals) -> list[str]:
+def history_notes(signals: Signals, enabled: Collection[str] | None = None) -> list[str]:
     """Neutral one-line notes for ``doctor``: which log-derived signals have too little
-    history yet. Informational, never a failure: such a signal is simply not used."""
+    history yet. Informational, never a failure: such a signal is simply not used.
+    ``enabled`` (default: all) limits them to the signals the controller reads."""
+
+    def shown(name: str) -> bool:
+        return enabled is None or name in enabled
+
     notes = []
     for name in ("reviewer_latency_ratio", "gate_failure_rate", "merge_failure_rate"):
-        if getattr(signals, name) is None:
+        if shown(name) and getattr(signals, name) is None:
             notes.append(f"{name}: too little history in the log yet (neutral, not used)")
+    if shown("gate_failure_ratio") and signals.gate_failure_ratio is None:
+        if signals.gate_failure_rate is not None:
+            # the recent hour is there: the 7-day baseline is what is short
+            notes.append(
+                f"gate_failure_ratio: under {MIN_BASELINE_GATE_OUTCOMES} gate outcomes in "
+                "the 7-day baseline yet (neutral, not used)"
+            )
+        elif not shown("gate_failure_rate"):
+            # the recent hour is short and gate_failure_rate's note is not there to say so
+            notes.append(
+                "gate_failure_ratio: too little history in the log yet (neutral, not used)"
+            )
     return notes

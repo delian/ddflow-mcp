@@ -56,7 +56,15 @@ class Threshold:
 
 
 def _default_thresholds() -> dict[str, Threshold]:
-    return {"load_per_core": Threshold(low=0.15, high=0.75)}
+    """The shipped marks, kept equal to `[schedule.signals]`'s defaults (`core` reads no
+    config; tests/test_adaptive_config.py holds the two together)."""
+    return {
+        "load_per_core": Threshold(low=0.15, high=0.75),
+        "memory_pressure": Threshold(low=0.75, high=0.85, critical=0.95),
+        "disk_pressure": Threshold(low=0.85, high=0.90, critical=0.97),
+        "reviewer_latency_ratio": Threshold(low=1.5, high=2.0),
+        "gate_failure_ratio": Threshold(low=1.5, high=2.0),
+    }
 
 
 @dataclass(frozen=True)

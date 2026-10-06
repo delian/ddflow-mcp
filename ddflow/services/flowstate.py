@@ -236,6 +236,7 @@ def _log_signals(events: Sequence[Event], now: float) -> dict[str, float | None]
     return {
         "reviewer_latency_ratio": FS.reviewer_latency_ratio(evs, now),
         "gate_failure_rate": FS.gate_failure_rate(evs, now),
+        "gate_failure_ratio": FS.gate_failure_ratio(evs, now),
         "merge_failure_rate": FS.merge_failure_rate(evs, now),
     }
 
@@ -358,6 +359,16 @@ def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.
             start = max(1, int(cfg.schedule.max_parallel_tasks or 1))
         why = f"the adaptive limit could not be derived ({type(exc).__name__}: {exc})"
         return FC.Decision(start, "start", LIMIT_UNAVAILABLE, why)
+
+
+def history_notes(cfg: Config, events: Sequence[Event], now: float | None = None) -> list[str]:
+    """doctor's notes for the log-derived signals with too little history to be read
+    (`flowsignals.history_notes`): none in ``fixed`` mode, where nothing is sampled, and
+    none for a signal `[schedule.signals].enabled` switches off."""
+    if cfg.schedule.parallel != "auto":
+        return []
+    at = time.time() if now is None else now
+    return FS.history_notes(FS.Signals(**_log_signals(events, at)), FP.enabled_signals(cfg))
 
 
 def doctor_notes(repo: Path) -> list[str]:
