@@ -27,7 +27,8 @@ def add_schedule_parser(sub) -> None:
     sh.add_argument("id")
     se = verbs.add_parser("search", help="jobs matching every word of the query")
     se.add_argument("query")
-    sc.set_defaults(fn=cmd_schedule)
+    # `ddflow schedule` with no verb lists: its options need defaults on the group too.
+    sc.set_defaults(fn=cmd_schedule, tag="", enabled=False)
 
 
 def _cadence(c: dict[str, Any]) -> str:

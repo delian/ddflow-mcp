@@ -22,6 +22,7 @@ from ddflow.api import schedule as A
 from ddflow.config import Config
 from ddflow.core.events import PROVENANCE_KINDS, Event
 from ddflow.core.model import HANDLERS, Schedule, fold
+from ddflow.infra.log import EventLog
 from ddflow.services import schedule as SV
 from ddflow.surfaces import cli
 from ddflow.surfaces.commands.schedule import add_schedule_parser
@@ -273,10 +274,14 @@ def test_removing_a_recorded_job_hides_the_same_id_below_it(proj):
 # -- validation against the other jobs -----------------------------------------------------
 
 
+def _logged(repo: Path) -> int:
+    return sum(1 for ev in EventLog(repo, "t").read_all() if ev.kind.startswith("schedule."))
+
+
 def test_a_needs_naming_no_job_or_closing_a_cycle_is_refused_before_it_is_written(proj):
-    before = (proj / ".ddflow" / "events").stat().st_mtime_ns
     out = A.schedule_define(proj, "a", {"cadence": {"every_days": 1}, "needs": ["ghost"]})
     assert out.exit == FAIL and "a needs ghost, which is not a job" in out.reason
+    assert _logged(proj) == 0
     assert (
         A.schedule_define(proj, "a", {"cadence": {"every_days": 1}, "needs": ["dedupe_sweep"]}).exit
         == OK
@@ -286,7 +291,25 @@ def test_a_needs_naming_no_job_or_closing_a_cycle_is_refused_before_it_is_writte
     assert out.exit == FAIL and "needs cycle: a -> b -> a" in out.reason
     assert A.schedule_show(proj, "a").data["needs"] == ["dedupe_sweep"]
     assert A.schedule_show(proj, "a").data["needed_by"] == ["b"]
-    del before
+    assert _logged(proj) == 2
+
+
+def test_a_definition_is_refused_for_its_own_problem_even_when_the_file_had_it(proj):
+    """rubber-duck on B-sched-model: the problems already present were subtracted, so a
+    broken file's broken need, defined again in the log, was accepted."""
+    _file(proj, "x.toml", "cadence = { every_days = 1 }\nneeds = ['ghost']\n")
+    out = A.schedule_define(proj, "x", {"cadence": {"every_days": 1}, "needs": ["ghost"]})
+    assert out.exit == FAIL and "x needs ghost" in out.reason
+    assert _logged(proj) == 0
+
+
+def test_show_reports_only_the_jobs_own_problems(proj):
+    _file(proj, "api-v2.toml", "cadence = { every_days = 1 }\nneeds = ['ghost']\n")
+    _file(proj, "api.toml", "cadence = { every_days = 1 }\n")
+    assert A.schedule_show(proj, "api").data["errors"] == []
+    assert A.schedule_show(proj, "api-v2").data["errors"] == [
+        "api-v2 needs ghost, which is not a job"
+    ]
 
 
 def test_a_cycle_through_files_is_reported_by_list(proj):
@@ -417,5 +440,19 @@ def test_the_cli_verbs_print_and_json_carries_the_rows(proj, capsys):
     assert code == OK and "source    log" in out and "runs      0" in out
     code, _, err = _cli(proj, "schedule", "show", "nope", capsys=capsys)
     assert code == FAIL and "no such job 'nope'" in err
+    code, out, _ = _cli(proj, "schedule", capsys=capsys)
+    assert code == OK and "audit" in out
     code, out, _ = _cli(proj, "schedule", "search", "zzz", capsys=capsys)
     assert code == NOTHING and "no job matches" in out
+
+
+@pytest.mark.parametrize("days", ["nan", "inf", "-inf", "1e309", "0", "-1"])
+def test_every_days_refuses_a_period_no_time_reaches(days):
+    """B1c68fe5e9c: `value <= 0` let nan and inf through, so the pass was never due."""
+    from ddflow.services.cadence import calendar
+
+    cfg = Config()
+    cfg.cadence.every_days = [f"bug_hunt={days}"]
+    with pytest.raises(ValueError, match="every_days entry"):
+        calendar(cfg)
+    assert SV.from_cadence(cfg)[1]

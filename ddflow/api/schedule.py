@@ -57,7 +57,7 @@ def schedule_show(repo: Path, jid: str, *, agent: str = "") -> O.Outcome:
         needed_by=sorted(i for i, o in defs.jobs.items() if jid in o.job.needs),
         conflicts=SV.conflicts_of(defs, jid, cfg),
         runs=list(st.cadences.get(jid, [])),
-        errors=[e for e in defs.errors if jid in e],
+        errors=[e for e in defs.errors if SV.concerns(e, jid)],
     )
 
 
@@ -73,12 +73,13 @@ def schedule_search(repo: Path, query: str, *, agent: str = "") -> O.Outcome:
 
 
 def _graph_refusal(kind: str, jid: str, defs, job) -> O.Outcome | None:
-    """The graph problems `job` would bring with it: a needs naming no job, or a cycle
-    through it. Problems already there before it are someone else's, not refused here."""
+    """The graph problems `job` brings with it: a needs of its own naming no job, or a
+    cycle through it -- refused even when the definition it replaces had the same
+    problem. Problems of OTHER jobs that were there before it are theirs, not refused here."""
     jobs = {i: d.job for i, d in defs.jobs.items()}
     before = set(SV.graph_errors(jobs))
     jobs[jid] = job
-    after = [e for e in SV.graph_errors(jobs) if e not in before]
+    after = [e for e in SV.graph_errors(jobs) if e not in before or SV.concerns(e, jid)]
     if after:
         return O.failed(kind, f"{jid}: " + "; ".join(after), id=jid, errors=after)
     return None
