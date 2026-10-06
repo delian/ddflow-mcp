@@ -37,8 +37,13 @@ def _default(v: object) -> str:
     if len(text) > SHOWN:
         return "(long: see `ddflow config --explain`)"
     text = text.replace("|", "\\|")
-    # A backtick inside would close a one-backtick code span early: fence it with two.
-    return f"`` {text} ``" if "`" in text else f"`{text}`"
+    # A code span closes at the first backtick run as long as its fence: make the fence
+    # one longer than the longest run inside, padded so a leading/trailing one is kept.
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    if not longest:
+        return f"`{text}`"
+    fence = "`" * (longest + 1)
+    return f"{fence} {text} {fence}"
 
 
 def render(cfg: Config | None = None, choices: dict[str, tuple[str, ...]] | None = None) -> str:
