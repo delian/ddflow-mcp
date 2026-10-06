@@ -171,3 +171,64 @@ def test_offload_own_replies_are_modern(repo, monkeypatch):
     sent = [json.loads(ln) for ln in out.getvalue().splitlines() if ln.strip()]
     assert sent[0]["result"]["resultType"] == "complete"
     assert sent[0]["result"]["_meta"] == {"exit": 2, SERVER_KEY: SERVER_INFO}
+
+
+# -- Bac0bb04c9f: 2025-11-25, the last initialize-era revision ----------------------------
+
+LATEST_LEGACY = "2025-11-25"
+
+
+def _init(repo, version):
+    return Server(repo, agent="legacy").handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": version}}
+    )["result"]
+
+
+def test_initialize_with_2025_11_25_is_answered_with_2025_11_25(repo):
+    assert _init(repo, LATEST_LEGACY)["protocolVersion"] == LATEST_LEGACY
+
+
+def test_an_unknown_initialize_version_falls_back_to_the_newest_legacy_one(repo):
+    assert _init(repo, "2099-01-01")["protocolVersion"] == LATEST_LEGACY
+    # The older revisions are still answered with themselves.
+    for older in ("2025-06-18", "2025-03-26", "2024-11-05"):
+        assert _init(repo, older)["protocolVersion"] == older
+
+
+def test_discover_lists_2025_11_25(repo):
+    res = call(repo, req("server/discover"))["result"]
+    assert LATEST_LEGACY in res["supportedVersions"]
+
+
+def test_tool_names_follow_the_2025_11_25_naming_guidance(repo):
+    """SEP-986: 1-128 characters of A-Z a-z 0-9 _ - . -- unique, case-sensitive."""
+    import re
+
+    names = [t["name"] for t in Server(repo, agent="x").handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    )["result"]["tools"]]  # fmt: skip
+    assert names and len(set(names)) == len(names)
+    assert all(re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", n) for n in names), names
+
+
+def test_input_validation_errors_are_tool_execution_errors(repo):
+    """SEP-1303: a bad argument is a tool result with isError, which the model can read
+    and correct -- never a JSON-RPC protocol error."""
+    srv = Server(repo, agent="x")
+    srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": LATEST_LEGACY},
+        }
+    )
+    r = srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "ddflow_show", "arguments": {"no_such_argument": 1}},
+        }
+    )
+    assert "error" not in r and r["result"]["isError"] is True
