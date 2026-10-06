@@ -180,9 +180,8 @@ def _trigger_row(st, t) -> dict[str, Any]:
         "fires": len(fires),
         "open": sorted(
             i
-            for f in st.trigger_keys.get(t.id, {}).values()
-            for i in f.get("items", [])
-            if TR.outcome(st, i) == "open"
+            for i, m in st.trigger_items.items()
+            if m.get("trigger") == t.id and TR.outcome(st, i) == "open"
         ),
         "held": TR._held(st, t) >= t.breaker,
     }
@@ -229,10 +228,13 @@ def trigger_evaluate(
     from ..core.model import fold
 
     log, cfg, _st = _load(repo, agent)
-    at = TR.ts(now) if now else datetime.now(UTC)
-    if at is None:
+    given = TR.ts(now) if now else None
+    if now and given is None:
         return O.failed("trigger.evaluated", f"--now {now!r} is not an ISO timestamp")
     with log.transaction():
+        # NOW is taken under the lock: taken before it, the fires of an evaluator that
+        # held the lock first would be stamped after it and missed by the cap (rubber-duck).
+        at = given or datetime.now(UTC)
         events = log.read_all()
         st = fold(events)
         defs = SV.definitions(repo, cfg, st)

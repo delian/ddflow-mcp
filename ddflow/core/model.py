@@ -735,9 +735,9 @@ class State:
     #: "hop", "digest", "job", "events"} (`trigger.fired`). Every fire is in the log; this
     #: tail is what the breaker and the global hourly cap read.
     trigger_fires: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-    #: trigger id -> dedupe key -> that key's LATEST fire (same shape). Kept whole while
-    #: `trigger_fires` keeps a tail: the cooldown and "one open remediation per key" read
-    #: this, the breaker and the hourly cap read the tail.
+    #: trigger id -> dedupe key -> {"at"} of that key's latest fire: what the cooldown
+    #: reads (the breaker and the hourly cap read the `trigger_fires` tail; which items are
+    #: open is `trigger_items`).
     trigger_keys: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     #: trigger id -> its last TRIGGER_SUPPRESSIONS_KEPT suppressions: {"at", "key", "reason",
     #: "detail"} (`trigger.suppressed`). Every one is in the log; the state keeps the tail.
@@ -2323,7 +2323,9 @@ def _h_trigger_fired(st: State, ev: Event) -> None:
     tail = st.trigger_fires.setdefault(ev.subject, [])
     tail.append(fire)
     del tail[:-TRIGGER_FIRES_KEPT]
-    st.trigger_keys.setdefault(ev.subject, {})[fire["key"]] = fire
+    # Only WHEN: the items are in `trigger_items`. One small entry per key ever fired,
+    # and every fire filed a queue item, so this grows no faster than the queue itself.
+    st.trigger_keys.setdefault(ev.subject, {})[fire["key"]] = {"at": fire["at"]}
     for item in fire["items"]:
         st.trigger_items[item] = {"trigger": ev.subject, "key": fire["key"], "hop": fire["hop"]}
 

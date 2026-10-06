@@ -379,3 +379,34 @@ def test_the_evaluator_decides_under_the_log_lock(proj, monkeypatch):
     monkeypatch.setattr(TR, "evaluate", spy)
     A.trigger_evaluate(proj)
     assert seen == [True]
+
+
+def test_a_late_straggler_does_not_hide_an_earlier_burst():
+    """rubber-duck and critic on B-trigger-model: anchored on the newest event, a burst
+    of 3 within 10 minutes was dropped once a fourth arrived 50 minutes later."""
+    trig = _trig(count=3, window=10, debounce=100)
+    evs = [_ev("gate.failed", "T1", m) for m in (0, 1, 2, 50)]
+    assert _run(evs, trig, 60)[0].reason == "debounce"
+    [d] = _run(evs, trig, 151)
+    assert d.fire and d.events == [e.id for e in evs[:3]]
+    assert TR.cluster([(T0, 1), (T0 + timedelta(minutes=11), 2)], 2, 10) == []
+
+
+def test_a_reopened_older_remediation_of_a_key_still_counts_as_open():
+    """roborev on B-trigger-model: only the key's latest fire was read for open items."""
+    evs = [*_fired("R1", "K", 0), _ev("item.completed", "R1", 1)]
+    evs += [*_fired("R2", "K", 2), _ev("item.completed", "R2", 3)]
+    evs += [_ev("item.reopened", "R1", 4), _ev("gate.failed", "x", 5, k="K")]
+    [d] = _run(evs, _trig(key="{data.k}"), 10)
+    assert (d.reason, d.detail) == ("open", "R1")
+
+
+def test_the_limits_that_read_the_fire_tail_cannot_exceed_it():
+    from ddflow.core.model import TRIGGER_FIRES_KEPT
+
+    _, errors = TR.build(
+        "t", {"event": "x", "action": {"job": "fix"}, "breaker": TRIGGER_FIRES_KEPT + 1}
+    )
+    assert any("breaker must be" in e for e in errors)
+    with pytest.raises(ValueError, match="max_per_hour"):
+        TR.evaluate(fold([]), [], {}, T0, max_per_hour=TRIGGER_FIRES_KEPT + 1)

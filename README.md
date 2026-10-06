@@ -3756,8 +3756,8 @@ title = "A gate keeps failing on one item"
 event = "gate.failed"              # an event kind, or a glob over kinds; never trigger.*
 match = { subject = "B-*" }        # optional: subject / agent / kind / a data field -> glob
 count = 3                          # N matching events ...
-window = 120                       # ... within this many minutes of each other (0: any
-                                   # since the key last fired)
+window = 120                       # ... within this many minutes of each other: a sliding
+                                   # window over their times (0: any since the key last fired)
 key = "{subject}"                  # dedupe key: {subject} {agent} {kind} {data.X}; one open
                                    # remediation per key ("" = one per trigger)
 debounce = 10                      # minutes of quiet before it fires
@@ -3765,6 +3765,7 @@ cooldown = 60                      # minutes before the same key may fire again
 max_open = 3                       # open remediations of this trigger, at most
 hop_limit = 1                      # how deep a chain of remediations may go
 breaker = 3                        # consecutive failed or empty remediations that hold it
+                                   # (at most 200: the fire history the state keeps)
 action = { job = "bug-audit" }     # the scheduled job whose template the item is filed from
                                    # (phase = "P-x" files it under a phase)
 enabled = true                     # a new trigger starts DISABLED until the operator says so
