@@ -157,7 +157,7 @@ dependency graph.
 
 ```
 surfaces/   cli.py, mcp.py                 argparse and JSON-RPC. No policy.
-api/        lifecycle.py, items.py,        the application layer: ONE typed entry
+api/        lifecycle/, items.py,          the application layer: ONE typed entry
             gates.py, knowledge.py         point per operation. Both surfaces call it.
 services/   gates.py, leases.py,           the domain. Every operation returns an
             review.py, flow.py,            Outcome. Nothing here prints.
@@ -206,7 +206,7 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `infra/container.py` | container detection, loopback rewriting |
 | `infra/tomlcfg.py` | one TOML overlay loader, one unknown-key policy |
 | `api/__init__.py` | the typed operation surface: one entry point per operation, called by both surfaces |
-| `api/lifecycle.py` | the work queue: claim, complete, merge, next, wait, and worktree adoption |
+| `api/lifecycle/claim.py`, `wait.py`, `ready.py`, `heartbeat.py`, `complete.py`, `merge.py`, `brief.py`, `reservations.py` | the work queue, one module per area (`api/lifecycle/` re-exports every name): claim and worktree adoption, wait, next, heartbeat/release, complete, merge, brief, and the reservation queue they share |
 | `services/leases.py` | acquire/renew/release, crash scanning, salvage advice |
 | `services/gates.py` | gate definitions, execution, evidence, independence |
 | `services/flow.py` | open a request, `pr sync` (merged / changes requested / closed / approved), version plans and cuts ([R16](RESEARCH.md)) |
