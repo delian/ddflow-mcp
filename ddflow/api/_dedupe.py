@@ -22,7 +22,6 @@ add function: ``task_add`` already carries twelve (BACKLOG B179).
 
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -475,9 +474,3 @@ def after_add(log, cfg: Config, rid: str, chk: Checked) -> None:
             subject,
             {"relation": "related", "target": target, "by": cfg.agent.id},
         )
-
-
-def with_check(cfg: Config, **changes: Any) -> Config:
-    """``cfg`` with some ``[dedupe]`` knobs replaced, for a caller that wants a different
-    policy for a batch (the importer) without touching the project's config."""
-    return dataclasses.replace(cfg, dedupe=dataclasses.replace(cfg.dedupe, **changes))
