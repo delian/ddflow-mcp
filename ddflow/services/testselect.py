@@ -15,7 +15,10 @@ A test is selected when, relative to the item's base:
 * it imports a changed module, directly or through modules that import it — read from
   the Python import graph of the repository, not from names;
 * its file name carries a changed file's stem (``test_gates.py`` for ``gates.py``) — the
-  convention that covers languages this module does not parse.
+  convention that covers languages this module does not parse;
+* it names a changed DATA file -- a fixture, a golden file, a baseline -- that lives below
+  a directory holding tests: a test reads one by its path, never by an import
+  (`_data_readers` says how it is matched).
 
 What it misses, stated so nobody mistakes it for the suite -- the gate runs all of these:
 
@@ -23,11 +26,21 @@ What it misses, stated so nobody mistakes it for the suite -- the gate runs all 
   nothing it exercises;
 * a test more than `MAX_HOPS` imports away from the change (it imports C, C imports B,
   B imports the changed A);
-* a test that reaches the change only through a re-exporting package ``__init__``.
+* a test that reaches the change only through a re-exporting package ``__init__``;
+* a test that builds a changed data file's path at run time, when another test spells
+  the file's name together with its directory: only that most specific match is taken.
 
-The last two are the bound, chosen: unbounded, the layer that imports everything (a CLI,
+The two import bounds are chosen: unbounded, the layer that imports everything (a CLI,
 an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
 Precision for fast feedback, recall at the gate.
+
+And what it over-selects, by choice: when no test spells a changed data file's name with
+one of its directories, every test that spells the bare name or the nearest directory is
+taken -- the reader that gets the directory from a constant (`FIXTURES / "corpus.jsonl"`),
+and also a test that only writes a `corpus.jsonl` of its own or reads another file in
+`fixtures/`. Text cannot tell them apart; a missed reader hides breakage until the gate,
+an extra test costs seconds. Taking every spelling always would cost more than it saves:
+a nearest directory like `dedupe` is also a gate name in 22 tests here.
 """
 
 from __future__ import annotations
@@ -182,8 +195,72 @@ def select(tree: Path, base: str) -> Selection | None:
         if hit:
             pick(t, f"named after {hit}")
 
+    for t, why in _data_readers(tree, changed, tests).items():
+        pick(t, why)
+
     sel.tests = [Selected(t, reasons[t]) for t in sorted(reasons)]
     return sel
+
+
+def _names(text: str, word: str) -> bool:
+    """``word`` (a file or directory name) spelt out in ``text``, not inside a longer name:
+    `schema.json` in `"fixtures/mcp-schema/schema.json"`, not in `old_schema.json` or
+    `schema.json.orig` (a full stop that ends a sentence is not part of a name)."""
+    if word not in text:  # the common answer, without a regex
+        return False
+    return re.search(rf"(?<![\w.-]){re.escape(word)}(?![\w-]|\.\w)", text) is not None
+
+
+def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str, str]:
+    """The tests that read a changed data file below a directory holding tests, each with
+    why. A test spells a data file's path out, never imports it, so it is matched on what
+    it names: the file's name together with one of its directories below that test
+    directory (`fixtures/mcp-schema` and `LICENSE`); failing that, its name OR its
+    NEAREST directory -- either part may be built at run time (`FIXTURES /
+    "corpus.jsonl"`, `BASELINES / f"{kind}.toml"`), and taking only one would let a noisy
+    other part (`fixtures` is in every test that reads any fixture) hide the reader. A
+    farther directory alone is never enough."""
+    homes = {str(d) for t in tests for d in PurePosixPath(t).parents if str(d) != "."}
+    sources: dict[str, str] = {}
+    seen: dict[tuple[str, str], bool] = {}  # one directory is asked about for every file in it
+
+    def names(test: str, word: str) -> bool:
+        if (test, word) not in seen:
+            if test not in sources:
+                try:
+                    sources[test] = (tree / test).read_text("utf-8", errors="replace")
+                except OSError:  # unreadable: it names nothing, rather than failing the run
+                    sources[test] = ""
+            seen[test, word] = _names(sources[test], word)
+        return seen[test, word]
+
+    out: dict[str, str] = {}
+    for c in changed:
+        if is_test_file(c) or PurePosixPath(c).name == "conftest.py":
+            continue  # each has its own rule above
+        dirs = _dirs_below_tests(c, homes)
+        if dirs is None:
+            continue
+        name = PurePosixPath(c).name
+        hit = [t for t in tests if names(t, name) and any(names(t, d) for d in dirs)]
+        if not hit:
+            hit = [t for t in tests if names(t, name) or (dirs and names(t, dirs[0]))]
+        for t in hit:
+            out.setdefault(t, f"names data file {c}")
+    return out
+
+
+def _dirs_below_tests(path: str, homes: set[str]) -> list[str] | None:
+    """The directories between ``path`` and the nearest directory holding tests, nearest
+    first; None when no directory above it (the repository root aside) holds tests."""
+    dirs: list[str] = []
+    for parent in PurePosixPath(path).parents:
+        if str(parent) == ".":
+            return None
+        if str(parent) in homes:
+            return dirs
+        dirs.append(parent.name)
+    return None
 
 
 #: How far along the import graph a test still counts as reaching a change: it imports
