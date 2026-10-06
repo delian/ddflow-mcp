@@ -33,13 +33,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ..config import TriggersConfig
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
 
 TRIGGERS_DIR = Path(".ddflow") / "triggers"
-#: Fires across EVERY trigger in any rolling hour, at most. A constant (and `evaluate`'s
-#: `max_per_hour`) until it becomes a `[triggers]` knob.
-GLOBAL_MAX_PER_HOUR = 10
 #: How many of a trigger's latest suppressions `show` lists (all are in the log).
 SHOWN_SUPPRESSIONS = 20
 FIELDS = (
@@ -382,7 +380,11 @@ def _why_not(
             f"{held} remediations in a row failed or yielded nothing; change the definition "
             f"to re-arm it",
         ),
-        (hour[0] >= hour[1], "global_cap", f"{hour[0]} fires in the last hour"),
+        (
+            hour[0] >= hour[1],
+            "global_cap",
+            f"{hour[0]} fires in the last hour; [triggers].max_fires_per_hour = {hour[1]}",
+        ),
     )
     return next(((r, why) for hit, r, why in checks if hit), ("", ""))
 
@@ -393,13 +395,15 @@ def evaluate(
     triggers: dict[str, Trigger],
     now: datetime,
     *,
-    max_per_hour: int = GLOBAL_MAX_PER_HOUR,
+    max_per_hour: int = TriggersConfig().max_fires_per_hour,
 ) -> list[Decision]:
     """Every (trigger, key) whose condition is met now, and what it decided. Pure: the
-    caller writes the events and files the items. The hourly cap is counted from each
-    trigger's fire tail, so it may not exceed what the tail keeps."""
-    if not 0 < max_per_hour <= TRIGGER_FIRES_KEPT:
-        raise ValueError(f"max_per_hour must be 1..{TRIGGER_FIRES_KEPT}, got {max_per_hour}")
+    caller writes the events and files the items. ``max_per_hour`` is
+    `[triggers].max_fires_per_hour` (D-trigger-cap-knob): 0 suppresses every fire as
+    `global_cap`. The hourly cap is counted from each trigger's fire tail, so it may not
+    exceed what the tail keeps."""
+    if not 0 <= max_per_hour <= TRIGGER_FIRES_KEPT:
+        raise ValueError(f"max_per_hour must be 0..{TRIGGER_FIRES_KEPT}, got {max_per_hour}")
     out: list[Decision] = []
     hour_ago = now - timedelta(hours=1)
     fired = sum(

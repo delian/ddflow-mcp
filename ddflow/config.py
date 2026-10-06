@@ -128,6 +128,12 @@ from .config_sections.schedule import (  # noqa: F401
 from .config_sections.session import (
     SessionConfig,
 )
+from .config_sections.triggers import (
+    TRIGGERS_MAX_FIRES_LIMIT,  # noqa: F401 -- re-exported
+    TRIGGERS_STRICTEST_NUMBER,
+    TriggersConfig,
+    max_fires_problem,
+)
 from .config_sections.upgrade import (
     UPGRADE_SKEW_POLICIES,
     UpgradeConfig,
@@ -204,6 +210,7 @@ class Config:
     rules: RulesConfig = field(default_factory=RulesConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     ids: IdsConfig = field(default_factory=IdsConfig)
+    triggers: TriggersConfig = field(default_factory=TriggersConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "local" | "env",
     #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong
@@ -343,7 +350,7 @@ class Config:
                     continue
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
-                value = _coerce_knob(sec, knob, raw, known[knob].type)
+                value = _coerce_layer_knob(sec, knob, raw, known[knob].type, lenient)
                 if f"{sec}.{knob}" == "schedule.signals" and isinstance(value, dict):
                     # merged over the layers below, mark by mark (`merge_signals`)
                     value = merge_signals(getattr(target, knob), value)
@@ -355,7 +362,7 @@ class Config:
                         # knob, so no command stops loading config -- and an enum knob
                         # takes its STRICTEST value, not its default, so a typo in a
                         # tightened setting fails closed (D-enum-fallback-strict).
-                        if f"{sec}.{knob}" not in KNOB_STRICTEST:
+                        if f"{sec}.{knob}" not in KNOB_STRICTEST | KNOB_STRICTEST_NUMBER:
                             self._bad_values.append(len(self.unknown_knobs))
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
@@ -686,7 +693,11 @@ KNOB_OUTWARD: dict[str, frozenset[str]] = {
     "export.refresh": frozenset(),
 }
 
-for _key, (_value, _why) in KNOB_STRICTEST.items():
+#: Numeric knobs whose bad FILE value takes the strictest value (D-trigger-cap-knob): as
+#: `KNOB_STRICTEST`, kept apart because that table must match `KNOB_CHOICES`.
+KNOB_STRICTEST_NUMBER: dict[str, tuple[int, str]] = {**TRIGGERS_STRICTEST_NUMBER}
+
+for _key, (_value, _why) in {**KNOB_STRICTEST, **KNOB_STRICTEST_NUMBER}.items():
     KNOB_DOCS[_key] = (
         f"{KNOB_DOCS[_key]} An unrecognised value in a config file is warned about, reported "
         f"by `doctor` and falls back to '{_value}', the strictest ({_why}); `config --set`, "
@@ -696,8 +707,11 @@ for _key, (_value, _why) in KNOB_STRICTEST.items():
 del _key, _value, _why
 
 
-def strictest(key: str) -> str:
-    """The value enum knob `key` takes when a config file gives it an unknown one."""
+def strictest(key: str) -> Any:
+    """The value enum knob `key` -- or numeric knob, `KNOB_STRICTEST_NUMBER` -- takes when
+    a config file gives it one it cannot use."""
+    if key in KNOB_STRICTEST_NUMBER:
+        return KNOB_STRICTEST_NUMBER[key][0]
     return KNOB_STRICTEST[key][0]
 
 
@@ -707,7 +721,8 @@ def strictest(key: str) -> str:
 #: takes its strictest value (`KNOB_STRICTEST`); the write paths (`config --set`,
 #: `ddflow_configure`) and the environment still refuse it.
 _TOLERANT_VALUES = frozenset(
-    {*KNOB_CHOICES, "export.tables", "bugs.phase", *(f"ids.{k}" for k in ID_KINDS)}
+    {*KNOB_CHOICES, *KNOB_STRICTEST_NUMBER, "export.tables", "bugs.phase"}
+    | {f"ids.{k}" for k in ID_KINDS}
 )
 
 
@@ -789,6 +804,7 @@ _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0
         else "must be an integer >= 0"
     ),
+    "triggers.max_fires_per_hour": max_fires_problem,
     "dedupe.kinds": lambda v: (
         "" if isinstance(v, list) and v and all(k in DEDUPE_KINDS for k in v)
         else f"must be a non-empty list drawn from {', '.join(DEDUPE_KINDS)}; "
@@ -879,6 +895,17 @@ def _coerce(raw: Any, typ: Any) -> Any:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
     return raw
+
+
+def _coerce_layer_knob(sec: str, knob: str, raw: Any, typ: Any, lenient: bool) -> Any:
+    """`_coerce_knob`, but a FILE value of a `KNOB_STRICTEST_NUMBER` knob that is not a
+    number ("ten") is kept as is: its check fails and the strictest value applies."""
+    try:
+        return _coerce_knob(sec, knob, raw, typ)
+    except InvalidValue:
+        if not (lenient and f"{sec}.{knob}" in KNOB_STRICTEST_NUMBER):
+            raise
+        return raw
 
 
 def _coerce_knob(sec: str, knob: str, raw: Any, typ: Any) -> Any:
