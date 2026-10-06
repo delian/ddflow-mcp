@@ -161,3 +161,19 @@ def test_a_reviewer_approval_from_before_the_primitive_still_counts():
     st = fold([ev])
     assert AP.check(st, "reviewer:lan", "abc").ok
     assert st.reviewer_approvals["abc"]["user"] == "op"
+
+
+def test_a_grant_that_is_not_a_persons_approves_nothing():
+    """A hand-written `approval.granted` without `human` neither passes the check nor
+    reaches the reviewer-trust table."""
+    ev = Event(
+        kind="approval.granted",
+        subject="reviewer:evil",
+        data={"subject": "reviewer:evil", "digest": "abc", "human": False},
+        agent="bot",
+        lamport=1,
+        ts="t",
+    )
+    st = fold([ev])
+    assert not AP.check(st, "reviewer:evil", "abc").ok
+    assert "abc" not in st.reviewer_approvals
