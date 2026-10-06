@@ -1,8 +1,7 @@
 """Fold handlers: leases and the claim contest: acquired, renewed, released/expired, resolved.
 
-The `_h_*` functions are fold handlers (`(State, Event) -> None`; `_h_added`/`_updated`/
-`_removed` also take the record kind) or handler factories (`_h_gate`, `_h_state`), assembled
-into `model.HANDLERS`; the other functions are the helpers they share. All of it is pure."""
+`model.HANDLERS` maps each event kind to an `_h_*` function here -- directly, or through
+the small wrapper or factory call it shows. Everything in this module is pure."""
 
 from __future__ import annotations
 
