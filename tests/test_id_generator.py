@@ -273,7 +273,13 @@ def test_a_seq_in_a_rendered_template_is_allocated() -> None:
 
 
 def test_a_short_sha_refiling_round_trips() -> None:
-    assert ids.is_filing_of(ids.refile("Bci-x-0123456789", "a1b2"), "Bci-x-0123456789")
+    for sha in ("a1b2", "", "deadbeefcafe"):
+        assert ids.is_filing_of(ids.refile("Bci-x-0123456789", sha), "Bci-x-0123456789")
+
+
+def test_a_sequence_numbered_id_is_not_a_refiling() -> None:
+    assert not ids.is_filing_of("fix-B1-1234", "fix-B1")
+    assert not ids.is_filing_of("promote-prod-1234", "promote-prod")
 
 
 def test_a_repeated_parent_token_reads_back() -> None:

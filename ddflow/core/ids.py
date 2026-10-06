@@ -278,15 +278,21 @@ def bugs_named_by_fix_task(cfg: Config | None, item_id: str) -> list[str]:
 
 def refile(base: str, sha: str) -> str:
     """A stable id filed AGAIN after its first record closed (a CI check failing after its
-    bug was fixed): the stable id and the failing commit's short sha."""
-    return "-".join((base, sha[:7]))
+    bug was fixed): the stable id and seven hex digits of the failing commit -- its short
+    sha, or, for a sha shorter than seven (or none), a digest of it, so `is_filing_of`
+    always recognises the result."""
+    short = sha[:7].lower()
+    if not re.fullmatch(r"[0-9a-f]{7}", short):
+        short = hashlib.blake2b(sha.encode("utf-8"), digest_size=4).hexdigest()[:7]
+    return "-".join((base, short))
 
 
 def is_filing_of(rid: str, base: str) -> bool:
     """Whether ``rid`` is ``base`` itself or exactly one of its re-filings (`refile`):
-    the suffix must be a short sha (4 to 7 hex digits), so another stable id that merely
-    starts with ``base`` (whose own suffix is a ten-digit digest) is not taken for one."""
-    return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{4,7}", rid) is not None
+    the suffix must be exactly seven hex digits (`refile` always writes seven), so neither
+    another stable id that merely starts with ``base`` (its own suffix is a ten-digit
+    digest) nor a sequence-numbered id is taken for one."""
+    return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
 
 
 def confirm(cfg: Config, kind: str, minted: Minted, *, used: Any, **fields: Any) -> Minted:
