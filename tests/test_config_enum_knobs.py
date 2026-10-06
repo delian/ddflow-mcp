@@ -43,7 +43,12 @@ def _listed_alternatives() -> dict[str, tuple[str, ...]]:
     found: dict[str, tuple[str, ...]] = {}
     cls = None
     comment = ""  # the `#:` comment block above the next field
-    for line in Path(C.__file__).read_text("utf-8").splitlines():
+    # The section classes live in `config_sections/` (B-split-config); read them all.
+    sources = [
+        Path(C.__file__),
+        *sorted(Path(C.__file__).with_name("config_sections").glob("*.py")),
+    ]
+    for line in "\n".join(p.read_text("utf-8") for p in sources).splitlines():
         if m := re.match(r"class (\w+)", line):
             cls, comment = m.group(1), ""
             continue
