@@ -2769,7 +2769,10 @@ run` record UNAVAILABLE and say what to pass. A lone agent working in the primar
 so with `[worktree].enabled = false`.
 The borrowed tree is never removed; uncommitted work in it is refused as for any merge;
 and paths the merge lands outside the item's globs are listed (`outside_globs`), since a
-borrowed branch can carry another item's commits too.
+borrowed branch can carry another item's commits too. The listing is exact for renamed
+files (both paths) and non-ASCII names; when git cannot list the landing at all,
+`outside_globs_unknown` is true and the CLI says so, rather than an empty list passing for a
+clean scope.
 
 ```console
 $ ddflow merge B-fix --branch agent-work

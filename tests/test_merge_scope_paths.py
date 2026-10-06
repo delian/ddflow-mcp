@@ -43,3 +43,14 @@ def test_the_old_path_of_a_rename_is_a_changed_path(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     it = SimpleNamespace(globs=["new.py", "naïve.py"])
     assert _outside_globs(repo, it, "main", "work") == ["old.py"]
+
+
+def test_a_listing_git_could_not_make_is_unknown_not_empty(tmp_path: Path) -> None:
+    """Bug B4e42502034: a failed listing read as "nothing outside the globs"."""
+    from ddflow.api.lifecycle.merge import _scope_fields
+
+    repo = _repo(tmp_path)
+    it = SimpleNamespace(globs=["new.py"])
+    assert _outside_globs(repo, it, "no-such-base", "work") is None
+    assert _scope_fields(None) == {"outside_globs": [], "outside_globs_unknown": True}
+    assert _scope_fields([]) == {"outside_globs": [], "outside_globs_unknown": False}

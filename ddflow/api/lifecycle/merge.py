@@ -151,7 +151,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             "landed_before": landed_before,
             "landed_after": landed_after,
             # Landed from a branch the item does not own (claimed --no-worktree).
-            **({"borrowed": True, "outside_globs": outside} if borrowed else {}),
+            **({"borrowed": True, **_scope_fields(outside)} if borrowed else {}),
         },
     )
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
@@ -195,7 +195,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         back_merged=back_merged,
         pr="",
         branch=wt.branch,
-        outside_globs=outside,
+        **_scope_fields(outside),
         **({"export_refresh": refreshed} if refreshed else {}),
     )
 
@@ -322,7 +322,7 @@ def _stands_in(tree: Path, *wheres: Path | None) -> bool:
 
 def _what_to_land(
     repo: Path, cfg, st, it, target: str, branch: str, called_from: Path | None
-) -> tuple[W.Worktree, list[str], list[str]] | O.Outcome:
+) -> tuple[W.Worktree, list[str], list[str] | None] | O.Outcome:
     """(the tree and branch to land, its uncommitted files, paths outside the globs).
 
     An item's own worktree lands its own branch, and naming another is refused. An item
@@ -413,8 +413,18 @@ def _branch_to_land(
     return branch
 
 
-def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
-    """Paths the landing changes that the item never declared.
+def _scope_fields(outside: list[str] | None) -> dict[str, Any]:
+    """`outside_globs` as recorded and returned: a list always, and `outside_globs_unknown`
+    beside it, true when git could not list the landing's paths -- so an empty list is never
+    read as a clean scope that nobody checked (B4e42502034)."""
+    if outside is None:
+        return {"outside_globs": [], "outside_globs_unknown": True}
+    return {"outside_globs": outside, "outside_globs_unknown": False}
+
+
+def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str] | None:
+    """Paths the landing changes that the item never declared; None when git could not list
+    them -- "could not tell", never "none" (B4e42502034).
 
     A borrowed branch can carry more than this item's work -- another item's commits made
     in the same tree -- and landing that should at least not be silent. Reported, not
@@ -426,7 +436,9 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
 
     # -z (via git_paths): a non-ASCII name is not C-quoted into one no glob matches;
     # --no-renames: a rename lists its old path too, which the landing removes (B20dc45f4c5).
-    changed = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{target}...{branch}") or []
+    changed = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{target}...{branch}")
+    if changed is None:
+        return None
     return [
         p
         for p in changed
