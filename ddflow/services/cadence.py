@@ -71,19 +71,14 @@ def phase_overdue(st, cfg) -> list[str]:
     """Blockers for completing a phase: every phase-counted pass that is due. A calendar entry
     replaces a count-based pass only while every entry is well-formed; one malformed entry
     leaves all count-based passes in force."""
-    replaced: set[str] = set()
-    for spec in cfg.cadence.every_days:
-        name, _, days = spec.partition("=")
-        try:
-            ok = bool(name.strip()) and float(days) > 0
-        except ValueError:
-            ok = False
-        if not ok:
-            # `ddflow cadence` refuses a malformed list outright, so no calendar pass
-            # can fire in place of a count-based one: replace nothing.
-            replaced = set()
-            break
-        replaced.add(name.strip())
+    try:
+        # The ONE parse of every_days (`calendar`): a second copy here accepted inf as a
+        # period, so a pass it "replaced" stopped blocking the phase (roborev, B1c68fe5e9c).
+        replaced = set(calendar(cfg))
+    except ValueError:
+        # `ddflow cadence` refuses a malformed list outright, so no calendar pass
+        # can fire in place of a count-based one: replace nothing.
+        replaced = set()
     return [
         f"periodic pass overdue: {d['cadence']} ({d['since']} of {d['every']} phases since "
         f"the last). Run it, then `ddflow cadence --ran {d['cadence']}`; to skip it on the "
