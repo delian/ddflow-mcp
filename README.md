@@ -3630,7 +3630,7 @@ defined in one of three places, and every view shows the merge:
 3. `[cadence]`: the five count passes and `every_days` show up as jobs (a pass set to 0 as
    disabled). How they fall due does not change.
 
-An earlier source shadows a later one with the same id, and `schedule show` names both.
+An earlier source shadows a later one with the same id, and showing the job names both.
 
 ```toml
 # .ddflow/schedules/bug-audit.toml
@@ -3658,8 +3658,10 @@ exempt). A job's runs are the `cadence.ran` records under its id.
 
 The read verbs are `list` (by tag, enabled only), `show` (source, what it shadows, needs and
 needed-by, the jobs it may not run beside, runs) and `search` (every word must match). They
-are built with their parser (`surfaces/commands/schedule.py`); the `schedule` CLI group and
-its MCP tool are mounted together with job authoring (add, edit, enable, disable).
+are built with their parser (`surfaces/commands/schedule.py`) but not mounted yet: the
+`schedule` CLI group and its MCP tool land together with job authoring (add, edit, enable,
+disable). Until then they are `api.schedule.schedule_list`, `schedule_show` and
+`schedule_search`.
 
 ---
 

@@ -13,6 +13,7 @@ is the layer check doing exactly what it is for.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 
@@ -28,7 +29,9 @@ def calendar(cfg) -> dict[str, float]:
             value = float(days) if sep and name.strip() else 0.0
         except ValueError:
             value = 0.0
-        if value <= 0:
+        # Not `value <= 0`: nan and inf (also "1e309") pass that, and a period no elapsed
+        # time reaches is a pass that silently never falls due (bug B1c68fe5e9c).
+        if not (math.isfinite(value) and value > 0):
             raise ValueError(
                 f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
                 f'number of days (e.g. "bug_hunt=7")'

@@ -333,6 +333,16 @@ def graph_errors(jobs: dict[str, Schedule]) -> list[str]:
     return errors
 
 
+def concerns(error: str, jid: str) -> bool:
+    """Is `error` (one of `Definitions.errors` / `graph_errors`) about job `jid`? By
+    position, never by substring: `api` must not own `api-v2`'s problems."""
+    if error.startswith(f"{jid} needs ") or f"{SCHEDULES_DIR.as_posix()}/{jid}.toml: " in error:
+        return True
+    if error.startswith("needs cycle: "):
+        return jid in error.removeprefix("needs cycle: ").split(" -> ")
+    return False
+
+
 def conflicts(a: Schedule, b: Schedule, shared: list[str] | None = None) -> list[str]:
     """Why `a` and `b` may not run at the same time: an explicit shared concurrency
     group, or scope globs that overlap (`core.schedule.conflicts`, shared globs exempt).
