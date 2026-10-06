@@ -3494,6 +3494,32 @@ mutation-verified in `tests/test_log_read_cache.py` — including that the diges
 whole prefix rather than a trailing window of it, which a smaller fixture cannot tell
 apart.
 
+### Managed definitions: the `def.*` event kinds
+
+Doc types, schedules, triggers, skills, agents, research claims and rules are all
+*definitions*: named documents that are written, revised, retired, replaced or merged. They
+share one record (B-uni-def-records) instead of a set of events per family. Five event
+kinds carry them, each with the envelope `{kind, id, digest, source, provenance}`:
+
+- `def.recorded`: a whole definition (`fields`). Recording an id again replaces its fields
+  and brings a retired, superseded or merged one back.
+- `def.updated`: some fields; a field set to null is removed.
+- `def.retired`: with a reason.
+- `def.superseded`: replaced by another active definition of the same kind (`successor`).
+- `def.merged`: folded into another active definition of the same kind, which lists it as
+  merged from.
+
+The fold keeps each definition under `kind:id`, so a schedule and a skill may share a
+name, with its digest and its full history. All five kinds are provenance kinds, and
+`ddflow replay` renders each one. The one
+write path is `ddflow.api` `def_record` / `def_update` / `def_retire` / `def_supersede` /
+`def_merge`, with `def_show` and `def_list` to read. It refuses an unknown kind, an id that
+cannot be an id, or fields that are not plain JSON (exit 1). It also refuses to revise a
+definition that is missing or no longer active (exit 3). An update that changes nothing is
+exit 2. A new definition runs the add-time duplicate check when its kind is in
+`[dedupe].kinds`: `rule` is by default, and other families add their kind when they start
+filing. The CLI and MCP surfaces are B-uni-record-surface.
+
 ### A log from a newer ddflow, and the link event kinds
 
 Checkouts of one repository can run different ddflow versions, and a shard merged from a

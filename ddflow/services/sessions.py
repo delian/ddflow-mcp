@@ -28,6 +28,7 @@ would be a scrub that a `git show` walks straight past.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import textwrap
@@ -543,6 +544,24 @@ def _rs_resolved(n, ev):
     return ReplayStep(n, ev.ts, "resolved", text, ev.subject)
 
 
+def _rs_definition(n, ev):
+    """A managed definition (`core.defs`) and each revision of it: what a rebuild must
+    define again, and what it must not (retired, superseded, merged)."""
+    d = ev.data
+    kind, rid = d.get("kind", "?"), d.get("id", "?")
+    verb = ev.kind.partition(".")[2]
+    text = f"{kind} `{rid}` {verb}"
+    if d.get("successor"):
+        text += f" into `{d['successor']}`" if verb == "merged" else f" by `{d['successor']}`"
+    if d.get("reason"):
+        text += f": {d['reason']}"
+    if d.get("source"):
+        text += f" (from {d['source']})"
+    if isinstance(d.get("fields"), dict) and d["fields"]:
+        text += "\n\n" + json.dumps(d["fields"], indent=2, sort_keys=True, ensure_ascii=False)
+    return ReplayStep(n, ev.ts, "definition", text)
+
+
 #: kind -> renderer. A table rather than a ladder: each arm is independent, and the
 #: set of kinds that carry irreplaceable intent is exactly what this dict declares.
 _REPLAY_RENDERERS = {
@@ -561,6 +580,10 @@ _REPLAY_RENDERERS = {
     "record.extended": _rs_extended,
     "link.recorded": _rs_link,
     "skew.overridden": _rs_skew_overridden,
+    **dict.fromkeys(
+        ("def.recorded", "def.updated", "def.retired", "def.superseded", "def.merged"),
+        _rs_definition,
+    ),
 }
 
 
@@ -610,6 +633,7 @@ def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str
             "lesson": "LESSON",
             "decision": "DECISION",
             "completed": "SHIPPED",
+            "definition": "DEFINITION",
         }.get(s.kind, s.kind)
         head = f"### {s.n}. [{tag}] {s.at}"
         if s.item:
