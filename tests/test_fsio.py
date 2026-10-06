@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from conftest import run_cli
 
-from ddflow.core.digest import digest
+from ddflow.core.digest import content_digest as digest
 from ddflow.infra import fsio, tomlcfg
 
 

@@ -3,8 +3,9 @@
 Every file ddflow writes that something else reads -- a config, an MCP server list, a hook,
 a lease ledger -- must never be seen half-written, and two agents rewriting it at once must
 not lose an edit. Both properties were re-implemented in several places with different
-gaps (no fsync, a fixed temp name, a lock that waits forever, a mode the file did not have
-before); this module is the one implementation (D-unify 4, B-uni-fsio). The architecture
+gaps (no fsync, a fixed temp name, a mode the file did not have before, a lock with no way
+to stop waiting); this module is the one implementation (D-unify 4, B-uni-fsio), and its
+callers move onto it slice by slice (the event log's lock in B-uni-fsio-log). The architecture
 guards count `tempfile`, `fcntl` and `os.replace` outside this module and only let the
 count go down.
 
