@@ -556,6 +556,46 @@ class Job:
 
 
 @dataclass
+class Schedule:
+    """A scheduled job's DEFINITION: what runs, how often, on what, and how it may act
+    (decision D-sched-no-daemon). When it is due and what a run did are not here: due
+    state is computed from the log, and a run is recorded by `cadence.ran` under the
+    job's id, as the existing periodic passes always were.
+
+    Folded from `schedule.defined` / `schedule.updated` / `schedule.removed`. The other
+    sources -- `.ddflow/schedules/*.toml` and the `[cadence]` config -- are read by
+    `services.schedule`, which merges all three into the one view every surface shows.
+    """
+
+    id: str
+    title: str = ""
+    #: Exactly one of {"every_days": float, "every_tasks": int, "every_phases": int}.
+    cadence: dict[str, Any] = field(default_factory=dict)
+    #: Upstream job ids: this job is due only after their latest run succeeded since its own.
+    needs: list[str] = field(default_factory=list)
+    #: What a run may write. Two jobs whose scopes overlap never run at once.
+    scope_globs: list[str] = field(default_factory=list)
+    #: Jobs sharing a non-empty group never run at once, whatever their scopes.
+    concurrency_group: str = ""
+    #: The prompt template a run renders (`ddflow prompts`); "" means the job's id.
+    prompt: str = ""
+    mode: str = "report"  # report | fix
+    #: {"max_items", "max_bugs", "max_turns"}: non-negative ints, 0 = no cap.
+    budget: dict[str, int] = field(default_factory=dict)
+    #: A run that cannot finish files a needs-operator item rather than failing quietly.
+    escalate: bool = True
+    missed: str = "skip"  # skip | once -- never a catch-up of every missed period
+    #: Minutes a due run may be spread by, so jobs due together do not all start at once.
+    jitter: int = 0
+    enabled: bool = True
+    tags: list[str] = field(default_factory=list)
+    at: str = ""
+    by: str = ""
+    #: Why it was removed; "" while defined. A removed job is kept, like a forgotten memory.
+    removed: str = ""
+
+
+@dataclass
 class Memory:
     """One operational fact, true of THIS machine, repository or working state.
 
@@ -688,6 +728,9 @@ class State:
     decisions: dict[str, Decision] = field(default_factory=dict)
     memories: dict[str, Memory] = field(default_factory=dict)
     jobs: dict[str, Job] = field(default_factory=dict)
+    #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
+    #: file and `[cadence]` sources over these).
+    schedules: dict[str, Schedule] = field(default_factory=dict)
     #: `repo:ID` -> what `ddflow external sync` last OBSERVED of an item in a sibling
     #: repository: {"state", "title", "repo", "at"}. Recorded in this log, so a
     #: dependency on another project is decided from a fact with a date on it, and the
@@ -2187,6 +2230,63 @@ def _h_link_recorded(st: State, ev: Event) -> None:
         _link(st, ev, relation, target, "later")
 
 
+#: What a `schedule.defined` / `schedule.updated` event may carry: every `Schedule` field
+#: an author sets. `id` is the subject; `at`, `by` and `removed` are the fold's.
+SCHEDULE_FIELDS: tuple[str, ...] = (
+    "title",
+    "cadence",
+    "needs",
+    "scope_globs",
+    "concurrency_group",
+    "prompt",
+    "mode",
+    "budget",
+    "escalate",
+    "missed",
+    "jitter",
+    "enabled",
+    "tags",
+)
+
+
+def _schedule_with(base: Schedule, d: dict[str, Any]) -> Schedule:
+    """`base` with the fields `d` carries; copied, so no list is shared with the event."""
+    out = Schedule(**{**asdict(base)})
+    for name in SCHEDULE_FIELDS:
+        if name in d:
+            v = d[name]
+            setattr(
+                out, name, list(v) if isinstance(v, list) else dict(v) if isinstance(v, dict) else v
+            )
+    return out
+
+
+def _h_schedule_defined(st: State, ev: Event) -> None:
+    """A whole definition: a field the event omits takes the model default, so defining a
+    job again REPLACES it rather than merging onto the old one. Defining a removed job
+    brings it back. When it was first defined, and by whom, is kept."""
+    prev = st.schedules.get(ev.subject)
+    job = _schedule_with(Schedule(id=ev.subject), ev.data)
+    job.at = prev.at if prev and prev.at else ev.ts
+    job.by = prev.by if prev and prev.by else ev.agent
+    st.schedules[ev.subject] = job
+
+
+def _h_schedule_updated(st: State, ev: Event) -> None:
+    """Only the fields the event carries change. An update that arrives before its
+    definition (a shard merged out of order) starts from the defaults rather than being
+    dropped, and the definition then replaces it."""
+    prev = st.schedules.get(ev.subject) or Schedule(id=ev.subject, at=ev.ts, by=ev.agent)
+    st.schedules[ev.subject] = _schedule_with(prev, ev.data)
+
+
+def _h_schedule_removed(st: State, ev: Event) -> None:
+    job = st.schedules.get(ev.subject)
+    if job is None:
+        job = st.schedules[ev.subject] = Schedule(id=ev.subject, at=ev.ts, by=ev.agent)
+    job.removed = ev.data.get("reason", "") or "removed"
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, "task")),
@@ -2250,6 +2350,10 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "session.ended": _h_session_ended,
     "gate.out_of_order": _h_gate_out_of_order,
     "cadence.ran": _h_cadence,
+    # first writer: api/schedule.py (define / update / remove)
+    "schedule.defined": _h_schedule_defined,
+    "schedule.updated": _h_schedule_updated,
+    "schedule.removed": _h_schedule_removed,
     "reviewer.configured": _h_reviewer_configured,
     "reviewer.approved": _h_reviewer_approved,
     "record.extended": _h_record_extended,

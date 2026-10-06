@@ -3694,6 +3694,52 @@ Task-counted passes stay advisory, and completing a task never asks. `--force` o
 (recorded), and every completion path, including a merged pull request, applies the check.
 The driver's phase close runs `ddflow cadence` first.
 
+### Scheduled jobs
+
+A cadence pass is one kind of **scheduled job**: a first-class definition of what runs, how
+often, on what, and how it may act (decision D-sched-no-daemon). ddflow computes when a job
+is due from the log; what starts it is pluggable, and there is no ddflow daemon. A job is
+defined in one of three places, and every view shows the merge:
+
+1. the event log: `schedule.defined` (a whole definition), `schedule.updated` (some fields)
+   and `schedule.removed` (with a reason; kept, and it hides the same id below it);
+2. `.ddflow/schedules/<id>.toml`, one job per file, reviewed in git like any config;
+3. `[cadence]`: the five count passes and `every_days` show up as jobs (a pass set to 0 as
+   disabled). How they fall due does not change.
+
+An earlier source shadows a later one with the same id, and showing the job names both.
+
+```toml
+# .ddflow/schedules/bug-audit.toml
+title = "Weekly whole-codebase bug audit"
+cadence = { every_days = 7 }        # or { every_tasks = N } / { every_phases = N }
+needs = ["integration_tests"]       # due only after these succeeded since its own last run
+scope_globs = ["ddflow/**"]         # what a run may write
+concurrency_group = "heavy"         # jobs in one group never run at once
+prompt = "bug-audit"                # the template a run renders ("" = the job id)
+mode = "report"                     # report | fix
+budget = { max_items = 5, max_bugs = 10, max_turns = 0 }   # 0 = no cap
+escalate = true                     # a run that cannot finish files a needs-operator item
+missed = "skip"                     # skip | once: never a catch-up of every missed period
+jitter = 30                         # minutes a due run may be spread by
+enabled = true
+tags = ["audit"]
+```
+
+Every definition is validated: an unknown field (a misspelt `scope_glob` would otherwise
+widen a job to the whole tree), a wrong type, an id that is not a plain key, a `needs` naming
+no job, or a `needs` cycle. A broken file is reported and left out; a recorded definition
+that is broken is refused before anything is written. Two enabled jobs may not run at the
+same time when they share a concurrency group or their scope globs overlap (shared globs
+exempt). A job's runs are the `cadence.ran` records under its id.
+
+The read verbs are `list` (by tag, enabled only), `show` (source, what it shadows, needs and
+needed-by, the jobs it may not run beside, runs) and `search` (every word must match). They
+are built with their parser (`surfaces/commands/schedule.py`) but not mounted yet: the
+`schedule` CLI group and its MCP tool land together with job authoring (add, edit, enable,
+disable). Until then they are `api.schedule.schedule_list`, `schedule_show` and
+`schedule_search`.
+
 ---
 
 ## Exporting documents
