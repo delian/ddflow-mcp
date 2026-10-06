@@ -8,9 +8,14 @@ the limit and never lowers it.
 
 Windows (all ending at ``now``):
 
-* ``reviewer_latency_ratio``: median seconds from ``gate.started`` to the review gate's
-  outcome over the last 30 minutes, divided by the project's median over the 7 days
-  before that window. None under 5 recent or 20 baseline samples.
+* ``reviewer_latency_ratio``: how long the REVIEWER takes to answer, now against usual
+  (bug B1c5dbe3103): each sample is the ``elapsed_s`` a ``ddflow review`` records in its
+  outcome's evidence, per wave of chunks it had to send -- so a large diff, a triage gap
+  before a hand-recorded outcome or a killed run cannot pose as a slow reviewer. The
+  median over the last 30 minutes is divided by the median over the 7 days before. It is
+  saturation only while the reviewer is busy: None when the recent reviews ran with
+  fewer than 3 in flight at once (one agent's rubber_duck and critic are two), and under
+  5 recent or 20 baseline samples.
 * ``gate_failure_rate``: ``gate.failed / (passed + failed)`` over the last 60 minutes.
   None under 10 outcomes.
 * ``gate_failure_ratio``: that rate divided by the project's own rate over the 7 days
@@ -40,6 +45,12 @@ from .model import State
 RECENT_REVIEW_S = 30 * 60.0
 BASELINE_S = 7 * 86400.0
 MIN_RECENT_REVIEWS = 5
+#: Reviews in flight at once (counting itself) below which slow answers are the diff's or
+#: the model's, not a queue: one agent's rubber_duck and critic run as a pair.
+MIN_IN_FLIGHT = 3
+#: Chunks a review sends in one wave: `services.review.AUTO_CONCURRENCY_CEILING` (32)
+#: requests over the default hedge of 2 copies. More chunks go out in further waves.
+WAVE_CHUNKS = 16
 MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0
 MIN_GATE_OUTCOMES = 10
@@ -82,34 +93,51 @@ def _outcome(ev: Event) -> str:
     return tail if head == "gate" and tail in _OUTCOME_KINDS else ""
 
 
-def reviewer_latency_ratio(events: Sequence[Event], now: float) -> float | None:
-    started: dict[tuple[str, str], float] = {}
-    recent: list[float] = []
-    baseline: list[float] = []
+def _review_samples(events: Sequence[Event]) -> list[tuple[float, float, float]]:
+    """(start, end, seconds per wave) of every review `ddflow review` recorded: an outcome
+    of a review gate whose evidence carries the command's own ``elapsed_s``. A later
+    `gate record` that carries the same review's evidence along is not a second sample."""
+    out = []
+    seen: set[tuple] = set()
     for ev in sorted(events, key=lambda e: (PR.epoch(e.ts), e.lamport)):
-        gate = _gate(ev)
-        if gate not in PR.REVIEW_GATES:
+        ev_data = ev.data if isinstance(ev.data, dict) else {}
+        evidence = ev_data.get("evidence")
+        if _gate(ev) not in PR.REVIEW_GATES or not _outcome(ev) or not isinstance(evidence, dict):
             continue
-        at = PR.epoch(ev.ts)
-        if at <= 0:
+        took, chunks = evidence.get("elapsed_s"), evidence.get("chunks_total") or 1
+        end = PR.epoch(ev.ts)
+        if not isinstance(took, int | float) or isinstance(took, bool) or took <= 0 or end <= 0:
             continue
-        key = (ev.subject, gate)
-        if ev.kind == "gate.started":
-            started[key] = at
-        elif _outcome(ev) and key in started:
-            took = at - started.pop(key)
-            if took < 0 or at > now:
-                continue
-            if at > now - RECENT_REVIEW_S:
-                recent.append(took)
-            elif at > now - RECENT_REVIEW_S - BASELINE_S:
-                baseline.append(took)
-    if len(recent) < MIN_RECENT_REVIEWS or len(baseline) < MIN_BASELINE_REVIEWS:
+        once = (
+            ev.subject,
+            _gate(ev),
+            evidence.get("output_file") or evidence.get("output_digest"),
+            took,
+        )
+        if once in seen:
+            continue
+        seen.add(once)
+        waves = max(1, -(-int(chunks) // WAVE_CHUNKS)) if isinstance(chunks, int) else 1
+        out.append((end - took, end, took / waves))
+    return out
+
+
+def reviewer_latency_ratio(events: Sequence[Event], now: float) -> float | None:
+    samples = sorted(_review_samples(events))
+    recent = [s for s in samples if now - RECENT_REVIEW_S < s[1] <= now]
+    base = [
+        s for s in samples if now - RECENT_REVIEW_S - BASELINE_S < s[1] <= now - RECENT_REVIEW_S
+    ]
+    if len(recent) < MIN_RECENT_REVIEWS or len(base) < MIN_BASELINE_REVIEWS:
         return None
-    base = statistics.median(baseline)
-    if base <= 0:
+    # how many reviews were running when each recent one started (itself included)
+    busy = [sum(1 for a, b, _ in samples if a <= start < b) for start, _, _ in recent]
+    if statistics.median(busy) < MIN_IN_FLIGHT:
         return None
-    return statistics.median(recent) / base
+    usual = statistics.median(s[2] for s in base)
+    if usual <= 0:
+        return None
+    return statistics.median(s[2] for s in recent) / usual
 
 
 def _failure_rate(

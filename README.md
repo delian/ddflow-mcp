@@ -2913,7 +2913,7 @@ raising it.
 
 | Signal | Definition | Window | Unavailable when |
 |---|---|---|---|
-| `reviewer_latency_ratio` | median seconds from `gate.started` to a review gate's outcome, over the project's median for the 7 days before the window | last 30 minutes | under 5 recent or under 20 baseline reviews |
+| `reviewer_latency_ratio` | how long the reviewer takes to answer: median `elapsed_s` that `ddflow review` records, per wave of chunks it sent, over the project's median for the 7 days before the window (so a large diff, or a triage gap before a hand-recorded outcome, is not a slow reviewer) | last 30 minutes | under 5 recent or under 20 baseline reviews, or fewer than 3 reviews in flight at once (slow alone is not busy) |
 | `gate_failure_rate` | `gate.failed / (passed + failed)` | last 60 minutes | under 10 outcomes |
 | `gate_failure_ratio` | `gate_failure_rate` over the project's own rate for the 7 days before the window | last 60 minutes | under 10 recent or 20 baseline outcomes (a clean baseline counts as one failure; a single recent failure counts as at most 1.0, the usual rate) |
 | `merge_failure_rate` | failed merge-gate outcomes over merge attempts | last 2 hours | no merge attempt |
@@ -2923,8 +2923,8 @@ raising it.
 A fresh project simply reports the first four as unavailable until it has history; nothing
 needs configuring. A merge git tried and failed (a conflict) is recorded as a failed `merge` gate
 outcome, which is what `merge_failure_rate` counts; a merge refused before git tried (target
-checked out elsewhere, another merge in progress) is not. Reviewer latency is the time from the
-`gate.started` that `ddflow review` writes before it calls the reviewer to the gate's outcome.
+checked out elsewhere, another merge in progress) is not. Reviewer latency is the `elapsed_s` that `ddflow review` records
+in the gate outcome's evidence: the reviewer's own time, not the agent's.
 
 ## Gitflow, pull requests and version tags
 
