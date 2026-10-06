@@ -375,9 +375,10 @@ def dirty(wt: Worktree, *, untracked: bool = True) -> list[str]:
     return [ln for ln in r.out.splitlines() if ln.strip()]
 
 
-#: The prefix of the one line `dirty` answers for a tree git could not read. Not a
-#: porcelain status code, so it cannot be mistaken for a file.
-UNREADABLE = "?! "
+#: The prefix of the one line `dirty` answers for a tree git could not read. No porcelain
+#: line can start with it (status columns are " MTADRCU?!"), so a caller that filters by
+#: status code -- untracked ``??`` or ignored ``!!`` -- cannot drop it as one.
+UNREADABLE = "unreadable: "
 
 
 def unreadable(lines: list[str]) -> bool:

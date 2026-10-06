@@ -85,7 +85,7 @@ class Plan:
 
     @property
     def needs_human(self) -> list[TreeState]:
-        return [t for t in self.trees if t.kind == "dirty"]
+        return [t for t in self.trees if t.kind in ("dirty", "unreadable")]
 
     @property
     def actionable(self) -> list[TreeState]:
@@ -184,7 +184,7 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     t.ahead = max(0, ahead)
     t.behind = max(0, W.behind(wt))
     if W.unreadable(dirty):
-        return dirty[0][len(W.UNREADABLE) :]
+        return dirty[0][len(W.UNREADABLE) :] or "git status failed"
     t.dirty_files = len(dirty)
     return "" if ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
