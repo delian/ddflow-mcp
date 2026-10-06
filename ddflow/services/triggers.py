@@ -414,7 +414,9 @@ def evaluate(
             evs = cluster(matched, trig.count, trig.window)
             if len(evs) < trig.count:
                 continue
-            hop = 1 + max(st.trigger_items.get(ev.subject, {}).get("hop", 0) for _, ev in evs)
+            # Over EVERY new event of the key, not only the cluster: a remediation's own
+            # failure among them must count against the hop limit (rubber-duck).
+            hop = 1 + max(st.trigger_items.get(ev.subject, {}).get("hop", 0) for _, ev in matched)
             d = Decision(tid, key, False, events=[ev.id for _, ev in evs], hop=hop)
             # the quiet period runs from the newest matching event, in the cluster or not
             newest = max(t for t, _ in matched)

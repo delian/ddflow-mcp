@@ -378,7 +378,42 @@ def test_the_evaluator_decides_under_the_log_lock(proj, monkeypatch):
 
     monkeypatch.setattr(TR, "evaluate", spy)
     A.trigger_evaluate(proj)
-    assert seen == [True]
+    # decided outside the lock (roborev: no O(all events) read under it) ...
+    assert seen == [False]
+    # ... and decided AGAIN under it when another writer got there first
+    seen.clear()
+    real_extent = EventLog.extent
+    calls = iter(range(100))
+
+    def growing(self):
+        out = dict(real_extent(self))
+        out["_grew"] = next(calls)
+        return out
+
+    monkeypatch.setattr(EventLog, "extent", growing)
+    A.trigger_evaluate(proj)
+    assert seen == [False, True]
+
+
+def test_hop_counts_every_new_event_of_the_key_not_only_the_cluster():
+    """rubber-duck on B-trigger-model: the cluster's earliest events set the hop, and the
+    remediation's own later failure slipped past the hop limit."""
+    evs = [*_fired("R1", "", 0, trig="other", hop=1)]
+    evs += [_ev("gate.failed", "T1", 1), _ev("gate.failed", "R1", 30)]
+    [d] = _run(evs, _trig(count=1, window=5, hop_limit=1), 40)
+    assert (d.reason, d.hop) == ("hop_limit", 2)
+
+
+def test_item_ids_count_every_item_the_trigger_filed():
+    """critic on B-trigger-model claimed ids repeat; each fire files a NEW item id, and
+    trigger_items is keyed by it, so the count only grows."""
+    evs = []
+    for i in range(3):
+        evs += _fired(f"T-t-{i + 1}", "S", i * 10)
+        evs += [_ev("item.completed", f"T-t-{i + 1}", i * 10 + 1)]
+    job = Schedule(id="fix")
+    d = TR.Decision("t", "S", True, events=["e"], hop=1)
+    assert TR.item_for(_trig(), job, d, set(), fold(evs))["id"] == "T-t-4"
 
 
 def test_a_late_straggler_does_not_hide_an_earlier_burst():

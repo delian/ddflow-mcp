@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..core.model import SCHEDULE_FIELDS, Schedule
+from ..core.model import SCHEDULE_FIELDS, Schedule, fold
 from ..services import schedule as SV
 from ..services import triggers as TR
 from ._base import _load
@@ -222,25 +222,31 @@ def trigger_evaluate(
     the reason; the run itself is `trigger.evaluated`. `dry_run` writes nothing. Exit 2
     when no condition is met (nothing recorded but the run).
 
-    The read, the decision and the writes happen under ONE log lock: two evaluators
-    started at once would otherwise both see a key with no open remediation, or the
-    hourly cap not yet reached, and both file (rubber-duck and roborev on B-trigger-model)."""
-    from ..core.model import fold
-
+    Decided from a log nothing has appended to since: two evaluators started at once
+    would otherwise both see a key with no open remediation, or the hourly cap not yet
+    reached, and both file (rubber-duck and roborev). The read and the fold happen
+    OUTSIDE the append lock, as a claim's do (`leases._decide_from`); under the lock a
+    few `stat` calls prove the log did not grow, and only if it did is everything read
+    and decided again -- with NOW taken again -- before anything is written."""
     log, cfg, _st = _load(repo, agent)
     given = TR.ts(now) if now else None
     if now and given is None:
         return O.failed("trigger.evaluated", f"--now {now!r} is not an ISO timestamp")
-    with log.transaction():
-        # NOW is taken under the lock: taken before it, the fires of an evaluator that
-        # held the lock first would be stamped after it and missed by the cap (rubber-duck).
-        at = given or datetime.now(UTC)
+
+    def decide():
         events = log.read_all()
-        st = fold(events)
+        st = fold(events, strict=False)
         defs = SV.definitions(repo, cfg, st)
         trigs, errors = TR.load(repo, defs.jobs)
-        decisions = TR.evaluate(st, events, trigs, at)
-        if not dry_run:
+        at = given or datetime.now(UTC)
+        return at, st, defs, trigs, errors, TR.evaluate(st, events, trigs, at)
+
+    before = log.extent()
+    at, st, defs, trigs, errors, decisions = decide()
+    if not dry_run:
+        with log.transaction():
+            if log.extent() != before:
+                at, st, defs, trigs, errors, decisions = decide()
             _apply(log, st, defs, trigs, decisions, at, errors)
     fired = sum(1 for d in decisions if d.fire)
     data = {"decisions": [asdict(d) for d in decisions], "errors": errors, "fired": fired}
