@@ -467,6 +467,18 @@ def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
     return O.refused("rule.added", problem) if problem else None
 
 
+def _refused_up_front(
+    repo: Path, rule: Rule, agent: str, answer: RuleDedupAnswer | None
+) -> O.Outcome | None:
+    """The project's [rules] limits, then an answer that is not one: refused before any
+    check runs. Never joined with `or`: an Outcome is falsy unless OK, so a refusal would
+    read as "nothing" (roborev)."""
+    refusal = _over_limits(repo, rule, agent)
+    if refusal is None and answer is not None and answer.problem:
+        refusal = O.failed("rule.added", answer.problem, id=rule.id)
+    return refusal
+
+
 def rule_add(
     repo: Path,
     rule: Rule,
@@ -490,11 +502,7 @@ def rule_add(
     Returns:
         Outcome with rule_id and other details, or refusal if duplicate found
     """
-    refusal = _over_limits(repo, rule, agent) or (
-        O.failed("rule.added", dedup_answer.problem, id=rule.id)
-        if dedup_answer is not None and dedup_answer.problem
-        else None
-    )
+    refusal = _refused_up_front(repo, rule, agent, dedup_answer)
     if refusal is not None:
         return refusal
     if not check_dedup:
@@ -599,6 +607,8 @@ def _check_edit(
         return O.failed("rule.updated", f"Rule {rule_id} not found", id=rule_id), {}
     if answer is not None and answer.problem:
         return O.failed("rule.updated", answer.problem, id=rule_id), {}
+    if answer is not None and answer.target == rule_id:
+        return O.failed("rule.updated", "a rule cannot point at itself", id=rule_id), {}
     if answer is not None and answer.relation in ("extends", "duplicate_of"):
         return O.failed(
             "rule.updated",
