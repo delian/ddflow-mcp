@@ -178,3 +178,5 @@ def test_a_grant_that_is_not_a_persons_approves_nothing(human):
     st = fold([ev])
     assert not AP.check(st, "reviewer:evil", "abc").ok
     assert "abc" not in st.reviewer_approvals
+    # kept in the record, as everything the log holds is: visible, not counted
+    assert [r["human"] for r in st.approvals["reviewer:evil"]] == [False]
