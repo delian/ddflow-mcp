@@ -342,3 +342,15 @@ def test_a_short_write_still_writes_the_whole_line(repo, monkeypatch):
         assert F.sample_if_due(_ctx(repo), src, clock).written
     monkeypatch.undo()
     assert len(F.read_ring(repo)) == 4
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
+def test_a_rewrite_keeps_the_rings_mode(repo):
+    clock, src = Clock(), SIG.FakeSource(GOOD)
+    F.sample_if_due(_ctx(repo), src, clock)
+    before = F.ring_path(repo).stat().st_mode & 0o777
+    with F.ring_path(repo).open("a", encoding="utf-8") as fh:
+        fh.write("torn")
+    clock.t += 60
+    F.sample_if_due(_ctx(repo), src, clock)  # the rewrite branch
+    assert F.ring_path(repo).stat().st_mode & 0o777 == before

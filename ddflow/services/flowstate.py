@@ -181,14 +181,26 @@ def _write_all(fd: int, data: bytes) -> None:
 
 
 def _append_line(path: Path, line: str) -> None:
-    """One whole line onto an ``O_APPEND`` descriptor: concurrent appenders land their
-    lines one after another. A write cut short (a full disk) leaves a torn tail, which
-    the next sample sees and repairs by rewriting the file."""
+    """One whole line onto an ``O_APPEND`` descriptor: a line written in one call lands
+    whole, after any other appender's. A write cut short (a full disk) needs a second
+    call, and another writer's line may land between the two; either way the damaged
+    line is seen by the next sample, which rewrites the file -- at most the samples on
+    that line are lost, never the ring."""
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
     try:
         _write_all(fd, line.encode("utf-8"))
     finally:
         os.close(fd)
+
+
+def _mode(path: Path) -> int:
+    """The ring's current mode, so a rewrite keeps it (0o644 when there is none yet).
+    Read from the file, never by flipping the umask: that is process-wide, and an MCP
+    server has other threads creating files."""
+    try:
+        return path.stat().st_mode & 0o777
+    except OSError:
+        return 0o644
 
 
 def _replace(path: Path, body: str) -> None:
@@ -198,6 +210,7 @@ def _replace(path: Path, body: str) -> None:
     fd, name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
     try:
         try:
+            os.fchmod(fd, _mode(path))  # mkstemp makes 0600; keep the ring's usual mode
             _write_all(fd, body.encode("utf-8"))
         finally:
             os.close(fd)
