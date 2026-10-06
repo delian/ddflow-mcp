@@ -62,7 +62,9 @@ def _untracked_digest(cwd: Path) -> str:
         # fingerprint that quietly stopped covering content would make `stale_evidence`
         # go quiet for the repositories that need it most.
         return f"names-only:{len(paths)}:" + digest("\n".join(sorted(paths)))
-    hashed = W.git(cwd, "hash-object", *paths)
+    # `--`: an untracked file named `-w` is a path, never the option that WRITES the
+    # object (Bc63747e0a4).
+    hashed = W.git(cwd, "hash-object", "--", *paths)
     ids = hashed.out.splitlines()
     # A short or long reply must not be zipped silently: `zip` would truncate to the
     # shorter list, pairing hashes with the wrong paths and producing a fingerprint

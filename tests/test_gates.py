@@ -613,3 +613,20 @@ def test_the_magnitude_works_before_the_first_commit(repo, tmp_path):
     stat = diff_stat(fresh)
     assert stat["untracked"] == 1, stat
     assert stat["insertions"] == 3, stat
+
+
+def _objects(repo: Path) -> set[Path]:
+    return {p for p in (repo / ".git" / "objects").rglob("*") if p.is_file()}
+
+
+def test_an_untracked_file_named_like_an_option_is_hashed_not_obeyed(repo):
+    """Bug Bc63747e0a4: `git hash-object` ran without `--`, so an untracked file named
+    `-w` was read as the WRITE option -- the observer wrote an object into the store --
+    and that file's content was never fingerprinted."""
+    (repo / "a.txt").write_text("a\n")
+    (repo / "-w").write_text("one\n")
+    before = _objects(repo)
+    first = G._untracked_digest(repo)
+    assert _objects(repo) == before, "the fingerprint wrote to the object store"
+    (repo / "-w").write_text("two\n")
+    assert G._untracked_digest(repo) != first, "the -w file's content is not covered"
