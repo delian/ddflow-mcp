@@ -492,8 +492,10 @@ Two tools exist so an agent can orient itself without being told: `ddflow_help` 
 is this, what is the loop) and `ddflow_workflow` (what are the rules *here*).
 
 **Protocol versions: both eras.** A client that opens with `initialize` negotiates
-`2025-06-18`, `2025-03-26` or `2024-11-05` (an unknown version falls back to the newest)
-and is served exactly as before. A client on the stateless `2026-07-28` revision sends no
+`2025-11-25`, `2025-06-18`, `2025-03-26` or `2024-11-05` (an unknown version falls back to
+the newest) and is served exactly as before; `2025-11-25` adds nothing a tools, resources
+and prompts server must do differently -- a bad argument was already a tool result with
+`isError`, never a protocol error. A client on the stateless `2026-07-28` revision sends no
 `initialize`: each request carries `io.modelcontextprotocol/protocolVersion` and
 `io.modelcontextprotocol/clientCapabilities` in `params._meta`, and the server answers it
 on its own. `server/discover` returns the supported versions, capabilities and the same
