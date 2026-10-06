@@ -4211,8 +4211,10 @@ decision or lesson left out is still named by id, and each decision is quoted up
 characters (`ddflow decision show <id>` for the whole). What a short section does not use
 goes to the sections that need more, so the safety-critical head survives a squeeze and
 no long section ahead of them — other items' jobs, leftovers, blocked items — can cut the
-decisions, rules and lessons out. A project's opening cost stays roughly constant as its
-lesson corpus grows.
+decisions, rules and lessons out. Long-running jobs: those running here, the item's own
+and the ones the brief's own agent started are listed in full (the item's first); other
+agents' exited or killed jobs collapse to one count line pointing at `ddflow job list`. A
+project's opening cost stays roughly constant as its lesson corpus grows.
 
 ---
 

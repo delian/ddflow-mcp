@@ -155,6 +155,7 @@ def brief(
         held=held_ids,
         suggested=suggested,
         reserve=render_md._approx_tokens(prepended) if prepended else 0,
+        agent=log.agent_id,
     )
     if undecided:
         text = undecided + "\n" + text
