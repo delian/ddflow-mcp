@@ -1,4 +1,4 @@
-"""Content digests: the one place ddflow hashes text or bytes.
+"""Content digests: where ddflow's hashing of text or bytes moves to (B-uni-fsio-digest).
 
 Pure (stdlib `hashlib` only). A digest that is STORED -- in the event log, a ledger, a
 generated file's header -- keeps the algorithm and length it was written with, so callers
@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 
 
-def digest(
+def content_digest(
     data: str | bytes, algo: str = "sha256", *, length: int | None = None, errors: str = "strict"
 ) -> str:
     """The hex digest of `data` (text is UTF-8 encoded with `errors`), cut to `length`
