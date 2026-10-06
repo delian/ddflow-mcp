@@ -206,6 +206,7 @@ GATE_RECORDS = {f"gate.{o}" for o in ("started", *GATE_OUTCOMES)}
 def test_every_event_kind_is_checked_or_exempt_with_a_reason():
     """Only the gate RECORD kinds are exempt as a family, by name; any other `gate.*`
     kind is classified like the rest (rubber-duck on B-coh-coverage)."""
+    assert "gate.out_of_order" not in GATE_RECORDS  # a pipeline note, classified below
     kinds = set(HANDLERS) - GATE_RECORDS
     unclassified = sorted(kinds - set(CHECKED) - set(EXEMPT))
     assert not unclassified, (
@@ -475,7 +476,7 @@ def test_the_capture_reaches_json_and_mcp(proj):
     """roborev on B-coh-coverage: the capture keys were projected away on both surfaces."""
     from ddflow.surfaces.tools import TOOLS as T
 
-    assert "lesson_capture" in T["ddflow_bug_fixed"]["payload"]
+    assert {"lesson_captured", "lesson_capture"} <= set(T["ddflow_bug_fixed"]["payload"])
     code, out, err = run_cli(
         proj,
         "lesson",
@@ -509,6 +510,7 @@ def test_the_capture_reaches_json_and_mcp(proj):
     assert code == 0, (code, out, err)
     body = json.loads(out)
     assert body["lesson_capture"]["extended"] == "L-old"
+    assert body["lesson_captured"] == "L-old"
 
     assert body["lesson_capture"]["candidates"][0]["id"] == "L-old"
 
