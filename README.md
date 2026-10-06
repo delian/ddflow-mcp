@@ -2421,6 +2421,13 @@ explicit spelling for a reviewer that really is of that family. The author is th
 agent declared at `session start --model`; with none declared there is nothing to compare
 and the record stands. `standards` is covered too, since it counts toward independence.
 
+Which gates are reviewer gates comes from their definitions: `rubber_duck`, `critic` and
+`standards`, plus every gate declaring `reviewer = "different_family"` — the built-in
+`verify`, and a project's own (`[gate.security_review]` with that line in `gates.toml`).
+A review recorded through any of them counts toward independence and has its `--model`
+checked as above; a `same_family_ok` gate does neither. (A custom reviewer gate used to be
+ignored, so an item reviewed only through one was refused at `complete`.)
+
 **`--reviewed-sha` ties a review to the commit that merges.** `roborev review HEAD` run from
 an item's worktree has enqueued the primary checkout's HEAD, so a `standards` gate was
 recorded against the wrong commit. Run `roborev review <sha>` with your branch head and
