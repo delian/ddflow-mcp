@@ -845,25 +845,29 @@ def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
     a plain history, more after criss-cross merges). Each is merged onto ``head`` with
     ``git merge-tree --write-tree -X theirs``: where the two conflict the incoming side
     is kept, so the diff to the tip shows exactly where the item's result departs from
-    the base's. Returns ``head`` when nothing came in, else the merged tree; the
-    incoming base commit (the item's whole own change on top of it) when a merge cannot
-    be written."""
+    the base's: a conflict it resolved its own way (overriding another item's change)
+    is its decision and is reviewed; one where it took the base's side is not new code.
+    Returns ``head`` when nothing came in, else the merged tree. When a merge cannot be
+    written (a delete/modify or rename conflict, say), ``head``: everything since the
+    reviewed head is sent, as before this fix -- more than the item's own, never less."""
     found = W.git(repo, "merge-base", "--all", base, tip) if base and tip else None
     bases = found.out.split() if found is not None and found.ok else []
-    came_in = [b for b in bases if not W.git(repo, "merge-base", "--is-ancestor", b, head).ok]
+    came_in = sorted(
+        b for b in bases if not W.git(repo, "merge-base", "--is-ancestor", b, head).ok
+    )  # sorted: `merge-base --all` names them in no particular order
     start = head
     for i, commit in enumerate(came_in):
         merged = W.git(repo, "merge-tree", "--write-tree", "-X", "theirs", start, commit)
         tree = merged.out.splitlines()[0].strip() if merged.ok and merged.out.strip() else ""
         if not tree:
-            return came_in[-1]
+            return head
         if i == len(came_in) - 1:
             return tree
         # Another base to merge: the tree as a commit merge-tree can take (unreferenced,
         # like the tree itself; git's gc removes both).
         made = W.git(repo, "commit-tree", tree, "-p", start, "-p", commit, "-m", "delta base")
         if not made.ok or not made.out.strip():
-            return came_in[-1]
+            return head
         start = made.out.strip()
     return head
 
@@ -904,14 +908,17 @@ def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
 
 
 def _delta_of_tree(wt: Path, head: str, base: str) -> str:
-    """The delta of an item's worktree: its commits and tracked edits since the start."""
+    """The delta of an item's worktree: its commits and tracked edits since the start.
+    Raises RuntimeError when the diff from a merged start cannot be produced."""
     start = _delta_start(wt, "HEAD", head, base)
-    if start != head:
-        committed = W.git(wt, "diff", "--no-color", start, "HEAD")
-        working = W.git(wt, "diff", "--no-color", "HEAD")
-        if committed.ok and working.ok:  # else: everything since head, never "nothing"
-            return "\n".join(p.out for p in (committed, working) if p.out.strip())
-    return W.capture_diff(wt, head, include_untracked=False)
+    if start == head:
+        return W.capture_diff(wt, head, include_untracked=False)
+    committed = W.git(wt, "diff", "--no-color", start, "HEAD")
+    working = W.git(wt, "diff", "--no-color", "HEAD")
+    for part in (committed, working):
+        if not part.ok:  # could not run: never "nothing changed"
+            raise RuntimeError(f"git diff in {wt} failed: {part.err or part.out}")
+    return "\n".join(p.out for p in (committed, working) if p.out.strip())
 
 
 def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
