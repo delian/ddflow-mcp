@@ -229,9 +229,26 @@ def test_a_merge_that_cannot_be_written_still_sends_none_of_mains_work(repo, tmp
     _git(repo, "rm", "-q", "gone.py")
     _git(repo, "commit", "-qm", "main: delete gone.py")
     _commit(repo, "theirs.py", "unrelated = 1\n", "main: other item")
-    subprocess.run(["git", "-C", str(tree), "merge", "-q", "main"], capture_output=True)
+    merged = subprocess.run(["git", "-C", str(tree), "merge", "-q", "main"], capture_output=True)
+    assert merged.returncode != 0 and (tree / "theirs.py").exists()  # the conflict, main's work in
     _git(tree, "rm", "-q", "gone.py")
     _git(tree, "commit", "-qm", "item: accept the deletion")
     _commit(tree, "own.py", "x = 1\n", "item: more")
     diff = RV._delta_diff(repo, _item(tree), "", head)
     assert "theirs.py" not in diff and "+x = 1" in diff
+
+
+def test_a_worktree_delta_with_nothing_merged_that_cannot_run_is_refused(
+    repo, tmp_path, monkeypatch
+):
+    tree = tmp_path / "item"
+    _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
+    head = _commit(tree, "own.py", "x = 1\n", "first")
+    _commit(tree, "own.py", "x = 2\n", "second")
+    real = RV.W.git
+    monkeypatch.setattr(
+        RV.W, "git",
+        lambda where, *a, **k: RV.W.GitResult(1, "", "boom") if a[:1] == ("diff",) else real(where, *a, **k),
+    )  # fmt: skip
+    with pytest.raises(RuntimeError, match="boom"):
+        RV._delta_diff(repo, _item(tree), "", head)
