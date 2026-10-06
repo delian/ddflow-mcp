@@ -129,6 +129,12 @@ def brief(
         if len(reports_block) > cap:
             reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
     from ...core import progress as PR
+    from ...services import choices as CH
+
+    # Prepended like the reports block, so budgeted like it (B1472311a63): uncounted, it
+    # took the room the lessons were meant to have.
+    undecided = CH.brief_block(cfg)
+    prepended = reports_block + (undecided + "\n" if undecided else "")
 
     text = render_md.brief(
         st,
@@ -148,11 +154,8 @@ def brief(
         memories=live,
         held=held_ids,
         suggested=suggested,
-        reserve=render_md._approx_tokens(reports_block) if reports_block else 0,
+        reserve=render_md._approx_tokens(prepended) if prepended else 0,
     )
-    from ...services import choices as CH
-
-    undecided = CH.brief_block(cfg)
     if undecided:
         text = undecided + "\n" + text
     text = reports_block + text
