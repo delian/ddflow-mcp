@@ -48,7 +48,7 @@ import shutil  # noqa: F401
 import socket  # noqa: F401
 import time  # noqa: F401
 import tomllib  # noqa: F401
-from collections.abc import Callable, Iterable  # noqa: F401
+from collections.abc import Callable, Iterable, Mapping  # noqa: F401
 from dataclasses import dataclass, field, fields  # noqa: F401
 from datetime import UTC, datetime  # noqa: F401
 from pathlib import Path  # noqa: F401
@@ -121,6 +121,8 @@ from .reviewers import (  # noqa: F401
     _declared_family,
     _unapproved_reviewer,
     family_of,
+    is_reviewer_gate,
+    reviewer_gates,
     reviewer_independence,
 )
 from .runner import (  # noqa: F401

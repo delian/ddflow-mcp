@@ -421,7 +421,7 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
     refused: an item's globs are often narrower than its honest diff, and the caller named
     or stood on this branch. ddflow's own bookkeeping paths are not the item's to declare.
     """
-    from ...core.schedule import globs_overlap
+    from ...core.schedule import path_in_glob
     from ...services.enforce import SELF_MANAGED
 
     d = W.git(repo, "diff", "--name-only", f"{target}...{branch}")
@@ -429,7 +429,7 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
     return [
         p
         for p in changed
-        if not p.startswith(SELF_MANAGED) and not any(globs_overlap(p, g) for g in it.globs)
+        if not p.startswith(SELF_MANAGED) and not any(path_in_glob(p, g) for g in it.globs)
     ]
 
 

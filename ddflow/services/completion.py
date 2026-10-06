@@ -215,7 +215,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
         )
 
-    ok, why = G.reviewer_independence(state, cfg, item_id, model)
+    # The project's own reviewer gates count, as their definitions declare (B0e1330bf74).
+    ok, why = G.reviewer_independence(state, cfg, item_id, model, G.load_gates(repo, cfg))
     v.independence = why
     # Not for a PROMOTION: it authors nothing -- it moves work that was reviewed, with this
     # very check, as the tasks that produced it. Demanding an independent reviewer of a
