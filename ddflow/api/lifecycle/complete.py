@@ -65,7 +65,7 @@ def complete(
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()]
-    pending = CM.open_bugs_of(st, item)
+    pending = CM.open_bugs_of(st, item, cfg)
     if closing and not pending:
         return O.refused(
             "item.completed",
@@ -131,7 +131,7 @@ def complete(
     # of their own and the item still completable, never stranded on a done task.
     from ..bug_reopen import refile_reported
 
-    refiled = refile_reported(log, cfg, item, CM.reported_against(st, item))
+    refiled = refile_reported(log, cfg, item, CM.reported_against(st, item, cfg))
     waiting = _waiters(repo, item)  # before the release: see `release`
     from ...services import ledger as LG
 
