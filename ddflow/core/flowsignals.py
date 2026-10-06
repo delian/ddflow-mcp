@@ -186,8 +186,14 @@ def history_notes(signals: Signals) -> list[str]:
     """Neutral one-line notes for ``doctor``: which log-derived signals have too little
     history yet. Informational, never a failure: such a signal is simply not used."""
     notes = []
-    # gate_failure_ratio is not listed: its recent hour is gate_failure_rate's, noted here.
     for name in ("reviewer_latency_ratio", "gate_failure_rate", "merge_failure_rate"):
         if getattr(signals, name) is None:
             notes.append(f"{name}: too little history in the log yet (neutral, not used)")
+    # gate_failure_ratio shares gate_failure_rate's recent hour (noted above when short);
+    # with that hour present, a None ratio means the 7-day baseline is what is short.
+    if signals.gate_failure_ratio is None and signals.gate_failure_rate is not None:
+        notes.append(
+            f"gate_failure_ratio: under {MIN_BASELINE_GATE_OUTCOMES} gate outcomes in the "
+            "7-day baseline yet (neutral, not used)"
+        )
     return notes
