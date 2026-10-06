@@ -9,8 +9,11 @@ from dataclasses import dataclass, field
 from ._docs import _doc
 
 #: The record kinds an add is checked for, and that are offered as candidates. Session
-#: prompts and notes are not records anyone duplicates (D-no-duplicates).
-DEDUPE_KINDS = ("bug", "task", "phase", "lesson", "decision", "research", "memory")
+#: prompts and notes are not records anyone duplicates (D-no-duplicates). A rule is a
+#: file, not a log record: it is CHECKED against every other kind when added or edited
+#: (D-rule-dedupe-everywhere), and compared with the other rules by `api.rules`' own
+#: check, but it is never itself offered as a candidate (the index holds no rules).
+DEDUPE_KINDS = ("bug", "task", "phase", "lesson", "decision", "research", "memory", "rule")
 DEDUPE_ON_MATCH = ("ask", "warn", "off")
 
 
@@ -57,5 +60,5 @@ _doc(
 _doc(
     "dedupe",
     "kinds",
-    "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it. Default: bug, task, phase, lesson, decision, research, memory.",
+    "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it. Default: bug, task, phase, lesson, decision, research, memory, rule. A rule (a file, not a log record) is checked on `rule add` and on a `rule edit` of its title or content against every other kind, and compared with the other rules by its own check; it is never offered as a candidate.",
 )

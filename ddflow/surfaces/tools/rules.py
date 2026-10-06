@@ -8,6 +8,20 @@ from typing import Any
 
 from ._common import _api, _list_or_none
 
+
+def _rule_answer(a: dict[str, Any], relations: tuple[str, ...]) -> Any:
+    """The duplicate-check answer a rule tool call carries, or None. More than one is
+    refused (the CLI's flags are mutually exclusive; silently keeping one dropped the
+    other, rubber-duck)."""
+    given = [r for r in relations if (a.get(r) if r != "new" else bool(a.get("new")))]
+    if len(given) > 1:
+        raise ValueError(f"answer one of {', '.join(given)}, not several")
+    if not given:
+        return None
+    rel = given[0]
+    return _api().RuleDedupAnswer(rel, "" if rel == "new" else a[rel])
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_rule_add": {
         "description": (
@@ -40,6 +54,8 @@ TOOLS: dict[str, dict[str, Any]] = {
                 repo,
                 a.get("content", "") or "",
                 title=a.get("title", "") or "",
+                rule_id=a.get("id", "") or "",
+                agent=agent,
             )
             if bool(a.get("check"))
             else _api().rule_add(
@@ -55,26 +71,19 @@ TOOLS: dict[str, dict[str, Any]] = {
                 ),
                 agent=agent,
                 check_dedup=True,
-                dedup_answer=(
-                    _api().RuleDedupAnswer("new", "")
-                    if bool(a.get("new"))
-                    else (
-                        _api().RuleDedupAnswer("extends", a["extends"])
-                        if a.get("extends")
-                        else (
-                            _api().RuleDedupAnswer("duplicate_of", a["duplicate_of"])
-                            if a.get("duplicate_of")
-                            else (
-                                _api().RuleDedupAnswer("related", a["related"])
-                                if a.get("related")
-                                else None
-                            )
-                        )
-                    )
-                ),
+                dedup_answer=_rule_answer(a, ("new", "extends", "duplicate_of", "related")),
             )
         ),
-        "payload": ("id", "candidates", "related"),
+        "payload": (
+            "id",
+            "candidates",
+            "related",
+            "options",
+            "extended",
+            "extended_kind",
+            "relation",
+            "dedupe_unavailable",
+        ),
     },
     "ddflow_rule_list": {
         "description": (
@@ -116,7 +125,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_edit": {
         "description": (
-            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest."
+            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest. "
+            "A new title or content is duplicate-checked against every record kind (answer new | related:ID)."
         ),
         "properties": {
             "id": ("string", "Rule id to edit.", True),
@@ -126,10 +136,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             "scope": ("string", "New scope.", False),
             "priority": ("integer", "New priority.", False),
             "globs": ("string", "Comma-separated globs.", False),
+            "new": ("boolean", "Dedup answer: a different record.", False),
+            "related": ("string", "Dedup answer: related to ID.", False),
         },
         "api": lambda repo, a, agent: _api().rule_update(
             repo,
             a["id"],
+            dedup_answer=_rule_answer(a, ("new", "related")),
+            agent=agent,
             **(
                 {
                     "title": a["title"],
@@ -173,7 +187,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 else {}
             ),
         ),
-        "payload": ("id",),
+        "payload": ("id", "candidates", "related", "options", "dedupe_unavailable"),
     },
     "ddflow_rule_remove": {
         "description": (
