@@ -59,12 +59,19 @@ def strictest_signals(base: dict[str, Any]) -> dict[str, Any]:
     enabled, and per signal the lower of each mark from the layers below (`base`) and the
     shipped default. The bad table's own numbers are not trusted at all.
 
-    Lower marks are stricter (higher is always worse), and the result is valid: the
-    lowest low is under the lowest high, and the lowest critical is not under it."""
+    Lower marks are stricter (higher is always worse), and the result is valid: taken over
+    tables each valid on its own, the lowest low is under the lowest high, and the lowest
+    critical is not under it."""
     out: dict[str, Any] = {"enabled": list(FLOW_SIGNALS)}
     shipped = default_signals()
     for name in FLOW_SIGNALS:
-        tables = [t for t in (base.get(name), shipped.get(name)) if isinstance(t, dict)]
+        # Only a table that is valid on its own takes part: marks mixed from a partial
+        # table (a `high` with no `low`) could invert the band.
+        tables = [
+            t
+            for t in (base.get(name), shipped.get(name))
+            if isinstance(t, dict) and not _signals_problem({name: t})
+        ]
         marks = {
             m: min(vals)
             for m in SIGNAL_MARKS

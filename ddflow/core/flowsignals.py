@@ -15,8 +15,8 @@ Windows (all ending at ``now``):
   None under 10 outcomes.
 * ``gate_failure_ratio``: that rate divided by the project's own rate over the 7 days
   before the window, so its marks mean "N times the usual" (D-unify 8: shrink at 2x).
-  None under 10 recent or 20 baseline outcomes, or with no failure in the baseline (a
-  ratio to zero says nothing).
+  None under 10 recent or 20 baseline outcomes; a baseline with no failure counts as one,
+  the smallest rate it could have measured.
 * ``merge_failure_rate``: failed merge-gate outcomes over merge attempts in the last
   2 hours. None with no attempt.
 * ``loop_findings``: how many findings the loops detector reports now.
@@ -145,9 +145,11 @@ def gate_failure_ratio(events: Sequence[Event], now: float) -> float | None:
         return None
     start = now - GATE_WINDOW_S  # the baseline ends where the recent window begins
     b_passed, b_failed = _failure_rate(events, start, BASELINE_S, None)
-    if b_passed + b_failed < MIN_BASELINE_GATE_OUTCOMES or not b_failed:
+    if b_passed + b_failed < MIN_BASELINE_GATE_OUTCOMES:
         return None
-    return (failed / (passed + failed)) / (b_failed / (b_passed + b_failed))
+    # A clean baseline counts as one failure, the smallest rate it could have measured:
+    # a ratio to zero says nothing, and a first burst of failures must still register.
+    return (failed / (passed + failed)) / (max(b_failed, 1) / (b_passed + b_failed))
 
 
 def merge_failure_rate(events: Sequence[Event], now: float) -> float | None:
@@ -184,8 +186,7 @@ def history_notes(signals: Signals) -> list[str]:
     """Neutral one-line notes for ``doctor``: which log-derived signals have too little
     history yet. Informational, never a failure: such a signal is simply not used."""
     notes = []
-    # gate_failure_ratio is left out: it is also None for a project whose baseline had no
-    # failure at all, which is not "too little history".
+    # gate_failure_ratio is not listed: its recent hour is gate_failure_rate's, noted here.
     for name in ("reviewer_latency_ratio", "gate_failure_rate", "merge_failure_rate"):
         if getattr(signals, name) is None:
             notes.append(f"{name}: too little history in the log yet (neutral, not used)")
