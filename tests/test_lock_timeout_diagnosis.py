@@ -64,6 +64,68 @@ def test_timeout_names_the_holder_and_its_command(tmp_path):
 
 
 @needs_proc_locks
+def test_a_long_interpreter_path_does_not_hide_the_holders_command(tmp_path):
+    """B3a4bf051b4: the first 200 characters of the command line were all interpreter path
+    when the holder ran from a deep directory, so the part naming WHAT holds the lock was
+    cut off. Run the holder through a 250-character interpreter path."""
+    import os
+
+    deep = tmp_path / ("d" * 120) / ("e" * 120)
+    deep.mkdir(parents=True)
+    python = deep / "python3"
+    python.symlink_to(sys.executable)
+    assert len(str(python)) > 250
+    lock = tmp_path / "events.lock"
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    p = subprocess.Popen(
+        [str(python), "-c", HOLDER, str(lock)], stdout=subprocess.PIPE, text=True, env=env
+    )
+    try:
+        assert p.stdout.readline().strip() == "held"
+        with pytest.raises(TimeoutError) as e, _flock(lock, 0.3):
+            pass
+        msg = str(e.value)
+        assert f"Held by pid {p.pid} (" in msg and "ddflow.infra.log" in msg, msg
+        assert str(deep) not in msg, msg
+    finally:
+        p.kill()
+        p.wait()
+
+
+def test_a_command_line_too_long_to_show_keeps_its_head_and_tail(tmp_path, monkeypatch):
+    real = Path.read_bytes
+
+    def fake(self, *a, **k):
+        if str(self) == "/proc/4242/cmdline":
+            return (
+                b"\0".join(
+                    [b"/opt/" + b"x" * 300 + b"/python3", b"-m", b"ddflow"]
+                    + [b"arg"] * 100
+                    + [b"--the-end"]
+                )
+                + b"\0"
+            )
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", fake)
+    note = L._describe_pid(4242)
+    assert note.startswith("pid 4242 (python3 -m ddflow arg"), note
+    assert note.endswith("--the-end)") and "..." in note, note
+    assert len(note) < 260, len(note)
+
+
+def test_the_script_an_interpreter_runs_is_named_but_arguments_keep_their_paths(monkeypatch):
+    real = Path.read_bytes
+    argv = b"/v/bin/python3\0/deep/v/bin/ddflow\0merge\0/abs/arg\0"
+
+    def fake(self, *a, **k):
+        return argv if str(self) == "/proc/4243/cmdline" else real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", fake)
+    assert L._describe_pid(4243) == "pid 4243 (python3 ddflow merge /abs/arg)"
+
+
+@needs_proc_locks
 def test_no_holder_is_named_once_the_lock_is_free(tmp_path):
     lock = tmp_path / "events.lock"
     with _flock(lock, 1):
