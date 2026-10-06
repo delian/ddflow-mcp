@@ -24,8 +24,8 @@ def cmd_cleanup(a, c: Ctx) -> int:
         print("  " + t.render())
     if plan.needs_human:
         print(
-            f"\n{len(plan.needs_human)} tree(s) hold UNCOMMITTED work and are never "
-            f"touched automatically. Inspect each before deciding."
+            f"\n{len(plan.needs_human)} tree(s) hold UNCOMMITTED work or could not be read, "
+            f"and are never touched automatically. Inspect each before deciding."
         )
     if not a.apply:
         print(

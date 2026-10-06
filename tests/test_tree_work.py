@@ -41,6 +41,7 @@ def test_dirty_of_an_unreadable_tree_is_not_empty(repo):
     assert lines, "a tree git could not read was reported clean"
     assert W.unreadable(lines)
     assert not W.unreadable(["?? work.txt"]), "an ordinary untracked file is readable"
+    assert not lines[0].startswith(("??", "!!")), "a status-code filter must not drop it"
     assert W.dirty(wt, untracked=False), "the tracked-only question fails closed too"
 
 
@@ -58,6 +59,7 @@ def test_cleanup_never_offers_an_unreadable_tree_for_removal(repo):
     assert row["action"] == "", f"an unreadable tree was offered for removal: {row}"
     assert row["kind"] == "unreadable", row
     assert "LEAVE ALONE" in row["done"], row
+    assert out.data["needs_human"] >= 1, "an unreadable tree needs a human to look"
 
 
 def test_remove_refuses_a_tree_whose_ahead_count_is_unknown(repo):
