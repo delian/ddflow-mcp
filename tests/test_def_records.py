@@ -273,6 +273,22 @@ def test_a_merge_is_listed_by_its_successor_whichever_arrives_first():
         ]
 
 
+def test_a_status_events_own_provenance_is_kept_in_the_history():
+    env = {"kind": "rule", "id": "r"}
+    evs = [
+        _ev("def.recorded", "rule:r", {**env, "fields": {}, "provenance": {"by": "x"}}, 1),
+        _ev(
+            "def.retired",
+            "rule:r",
+            {**env, "reason": "old", "provenance": {"by": "y", "via": "sweep"}},
+            2,
+        ),
+    ]
+    rec = fold(evs).defs["rule:r"]
+    assert rec.provenance == {"by": "x"}
+    assert rec.history[-1]["provenance"] == {"by": "y", "via": "sweep"}
+
+
 # -- the add-time duplicate check -------------------------------------------------------------
 
 FIRST = (

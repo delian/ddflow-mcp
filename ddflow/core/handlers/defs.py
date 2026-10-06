@@ -18,6 +18,11 @@ def _target(ev: Event) -> tuple[str, str]:
 
 
 def _note(rec: DefRecord, ev: Event, **extra: Any) -> None:
+    """One history entry. An event's provenance beyond its author is kept here too, so a
+    status event's (which does not replace the record's) is never lost."""
+    prov = ev.data.get("provenance")
+    if isinstance(prov, dict) and set(prov) - {"by"}:
+        extra["provenance"] = dict(prov)
     entry = {
         "event": ev.kind,
         "at": ev.ts,
