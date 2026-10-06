@@ -157,7 +157,7 @@ def def_update(
     digest = D.digest(merged)
     if digest == rec.digest and (source is None or source == rec.source) and not provenance:
         return O.nothing("def.updated", f"{kind} {rid}: nothing changed", def_kind=kind, id=rid)
-    data = _envelope(cfg, kind, rid, source, provenance)
+    data = _envelope(cfg, kind, rid, rec.source if source is None else source, provenance)
     data.update(fields=dict(fields), digest=digest)
     log.append("def.updated", D.key(kind, rid), data)
     changed = sorted(k for k in fields if rec.fields.get(k) != fields[k])
@@ -172,11 +172,11 @@ def def_retire(repo: Path, kind: str, rid: str, *, reason: str, agent: str = "")
             "def.retired", "retiring a definition needs a reason", def_kind=kind, id=rid
         )
     log, cfg, st = _load(repo, agent)
-    _rec, refusal = _live(st, kind, rid, "def.retired")
+    rec, refusal = _live(st, kind, rid, "def.retired")
     if refusal is not None:
         return refusal
-    data = _envelope(cfg, kind, rid, None, None)
-    data["reason"] = reason.strip()
+    data = _envelope(cfg, kind, rid, rec.source, None)
+    data.update(digest=rec.digest, reason=reason.strip())
     log.append("def.retired", D.key(kind, rid), data)
     return O.ok("def.retired", def_kind=kind, id=rid)
 
@@ -189,13 +189,13 @@ def _replace(
     if rid == by:
         return O.failed(event_kind, f"{kind} {rid!r} cannot replace itself", def_kind=kind, id=rid)
     log, cfg, st = _load(repo, agent)
-    _rec, refusal = _live(st, kind, rid, event_kind)
+    rec, refusal = _live(st, kind, rid, event_kind)
     if refusal is None:
         _succ, refusal = _live(st, kind, by, event_kind)
     if refusal is not None:
         return refusal
-    data = _envelope(cfg, kind, rid, None, None)
-    data["successor"] = by
+    data = _envelope(cfg, kind, rid, rec.source, None)
+    data.update(digest=rec.digest, successor=by)
     if reason.strip():
         data["reason"] = reason.strip()
     log.append(event_kind, D.key(kind, rid), data)

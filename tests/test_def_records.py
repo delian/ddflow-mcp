@@ -186,6 +186,32 @@ def test_show_carries_fields_provenance_and_history(repo):
     json.dumps(out.data)  # a wire body
 
 
+def test_every_event_carries_the_envelope(repo):
+    A.def_record(repo, "rule", "r1", {"c": "x"}, source="rules/r1.toml", agent="a")
+    A.def_record(repo, "rule", "r2", {"c": "y"}, agent="a")
+    A.def_update(repo, "rule", "r1", {"c": "z"}, agent="a")
+    A.def_supersede(repo, "rule", "r1", "r2", reason="newer", agent="a")
+    A.def_retire(repo, "rule", "r2", reason="gone", agent="a")
+    for ev in EventLog(repo, "a").read_all():
+        if ev.kind.startswith("def."):
+            assert {"kind", "id", "digest", "source", "provenance"} <= set(ev.data), ev.kind
+
+
+def test_replay_renders_every_definition_event(repo):
+    from ddflow.services.sessions import replay
+
+    A.def_record(repo, "rule", "r1", {"content": "run tests in parallel"}, agent="a")
+    A.def_record(repo, "rule", "r2", {"content": "use xdist"}, agent="a")
+    A.def_merge(repo, "rule", "r1", "r2", reason="same rule", agent="a")
+    steps = [s for s in replay(EventLog(repo, "a").read_all()) if s.kind == "definition"]
+    assert [s.text.splitlines()[0] for s in steps] == [
+        "rule `r1` recorded",
+        "rule `r2` recorded",
+        "rule `r1` merged into `r2`: same rule",
+    ]
+    assert "run tests in parallel" in steps[0].text
+
+
 # -- the fold ------------------------------------------------------------------------------
 
 
