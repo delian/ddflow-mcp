@@ -69,17 +69,23 @@ def _split_outside_brackets(spec: str) -> list[str]:
     """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
-    refused as a single missing test. The depth never goes below zero: a value may hold
-    `]` itself (`t[x]y]`), and a negative depth swallowed every later separator, so a
-    missing second test was never resolved (Bfc9daca269).
+    refused as a single missing test. A value may hold `]` itself (`t[x]y]`, `t[a]b]c,d]`),
+    so the id's brackets close only at a `]` that ENDS the entry -- one followed by a
+    separator, whitespace or the end. Counting every `]` drove the depth negative and
+    swallowed every later separator, so a missing second test was never resolved
+    (Bfc9daca269); clamping at zero split `t[a]b]c,d]` inside its own brackets.
     """
-    out, depth, cur = [], 0, []
-    for ch in spec:
-        if ch in ",;" and depth == 0:
+    out, inside, cur = [], False, []
+    for i, ch in enumerate(spec):
+        if ch in ",;" and not inside:
             out.append("".join(cur))
             cur = []
             continue
-        depth = max(0, depth + {"[": 1, "]": -1}.get(ch, 0))
+        if ch == "[":
+            inside = True
+        elif ch == "]" and inside:
+            after = spec[i + 1 : i + 2]
+            inside = not (after == "" or after in ",;" or after.isspace())
         cur.append(ch)
     out.append("".join(cur))
     return [e.strip() for e in out if e.strip()]
