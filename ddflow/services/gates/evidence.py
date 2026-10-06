@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
+from ...core.digest import content_digest
 from ...infra import proc as P
 
 #: How many untracked files `tree_fingerprint` will hash before giving up on content
@@ -258,9 +258,7 @@ def commit_tree_entries(cwd: Path | str, rev: str) -> TreeEntries | None:
 
 def _blob_id(data: bytes, fmt: str) -> str:
     """git's blob id for ``data``, computed here: `hash-object` would follow a symlink."""
-    h = hashlib.new("sha256" if fmt == "sha256" else "sha1")
-    h.update(b"blob %d\0" % len(data) + data)
-    return h.hexdigest()
+    return content_digest(b"blob %d\0" % len(data) + data, "sha256" if fmt == "sha256" else "sha1")
 
 
 def worktree_entries(cwd: Path | str) -> TreeEntries | None:
@@ -373,9 +371,7 @@ def content_id(entries: TreeEntries | None) -> str:
     if entries is None:
         return ""
     body = "\n".join(f"{m} {o} {p}" for p, (m, o) in sorted(entries.items()))
-    return (
-        "st:" + hashlib.blake2b(body.encode("utf-8", "surrogateescape"), digest_size=16).hexdigest()
-    )
+    return "st:" + content_digest(body, "blake2b", size=16, errors="surrogateescape")
 
 
 def source_tree(cwd: Path | str) -> str:
@@ -399,4 +395,4 @@ def differing_paths(a: TreeEntries, b: TreeEntries) -> list[str]:
 
 
 def digest(text: str) -> str:
-    return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=8).hexdigest()
+    return content_digest(text, "blake2b", size=8, errors="replace")
