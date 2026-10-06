@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .defs import DefRecord
 from .events import version_key
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
@@ -792,6 +793,9 @@ class State:
     exports: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: record id -> its links and additions. Only records that have any appear.
     links: dict[str, RecordLinks] = field(default_factory=dict)
+    #: "kind:id" -> a managed definition (`core.defs`): doc types, schedules, triggers,
+    #: skills, agents, research claims and rules, from the `def.*` events.
+    defs: dict[str, DefRecord] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
