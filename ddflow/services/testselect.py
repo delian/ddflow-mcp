@@ -198,11 +198,9 @@ def select(tree: Path, base: str) -> Selection | None:
 def _names(text: str, word: str) -> bool:
     """``word`` (a file or directory name) spelt out in ``text``, not inside a longer name:
     `schema.json` in `"fixtures/mcp-schema/schema.json"`, not in `old_schema.json`."""
+    if word not in text:  # the common answer, without a regex
+        return False
     return re.search(rf"(?<![\w.-]){re.escape(word)}(?![\w-])", text) is not None
-
-
-def _spelt(text: str, every: list[str], some: list[str]) -> bool:
-    return all(_names(text, w) for w in every) and (not some or any(_names(text, w) for w in some))
 
 
 def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str, str]:
@@ -215,11 +213,22 @@ def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str,
     also appears in tests that only write one of their own, so it is the last resort."""
     homes = {str(d) for t in tests for d in PurePosixPath(t).parents if str(d) != "."}
     sources: dict[str, str] = {}
+    seen: dict[tuple[str, str], bool] = {}  # one directory is asked about for every file in it
 
-    def text(test: str) -> str:
-        if test not in sources:
-            sources[test] = (tree / test).read_text("utf-8", errors="replace")
-        return sources[test]
+    def names(test: str, word: str) -> bool:
+        if (test, word) not in seen:
+            if test not in sources:
+                try:
+                    sources[test] = (tree / test).read_text("utf-8", errors="replace")
+                except OSError:  # unreadable: it names nothing, rather than failing the run
+                    sources[test] = ""
+            seen[test, word] = _names(sources[test], word)
+        return seen[test, word]
+
+    def spelt(test: str, every: list[str], some: list[str]) -> bool:
+        return all(names(test, w) for w in every) and (
+            not some or any(names(test, w) for w in some)
+        )
 
     out: dict[str, str] = {}
     for c in changed:
@@ -232,7 +241,7 @@ def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str,
         # (every word, at least one of these words), most specific first
         rungs = [([name], dirs), *(([d], []) for d in dirs), ([name], [])]
         for every, some in rungs:
-            hit = [t for t in tests if _spelt(text(t), every, some)]
+            hit = [t for t in tests if spelt(t, every, some)]
             if hit:
                 for t in hit:
                     out.setdefault(t, f"names data file {c}")

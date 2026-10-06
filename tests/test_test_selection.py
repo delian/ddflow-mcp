@@ -9,6 +9,7 @@ and leaves out the ones it cannot.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -288,3 +289,22 @@ def test_a_changed_conftest_is_not_also_read_as_a_data_file(data):
     _git(data, "add", "tests/test_mentions.py")
     _git(data, "commit", "-qm", "mentions")
     assert _picked(data) == {"tests/sub/test_deep.py": "under changed tests/sub/conftest.py"}
+
+
+def test_an_unreadable_test_names_nothing_and_does_not_fail_the_selection(data):
+    locked = data / "tests/test_locked.py"
+    locked.write_text('COUNTS = "ratchet_counts"\n')
+    _git(data, "add", "tests/test_locked.py")
+    _git(data, "commit", "-qm", "locked")
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("this user reads a mode-000 file (root): nothing to show")
+        (data / "tests/ratchet_counts/widgets.toml").write_text("baseline = 1\n")
+        # git cannot compare what it cannot read, so it lists test_locked as changed
+        assert _picked(data) == {
+            "tests/test_guard.py": "names data file tests/ratchet_counts/widgets.toml",
+            "tests/test_locked.py": "changed",
+        }
+    finally:
+        locked.chmod(0o644)
