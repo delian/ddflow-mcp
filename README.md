@@ -825,7 +825,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 174 knobs.
+cadences, and the rest of the 188 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -4397,7 +4397,7 @@ declared once and persists — see
 
 ## Configuration
 
-174 knobs across 25 sections, every one documented in place:
+188 knobs across 26 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -4433,6 +4433,39 @@ refuses a non-string element instead of casting it (`null` is not the string `"N
 A test asserts every knob carries documentation, so the reference cannot rot.
 
 ---
+
+## Id schemes
+
+Every id ddflow mints comes from a template in `[ids]`, one per record kind (decision
+D-id-schemes-final). The defaults reproduce the ids ddflow has always minted, so a project
+that sets nothing sees no change and an existing log replays exactly; a recorded id is never
+renamed, and a changed template applies to records created afterwards.
+
+| Kind | Default | Example |
+|---|---|---|
+| `bug`, `lesson`, `research`, `decision`, `memory`, `job` | `{prefix}{hash}` | `B9c56de9d58` |
+| `session` | `s{time}-{pid}` | `s20261005T225456-2195563` |
+| `fix_task` / `fix_task_followup` | `fix-{parent}` / `fix-{parent}-{seq}` | `fix-B9c56de9d58`, `fix-B9c56de9d58-2` |
+| `promotion` | `promote-{env}-{seq}` | `promote-staging-1` |
+| `ci_bug` | `Bci-{slug}-{digest}` (stable) | `Bci-tests-test-x-py-9f1c2a7b3d` |
+| `split_child` | `{parent}.{seq}` | `P.T.2` |
+| `imported_phase` / `imported_task` | `{user-text}` / `{phase}.{slug}` | `SESSION-ONE`, `P1.do-it` |
+
+Tokens: `{prefix}` (the kind's letter), `{seq}`, `{date}`, `{time}`, `{pid}`, `{slug}`,
+`{hash}`, `{parent}`, `{phase}`, `{env}`, `{user-text}`, `{digest}`. A template must hold a
+source of uniqueness -- `{seq}`, `{hash}`, or `{time}` with `{pid}` -- or `{digest}`, which
+makes it stable (the same content maps to the same id) and then allows only content
+tokens. Two kinds are exempt: `fix_task`, minted once per bug, is unique by its `{parent}`,
+and the imported kinds carry names the importer already makes unique. Outside its tokens a
+template may hold ASCII letters (either case), digits, `.`, `_` and `-` only, because an id
+is a file name, a branch name and a glob token. `ddflow config --set ids.bug "BUG-{seq}"`
+sets one; an invalid template (`BUG-{date}`: nothing makes it unique) is refused, exit 3;
+one in a file is warned about, named by `ddflow doctor`, and the default stays in effect.
+`[bugs].phase`, the one fixed id, is held to the same characters.
+
+_Rollout: the templates load, validate and render today; the one id service that every
+place minting an id goes through (so a changed template changes the ids minted) is the
+next id-scheme task. Until it lands every id is minted in today's default shape._
 
 ## What is automated, and what is not
 
