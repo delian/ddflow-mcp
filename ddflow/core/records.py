@@ -311,6 +311,30 @@ class Item:
             parts.append("lease claims that overlapped: " + "; ".join(clauses))
         return "; ".join(parts)
 
+    def lease_taken_over_by(self) -> str:
+        """Who FIRST took over the DISPLAYED claim, "" when nobody did (D-contest-redisplay).
+
+        First, not latest: the displaced record keeps one entry per claim window
+        (`handlers.leases._displace`), so a second takeover of the same claim adds none.
+
+        A contested claim another holder took over stays in the contest, and when that
+        takeover is released it is displayed again (`handlers.leases._redisplay`). It is
+        live as far as the log can tell, but the person reading it must know it was once
+        taken over: its holder may have moved on. Matched by claim window (event and
+        start), so a claim `resolve` kept in a fresh window is not marked."""
+        if self.lease is None:
+            return ""
+        for e in self.displaced:
+            by = e.get("by", {}).get("holder", "")
+            if (
+                e["event"] == self.lease.event
+                and e["lease"]["acquired_at"] == self.lease.acquired_at
+                and by
+                and by != self.lease.holder
+            ):
+                return by
+        return ""
+
     def lease_clashes(self, claim: dict[str, Any]) -> list[dict[str, Any]]:
         """The contestants whose windows overlapped ``claim``'s: the claims it met."""
         return _clashing(self.lease_contest, claim)
