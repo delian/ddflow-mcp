@@ -519,30 +519,28 @@ class Server:
         naming anyone but the connection's own identity, a claim does not adopt the tree
         the server stands in (`_someone_else`) -- a stateless caller cannot be told
         apart from a subagent riding the connection (B7c7a0d9222)."""
-        agent, per_call = self.agent, ""
-        if modern:
-            per_call, bad = _meta_agent(params)
-            if bad:
-                return agent, "", args, bad
-            agent = per_call or agent
-        if AS_AGENT not in args:
-            return agent, per_call, args, ""
-        args = dict(args)
-        want = args.pop(AS_AGENT)
-        if not isinstance(want, str):
-            return agent, "", args, f"{AS_AGENT} must be a string"
-        want = want.strip()
-        if want and not _VALID_AGENT.fullmatch(want):
-            return (
-                agent,
-                "",
-                args,
-                (
-                    f"{want!r} is not a usable agent name: use letters, digits, "
-                    f"'.', '_' or '-', up to 64 characters."
-                ),
-            )
-        return want or agent, want or per_call, args, ""
+        if AS_AGENT in args:  # the argument first: when it is given, `_meta` is not read
+            args = dict(args)
+            want = args.pop(AS_AGENT)
+            if not isinstance(want, str):
+                return self.agent, "", args, f"{AS_AGENT} must be a string"
+            want = want.strip()
+            if want and not _VALID_AGENT.fullmatch(want):
+                return (
+                    self.agent,
+                    "",
+                    args,
+                    (
+                        f"{want!r} is not a usable agent name: use letters, digits, "
+                        f"'.', '_' or '-', up to 64 characters."
+                    ),
+                )
+            if want:
+                return want, want, args, ""
+        if not modern:
+            return self.agent, "", args, ""
+        per_call, bad = _meta_agent(params)
+        return per_call or self.agent, per_call, args, bad
 
     def _invoke(self, spec, args, agent, per_call, params):
         """Run a tool's typed `api`; the connection facts it needs are passed in."""
