@@ -228,7 +228,11 @@ def test_input_validation_errors_are_tool_execution_errors(repo):
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": {"name": "ddflow_show", "arguments": {"no_such_argument": 1}},
+            # `id` given: the UNKNOWN argument is what is refused, not a missing one.
+            "params": {"name": "ddflow_show", "arguments": {"id": "T1", "no_such_argument": 1}},
         }
     )
     assert "error" not in r and r["result"]["isError"] is True
+    assert (
+        "unknown argument(s) for ddflow_show: no_such_argument" in r["result"]["content"][0]["text"]
+    )
