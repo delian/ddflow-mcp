@@ -31,7 +31,7 @@ from conftest import run_cli
 from test_add_dedupe_cli import ADDS
 
 from ddflow.api import rules as R
-from ddflow.core.model import HANDLERS, fold
+from ddflow.core.model import GATE_OUTCOMES, HANDLERS, fold
 from ddflow.infra.log import EventLog
 from ddflow.surfaces import cli
 from ddflow.surfaces.tools import TOOLS
@@ -54,8 +54,8 @@ _STATE = "a state change of a record that already exists; it adds no text to com
 _UPDATE = "changes or closes an existing record (same id); the add was checked"
 _OBSERVED = "a machine observation or run record, not authored text"
 _CONFIG = "who changed a setting or approved a tool; the setting itself lives in config"
-#: Every other kind, and why it is not duplicate-checked. `gate.*` outcomes are the gate
-#: records of an item (state), matched by prefix below.
+#: Every other kind, and why it is not duplicate-checked. The gate records of an item
+#: (`GATE_RECORDS`, state) are exempt by name below.
 EXEMPT: dict[str, str] = {
     **dict.fromkeys(
         (
@@ -199,8 +199,14 @@ _TEXT_TOOL = re.compile(r"_(add|found|import|split|note|prompt|define|propose)$"
 # -- the ratchets --------------------------------------------------------------------------
 
 
+#: The gate records of an item: `gate.started` and one kind per recorded outcome.
+GATE_RECORDS = {f"gate.{o}" for o in ("started", *GATE_OUTCOMES)}
+
+
 def test_every_event_kind_is_checked_or_exempt_with_a_reason():
-    kinds = {k for k in HANDLERS if not k.startswith("gate.") or k == "gate.out_of_order"}
+    """Only the gate RECORD kinds are exempt as a family, by name; any other `gate.*`
+    kind is classified like the rest (rubber-duck on B-coh-coverage)."""
+    kinds = set(HANDLERS) - GATE_RECORDS
     unclassified = sorted(kinds - set(CHECKED) - set(EXEMPT))
     assert not unclassified, (
         f"new event kind(s) {unclassified}: does each FILE a record whose text could repeat "
@@ -386,6 +392,21 @@ def test_a_lesson_captured_by_bug_fixed_that_copies_one_extends_it(proj):
     assert code == 0, (code, out, err)
     assert set(_lessons(proj)) == {"L-old"}
     assert "lesson added to L-old, which it copies" in out
+    # `lesson_captured` names the lesson that holds the text, merged or not (rubber-duck)
+    from ddflow.api import knowledge as K
+
+    code, out, err = run_cli(proj, "bug", "found", "--summary", "another setup exit", "--no-task")
+    bid = re.search(r"bug (B\w+) recorded", out).group(1)  # type: ignore[union-attr]
+    res = K.bug_fixed(
+        proj,
+        bid,
+        regression_test="tests/test_x.py",
+        lesson_title=LESSON,
+        lesson_rule="assert each setup step",
+        verify_regression=False,
+        verify_reason="t",
+    )
+    assert res.data["lesson_captured"] == "L-old"
 
 
 def test_a_lesson_captured_by_bug_fixed_that_reads_like_one_is_filed_linked(proj):
@@ -409,6 +430,38 @@ def test_a_lesson_captured_by_bug_fixed_that_reads_like_one_is_filed_linked(proj
     assert st.links[new].linked("related") == {"L-old"}
     assert st.links[new].answer.get("auto") is True
     assert f"lesson {new} captured, linked to L-old" in out
+
+
+def test_a_capture_whose_check_could_not_run_says_so(proj, monkeypatch):
+    """roborev on B-coh-coverage: an unavailable check must never read as a clean capture."""
+    from ddflow.api import _dedupe as DD
+    from ddflow.api import knowledge as K
+    from ddflow.surfaces.commands.knowledge import _lesson_tail
+
+    real = DD._assess
+
+    def broken(repo, log, cfg, st, rec):
+        found, _shown, _why = real(repo, log, cfg, st, rec)
+        return found, [], "OSError: index is locked"
+
+    code, out, err = run_cli(proj, "bug", "found", "--summary", "setup exit ignored", "--no-task")
+    assert code == 0, (code, out, err)
+    bid = re.search(r"bug (B\w+) recorded", out).group(1)  # type: ignore[union-attr]
+    monkeypatch.setattr(DD, "_assess", broken)
+    res = K.bug_fixed(
+        proj,
+        bid,
+        regression_test="tests/test_x.py",
+        lesson_title=LESSON,
+        lesson_rule="r",
+        verify_regression=False,
+        verify_reason="t",
+    )
+    assert res.exit == 0, res.reason
+    cap = res.data["lesson_capture"]
+    assert cap["dedupe_unavailable"] == "OSError: index is locked"
+    assert res.data["lesson_captured"] == cap["captured"] == f"L-{bid}"
+    assert "filed UNCHECKED" in _lesson_tail(cap)
 
 
 def test_a_new_lesson_captured_by_bug_fixed_is_filed_as_before(proj):
@@ -456,6 +509,7 @@ def test_the_capture_reaches_json_and_mcp(proj):
     assert code == 0, (code, out, err)
     body = json.loads(out)
     assert body["lesson_capture"]["extended"] == "L-old"
+
     assert body["lesson_capture"]["candidates"][0]["id"] == "L-old"
 
 

@@ -1302,7 +1302,8 @@ def bug_fixed(
         regression_verified=verified,
         regression_verify=verify_ev,
         unchecked=unchecked,
-        lesson_captured=capture.get("captured", ""),
+        # The lesson that now holds the text: the new one, or the one it was added to.
+        lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
     )
 

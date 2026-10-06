@@ -2097,9 +2097,10 @@ prompt or note — runs the same check against the log **before it writes**, wit
   asked there (the bug is already closed), so the answer is automatic and marked `auto`:
   identical text goes onto the open lesson it copies (no new id), and a lesson that merely
   reads like one is filed **linked** to it (`related`), so the pair meets in the next sweep
-  rather than drifting apart. The result says which (`lesson_capture`: `captured`,
-  `extended`, `related`, `candidates`, and `dedupe_unavailable` when the check could not
-  run), on the CLI line, in `--json` and over MCP.
+  rather than drifting apart. The result says which (`lesson_captured` names the lesson
+  that holds the text; `lesson_capture` has `captured`, `extended`, `related`, `candidates`,
+  and `dedupe_unavailable` when the check could not run -- the lesson is then filed
+  unchecked and the CLI says so), on the CLI line, in `--json` and over MCP.
 - **Rules** (`rule add`, `ddflow_rule_add`) are files, not log records, and run their own
   check against the other rules: content against content, and title against title for
   rules with no content (two title-only rules no longer read as copies of each other).
