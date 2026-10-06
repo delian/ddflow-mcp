@@ -166,3 +166,15 @@ def test_every_kind_has_a_template_reader() -> None:
 
 def test_a_given_prefix_wins() -> None:
     assert ids.render(Config(), "bug", prefix="X", hash_parts=("a",)).startswith("X")
+
+
+def test_values_that_make_an_unusable_id_are_refused() -> None:
+    cfg = Config()
+    cfg.ids.lesson = "L.{seq}.{slug}"
+    with pytest.raises(ValueError, match="lesson"):
+        ids.render(cfg, "lesson", seq=1, slug="")  # would end in '.'
+    with pytest.raises(ValueError, match="bug"):
+        ids.render(Config(), "bug", prefix="a/b", hash_parts=("x",))
+    with pytest.raises(ValueError):
+        ids.render(Config(), "bug", prefix=".x", hash_parts=("x",))
+    assert ids.render(cfg, "lesson", seq=1, slug="ok") == "L.1.ok"
