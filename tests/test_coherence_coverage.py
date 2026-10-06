@@ -151,7 +151,7 @@ WRITERS_EXEMPT: dict[str, str] = {
     "to a duplicate, not a new record",
     "api/knowledge.py:bug_file_tasks": "attaches a fix task to an existing bug (same id)",
     "api/bug_reopen.py:refile_reported": "attaches a fix task to an existing bug (same id)",
-    "api/schedule.py:trigger_evaluate": "a trigger's remediation item, generated from its job; "
+    "api/schedule.py:_apply": "a trigger's remediation item, generated from its job; "
     "de-duplicated by the trigger's dedupe key (one open remediation per key)",
     "services/promotions.py:add": "a generated 'Promote X to Y' task; one open promotion per "
     "environment is enforced instead",

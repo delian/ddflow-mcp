@@ -42,17 +42,6 @@ TRIGGERS_DIR = Path(".ddflow") / "triggers"
 GLOBAL_MAX_PER_HOUR = 10
 #: How many of a trigger's latest suppressions `show` lists (all are in the log).
 SHOWN_SUPPRESSIONS = 20
-#: The reasons a met condition did not fire, in the order they are checked.
-REASONS = (
-    "disabled",
-    "debounce",
-    "cooldown",
-    "open",
-    "max_open",
-    "hop_limit",
-    "breaker",
-    "global_cap",
-)
 FIELDS = (
     "title",
     "event",
@@ -312,22 +301,24 @@ def _held(st: State, trig: Trigger) -> int:
 
 
 def _ledger(st: State, tid: str) -> tuple[dict[str, datetime], dict[str, list[str]]]:
-    """(key -> when it last fired, key -> its remediation items still open)."""
+    """(key -> when it last fired, key -> its remediation items still open). Read from the
+    latest fire of each key: a key fires only when nothing of it is open, so its latest
+    fire holds every item of it that can still be open."""
     last_at: dict[str, datetime] = {}
     open_by_key: dict[str, list[str]] = {}
-    for f in st.trigger_fires.get(tid, []):
+    for key, f in st.trigger_keys.get(tid, {}).items():
         t = ts(f.get("at", ""))
         if t is not None:
-            last_at[f["key"]] = max(t, last_at.get(f["key"], t))
-        for i in f.get("items", []):
-            if outcome(st, i) == "open":
-                open_by_key.setdefault(f["key"], []).append(i)
+            last_at[key] = t
+        items = [i for i in f.get("items", []) if outcome(st, i) == "open"]
+        if items:
+            open_by_key[key] = items
     return last_at, open_by_key
 
 
 def _groups(st: State, trig: Trigger, events: list, last_at: dict, now: datetime) -> dict:
     """key -> [(ts, event)] that count now: matching, not about this trigger's own items,
-    after the key last fired, inside the window, not in the future."""
+    after the key last fired, not in the future, and within `window` of the newest."""
     own = {i for i, m in st.trigger_items.items() if m.get("trigger") == trig.id}
     out: dict[str, list] = {}
     for ev in events:
@@ -338,11 +329,17 @@ def _groups(st: State, trig: Trigger, events: list, last_at: dict, now: datetime
             continue
         key = render_key(trig.key, ev)
         since = last_at.get(key)
-        if (since is not None and t <= since) or (
-            trig.window and t < now - timedelta(minutes=trig.window)
-        ):
+        if since is not None and t <= since:
             continue
         out.setdefault(key, []).append((t, ev))
+    if trig.window:
+        # N within T of EACH OTHER, anchored on the newest -- not on `now`: anchored on
+        # `now`, a debounce longer than the gap aged the older events out before the
+        # quiet period ended, and a met condition never fired (rubber-duck).
+        span = timedelta(minutes=trig.window)
+        for key, evs in out.items():
+            newest = max(t for t, _ in evs)
+            out[key] = [(t, ev) for t, ev in evs if t >= newest - span]
     return out
 
 
@@ -417,7 +414,8 @@ def evaluate(
 
 def item_for(trig: Trigger, job, d: Decision, taken: set[str], st: State) -> dict[str, Any]:
     """The queue item one fire files, from its job's template: the job's title, scope and
-    prompt, tagged with the trigger, the job and the key, under `action.phase` if given."""
+    prompt, tagged with the trigger, the job, the mode, the key and the trigger's own
+    `tags`, under `action.phase` if given."""
     n = len(st.trigger_fires.get(trig.id, [])) + 1
     iid = f"T-{trig.id}-{n}"
     while iid in taken:
@@ -437,7 +435,17 @@ def item_for(trig: Trigger, job, d: Decision, taken: set[str], st: State) -> dic
         "title": f"{what}: {trig.id}" + (f" [{d.key}]" if d.key else ""),
         "body": body,
         "globs": list(job.scope_globs),
-        "tags": [f"trigger:{trig.id}", f"schedule:{job.id}", f"mode:{job.mode}"],
+        "tags": list(
+            dict.fromkeys(
+                [
+                    f"trigger:{trig.id}",
+                    f"schedule:{job.id}",
+                    f"mode:{job.mode}",
+                    *([f"key:{d.key}"] if d.key else []),
+                    *trig.tags,
+                ]
+            )
+        ),
     }
     if trig.action.get("phase"):
         data["parent"] = trig.action["phase"]
