@@ -190,5 +190,7 @@ def test_wait_plans_with_the_same_limit_as_next(repo, monkeypatch) -> None:
 
     monkeypatch.setattr(FL, "limit_for", spy)
     lifecycle.next_(repo, agent="a1")
+    n = len(seen)
     lifecycle.wait(repo, agent="a1", timeout_s=0)
-    assert seen and all(seen), seen  # every caller hands over the log
+    assert n >= 1 and len(seen) > n, seen  # wait asked for the limit too
+    assert all(seen), seen  # and every caller handed over the log
