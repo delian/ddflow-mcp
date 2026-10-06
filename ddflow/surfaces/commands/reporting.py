@@ -25,7 +25,7 @@ def taken_over_note(it) -> str:
     if not by:
         return ""
     return (
-        f" (previously taken over by {by}; still in an unresolved contest -- "
+        f" (previously taken over, first by {by}; still in an unresolved contest -- "
         f"`ddflow resolve {it.id} --keep <event-id|agent>`)"
     )
 

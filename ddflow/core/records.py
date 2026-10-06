@@ -312,7 +312,10 @@ class Item:
         return "; ".join(parts)
 
     def lease_taken_over_by(self) -> str:
-        """Who took over the DISPLAYED claim, "" when nobody did (D-contest-redisplay).
+        """Who FIRST took over the DISPLAYED claim, "" when nobody did (D-contest-redisplay).
+
+        First, not latest: the displaced record keeps one entry per claim window
+        (`handlers.leases._displace`), so a second takeover of the same claim adds none.
 
         A contested claim another holder took over stays in the contest, and when that
         takeover is released it is displayed again (`handlers.leases._redisplay`). It is

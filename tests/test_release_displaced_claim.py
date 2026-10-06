@@ -103,12 +103,12 @@ def test_show_and_status_mark_the_redisplayed_claim(monkeypatch):
     from ddflow.surfaces.commands import reporting as R
 
     it, _ = _taken_over_then_released()
-    assert "previously taken over by C" in R.taken_over_note(it)
+    assert "previously taken over, first by C" in R.taken_over_note(it)
     from collections import defaultdict
 
     render = defaultdict(list, {"running": [it], "parallel": ""})
     lines = R._queue_lines(render)
-    assert any("previously taken over by C" in ln for ln in lines), lines
+    assert any("previously taken over, first by C" in ln for ln in lines), lines
     assert R.taken_over_note(SimpleNamespace(lease=None)) == ""
 
 
@@ -119,3 +119,18 @@ def test_the_redisplay_docstring_states_the_rule():
     # It said "a displaced claim is never promoted" -- false for a contestant taken over.
     assert "A displaced claim is never promoted" not in doc
     assert "displayed again" in doc and "taken over" in doc.lower()
+
+
+def test_a_second_takeover_of_the_same_claim_names_the_first_taker():
+    """Rubber-duck: the record keeps ONE entry per claim window, so after B and then C
+    took over A's claim, the mark names B -- the first -- and says so."""
+    x, a = _at(2, "X", 100.0, 50), _at(3, "A", 120.0, 50)
+    b, c = _at(4, "B", 300.0, 50), _at(6, "C", 500.0, 50)
+    evs = [
+        _ev("task.added", 1, title="t"), x, a, b,
+        _ev("lease.released", 5, "B", holder="B", event=b.id), c,
+        _ev("lease.released", 7, "C", holder="C", event=c.id),
+    ]  # fmt: skip
+    it = fold(evs).items["T"]
+    assert it.lease.holder == "A" and it.lease_taken_over_by() == "B"
+    assert [e["by"]["holder"] for e in it.displaced] == ["B"]
