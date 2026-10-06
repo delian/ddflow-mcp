@@ -53,10 +53,14 @@ _PARAMS = re.compile(r"\[.*?\](?=::|\s|$)", re.S)
 def _bare_names(names: str) -> list[str]:
     """`TestC[1]::test_m[a::b]` -> ['TestC', 'test_m']: every parametrize id removed, then
     anything after whitespace (tests joined by spaces are `_looks_like_several`'s), then
-    -- for an id that never closes -- everything from its `[`."""
+    -- for an id that never closes -- everything from its `[`. A value holding `]::` or
+    `] ` cannot be told from an id boundary, so a piece left holding a bracket is dropped:
+    the permissive side, since a phantom name would refuse a real test and lock the bug
+    open; such an id resolves to the names around it."""
     bare = _PARAMS.sub("", names)
     bare = bare.split(None, 1)[0] if bare.strip() else ""
-    return bare.split("[", 1)[0].split("::")
+    parts = bare.split("[", 1)[0].split("::")
+    return [p for p in parts if "]" not in p] or [""]
 
 
 def _looks_like_several(entry: str) -> bool:
