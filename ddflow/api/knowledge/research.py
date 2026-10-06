@@ -54,7 +54,7 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
             "verdict must be CONFIRMED, REFUTED or THEORETICAL. A note with no verdict "
             "is a literature summary, not research.",
         )
-    if finding.verdict in ("CONFIRMED", "REFUTED") and not (finding.probe or finding.probe_output):
+    if finding.verdict in ("CONFIRMED", "REFUTED") and not (finding.probe or "").strip():
         return O.failed(
             "research.recorded",
             f"{finding.verdict} requires a --probe (and ideally --probe-output): a "

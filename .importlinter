@@ -146,7 +146,6 @@ ignore_imports =
     ddflow.services.companions -> tempfile
     ddflow.services.flowstate -> tempfile
     ddflow.services.gates.runner -> tempfile
-    ddflow.services.harness -> tempfile
     ddflow.services.onboard_tests -> tempfile
     ddflow.services.onboard_verify -> tempfile
     ddflow.services.version_files -> tempfile
