@@ -36,9 +36,10 @@ from ..core import flowsignals as FS
 from ..core.events import Event
 from ..core.model import State
 from ..infra import signals as SIG
+from .configwrite import LOCAL_DIR, ensure_local_dir
 
-#: Where the ring lives, relative to the repository root.
-RING = Path(".ddflow") / "local" / "flow" / "samples.jsonl"
+#: Where the ring lives, relative to the repository root: under the git-ignored local dir.
+RING = LOCAL_DIR / "flow" / "samples.jsonl"
 #: How much history the ring keeps.
 KEEP_S = 6 * 3600.0
 #: A lock file older than this is a crashed sampler's and is taken over.
@@ -47,16 +48,21 @@ STALE_LOCK_S = 10.0
 LOCK_WAIT_S = 2.0
 
 Clock = Callable[[], float]
+Events = Sequence[Event] | Callable[[], Sequence[Event]]
 
 
 @dataclass
 class FlowCtx:
-    """What sampling and folding need from the loaded project."""
+    """What sampling and folding need from the loaded project. ``events`` may be a
+    callable, read only when a sample is actually due."""
 
     repo: Path
     cfg: Config
     state: State
-    events: Sequence[Event] = field(default_factory=tuple)
+    events: Events = field(default_factory=tuple)
+
+    def log_events(self) -> Sequence[Event]:
+        return self.events() if callable(self.events) else self.events
 
 
 @dataclass(frozen=True)
@@ -73,25 +79,46 @@ def ring_path(repo: Path) -> Path:
     return Path(repo) / RING
 
 
-def read_ring(repo: Path) -> list[dict]:
-    """Every well-formed sample, oldest first. A corrupt or truncated line is skipped."""
+def _number_or_none(v: object) -> bool:
+    return v is None or (isinstance(v, int | float) and not isinstance(v, bool))
+
+
+def _row_ok(row: object) -> bool:
+    """A sample the fold can use: numeric ``at``, a map of numeric-or-None signals and,
+    when present, an integer ``in_flight``. Anything else is skipped like a torn line."""
+    if not isinstance(row, dict) or not _number_or_none(row.get("at")) or row.get("at") is None:
+        return False
+    sig = row.get("signals")
+    if not isinstance(sig, dict) or not all(_number_or_none(v) for v in sig.values()):
+        return False
+    flying = row.get("in_flight", 0)
+    return isinstance(flying, int) and not isinstance(flying, bool)
+
+
+def _read(repo: Path) -> tuple[list[dict], bool]:
+    """(well-formed samples oldest first, whether the file is clean). Not clean: a line
+    was skipped or the last one has no newline -- a torn write -- so the next write
+    rewrites the file instead of appending onto the damage."""
     try:
         text = ring_path(repo).read_text("utf-8", errors="replace")
     except OSError:
-        return []
+        return [], True
     rows = []
-    for line in text.splitlines():
+    lines = text.splitlines()
+    for line in lines:
         try:
             row = json.loads(line)
         except ValueError:
             continue
-        if (
-            isinstance(row, dict)
-            and isinstance(row.get("at"), int | float)
-            and isinstance(row.get("signals"), dict)
-        ):
+        if _row_ok(row):
             rows.append(row)
-    return sorted(rows, key=lambda r: r["at"])
+    clean = len(rows) == len(lines) and (not text or text.endswith("\n"))
+    return sorted(rows, key=lambda r: r["at"]), clean
+
+
+def read_ring(repo: Path) -> list[dict]:
+    """Every well-formed sample, oldest first. A corrupt or truncated line is skipped."""
+    return _read(repo)[0]
 
 
 def in_flight(state: State, cfg: Config, now: float) -> int:
@@ -100,23 +127,16 @@ def in_flight(state: State, cfg: Config, now: float) -> int:
     return sum(1 for i in live if i in state.items and not state.items[i].removed)
 
 
-def _ensure_dir(repo: Path) -> Path:
-    """``.ddflow/local/flow``, with ``.ddflow/local`` ignoring itself so nothing under
-    it is ever staged, even in a project whose ``.ddflow/.gitignore`` predates it."""
-    local = Path(repo) / ".ddflow" / "local"
-    d = local / "flow"
-    d.mkdir(parents=True, exist_ok=True)
-    ignore = local / ".gitignore"
-    if not ignore.exists():
-        ignore.write_text("*\n", "utf-8")
-    return d
-
-
 @contextlib.contextmanager
-def _lock(path: Path, clock: Clock) -> Iterator[bool]:
-    """A short exclusive lock by ``O_CREAT | O_EXCL``. Yields False when another sampler
-    held it for the whole wait: that sample is simply skipped."""
+def _lock(path: Path) -> Iterator[bool]:
+    """A short exclusive lock by ``O_CREAT | O_EXCL`` (portable: no ``fcntl``). Yields
+    False when another sampler held it for the whole wait: that sample is skipped.
+
+    The lock file carries a token, and only its owner removes it. A crashed sampler's
+    lock (older than ``STALE_LOCK_S``) is taken over by renaming it aside first: only
+    one taker's rename can succeed, so a fresh lock is never removed by mistake."""
     lock = path.with_name(path.name + ".lock")
+    token = f"{os.getpid()}-{time.time_ns()}".encode()
     deadline = time.monotonic() + LOCK_WAIT_S
     fd = None
     while fd is None:
@@ -125,19 +145,25 @@ def _lock(path: Path, clock: Clock) -> Iterator[bool]:
         except FileExistsError:
             with contextlib.suppress(OSError):
                 if time.time() - lock.stat().st_mtime > STALE_LOCK_S:
-                    lock.unlink()
+                    aside = lock.with_name(f"{lock.name}.stale-{token.decode()}")
+                    os.rename(lock, aside)  # one taker wins; the others retry
+                    aside.unlink()
                     continue
             if time.monotonic() > deadline:
                 yield False
                 return
             time.sleep(0.01)
     try:
-        os.write(fd, f"{os.getpid()}\n".encode())
+        os.write(fd, token)
+        os.close(fd)
+        fd = None
         yield True
     finally:
-        os.close(fd)
+        if fd is not None:
+            os.close(fd)
         with contextlib.suppress(OSError):
-            lock.unlink()
+            if lock.read_bytes() == token:
+                lock.unlink()
 
 
 def _samples(rows: Sequence[dict]) -> list[FC.Sample]:
@@ -148,10 +174,10 @@ def _history(rows: Sequence[dict]) -> list[tuple[float, int]]:
     return [(float(r["at"]), int(r.get("in_flight", 0) or 0)) for r in rows]
 
 
-def _log_signals(ctx: FlowCtx, now: float) -> dict[str, float | None]:
-    """The log-derived signals at ``now``. Only the rates (cheap scans of the log);
-    loop findings and independent work are the caller's to read at decision time."""
-    evs = list(ctx.events)
+def _log_signals(events: Sequence[Event], now: float) -> dict[str, float | None]:
+    """The log-derived rates at ``now`` (cheap scans of the log). Loop findings and
+    independent work are the caller's to read at decision time."""
+    evs = list(events)
     return {
         "reviewer_latency_ratio": FS.reviewer_latency_ratio(evs, now),
         "gate_failure_rate": FS.gate_failure_rate(evs, now),
@@ -166,62 +192,81 @@ def _enabled(cfg: Config, signals: dict[str, float | None]) -> dict[str, float |
 
 def _fold(ctx: FlowCtx, rows: Sequence[dict], now: float, fresh: bool) -> FC.Decision:
     samples = _samples(rows)
-    if fresh and samples and ctx.events:
+    events = ctx.log_events() if fresh and samples else ()
+    if events:
         # The log is read at evaluation time: the newest sample carries the rates as
         # they are NOW, so a burst of failures is seen without waiting for a sample.
         last = samples[-1]
-        merged = {**last.signals, **_enabled(ctx.cfg, _log_signals(ctx, now))}
+        merged = {**last.signals, **_enabled(ctx.cfg, _log_signals(events, now))}
         samples[-1] = FC.Sample(at=last.at, signals=merged)
     return FC.fold_limit(samples, FP.params(ctx.cfg), _history(rows), now)
+
+
+def _due(rows: Sequence[dict], now: float, interval: int) -> SampleResult | None:
+    """None when a sample is due, else why not."""
+    if rows and now < rows[-1]["at"]:
+        return SampleResult(False, "the clock is earlier than the newest sample; dropped")
+    if rows and now - rows[-1]["at"] < interval:
+        return SampleResult(False, "not due")
+    return None
 
 
 def sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock = time.time) -> SampleResult:
     """Append one sample when the newest is at least ``signal_interval_s`` old.
 
-    Never raises. Two calls within the interval write one sample; a clock earlier than
-    the newest sample drops this one; an unwritable directory returns ``unavailable``.
+    Two calls within the interval write one sample; a clock earlier than the newest
+    sample drops this one; an unwritable directory returns ``unavailable``. The slow
+    part -- sampling the host and scanning the log -- happens BEFORE the lock, which is
+    held only to re-check and write, so a large log never holds other samplers off.
+    Never raises.
     """
+    try:
+        return _sample_if_due(ctx, source, clock)
+    except OSError as exc:
+        return SampleResult(False, f"the signal ring cannot be written: {exc}", unavailable=True)
+    except Exception as exc:  # opportunistic: a sample that fails costs nothing else
+        return SampleResult(False, f"sampling failed: {type(exc).__name__}: {exc}")
+
+
+def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> SampleResult:
     now = clock()
     interval = max(1, int(ctx.cfg.schedule.signal_interval_s))
     path = ring_path(ctx.repo)
-    rows = read_ring(ctx.repo)
-    if rows and now - rows[-1]["at"] < interval:
-        if now < rows[-1]["at"]:
-            return SampleResult(False, "the clock is earlier than the newest sample; dropped")
-        return SampleResult(False, "not due")
-    try:
-        _ensure_dir(ctx.repo)
-        with _lock(path, clock) as held:
-            if not held:
-                return SampleResult(False, "another sampler holds the ring")
-            rows = read_ring(ctx.repo)  # again, under the lock
-            if rows and now < rows[-1]["at"]:
-                return SampleResult(False, "the clock is earlier than the newest sample; dropped")
-            if rows and now - rows[-1]["at"] < interval:
-                return SampleResult(False, "not due")
-            raw = source.sample()
-            signals = _enabled(ctx.cfg, {**SIG.controller_signals(raw), **_log_signals(ctx, now)})
-            flying = in_flight(ctx.state, ctx.cfg, now)
-            decision = _fold(ctx, rows, now, fresh=False)
-            row = {
-                "at": now,
-                "signals": signals,
-                "in_flight": flying,
-                "limit_binding": flying >= decision.limit,
-                "reasons": dict(getattr(source, "reasons", {}) or {}),
-            }
-            kept = [r for r in rows if r["at"] >= now - KEEP_S]
-            line = json.dumps(row, sort_keys=True) + "\n"
-            if len(kept) == len(rows) and path.exists():
-                with path.open("a", encoding="utf-8") as fh:
-                    fh.write(line)
-            else:  # trim: rewrite the kept window and the new sample, atomically
-                tmp = path.with_name(path.name + ".tmp")
-                body = "".join(json.dumps(r, sort_keys=True) + "\n" for r in kept) + line
-                tmp.write_text(body, "utf-8")
-                os.replace(tmp, path)
-    except OSError as exc:
-        return SampleResult(False, f"the signal ring cannot be written: {exc}", unavailable=True)
+    rows, _clean = _read(ctx.repo)
+    if (why := _due(rows, now, interval)) is not None:
+        return why
+    raw = source.sample()
+    signals = _enabled(
+        ctx.cfg, {**SIG.controller_signals(raw), **_log_signals(ctx.log_events(), now)}
+    )
+    flying = in_flight(ctx.state, ctx.cfg, now)
+    binding = flying >= _fold(ctx, rows, now, fresh=False).limit
+    reasons = dict(getattr(source, "reasons", {}) or {})
+    ensure_local_dir(ctx.repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _lock(path) as held:
+        if not held:
+            return SampleResult(False, "another sampler holds the ring")
+        rows, clean = _read(ctx.repo)  # again, under the lock
+        if (why := _due(rows, now, interval)) is not None:
+            return why
+        row = {
+            "at": now,
+            "signals": signals,
+            "in_flight": flying,
+            "limit_binding": binding,
+            "reasons": reasons,
+        }
+        kept = [r for r in rows if r["at"] >= now - KEEP_S]
+        line = json.dumps(row, sort_keys=True) + "\n"
+        if clean and len(kept) == len(rows) and path.exists():
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+        else:  # trim, or repair a torn file: rewrite the kept window atomically
+            tmp = path.with_name(path.name + ".tmp")
+            body = "".join(json.dumps(r, sort_keys=True) + "\n" for r in kept) + line
+            tmp.write_text(body, "utf-8")
+            os.replace(tmp, path)
     return SampleResult(True)
 
 

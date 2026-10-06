@@ -64,7 +64,8 @@ def _sample_flow(repo: Path, log: EventLog, cfg: Config, st: State) -> None:
         from ..infra import signals as SIG
         from ..services import flowstate as FL
 
-        ctx = FL.FlowCtx(repo=Path(repo), cfg=cfg, state=st, events=log.read_all())
+        # `log.read_all`, not its result: the log is read only when a sample is due
+        ctx = FL.FlowCtx(repo=Path(repo), cfg=cfg, state=st, events=log.read_all)
         FL.sample_if_due(ctx, SIG.HostSignals(repo))
     except Exception:
         return
