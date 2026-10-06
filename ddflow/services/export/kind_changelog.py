@@ -189,7 +189,8 @@ def _first_sentence(text: str) -> str:
 def _fixed_bugs(title: str) -> list[str]:
     ids: list[str] = []
     for m in _FIXES.finditer(title or ""):
-        ids += [b.strip() for b in re.split(r",|\band\b", m.group(1)) if b.strip()]
+        # "and" between ids, never inside one: `\band\b` split `B-parse-and-merge` (B7a5a58fb1d).
+        ids += [b.strip() for b in re.split(r",|\s+and\s+", m.group(1)) if b.strip()]
     return ids
 
 
