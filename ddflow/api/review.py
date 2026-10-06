@@ -928,11 +928,10 @@ def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
     """The delta of a named branch. Raises RuntimeError when no diff can be produced: a
     delta that could not run is never "nothing changed"."""
     start = _delta_start(repo, tip, head, base)
-    d = W.git(repo, "diff", "--no-color", start, tip) if start != head else None
-    if d is None or not d.ok:  # nothing merged in, or that diff failed: since head
-        d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
-    if not d.ok:
-        raise RuntimeError(f"git diff {head[:10]}...{tip} failed: {d.err or d.out}")
+    rng = (f"{head}...{tip}",) if start == head else (start, tip)
+    d = W.git(repo, "diff", "--no-color", *rng)
+    if not d.ok:  # never a wider range than asked: that would send the base's work
+        raise RuntimeError(f"git diff {' '.join(rng)} failed: {d.err or d.out}")
     return (d.out + "\n") if d.out else ""
 
 
