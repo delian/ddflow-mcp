@@ -67,6 +67,14 @@ def _check(spec: dict[str, Any], known: set[str], where: str, lenient: bool = Fa
     return {k: v for k, v in spec.items() if k in known}
 
 
+def _lenient_for(path: Path, lenient: bool) -> bool:
+    """``lenient``, or True for the git-ignored machine-local layer (`.ddflow/local/`),
+    which any checkout's ddflow on this machine may have written -- always lenient, as
+    `Config.load` treats `.ddflow/local/config.toml` (B0016a65167)."""
+    p = Path(path)
+    return lenient or (p.parent.name == "local" and p.parent.parent.name == ".ddflow")
+
+
 def overlay_table(
     paths: Iterable[Path], table: str, cls: type, *, lenient: bool = False
 ) -> dict[str, dict[str, Any]]:
@@ -86,7 +94,7 @@ def overlay_table(
             if not isinstance(raw, dict):
                 continue
             out.setdefault(key, {}).update(
-                _check(raw, known, f"[{table}.{key}] in {path}", lenient)
+                _check(raw, known, f"[{table}.{key}] in {path}", _lenient_for(path, lenient))
             )
     return out
 
@@ -111,7 +119,8 @@ def overlay_array(
             if not isinstance(raw, dict):
                 continue
             ident = raw.get(key) or (raw.get(fallback_key) if fallback_key else "")
-            spec = _check(raw, known, f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}", lenient)
+            where = f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}"
+            spec = _check(raw, known, where, _lenient_for(path, lenient))
             if not ident:
                 raise ValueError(f"[[{table}]] #{n} in {path} has no `{key}`")
             out[str(ident)] = spec

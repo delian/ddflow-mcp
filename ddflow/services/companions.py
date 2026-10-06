@@ -46,6 +46,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
 from ..infra.tomlcfg import value as toml_value
@@ -255,8 +256,9 @@ def load(repo: Path) -> list[Companion]:
     A project entry with an existing id REPLACES it (so a project can point `roborev`
     at its own wrapper); a new id is appended. Reads `.ddflow/config.toml` as well as
     `.ddflow/companions.toml`, through the same loader gates and reviewers use — and
-    therefore with the same policy: **an unknown field is an error.** It used to drop
-    them silently, so a misspelt `commmand` produced a companion with no command that
+    therefore with the same policy: **an unknown field is an error** in the tree the
+    code came from (elsewhere the file may be newer than the code: skipped with a
+    warning, B0016a65167). It used to drop them silently, so a misspelt `commmand` produced a companion with no command that
     `companions add` would write into an agent's config as a launch line failing
     mid-task.
     """
@@ -265,7 +267,11 @@ def load(repo: Path) -> list[Companion]:
     out: dict[str, Companion] = {}
     shipped = paths.templates_dir() / "companions.toml"
     sources = [shipped, *tomlcfg.config_paths(repo, "companions.toml")]
-    for cid, spec in tomlcfg.overlay_array(sources, "companion", Companion, key="id").items():
+    # A newer checkout's companion field warns and is skipped by older code (B0016a65167).
+    lenient = not _is_code_tree(Path(repo))
+    for cid, spec in tomlcfg.overlay_array(
+        sources, "companion", Companion, key="id", lenient=lenient
+    ).items():
         # The loader rejects an unknown FIELD; it cannot know that `kind` has a closed
         # vocabulary. An unvalidated `kind = "MCP"` would be neither "mcp" nor "cli",
         # so `is_mcp` is False and the companion silently stops being registrable --
