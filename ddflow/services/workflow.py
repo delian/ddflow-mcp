@@ -111,7 +111,10 @@ RULE_KEYS: tuple[str, ...] = (
     "gates.unavailable_is_failure",
     "gates.allow_skip_with_reason",
     "gates.evidence_required",
+    "schedule.parallel",
     "schedule.max_parallel_tasks",
+    "schedule.max_parallel_min",
+    "schedule.max_parallel_max",
     "worktree.max_parallel",
     "worktree.enabled",
     "lease.ttl_s",
@@ -235,6 +238,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
                 )
             )
     out += _policy_findings(cfg)
+    out += _parallel_findings(cfg)
     return out + (_project_findings(gates, root) if root else [])
 
 
@@ -257,6 +261,84 @@ def _policy_findings(cfg: Config) -> list[Finding]:
             "user-facing documentation.",
         )
     ]
+
+
+#: The explicit value every project adopted before adaptive parallelism carries
+#: (services/adopt.py wrote it for both caps).
+OLD_PARALLEL_DEFAULT = 4
+
+
+def _explicit(cfg: Config, key: str) -> bool:
+    return cfg.sources.get(key, "default") != "default"
+
+
+def _in_local(cfg: Config, key: str) -> bool:
+    return cfg.sources.get(key, "").startswith("local")
+
+
+def _set_cmd(cfg: Config, key: str, value: str, *, layer_of: str = "") -> str:
+    """The command that sets `key` where it takes effect: the local layer when `key`
+    itself or the finding's value (`layer_of`) lives there -- a local value is overridden
+    only there, and a machine's own override must not be answered in the shared file."""
+    local = _in_local(cfg, key) or _in_local(cfg, layer_of or key)
+    return f"`ddflow config{' --local' if local else ''} --set {key} {value}`"
+
+
+def _parallel_findings(cfg: Config) -> list[Finding]:
+    """Advice, never a problem, about what keeps adaptive parallelism from working: an
+    inconsistent auto range (the controller clamps it) and the explicit 4s an older
+    `adopt` wrote, each with the command that removes it."""
+    from ..config import parallel_range_problems
+
+    out = [
+        Finding(
+            ADVISORY,
+            key,
+            f"{why}; auto clamps it into [max_parallel_min, max_parallel_max]. Make the "
+            "range consistent with `ddflow config --set schedule.max_parallel_max N` "
+            "(machine sizing: add --local), or `ddflow config --set schedule.parallel "
+            "fixed` to use max_parallel_tasks as the number.",
+        )
+        for key, why in parallel_range_problems(cfg)
+    ]
+    if cfg.schedule.parallel != "auto":
+        return out
+    if cfg.worktree.max_parallel == OLD_PARALLEL_DEFAULT and _explicit(
+        cfg, "worktree.max_parallel"
+    ):
+        out.append(
+            Finding(
+                ADVISORY,
+                "worktree.max_parallel",
+                f"is set to {OLD_PARALLEL_DEFAULT}, the old default an earlier `adopt` "
+                f"wrote, so it caps auto at {OLD_PARALLEL_DEFAULT} worktrees whatever the "
+                f"limit allows. {_set_cmd(cfg, 'worktree.max_parallel', '0')} follows the "
+                "schedule limit instead; keep it only if this machine cannot hold more "
+                "trees (then set it with --local).",
+            )
+        )
+    if (
+        cfg.schedule.max_parallel_tasks == OLD_PARALLEL_DEFAULT
+        and _explicit(cfg, "schedule.max_parallel_tasks")
+        and not _explicit(cfg, "schedule.parallel")
+    ):
+        out.append(
+            Finding(
+                ADVISORY,
+                "schedule.max_parallel_tasks",
+                f"is set to {OLD_PARALLEL_DEFAULT}, the old default an earlier `adopt` "
+                "wrote. Under auto (now the default) it is only the START value, so the "
+                "limit may rise to schedule.max_parallel_max. To keep exactly "
+                f"{OLD_PARALLEL_DEFAULT}: {_set_cmd(cfg, 'schedule.parallel', 'fixed', layer_of='schedule.max_parallel_tasks')}; "
+                "to accept auto, remove the line from "
+                + (
+                    ".ddflow/local/config.toml."
+                    if _in_local(cfg, "schedule.max_parallel_tasks")
+                    else ".ddflow/config.toml."
+                ),
+            )
+        )
+    return out
 
 
 def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:

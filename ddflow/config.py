@@ -32,6 +32,11 @@ from typing import Any
 KNOB_DOCS: dict[str, str] = {}
 
 
+class InvalidValue(ValueError):
+    """A KNOWN knob given a value it cannot take. The write paths refuse it (exit 3,
+    naming the key); an unknown key or section stays a plain ValueError (exit 1)."""
+
+
 def _doc(section: str, knob: str, text: str) -> None:
     KNOB_DOCS[f"{section}.{knob}"] = text
 
@@ -104,7 +109,7 @@ class WorktreeConfig:
     base_ref: str = ""  # "" = the repo's default branch, auto-detected
     merge_strategy: str = "no-ff"  # no-ff | ff-only | squash
     remove_on_merge: bool = True
-    max_parallel: int = 4
+    max_parallel: int = 0  # 0 = follow the schedule limit (not unlimited)
     sync_before_start: bool = True
     adopt_existing: bool = True
     local_files: list[str] = field(default_factory=list)
@@ -143,7 +148,7 @@ _doc(
 _doc(
     "worktree",
     "max_parallel",
-    "Ceiling on simultaneously active task worktrees. Guards disk and CPU; the scheduler queues beyond it rather than refusing.",
+    "Ceiling on simultaneously active task worktrees. Guards disk and CPU; the scheduler queues beyond it rather than refusing. 0 (the default) means FOLLOW the schedule limit -- the adaptive or fixed number of items in flight (`schedule.parallel`) -- and is not unlimited: there is no unlimited setting, the schedule ceiling always bounds it. A nonzero value stays an independent hard cap on worktrees alone. Projects adopted before adaptive parallelism carry an explicit `max_parallel = 4`, which caps auto at 4 worktrees; `ddflow doctor` names it and the remedy `ddflow config --set worktree.max_parallel 0`.",
 )
 _doc(
     "worktree",
@@ -584,11 +589,124 @@ _doc(
 )
 
 
+#: Every signal the adaptive flow controller can read: the host ones
+#: (`core/flowcontrol.HOST_SIGNALS`, sampled by `infra/signals`) and the log-derived ones
+#: (`core/flowsignals`). Spelled out here because `config` imports nothing;
+#: tests/test_adaptive_config.py holds the three lists together.
+FLOW_SIGNALS: tuple[str, ...] = (
+    "load_per_core",
+    "memory_pressure",
+    "disk_pressure",
+    "reviewer_latency_ratio",
+    "gate_failure_rate",
+    "merge_failure_rate",
+    "loop_findings",
+    "independent_ready",
+)
+#: The marks a signal may carry, higher always worse: at or under `low` healthy, over
+#: `high` bad, at or over `critical` (optional) pauses admission.
+SIGNAL_MARKS = ("low", "high", "critical")
+
+
+def default_signals() -> dict[str, Any]:
+    """The shipped `[schedule.signals]`: every signal enabled, and the marks the
+    controller ships with (`flowcontrol.Params`): load per core 0.15 / 0.75. A signal
+    with no marks is read but never moves the limit until marks are set for it."""
+    return {"enabled": list(FLOW_SIGNALS), "load_per_core": {"low": 0.15, "high": 0.75}}
+
+
+def merge_signals(base: dict[str, Any], layer: dict[str, Any]) -> dict[str, Any]:
+    """`layer` over `base`: `enabled` replaced whole, each signal's marks merged mark by
+    mark, so a local `high` keeps the committed `low`."""
+    out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in base.items()}
+    for key, value in layer.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = {**out[key], **value}
+        else:
+            out[key] = dict(value) if isinstance(value, dict) else value
+    return out
+
+
+def _number(v: Any) -> bool:
+    return isinstance(v, int | float) and not isinstance(v, bool)
+
+
+def _signals_problem(v: Any) -> str:
+    known = ", ".join(FLOW_SIGNALS)
+    if not isinstance(v, dict):
+        return "must be a table: enabled = [...] and one table of marks per signal"
+    enabled = v.get("enabled", [])
+    if not isinstance(enabled, list) or not all(isinstance(x, str) for x in enabled):
+        return f"enabled must be a list of signal names drawn from {known}"
+    if bad := [x for x in enabled if x not in FLOW_SIGNALS]:
+        return f"unknown signal {bad[0]!r} in enabled; the signals are {known}"
+    for name, marks in v.items():
+        if name == "enabled":
+            continue
+        if name not in FLOW_SIGNALS:
+            return f"unknown signal {name!r}; the signals are {known}"
+        if not isinstance(marks, dict):
+            return f"{name} must be a table of marks ({', '.join(SIGNAL_MARKS)})"
+        if bad := [m for m in marks if m not in SIGNAL_MARKS]:
+            return f"{name}.{bad[0]} is not a mark; a signal has {', '.join(SIGNAL_MARKS)}"
+        if bad := [m for m, x in marks.items() if not _number(x)]:
+            return f"{name}.{bad[0]} must be a number"
+        low, high, crit = (marks.get(m) for m in SIGNAL_MARKS)
+        if low is None or high is None:
+            return f"{name} needs both a low and a high mark"
+        if low > high:
+            return f"{name}: low ({low}) must not exceed high ({high})"
+        if crit is not None and crit < high:
+            return f"{name}: critical ({crit}) must not be under high ({high})"
+    return ""
+
+
+def parallel_range_problems(cfg: Config) -> list[tuple[str, str]]:
+    """`(key, why)` for each way the auto range is inconsistent: it must hold
+    `max_parallel_min <= max_parallel_tasks <= max_parallel_max`. Judged on the merged
+    configuration, and only in auto: in fixed mode the number is the number. The
+    controller clamps an inconsistent range (`flowcontrol.Params.bounds`) rather than
+    failing, so a project adopted with a larger explicit start keeps working."""
+    s = cfg.schedule
+    if s.parallel != "auto":
+        return []
+    out = []
+    if s.max_parallel_min > s.max_parallel_tasks:
+        out.append(
+            (
+                "schedule.max_parallel_min",
+                f"the floor ({s.max_parallel_min}) is above the start value "
+                f"schedule.max_parallel_tasks ({s.max_parallel_tasks})",
+            )
+        )
+    if s.max_parallel_tasks > s.max_parallel_max:
+        out.append(
+            (
+                "schedule.max_parallel_tasks",
+                f"the start value ({s.max_parallel_tasks}) is above the ceiling "
+                f"schedule.max_parallel_max ({s.max_parallel_max})",
+            )
+        )
+    return out
+
+
 @dataclass
 class ScheduleConfig:
     """Dependency resolution and parallel fan-out."""
 
+    #: auto | fixed: whether the number of items in flight adapts (D-adaptive-flow-accepted)
+    parallel: str = "auto"
+    #: the START value in auto, the number itself in fixed
     max_parallel_tasks: int = 4
+    max_parallel_min: int = 2
+    max_parallel_max: int = 8
+    adapt_up_after_s: int = 600
+    adapt_cooldown_s: int = 300
+    signal_interval_s: int = 60
+    #: `[schedule.signals]`: `enabled` (the signals the controller reads) and, per
+    #: signal, its `low` / `high` / `critical` marks. Merged layer by layer over the
+    #: shipped default, so setting one mark keeps the others.
+    signals: dict[str, Any] = field(default_factory=default_signals)
     ready_policy: str = "deps_and_lease"  # deps_and_lease | deps_only
     cycle_policy: str = "error"  # error | warn
     unknown_dep_policy: str = "block"  # block | warn
@@ -625,7 +743,42 @@ _doc(
 _doc(
     "schedule",
     "max_parallel_tasks",
-    "How many items may be in flight at once, counted across the whole queue. Every live lease counts, worktree or not -- a review task occupies an agent just as a coding task does. Distinct from worktree.max_parallel, which caps only the leases that made a tree.",
+    "How many items may be in flight at once, counted across the whole queue. Every live lease counts, worktree or not -- a review task occupies an agent just as a coding task does. In `parallel = 'auto'` (the default) this is the START value the adaptive limit begins from and returns to; in 'fixed' it is the limit itself. Distinct from worktree.max_parallel, which caps only the leases that made a tree.",
+)
+_doc(
+    "schedule",
+    "parallel",
+    "'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts between `max_parallel_min` and `max_parallel_max`, starting at `max_parallel_tasks` -- raised by one after `adapt_up_after_s` of healthy samples while the limit was binding, lowered by a quarter when a signal is bad on 3 of the last 4 samples -- and the limit is derived on this machine, never committed. 'fixed': `max_parallel_tasks` is the number, exactly as before adaptive parallelism. A shrink never touches a running lease; it only stops new admissions.",
+)
+_doc(
+    "schedule",
+    "max_parallel_min",
+    "The floor of the adaptive limit (default 2, at least 1): however bad the signals, auto never offers fewer slots than this. Must not exceed `max_parallel_tasks` in auto.",
+)
+_doc(
+    "schedule",
+    "max_parallel_max",
+    "The ceiling of the adaptive limit (default 8, at least 1): auto never exceeds it, whatever the signals say. Must not be under `max_parallel_tasks` in auto. Machine sizing: set it in the local layer (`ddflow config --local --set schedule.max_parallel_max N`), which wins over the committed value.",
+)
+_doc(
+    "schedule",
+    "adapt_up_after_s",
+    "Seconds of all-healthy samples, with the limit actually binding (in flight reached it), before auto raises the limit by one (default 600). After a decrease no increase happens for twice this long.",
+)
+_doc(
+    "schedule",
+    "adapt_cooldown_s",
+    "Minimum seconds between two decreases of the adaptive limit (default 300), so one bad stretch lowers it once rather than to the floor.",
+)
+_doc(
+    "schedule",
+    "signal_interval_s",
+    "Seconds between two samples of the signals auto steers by (default 60, at least 1). Samples are taken opportunistically by next, brief, claim and heartbeat -- there is no daemon -- and kept in a git-ignored ring under .ddflow/local/flow/.",
+)
+_doc(
+    "schedule",
+    "signals",
+    "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, merge_failure_rate, loop_findings, independent_ready), and per signal a table of marks, higher always worse: `low` (at or under it healthy), `high` (over it bad; between the two is the hysteresis band) and an optional `critical` (pauses admission for that evaluation). Shipped marks: load_per_core low 0.15, high 0.75; a signal with no marks is read but never moves the limit. Layers merge mark by mark: `ddflow config --set schedule.signals.load_per_core.high 0.8` keeps the low mark. An unknown signal name is refused with this list.",
 )
 _doc(
     "schedule",
@@ -1676,7 +1829,10 @@ class Config:
                     continue
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
-                value = _coerce(raw, known[knob].type)
+                value = _coerce_knob(sec, knob, raw, known[knob].type)
+                if f"{sec}.{knob}" == "schedule.signals" and isinstance(value, dict):
+                    # merged over the layers below, mark by mark (`merge_signals`)
+                    value = merge_signals(getattr(target, knob), value)
                 check = _KNOB_CHECKS.get(f"{sec}.{knob}")
                 if check and (why := check(value)):
                     if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
@@ -1708,7 +1864,7 @@ class Config:
                         setattr(target, knob, value)
                         self.sources[f"{sec}.{knob}"] = f"{source} (strictest fallback)"
                         continue
-                    raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
+                    raise InvalidValue(f"invalid {sec}.{knob} = {value!r}: {why}")
                 self._forget_fallback(f"{sec}.{knob}", f"the {source} value {value!r}")
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
@@ -1906,6 +2062,7 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "schedule.cycle_policy": ("error", "warn"),
     "schedule.unknown_dep_policy": ("block", "warn"),
     "schedule.empty_phase": ("note", "problem", "off"),
+    "schedule.parallel": ("auto", "fixed"),
     "dedupe.on_match": DEDUPE_ON_MATCH,
     "enforce.commit_without_lease": _BLOCK_WARN_OFF,
     "enforce.generated_views": _BLOCK_WARN_OFF,
@@ -1955,6 +2112,10 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "schedule.cycle_policy": ("error", "a dependency cycle refuses scheduling"),
     "schedule.unknown_dep_policy": ("block", "a dependency on an unknown id stays unmet"),
     "schedule.empty_phase": ("problem", "an open phase with no task fails doctor"),
+    "schedule.parallel": (
+        "fixed",
+        "no safety dimension; changes least -- max_parallel_tasks is the number, nothing adapts",
+    ),
     "dedupe.on_match": ("ask", "a likely duplicate is refused until answered"),
     "enforce.commit_without_lease": ("block", "the hook refuses"),
     "enforce.generated_views": ("block", "the hook refuses"),
@@ -1994,6 +2155,7 @@ KNOB_OUTWARD: dict[str, frozenset[str]] = {
     "schedule.cycle_policy": frozenset(),
     "schedule.unknown_dep_policy": frozenset(),
     "schedule.empty_phase": frozenset(),
+    "schedule.parallel": frozenset(),
     "dedupe.on_match": frozenset(),
     "enforce.commit_without_lease": frozenset(),
     "enforce.generated_views": frozenset(),
@@ -2049,6 +2211,14 @@ def _export_tables_problem(v: Any) -> str:
     return ""
 
 
+def _int_at_least(n: int) -> Callable[[Any], str]:
+    return lambda v: (
+        ""
+        if isinstance(v, int) and not isinstance(v, bool) and v >= n
+        else f"must be an integer >= {n}"
+    )
+
+
 #: Knobs whose TYPE is not the whole contract: "" means valid, else why not. Checked on
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
@@ -2077,6 +2247,17 @@ _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
         else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
     ),
     "enforce.trailer_waivers": _waivers_problem,
+    "schedule.max_parallel_tasks": _int_at_least(1),
+    "schedule.max_parallel_min": _int_at_least(1),
+    "schedule.max_parallel_max": _int_at_least(1),
+    "schedule.adapt_up_after_s": _int_at_least(0),
+    "schedule.adapt_cooldown_s": _int_at_least(0),
+    "schedule.signal_interval_s": _int_at_least(1),
+    "schedule.signals": _signals_problem,
+    "worktree.max_parallel": lambda v: (
+        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+        else "must be an integer >= 0 (0 = follow the schedule limit)"
+    ),
     "dedupe.show_floor": _unit_interval,
     "dedupe.ask_threshold": _unit_interval,
     "dedupe.max_candidates": lambda v: (
@@ -2177,6 +2358,17 @@ def _coerce(raw: Any, typ: Any) -> Any:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
     return raw
+
+
+def _coerce_knob(sec: str, knob: str, raw: Any, typ: Any) -> Any:
+    """`_coerce` for a KNOWN knob: a value of the wrong type is an `InvalidValue` naming
+    the key, refused like any other invalid value (exit 3 on the write paths)."""
+    try:
+        return _coerce(raw, typ)
+    except InvalidValue:
+        raise
+    except ValueError as exc:
+        raise InvalidValue(f"invalid {sec}.{knob} = {raw!r}: {exc}") from exc
 
 
 def _is_exactly(ts: str, want: str) -> bool:
