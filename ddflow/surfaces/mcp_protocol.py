@@ -20,8 +20,8 @@ Two eras, one engine (B149, D-unify 8):
   and `round_trip`).
 
 Stdlib only, deliberately: the official SDK pulls 28 packages, and stdio is a few hundred
-lines of newline-delimited JSON-RPC. The `[mcp-sdk]` extra is for a network transport
-behind the same tool registry, never for this.
+lines of newline-delimited JSON-RPC. The official SDK is for a network transport behind the
+same tool registry, as the planned `[mcp-sdk]` extra (D-unify 2), never for this.
 """
 
 from __future__ import annotations

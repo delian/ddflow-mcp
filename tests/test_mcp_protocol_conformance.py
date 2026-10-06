@@ -426,7 +426,9 @@ def test_an_input_required_result_conforms_and_its_retry_is_verified(repo):
     assert P.modern_check(retry) == rev
     assert P.round_trip(retry["params"], "tools/call") == {"step": 1}
     # The server answers the retry like any modern call: the tool never sees the round trip.
-    check_reply(rev, "tools/call", M.Server(repo, agent="conformance").handle(retry))
+    served = M.Server(repo, agent="conformance").handle(retry)
+    check_reply(rev, "tools/call", served)
+    assert "result" in served and served["result"]["resultType"] == "complete", served
 
 
 def _modern_params(**caps):
@@ -452,7 +454,9 @@ def test_a_state_this_server_did_not_issue_is_refused(repo):
     params = _modern_params()
     token = P.input_required("tools/call", params, state={"n": 1})["requestState"]
     body, tag = token.split(".")
-    forged = f"{body}.{tag[:-2]}AA"
+    flipped = "B" if tag[10] != "B" else "C"  # a change on every run, never a no-op
+    forged = f"{body}.{tag[:10]}{flipped}{tag[11:]}"
+    assert forged != token
     srv = M.Server(repo, agent="conformance")
     for bad in ("garbage", forged, "", f"{body}.{body}"):
         reply = srv.handle(_retry(params, bad))
