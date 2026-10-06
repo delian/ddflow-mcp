@@ -268,7 +268,9 @@ def bugs_named_by_fix_task(cfg: Config | None, item_id: str) -> list[str]:
         if "{parent}" not in template:
             continue
         rx = _pattern(template.replace("{parent}", "\x00"))
-        pattern = rx.pattern.replace(re.escape("\x00"), "(?P<parent>.+)")
+        # the first {parent} captures, any repeat must be the same text
+        pattern = rx.pattern.replace(re.escape("\x00"), "(?P<parent>.+)", 1)
+        pattern = pattern.replace(re.escape("\x00"), "(?P=parent)")
         if (m := re.fullmatch(pattern, item_id)) and m.group("parent") not in out:
             out.append(m.group("parent"))
     return out
@@ -282,9 +284,9 @@ def refile(base: str, sha: str) -> str:
 
 def is_filing_of(rid: str, base: str) -> bool:
     """Whether ``rid`` is ``base`` itself or exactly one of its re-filings (`refile`):
-    the suffix must be the seven-hex-digit sha, so another stable id that merely starts
-    with ``base`` is not taken for one."""
-    return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
+    the suffix must be a short sha (4 to 7 hex digits), so another stable id that merely
+    starts with ``base`` (whose own suffix is a ten-digit digest) is not taken for one."""
+    return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{4,7}", rid) is not None
 
 
 def confirm(cfg: Config, kind: str, minted: Minted, *, used: Any, **fields: Any) -> Minted:

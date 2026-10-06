@@ -270,3 +270,14 @@ def test_a_seq_in_a_rendered_template_is_allocated() -> None:
     cfg.ids.fix_task = "fix-{parent}-{seq}"
     assert ids.render(cfg, "fix_task", parent="B1") == "fix-B1-1"
     assert ids.render(cfg, "fix_task", used={"fix-B1-1": "item"}, parent="B1") == "fix-B1-2"
+
+
+def test_a_short_sha_refiling_round_trips() -> None:
+    assert ids.is_filing_of(ids.refile("Bci-x-0123456789", "a1b2"), "Bci-x-0123456789")
+
+
+def test_a_repeated_parent_token_reads_back() -> None:
+    cfg = Config()
+    cfg.ids.fix_task = "{parent}-fix-{parent}"
+    assert ids.bugs_named_by_fix_task(cfg, "B1-fix-B1")[0] == "B1"
+    assert "B1" not in ids.bugs_named_by_fix_task(cfg, "B1-fix-B2")
