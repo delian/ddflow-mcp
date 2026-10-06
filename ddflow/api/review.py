@@ -912,10 +912,10 @@ def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
 
 def _delta_of_tree(wt: Path, head: str, base: str) -> str:
     """The delta of an item's worktree: its commits and tracked edits since the start.
-    Raises RuntimeError when the diff from a merged start cannot be produced."""
+    Raises RuntimeError when a diff cannot be produced: never "nothing changed"."""
     start = _delta_start(wt, "HEAD", head, base)
-    if start == head:
-        return W.capture_diff(wt, head, include_untracked=False)
+    # `start..HEAD` plus the tracked edits: what `capture_diff(wt, head)` sent (a delta is
+    # only taken from a head the branch contains), with each git call's failure kept.
     committed = W.git(wt, "diff", "--no-color", start, "HEAD")
     working = W.git(wt, "diff", "--no-color", "HEAD")
     for part in (committed, working):
