@@ -171,7 +171,10 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     ("research",): "checked",
     ("memory", "add"): "checked",
     ("rule", "add"): "own check: rules are files, not log records, and are compared with "
-    "each other by api.rules.rule_dedup_check",
+    "each other by api.rules.rule_dedup_check -- and with every other kind by "
+    "api._dedupe.check_add, through api.rules._cross_kind (D-rule-dedupe-everywhere)",
+    ("rule", "edit"): "own check: a new title or content runs api._dedupe.check_add through "
+    "api.rules._cross_kind (D-rule-dedupe-everywhere)",
     ("split",): WRITERS_EXEMPT["api/items.py:split"],
     ("import",): WRITERS_EXEMPT["services/importer.py:apply_import"],
     ("promote", "add"): WRITERS_EXEMPT["services/promotions.py:add"],
@@ -197,6 +200,7 @@ MCP_TOOLS: dict[str, str] = {
     "ddflow_research_add": "checked",
     "ddflow_memory_add": "checked",
     "ddflow_rule_add": CLI_VERBS[("rule", "add")],
+    "ddflow_rule_edit": CLI_VERBS[("rule", "edit")],
     "ddflow_split": CLI_VERBS[("split",)],
     "ddflow_import": CLI_VERBS[("import",)],
     "ddflow_promote_add": CLI_VERBS[("promote", "add")],
@@ -578,3 +582,27 @@ def test_a_rule_answered_related_is_filed_and_says_so(proj):
         dedup_answer=R.RuleDedupAnswer("related", "r-nope"),
     )
     assert missing.exit == 1 and "not found" in missing.reason
+
+
+def test_rule_add_and_edit_run_the_shared_check():
+    """D-rule-dedupe-everywhere: the classification above is true -- both paths reach
+    `check_add` (through `_cross_kind`), and `rule` is a checked kind by default."""
+    import inspect
+
+    from ddflow.config_sections.dedupe import DedupeConfig
+
+    assert "rule" in DedupeConfig().kinds
+    assert "check_add" in inspect.getsource(R._cross_kind)
+    # Each caller on its own source: a shared helper must not vouch for a function that
+    # stopped calling it (roborev).
+    calls = {
+        R.rule_add: ("_add_checked_against_others", "_answer_other_kind"),
+        R._add_checked_against_others: ("_cross_kind",),
+        R._answer_other_kind: ("_cross_kind",),
+        R.rule_update: ("_check_edit",),
+        R._check_edit: ("_cross_kind",),
+        R.rule_dedup_check_dry_run: ("_cross_kind",),
+    }
+    for fn, callees in calls.items():
+        src = inspect.getsource(fn)
+        assert all(f"{c}(" in src for c in callees), (fn.__name__, callees)

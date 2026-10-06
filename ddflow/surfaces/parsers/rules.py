@@ -36,6 +36,11 @@ def register(s: argparse._SubParsersAction) -> None:
     for flag in ("title", "content", "tags", "scope", "globs"):
         rue.add_argument(f"--{flag}", default=None)
     rue.add_argument("--priority", type=int, default=None)
+    # A new title or content is duplicate-checked against every other record kind
+    # (D-rule-dedupe-everywhere); these answer it.
+    ge = rue.add_mutually_exclusive_group()
+    ge.add_argument("--new", action="store_true", help="answer the duplicate check: different")
+    ge.add_argument("--related", metavar="ID", default="", help="answer it: related to ID")
     rue.set_defaults(fn=cmd_rule)
     rul = ru_s.add_parser("list")
     rul.add_argument("--tag", default="")
