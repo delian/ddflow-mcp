@@ -495,7 +495,8 @@ class Server:
         return say
 
     def _someone_else(self, per_call: str) -> bool:
-        """Does a per-call `as_agent` name an agent OTHER than this connection's own?
+        """Does a per-call name -- `as_agent`, or a stateless request's `_meta` agent --
+        name an agent OTHER than this connection's own?
 
         The connection's own identity is the declared one, else the derived default --
         the same answer `ddflow_identify` reports. Naming it again per call is the same
