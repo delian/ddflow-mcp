@@ -298,8 +298,7 @@ def apply(
     double the queue. `state` is optional -- without one this folds the log itself,
     because a caller who forgets it must not silently double the queue (rubber_duck on
     a86e6f43). A fact over `[memory] max_chars` is REFUSED with what to do instead,
-    never truncated -- the rule `memory_add` enforces; the importer's 4000-byte cap
-    belongs to its own free-form store, not to a fresh import.
+    never truncated -- the rule `memory_add` enforces, and the importer's (B021a859d56).
 
     Two facts whose file names slug to the same id are a REFUSAL, not a merge: the fold
     keeps one text per id, so appending both would silently lose one while the report

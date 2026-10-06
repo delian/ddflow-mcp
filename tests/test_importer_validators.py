@@ -8,10 +8,12 @@ harness) refuse a memory over `[memory] max_chars` rather than truncate it.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -68,3 +70,20 @@ def test_a_memory_over_max_chars_is_not_recorded_or_truncated(tmp_path):
     assert memories["M-0002"].text == "box has 8 GPUs"
     assert counts.get("memory") == 1, counts
     assert any("max_chars" in k for k in counts), counts
+
+
+def test_an_over_long_memory_is_left_out_of_the_plan_so_verify_sees_no_drift(repo):
+    """Dropped at apply but still proposed by the plan, it was re-proposed by every scan
+    and `import --verify` reported drift no re-import could clear (roborev on 57449fa)."""
+    (repo / ".agent_memory").mkdir()
+    (repo / ".agent_memory" / "LOG.txt").write_text(
+        f"#0 2026-07-31 this box has 8 H200 GPUs\n#1 2026-08-01 {'w' * 300}\n"
+    )
+    plan = IM.plan_import(repo)
+    assert [f.ident for f in plan.by_kind("memory")] == ["M-0000"]
+    assert any("M-0001" in n and "max_chars" in n for n in plan.notes), plan.notes
+    code, _out, err = run_cli(repo, "import", "--apply")
+    assert code == 0, err
+    code, out, err = run_cli(repo, "--json", "import", "--verify")
+    report = json.loads(out)
+    assert code == 0 and report["verified"], out + err
