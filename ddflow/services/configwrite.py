@@ -118,12 +118,12 @@ def _range_problems(repo: Path, text: str, local: bool) -> set[tuple[str, str]]:
 def _new_range_problems(repo: Path, before: str, after: str, local: bool) -> set:
     """Range problems the edit INTRODUCES. Only new ones are refused, so a project whose
     range was already inconsistent can still make an unrelated edit, or the repair. When
-    the config before the edit cannot be judged, nothing can be attributed to the edit
-    and nothing is refused; the edited text itself has already passed `Config.check`."""
-    found = _range_problems(repo, after, local)
+    either side cannot be judged (a sibling layer that does not load, say), nothing can
+    be attributed to the edit and nothing is refused: the edited text itself has already
+    passed `Config.check`, and the load path reports the broken layer."""
     try:
-        return found - _range_problems(repo, before, local)
-    except (ValueError, OSError):
+        return _range_problems(repo, after, local) - _range_problems(repo, before, local)
+    except Exception:  # cannot attribute: refuse nothing, never crash the writer
         return set()
 
 
@@ -745,7 +745,7 @@ def _append_config(
             return KeyRefused(f"appending this would break the config: {exc}"), Path()
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"appending this would break the config: {exc}", Path()
-        if new_range := _range_problems(repo, merged, local) - _range_problems(repo, prev, local):
+        if new_range := _new_range_problems(repo, prev, merged, local):
             return KeyRefused(_range_refusal(new_range)), Path()
         # `[gate.a.b]` is bare in every segment, so the plain-key check passes it -- and
         # it nests a table every later command refuses to load. Judged as `_write_config`

@@ -177,6 +177,8 @@ def test_a_zero_worktree_cap_follows_the_schedule_limit(repo: Path) -> None:
         ("schedule.max_parallel_min", "5"),  # above the start value 4
         ("schedule.max_parallel_max", "3"),  # below the start value 4
         ("schedule.max_parallel_tasks", "9"),  # above the ceiling 8
+        ("schedule.max_parallel_tasks", "0"),
+        ("schedule.max_parallel_min", "abc"),  # the wrong type is refused the same way
         ("schedule.signals.enabled", '["load_per_core", "moon_phase"]'),
         ("schedule.signals.moon_phase.high", "0.5"),
         ("schedule.signals.load_per_core.low", "0.9"),  # above its high mark 0.75
@@ -388,3 +390,24 @@ def test_an_edit_is_judged_even_when_the_old_local_layer_is_unreadable(repo: Pat
     after = "[schedule]\nmax_parallel_tasks = 10\n"
     assert _new_range_problems(repo, before, after, False) == set()
     assert _new_range_problems(repo, "", after, False)
+
+
+def test_a_local_auto_choice_silences_the_start_value_note(repo: Path) -> None:
+    from ddflow.services import workflow as WF
+    from ddflow.services.gates import load_gates
+
+    assert run_cli(repo, "init")[0] == OK
+    _edit(repo, "[schedule]\n", "[schedule]\nmax_parallel_tasks = 4\n")
+    (repo / ".ddflow" / "local").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "local" / "config.toml").write_text('[schedule]\nparallel = "auto"\n')
+    cfg = Config.load(repo)
+    subjects = [f.subject for f in WF.check(cfg, load_gates(repo, cfg))]
+    assert "schedule.max_parallel_tasks" not in subjects  # the operator chose auto
+
+
+def test_an_unreadable_sibling_layer_never_crashes_the_range_guard(repo: Path) -> None:
+    from ddflow.services.configwrite import _new_range_problems
+
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "config.toml").write_text("[schedule\n")  # the committed layer: broken
+    assert _new_range_problems(repo, "", "[schedule]\nmax_parallel_tasks = 10\n", True) == set()

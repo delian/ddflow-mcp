@@ -2,7 +2,8 @@
 
 `core/flowcontrol` is stdlib only and knows nothing of configuration; this is the one
 place that turns the operator's knobs into its :class:`~ddflow.core.flowcontrol.Params`,
-so every caller (the sampler, `plan`, the operator surface) folds with the same numbers.
+so every caller (the sampler, `plan` and the operator surface, as they are wired in)
+folds with the same numbers.
 Pure: a function of the loaded :class:`~ddflow.config.Config`.
 """
 

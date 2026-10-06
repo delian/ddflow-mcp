@@ -2714,6 +2714,10 @@ refuses at once rather than sleeping to its timeout.
 How many items may be in flight adapts by default (decision D-adaptive-flow-accepted). In
 `[schedule]`:
 
+_Rollout: these knobs load, validate and are reported today; the sampler and `plan` wiring
+that let the controller move the limit land in the next adaptive-flow tasks. Until then auto
+holds at `max_parallel_tasks`, exactly like fixed._
+
 | Knob | Default | Meaning |
 |---|---|---|
 | `parallel` | `auto` | `auto`: the limit adapts inside `[max_parallel_min, max_parallel_max]`; `fixed`: `max_parallel_tasks` is the number, exactly as before |

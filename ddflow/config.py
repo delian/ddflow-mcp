@@ -1829,7 +1829,7 @@ class Config:
                     continue
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
-                value = _coerce(raw, known[knob].type)
+                value = _coerce_knob(sec, knob, raw, known[knob].type)
                 if f"{sec}.{knob}" == "schedule.signals" and isinstance(value, dict):
                     # merged over the layers below, mark by mark (`merge_signals`)
                     value = merge_signals(getattr(target, knob), value)
@@ -2247,6 +2247,7 @@ _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
         else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
     ),
     "enforce.trailer_waivers": _waivers_problem,
+    "schedule.max_parallel_tasks": _int_at_least(1),
     "schedule.max_parallel_min": _int_at_least(1),
     "schedule.max_parallel_max": _int_at_least(1),
     "schedule.adapt_up_after_s": _int_at_least(0),
@@ -2357,6 +2358,17 @@ def _coerce(raw: Any, typ: Any) -> Any:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
     return raw
+
+
+def _coerce_knob(sec: str, knob: str, raw: Any, typ: Any) -> Any:
+    """`_coerce` for a KNOWN knob: a value of the wrong type is an `InvalidValue` naming
+    the key, refused like any other invalid value (exit 3 on the write paths)."""
+    try:
+        return _coerce(raw, typ)
+    except InvalidValue:
+        raise
+    except ValueError as exc:
+        raise InvalidValue(f"invalid {sec}.{knob} = {raw!r}: {exc}") from exc
 
 
 def _is_exactly(ts: str, want: str) -> bool:
