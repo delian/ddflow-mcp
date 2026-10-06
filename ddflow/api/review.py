@@ -805,7 +805,10 @@ def _delta_scope(repo, it, log, gate, branch, base: str = "") -> tuple[str, str,
             f"--delta rechecks what changed since the head of the item's recorded {gate} "
             "review, and none is on record: run the full review first.",
         )
-    diff = _delta_diff(repo, it, branch, head, base)
+    try:
+        diff = _delta_diff(repo, it, branch, head, base)
+    except RuntimeError as exc:
+        return "", "", f"the delta could not be produced ({exc}); `--full` reviews the whole diff."
     if not diff.strip():
         return (
             "",
@@ -906,7 +909,9 @@ def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
         d = W.git(repo, "diff", "--no-color", start, tip) if start != head else None
         if d is None or not d.ok:  # nothing merged in, or that diff failed: since head
             d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
-        return (d.out + "\n") if d.ok and d.out else ""
+        if not d.ok:  # could not run: never "nothing changed"
+            raise RuntimeError(f"git diff {head[:10]}...{tip} failed: {d.err or d.out}")
+        return (d.out + "\n") if d.out else ""
     return W.capture_diff(repo, head, include_untracked=False, exclude=SELF_MANAGED)
 
 
