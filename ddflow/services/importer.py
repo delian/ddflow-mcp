@@ -2457,6 +2457,7 @@ def plan_import(
             _settle_phases(plan, state, touched, existing_phases)
         else:
             _settle_needed_phases(plan, deferred_done, state, touched, existing_phases)
+    _leave_out_long_memories(repo, plan)
     _dedupe_found(repo, state, plan)
     for f in scan_branches(repo):
         f.ident = _unique("", f.ident, proposed)
@@ -2984,18 +2985,38 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
         plan.notes.append("\n".join(lines))
 
 
-def _memories_within(repo: Path, plan: ImportPlan) -> tuple[list[Found], dict[str, int]]:
-    """The memories to record, and a count of those left out for their length.
+def _memories_within(repo: Path, plan: ImportPlan) -> tuple[list[Found], list[Found], int]:
+    """``(kept, too_long, limit)``: the plan's memories within `[memory] max_chars`, and
+    the rest.
 
-    Refused over `[memory] max_chars`, never cut: the rule `memory add` and the
-    onboarding harness apply -- a memory cut mid-sentence says something its author did
-    not (B021a859d56). Counted, so the apply report says what was left out.
+    Refused over the limit, never cut: the rule `memory add` and the onboarding harness
+    apply -- a memory cut mid-sentence says something its author did not (B021a859d56).
+    The plan leaves them out with a note, so a re-scan does not report them as drift.
     """
     limit = Config.load(repo).memory.max_chars
     found = plan.by_kind("memory")
-    kept = [f for f in found if len(f.body) <= limit]
-    left = len(found) - len(kept)
-    return kept, ({f"memory over [memory] max_chars ({limit}) not recorded": left} if left else {})
+    return (
+        [f for f in found if len(f.body) <= limit],
+        [f for f in found if len(f.body) > limit],
+        limit,
+    )
+
+
+def _leave_out_long_memories(repo: Path, plan: ImportPlan) -> None:
+    """Drop the plan's memories over `[memory] max_chars`, with a note naming each."""
+    _, too_long, limit = _memories_within(repo, plan)
+    if too_long:
+        plan.found = [f for f in plan.found if f not in too_long]
+        plan.notes.append(
+            f"{len(too_long)} memory record(s) over [memory] max_chars ({limit}) not "
+            f"imported, never cut: {', '.join(f'{f.ident} ({f.source})' for f in too_long)}. "
+            f"Write each as a lesson, or shorten it in its source."
+        )
+
+
+def _count_long_memories(counts: dict[str, int], too_long: list[Found], limit: int) -> None:
+    if too_long:
+        counts[f"memory over [memory] max_chars ({limit}) not recorded"] = len(too_long)
 
 
 def _imported_research(f: Found) -> dict[str, Any]:
@@ -3121,8 +3142,9 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     # OptMem records are operational MEMORIES -- the thing `brief` shows first and
     # `recall` searches -- not journal notes. Their store numbered them, so the id is
     # the store's (`M-0041`) and a re-import skips what is already remembered.
-    kept, too_long = _memories_within(repo, plan)
-    counts.update(too_long)
+    # A plan built by hand still gets the rule; `plan_import` already left them out.
+    kept, too_long, limit = _memories_within(repo, plan)
+    _count_long_memories(counts, too_long, limit)
     for f in kept:
         log.append(
             "memory.recorded",
