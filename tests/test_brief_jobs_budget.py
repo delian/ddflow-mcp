@@ -22,11 +22,15 @@ STALE = 40
 def _project(repo: Path) -> None:
     assert run_cli(repo, "init")[0] == 0
     log = EventLog(repo, "a1")
+    # Other AGENTS' jobs: the brief's own agent's are listed in full (B1472311a63).
+    others = EventLog(repo, "a2")
     log.append("task.added", "MINE", {"title": "the item asked about", "kind": "task"})
     for i in range(STALE):
         log.append("task.added", f"OTHER{i}", {"title": f"other {i}", "kind": "task"})
         # pid 0 with no log: never running, never ended -- a job nobody collected.
-        log.append("job.started", f"Jother{i:03d}", {"item": f"OTHER{i}", "command": "x", "pid": 0})
+        others.append(
+            "job.started", f"Jother{i:03d}", {"item": f"OTHER{i}", "command": "x", "pid": 0}
+        )
     log.append("job.started", "Jmine", {"item": "MINE", "command": "train", "pid": 0})
 
 
@@ -89,3 +93,15 @@ def test_jobs_on_other_hosts_are_bounded_too(repo, monkeypatch):
     listed = [ln for ln in out if ln.startswith("- **")]
     assert [ln.split("`")[1] for ln in listed] == [f"Jold{i:03d}" for i in range(35, 40)]
     assert f"{STALE - 5} more job(s) of other items on other hosts" in "\n".join(out)
+
+
+def test_the_items_own_job_survives_a_flood_of_the_agents_own(repo):
+    """B1472311a63: the agent's own jobs are listed in full, so forty of them fill the jobs
+    section -- which is then cut to its share, the item's own job first."""
+    _project(repo)
+    log = EventLog(repo, "a1")
+    for i in range(STALE):
+        log.append("job.started", f"Jown{i:03d}", {"item": f"OTHER{i}", "command": "x", "pid": 0})
+    text = lifecycle.brief(repo, item="MINE", agent="a1").data["text"]
+    assert "Jmine" in text
+    assert "## Current: MINE" in text or "## Suggested next: MINE" in text
