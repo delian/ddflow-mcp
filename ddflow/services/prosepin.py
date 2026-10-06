@@ -31,7 +31,7 @@ import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..infra.worktree import repo_relative
+from ..infra.fsio import repo_rel
 
 #: Needles shorter than this are ordinary words and would mark most of any document as
 #: pinned. Twelve is the source project's measured floor.
@@ -201,7 +201,7 @@ def coverage(
     named: set[str] = set()
 
     for f in files:
-        rel = repo_relative(repo, f, as_given=True) or str(f)
+        rel = repo_rel(repo, f, as_given=True, strict=False)
         try:
             source = f.read_text(encoding="utf-8")
         # OSError: a dangling symlink or an unreadable file. One bad file must not hide

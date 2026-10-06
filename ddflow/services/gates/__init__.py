@@ -57,6 +57,7 @@ from typing import Any  # noqa: F401
 from ...config import Config  # noqa: F401
 from ...core.digest import content_digest  # noqa: F401
 from ...core.model import GATE_OUTCOMES, Item, State  # noqa: F401
+from ...infra import fsio  # noqa: F401
 from ...infra import proc as P  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from .defs import (  # noqa: F401
