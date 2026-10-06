@@ -117,21 +117,23 @@ def test_main_refuses_a_hand_edited_region_unless_forced(tmp_path, capsys):
 
 
 def _count_claims(text: str) -> list[tuple[str, str]]:
-    """Every knob count `text` states, as (knobs, sections or ""): "N knobs [across M
-    sections]", and the parenthetical "knobs (K of the N)" a section's own list uses."""
+    """Every knob count `text` states, as (knobs, sections or ""). The contract: "N knobs
+    [across M sections]"; and "knobs (K of the N)" -- the word, then only spaces, bold
+    markers or one line wrap, then the parenthetical. A wrapped line is still the claim;
+    punctuation between them (`knobs, (...)`) is another sentence's aside, not a count."""
     claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", text)
-    claims += [(n, "") for n in re.findall(r"knobs[* ]{0,4}\(\d+ of the (\d+)\)", text)]
+    claims += [(n, "") for n in re.findall(r"knobs\**[ ]*\n?[ ]*\(\d+ of the (\d+)\)", text)]
     return claims
 
 
-def test_the_count_claims_are_the_knob_counts_and_nothing_else():
-    """The "of the N" form is read only as the parenthetical after "knobs": another
-    number after "of the" is not a knob count."""
+def test_the_count_claims_follow_their_contract():
+    """One case per clause of `_count_claims`' contract."""
     assert _count_claims("**The `[export]` knobs** (5 of the 150): ...") == [("150", "")]
-    assert _count_claims("All 70 knobs across 15 sections. See the knobs of the 15 sections.") == [
-        ("70", "15")
-    ]
-    assert _count_claims("see the knobs\n(2 of the 7) defaults.") == []
+    assert _count_claims("the `[export]` knobs**\n(5 of the 150): ...") == [("150", "")]
+    assert _count_claims("All 70 knobs across 15 sections") == [("70", "15")]
+    assert _count_claims("See the knobs of the 15 sections.") == []
+    assert _count_claims("the knobs, (2 of the 70) are ...") == []
+    assert _count_claims("the knobs\n\n(2 of the 70)") == []
 
 
 def test_the_readme_knob_counts_match_the_config():
