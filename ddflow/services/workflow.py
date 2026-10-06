@@ -327,7 +327,7 @@ def _parallel_findings(cfg: Config) -> list[Finding]:
                 f"is set to {OLD_PARALLEL_DEFAULT}, the old default an earlier `adopt` "
                 "wrote. Under auto (now the default) it is only the START value, so the "
                 "limit may rise to schedule.max_parallel_max. To keep exactly "
-                f"{OLD_PARALLEL_DEFAULT}: `ddflow config --set schedule.parallel fixed`; "
+                f"{OLD_PARALLEL_DEFAULT}: {_set_cmd(cfg, 'schedule.parallel', 'fixed')}; "
                 "to accept auto, remove the line from "
                 + (
                     ".ddflow/local/config.toml."
