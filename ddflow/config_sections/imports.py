@@ -1,4 +1,4 @@
-"""The `[import]` section: its dataclass, the values it accepts and its knob docs.
+"""The `[importer]` section: its dataclass, the values it accepts and its knob docs.
 
 Re-exported from `ddflow.config`, which assembles `Config` from every section."""
 

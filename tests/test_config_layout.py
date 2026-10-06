@@ -79,3 +79,19 @@ def test_the_knob_docs_are_one_registry():
     assert C.KNOB_DOCS is KNOB_DOCS
     explained = [k for k, *_ in C.Config().explain()]
     assert explained and all(k in KNOB_DOCS for k in explained)
+
+
+def test_a_section_module_documents_only_its_own_knobs():
+    """Review finding: `[gates]` and `[reinstruct]` docs once sat in the `[cadence]` module."""
+    section_of = {cls.__module__: name for name, cls in _section_types().items()}
+    for mod in SECTION_MODULES:
+        tree = ast.parse(Path(mod.__file__).read_text("utf-8"))
+        named = {
+            n.args[0].value
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Call)
+            and getattr(n.func, "id", "") == "_doc"
+            and n.args
+            and isinstance(n.args[0], ast.Constant)
+        }
+        assert named <= {section_of[mod.__name__]}, f"{mod.__name__} documents {sorted(named)}"

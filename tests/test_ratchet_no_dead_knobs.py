@@ -47,7 +47,7 @@ def _sources() -> str:
         for p in pkg.rglob("*.py")
         # The config's own definitions are not reads: config.py and its sections package.
         if p.name != "config.py"
-        and "config_sections" not in p.parts
+        and p.relative_to(pkg).parts[0] != "config_sections"
         and "__pycache__" not in str(p)
     )
 

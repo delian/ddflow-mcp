@@ -25,9 +25,6 @@ from pathlib import Path
 from typing import Any
 
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
-# The package imports its sections in DECLARATION order whatever order these lines take
-# (`config_sections/__init__.py`), so the knob docs register -- and `config --explain`
-# lists them -- in that order.
 from .config_sections._docs import KNOB_DOCS, _doc  # noqa: F401
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
