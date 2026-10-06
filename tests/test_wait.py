@@ -360,8 +360,10 @@ def test_a_full_parallelism_cap_waits_on_every_holder(proj):
     """Any release frees a slot, so every holder is one the waiter is waiting on. Pins the
     scheduler's "cap reached" wording that `_blocking_leases` keys on."""
     cfg = proj / ".ddflow" / "config.toml"
-    assert "max_parallel_tasks = 4" in cfg.read_text()
-    cfg.write_text(cfg.read_text().replace("max_parallel_tasks = 4", "max_parallel_tasks = 2"))
+    assert "[schedule]\n" in cfg.read_text()  # init no longer pins 4 (B-af-config)
+    cfg.write_text(
+        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1)
+    )
     run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
     run_cli(proj, "task", "add", "U2", "--globs", "docs/u2.md")
     assert A.claim(proj, "U1", no_worktree=True, agent="agent-other").ok
@@ -441,7 +443,11 @@ def test_a_cap_blocked_item_wait_agrees_with_claim(proj):
     called any `state` blocker hopeless. Whatever the item path answers must match what
     `claim` then does: ready means claim grants it, blocked means claim refuses it."""
     cfg = proj / ".ddflow" / "config.toml"
-    cfg.write_text(cfg.read_text().replace("max_parallel_tasks = 4", "max_parallel_tasks = 1"))
+    cfg.write_text(
+        cfg.read_text().replace(
+            "[schedule]\n", '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 1\n', 1
+        )
+    )
     run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
     out = A.wait(proj, item="U1", timeout_s=0, agent=WAITER)
     assert out.data["waitable"], f"a full cap clears on any release: {out.reason}"

@@ -543,10 +543,11 @@ heartbeat_s = 300
 
 [worktree]
 enabled = true
-max_parallel = 4
+# max_parallel = 0      # 0 (default) follows the schedule limit; a number caps worktrees
 
 [schedule]
-max_parallel_tasks = 4
+# parallel = "auto"     # auto (default): the limit adapts in [max_parallel_min, max_parallel_max]
+# max_parallel_tasks = 4   # the start value in auto, the number in fixed
 
 [enforce]
 # "block" makes the pre-commit hook REFUSE a commit touching paths no lease of yours
