@@ -2128,8 +2128,11 @@ prompt or note — runs the same check against the log **before it writes**, wit
   `related`; `--extends D` / `--duplicate-of D` put the rule's text on that record while it
   is open (`record.extended`, no rule filed) and otherwise file the rule naming it;
   `--check` lists both. `rule edit` (`ddflow_rule_edit`) runs it on a new title or
-  content and takes `--new` / `--related ID` (`new` / `related` over MCP); an edit cannot
-  be folded into another record.
+  content and takes `--new` / `--related ID` (`new` / `related` over MCP; `ID` may be
+  another rule); an edit cannot be folded into another record. When the check cannot run
+  (an index that will not open), the rule is still filed and the result says so:
+  `dedupe_unavailable` in `--json` and over MCP, `filed UNCHECKED` on the CLI line; records
+  it merely resembles are listed after the line (`It reads like: ...`).
 - **Where the check does not run, a test says why.** `tests/test_coherence_coverage.py`
   classifies every event kind, every function that appends an add kind, and every CLI
   verb and MCP tool that records text as checked or exempt with a reason (a split's parts,

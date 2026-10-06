@@ -490,7 +490,11 @@ def rule_add(
     Returns:
         Outcome with rule_id and other details, or refusal if duplicate found
     """
-    refusal = _over_limits(repo, rule, agent)
+    refusal = _over_limits(repo, rule, agent) or (
+        O.failed("rule.added", dedup_answer.problem, id=rule.id)
+        if dedup_answer is not None and dedup_answer.problem
+        else None
+    )
     if refusal is not None:
         return refusal
     if not check_dedup:
@@ -575,6 +579,55 @@ def rule_add(
     return O.failed("rule.added", f"Unknown relation: {dedup_answer.relation}", id=rule.id)
 
 
+def _check_edit(
+    repo: Path,
+    rule_id: str,
+    fields: dict[str, Any],
+    answer: RuleDedupAnswer | None,
+    agent: str,
+) -> tuple[O.Outcome | None, dict[str, Any]]:
+    """(why the edit stops -- None when it goes ahead --, what its result carries about
+    the check: `related`, `candidates`, `dedupe_unavailable`). Only a new title or content
+    is checked; an answer naming another RULE relates the two and needs no check against
+    the other kinds, as on `rule add`."""
+    if "title" not in fields and "content" not in fields:
+        return None, {}
+    storage = RulesStorage(repo)
+    try:
+        current = storage.get(rule_id)
+    except FileNotFoundError:
+        return O.failed("rule.updated", f"Rule {rule_id} not found", id=rule_id), {}
+    if answer is not None and answer.problem:
+        return O.failed("rule.updated", answer.problem, id=rule_id), {}
+    if answer is not None and answer.relation in ("extends", "duplicate_of"):
+        return O.failed(
+            "rule.updated",
+            f"an edit cannot be folded into another record: answer new or related "
+            f"{answer.target}, or `ddflow rule remove {rule_id}` and extend {answer.target}",
+            id=rule_id,
+        ), {}
+    related = {"related": answer.target} if answer and answer.relation == "related" else {}
+    if answer is not None and answer.target and _is_rule(repo, answer.target):
+        return None, related
+    edited = dataclasses.replace(
+        current,
+        title=fields.get("title", current.title),
+        content=fields.get("content", current.content),
+    )
+    chk = _cross_kind(
+        repo,
+        edited,
+        agent,
+        DD.Answer(answer.relation, answer.target) if answer else None,
+        event_kind="rule.updated",
+    )
+    if chk is None:
+        return None, related
+    if chk.refusal is not None:
+        return chk.refusal, {}
+    return None, {**chk.data(), **related}
+
+
 def rule_update(
     repo: Path,
     rule_id: str,
@@ -601,33 +654,9 @@ def rule_update(
         Outcome indicating success or failure
     """
     storage = RulesStorage(repo)
-    related = ""
-    if "title" in fields or "content" in fields:
-        try:
-            current = storage.get(rule_id)
-        except FileNotFoundError:
-            return O.failed("rule.updated", f"Rule {rule_id} not found", id=rule_id)
-        if dedup_answer is not None and dedup_answer.problem:
-            return O.failed("rule.updated", dedup_answer.problem, id=rule_id)
-        if dedup_answer is not None and dedup_answer.relation in ("extends", "duplicate_of"):
-            return O.failed(
-                "rule.updated",
-                f"an edit cannot be folded into another record: answer new or related "
-                f"{dedup_answer.target}, or `ddflow rule remove {rule_id}` and extend "
-                f"{dedup_answer.target}",
-                id=rule_id,
-            )
-
-        edited = dataclasses.replace(
-            current,
-            title=fields.get("title", current.title),
-            content=fields.get("content", current.content),
-        )
-        answer = DD.Answer(dedup_answer.relation, dedup_answer.target) if dedup_answer else None
-        chk = _cross_kind(repo, edited, agent, answer, event_kind="rule.updated")
-        if chk is not None and chk.refusal is not None:
-            return chk.refusal
-        related = dedup_answer.target if dedup_answer and dedup_answer.relation == "related" else ""
+    stop, extra = _check_edit(repo, rule_id, fields, dedup_answer, agent)
+    if stop is not None:
+        return stop
 
     try:
         _rule, _event_fields = storage.update(rule_id, **fields)
@@ -641,7 +670,7 @@ def rule_update(
             "rule.updated",
             id=rule_id,
             **fields,
-            **({"related": related} if related else {}),
+            **extra,
         )
 
     except FileNotFoundError:

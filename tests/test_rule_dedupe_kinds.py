@@ -146,3 +146,42 @@ def test_mcp_edit_takes_new(proj):
     body = _mcp(proj, "ddflow_rule_edit", {"id": "r-x", "content": RESTATED, "new": True})
     assert "refusal" not in body, body
     assert R.RulesStorage(proj).get("r-x").content == RESTATED
+
+
+def test_edit_related_may_name_another_rule(proj):
+    """roborev: the answer was validated against log records only, so a rule id read as
+    'no such record'. As on `rule add`, naming a rule needs no cross-kind check."""
+    assert R.rule_add(proj, R.Rule(id="r-a", title="Test names", content=UNRELATED)).exit == 0
+    other = R.Rule(id="r-b", title="Lint", content="run the linter before every commit")
+    assert R.rule_add(proj, other).exit == 0
+    code, out, err = run_cli(proj, "rule", "edit", "r-a", "--content", "zz", "--related", "r-b")
+    assert code == 0, (code, out, err)
+    assert "related to r-b" in out
+
+
+def test_a_check_that_could_not_run_says_the_rule_was_filed_unchecked(proj, monkeypatch):
+    """roborev: an index that would not open filed the rule and reported plain success."""
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import rules as C
+
+    def broken(*a, **k):
+        raise OSError("index locked")
+
+    monkeypatch.setattr("ddflow.infra.store.Store.ensure", broken)
+    out = R.rule_add(proj, R.Rule(id="r-mig", title="Migrations", content=RESTATED))
+    assert out.exit == 0 and "index locked" in out.data["dedupe_unavailable"]
+    assert "filed UNCHECKED" in C._check_note(out)
+    edit = R.rule_update(proj, "r-mig", content=UNRELATED)
+    assert "index locked" in edit.data["dedupe_unavailable"]
+    assert C._check_note(SimpleNamespace(data={})) == ""
+
+
+def test_an_unknown_answer_is_refused_before_anything_is_filed(proj):
+    out = R.rule_add(
+        proj,
+        R.Rule(id="r-q", title="Q", content=UNRELATED),
+        dedup_answer=R.RuleDedupAnswer("maybe", ""),
+    )
+    assert out.exit == 1 and "unknown answer" in out.reason
+    assert "r-q" not in _rules(proj)
