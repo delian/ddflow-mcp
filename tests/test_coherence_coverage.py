@@ -147,6 +147,11 @@ EXEMPT: dict[str, str] = {
         ("trigger.evaluated", "trigger.fired", "trigger.suppressed"),
         "the trigger evaluator's own record of a run, a fire or a suppression: no authored text",
     ),
+    **dict.fromkeys(
+        ("approval.granted", "approval.used"),
+        "a person's approval of a digest, or a single-use approval spent: no authored "
+        "text to compare (services.approval)",
+    ),
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
 }

@@ -8,6 +8,7 @@ from __future__ import annotations
 from ..events import Event
 from ..records import GateRecord, State
 from ._common import _item
+from .approvals import REVIEWER, grant_row
 
 
 def _count_recording(st: State, gate: str) -> None:
@@ -94,8 +95,12 @@ def _h_reviewer_configured(st: State, ev: Event) -> None:
 
 
 def _h_reviewer_approved(st: State, ev: Event) -> None:
+    """The reviewer approval before `approval.granted` (B-uni-approval): read into both
+    tables, as the new event is, so one check answers for a log of either era."""
     dig = str(ev.data.get("digest", ""))
     if dig:
+        subject = REVIEWER + ev.subject
+        st.approvals.setdefault(subject, []).append({**grant_row(ev, subject), "human": True})
         st.reviewer_approvals[dig] = {
             "name": ev.subject,
             "user": ev.data.get("user", ""),
