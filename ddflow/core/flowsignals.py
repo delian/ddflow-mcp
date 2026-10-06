@@ -51,8 +51,8 @@ MIN_IN_FLIGHT = 3
 #: For a review recorded before its evidence carried `waves`: the chunks one wave holds
 #: at the defaults. `services.review` sends every chunk's FIRST copy before any hedge
 #: copy, up to `AUTO_CONCURRENCY_CEILING` (32) requests, so 32 chunks' answers arrive in
-#: one round. A recorded `waves` -- a count of rounds, taken at the reviewer's own
-#: concurrency -- always wins.
+#: one round. A recorded `waves` -- the rounds of first copies at the reviewer's own
+#: concurrency (`services.review._waves`) -- always wins.
 WAVE_CHUNKS = 32
 MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0

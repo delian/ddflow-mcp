@@ -326,7 +326,7 @@ class ReviewResult:
     chunks_off_contract: int = 0
     elapsed_s: float = 0.0
     #: How many rounds the sent chunks' FIRST copies needed at the reviewer's concurrency
-    #: (`_race` queues every first copy before any hedge copy, so hedging adds no round):
+    #: (`_waves`; a hedge copy answering a failed first copy may add a round it does not count):
     #: `elapsed_s / waves` is the reviewer's time per request, which the adaptive flow
     #: controller reads as reviewer latency (bug B1c5dbe3103).
     waves: int = 1
@@ -1130,6 +1130,14 @@ def _concurrency(rev: Reviewer, requests: int) -> int:
     return max(1, min(requests * max(1, int(rev.hedge)), AUTO_CONCURRENCY_CEILING))
 
 
+def _waves(rev: Reviewer, sent: int) -> int:
+    """Rounds of FIRST copies a review of `sent` chunks needs at `rev`'s concurrency: `_race`
+    queues every chunk's first copy before any hedge copy. A first copy that fails is
+    answered by a hedge copy in a later round, which this does not count -- such a review
+    then reads as slower per request than it was, never faster."""
+    return max(1, -(-sent // _concurrency(rev, sent))) if sent else 1
+
+
 def _race(
     rev: Reviewer,
     system: str,
@@ -1494,7 +1502,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
 
     # `_race` and the retry index the SENT chunks (positions in `wanted`); progress and
     # absorption speak chunk numbers.
-    res.waves = -(-len(users) // _concurrency(rev, len(users))) if users else 1
+    res.waves = _waves(rev, len(users))
     first = _race(
         rev,
         system,

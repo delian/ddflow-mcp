@@ -308,15 +308,16 @@ def test_a_review_records_its_waves_for_the_signal():
     assert R.ReviewResult("lan", "m", "deepseek").evidence()["waves"] == 1
 
 
-def test_a_review_counts_its_waves_from_its_first_copies(monkeypatch):
+def test_a_review_counts_its_waves_from_its_first_copies():
     """`_race` sends every chunk's first copy before any hedge copy: at a cap of 8 in
     flight, 20 chunks answer in ceil(20 / 8) = 3 rounds, whatever the hedge."""
     from ddflow.services import review as R
 
-    rev = R.Reviewer(name="lan", kind="openai", model="m", max_concurrency=8, hedge=2)
-    assert -(-20 // R._concurrency(rev, 20)) == 3
-    rev = R.Reviewer(name="lan", kind="openai", model="m", hedge=2)
-    assert -(-20 // R._concurrency(rev, 20)) == 1  # 32 in flight: one round
+    assert R._waves(R.Reviewer(name="lan", max_concurrency=8, hedge=2), 20) == 3
+    assert R._waves(R.Reviewer(name="lan", max_concurrency=8, hedge=1), 20) == 3
+    assert R._waves(R.Reviewer(name="lan", hedge=2), 20) == 1  # 32 in flight: one round
+    assert R._waves(R.Reviewer(name="lan", hedge=2), 70) == 3
+    assert R._waves(R.Reviewer(name="lan"), 0) == 1
 
 
 def test_a_copied_review_without_a_reply_file_is_still_one_sample():
