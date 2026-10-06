@@ -66,7 +66,8 @@ def strictest_signals(base: dict[str, Any]) -> dict[str, Any]:
     shipped = default_signals()
     for name in FLOW_SIGNALS:
         # Only a table that is valid on its own takes part: marks mixed from a partial
-        # table (a `high` with no `low`) could invert the band.
+        # table (a `high` with no `low`) could invert the band. The loader only ever
+        # passes validated layers, so this hardens the helper for direct callers.
         tables = [
             t
             for t in (base.get(name), shipped.get(name))
