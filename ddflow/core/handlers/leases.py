@@ -336,8 +336,15 @@ def _h_lease_gone(st: State, ev: Event) -> None:
 def _redisplay(it: Item) -> None:
     """The displayed lease was released while a contest stands: the latest contestant is
     displayed -- the fold's own rule, and what the log without the released claim shows.
-    A displaced claim is never promoted: it lapsed before a takeover, and reviving it
-    would turn the next ordinary claim into a recovery."""
+
+    An unresolved contest always shows a live claim (D-contest-redisplay). So a
+    contestant another holder has taken over -- it lapsed, the takeover put it on the
+    displaced record, and it stayed in the contest -- is displayed again when that
+    takeover is released, and `Item.lease_taken_over_by` names who took it over so
+    `show` and `status` mark it. Only a claim on the displaced record and NOT in the
+    contest is never promoted: it lapsed before a takeover nobody contested, and reviving
+    it would turn the next ordinary claim into a recovery. The releaser's own superseded
+    claims leave the contest with the release (`_h_lease_gone`), so they never are."""
     if it.lease is None and it.lease_contest:
         _hold(it, Lease(**max(it.lease_contest, key=lambda h: h["lease"]["acquired_at"])["lease"]))
 

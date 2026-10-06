@@ -18,6 +18,18 @@ from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
+def taken_over_note(it) -> str:
+    """ " (previously taken over by X ...)" for a displayed claim another holder took over
+    and released (D-contest-redisplay), "" otherwise."""
+    by = it.lease_taken_over_by() if it.lease is not None else ""
+    if not by:
+        return ""
+    return (
+        f" (previously taken over by {by}; still in an unresolved contest -- "
+        f"`ddflow resolve {it.id} --keep <event-id|agent>`)"
+    )
+
+
 def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
@@ -30,7 +42,7 @@ def _queue_lines(r) -> list[str]:
         out.append("")
         out.append("In flight:")
         for t in r["running"]:
-            held = f"  — {t.lease.holder}" if t.lease else ""
+            held = f"  — {t.lease.holder}{taken_over_note(t)}" if t.lease else ""
             out.append(f"  [~] {t.id:<12} {t.title}{held}")
     if r["ready"]:
         out.append("")
@@ -165,7 +177,10 @@ def cmd_show(a, c: Ctx) -> int:
         # The lease's OWN globs: what the conflict checks and the commit hook read, which
         # an operator could otherwise only learn from the event log (Bd8038b08a1).
         held = f" on {', '.join(it.lease.globs)}" if it.lease.globs else " on no globs"
-        print(f"  lease {it.lease.holder} ({it.lease.remaining_s(time.time()):.0f}s left){held}")
+        print(
+            f"  lease {it.lease.holder} ({it.lease.remaining_s(time.time()):.0f}s left){held}"
+            + taken_over_note(it)
+        )
     if it.worktree:
         print(f"  worktree {W.load_path(c.repo, it.worktree)} [{it.branch}]")
     if it.body:
