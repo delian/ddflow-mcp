@@ -13,10 +13,12 @@ parameters from ``[schedule]`` (``core/flowparams``), so the same ring always gi
 same limit and a restart loses nothing.
 
 Robust by construction, because it runs inside every command: a corrupt or truncated line
-is skipped, a clock that went backwards drops the sample, two agents sampling at once are
-serialised by a short ``O_EXCL`` lock file (portable: no ``fcntl``), and a directory that
-cannot be written makes the limit fall back to its start value with the reason -- it never
-raises.
+is skipped (and the file rewritten on the next sample), a clock that went backwards drops
+the sample, and a directory that cannot be written makes the limit fall back to its start
+value with the reason -- it never raises. The ring's integrity comes from how it is
+written -- whole lines appended to an ``O_APPEND`` descriptor, rewrites through a private
+temporary file and an atomic rename -- not from the short ``O_EXCL`` lock file, which only
+throttles concurrent samplers to one sample per interval.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -158,7 +161,7 @@ def _lock(path: Path) -> Iterator[bool]:
                 return
             time.sleep(0.01)
     try:
-        os.write(fd, token)
+        _write_all(fd, token)
         os.close(fd)
         fd = None
         yield True
@@ -170,26 +173,38 @@ def _lock(path: Path) -> Iterator[bool]:
                 lock.unlink()
 
 
+def _write_all(fd: int, data: bytes) -> None:
+    """Every byte, however many calls ``os.write`` takes (it may write fewer)."""
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view) :]
+
+
 def _append_line(path: Path, line: str) -> None:
-    """One ``O_APPEND`` write of one whole line: concurrent appenders never interleave
-    inside a line."""
+    """One whole line onto an ``O_APPEND`` descriptor: concurrent appenders land their
+    lines one after another. A write cut short (a full disk) leaves a torn tail, which
+    the next sample sees and repairs by rewriting the file."""
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
     try:
-        os.write(fd, line.encode("utf-8"))
+        _write_all(fd, line.encode("utf-8"))
     finally:
         os.close(fd)
 
 
 def _replace(path: Path, body: str) -> None:
-    """Write ``body`` to a temporary file of this writer's own, then rename it over
-    ``path`` atomically: a reader sees the old ring or the new one, never a mix."""
-    tmp = path.with_name(f"{path.name}.{os.getpid()}-{time.time_ns()}.tmp")
+    """Write ``body`` to a temporary file of this call's own (``mkstemp``: unique per
+    call, even between threads), then rename it over ``path`` atomically: a reader sees
+    the old ring or the new one, never a mix."""
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
     try:
-        tmp.write_text(body, "utf-8")
-        os.replace(tmp, path)
+        try:
+            _write_all(fd, body.encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.replace(name, path)
     finally:
         with contextlib.suppress(OSError):
-            tmp.unlink()
+            os.unlink(name)
 
 
 def _samples(rows: Sequence[dict]) -> list[FC.Sample]:

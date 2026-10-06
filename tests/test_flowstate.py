@@ -307,9 +307,12 @@ def test_the_ring_stays_valid_even_when_the_lock_lets_two_writers_in(repo, monke
     with F.ring_path(repo).open("a", encoding="utf-8") as fh:
         fh.write("torn")  # every writer will take the rewrite branch at least once
 
+    results: list = []
+
     def worker(n: int) -> None:
         for i in range(1, 40):
-            F.sample_if_due(_ctx(repo), SIG.FakeSource(GOOD), Clock(T0 + 60 * i + n * 0.001))
+            c = Clock(T0 + 60 * i + n * 0.001)
+            results.append(F.sample_if_due(_ctx(repo), SIG.FakeSource(GOOD), c))
 
     threads = [threading.Thread(target=worker, args=(n,)) for n in range(6)]
     for t in threads:
@@ -318,6 +321,24 @@ def test_the_ring_stays_valid_even_when_the_lock_lets_two_writers_in(repo, monke
         t.join()
     rows = F.read_ring(repo)
     assert rows
+    assert not [r for r in results if "failed" in r.reason or r.unavailable], results
     for line in F.ring_path(repo).read_text("utf-8").splitlines():
         json.loads(line)  # no torn or interleaved line
     assert not list(F.ring_path(repo).parent.glob("*.tmp"))
+
+
+def test_a_short_write_still_writes_the_whole_line(repo, monkeypatch):
+    real_write = os.write
+
+    def half(fd, data):
+        data = bytes(data)
+        return real_write(fd, data[: max(1, len(data) // 2)])
+
+    clock, src = Clock(), SIG.FakeSource(GOOD)
+    F.sample_if_due(_ctx(repo), src, clock)
+    monkeypatch.setattr(F.os, "write", half)
+    for _ in range(3):
+        clock.t += 60
+        assert F.sample_if_due(_ctx(repo), src, clock).written
+    monkeypatch.undo()
+    assert len(F.read_ring(repo)) == 4
