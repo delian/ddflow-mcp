@@ -38,6 +38,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ..core.digest import content_digest
+from ..infra import fsio
 from ..infra.tomlcfg import atomic_write
 
 #: Where waits are registered. Under `.ddflow/local/`, which carries its own `*`
@@ -132,10 +133,8 @@ def register(repo: Path, w: Waiter) -> Waiter:
         d.mkdir(parents=True, exist_ok=True)
     except OSError:
         return w
-    ignore = d.parent / ".gitignore"
-    if not ignore.exists():
-        with contextlib.suppress(OSError):
-            ignore.write_text("*\n", "utf-8")
+    with contextlib.suppress(OSError):
+        fsio.ensure_ignored_dir(d.parent)
     w.pid = w.pid or os.getpid()
     w.host = w.host or socket.gethostname()
     w.since = w.since or time.time()
@@ -233,9 +232,7 @@ def queue(
     w.host = socket.gethostname()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        ignore = path.parent.parent / ".gitignore"
-        if not ignore.exists():
-            ignore.write_text("*\n", "utf-8")
+        fsio.ensure_ignored_dir(path.parent.parent)
     except OSError:
         return
     _write(w)
