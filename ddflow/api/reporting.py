@@ -150,14 +150,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
             for t in sorted(done, key=lambda t: t.completed_at)
         ],
         "in_flight": [
-            {
-                "id": t.id,
-                "title": t.title,
-                "holder": t.lease.holder if t.lease else "",
-                # D-contest-redisplay: a contestant displayed again after the claim that
-                # took it over was released. Only when it was, so the shape is unchanged.
-                **({"taken_over_by": by} if (by := t.lease_taken_over_by()) else {}),
-            }
+            {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
         ],
         # A task RUNNING with no live lease is offered as ready -- someone must resume it
@@ -184,6 +177,19 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "loops": [f.__dict__ for f in findings],
         "recoverable": [plain(r) for r in rec if may_hold_work(r)],
     }
+    # D-contest-redisplay: a contestant displayed again after the claim that took it over
+    # was released. Such an item is CONTESTED, so it is blocked, never in flight; listed
+    # here, and only when there is one, so the shape is otherwise unchanged.
+    taken = {
+        t.id: (t.lease.holder, by)
+        for t in tasks
+        if t.lease is not None and not t.removed and (by := t.lease_taken_over_by())
+    }
+    if taken:
+        data["taken_over"] = [
+            {"id": i, "holder": holder, "taken_over_by": by}
+            for i, (holder, by) in sorted(taken.items())
+        ]
     if st.skipped_kinds:
         data["skipped_kinds"] = dict(st.skipped_kinds)
     if st.highest_version:
@@ -207,6 +213,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "cap": p.cap_note,
         "parallel": p.parallel_line,
         "blocked": blocked,
+        "taken_over": {i: by for i, (_holder, by) in taken.items()},
         "recoverable": rec,
         "findings": findings,
         "hours": hours,

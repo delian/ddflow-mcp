@@ -84,8 +84,9 @@ def _taken_over_then_released():
 
 
 def test_releasing_a_takeover_displays_the_taken_over_contestant_again():
-    """The rule on main, kept by the operator: an unresolved contest always shows a live
-    claim, so the latest contestant -- B, though C took it over -- is displayed again."""
+    """The rule on main, kept by the operator: an unresolved contest always displays one
+    of its claims, so the latest contestant -- B, though C took it over -- is displayed
+    again (lapsed or not)."""
     it, b = _taken_over_then_released()
     assert it.lease is not None and it.lease.holder == "B" and it.lease.event == b.id
     assert it.lease_taken_over_by() == "C"
@@ -97,19 +98,37 @@ def test_a_claim_nobody_took_over_is_not_marked():
     assert it.lease is not None and it.lease_taken_over_by() == ""
 
 
-def test_show_and_status_mark_the_redisplayed_claim(monkeypatch):
+def test_show_and_status_mark_the_redisplayed_claim(repo):
+    """Driven through `status` itself (roborev): the redisplayed item is CONTESTED, so it
+    is blocked, not in flight -- the mark must be where it lands."""
     from types import SimpleNamespace
 
+    from conftest import run_cli
+
+    from ddflow.api import reporting as A
+    from ddflow.infra.log import EventLog
     from ddflow.surfaces.commands import reporting as R
 
     it, _ = _taken_over_then_released()
     assert "previously taken over, first by C" in R.taken_over_note(it)
-    from collections import defaultdict
-
-    render = defaultdict(list, {"running": [it], "parallel": ""})
-    lines = R._queue_lines(render)
-    assert any("previously taken over, first by C" in ln for ln in lines), lines
     assert R.taken_over_note(SimpleNamespace(lease=None)) == ""
+
+    assert run_cli(repo, "init")[0] == 0
+    EventLog(repo, "x").append("task.added", "T", {"title": "t", "kind": "task"})
+    for who, at in (("A", 100.0), ("B", 120.0), ("C", 300.0)):
+        EventLog(repo, who).append(
+            "lease.acquired", "T", {"holder": who, "at": at, "ttl_s": 50, "globs": []}
+        )
+    c_event = next(
+        e.id
+        for e in EventLog(repo, "x").read_all()
+        if e.kind == "lease.acquired" and e.agent == "C"
+    )
+    EventLog(repo, "C").append("lease.released", "T", {"holder": "C", "event": c_event})
+    out = A.status(repo, full=True)
+    assert out.data["taken_over"] == [{"id": "T", "holder": "B", "taken_over_by": "C"}]
+    lines = R._queue_lines(out.data["_render"])
+    assert any("T (contested; previously taken over, first by C)" in ln for ln in lines), lines
 
 
 def test_the_redisplay_docstring_states_the_rule():
