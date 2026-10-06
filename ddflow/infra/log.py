@@ -156,10 +156,7 @@ def _write_seen_marker(root: Path, version: str) -> None:
     marker that cannot be written costs only the once-per-version upgrade notice."""
     path = Path(root) / SEEN_MARKER
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        ignore = path.parent / ".gitignore"
-        if not ignore.exists():
-            ignore.write_text("*\n", "utf-8")
+        fsio.ensure_ignored_dir(path.parent)
         fsio.atomic_write(path, json.dumps({"version": version, "at": utcnow()}) + "\n")
     except OSError:
         pass
@@ -554,10 +551,7 @@ def _clone_suffix(root: Path) -> str:
     with contextlib.suppress(FileNotFoundError):
         return path.read_text("utf-8").strip()
     try:
-        path.parent.mkdir(exist_ok=True)
-        ignore = path.parent / ".gitignore"
-        if not ignore.exists():
-            ignore.write_text("*\n", "utf-8")
+        fsio.ensure_ignored_dir(path.parent)
         # Exclusive: the first writer wins and the rest read its value. Where there are no
         # hard links (some FUSE and SMB mounts) a reader racing it may see it empty for an
         # instant, and an empty read is not cached, so that caller simply asks again.
@@ -1308,10 +1302,7 @@ class EventLog:
                 "sha256": D.content_digest(payload),
             }
             target = self._snapshot_path()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            ignore = target.parent / ".gitignore"
-            if not ignore.exists():
-                ignore.write_text("*\n", "utf-8")
+            fsio.ensure_ignored_dir(target.parent)
             # A cache: never torn for a reader, but no fsync -- a crash costs a cold read.
             fsio.atomic_write(target, json.dumps(meta).encode() + b"\n" + payload, fsync=False)
             _SNAP_COVERED[self.dir] = total
