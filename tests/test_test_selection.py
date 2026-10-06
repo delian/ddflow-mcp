@@ -323,17 +323,32 @@ def test_a_farther_directory_alone_is_not_evidence(data):
 
 
 def test_a_file_named_alone_is_the_last_resort(data):
-    """`FIXTURES / "corpus.jsonl"` with FIXTURES from a conftest: the test spells the
+    """`FIXTURES / "lines.ndjson"` with FIXTURES from a conftest: the test spells the
     name and no directory, and still reads the file -- once nothing more specific does."""
-    (data / "tests/fixtures/sets/corpus.jsonl").parent.mkdir(parents=True)
-    (data / "tests/fixtures/sets/corpus.jsonl").write_text("{}\n")
-    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "corpus.jsonl"\n')
+    (data / "tests/fixtures/sets/lines.ndjson").parent.mkdir(parents=True)
+    (data / "tests/fixtures/sets/lines.ndjson").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
     _git(data, "add", "-A")
     _git(data, "commit", "-qm", "corpus")
-    (data / "tests/fixtures/sets/corpus.jsonl").write_text('{"x": 1}\n')
+    (data / "tests/fixtures/sets/lines.ndjson").write_text('{"x": 1}\n')
     assert _picked(data) == {
-        "tests/test_run_time_path.py": "names data file tests/fixtures/sets/corpus.jsonl"
+        "tests/test_run_time_path.py": "names data file tests/fixtures/sets/lines.ndjson"
     }
+
+
+def test_the_last_resort_takes_every_test_spelling_the_name_by_choice(data):
+    """The cost of the last resort, pinned so it is a choice and not an accident: with
+    nothing more specific, a test that only writes a file of the same name is taken too.
+    Text cannot tell it from the reader; one extra test is cheaper than a missed one."""
+    (data / "tests/fixtures/sets/lines.ndjson").parent.mkdir(parents=True)
+    (data / "tests/fixtures/sets/lines.ndjson").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
+    (data / "tests/test_writes_own.py").write_text('(tmp_path / "lines.ndjson").write_text("")\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "corpus")
+    (data / "tests/fixtures/sets/lines.ndjson").write_text('{"x": 1}\n')
+    why = "names data file tests/fixtures/sets/lines.ndjson"
+    assert _picked(data) == {"tests/test_run_time_path.py": why, "tests/test_writes_own.py": why}
 
 
 def test_a_data_file_directly_in_a_test_directory_is_matched_by_its_name(data):

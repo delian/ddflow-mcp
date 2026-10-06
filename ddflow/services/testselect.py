@@ -31,6 +31,12 @@ What it misses, stated so nobody mistakes it for the suite -- the gate runs all 
   spells out that file's name and directory without reading it (the most specific
   match wins).
 
+And what it over-selects, by choice: when no test spells a changed data file's name with
+its directory, or its nearest directory, every test that spells the bare name is taken
+-- the reader that gets the directory from a constant (`FIXTURES / "corpus.jsonl"`), and
+also a test that only writes a `corpus.jsonl` of its own. Text cannot tell them apart; a
+missed reader hides breakage until the gate, an extra test costs seconds.
+
 The last two are the bound, chosen: unbounded, the layer that imports everything (a CLI,
 an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
 Precision for fast feedback, recall at the gate.
