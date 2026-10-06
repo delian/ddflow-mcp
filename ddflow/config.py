@@ -376,7 +376,8 @@ class Config:
                             f"{sec}.{knob}",
                             f"the {source} value {bad!r}, itself unknown: {value!r} is in effect",
                         )
-                        head = f"{sec}.{knob} = {bad!r}"
+                        why = f" [{why}]" if f"{sec}.{knob}" == SIGNALS else ""  # a table: why
+                        head = f"{sec}.{knob} = {bad!r}{why}"
                         self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
                             (len(self.unknown_knobs), head)
                         )
@@ -710,8 +711,7 @@ del _key, _value, _why
 
 
 def strictest(key: str, below: Any = None) -> Any:
-    """The value enum or number knob `key` -- or the signals table, from `below`, the layers
-    under it -- takes when a config file gives it one it cannot use."""
+    """What enum or number knob `key` (or the signals table, from `below`) falls back to."""
     if key == SIGNALS:
         return strictest_signals(below if isinstance(below, dict) else default_signals())
     if key in KNOB_STRICTEST_NUMBER:

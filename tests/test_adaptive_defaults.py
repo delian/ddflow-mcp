@@ -201,7 +201,17 @@ def test_a_bad_table_in_a_file_loads_with_the_strictest_fallback(repo):
     # the note names what the local file wrote, not the table merged over the layers below
     assert note.startswith("schedule.signals = {'enabled': ['load_per_core'], 'memory_pressure'")
     assert "'high': 0.5" not in note.split("in effect")[0] and "the strictest" in note
+    assert "[memory_pressure: low (0.99) must not exceed high (0.98)]" in note  # and why
     assert _signals_problem(sig) == ""
+
+
+def test_a_table_valid_alone_but_not_over_the_layers_below_says_why(repo):
+    # the layer's high 0.98 would sit over the critical mark 0.95 from the layers below
+    _write(repo, local="[schedule.signals.memory_pressure]\nhigh = 0.98\n")
+    cfg = Config.load(repo)
+    assert cfg.schedule.signals["memory_pressure"] == SHIPPED_MARKS["memory_pressure"]
+    (note,) = [n for n in cfg.unknown_knobs if n.startswith("schedule.signals")]
+    assert "[memory_pressure: critical (0.95) must not be under high (0.98)]" in note
 
 
 def test_a_looser_valid_table_is_applied_as_written(repo):
