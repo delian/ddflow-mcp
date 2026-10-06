@@ -110,7 +110,17 @@ def next_(
         if rep.changes:
             log, cfg, st = _load(repo, agent)
     me = cfg.agent.id or log.agent_id
-    p = plan(st, cfg, kind=kind, phase=phase, agent=me, hold=_reservation_hold(repo, st, cfg, me))
+    from ..services.flowstate import limit_for
+
+    p = plan(
+        st,
+        cfg,
+        kind=kind,
+        phase=phase,
+        agent=me,
+        hold=_reservation_hold(repo, st, cfg, me),
+        parallel=limit_for(repo, cfg, st, log.read_all),
+    )
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
@@ -335,7 +345,19 @@ def _judge_any(
     others = {i: lz for i, lz in live.items() if lz.holder != me}
     # The same offer `next` makes: what is reserved for a waiter in line is not ready.
     hold = _reservation_hold(repo, st, cfg, me, now) if repo is not None else None
-    p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me, hold=hold)
+    from ..services.flowstate import limit_for
+
+    # The same limit `next` plans with, so a waiter waits on the offer `next` would make.
+    parallel = None
+    if repo is not None:
+        from ..infra.log import EventLog
+
+        # The log, read lazily as `next` reads it, so the rates are re-read here too.
+        def events():
+            return EventLog(repo, me, log_cfg=cfg.log).read_all()
+
+        parallel = limit_for(repo, cfg, st, events)
+    p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me, hold=hold, parallel=parallel)
     out: dict[str, Any] = {
         "why": "",
         "waiting_on": [],
@@ -2180,7 +2202,15 @@ def brief(
     unknown = _unknown_phase(st, phase)
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")
-    p = plan(st, cfg, phase=phase, agent=cfg.agent.id or log.agent_id)
+    from ..services.flowstate import limit_for
+
+    p = plan(
+        st,
+        cfg,
+        phase=phase,
+        agent=cfg.agent.id or log.agent_id,
+        parallel=limit_for(repo, cfg, st, log.read_all),
+    )
     # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
     # ready item was headed "Current" for an agent that had just claimed another one --
     # it is the queue's pick, not the agent's work. Most recent claim first.
