@@ -13,10 +13,11 @@ and it is why an agent with neither (a human, a CI job, a `Makefile`) loses noth
 
 Notes on protocol handling:
 
-* The client's ``protocolVersion`` is echoed back when we recognise it, else we answer
-  with our newest. Refusing an unknown version outright breaks on every client that
-  ships ahead of us, which for a tool meant to work with five different agents is the
-  likelier direction of drift.
+* At ``initialize`` (the legacy revisions) the client's ``protocolVersion`` is echoed
+  back when we recognise it, else we answer with our newest. Refusing an unknown version
+  outright breaks on every client that ships ahead of us, which for a tool meant to work
+  with five different agents is the likelier direction of drift. A ``2026-07-28``
+  request names its version per request instead; see ``MODERN_PROTOCOLS``.
 * Every tool returns text content. Structured results are JSON *inside* that text,
   because ``structuredContent`` support is uneven across clients and a result an agent
   cannot read is worse than a verbose one it can.
@@ -72,8 +73,47 @@ from .tools.tiers import (  # noqa: F401
     tier_tools,
 )
 
+#: The LEGACY revisions: negotiated once, by `initialize`, for the life of the process.
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "ddflow", "version": _VERSION, "title": "ddflow work-queue kernel"}
+
+# -- the modern (stateless) revisions ---------------------------------------------------
+#
+# From `2026-07-28` there is no handshake: every request names its protocol version and
+# the client's capabilities in `params._meta`, and the server answers each on its own.
+# This server is DUAL-ERA, as that revision allows: a request carrying the modern `_meta`
+# is served by the modern rules below, and `initialize` still selects the legacy ones, so
+# no client that works today stops working (B149).
+#
+# Adding the version string is not what honours the revision; its MUSTs are: answer
+# `server/discover`; refuse a version it does not serve with -32022 naming the ones it
+# does; refuse a modern request missing a required `_meta` field with -32602; give every
+# result a `resultType`; and give list/read results their cache hints. Its SHOULD -- the
+# server's identity in each result's `_meta` -- is done too. Nothing here sends
+# `notifications/message`, a server-initiated request, or the retired -32002.
+
+#: Served per request, statelessly.
+MODERN_PROTOCOLS = ("2026-07-28",)
+META_VERSION = "io.modelcontextprotocol/protocolVersion"
+META_CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
+META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
+UNSUPPORTED_PROTOCOL_VERSION = -32022
+INVALID_PARAMS = -32602
+
+#: `ttlMs` per cacheable method (`CacheableResult`). The tool list and the resource list
+#: are fixed for the life of the process (`listChanged` is false), so a client may keep
+#: them an hour; everything else is read from the repository's live state -- the prompt
+#: list includes the operator's macros, discovery carries instructions that name the
+#: work left over from a crash -- so it is fresh on every read. `private` throughout: the
+#: content is one operator's repository, never something a shared cache should hold.
+CACHE_TTL_MS = {
+    "tools/list": 3_600_000,
+    "resources/list": 3_600_000,
+    "resources/read": 0,
+    "prompts/list": 0,
+    "server/discover": 0,
+}
+CACHE_SCOPE = "private"
 
 #: The per-CALL identity override every tool accepts except `ddflow_identify` itself.
 #:
@@ -496,6 +536,46 @@ class Server:
         log.override_skew(reason)
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
+        """One JSON-RPC message, in whichever era the message itself declares.
+
+        A request carrying the modern `_meta` is checked and answered by the `2026-07-28`
+        rules (`_modern_check`, `_modernize`); anything else -- `initialize` and every
+        request after it -- is served exactly as before. The era is read from each
+        message, never from the connection: a modern request relies on nothing an
+        earlier request said.
+        """
+        method = msg.get("method", "")
+        if method == "initialize":
+            return self._dispatch(msg)
+        era = _modern_check(msg)
+        if era is None:
+            return self._dispatch(msg)
+        if "id" not in msg:
+            # A notification is never answered -- not with a refusal, and not with a
+            # result either (`server/discover` sent without an id would otherwise get one).
+            if not isinstance(era, dict):
+                self._dispatch(msg)
+            return None
+        if isinstance(era, dict):
+            return era
+        if method == "server/discover":
+            reply: dict[str, Any] | None = _ok(msg.get("id"), self._discover())
+        else:
+            reply = self._dispatch(msg)
+        return _modernize(method, reply)
+
+    def _discover(self) -> dict[str, Any]:
+        """`server/discover`: the versions, capabilities, identity and instructions a
+        modern client would otherwise have learned from `initialize`. `resultType`, the
+        identity in `_meta` and the cache hints are added by `_modernize`, like every
+        modern result's."""
+        return {
+            "supportedVersions": [*MODERN_PROTOCOLS, *SUPPORTED_PROTOCOLS],
+            "capabilities": _capabilities(),
+            "instructions": _instructions(self.repo, self.agent, self.tier),
+        }
+
+    def _dispatch(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method = msg.get("method", "")
         mid = msg.get("id")
         if method == "initialize":
@@ -508,16 +588,7 @@ class Server:
                 mid,
                 {
                     "protocolVersion": self.protocol,
-                    "capabilities": {
-                        "tools": {"listChanged": False},
-                        "resources": {"listChanged": False},
-                        # Prompts are how a client surfaces a workflow as a slash
-                        # command. Omitting the capability means a spec-respecting
-                        # client never calls prompts/list, so the commands exist and
-                        # are unreachable — which is indistinguishable, from the
-                        # operator's side, from not having written them.
-                        "prompts": {"listChanged": False},
-                    },
+                    "capabilities": _capabilities(),
                     "serverInfo": SERVER_INFO,
                     "instructions": _instructions(self.repo, self.agent, self.tier),
                 },
@@ -865,6 +936,70 @@ class Server:
                 },
             )
         return _err(mid, -32601, f"method not found: {method}")
+
+
+def _capabilities() -> dict[str, Any]:
+    """What this server offers, for `initialize` and `server/discover` alike."""
+    return {
+        "tools": {"listChanged": False},
+        "resources": {"listChanged": False},
+        # Prompts are how a client surfaces a workflow as a slash command. Omitting the
+        # capability means a spec-respecting client never calls prompts/list, so the
+        # commands exist and are unreachable — which is indistinguishable, from the
+        # operator's side, from not having written them.
+        "prompts": {"listChanged": False},
+    }
+
+
+def _modern_check(msg: dict[str, Any]) -> str | dict[str, Any] | None:
+    """The modern version a message is served under, the error that refuses it, or None.
+
+    None: no `io.modelcontextprotocol/protocolVersion` in `params._meta`, so a legacy
+    message, served as one -- except `server/discover`, which exists only in the modern
+    era: answering it "method not found" would tell a dual-era client's probe that this
+    is a legacy server, so a discovery without the version is refused as malformed.
+
+    A version this server does not serve per request is -32022 naming every version it
+    supports (the legacy ones through `initialize`, as the spec's dual-era example does);
+    a modern request without its required `clientCapabilities` is -32602.
+    """
+    params = msg.get("params")
+    meta = params.get("_meta") if isinstance(params, dict) else None
+    mid = msg.get("id")
+    if not isinstance(meta, dict) or META_VERSION not in meta:
+        if msg.get("method") == "server/discover":
+            return _err(mid, INVALID_PARAMS, f"server/discover requires _meta {META_VERSION!r}")
+        return None
+    want = meta[META_VERSION]
+    if not isinstance(want, str):
+        return _err(mid, INVALID_PARAMS, f"_meta {META_VERSION!r} must be a string")
+    if want not in MODERN_PROTOCOLS:
+        return _err(
+            mid,
+            UNSUPPORTED_PROTOCOL_VERSION,
+            "Unsupported protocol version",
+            data={"supported": [*MODERN_PROTOCOLS, *SUPPORTED_PROTOCOLS], "requested": want},
+        )
+    if not isinstance(meta.get(META_CLIENT_CAPS), dict):
+        return _err(mid, INVALID_PARAMS, f"a {want} request requires _meta {META_CLIENT_CAPS!r}")
+    return want
+
+
+def _modernize(method: str, reply: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A reply as the modern revision shapes it: every result carries `resultType`
+    (this server never asks for more input, so it is always "complete") and the server's
+    identity in `_meta`; a cacheable method's result carries `ttlMs` and `cacheScope`.
+    Errors and silence pass through unchanged."""
+    if reply is None or not isinstance(reply.get("result"), dict):
+        return reply
+    res = reply["result"]
+    res.setdefault("resultType", "complete")
+    meta = res.get("_meta")
+    res["_meta"] = {**(meta if isinstance(meta, dict) else {}), META_SERVER_INFO: dict(SERVER_INFO)}
+    if method in CACHE_TTL_MS:
+        res["ttlMs"] = CACHE_TTL_MS[method]
+        res["cacheScope"] = CACHE_SCOPE
+    return reply
 
 
 def _obligation_footer(server) -> str:
@@ -1248,8 +1383,11 @@ def _ok(mid: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": mid, "result": result}
 
 
-def _err(mid: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": message}}
+def _err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any]:
+    error: dict[str, Any] = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
+    return {"jsonrpc": "2.0", "id": mid, "error": error}
 
 
 def _text(body: str, *, error: bool = False, meta: dict | None = None) -> dict[str, Any]:
@@ -1498,8 +1636,15 @@ def serve(
             notify(_err(None, -32700, f"parse error: {exc}"))
             continue
         if offload and _offloaded(msg):
+            era = _modern_check(msg)
+            if isinstance(era, dict):  # refused before a worker is spent on it
+                notify(era)
+                continue
+            # The worker's answer is already modern (it runs `handle`); this also shapes
+            # the replies `_offload` makes itself -- busy, failed to start, no answer.
+            send = notify if era is None else lambda f: notify(_modernize("tools/call", f))
             relays = [r for r in relays if r.is_alive()]
-            if (relay := _offload(srv, msg, notify, len(relays))) is not None:
+            if (relay := _offload(srv, msg, send, len(relays))) is not None:
                 relays.append(relay)
             continue
         try:

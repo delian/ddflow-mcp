@@ -491,6 +491,21 @@ second content block.
 Two tools exist so an agent can orient itself without being told: `ddflow_help` (what
 is this, what is the loop) and `ddflow_workflow` (what are the rules *here*).
 
+**Protocol versions: both eras.** A client that opens with `initialize` negotiates
+`2025-06-18`, `2025-03-26` or `2024-11-05` (an unknown version falls back to the newest)
+and is served exactly as before. A client on the stateless `2026-07-28` revision sends no
+`initialize`: each request carries `io.modelcontextprotocol/protocolVersion` and
+`io.modelcontextprotocol/clientCapabilities` in `params._meta`, and the server answers it
+on its own. `server/discover` returns the supported versions, capabilities and the same
+instructions `initialize` carries; a version not served per request is refused with
+`-32022` (`data.supported` lists every version), a missing required `_meta` field with
+`-32602`; every modern result carries `resultType: "complete"` and the server's identity
+in `_meta`, and `tools/list`, `resources/list`, `resources/read`, `prompts/list` and
+`server/discover` carry `ttlMs` and `cacheScope: "private"` (an hour for the two lists
+fixed for the life of the server, 0 for everything read from the repository's state).
+`ddflow_identify` still names the agent for the rest of the connection in both eras;
+`as_agent` is the per-call form.
+
 ### What goes in AGENTS.md / CLAUDE.md
 
 `ddflow adopt` writes it as a managed block between `<!-- DDFLOW:BEGIN -->` and
