@@ -82,8 +82,9 @@ def test_an_over_long_memory_is_left_out_of_the_plan_so_verify_sees_no_drift(rep
     plan = IM.plan_import(repo)
     assert [f.ident for f in plan.by_kind("memory")] == ["M-0000"]
     assert any("M-0001" in n and "max_chars" in n for n in plan.notes), plan.notes
-    code, _out, err = run_cli(repo, "import", "--apply")
+    code, out, err = run_cli(repo, "import", "--apply")
     assert code == 0, err
+    assert "max_chars" in out, f"the apply report must say a memory was left out:\n{out}"
     code, out, err = run_cli(repo, "--json", "import", "--verify")
     report = json.loads(out)
     assert code == 0 and report["verified"], out + err
