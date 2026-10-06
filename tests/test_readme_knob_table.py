@@ -54,6 +54,7 @@ def test_a_cell_escapes_a_pipe_and_points_a_long_default_at_explain():
     assert KT._default("a|b") == '`"a\\|b"`'
     assert KT._default(["x" * KT.SHOWN]) == "(long: see `ddflow config --explain`)"
     assert KT._default({"k": 1}) == "`{k = 1}`"
+    assert KT._default("a`b") == '`` "a`b" ``'
 
 
 #: A begin marker as an older render left it: any 12-hex digest.
