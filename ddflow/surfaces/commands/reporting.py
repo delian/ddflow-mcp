@@ -30,6 +30,12 @@ def taken_over_note(it) -> str:
     )
 
 
+def _taken(r, iid: str) -> str:
+    """ " (previously taken over, first by X)" for an item `status` lists as taken over."""
+    by = r.get("taken_over", {}).get(iid)
+    return f" (previously taken over, first by {by})" if by else ""
+
+
 def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
@@ -42,12 +48,12 @@ def _queue_lines(r) -> list[str]:
         out.append("")
         out.append("In flight:")
         for t in r["running"]:
-            held = f"  — {t.lease.holder}" if t.lease else ""
+            held = f"  — {t.lease.holder}{_taken(r, t.id)}" if t.lease else ""
             out.append(f"  [~] {t.id:<12} {t.title}{held}")
     if r["ready"]:
         out.append("")
         out.append("Ready to start:")
-        out += [f"  [ ] {t.id:<12} {t.title}" for t in r["ready"][:8]]
+        out += [f"  [ ] {t.id:<12} {t.title}{_taken(r, t.id)}" for t in r["ready"][:8]]
     out += [f"  INTERRUPTED: {note}" for note in r["interrupted"]]
     if r.get("parallel"):
         out += ["", r["parallel"]]
