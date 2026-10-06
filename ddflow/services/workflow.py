@@ -276,10 +276,12 @@ def _in_local(cfg: Config, key: str) -> bool:
     return cfg.sources.get(key, "").startswith("local")
 
 
-def _set_cmd(cfg: Config, key: str, value: str) -> str:
-    """The command that changes `key` in the layer its value comes from: a value in the
-    local layer is overridden only there."""
-    return f"`ddflow config{' --local' if _in_local(cfg, key) else ''} --set {key} {value}`"
+def _set_cmd(cfg: Config, key: str, value: str, *, layer_of: str = "") -> str:
+    """The command that sets `key` in the layer the finding's value comes from
+    (`layer_of`, default `key` itself): a value in the local layer is overridden only
+    there, and a machine's own override must not be answered in the shared file."""
+    local = _in_local(cfg, layer_of or key)
+    return f"`ddflow config{' --local' if local else ''} --set {key} {value}`"
 
 
 def _parallel_findings(cfg: Config) -> list[Finding]:
@@ -327,7 +329,7 @@ def _parallel_findings(cfg: Config) -> list[Finding]:
                 f"is set to {OLD_PARALLEL_DEFAULT}, the old default an earlier `adopt` "
                 "wrote. Under auto (now the default) it is only the START value, so the "
                 "limit may rise to schedule.max_parallel_max. To keep exactly "
-                f"{OLD_PARALLEL_DEFAULT}: {_set_cmd(cfg, 'schedule.parallel', 'fixed')}; "
+                f"{OLD_PARALLEL_DEFAULT}: {_set_cmd(cfg, 'schedule.parallel', 'fixed', layer_of='schedule.max_parallel_tasks')}; "
                 "to accept auto, remove the line from "
                 + (
                     ".ddflow/local/config.toml."

@@ -117,14 +117,24 @@ def _range_problems(repo: Path, text: str, local: bool) -> set[tuple[str, str]]:
 
 def _new_range_problems(repo: Path, before: str, after: str, local: bool) -> set:
     """Range problems the edit INTRODUCES. Only new ones are refused, so a project whose
-    range was already inconsistent can still make an unrelated edit, or the repair. When
-    either side cannot be judged (a sibling layer that does not load, say), nothing can
-    be attributed to the edit and nothing is refused: the edited text itself has already
-    passed `Config.check`, and the load path reports the broken layer."""
+    range was already inconsistent can still make an unrelated edit, or the repair.
+
+    A local write is judged over the committed layer; when that layer cannot be read
+    (it does not parse, say -- the load path reports it), the edit is judged on its own
+    over the shipped defaults instead, so a broken sibling never switches the guard off;
+    and when the text BEFORE the edit does not load, every problem the result has is
+    the edit's (a repair leaves none, so it is never refused).
+    """
+    unreadable = (tomllib.TOMLDecodeError, ValueError, OSError)
     try:
-        return _range_problems(repo, after, local) - _range_problems(repo, before, local)
-    except Exception:  # cannot attribute: refuse nothing, never crash the writer
-        return set()
+        found = _range_problems(repo, after, local)
+    except unreadable:
+        found = _range_problems(repo, after, False)  # the sibling layer is broken
+        local = False
+    try:
+        return found - _range_problems(repo, before, local)
+    except unreadable:  # the text before the edit does not load: the edit owns them all
+        return found
 
 
 def _range_refusal(problems: set[tuple[str, str]]) -> str:

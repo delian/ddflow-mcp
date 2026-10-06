@@ -382,14 +382,14 @@ def test_fixed_params_cannot_move() -> None:
     assert FP.params(cfg).bounds() == (5, 5, 5)
 
 
-def test_an_edit_is_judged_even_when_the_old_local_layer_is_unreadable(repo: Path) -> None:
-    """The range guard never refuses an edit for problems it cannot attribute to it."""
+def test_an_edit_over_an_unloadable_file_owns_the_result_s_problems(repo: Path) -> None:
+    """When the text before the edit does not load, the result is judged on its own."""
     from ddflow.services.configwrite import _new_range_problems
 
     before = "[schedule]\nmax_parallel_min = 'x'\n"  # does not load
     after = "[schedule]\nmax_parallel_tasks = 10\n"
-    assert _new_range_problems(repo, before, after, False) == set()
-    assert _new_range_problems(repo, "", after, False)
+    assert _new_range_problems(repo, before, after, False)  # the result's problems are the edit's
+    assert _new_range_problems(repo, before, "[schedule]\n", False) == set()  # a repair passes
 
 
 def test_a_local_auto_choice_silences_the_start_value_note(repo: Path) -> None:
@@ -405,9 +405,29 @@ def test_a_local_auto_choice_silences_the_start_value_note(repo: Path) -> None:
     assert "schedule.max_parallel_tasks" not in subjects  # the operator chose auto
 
 
-def test_an_unreadable_sibling_layer_never_crashes_the_range_guard(repo: Path) -> None:
+def test_an_unreadable_sibling_layer_never_switches_the_range_guard_off(repo: Path) -> None:
     from ddflow.services.configwrite import _new_range_problems
 
     (repo / ".ddflow").mkdir()
     (repo / ".ddflow" / "config.toml").write_text("[schedule\n")  # the committed layer: broken
-    assert _new_range_problems(repo, "", "[schedule]\nmax_parallel_tasks = 10\n", True) == set()
+    after = "[schedule]\nmax_parallel_tasks = 10\n"
+    found = _new_range_problems(repo, "", after, True)  # judged over the shipped defaults
+    assert [k for k, _ in found] == ["schedule.max_parallel_tasks"]
+    assert _new_range_problems(repo, after, after, True) == set()  # not introduced
+
+
+def test_a_local_start_value_is_given_a_local_mode_remedy(repo: Path) -> None:
+    from ddflow.services import workflow as WF
+    from ddflow.services.gates import load_gates
+
+    assert run_cli(repo, "init")[0] == OK
+    (repo / ".ddflow" / "local").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "local" / "config.toml").write_text("[schedule]\nmax_parallel_tasks = 4\n")
+    cfg = Config.load(repo)
+    [f] = [
+        f
+        for f in WF.check(cfg, load_gates(repo, cfg))
+        if f.subject == "schedule.max_parallel_tasks"
+    ]
+    assert "ddflow config --local --set schedule.parallel fixed" in f.detail
+    assert ".ddflow/local/config.toml" in f.detail
