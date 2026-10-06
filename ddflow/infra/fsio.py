@@ -15,7 +15,6 @@ POSIX only, as the rest of the package (`fcntl`).
 from __future__ import annotations
 
 import contextlib
-import errno
 import fcntl
 import os
 import secrets
@@ -26,8 +25,6 @@ from pathlib import Path
 
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
-#: What `link(2)` says on a filesystem that has no hard links at all.
-_NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP})
 
 
 class LockTimeout(TimeoutError):
@@ -58,6 +55,7 @@ def atomic_write(
     mode: int | None = None,
     exclusive: bool = False,
     encoding: str = "utf-8",
+    fsync: bool = True,
 ) -> None:
     """Replace `path` with `data` so that no reader ever sees a partial file.
 
@@ -74,7 +72,9 @@ def atomic_write(
     with no hard links (FAT, many SMB and FUSE mounts) an exclusive write is created with
     `O_EXCL` and written in place: still never replacing a file, but NOT atomic for a
     reader there, and a failure removes what it created. Otherwise, on any failure the
-    temporary file is removed and `path` is untouched.
+    temporary file is removed and `path` is untouched. `fsync=False` skips the flush to
+    disk: still never torn for a reader, but a crash may lose the new content -- for a
+    cache that is rebuilt anyway.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,11 +91,12 @@ def atomic_write(
         with os.fdopen(fd, "wb") as fh:
             fh.write(raw)
             fh.flush()
-            os.fsync(fh.fileno())
+            if fsync:
+                os.fsync(fh.fileno())
         if want is not None:
             os.chmod(tmp, want)
         if exclusive:
-            _link_exclusive(tmp, path, raw, want)
+            _link_exclusive(tmp, path, raw, want, fsync=fsync)
             tmp.unlink()
         else:
             os.replace(tmp, path)
@@ -106,27 +107,31 @@ def atomic_write(
         raise
 
 
-def _link_exclusive(tmp: Path, path: Path, raw: bytes, want: int | None) -> None:
+def _link_exclusive(
+    tmp: Path, path: Path, raw: bytes, want: int | None, *, fsync: bool = True
+) -> None:
     """Give the finished `tmp` the name `path` only if nothing has it: a hard link fails
     with `FileExistsError` when it does, so the check and the write are one step.
 
     A filesystem without hard links (FAT, many SMB and FUSE mounts) refuses the link
-    itself; there the file is created with `O_EXCL` -- still never replacing one -- and
-    written in place, which is exclusive though no longer atomic for a reader."""
+    itself, with whatever error it chooses (EPERM, ENOTSUP, or none at all); on ANY such
+    refusal the file is created with `O_EXCL` -- still never replacing one -- and written
+    in place, which is exclusive though no longer atomic for a reader. A real problem
+    (a full disk, no permission) fails that create too, and is raised from it."""
     try:
         os.link(tmp, path)
         return
     except FileExistsError:
         raise
-    except OSError as exc:
-        if exc.errno not in _NO_HARD_LINKS:
-            raise
+    except OSError:
+        pass
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if want is not None else 0o666)
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(raw)
             fh.flush()
-            os.fsync(fh.fileno())
+            if fsync:
+                os.fsync(fh.fileno())
         if want is not None:
             os.chmod(path, want)
     except BaseException:
@@ -141,11 +146,14 @@ def lock_path_for(path: Path | str) -> Path:
 
 
 @contextlib.contextmanager
-def file_lock(lock: Path | str, timeout_s: float | None = None) -> Iterator[None]:
+def file_lock(
+    lock: Path | str, timeout_s: float | None = None, *, poll_s: float = LOCK_POLL_S
+) -> Iterator[None]:
     """Hold an exclusive `flock` on the file `lock` (created if missing) for the block.
 
     `timeout_s=None` waits as long as it takes; a number gives up with `LockTimeout` when
-    someone else still holds it after that many seconds (0: one try). The lock is released
+    someone else still holds it after that many seconds (0: one try), retrying every
+    `poll_s` until then. The lock is released
     when the block ends, by an exception too, and with the process if it dies.
     """
     lock = Path(lock)
@@ -163,7 +171,7 @@ def file_lock(lock: Path | str, timeout_s: float | None = None) -> Iterator[None
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
                         raise LockTimeout(lock, timeout_s) from None
-                    time.sleep(LOCK_POLL_S)
+                    time.sleep(poll_s)
         try:
             yield
         finally:
