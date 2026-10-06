@@ -46,15 +46,15 @@ BASELINE: dict[str, int] = {
     # a list or tuple literal starting with "git" (a git argv) outside ddflow.infra.git
     "git_argv": 26,
     # Path.write_text outside ddflow.infra.fsio
-    "write_text": 42,
+    "write_text": 40,
     # any use of the tempfile module outside ddflow.infra.fsio
     "tempfile": 12,
     # os.replace outside ddflow.infra.fsio
-    "os_replace": 2,
+    "os_replace": 1,
     # any use of the fcntl module outside ddflow.infra.fsio
-    "fcntl": 5,
+    "fcntl": 0,
     # any use of the hashlib module outside ddflow.core.digest
-    "hashlib": 29,
+    "hashlib": 23,
     # an import statement inside a function body
     "deferred_imports": 620,
     # functions and methods of radon cyclomatic-complexity grade D or worse (CC > 20)
@@ -77,8 +77,6 @@ KEPT_UNREFERENCED: dict[str, str] = {
     # Adaptive flow (D-adaptive-flow): the admission target; the quota signal is the
     # remaining wiring. (The doctor's too-little-history notes are wired: Bc6784dab3c.)
     "ddflow/core/flowcontrol.py:decide_admission": "B-af-quota-signal",
-    # The content digest the hashlib sites move onto (B-uni-fsio-digest).
-    "ddflow/core/digest.py:content_digest": "B-uni-fsio-digest",
     # Usage quotas (D-quotas): the api awaits its surfaces.
     "ddflow/api/quota.py:quota_declare": "BL-quotas",
     "ddflow/api/quota.py:quota_show": "BL-quotas",

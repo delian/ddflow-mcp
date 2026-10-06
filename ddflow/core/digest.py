@@ -12,10 +12,20 @@ import hashlib
 
 
 def content_digest(
-    data: str | bytes, algo: str = "sha256", *, length: int | None = None, errors: str = "strict"
+    data: str | bytes | memoryview,
+    algo: str = "sha256",
+    *,
+    length: int | None = None,
+    errors: str = "strict",
 ) -> str:
     """The hex digest of `data` (text is UTF-8 encoded with `errors`), cut to `length`
     characters when given."""
     raw = data.encode("utf-8", errors) if isinstance(data, str) else data
     hexed = hashlib.new(algo, raw).hexdigest()
     return hexed[:length] if length is not None else hexed
+
+
+def hasher(data: bytes | memoryview = b"", algo: str = "sha256"):
+    """An incremental hash object (`update`, `hexdigest`, `copy`), seeded with `data`: for
+    a digest computed in pieces or continued as a file grows (the event log's shards)."""
+    return hashlib.new(algo, data)
