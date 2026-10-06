@@ -179,11 +179,14 @@ def test_a_diff_that_cannot_run_is_never_nothing_changed(merged, monkeypatch):
     since-head range, which holds main's work."""
     repo, _tree, head = merged
     real = RV.W.git
-    monkeypatch.setattr(
-        RV.W, "git",
-        lambda where, *a, **k: RV.W.GitResult(1, "", "boom") if a[:1] == ("diff",) else real(where, *a, **k),
-    )  # fmt: skip
-    with pytest.raises(RuntimeError, match="boom"):
+
+    def failing(where, *args, **kw):  # only the merged-start diff fails; since-head works
+        if args[:1] == ("diff",) and f"{head}...item" not in args:
+            return RV.W.GitResult(1, "", "boom")
+        return real(where, *args, **kw)
+
+    monkeypatch.setattr(RV.W, "git", failing)
+    with pytest.raises(RuntimeError, match="boom"):  # a retry over head...item would succeed
         RV._delta_diff(repo, _item(Path("/nonexistent")), "item", head)
     it = SimpleNamespace(id="T1", worktree="", branch="item")
 
