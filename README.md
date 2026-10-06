@@ -2425,7 +2425,8 @@ Which gates are reviewer gates comes from their definitions: `rubber_duck`, `cri
 `standards`, plus every gate declaring `reviewer = "different_family"` — the built-in
 `verify`, and a project's own (`[gate.security_review]` with that line in `gates.toml`).
 A review recorded through any of them counts toward independence and has its `--model`
-checked as above; a `same_family_ok` gate does neither. (A custom reviewer gate used to be
+checked as above; a `same_family_ok` gate does neither, built in or not (`critic` set to
+`same_family_ok` stops counting). (A custom reviewer gate used to be
 ignored, so an item reviewed only through one was refused at `complete`.)
 
 **`--reviewed-sha` ties a review to the commit that merges.** `roborev review HEAD` run from

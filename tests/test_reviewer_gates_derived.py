@@ -57,6 +57,19 @@ def test_a_same_family_ok_gate_is_not_a_cross_family_reviewer_gate(repo, cfg):
     assert "pair_check" not in G.reviewer_gates(G.load_gates(repo, cfg))
 
 
+def test_a_definition_overrides_the_built_in_set(repo, cfg):
+    """A project that lowers critic to same_family_ok has said a same-family critic is
+    enough: the definition wins over the built-in list, both ways."""
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.critic]\nreviewer = "same_family_ok"\n', "utf-8"
+    )
+    gd = G.load_gates(repo, cfg)
+    assert not G.is_reviewer_gate("critic", gd["critic"])
+    assert "critic" not in G.reviewer_gates(gd)
+    assert {"rubber_duck", "standards"} <= set(G.reviewer_gates(gd))
+
+
 def test_a_declared_reviewer_gate_is_one_where_its_record_is_vetted(repo, cfg):
     """`gate record` refuses the author's own model on a reviewer gate (B1979dac602) and
     checks a roborev sha's reviewer there: both ask `is_reviewer_gate`."""
