@@ -33,7 +33,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from ..core.model import ABANDONED, DONE, State
+from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
 
 TRIGGERS_DIR = Path(".ddflow") / "triggers"
@@ -94,10 +94,11 @@ class Trigger:
 # -- one definition ------------------------------------------------------------------------
 
 
-def _int(name: str, lo: int):
+def _int(name: str, lo: int, hi: int | None = None):
     def check(v: Any, errors: list[str]) -> Any:
-        if not isinstance(v, int) or isinstance(v, bool) or v < lo:
-            errors.append(f"{name} must be a whole number, {lo} or more, got {v!r}")
+        if not isinstance(v, int) or isinstance(v, bool) or v < lo or (hi and v > hi):
+            top = f" and at most {hi}" if hi else " or more"
+            errors.append(f"{name} must be a whole number, {lo}{top}, got {v!r}")
             return None
         return v
 
@@ -174,7 +175,7 @@ _CHECKS = {
     "cooldown": _int("cooldown", 0),
     "max_open": _int("max_open", 1),
     "hop_limit": _int("hop_limit", 0),
-    "breaker": _int("breaker", 1),
+    "breaker": _int("breaker", 1, TRIGGER_FIRES_KEPT),
     "action": _action,
     "enabled": _enabled,
     "tags": lambda v, e: SV._str_list("tags", v, e),
@@ -301,24 +302,24 @@ def _held(st: State, trig: Trigger) -> int:
 
 
 def _ledger(st: State, tid: str) -> tuple[dict[str, datetime], dict[str, list[str]]]:
-    """(key -> when it last fired, key -> its remediation items still open). Read from the
-    latest fire of each key: a key fires only when nothing of it is open, so its latest
-    fire holds every item of it that can still be open."""
+    """(key -> when it last fired, key -> its remediation items still open). Open items
+    come from `trigger_items`, every item a trigger filed: a reopened older item of a key
+    counts as open whichever fire was its key's latest (roborev)."""
     last_at: dict[str, datetime] = {}
-    open_by_key: dict[str, list[str]] = {}
     for key, f in st.trigger_keys.get(tid, {}).items():
         t = ts(f.get("at", ""))
         if t is not None:
             last_at[key] = t
-        items = [i for i in f.get("items", []) if outcome(st, i) == "open"]
-        if items:
-            open_by_key[key] = items
+    open_by_key: dict[str, list[str]] = {}
+    for item, m in st.trigger_items.items():
+        if m.get("trigger") == tid and outcome(st, item) == "open":
+            open_by_key.setdefault(str(m.get("key", "")), []).append(item)
     return last_at, open_by_key
 
 
 def _groups(st: State, trig: Trigger, events: list, last_at: dict, now: datetime) -> dict:
     """key -> [(ts, event)] that count now: matching, not about this trigger's own items,
-    after the key last fired, not in the future, and within `window` of the newest."""
+    after the key last fired, not in the future. `cluster` applies the window."""
     own = {i for i, m in st.trigger_items.items() if m.get("trigger") == trig.id}
     out: dict[str, list] = {}
     for ev in events:
@@ -332,15 +333,26 @@ def _groups(st: State, trig: Trigger, events: list, last_at: dict, now: datetime
         if since is not None and t <= since:
             continue
         out.setdefault(key, []).append((t, ev))
-    if trig.window:
-        # N within T of EACH OTHER, anchored on the newest -- not on `now`: anchored on
-        # `now`, a debounce longer than the gap aged the older events out before the
-        # quiet period ended, and a met condition never fired (rubber-duck).
-        span = timedelta(minutes=trig.window)
-        for key, evs in out.items():
-            newest = max(t for t, _ in evs)
-            out[key] = [(t, ev) for t, ev in evs if t >= newest - span]
     return out
+
+
+def cluster(evs: list, count: int, window: int) -> list:
+    """The latest run of `count` or more events lying within `window` minutes of each
+    other (a sliding window over their times), or [] when there is none. No window: all.
+    Neither anchored on `now` -- a debounce longer than the gap aged the older events out
+    -- nor on the newest event -- one late straggler hid an earlier burst (rubber-duck)."""
+    evs = sorted(evs, key=lambda x: x[0])
+    if not window:
+        return evs if len(evs) >= count else []
+    span = timedelta(minutes=window)
+    i = len(evs) - 1
+    for j in range(len(evs) - 1, -1, -1):
+        i = min(i, j)
+        while i > 0 and evs[j][0] - evs[i - 1][0] <= span:
+            i -= 1
+        if j - i + 1 >= count:
+            return evs[i : j + 1]
+    return []
 
 
 def _why_not(
@@ -384,7 +396,10 @@ def evaluate(
     max_per_hour: int = GLOBAL_MAX_PER_HOUR,
 ) -> list[Decision]:
     """Every (trigger, key) whose condition is met now, and what it decided. Pure: the
-    caller writes the events and files the items."""
+    caller writes the events and files the items. The hourly cap is counted from each
+    trigger's fire tail, so it may not exceed what the tail keeps."""
+    if not 0 < max_per_hour <= TRIGGER_FIRES_KEPT:
+        raise ValueError(f"max_per_hour must be 1..{TRIGGER_FIRES_KEPT}, got {max_per_hour}")
     out: list[Decision] = []
     hour_ago = now - timedelta(hours=1)
     fired = sum(
@@ -395,12 +410,14 @@ def evaluate(
     )
     for tid, trig in sorted(triggers.items()):
         last_at, open_by_key = _ledger(st, tid)
-        for key, evs in sorted(_groups(st, trig, events, last_at, now).items()):
+        for key, matched in sorted(_groups(st, trig, events, last_at, now).items()):
+            evs = cluster(matched, trig.count, trig.window)
             if len(evs) < trig.count:
                 continue
             hop = 1 + max(st.trigger_items.get(ev.subject, {}).get("hop", 0) for _, ev in evs)
             d = Decision(tid, key, False, events=[ev.id for _, ev in evs], hop=hop)
-            newest = max(t for t, _ in evs)
+            # the quiet period runs from the newest matching event, in the cluster or not
+            newest = max(t for t, _ in matched)
             d.reason, d.detail = _why_not(
                 st, trig, d, newest, last_at.get(key), open_by_key, now, (fired, max_per_hour)
             )
@@ -416,7 +433,8 @@ def item_for(trig: Trigger, job, d: Decision, taken: set[str], st: State) -> dic
     """The queue item one fire files, from its job's template: the job's title, scope and
     prompt, tagged with the trigger, the job, the mode, the key and the trigger's own
     `tags`, under `action.phase` if given."""
-    n = len(st.trigger_fires.get(trig.id, [])) + 1
+    # Every item this trigger ever filed, not the capped fire tail (roborev: O(N) scans).
+    n = sum(1 for m in st.trigger_items.values() if m.get("trigger") == trig.id) + 1
     iid = f"T-{trig.id}-{n}"
     while iid in taken:
         n += 1
