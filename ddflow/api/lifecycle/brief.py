@@ -1,0 +1,186 @@
+"""`brief`: the session-start pack.
+
+Part of `ddflow.api.lifecycle`, which re-exports every name defined here."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+from ...core import outcome as O
+from ...services import leases as L
+from .._base import _load
+from .heartbeat import _waiters
+from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
+
+
+def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
+    """The brief's section on who the agent holds up, "" when nobody waits."""
+    lines = [
+        f"- {w['agent']} has waited {w['waiting_s'] // 60}m for the files {iid} holds"
+        + (f" (for {w['item']})" if w["item"] else "")
+        for iid in held_ids
+        for w in _waiters(repo, iid)
+    ]
+    if not lines:
+        return ""
+    return (
+        "\n\n## Waiting on you\n\n"
+        + "\n".join(lines)
+        + "\n\nFirst come, first served: the oldest gets the files the moment you let go. "
+        "Claim when you are ready to edit; do not hold file globs while only gates, "
+        "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
+    )
+
+
+def brief(
+    repo: Path,
+    *,
+    item: str = "",
+    phase: str = "",
+    check_recovery: bool = DEFAULT_CHECK_RECOVERY,
+    agent: str = "",
+) -> O.Outcome:
+    """The budgeted reading pack: what to do next, and what governs it.
+
+    Decisions reach the agent by GLOB rather than by search — the whole point is that they
+    arrive without its having to suspect they exist.
+    """
+    from ...core.schedule import conflicts, plan
+    from ...infra.store import Store
+    from ...views import markdown as render_md
+
+    log, cfg, _ = _load(repo, agent)
+    store = Store(repo, cfg)
+    st = store.ensure(log)
+    unknown = _unknown_phase(st, phase)
+    if unknown:  # as `next` refuses it (Bc2acd426f4)
+        return O.failed("brief", unknown, phase=phase, text="")
+    from ...services.flowstate import limit_for
+
+    p = plan(
+        st,
+        cfg,
+        phase=phase,
+        agent=cfg.agent.id or log.agent_id,
+        parallel=limit_for(repo, cfg, st, log.read_all),
+    )
+    # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
+    # ready item was headed "Current" for an agent that had just claimed another one --
+    # it is the queue's pick, not the agent's work. Most recent claim first.
+    held = sorted(
+        (
+            (lease.acquired_at, iid)
+            for iid, lease in st.active_leases(time.time(), cfg.lease.grace_s).items()
+            if lease.holder == log.agent_id and not st.items[iid].removed
+        ),
+        reverse=True,
+    )
+    held_ids = [iid for _, iid in held]
+    suggested = False
+    if not item and held_ids:
+        item = held_ids[0]
+    elif not item and p.ready:
+        item = p.ready[0].id
+        suggested = True
+
+    query = ""
+    if item and item in st.items:
+        target = st.items[item]
+        query = f"{target.title} {target.body} {' '.join(target.tags)}"
+    lessons = store.search("lessons", query, cfg.session.brief_lesson_count) if query else []
+
+    from ...services import skills as SK
+
+    project_skills = SK.relevant(repo, query) if query else []
+
+    rules = ""
+    for candidate in ("AGENTS.md", "CLAUDE.md", ".ddflow/RULES.md"):
+        if (repo / candidate).is_file():
+            rules = f"See `{candidate}` (loaded separately by your agent)."
+            break
+
+    recovery = L.scan(log, cfg, repo) if check_recovery else []
+    decisions = []
+    if item and item in st.items:
+        target = st.items[item]
+        decisions = [
+            d
+            for d in st.decisions.values()
+            if d.live and d.globs and conflicts(target.globs, d.globs)
+        ]
+        decisions += [d for d in st.decisions.values() if d.live and not d.globs]
+
+    live = sorted(
+        (m for m in st.memories.values() if m.live),
+        key=lambda m: (m.origin_at or m.at, m.at),
+        reverse=True,
+    )
+    from ..reporting import new_reports
+
+    reports_block = ""
+    if item and item in st.items and st.items[item].lease:
+        reports_block = render_md.new_reports_block(
+            item, new_reports(st, item, st.items[item].lease.acquired_at)
+        )
+        # The block is prepended to a budgeted brief: it may take at most half of it, so a
+        # small `brief_max_tokens` still leaves the head of the brief itself.
+        cap = cfg.session.brief_max_tokens * 4 // 2
+        if len(reports_block) > cap:
+            reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
+    from ...core import progress as PR
+
+    text = render_md.brief(
+        st,
+        cfg,
+        p,
+        loops=[f for f in PR.detect(log.read_all(), st, cfg) if f.item == item] if item else [],
+        repo=repo,
+        item=item,
+        lessons=lessons,
+        skills=project_skills,
+        rules=rules,
+        # All of it: the view ranks and counts (B20e103326b). Filtering on `salvageable`
+        # dropped `stale_running` (False) and unmeasurable trees (None) -- the most
+        # dangerous leftovers -- and the clean ones without a word.
+        recovery=recovery,
+        decisions=decisions,
+        memories=live,
+        held=held_ids,
+        suggested=suggested,
+        reserve=render_md._approx_tokens(reports_block) if reports_block else 0,
+    )
+    from ...services import choices as CH
+
+    undecided = CH.brief_block(cfg)
+    if undecided:
+        text = undecided + "\n" + text
+    text = reports_block + text
+    if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
+        text += "\n## Finished phases to close\n" + p.close_note() + "\n"
+    text += _waiting_on_you(repo, held_ids)
+    from ...services.export import select as export_select
+
+    if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
+        text += "\n" + line
+    if item and item in st.items:
+        pr = st.items[item].pr
+        if pr is not None and pr.review == "changes_requested" and pr.feedback:
+            # FIRST, not appended: this is why the item is back, and an agent that fixes
+            # something other than what the reviewer asked for starts another round.
+            text = (
+                f"## Review feedback on {item} (round {pr.rounds}, {pr.url})\n\n"
+                f"Address this, commit, then `ddflow merge {item}` again -- it updates the "
+                f"same request.\n\n{pr.feedback}\n\n" + text
+            )
+    return O.ok(
+        "brief",
+        brief=text,
+        text=text,
+        item=item,
+        #: Whether `item` is the agent's work (False) or only the queue's pick (True).
+        suggested=suggested,
+        held=held_ids,
+        ready=[i.id for i in p.ready],
+        approx_tokens=len(text) // 4,
+    )
