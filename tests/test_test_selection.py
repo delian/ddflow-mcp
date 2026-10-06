@@ -322,9 +322,9 @@ def test_a_farther_directory_alone_is_not_evidence(data):
     assert _picked(data) == {}, "nothing names report.json or `deep`"
 
 
-def test_a_file_named_alone_is_the_last_resort(data):
+def test_a_file_named_without_its_directory_is_still_read(data):
     """`FIXTURES / "lines.ndjson"` with FIXTURES from a conftest: the test spells the
-    name and no directory, and still reads the file -- once nothing more specific does."""
+    name and no directory, and still reads the file."""
     (data / "tests/fixtures/sets/lines.ndjson").parent.mkdir(parents=True)
     (data / "tests/fixtures/sets/lines.ndjson").write_text("{}\n")
     (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
@@ -336,10 +336,11 @@ def test_a_file_named_alone_is_the_last_resort(data):
     }
 
 
-def test_the_last_resort_takes_every_test_spelling_the_name_by_choice(data):
-    """The cost of the last resort, pinned so it is a choice and not an accident: with
-    nothing more specific, a test that only writes a file of the same name is taken too.
-    Text cannot tell it from the reader; one extra test is cheaper than a missed one."""
+def test_without_name_and_directory_every_test_spelling_the_name_is_taken_by_choice(data):
+    """The cost of the fallback, pinned so it is a choice and not an accident: with no
+    test spelling name and directory, a test that only writes a file of the same name is
+    taken too. Text cannot tell it from the reader; one extra test is cheaper than a
+    missed one."""
     (data / "tests/fixtures/sets/lines.ndjson").parent.mkdir(parents=True)
     (data / "tests/fixtures/sets/lines.ndjson").write_text("{}\n")
     (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
@@ -349,6 +350,20 @@ def test_the_last_resort_takes_every_test_spelling_the_name_by_choice(data):
     (data / "tests/fixtures/sets/lines.ndjson").write_text('{"x": 1}\n')
     why = "names data file tests/fixtures/sets/lines.ndjson"
     assert _picked(data) == {"tests/test_run_time_path.py": why, "tests/test_writes_own.py": why}
+
+
+def test_a_noisy_nearest_directory_does_not_hide_the_reader_that_spells_the_name(data):
+    """Rereview of B20b7744905: `fixtures` is in every test that reads any fixture; a
+    reader spelling only `FIXTURES / "lines.ndjson"` must still be taken."""
+    (data / "tests/fixtures/lines.ndjson").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
+    (data / "tests/test_other_fixture.py").write_text('F = "fixtures/elsewhere.json"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "lines")
+    (data / "tests/fixtures/lines.ndjson").write_text('{"x": 1}\n')
+    got = _picked(data)
+    assert got["tests/test_run_time_path.py"] == "names data file tests/fixtures/lines.ndjson"
+    assert "tests/test_other_fixture.py" in got, "the nearest directory is taken as well"
 
 
 def test_a_data_file_directly_in_a_test_directory_is_matched_by_its_name(data):

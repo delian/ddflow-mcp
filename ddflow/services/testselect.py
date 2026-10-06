@@ -32,10 +32,11 @@ What it misses, stated so nobody mistakes it for the suite -- the gate runs all 
   match wins).
 
 And what it over-selects, by choice: when no test spells a changed data file's name with
-its directory, or its nearest directory, every test that spells the bare name is taken
--- the reader that gets the directory from a constant (`FIXTURES / "corpus.jsonl"`), and
-also a test that only writes a `corpus.jsonl` of its own. Text cannot tell them apart; a
-missed reader hides breakage until the gate, an extra test costs seconds.
+one of its directories, every test that spells the bare name or the nearest directory is
+taken -- the reader that gets the directory from a constant (`FIXTURES / "corpus.jsonl"`),
+and also a test that only writes a `corpus.jsonl` of its own or reads another file in
+`fixtures/`. Text cannot tell them apart; a missed reader hides breakage until the gate,
+an extra test costs seconds.
 
 The last two are the bound, chosen: unbounded, the layer that imports everything (a CLI,
 an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
@@ -213,13 +214,12 @@ def _names(text: str, word: str) -> bool:
 def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str, str]:
     """The tests that read a changed data file below a directory holding tests, each with
     why. A test spells a data file's path out, never imports it, so it is matched on what
-    it names, most specific first: the file's name together with one of its directories
-    below that test directory (`fixtures/mcp-schema` and `LICENSE`); failing that, the
-    file's NEAREST directory alone (`guard_baselines`, whose file names the test builds
-    at run time); failing that, its name alone (`FIXTURES / "corpus.jsonl"`, the
-    directory a constant from elsewhere). A farther directory alone is never enough:
-    `fixtures` is in every test that reads any fixture at all. The name alone comes last
-    because a generic one (`LICENSE`) is also in tests that write one of their own."""
+    it names: the file's name together with one of its directories below that test
+    directory (`fixtures/mcp-schema` and `LICENSE`); failing that, its name OR its
+    NEAREST directory -- either part may be built at run time (`FIXTURES /
+    "corpus.jsonl"`, `BASELINES / f"{kind}.toml"`), and taking only one would let a noisy
+    other part (`fixtures` is in every test that reads any fixture) hide the reader. A
+    farther directory alone is never enough."""
     homes = {str(d) for t in tests for d in PurePosixPath(t).parents if str(d) != "."}
     sources: dict[str, str] = {}
     seen: dict[tuple[str, str], bool] = {}  # one directory is asked about for every file in it
@@ -234,11 +234,6 @@ def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str,
             seen[test, word] = _names(sources[test], word)
         return seen[test, word]
 
-    def spelt(test: str, every: list[str], some: list[str]) -> bool:
-        return all(names(test, w) for w in every) and (
-            not some or any(names(test, w) for w in some)
-        )
-
     out: dict[str, str] = {}
     for c in changed:
         if is_test_file(c) or PurePosixPath(c).name == "conftest.py":
@@ -247,14 +242,11 @@ def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str,
         if dirs is None:
             continue
         name = PurePosixPath(c).name
-        # (every word, at least one of these words), most specific first
-        rungs = [([name], dirs), *([([dirs[0]], [])] if dirs else []), ([name], [])]
-        for every, some in rungs:
-            hit = [t for t in tests if spelt(t, every, some)]
-            if hit:
-                for t in hit:
-                    out.setdefault(t, f"names data file {c}")
-                break
+        hit = [t for t in tests if names(t, name) and any(names(t, d) for d in dirs)]
+        if not hit:
+            hit = [t for t in tests if names(t, name) or (dirs and names(t, dirs[0]))]
+        for t in hit:
+            out.setdefault(t, f"names data file {c}")
     return out
 
 
