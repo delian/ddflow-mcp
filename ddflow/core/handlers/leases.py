@@ -249,6 +249,12 @@ def _released_claim(claims: list[dict[str, Any]], d: dict[str, Any]) -> str:
     return max(own, key=lambda c: c["lease"]["acquired_at"])["event"] if own else ""
 
 
+def _superseded_by_self(displaced: dict[str, Any], holder: str) -> bool:
+    """A claim of `holder`'s on the displaced record that `holder`'s own later claim
+    replaced (a re-claim after it lapsed), not one a rival took over."""
+    return displaced["holder"] == holder and displaced.get("by", {}).get("holder") == holder
+
+
 def _h_lease_gone(st: State, ev: Event) -> None:
     """Handle `lease.released` and `lease.expired`.
 
@@ -273,8 +279,18 @@ def _h_lease_gone(st: State, ev: Event) -> None:
     holder = d.get("holder")
     if ev.kind == "lease.released" and holder is not None:
         # A claim given up can no longer contradict a takeover of it.
+        # A holder's earlier claims that its OWN later claim displaced are superseded, not
+        # rivals: releasing the latest gives them up too. Left in the contest, the next
+        # redisplay showed the releaser holding the item through one of them
+        # (B6e15f963d2). The displaced record keeps them, as history a late claim from
+        # another clone is still weighed against. Read before the line below, which takes
+        # a holder-only release's claim off that record.
+        superseded = [e["event"] for e in it.displaced if _superseded_by_self(e, holder)]
         gone = _released_claim(it.displaced, d)
         it.displaced = [e for e in it.displaced if e["event"] != gone]
+        for own in superseded:
+            if any(h["event"] == own for h in it.lease_contest):
+                _withdraw_claim(it, own)
         gone = _released_claim(it.lease_contest, d)
         if gone:
             _withdraw_claim(it, gone)
