@@ -58,3 +58,30 @@ def test_the_research_gate_instruction_names_a_command_that_parses():
     # `A|B|C` placeholders take their first alternative, in place.
     argv = [a.split("|")[0] for a in cmd.group(1).split()[1:]]
     build_parser().parse_args([*argv, "--question", "q", "--probe", "p"])
+
+
+@pytest.mark.parametrize("verdict", ["CONFIRMED", "REFUTED"])
+def test_a_probe_output_without_the_probe_is_refused(repo, verdict):
+    """Bug Bc9802f9d9d: the guard accepted --probe-output alone, though the refusal, the
+    driver and the README all say CONFIRMED and REFUTED require a --probe -- an output
+    with no command behind it cannot be re-run."""
+    run_cli(repo, "init")
+    code, _, err = run_cli(
+        repo,
+        "research",
+        "--question",
+        "is it fast?",
+        "--verdict",
+        verdict,
+        "--probe-output",
+        "it was fast",
+    )
+    assert code == 1 and "requires a --probe" in err, (code, err)
+    code, _, err = run_cli(
+        repo, "research", "--question", "q1", "--verdict", verdict, "--probe", "   "
+    )
+    assert code == 1 and "requires a --probe" in err, (code, err)
+    code, _, err = run_cli(
+        repo, "research", "--question", "q2", "--verdict", "THEORETICAL", "--probe-output", "x"
+    )
+    assert code == 0, err
