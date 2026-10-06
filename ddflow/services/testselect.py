@@ -15,7 +15,10 @@ A test is selected when, relative to the item's base:
 * it imports a changed module, directly or through modules that import it — read from
   the Python import graph of the repository, not from names;
 * its file name carries a changed file's stem (``test_gates.py`` for ``gates.py``) — the
-  convention that covers languages this module does not parse.
+  convention that covers languages this module does not parse;
+* it names a changed DATA file -- a fixture, a golden file, a baseline -- that lives below
+  a directory holding tests: a test reads one by its path, never by an import
+  (`_data_readers` says how it is matched).
 
 What it misses, stated so nobody mistakes it for the suite -- the gate runs all of these:
 
@@ -23,7 +26,10 @@ What it misses, stated so nobody mistakes it for the suite -- the gate runs all 
   nothing it exercises;
 * a test more than `MAX_HOPS` imports away from the change (it imports C, C imports B,
   B imports the changed A);
-* a test that reaches the change only through a re-exporting package ``__init__``.
+* a test that reaches the change only through a re-exporting package ``__init__``;
+* a test that reads a data file under a name it builds at run time, when another test
+  spells out that file's name and directory without reading it (the most specific
+  match wins).
 
 The last two are the bound, chosen: unbounded, the layer that imports everything (a CLI,
 an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
@@ -182,8 +188,69 @@ def select(tree: Path, base: str) -> Selection | None:
         if hit:
             pick(t, f"named after {hit}")
 
+    for t, why in _data_readers(tree, changed, tests).items():
+        pick(t, why)
+
     sel.tests = [Selected(t, reasons[t]) for t in sorted(reasons)]
     return sel
+
+
+def _names(text: str, word: str) -> bool:
+    """``word`` (a file or directory name) spelt out in ``text``, not inside a longer name:
+    `schema.json` in `"fixtures/mcp-schema/schema.json"`, not in `old_schema.json`."""
+    return re.search(rf"(?<![\w.-]){re.escape(word)}(?![\w-])", text) is not None
+
+
+def _spelt(text: str, every: list[str], some: list[str]) -> bool:
+    return all(_names(text, w) for w in every) and (not some or any(_names(text, w) for w in some))
+
+
+def _data_readers(tree: Path, changed: list[str], tests: list[str]) -> dict[str, str]:
+    """The tests that read a changed data file below a directory holding tests, each with
+    why. A test spells a data file's path out, never imports it, so it is matched on what
+    it names, most specific first: the file's name together with one of its directories
+    below that test directory (`fixtures/mcp-schema` and `LICENSE`); failing that, the
+    nearest such directory alone (`guard_baselines`, whose file names the test builds at
+    run time); failing that, the file's name alone. A bare `LICENSE` or `.gitattributes`
+    also appears in tests that only write one of their own, so it is the last resort."""
+    homes = {str(d) for t in tests for d in PurePosixPath(t).parents if str(d) != "."}
+    sources: dict[str, str] = {}
+
+    def text(test: str) -> str:
+        if test not in sources:
+            sources[test] = (tree / test).read_text("utf-8", errors="replace")
+        return sources[test]
+
+    out: dict[str, str] = {}
+    for c in changed:
+        if is_test_file(c) or PurePosixPath(c).name == "conftest.py":
+            continue  # each has its own rule above
+        dirs = _dirs_below_tests(c, homes)
+        if dirs is None:
+            continue
+        name = PurePosixPath(c).name
+        # (every word, at least one of these words), most specific first
+        rungs = [([name], dirs), *(([d], []) for d in dirs), ([name], [])]
+        for every, some in rungs:
+            hit = [t for t in tests if _spelt(text(t), every, some)]
+            if hit:
+                for t in hit:
+                    out.setdefault(t, f"names data file {c}")
+                break
+    return out
+
+
+def _dirs_below_tests(path: str, homes: set[str]) -> list[str] | None:
+    """The directories between ``path`` and the nearest directory holding tests, nearest
+    first; None when no directory above it (the repository root aside) holds tests."""
+    dirs: list[str] = []
+    for parent in PurePosixPath(path).parents:
+        if str(parent) == ".":
+            return None
+        if str(parent) in homes:
+            return dirs
+        dirs.append(parent.name)
+    return None
 
 
 #: How far along the import graph a test still counts as reaching a change: it imports

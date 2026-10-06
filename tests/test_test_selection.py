@@ -229,3 +229,62 @@ def test_a_name_match_is_a_whole_word_not_a_substring(tmp_path, repo):
     _git(repo, "commit", "-qm", "names")
     (repo / "pkg/cli.py").write_text("X = 2\n")
     assert _picked(repo) == {"tests/test_cli_parity.py": "named after cli"}
+
+
+@pytest.fixture
+def data(proj):
+    """Data files the tests read by path, never by import: a guard baseline whose name the
+    test builds at run time, a fixture tree, and a note outside any test directory."""
+    files = {
+        "tests/ratchet_counts/widgets.toml": "baseline = 2\n",
+        "tests/fixtures/vendored-spec/COPYING": "MIT\n",
+        "tests/fixtures/vendored-spec/v1/spec.json": "{}\n",
+        "docs/notes.md": "notes\n",
+        # reads COUNTS / f"{kind}.toml": only the directory is ever spelt out
+        "tests/test_guard.py": 'COUNTS = "ratchet_counts"\n\ndef test_g():\n    assert 1\n',
+        "tests/test_conformance.py": (
+            'SCHEMAS = ("fixtures/vendored-spec", "spec.json", "COPYING")\n\n'
+            "def test_s():\n    assert 1\n"
+        ),
+        # writes a COPYING of its own: the bare name is not evidence it reads this one
+        "tests/test_licence_writer.py": 'NAME = "COPYING"\n\ndef test_l():\n    assert 1\n',
+        "tests/test_prose.py": 'DOC = "notes.md"\n\ndef test_p():\n    assert 1\n',
+    }
+    for path, text in files.items():
+        (proj / path).parent.mkdir(parents=True, exist_ok=True)
+        (proj / path).write_text(text)
+    _git(proj, "add", "-A")
+    _git(proj, "commit", "-qm", "data files")
+    return proj
+
+
+def test_a_changed_baseline_selects_the_test_that_reads_its_directory(data):
+    """B20b7744905: lowering one guard baseline (a data-only change) selected nothing, so
+    the guard test that reads it never ran in the fast loop."""
+    (data / "tests/ratchet_counts/widgets.toml").write_text("baseline = 1\n")
+    assert _picked(data) == {
+        "tests/test_guard.py": "names data file tests/ratchet_counts/widgets.toml"
+    }
+
+
+def test_a_fixture_is_matched_by_its_name_with_its_directory_before_its_bare_name(data):
+    (data / "tests/fixtures/vendored-spec/COPYING").write_text("Apache-2.0\n")
+    (data / "tests/fixtures/vendored-spec/v1/spec.json").write_text('{"v": 1}\n')
+    assert _picked(data) == {
+        "tests/test_conformance.py": "names data file tests/fixtures/vendored-spec/COPYING"
+    }
+
+
+def test_a_data_file_outside_every_test_directory_selects_nothing_new(data):
+    (data / "docs/notes.md").write_text("changed\n")
+    assert _picked(data) == {}
+
+
+def test_a_changed_conftest_is_not_also_read_as_a_data_file(data):
+    """A conftest.py has its own rule (every test beneath it); a test that merely mentions
+    the name `conftest.py` does not read the one in tests/sub."""
+    (data / "tests/sub/conftest.py").write_text("import os\n")
+    (data / "tests/test_mentions.py").write_text('C = "conftest.py"\n')
+    _git(data, "add", "tests/test_mentions.py")
+    _git(data, "commit", "-qm", "mentions")
+    assert _picked(data) == {"tests/sub/test_deep.py": "under changed tests/sub/conftest.py"}
