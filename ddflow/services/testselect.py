@@ -40,7 +40,7 @@ taken -- the reader that gets the directory from a constant (`FIXTURES / "corpus
 and also a test that only writes a `corpus.jsonl` of its own or reads another file in
 `fixtures/`. Text cannot tell them apart; a missed reader hides breakage until the gate,
 an extra test costs seconds. Taking every spelling always would cost more than it saves:
-a nearest directory like `dedupe` is also a gate name in dozens of tests here.
+a nearest directory like `dedupe` is also a gate name in 22 tests here.
 """
 
 from __future__ import annotations
