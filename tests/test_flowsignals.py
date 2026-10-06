@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from ddflow.config import Config
 from ddflow.core import flowsignals as FS
 from ddflow.core.events import Event
@@ -32,10 +34,29 @@ class Log:
             Event(kind=kind, subject=subject, data=data, lamport=len(self.events) + 1, ts=_ts(at))
         )
 
-    def review(self, item: str, gate: str, ago: float, took: float, outcome: str = "passed"):
-        """A gate that started ``ago`` seconds before NOW and ended ``took`` seconds later."""
-        self.add("gate.started", item, NOW - ago, gate=gate)
-        self.add(f"gate.{outcome}", item, NOW - ago + took, gate=gate)
+    def review(
+        self,
+        item: str,
+        gate: str,
+        ago: float,
+        took: float,
+        outcome: str = "passed",
+        *,
+        chunks: int = 1,
+        started_ago: float | None = None,
+    ):
+        """A `ddflow review` that started ``ago`` seconds before NOW and ended ``took``
+        seconds later, recording ``elapsed_s`` in its evidence as the command does.
+        ``started_ago`` puts the `gate.started` earlier than the review itself (a review
+        that was killed and re-run, or a gap the agent spent triaging)."""
+        self.add("gate.started", item, NOW - (started_ago or ago), gate=gate)
+        evidence = {
+            "status": "REVIEWED",
+            "elapsed_s": took,
+            "chunks_total": chunks,
+            "output_file": f".ddflow/local/reviews/{item}.{gate}.{ago}.jsonl",
+        }
+        self.add(f"gate.{outcome}", item, NOW - ago + took, gate=gate, evidence=evidence)
 
     def outcomes(self, gate: str, ago: float, passed: int, failed: int) -> None:
         for i in range(passed):
@@ -190,3 +211,60 @@ def test_a_short_gate_baseline_is_noted_for_the_ratio():
     """The last hour has outcomes but the week before has too few: only the ratio is out."""
     notes = FS.history_notes(FS.Signals(0.5, 0.1, 0.0, gate_failure_ratio=None))
     assert len(notes) == 1 and notes[0].startswith("gate_failure_ratio: under 20")
+
+
+# -- bug B1c5dbe3103: the ratio measures the reviewer, not the agent or the diff ----------
+
+
+def _baseline(log: Log, took: float = 100) -> None:
+    for i in range(20):  # 20 reviews over the previous days
+        log.review(f"b{i}", "critic", 2 * DAY + i * 600, took)
+
+
+def _busy(log: Log, took: float, **kw: int) -> None:
+    """5 recent reviews a minute apart, with 3 more running beside each: a busy reviewer."""
+    for i in range(5):
+        log.review(f"r{i}", "critic", 25 * MIN - i * 60, took, **kw)
+        for j in range(3):
+            log.review(f"c{i}{j}", "rubber_duck", 25 * MIN - i * 60 - 5, took, **kw)
+
+
+def test_a_large_diff_at_the_same_service_time_does_not_raise_the_ratio():
+    log = Log()
+    _baseline(log)
+    # 40 chunks go out in 3 waves of 16: 300 s of wall time is 100 s per request
+    _busy(log, 300, chunks=40)
+    assert _signals(log).reviewer_latency_ratio == pytest.approx(1.0)
+
+
+def test_slow_answers_from_an_idle_reviewer_are_not_saturation():
+    log = Log()
+    _baseline(log)
+    for i in range(5):  # three times slower, but one review at a time
+        log.review(f"r{i}", "critic", 25 * MIN - i * 300, 300)
+    assert _signals(log).reviewer_latency_ratio is None
+
+
+def test_slow_answers_from_a_busy_reviewer_are():
+    log = Log()
+    _baseline(log)
+    _busy(log, 300)
+    assert _signals(log).reviewer_latency_ratio == pytest.approx(3.0)
+
+
+def test_a_triage_gap_before_a_hand_recorded_outcome_is_not_a_sample():
+    log = Log()
+    _baseline(log)
+    _busy(log, 100)
+    for i in range(5):
+        # A review killed after gate.started, then `gate record` 20 minutes later, after
+        # triage: that gap is the agent's, not the reviewer's ...
+        log.add("gate.started", f"m{i}", NOW - 20 * MIN, gate="critic")
+        log.add("gate.passed", f"m{i}", NOW - 60, gate="critic", evidence={"note": "by hand"})
+        # ... and a `gate record` that carries the last review's evidence along is that
+        # same review again, not a second sample of it.
+        review = next(e for e in log.events if e.subject == f"r{i}" and e.kind == "gate.passed")
+        log.add("gate.passed", f"r{i}", NOW - 30, gate="critic", evidence=review.data["evidence"])
+    assert _signals(log).reviewer_latency_ratio == 1.0
+    samples = FS._review_samples(log.events)
+    assert len(samples) == 20 + 5 * 4  # the baseline, and each busy review once

@@ -114,24 +114,33 @@ def _outcomes(at: float, passed: int, failed: int) -> list[Event]:
     ]
 
 
-def _reviews(at: float, n: int, took: float, first: int) -> list[Event]:
+def _reviews(at: float, n: int, took: float, first: int, pair: int = 1) -> list[Event]:
+    """`n` reviews a minute apart, each answered in `took` seconds as `ddflow review`
+    records it (evidence `elapsed_s`), with `pair - 1` more running beside each."""
     out = []
     for i in range(n):
         start = at + i * 60
-        data = {"gate": "critic"}
-        lam = first + 2 * i
-        out.append(
-            Event(kind="gate.started", subject=f"r{lam}", data=data, lamport=lam, ts=_ts(start))
-        )
-        out.append(
-            Event(
-                kind="gate.passed",
-                subject=f"r{lam}",
-                data=data,
-                lamport=lam + 1,
-                ts=_ts(start + took),
+        for j in range(pair):
+            lam = first + 2 * (i * pair + j)
+            evidence = {"status": "REVIEWED", "elapsed_s": took, "chunks_total": 1}
+            out.append(
+                Event(
+                    kind="gate.started",
+                    subject=f"r{lam}",
+                    data={"gate": "critic"},
+                    lamport=lam,
+                    ts=_ts(start),
+                )
             )
-        )
+            out.append(
+                Event(
+                    kind="gate.passed",
+                    subject=f"r{lam}",
+                    data={"gate": "critic", "evidence": {**evidence, "output_file": f"r{lam}"}},
+                    lamport=lam + 1,
+                    ts=_ts(start + took),
+                )
+            )
     return out
 
 
@@ -199,7 +208,8 @@ def test_failures_at_twice_the_baseline_shrink_the_limit(repo):
 
 def test_reviews_at_twice_the_baseline_latency_shrink_the_limit(repo):
     now = T0 + 9 * MIN
-    events = _reviews(now - 2 * DAY, 20, 100, 1) + _reviews(now - 25 * MIN, 5, 300, 100)
+    # a busy reviewer: 4 reviews in flight at once (bug B1c5dbe3103: slow alone is not busy)
+    events = _reviews(now - 2 * DAY, 20, 100, 1) + _reviews(now - 25 * MIN, 5, 300, 100, pair=4)
     assert FS.reviewer_latency_ratio(events, now) == pytest.approx(3.0)
     d = _limit(repo, HEALTHY, events)
     assert d.limit < 4 and d.limited_by == "reviewer_latency_ratio", d
