@@ -3510,7 +3510,8 @@ kinds carry them, each with the envelope `{kind, id, digest, source, provenance}
   merged from.
 
 The fold keeps each definition under `kind:id`, so a schedule and a skill may share a
-name, with its digest and its full history. All five kinds are provenance kinds. The one
+name, with its digest and its full history. All five kinds are provenance kinds, and
+`ddflow replay` renders each one. The one
 write path is `ddflow.api` `def_record` / `def_update` / `def_retire` / `def_supersede` /
 `def_merge`, with `def_show` and `def_list` to read. It refuses an unknown kind, an id that
 cannot be an id, or fields that are not plain JSON (exit 1). It also refuses to revise a
