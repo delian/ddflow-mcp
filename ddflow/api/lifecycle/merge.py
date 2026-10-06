@@ -426,9 +426,7 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
 
     # -z (via git_paths): a non-ASCII name is not C-quoted into one no glob matches;
     # --no-renames: a rename lists its old path too, which the landing removes (B20dc45f4c5).
-    changed = (
-        W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{target}...{branch}") or []
-    )
+    changed = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{target}...{branch}") or []
     return [
         p
         for p in changed
