@@ -74,7 +74,14 @@ from .tools.tiers import (  # noqa: F401
 )
 
 #: The LEGACY revisions: negotiated once, by `initialize`, for the life of the process.
-SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
+#: Newest first: an unknown version is answered with the first. `2025-11-25`
+#: (Bac0bb04c9f) asks nothing new of a stdio server offering tools, resources and
+#: prompts: everything it adds is optional (icons, tasks, URL elicitation, sampling with
+#: tools, `Implementation.description`) or already done here -- a bad argument is a tool
+#: result with `isError` (SEP-1303), tool names keep to `[A-Za-z0-9_.-]{1,128}`
+#: (SEP-986), and the input schemas name no `$schema`, so they read as JSON Schema
+#: 2020-12, its default dialect (SEP-1613).
+SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "ddflow", "version": _VERSION, "title": "ddflow work-queue kernel"}
 
 # -- the modern (stateless) revisions ---------------------------------------------------
