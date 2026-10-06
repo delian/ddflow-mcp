@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from ..config import ID_PREFIXES, Config
+from ..config import ID_PREFIXES, Config, id_problem
 
 
 def auto_id(prefix: str, *parts: str) -> str:
@@ -92,9 +92,16 @@ TEMPLATE_OF: dict[str, Callable[[Config], str]] = {
 def render(cfg: Config, kind: str, **fields: Any) -> str:
     """The id ``kind``'s `[ids]` template makes of ``fields``. ``{prefix}``, ``{hash}``
     (from ``hash_parts``), ``{time}``, ``{date}`` and ``{pid}`` are filled here when not
-    given; every other token must be passed.
+    given; every other token must be passed. The result is held to the id characters
+    (`config.id_problem`): a value that makes it unusable raises ValueError.
 
     Rendering only: the id service (B-id-generator) owns sequence allocation and the
     taken-key check under the log lock."""
     template = TEMPLATE_OF[kind](cfg)
-    return re.sub(r"\{([^{}]*)\}", lambda m: _token_value(kind, m.group(1), fields), template)
+    minted = re.sub(r"\{([^{}]*)\}", lambda m: _token_value(kind, m.group(1), fields), template)
+    # The template was valid; the VALUES may still not be (an empty slug between two
+    # dots, a caller's prefix with a slash): an id is a file name, a branch name and a
+    # glob token, so a bad one is refused here rather than written into the log.
+    if problem := id_problem(minted):
+        raise ValueError(f"the {kind} id {minted!r} {problem}")
+    return minted
