@@ -357,11 +357,6 @@ class Config:
                     # merged over the layers below, mark by mark (`merge_signals`)
                     value = merge_signals(getattr(target, knob), value)
                 check = _KNOB_CHECKS.get(f"{sec}.{knob}")
-                if check and (why := check(value)) and lenient and f"{sec}.{knob}" == SIGNALS:
-                    # A table, not an enum: its strictest fallback is computed from the
-                    # layers below (`strictest_signals`), never from the bad table's numbers.
-                    self._apply_signals_fallback(target, raw, why, source)
-                    continue
                 if check and (why := check(value)):
                     if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
                         # A value this code does not know, in a file that may be NEWER
@@ -369,17 +364,16 @@ class Config:
                         # knob, so no command stops loading config -- and an enum knob
                         # takes its STRICTEST value, not its default, so a typo in a
                         # tightened setting fails closed (D-enum-fallback-strict).
-                        if f"{sec}.{knob}" not in KNOB_STRICTEST | KNOB_STRICTEST_NUMBER:
+                        if f"{sec}.{knob}" not in _STRICT_FALLBACK:
                             self._bad_values.append(len(self.unknown_knobs))
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
-                        bad, value = value, strictest(f"{sec}.{knob}")
+                        bad, value = value, strictest(f"{sec}.{knob}", getattr(target, knob))
                         # an earlier layer's note names what THIS layer wrote, not the
                         # fallback; each bad value stays its own (true) report
                         self._forget_fallback(
                             f"{sec}.{knob}",
-                            f"the {source} value {bad!r}, itself unknown: "
-                            f"{strictest(f'{sec}.{knob}')!r} is in effect",
+                            f"the {source} value {bad!r}, itself unknown: {value!r} is in effect",
                         )
                         head = f"{sec}.{knob} = {bad!r}"
                         self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
@@ -411,22 +405,6 @@ class Config:
         return {i for notes in self._fallback_notes.values() for i, _ in notes} | set(
             self._bad_values
         )
-
-    def _apply_signals_fallback(self, target: Any, raw: Any, why: str, source: str) -> None:
-        """A `[schedule.signals]` table a config file gives that is not valid: loading goes
-        on with the strictest table (D-enum-fallback-strict), reported like an enum's."""
-        fallback = strictest_signals(target.signals)
-        self._forget_fallback(
-            SIGNALS, f"the {source} value {raw!r}, itself invalid: the strictest is in effect"
-        )
-        head = f"{SIGNALS} = {raw!r}"
-        self._fallback_notes.setdefault(SIGNALS, []).append((len(self.unknown_knobs), head))
-        self.unknown_knobs.append(
-            f"{head} ({why}; in effect: the strictest -- every signal enabled, each mark the "
-            "lower of the layers below and the shipped one)"
-        )
-        target.signals = fallback
-        self.sources[SIGNALS] = f"{source} (strictest fallback)"
 
     def _forget_fallback(self, key: str, by: str) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
@@ -730,9 +708,11 @@ for _key, (_value, _why) in {**KNOB_STRICTEST, **KNOB_STRICTEST_NUMBER}.items():
 del _key, _value, _why
 
 
-def strictest(key: str) -> Any:
-    """The value enum knob `key` -- or numeric knob, `KNOB_STRICTEST_NUMBER` -- takes when
-    a config file gives it one it cannot use."""
+def strictest(key: str, below: Any = None) -> Any:
+    """The value enum or number knob `key` -- or the signals table, from `below`, the layers
+    under it -- takes when a config file gives it one it cannot use."""
+    if key == SIGNALS:
+        return strictest_signals(below if isinstance(below, dict) else default_signals())
     if key in KNOB_STRICTEST_NUMBER:
         return KNOB_STRICTEST_NUMBER[key][0]
     return KNOB_STRICTEST[key][0]
@@ -745,9 +725,10 @@ def strictest(key: str) -> Any:
 #: (`KNOB_STRICTEST_NUMBER`); the write paths (`config --set`,
 #: `ddflow_configure`) and the environment still refuse it.
 _TOLERANT_VALUES = frozenset(
-    {*KNOB_CHOICES, *KNOB_STRICTEST_NUMBER, "export.tables", "bugs.phase"}
+    {*KNOB_CHOICES, *KNOB_STRICTEST_NUMBER, "export.tables", "bugs.phase", SIGNALS}
     | {f"ids.{k}" for k in ID_KINDS}
 )
+_STRICT_FALLBACK = {*KNOB_STRICTEST, *KNOB_STRICTEST_NUMBER, SIGNALS}  # values `strictest` has
 
 
 def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
