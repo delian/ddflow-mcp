@@ -8,6 +8,20 @@ from typing import Any
 
 from ._common import _api, _list_or_none
 
+
+def _rule_answer(a: dict[str, Any], relations: tuple[str, ...]) -> Any:
+    """The duplicate-check answer a rule tool call carries, or None. More than one is
+    refused (the CLI's flags are mutually exclusive; silently keeping one dropped the
+    other, rubber-duck)."""
+    given = [r for r in relations if (a.get(r) if r != "new" else bool(a.get("new")))]
+    if len(given) > 1:
+        raise ValueError(f"answer one of {', '.join(given)}, not several")
+    if not given:
+        return None
+    rel = given[0]
+    return _api().RuleDedupAnswer(rel, "" if rel == "new" else a[rel])
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_rule_add": {
         "description": (
@@ -57,23 +71,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 ),
                 agent=agent,
                 check_dedup=True,
-                dedup_answer=(
-                    _api().RuleDedupAnswer("new", "")
-                    if bool(a.get("new"))
-                    else (
-                        _api().RuleDedupAnswer("extends", a["extends"])
-                        if a.get("extends")
-                        else (
-                            _api().RuleDedupAnswer("duplicate_of", a["duplicate_of"])
-                            if a.get("duplicate_of")
-                            else (
-                                _api().RuleDedupAnswer("related", a["related"])
-                                if a.get("related")
-                                else None
-                            )
-                        )
-                    )
-                ),
+                dedup_answer=_rule_answer(a, ("new", "extends", "duplicate_of", "related")),
             )
         ),
         "payload": (
@@ -144,11 +142,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().rule_update(
             repo,
             a["id"],
-            dedup_answer=(
-                _api().RuleDedupAnswer("new", "")
-                if bool(a.get("new"))
-                else (_api().RuleDedupAnswer("related", a["related"]) if a.get("related") else None)
-            ),
+            dedup_answer=_rule_answer(a, ("new", "related")),
             agent=agent,
             **(
                 {

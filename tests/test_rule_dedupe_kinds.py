@@ -207,3 +207,32 @@ def test_an_edit_cannot_relate_a_rule_to_itself(proj):
     assert out.exit == 1 and "itself" in out.reason
     note = C._check_note(SimpleNamespace(data={"dedupe_unavailable": "x"}), "edited")
     assert note.strip().startswith("edited UNCHECKED")
+
+
+def test_a_rule_duplicate_refusal_lists_the_other_kinds_too(proj):
+    """Rubber-duck: a rule reading like another RULE and a decision was refused for the
+    rule alone; `new` then filed it past the decision nobody was shown."""
+    assert (
+        R.rule_add(
+            proj,
+            R.Rule(id="r-old", title="Migrations", content=RESTATED),
+            dedup_answer=R.RuleDedupAnswer("new", ""),
+        ).exit
+        == 0
+    )
+    out = R.rule_add(proj, R.Rule(id="r-new", title="Migrations", content=RESTATED))
+    assert out.exit == 3
+    ids = {c["id"] for c in out.data["candidates"]}
+    assert {"r-old", "D-mig"} <= ids and "D-mig" in out.reason
+
+
+def test_mcp_refuses_two_answers_at_once(proj):
+    args = {"id": "r-mig", "title": "Migrations", "content": RESTATED}
+    srv = Server(proj, agent="m")
+    srv.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    r = srv.handle(
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+         "params": {"name": "ddflow_rule_add", "arguments": {**args, "new": True, "related": "D-mig"}}}
+    )  # fmt: skip
+    assert r["result"]["isError"] and "not several" in r["result"]["content"][0]["text"]
+    assert "r-mig" not in _rules(proj)
