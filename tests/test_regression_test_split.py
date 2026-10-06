@@ -140,3 +140,14 @@ def test_a_value_shaped_like_a_test_list_is_read_as_a_list():
         "tests/a.py::t[a]",
         "tests/b.py::u[x]]",
     ]
+
+
+def test_a_value_holding_a_bracket_and_colons_adds_no_phantom_name():
+    """Review of Bb3ef73d53b: `]::` inside a value is read as an id boundary; the piece it
+    leaves (`y]`) must not become a name no test defines."""
+    from ddflow.api.knowledge.regression import _bare_names
+
+    assert _bare_names("TestC::test_m[x]::y]") == ["TestC", "test_m"]
+    assert _bare_names("TestC[a]::b]::test_m") == ["TestC", "test_m"]
+    assert _bare_names("TestC[1]::test_m") == ["TestC", "test_m"]
+    assert _bare_names("[p]") == [""]
