@@ -84,6 +84,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "extended",
             "extended_kind",
             "relation",
+            "dedupe_unavailable",
         ),
     },
     "ddflow_rule_list": {
@@ -192,7 +193,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 else {}
             ),
         ),
-        "payload": ("id", "candidates", "related", "options"),
+        "payload": ("id", "candidates", "related", "options", "dedupe_unavailable"),
     },
     "ddflow_rule_remove": {
         "description": (

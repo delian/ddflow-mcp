@@ -593,6 +593,16 @@ def test_rule_add_and_edit_run_the_shared_check():
 
     assert "rule" in DedupeConfig().kinds
     assert "check_add" in inspect.getsource(R._cross_kind)
-    for fn in (R.rule_add, R.rule_update, R.rule_dedup_check_dry_run):
-        src = inspect.getsource(fn) + inspect.getsource(R._add_checked_against_others)
-        assert "_cross_kind" in src or "_answer_other_kind" in src, fn.__name__
+    # Each caller on its own source: a shared helper must not vouch for a function that
+    # stopped calling it (roborev).
+    calls = {
+        R.rule_add: ("_add_checked_against_others", "_answer_other_kind"),
+        R._add_checked_against_others: ("_cross_kind",),
+        R._answer_other_kind: ("_cross_kind",),
+        R.rule_update: ("_check_edit",),
+        R._check_edit: ("_cross_kind",),
+        R.rule_dedup_check_dry_run: ("_cross_kind",),
+    }
+    for fn, callees in calls.items():
+        src = inspect.getsource(fn)
+        assert all(f"{c}(" in src for c in callees), (fn.__name__, callees)

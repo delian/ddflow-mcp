@@ -26,8 +26,17 @@ from ..context import FAIL, Ctx
 _PAYLOADS = {
     "list": ("rows", "count"),
     "search": ("rows", "count", "query"),
-    "add": ("id", "candidates", "related", "options", "extended", "extended_kind", "relation"),
-    "edit": ("id", "candidates", "related", "options"),
+    "add": (
+        "id",
+        "candidates",
+        "related",
+        "options",
+        "extended",
+        "extended_kind",
+        "relation",
+        "dedupe_unavailable",
+    ),
+    "edit": ("id", "candidates", "related", "options", "dedupe_unavailable"),
     "remove": ("id",),
     "show": ("id", "title", "content", "tags", "scope", "priority", "globs", "created", "updated"),
 }
@@ -35,6 +44,19 @@ _PAYLOADS = {
 
 def _csv(text: str) -> list[str]:
     return [p.strip() for p in (text or "").split(",") if p.strip()]
+
+
+def _check_note(out) -> str:
+    """What a filed rule's result says about the duplicate check: that it could not run
+    (the rule was filed UNCHECKED), or the records it reads like (a warning)."""
+    if why := out.data.get("dedupe_unavailable"):
+        return f"\n  filed UNCHECKED: the duplicate check could not run ({why})"
+    shown = [c for c in out.data.get("candidates", []) if c.get("kind") != "rule"]
+    if not shown:
+        return ""
+    return "\n  It reads like: " + "; ".join(
+        f"{c['id']} ({c.get('kind', '')}, score {c['score']:.2f})" for c in shown
+    )
 
 
 def _agent(c: Ctx) -> str:
@@ -92,7 +114,8 @@ def _cmd_edit(a, c: Ctx) -> int:
         out,
         verb,
         f"updated {a.id}: {', '.join(sorted(fields)) or 'nothing'}"
-        + (f" (related to {related})" if related else ""),
+        + (f" (related to {related})" if related else "")
+        + _check_note(out),
     )
 
 
@@ -161,4 +184,4 @@ def cmd_rule(a, c: Ctx) -> int:
         )
     said = {"related": "related to", "duplicate_of": "duplicate of", "extends": "extends"}
     linked = next((f" ({said[r]} {out.data[r]})" for r in said if out.data.get(r)), "")
-    return _emit(c, out, verb, f"added rule {a.id}{linked}")
+    return _emit(c, out, verb, f"added rule {a.id}{linked}{_check_note(out)}")
