@@ -119,11 +119,13 @@ from .config_sections.rules import (
 from .config_sections.schedule import (  # noqa: F401
     FLOW_SIGNALS,
     SIGNAL_MARKS,
+    SIGNALS,
     ScheduleConfig,
     _number,
     _signals_problem,
     default_signals,
     merge_signals,
+    strictest_signals,
 )
 from .config_sections.session import (
     SessionConfig,
@@ -351,6 +353,7 @@ class Config:
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
                 value = _coerce_layer_knob(sec, knob, raw, known[knob].type, lenient)
+                written = value  # what THIS layer says, before any merge: what a note names
                 if f"{sec}.{knob}" == "schedule.signals" and isinstance(value, dict):
                     # merged over the layers below, mark by mark (`merge_signals`)
                     value = merge_signals(getattr(target, knob), value)
@@ -362,19 +365,19 @@ class Config:
                         # knob, so no command stops loading config -- and an enum knob
                         # takes its STRICTEST value, not its default, so a typo in a
                         # tightened setting fails closed (D-enum-fallback-strict).
-                        if f"{sec}.{knob}" not in KNOB_STRICTEST | KNOB_STRICTEST_NUMBER:
+                        if f"{sec}.{knob}" not in _STRICT_FALLBACK:
                             self._bad_values.append(len(self.unknown_knobs))
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
-                        bad, value = value, strictest(f"{sec}.{knob}")
+                        bad, value = written, strictest(f"{sec}.{knob}", getattr(target, knob))
                         # an earlier layer's note names what THIS layer wrote, not the
                         # fallback; each bad value stays its own (true) report
                         self._forget_fallback(
                             f"{sec}.{knob}",
-                            f"the {source} value {bad!r}, itself unknown: "
-                            f"{strictest(f'{sec}.{knob}')!r} is in effect",
+                            f"the {source} value {bad!r}, itself unknown: {value!r} is in effect",
                         )
-                        head = f"{sec}.{knob} = {bad!r}"
+                        why = f" [{why}]" if f"{sec}.{knob}" == SIGNALS else ""  # a table: why
+                        head = f"{sec}.{knob} = {bad!r}{why}"
                         self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
                             (len(self.unknown_knobs), head)
                         )
@@ -707,9 +710,10 @@ for _key, (_value, _why) in {**KNOB_STRICTEST, **KNOB_STRICTEST_NUMBER}.items():
 del _key, _value, _why
 
 
-def strictest(key: str) -> Any:
-    """The value enum knob `key` -- or numeric knob, `KNOB_STRICTEST_NUMBER` -- takes when
-    a config file gives it one it cannot use."""
+def strictest(key: str, below: Any = None) -> Any:
+    """What enum or number knob `key` (or the signals table, from `below`) falls back to."""
+    if key == SIGNALS:
+        return strictest_signals(below if isinstance(below, dict) else default_signals())
     if key in KNOB_STRICTEST_NUMBER:
         return KNOB_STRICTEST_NUMBER[key][0]
     return KNOB_STRICTEST[key][0]
@@ -722,9 +726,10 @@ def strictest(key: str) -> Any:
 #: (`KNOB_STRICTEST_NUMBER`); the write paths (`config --set`,
 #: `ddflow_configure`) and the environment still refuse it.
 _TOLERANT_VALUES = frozenset(
-    {*KNOB_CHOICES, *KNOB_STRICTEST_NUMBER, "export.tables", "bugs.phase"}
+    {*KNOB_CHOICES, *KNOB_STRICTEST_NUMBER, "export.tables", "bugs.phase", SIGNALS}
     | {f"ids.{k}" for k in ID_KINDS}
 )
+_STRICT_FALLBACK = {*KNOB_STRICTEST, *KNOB_STRICTEST_NUMBER, SIGNALS}  # values `strictest` has
 
 
 def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
