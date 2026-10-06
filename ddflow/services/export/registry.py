@@ -6,7 +6,6 @@ See the package docstring (``ddflow.services.export``) for the plug-in contract.
 from __future__ import annotations
 
 import ctypes
-import hashlib
 import importlib
 import pkgutil
 import re
@@ -20,6 +19,7 @@ from typing import Any
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 
+from ...core.digest import content_digest
 from ..prompts import Template
 from .frame import DEFAULT_MAX_BYTES, frame, normalize, one_line, truncate
 from .query import EXIT_REFUSED, ExportError, Query
@@ -483,7 +483,7 @@ def _template_line(exc: BaseException) -> int:
 
 def template_digest(text: str) -> str:
     """12 hex chars of sha256 over a template's text: what drift detection compares."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return content_digest(text, length=12)
 
 
 def shipped_digest(kind: str, builtin: Path | None = None) -> str:

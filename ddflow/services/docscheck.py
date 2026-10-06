@@ -30,7 +30,6 @@ on a project of a few hundred files.
 from __future__ import annotations
 
 import fnmatch
-import hashlib
 import json
 import posixpath
 import re
@@ -40,6 +39,7 @@ from dataclasses import dataclass, field
 from urllib.parse import unquote
 
 from ..config import EnforceConfig
+from ..core.digest import content_digest
 from ..infra import proc as P
 from .docsync import glob_regex
 
@@ -220,7 +220,7 @@ def check_docs(
         sort_keys=True,
         separators=(",", ":"),
     )
-    report.digest = hashlib.sha256(blob.encode()).hexdigest()
+    report.digest = content_digest(blob)
     return report
 
 
