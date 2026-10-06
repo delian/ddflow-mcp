@@ -23,7 +23,6 @@ byte and `verify_digest` says no.
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -32,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.digest import content_digest, hasher
 from ..core.events import Event
 from ..core.model import known_kinds
 from . import install_info as _install
@@ -340,7 +340,7 @@ def build_bundle(
     reporter = agents(provenance.reported_by_agent)
     operator = "op-1" if provenance.on_behalf_of_operator else ""
     session = (
-        "s-" + hashlib.sha256(provenance.session.encode("utf-8", "replace")).hexdigest()[:8]
+        "s-" + content_digest(provenance.session, errors="replace", length=8)
         if provenance.session
         else ""
     )
@@ -518,7 +518,7 @@ def render_markdown(data: Mapping[str, Any]) -> str:
 
 def digest_of(body: str, json_body: str) -> str:
     """sha256 over the exact bytes of the markdown body and the canonical JSON body."""
-    h = hashlib.sha256()
+    h = hasher()
     h.update(body.encode("utf-8"))
     h.update(b"\n--json--\n")
     h.update(json_body.encode("utf-8"))

@@ -28,7 +28,6 @@ holder believe someone is waiting who is not.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import math
 import os
@@ -38,6 +37,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..core.digest import content_digest
 from ..infra.tomlcfg import atomic_write
 
 #: Where waits are registered. Under `.ddflow/local/`, which carries its own `*`
@@ -185,9 +185,7 @@ def mark_woken(w: Waiter, window_s: float) -> None:
 def _queue_path(repo: Path, agent: str, item: str) -> Path:
     # Sanitised for the filesystem, then keyed by a hash of the exact pair: two pairs that
     # sanitise alike ("a/b" and "a_b") must not share one place in line.
-    digest = hashlib.sha1(
-        f"{agent}\0{item}".encode("utf-8", "surrogateescape"), usedforsecurity=False
-    ).hexdigest()[:10]
+    digest = content_digest(f"{agent}\0{item}", "sha1", errors="surrogateescape", length=10)
     safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in f"{agent}-q-{item}")
     return _dir(repo) / f"{safe[:80]}-{digest}.json"
 

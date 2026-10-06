@@ -13,7 +13,6 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 
 from __future__ import annotations
 
-import hashlib
 import re
 import shlex
 import shutil
@@ -25,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import CI_ON_MERGE_MODES, Config
+from ..core.digest import content_digest
 from ..infra import proc as P
 from ..infra import worktree as W
 
@@ -236,7 +236,7 @@ def bug_id(check: str, cfg: Config | None = None) -> str:
     from ..core import ids as IDS
 
     slug = re.sub(r"[^A-Za-z0-9]+", "-", check).strip("-").lower()[:30].strip("-")
-    digest = hashlib.sha1(check.encode()).hexdigest()[:10]  # nosec B324 - not security
+    digest = content_digest(check, "sha1", length=10)
     return IDS.render(cfg if cfg is not None else Config(), "ci_bug", slug=slug, digest=digest)
 
 
