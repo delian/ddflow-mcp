@@ -101,10 +101,10 @@ def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
     """``(macros, refused)``: the usable `[[macro]]` blocks, and why each other one is not.
 
     Read from `.ddflow/config.toml`, then `.ddflow/macros.toml` -- the same two-file
-    precedence as reviewers and companions. A block that cannot be read at all (an
-    unknown field, invalid TOML) still raises: that is the whole file, not one macro.
-    An unknown field raises only in the tree the code came from; elsewhere the file may
-    be newer than the code, and the field is skipped with a warning (B0016a65167).
+    precedence as reviewers and companions. A block that cannot be read at all (invalid
+    TOML; an unknown field, in the tree the code came from -- elsewhere the file may be
+    newer than the code, and the field is skipped with a warning, B0016a65167) still
+    raises: that is the whole file, not one macro.
 
     A macro named like a shipped command is REFUSED BY NAME rather than left to lose to
     it silently -- a `bug-hunt` block that does nothing, with every surface reporting the
