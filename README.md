@@ -4575,8 +4575,9 @@ A test asserts every knob carries documentation, so the reference cannot rot.
 ### All knobs
 
 The table is generated from the knob declarations themselves (`uv run python -m
-ddflow.views.knob_table README.md` rewrites it) and a test fails when it differs, so its
-count and defaults cannot drift. A long default is left to `ddflow config --explain`.
+ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by hand unless
+given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
+long default is left to `ddflow config --explain`.
 
 <!-- ddflow:begin README/knobs sha=30cc606b5e44 -->
 <details><summary>All 189 knobs across 27 sections</summary>

@@ -32,6 +32,7 @@ def test_the_readme_knob_table_is_what_the_declarations_render():
     readme = _readme()
     assert readme.count(f"<!-- ddflow:begin {KT.REGION} sha=") == 1
     assert readme.count(KT.END) == 1
+    assert not KT.hand_edited(readme)
     assert KT.replace(readme, KT.render()) == readme, (
         "README.md's knob table is stale: `uv run python -m ddflow.views.knob_table README.md`"
     )
@@ -85,19 +86,41 @@ def test_replace_swaps_only_the_region_and_refuses_a_readme_without_one():
 
 
 def test_main_rewrites_a_stale_region_and_leaves_a_current_one(tmp_path, capsys):
+    """A region whose body still hashes to its sha is stale, not edited: rewritten."""
     path = tmp_path / "README.md"
-    path.write_text(f"x\n{OLD_BEGIN}\nstale\n{KT.END}\n", "utf-8")
+    old = KT.render().replace("All ", "Every ", 1)
+    old = re.sub(
+        r"sha=[0-9a-f]{12}",
+        "sha=" + content_digest(old.split("\n", 1)[1].rsplit("\n", 1)[0], length=12),
+        old,
+    )
+    path.write_text(f"x\n{old}\n", "utf-8")
+    assert not KT.hand_edited(path.read_text("utf-8"))
     assert KT.main([str(path)]) == 0
     assert path.read_text("utf-8") == f"x\n{KT.render()}\n"
     assert KT.main([str(path)]) == 0
     assert "already current" in capsys.readouterr().out
 
 
+def test_main_refuses_a_hand_edited_region_unless_forced(tmp_path, capsys):
+    """D-doc-regions: the body no longer matches the sha its marker recorded, so a rewrite
+    would silently drop someone's edit."""
+    path = tmp_path / "README.md"
+    edited = f"x\n{OLD_BEGIN}\nmy note\n{KT.END}\n"
+    path.write_text(edited, "utf-8")
+    assert KT.hand_edited(edited)
+    assert KT.main([str(path)]) == 3
+    assert path.read_text("utf-8") == edited
+    assert "edited by hand" in capsys.readouterr().err
+    assert KT.main([str(path), "--force"]) == 0
+    assert path.read_text("utf-8") == f"x\n{KT.render()}\n"
+
+
 def _count_claims(text: str) -> list[tuple[str, str]]:
     """Every knob count `text` states, as (knobs, sections or ""): "N knobs [across M
     sections]", and the parenthetical "knobs (K of the N)" a section's own list uses."""
     claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", text)
-    claims += [(n, "") for n in re.findall(r"knobs\W{0,4}\(\d+ of the (\d+)\)", text)]
+    claims += [(n, "") for n in re.findall(r"knobs[* ]{0,4}\(\d+ of the (\d+)\)", text)]
     return claims
 
 
@@ -108,6 +131,7 @@ def test_the_count_claims_are_the_knob_counts_and_nothing_else():
     assert _count_claims("All 70 knobs across 15 sections. See the knobs of the 15 sections.") == [
         ("70", "15")
     ]
+    assert _count_claims("see the knobs\n(2 of the 7) defaults.") == []
 
 
 def test_the_readme_knob_counts_match_the_config():
