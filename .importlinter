@@ -1,0 +1,197 @@
+# Architecture contracts for import-linter (`lint-imports`), run by
+# tests/test_architecture_guards.py and so by the unit suite, CI and the pre-push hook.
+#
+# These are RATCHETS (D-unify 4, strangler with ratchets). Each contract states the rule
+# the code is moving towards; its `ignore_imports` lists the imports that break the rule
+# TODAY. An entry may only be removed, never added: a new violation fails the contract,
+# and an entry that no longer matches any import fails too
+# (unmatched_ignore_imports_alerting = error), so the list shrinks as the code moves.
+# When a refactor moves an import (a module split, a call site moved to its one home),
+# edit the entry in the same change; never add one to make a new import pass.
+#
+# Entries marked "home" are permanent: the one module allowed to own that import. A home
+# module that does not exist yet (ddflow.infra.git, ddflow.infra.fsio, ddflow.core.digest,
+# the extras' adapters) has no entry -- an entry matching no import is an error -- and the
+# task that creates the module adds its home entry in the same change.
+
+[importlinter]
+root_package = ddflow
+include_external_packages = True
+unmatched_ignore_imports_alerting = error
+
+# surfaces > api > views > services > infra > config > core. A layer may import any layer
+# below it. `config` sits above `core` because `core` is pure: it should be handed its
+# knobs, not read them. `views` sits above `services`: a renderer reads service results,
+# a service returns an Outcome and does not render.
+[importlinter:contract:layers]
+name = Layers: surfaces > api > views > services > infra > config > core
+type = layers
+layers =
+    ddflow.surfaces
+    ddflow.api
+    ddflow.views
+    ddflow.services
+    ddflow.infra
+    ddflow.config : ddflow.config_sections
+    ddflow.core
+ignore_imports =
+    # core -> config
+    ddflow.core.flow -> ddflow.config
+    ddflow.core.flowparams -> ddflow.config
+    ddflow.core.flowsignals -> ddflow.config
+    ddflow.core.globspec -> ddflow.config
+    ddflow.core.ids -> ddflow.config
+    ddflow.core.progress -> ddflow.config
+    ddflow.core.schedule -> ddflow.config
+    # services -> views
+    ddflow.services.enforce -> ddflow.views.markdown
+    ddflow.services.sessions -> ddflow.views.markdown
+
+# A surface (argparse, JSON-RPC) reaches the domain through ddflow.api only.
+[importlinter:contract:surfaces-through-api]
+name = Surfaces reach services and infra only through ddflow.api
+type = forbidden
+source_modules =
+    ddflow.surfaces
+forbidden_modules =
+    ddflow.services
+    ddflow.infra
+allow_indirect_imports = True
+ignore_imports =
+    ddflow.surfaces.cli -> ddflow.infra.worktree
+    ddflow.surfaces.cli -> ddflow.services.gates
+    ddflow.surfaces.cli -> ddflow.services.leases
+    ddflow.surfaces.commands.ci -> ddflow.infra.worktree
+    ddflow.surfaces.commands.config -> ddflow.services.configwrite
+    ddflow.surfaces.commands.flow -> ddflow.services.choices
+    ddflow.surfaces.commands.knowledge -> ddflow.infra.store
+    ddflow.surfaces.commands.operations -> ddflow.services.importer
+    ddflow.surfaces.commands.reporting -> ddflow.infra.worktree
+    ddflow.surfaces.commands.review -> ddflow.infra.tomlcfg
+    ddflow.surfaces.commands.review -> ddflow.services.configwrite
+    ddflow.surfaces.commands.review -> ddflow.services.review
+    ddflow.surfaces.commands.review -> ddflow.services.reviewer_trust
+    ddflow.surfaces.commands.setup -> ddflow.infra.worktree
+    ddflow.surfaces.commands.setup -> ddflow.services.adopt
+    ddflow.surfaces.commands.setup -> ddflow.services.help
+    ddflow.surfaces.commands.viewers_lists -> ddflow.services.viewers
+    ddflow.surfaces.commands.viewers_search -> ddflow.services.search
+    ddflow.surfaces.commands.viewers_sessions -> ddflow.services.session_view
+    ddflow.surfaces.context -> ddflow.infra.harness_identity
+    ddflow.surfaces.context -> ddflow.infra.log
+    ddflow.surfaces.context -> ddflow.infra.store
+    ddflow.surfaces.context -> ddflow.infra.worktree
+    ddflow.surfaces.context -> ddflow.services.gates
+    ddflow.surfaces.context -> ddflow.services.tree_owner
+    ddflow.surfaces.mcp -> ddflow.infra.harness_identity
+    ddflow.surfaces.mcp -> ddflow.infra.log
+    ddflow.surfaces.mcp -> ddflow.infra.proc
+    ddflow.surfaces.mcp -> ddflow.infra.worktree
+    ddflow.surfaces.mcp -> ddflow.services.adopt
+    ddflow.surfaces.mcp -> ddflow.services.companions
+    ddflow.surfaces.mcp -> ddflow.services.gates
+    ddflow.surfaces.mcp -> ddflow.services.importer
+    ddflow.surfaces.mcp -> ddflow.services.leases
+    ddflow.surfaces.mcp -> ddflow.services.macros
+    ddflow.surfaces.mcp -> ddflow.services.obligations
+    ddflow.surfaces.mcp -> ddflow.services.prompts
+    ddflow.surfaces.mcp -> ddflow.services.review
+    ddflow.surfaces.parsers.review -> ddflow.services.adopt
+    ddflow.surfaces.tools._common -> ddflow.services.adopt
+
+# Processes start in ddflow.infra.proc (and git in ddflow.infra.git, when it exists).
+[importlinter:contract:subprocess-home]
+name = subprocess is imported only by ddflow.infra.proc and ddflow.infra.git
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    subprocess
+allow_indirect_imports = True
+ignore_imports =
+    # home
+    ddflow.infra.proc -> subprocess
+    ddflow.infra.claimref -> subprocess
+    ddflow.infra.log -> subprocess
+    ddflow.infra.paths -> subprocess
+    ddflow.services.bisect -> subprocess
+    ddflow.services.ci -> subprocess
+    ddflow.services.companions -> subprocess
+    ddflow.services.gates -> subprocess
+    ddflow.services.onboard_tests -> subprocess
+    ddflow.services.onboard_verify -> subprocess
+    ddflow.services.review -> subprocess
+    ddflow.surfaces.mcp -> subprocess
+
+# Atomic writes, temporary files and locks belong in ddflow.infra.fsio (not written yet).
+[importlinter:contract:fsio-home]
+name = tempfile and fcntl are imported only by ddflow.infra.fsio
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    tempfile
+    fcntl
+allow_indirect_imports = True
+ignore_imports =
+    ddflow.api.operations -> tempfile
+    ddflow.infra.forge -> tempfile
+    ddflow.infra.log -> fcntl
+    ddflow.infra.tomlcfg -> fcntl
+    ddflow.infra.tomlcfg -> tempfile
+    ddflow.infra.worktree -> tempfile
+    ddflow.services.changelog_cut -> tempfile
+    ddflow.services.ci -> tempfile
+    ddflow.services.companions -> tempfile
+    ddflow.services.flowstate -> tempfile
+    ddflow.services.gates -> tempfile
+    ddflow.services.harness -> tempfile
+    ddflow.services.onboard_tests -> tempfile
+    ddflow.services.onboard_verify -> tempfile
+    ddflow.services.version_files -> tempfile
+
+# Content digests belong in ddflow.core.digest (not written yet).
+[importlinter:contract:digest-home]
+name = hashlib is imported only by ddflow.core.digest
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    hashlib
+allow_indirect_imports = True
+ignore_imports =
+    ddflow.api.review -> hashlib
+    ddflow.core.events -> hashlib
+    ddflow.core.ids -> hashlib
+    ddflow.core.textsim -> hashlib
+    ddflow.infra.log -> hashlib
+    ddflow.services.bugreport -> hashlib
+    ddflow.services.ci -> hashlib
+    ddflow.services.docscheck -> hashlib
+    ddflow.services.export.frame -> hashlib
+    ddflow.services.export.registry -> hashlib
+    ddflow.services.gates -> hashlib
+    ddflow.services.ledger -> hashlib
+    ddflow.services.legacy -> hashlib
+    ddflow.services.quota -> hashlib
+    ddflow.services.review -> hashlib
+    ddflow.services.reviewer_trust -> hashlib
+    ddflow.services.sessions -> hashlib
+    ddflow.services.triggers -> hashlib
+    ddflow.services.waits -> hashlib
+
+# Optional extras (D-unify 2): each is imported by exactly ONE adapter module, which owns
+# the stdlib fallback and the doctor line. The task that writes an adapter adds its one
+# "home" entry here, e.g. `ddflow.services.searchcore.fuzzy -> rapidfuzz`.
+[importlinter:contract:extras-one-adapter]
+name = Optional extras are imported only by their one adapter module
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    rapidfuzz
+    watchfiles
+    model2vec
+    sqlite_vec
+    mcp
+allow_indirect_imports = True
