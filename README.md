@@ -4206,8 +4206,9 @@ blocked, then the handful of past lessons **ranked against this task's text**.
 This *replaces* reading the project's rule and lesson corpora. When the whole does not
 fit, each section is cut to its share of the budget and ends with one line saying how much
 it left out and where the rest is (`ddflow recover`, `ddflow job list`, `ddflow next`,
-`ddflow decision applicable <id>`, `ddflow memory list`, `ddflow recall <topic>`); a
-decision or lesson left out is still named by id, and each decision is quoted up to 280
+`ddflow decision applicable <id>`, `ddflow memory list`, `ddflow recall <topic>`); the
+decisions and lessons left out are named by id (the first six, then a count), and each
+decision is quoted up to 280
 characters (`ddflow decision show <id>` for the whole). What a short section does not use
 goes to the sections that need more, so the safety-critical head survives a squeeze and
 no long section ahead of them — other items' jobs, leftovers, blocked items — can cut the
