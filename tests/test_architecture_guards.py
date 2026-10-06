@@ -13,7 +13,16 @@ compared with a committed baseline, and the baseline can only go down:
 
 The import rules (layers, surfaces through api, one home each for subprocess, tempfile,
 fcntl, hashlib and the optional extras) live in `.importlinter` and are checked by
-import-linter here; that file's allowlists are ratchets of the same kind.
+import-linter here; their allowlists are ratchets of the same kind.
+
+Every baseline is a file of its own under tests/guard_baselines/: `<counter>.toml` holds
+one counter's number (`unreferenced_functions.toml` also the functions kept unreferenced
+on purpose), and `importlinter-<contract>.toml` one contract's `ignore_imports`
+allowlist, which this module joins back into the contract before import-linter runs. So
+a task that lowers one counter, or shrinks one contract's allowlist, edits -- and
+declares in its globs -- only that file: lanes lowering different counters never touch
+the same file, and this module changes only when a guard is added or what it measures
+changes.
 
 Counted on the source with `ast`, never by running anything, so the guard is the same on
 every platform and takes seconds. Complexity is radon's grade; duplicate code is pylint's
@@ -37,52 +46,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "ddflow"
 
-#: The committed baseline. Lower a number in the same change that removes the sites; the
-#: failure message prints the exact value. Never raise one.
-BASELINE: dict[str, int] = {
-    # subprocess.run/Popen/call/check_*/getoutput, os.system/popen, and the thin
-    # infra.proc.run/popen wrappers, outside ddflow.infra.proc and ddflow.infra.git
-    "subprocess_calls": 42,
-    # a list or tuple literal starting with "git" (a git argv) outside ddflow.infra.git
-    "git_argv": 26,
-    # Path.write_text outside ddflow.infra.fsio
-    "write_text": 40,
-    # any use of the tempfile module outside ddflow.infra.fsio
-    "tempfile": 12,
-    # os.replace outside ddflow.infra.fsio
-    "os_replace": 1,
-    # any use of the fcntl module outside ddflow.infra.fsio
-    "fcntl": 0,
-    # any use of the hashlib module outside ddflow.core.digest
-    "hashlib": 23,
-    # an import statement inside a function body
-    "deferred_imports": 620,
-    # functions and methods of radon cyclomatic-complexity grade D or worse (CC > 20)
-    "complexity_d_or_worse": 112,
-    # pylint duplicate-code (R0801) clusters, with DUPLICATE_ARGS below
-    "duplicate_code_clusters": 6,
-    # module-level functions whose name nothing in ddflow/ mentions, less KEPT_UNREFERENCED
-    "unreferenced_functions": 6,
-}
-
-#: Unreferenced on purpose: the work that wires each in is planned (B-uni-dead-code). An
-#: entry leaves this list in the change that gives it a caller -- a test holds that -- and a
-#: new unreferenced function is either wired, deleted, or listed here with its task.
-#: (Not counted at all, so not listed: argparse `Action.__call__`'s `option_string`, which
-#: vulture reports at cli.py and is the protocol's signature, not dead code.)
-KEPT_UNREFERENCED: dict[str, str] = {
-    # Claude Code's server approval (B-onboard-harness): the per-descriptor approval step
-    # of B-hx-onboard-generic is its caller; the onboard prompt does it by hand until then.
-    "ddflow/services/harness.py:enable_project_servers": "B-hx-onboard-generic",
-    # Adaptive flow (D-adaptive-flow): the admission target; the quota signal is the
-    # remaining wiring. (The doctor's too-little-history notes are wired: Bc6784dab3c.)
-    "ddflow/core/flowcontrol.py:decide_admission": "B-af-quota-signal",
-    # Usage quotas (D-quotas): the api awaits its surfaces.
-    "ddflow/api/quota.py:quota_declare": "BL-quotas",
-    "ddflow/api/quota.py:quota_show": "BL-quotas",
-    "ddflow/api/quota.py:quota_list": "BL-quotas",
-    "ddflow/api/quota.py:quota_forget": "BL-quotas",
-}
+#: The committed baselines, one file per guard. A counter's number is in
+#: `<counter>.toml`: lower it in the same change that removes the sites (the failure
+#: message prints the exact value), never raise it. The functions kept unreferenced on
+#: purpose are in `unreferenced_functions.toml`, each contract's import allowlist in
+#: `importlinter-<contract>.toml`.
+BASELINES = ROOT / "tests" / "guard_baselines"
 
 #: The one module each pattern belongs in. Sites there are the interface, not a violation.
 HOMES: dict[str, frozenset[str]] = {
@@ -94,6 +63,15 @@ HOMES: dict[str, frozenset[str]] = {
     "fcntl": frozenset({"ddflow.infra.fsio"}),
     "hashlib": frozenset({"ddflow.core.digest"}),
 }
+
+#: Every counter test_ratchet holds; each has its baseline in BASELINES/<counter>.toml.
+COUNTERS: tuple[str, ...] = (
+    *HOMES,
+    "deferred_imports",
+    "complexity_d_or_worse",
+    "duplicate_code_clusters",
+    "unreferenced_functions",
+)
 
 #: Pinned so the count means the same thing on every machine: no rc file is read, no
 #: stats are persisted under the home directory, and six lines is the smallest cluster.
@@ -292,7 +270,8 @@ def _unreferenced(sources: dict[str, str]) -> list[str]:
 
 def _unreferenced_functions() -> list[str]:
     found = _unreferenced({str(p.relative_to(ROOT)): p.read_text("utf-8") for p in _modules()})
-    return [f for f in found if _kept_key(f) not in KEPT_UNREFERENCED]
+    kept = _kept_unreferenced()
+    return [f for f in found if _kept_key(f) not in kept]
 
 
 def _kept_key(site: str) -> str:
@@ -370,10 +349,49 @@ def _measure(kind: str) -> list[str]:
     return _sites(kind)
 
 
-@pytest.mark.parametrize("kind", sorted(BASELINE))
+def _baseline_path(name: str) -> Path:
+    return BASELINES / f"{name}.toml"
+
+
+def _read_baseline(name: str, keys: set[str]) -> dict:
+    """The baseline file `name`, which must hold exactly `keys` (a misspelt key would
+    otherwise read as a missing baseline, or be ignored)."""
+    path = _baseline_path(name)
+    rel = path.relative_to(ROOT)
+    assert path.is_file(), f"{rel} is missing: every guard reads its baseline from its own file"
+    data = tomllib.loads(path.read_text("utf-8"))
+    assert set(data) == keys, f"{rel} holds {sorted(data)}; it must hold exactly {sorted(keys)}"
+    return data
+
+
+def _baseline(kind: str) -> int:
+    keys = {"baseline", "kept"} if kind == "unreferenced_functions" else {"baseline"}
+    value = _read_baseline(kind, keys)["baseline"]
+    assert type(value) is int and value >= 0, (
+        f"{_baseline_path(kind).relative_to(ROOT)}: baseline must be a count, not {value!r}"
+    )
+    return value
+
+
+def _kept_unreferenced() -> dict[str, str]:
+    """Unreferenced on purpose, each with the task that wires it in."""
+    kept = _read_baseline("unreferenced_functions", {"baseline", "kept"})["kept"]
+    assert isinstance(kept, dict) and all(isinstance(v, str) for v in kept.values()), kept
+    return kept
+
+
+def _allowlist(contract: str) -> list[str]:
+    """The `ignore_imports` entries of one `.importlinter` contract."""
+    entries = _read_baseline(f"importlinter-{contract}", {"ignore_imports"})["ignore_imports"]
+    assert isinstance(entries, list) and all(isinstance(e, str) for e in entries), entries
+    return entries
+
+
+@pytest.mark.parametrize("kind", sorted(COUNTERS))
 def test_ratchet(kind: str) -> None:
+    baseline = _baseline(kind)
     sites = _measure(kind)
-    count, baseline = len(sites), BASELINE[kind]
+    count = len(sites)
     assert count <= baseline, (
         f"{kind}: {count} sites, the baseline is {baseline}. New code used a pattern "
         f"P-unify is retiring; use the shared interface"
@@ -383,7 +401,7 @@ def test_ratchet(kind: str) -> None:
     )
     assert count >= baseline, (
         f"{kind}: {count} sites, below the baseline of {baseline}. Good -- now lower it: "
-        f'set BASELINE["{kind}"] = {count} in tests/test_architecture_guards.py in this '
+        f"set baseline = {count} in {_baseline_path(kind).relative_to(ROOT)} in this "
         "same change, so the sites cannot grow back."
     )
 
@@ -402,25 +420,48 @@ CONTRACTS = frozenset(
 )
 
 
-def _contracts() -> dict[str, configparser.SectionProxy]:
-    ini = configparser.ConfigParser()
+def _importlinter() -> configparser.ConfigParser:
+    ini = configparser.ConfigParser(interpolation=None)
     ini.read(ROOT / ".importlinter", encoding="utf-8")
+    return ini
+
+
+def _contracts(
+    ini: configparser.ConfigParser | None = None,
+) -> dict[str, configparser.SectionProxy]:
+    if ini is None:
+        ini = _importlinter()
     prefix = "importlinter:contract:"
     return {name[len(prefix) :]: ini[name] for name in ini.sections() if name.startswith(prefix)}
 
 
-def test_import_contracts() -> None:
+def _joined_importlinter(directory: Path) -> Path:
+    """`.importlinter` with each contract's allowlist joined back from its baseline file,
+    written into `directory` for import-linter to read."""
+    ini = _importlinter()
+    for contract, section in _contracts(ini).items():
+        entries = _allowlist(contract)
+        if entries:
+            section["ignore_imports"] = "\n" + "\n".join(entries)
+    path = directory / ".importlinter"
+    with path.open("w", encoding="utf-8") as out:
+        ini.write(out)
+    return path
+
+
+def test_import_contracts(tmp_path: Path) -> None:
     """The contracts in `.importlinter` are all there, each one is kept, and none of their
     allowlist entries is stale (`unmatched_ignore_imports_alerting = error`)."""
     pytest.importorskip("importlinter", reason="import-linter (a dev dependency) is not installed")
     contracts = _contracts()
     assert CONTRACTS <= set(contracts), f"contracts missing: {sorted(CONTRACTS - set(contracts))}"
+    config = _joined_importlinter(tmp_path)
     proc = subprocess.run(
         [
             sys.executable,
             "-c",
             "import sys; from importlinter.cli import lint_imports; "
-            "sys.exit(lint_imports(config_filename='.importlinter', no_cache=True, no_logo=True))",
+            f"sys.exit(lint_imports(config_filename={str(config)!r}, no_cache=True, no_logo=True))",
         ],
         cwd=ROOT,
         capture_output=True,
@@ -432,8 +473,8 @@ def test_import_contracts() -> None:
     output = proc.stdout + proc.stderr
     assert proc.returncode == 0, (
         "an architecture contract in .importlinter is broken. Fix the import, or -- when "
-        "a refactor moved an allowed import -- move its ignore_imports entry; never add "
-        "one for new code.\n" + output
+        "a refactor moved an allowed import -- move its ignore_imports entry in "
+        "tests/guard_baselines/importlinter-<contract>.toml; never add one for new code.\n" + output
     )
     # Exit 0 already means "every contract it loaded was kept"; this says it loaded them all.
     assert f"Contracts: {len(contracts)} kept, 0 broken." in output, output
@@ -516,9 +557,10 @@ def test_kept_unreferenced_functions_are_still_defined_and_unreferenced() -> Non
         _kept_key(f)
         for f in _unreferenced({str(p.relative_to(ROOT)): p.read_text("utf-8") for p in _modules()})
     }
-    stale = sorted(set(KEPT_UNREFERENCED) - found)
+    stale = sorted(set(_kept_unreferenced()) - found)
     assert not stale, (
-        f"no longer unreferenced (wired or gone): remove from KEPT_UNREFERENCED: {stale}"
+        "no longer unreferenced (wired or gone): remove from [kept] in "
+        f"tests/guard_baselines/unreferenced_functions.toml: {stale}"
     )
 
 
@@ -529,3 +571,25 @@ def test_the_unreferenced_census_counts_what_it_says() -> None:
         "b.py": "from a import used\nimport a\na.by_attr()\nCMD = 'from a import in_string as m; m()'\n",
     }
     assert _unreferenced(sources) == ["a.py:2 dead"]
+
+
+def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> None:
+    """One file per guard: each counter and each `.importlinter` contract has its baseline
+    file, holding exactly its keys; `.importlinter` itself lists no allowlist (two homes
+    for one list would drift); and no other file is there -- one left behind by a renamed
+    or removed guard would be read by nothing while looking like it still guarded."""
+    contracts = _contracts()
+    expected = {f"{k}.toml" for k in COUNTERS} | {f"importlinter-{c}.toml" for c in contracts}
+    present = {p.name for p in BASELINES.iterdir() if not p.name.startswith(".")}
+    assert present == expected, (
+        f"missing: {sorted(expected - present)}; read by no guard: {sorted(present - expected)}"
+    )
+    for kind in COUNTERS:
+        _baseline(kind)
+    _kept_unreferenced()
+    for contract, section in contracts.items():
+        _allowlist(contract)
+        assert "ignore_imports" not in section, (
+            f".importlinter lists ignore_imports for {contract}: move them to "
+            f"{_baseline_path(f'importlinter-{contract}').relative_to(ROOT)}"
+        )

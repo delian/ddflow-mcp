@@ -1,0 +1,31 @@
+# The `ignore_imports` allowlist of the .importlinter contract `digest-home` (hashlib is
+# imported only by ddflow.core.digest), which tests/test_architecture_guards.py joins
+# back into the contract before it runs import-linter.
+#
+# Each entry is an import that breaks the contract TODAY. An entry may only be removed,
+# never added: a new violation fails the contract, and an entry that no longer matches
+# any import fails too. When a refactor moves an import, edit its entry in the same
+# change; never add one to make a new import pass. An entry marked "home" is permanent:
+# the one module allowed to own that import.
+ignore_imports = [
+    # home
+    "ddflow.core.digest -> hashlib",
+    "ddflow.api.review -> hashlib",
+    "ddflow.core.events -> hashlib",
+    "ddflow.core.ids -> hashlib",
+    "ddflow.core.textsim -> hashlib",
+    "ddflow.services.bugreport -> hashlib",
+    "ddflow.services.ci -> hashlib",
+    "ddflow.services.docscheck -> hashlib",
+    "ddflow.services.export.frame -> hashlib",
+    "ddflow.services.export.registry -> hashlib",
+    "ddflow.services.gates.evidence -> hashlib",
+    "ddflow.services.ledger -> hashlib",
+    "ddflow.services.legacy -> hashlib",
+    "ddflow.services.quota -> hashlib",
+    "ddflow.services.review -> hashlib",
+    "ddflow.services.reviewer_trust -> hashlib",
+    "ddflow.services.sessions -> hashlib",
+    "ddflow.services.triggers -> hashlib",
+    "ddflow.services.waits -> hashlib",
+]

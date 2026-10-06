@@ -1,0 +1,22 @@
+# The `ignore_imports` allowlist of the .importlinter contract `layers` (Layers:
+# surfaces > api > views > services > infra > config > core), which
+# tests/test_architecture_guards.py joins back into the contract before it runs
+# import-linter.
+#
+# Each entry is an import that breaks the contract TODAY. An entry may only be removed,
+# never added: a new violation fails the contract, and an entry that no longer matches
+# any import fails too. When a refactor moves an import, edit its entry in the same
+# change; never add one to make a new import pass.
+ignore_imports = [
+    # core -> config
+    "ddflow.core.flow -> ddflow.config",
+    "ddflow.core.flowparams -> ddflow.config",
+    "ddflow.core.flowsignals -> ddflow.config",
+    "ddflow.core.globspec -> ddflow.config",
+    "ddflow.core.ids -> ddflow.config",
+    "ddflow.core.progress -> ddflow.config",
+    "ddflow.core.schedule -> ddflow.config",
+    # services -> views
+    "ddflow.services.enforce -> ddflow.views.markdown",
+    "ddflow.services.sessions -> ddflow.views.markdown",
+]

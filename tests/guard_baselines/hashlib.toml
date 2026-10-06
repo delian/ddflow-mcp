@@ -1,0 +1,6 @@
+# Ratchet `hashlib` (tests/test_architecture_guards.py) counts
+# any use of the hashlib module outside ddflow.core.digest.
+#
+# Lower the baseline in the same change that removes sites; the failure message
+# prints the exact value. Never raise it.
+baseline = 23
