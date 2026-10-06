@@ -1,7 +1,9 @@
 """A review appends gate.started before it calls the reviewer (bug B7ed5137d45).
 
-Without it `flowsignals.reviewer_latency_ratio` has no started-to-outcome pairs on a real
-log, so the adaptive flow controller never sees reviewer latency.
+It marks when a review began, for readers of the log (`ddflow history`, `rates`).
+Reviewer latency itself no longer pairs it with the outcome: it reads the `elapsed_s` the
+review records, so a killed run or a triage gap cannot pose as a slow reviewer (bug
+B1c5dbe3103).
 """
 
 from __future__ import annotations
