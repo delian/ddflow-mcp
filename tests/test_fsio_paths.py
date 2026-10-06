@@ -120,6 +120,43 @@ def test_pin_a_worktree_root_that_cannot_be_written_does_not_fail(tmp_path):
     assert not (root / ".gitignore").exists()
 
 
+def test_pin_a_registered_wait_dir_ignores_itself(tmp_path):
+    from ddflow.services import waits as WT
+
+    WT.register(tmp_path, WT.Waiter(agent="a", item="I1"))
+    assert (tmp_path / ".ddflow" / "local" / ".gitignore").read_bytes() == b"*\n"
+
+
+def test_pin_a_place_in_line_dir_ignores_itself(tmp_path):
+    from ddflow.services import waits as WT
+
+    WT.queue(tmp_path, "a", "I1", waiting_on=["I0"], reason="held", window_s=60)
+    assert (tmp_path / ".ddflow" / "local" / ".gitignore").read_bytes() == b"*\n"
+
+
+def test_pin_an_unwritable_ignore_file_does_not_stop_a_wait(tmp_path, monkeypatch):
+    from ddflow.services import waits as WT
+
+    real = Path.write_text
+
+    def refuse(self, *a, **kw):
+        if self.name == ".gitignore":
+            raise PermissionError(13, "read-only", str(self))
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "write_text", refuse)
+    real_atomic = fsio.atomic_write
+
+    def refuse_atomic(path, data, **kw):
+        if Path(path).name == ".gitignore":
+            raise PermissionError(13, "read-only", str(path))
+        return real_atomic(path, data, **kw)
+
+    monkeypatch.setattr(fsio, "atomic_write", refuse_atomic)
+    w = WT.register(tmp_path, WT.Waiter(agent="a", item="I1"))
+    assert w.path and Path(w.path).exists()
+
+
 @pytest.mark.parametrize(
     "write",
     [
