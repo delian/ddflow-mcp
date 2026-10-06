@@ -40,3 +40,18 @@ def test_every_bug_in_an_and_joined_fix_list_rides_on_the_fix_task_line():
     lines = [ln for ln in day.splitlines() if ln.startswith("- ")]
     assert len(lines) == 1, lines  # the three bugs rode on T-fix's line, none on its own
     assert "`T-fix`" in lines[0] and "bug fixed" in lines[0], lines
+
+
+def test_a_hyphenated_id_holding_and_is_one_id():
+    """Bug B7a5a58fb1d: the shared parser split on `\\band\\b`, which matches inside a slug
+    id (`B-parse-and-merge`), naming two ids that do not exist."""
+    from ddflow.services.export.kind_changelog import _fixed_bugs
+
+    assert _fixed_bugs("x (fixes bug B-parse-and-merge)") == ["B-parse-and-merge"]
+    assert _fixed_bugs("x (fixes bugs B-a-and-b, B-c and B-d-and-e)") == [
+        "B-a-and-b",
+        "B-c",
+        "B-d-and-e",
+    ]
+    assert _fixed_bugs("x (fixes bugs A, B, and X)") == ["A", "B", "X"]
+    assert _fixed_bugs("x (fixes bugs A and X)") == ["A", "X"]
