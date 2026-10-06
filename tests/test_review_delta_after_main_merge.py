@@ -102,9 +102,9 @@ def test_a_conflicted_merge_still_sends_none_of_mains_other_work(repo, tmp_path)
     _git(tree, "commit", "-qam", "item: resolve")
     diff = RV._delta_diff(repo, _item(tree), "", head)
     assert "theirs.py" not in diff
-    # exactly the resolution, against the reviewed side: not the item's whole change
-    assert "+v = 'resolved'" in diff and "-v = 'item'" in diff
-    assert "+v = 'main'" not in diff
+    # exactly where the resolution departs from main's side
+    assert "+v = 'resolved'" in diff and "-v = 'main'" in diff
+    assert "v = 'item'" not in diff
 
 
 def test_a_commit_made_before_the_merge_is_still_sent(repo, tmp_path):
@@ -122,3 +122,51 @@ def test_a_commit_made_before_the_merge_is_still_sent(repo, tmp_path):
     ):
         assert "made_before_the_merge" in diff
         assert "theirs.py" not in diff
+
+
+def test_a_resolution_that_takes_mains_side_sends_nothing_of_main(repo, tmp_path):
+    tree = tmp_path / "item"
+    _commit(repo, "shared.py", "v = 0\n", "base")
+    _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
+    head = _commit(tree, "shared.py", "v = 'item'\n", "item: change shared")
+    _commit(repo, "shared.py", "v = 'main'\n", "main: change shared")
+    subprocess.run(["git", "-C", str(tree), "merge", "-q", "main"], capture_output=True)
+    (tree / "shared.py").write_text("v = 'main'\n")
+    _git(tree, "commit", "-qam", "item: take main's side")
+    _commit(tree, "own.py", "x = 1\n", "item: more")
+    diff = RV._delta_diff(repo, _item(tree), "", head)
+    assert "shared.py" not in diff and "+x = 1" in diff
+
+
+def test_a_criss_cross_history_still_excludes_mains_work(repo, tmp_path):
+    """main merged the item's reviewed head, and the item merged main: two merge bases.
+    The one the reviewed head already holds is not 'incoming'."""
+    tree = tmp_path / "item"
+    _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
+    head = _commit(tree, "own.py", "x = 1\n", "item: reviewed")
+    _commit(repo, "theirs.py", "".join(f"y{i} = {i}\n" for i in range(50)), "main: other")
+    _git(tree, "merge", "-q", "--no-edit", "main")
+    _git(repo, "merge", "-q", "--no-edit", head)  # main takes the item's reviewed head
+    _commit(repo, "later.py", "z = 1\n", "main: later")
+    _git(tree, "merge", "-q", "--no-edit", "main")
+    _commit(tree, "own.py", "x = 2\n", "item: after")
+    diff = RV._delta_diff(repo, _item(tree), "", head)
+    assert "theirs.py" not in diff and "later.py" not in diff
+    assert "+x = 2" in diff
+
+
+def test_two_incoming_merge_bases_are_both_merged_onto_the_head(repo, tmp_path):
+    """A true criss-cross: main merged the item's I1 while the item merged main's M1, so
+    `merge-base --all` names both, and the reviewed head H holds neither."""
+    tree = tmp_path / "item"
+    _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
+    head = _commit(tree, "own.py", "x = 1\n", "item: H, reviewed")
+    i1 = _commit(tree, "i1.py", "i = 1\n", "item: I1")
+    m1 = _commit(repo, "theirs.py", "m = 1\n", "main: M1")
+    _git(repo, "merge", "-q", "--no-edit", i1)
+    _git(tree, "merge", "-q", "--no-edit", m1)
+    bases = _git(repo, "merge-base", "--all", "main", "item").split()
+    assert sorted(bases) == sorted([i1, m1])
+    _commit(tree, "own.py", "x = 2\n", "item: after")
+    diff = RV._delta_diff(repo, _item(tree), "", head)
+    assert "theirs.py" not in diff and "+x = 2" in diff

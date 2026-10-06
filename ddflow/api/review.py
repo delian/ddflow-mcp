@@ -838,23 +838,31 @@ def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
     The commits from ``base`` were reviewed as their own items, so only what the branch
     did on top of them is new: its own commits, and its side of the merge.
 
-    The merge is ``git merge-tree --write-tree -X ours``: where head and the incoming
-    work conflict it keeps head's side, so the diff to the tip is exactly how the item
-    resolved the conflict. ``head`` when nothing came in, or when the history has more
-    than one merge base (criss-cross: which commit "came in" is ambiguous, so the delta
-    sends everything since head, as before). The merged-in base commit -- the item's
-    whole own change on top of the base -- when even that merge cannot be written."""
-    came = W.git(repo, "merge-base", "--all", base, tip) if base and tip else None
-    bases = came.out.split() if came is not None and came.ok else []
-    if len(bases) != 1:
-        return head
-    came_in = bases[0]
-    if W.git(repo, "merge-base", "--is-ancestor", came_in, head).ok:
-        return head  # nothing from base since the reviewed head
-    merged = W.git(repo, "merge-tree", "--write-tree", "-X", "ours", head, came_in)
-    if merged.ok and merged.out.strip():
-        return merged.out.splitlines()[0].strip()
-    return came_in
+    What came in is every merge base of ``base`` and the tip that ``head`` lacks (one in
+    a plain history, more after criss-cross merges). Each is merged onto ``head`` with
+    ``git merge-tree --write-tree -X theirs``: where the two conflict the incoming side
+    is kept, so the diff to the tip shows exactly where the item's result departs from
+    the base's. Returns ``head`` when nothing came in, else the merged tree; the
+    incoming base commit (the item's whole own change on top of it) when a merge cannot
+    be written."""
+    found = W.git(repo, "merge-base", "--all", base, tip) if base and tip else None
+    bases = found.out.split() if found is not None and found.ok else []
+    came_in = [b for b in bases if not W.git(repo, "merge-base", "--is-ancestor", b, head).ok]
+    start = head
+    for i, commit in enumerate(came_in):
+        merged = W.git(repo, "merge-tree", "--write-tree", "-X", "theirs", start, commit)
+        tree = merged.out.splitlines()[0].strip() if merged.ok and merged.out.strip() else ""
+        if not tree:
+            return came_in[-1]
+        if i == len(came_in) - 1:
+            return tree
+        # Another base to merge: the tree as a commit merge-tree can take (unreferenced,
+        # like the tree itself; git's gc removes both).
+        made = W.git(repo, "commit-tree", tree, "-p", start, "-p", commit, "-m", "delta base")
+        if not made.ok or not made.out.strip():
+            return came_in[-1]
+        start = made.out.strip()
+    return head
 
 
 def _head_of(repo: Path, it, branch: str, commit: str) -> str:
