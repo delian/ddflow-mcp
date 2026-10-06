@@ -911,6 +911,8 @@ SECTION_TRIMMED = "cut to fit session.brief_max_tokens"
 
 #: The least a section is allowed when trimmed: its heading and a line or two.
 _SECTION_FLOOR = 160
+#: How many left-out records a trimmed section names; the rest are counted.
+_SECTION_NAMED = 6
 
 
 def _record_id(line: str) -> str:
@@ -931,7 +933,9 @@ def _trim_section(name: str, lines: list[str], room: int, item: str) -> list[str
         seen = {_record_id(k) for k in kept}
         ids = list(dict.fromkeys(r for r in map(_record_id, rest) if r and r not in seen))
         entries = sum(1 for ln in rest if ln.startswith("- ")) or len([ln for ln in rest if ln])
-        named = f": {', '.join(ids)}" if ids else ""
+        named = f": {', '.join(ids[:_SECTION_NAMED])}" if ids else ""
+        if len(ids) > _SECTION_NAMED:  # bounded: hundreds of ids would overrun the share
+            named += f" and {len(ids) - _SECTION_NAMED} more"
         marker = f"- _[{entries} more {SECTION_TRIMMED}{named}; {where}]_"
         # The heading (and the blank lines around it) stays: a section cut to nothing
         # would read as a section with nothing in it.
@@ -1060,7 +1064,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     text = "\n".join(head + body)
     # The backstop, for a heading that alone overran its share: the note counts too.
     if len(text) + (len(note) if trimmed else 0) > budget * 4:
-        text = text[: budget * 4 - len(note)].rsplit("\n", 1)[0]
+        text = text[: max(0, budget * 4 - len(note))].rsplit("\n", 1)[0]
         trimmed = True
     if trimmed:
         text += note

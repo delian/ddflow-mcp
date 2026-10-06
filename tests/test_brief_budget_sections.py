@@ -123,3 +123,40 @@ def test_the_section_shares_never_overrun_the_room():
     small = [(n, ["y" * 149]) for n in M._SECTION_SHARE]
     body, trimmed = M._fit_sections(small, 1000, "MINE")
     assert trimmed and len("\n".join(body)) <= 1000 + 9 * 160, "nine headings at most"
+
+
+def test_hundreds_of_decisions_still_leave_rules_and_lessons(repo):
+    """roborev: the marker named every left-out id, so 300 decisions made the decisions
+    section overrun its share and the backstop cut the rules and lessons again."""
+    _project(repo)
+    log = EventLog(repo, "a1")
+    for i in range(300):
+        log.append(
+            "decision.recorded",
+            f"DX{i:03d}",
+            {"title": f"extra {i}", "decision": "rotate by size " * 20, "globs": ["src/zebra/*"]},
+        )
+    data = lifecycle.brief(repo, item="MINE", agent="a1").data
+    text = data["text"]
+    assert data["approx_tokens"] <= 1200 * 1.05
+    assert "## Project rules" in text and "## Lessons that bear on this task" in text
+    assert "L-zebra" in text
+    assert " more cut to fit" in text and "ddflow decision applicable MINE" in text
+    # The marker names a few and counts the rest: naming all 300 overran the share.
+    markers = [ln for ln in text.splitlines() if "cut to fit" in ln]
+    assert all(len(ln) < 400 for ln in markers), max(map(len, markers))
+
+
+def test_a_tiny_budget_is_still_a_budget(repo):
+    """roborev: a budget under the note's length sliced from the END and kept the text."""
+    from ddflow.api._base import _load
+    from ddflow.core.schedule import plan
+    from ddflow.views import markdown as M
+
+    _project(repo)
+    _log, cfg, st = _load(repo, "a1")
+    cfg.session.brief_max_tokens = 30
+    lessons = [{"id": "L-zebra", "title": "t", "rule": "r " * 200}]
+    text = M.brief(st, cfg, plan(st, cfg), item="MINE", lessons=lessons, reserve=29)
+    # budget 1 token: nothing but the truncation note survives
+    assert text.startswith("\n\n_[brief truncated at 1 tokens"), text[:200]
