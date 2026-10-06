@@ -27,7 +27,6 @@ corrupt file as empty would lift every limit without a word.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -37,6 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..core.digest import content_digest
 from ..infra.tomlcfg import atomic_write, locked
 
 #: Window -> its length in seconds. `month` is 30 days when rolling; a FIXED window
@@ -106,7 +106,7 @@ class Profile:
 
 def account_tag(account_id: str) -> str:
     """A stable short tag for an account id, so a subject never carries the raw id."""
-    return hashlib.sha256(account_id.encode("utf-8")).hexdigest()[:12]
+    return content_digest(account_id, length=12)
 
 
 def _now() -> str:

@@ -548,12 +548,12 @@ class _ReplyFile:
                 pass  # the evidence still carries the bodies; this is the belt
 
     def evidence(self) -> dict[str, Any]:
-        import hashlib
+        from ..core.digest import content_digest
 
         if not self._started:
             return {}
         try:
-            digest = hashlib.sha256(self.path.read_bytes()).hexdigest()[:16]
+            digest = content_digest(self.path.read_bytes(), length=16)
         except OSError:
             return {}
         # Repo-relative: the event log is committed, an absolute path is one machine's.
