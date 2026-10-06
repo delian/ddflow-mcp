@@ -3556,6 +3556,19 @@ Every number the older ddflow shows is computed without those events, so the rem
 last stamped by (next section); the note names it. An event whose `schema` is newer than
 this code knows is counted the same way (`phase.added (schema 2) x1`).
 
+### The compatibility contract
+
+What ddflow promises not to break is written down in
+[docs/ddflow/compatibility.md](docs/ddflow/compatibility.md) (decision D-compat): which
+surfaces are interfaces (commands, flags, MCP tools and their results, `--json` fields,
+config keys, event kinds and payloads, template data, hook commands, on-disk formats); that
+every change is additive, deprecating (a hidden alias with a notice, kept until 1.0) or
+breaking (a declared migration and a minor bump while 0.x); that releases are numbered by
+impact; and that `FORMAT_LEVEL` in `ddflow/__init__.py`, not the version, says when an older
+ddflow can no longer read or write a project safely. An older ddflow writes what it
+understands, preserves the rest, and is refused only on a direct conflict. The skew guard
+below is the current, version-based form of that refusal.
+
 ### The version stamp and the skew guard
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
