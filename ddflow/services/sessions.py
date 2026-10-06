@@ -32,6 +32,7 @@ import os
 import re
 import textwrap
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -91,14 +92,28 @@ def _mask(s: str) -> str:
     return "[REDACTED]"
 
 
-def new_session_id() -> str:
-    return time.strftime("s%Y%m%dT%H%M%S", time.gmtime()) + f"-{os.getpid():d}"
+def new_session_id(cfg: Config | None = None, events: Iterable = ()) -> str:
+    """A new session's id, from `[ids].session` (`s<UTC time>-<pid>` by default) through
+    the id service, checked against the sessions ``events`` already started."""
+    from ..core import ids as IDS
+
+    used = {e.subject: "session" for e in events if e.kind == "session.started"}
+    return IDS.make(cfg if cfg is not None else Config(), "session", used=used).id
+
+
+def _cfg_of(log: EventLog) -> Config:
+    """The project's config, for an id minted where only the log is at hand; the shipped
+    defaults when it cannot be read (a session id must never fail to mint)."""
+    try:
+        return Config.load(log.root)
+    except Exception:
+        return Config()
 
 
 def start(
     log: EventLog, cfg: Config, *, model: str = "", agent_tool: str = "", session_id: str = ""
 ) -> str:
-    sid = session_id or new_session_id()
+    sid = session_id or new_session_id(cfg, log.read_all())
     log.append("session.started", sid, {"model": model, "tool": agent_tool, "cwd": str(Path.cwd())})
     return sid
 
@@ -221,7 +236,7 @@ def resolve(
             return hid, "harness"
     if live:
         return live[0], "latest"
-    sid = new_session_id()
+    sid = new_session_id(_cfg_of(log), events)
     log.append(
         "session.started",
         sid,
@@ -256,7 +271,7 @@ def adopt_orphans(log: EventLog) -> int:
             before = [sid for ts, sid in starts if ts <= o.ts]
             sid = before[-1] if before else starts[0][1]
         else:
-            sid = new_session_id()
+            sid = new_session_id(_cfg_of(log), events)
             log.append("session.started", sid, {"model": "", "tool": "", "implicit": True})
             starts = [(o.ts, sid)]
         log.append(o.kind, sid, {**o.data, "adopted_from": o.id, "orphan_at": o.ts})

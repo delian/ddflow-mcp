@@ -75,8 +75,11 @@ def add(
         )
     if ahead == 0 and not force:
         return {"id": "", "from": frm, "to": to, "ahead": 0}
+    from ..core import ids as IDS
+
     n = 1 + sum(1 for i in st.items.values() if i.promote_to == to)
-    pid = f"promote-{F.safe_name(to)}-{n}"
+    minted = IDS.make(cfg, "promotion", used=IDS.taken(st), env=F.safe_name(to), seq=n)
+    pid = minted.id
     log.append(
         "task.added",
         pid,
