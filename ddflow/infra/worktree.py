@@ -362,10 +362,27 @@ def dirty(wt: Worktree, *, untracked: bool = True) -> list[str]:
     reports itself. Counting untracked files as "dirty" made `merge` refuse forever in
     any repo holding a build directory, a virtualenv, or — as found here — ddflow's
     own freshly-created `.ddflow/` before it was committed.
+
+    An unreadable tree (a broken ``.git`` file, no permission, no git) is never clean:
+    it answers one line starting with `UNREADABLE`, so every caller that asks "anything
+    uncommitted?" keeps the tree, and `unreadable` tells the two apart (B028b11b4cb).
     """
     args = ["status", "--porcelain"] + ([] if untracked else ["--untracked-files=no"])
     r = git(wt.path, *args)
-    return [ln for ln in r.out.splitlines() if ln.strip()] if r.ok else []
+    if not r.ok:
+        why = (r.err or r.out).strip().splitlines() or [f"exit {r.code}"]
+        return [f"{UNREADABLE}git status failed: {why[0]}"]
+    return [ln for ln in r.out.splitlines() if ln.strip()]
+
+
+#: The prefix of the one line `dirty` answers for a tree git could not read. Not a
+#: porcelain status code, so it cannot be mistaken for a file.
+UNREADABLE = "?! "
+
+
+def unreadable(lines: list[str]) -> bool:
+    """True when `dirty` could not read the tree: unknown, which is never clean."""
+    return any(ln.startswith(UNREADABLE) for ln in lines)
 
 
 def commit(
@@ -601,6 +618,17 @@ def remove(repo: Path, cfg: Config, wt: Worktree, *, force: bool = False) -> Git
     root = repo_root(repo)
     if not force:
         d, a = dirty(wt), ahead(wt)
+        if unreadable(d) or a < 0:
+            # Unknown is not clean: an unmeasured tree may hold anything (B028b11b4cb).
+            why = d[0][len(UNREADABLE) :] if unreadable(d) else f"no commit count vs {wt.base}"
+            return GitResult(
+                2,
+                "",
+                (
+                    f"refusing to remove {wt.path}: could not measure it ({why}). "
+                    f"Inspect with `git -C {wt.path} status`; pass --force once you are certain."
+                ),
+            )
         if d or a > 0:
             return GitResult(
                 2,
