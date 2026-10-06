@@ -48,8 +48,9 @@ MIN_RECENT_REVIEWS = 5
 #: Reviews in flight at once (counting itself) below which slow answers are the diff's or
 #: the model's, not a queue: one agent's rubber_duck and critic run as a pair.
 MIN_IN_FLIGHT = 3
-#: Chunks a review sends in one wave: `services.review.AUTO_CONCURRENCY_CEILING` (32)
-#: requests over the default hedge of 2 copies. More chunks go out in further waves.
+#: For a review recorded before its evidence carried `waves`: the chunks one wave holds
+#: at the defaults, `services.review.AUTO_CONCURRENCY_CEILING` (32) requests over a hedge
+#: of 2 copies. A recorded `waves` (the reviewer's own concurrency) always wins.
 WAVE_CHUNKS = 16
 MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0
@@ -93,10 +94,11 @@ def _outcome(ev: Event) -> str:
     return tail if head == "gate" and tail in _OUTCOME_KINDS else ""
 
 
-def _review_samples(events: Sequence[Event]) -> list[tuple[float, float, float]]:
+def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, float, float]]:
     """(start, end, seconds per wave) of every review `ddflow review` recorded: an outcome
     of a review gate whose evidence carries the command's own ``elapsed_s``. A later
-    `gate record` that carries the same review's evidence along is not a second sample."""
+    `gate record` that carries the same review's evidence along is not a second sample.
+    Nothing that ended after ``now`` (a skewed clock) is a sample or counts as in flight."""
     out = []
     seen: set[tuple] = set()
     for ev in sorted(events, key=lambda e: (PR.epoch(e.ts), e.lamport)):
@@ -106,24 +108,24 @@ def _review_samples(events: Sequence[Event]) -> list[tuple[float, float, float]]
             continue
         took, chunks = evidence.get("elapsed_s"), evidence.get("chunks_total") or 1
         end = PR.epoch(ev.ts)
-        if not isinstance(took, int | float) or isinstance(took, bool) or took <= 0 or end <= 0:
+        if not isinstance(took, int | float) or isinstance(took, bool) or took <= 0:
             continue
-        once = (
-            ev.subject,
-            _gate(ev),
-            evidence.get("output_file") or evidence.get("output_digest"),
-            took,
-        )
+        if end <= 0 or end > now:
+            continue
+        same = evidence.get("output_file") or evidence.get("output_digest") or ev.lamport
+        once = (ev.subject, _gate(ev), same, took)
         if once in seen:
             continue
         seen.add(once)
-        waves = max(1, -(-int(chunks) // WAVE_CHUNKS)) if isinstance(chunks, int) else 1
+        waves = evidence.get("waves")  # recorded since bug B1c5dbe3103; estimated before
+        if not isinstance(waves, int) or isinstance(waves, bool) or waves < 1:
+            waves = max(1, -(-int(chunks) // WAVE_CHUNKS)) if isinstance(chunks, int) else 1
         out.append((end - took, end, took / waves))
     return out
 
 
 def reviewer_latency_ratio(events: Sequence[Event], now: float) -> float | None:
-    samples = sorted(_review_samples(events))
+    samples = sorted(_review_samples(events, now))
     recent = [s for s in samples if now - RECENT_REVIEW_S < s[1] <= now]
     base = [
         s for s in samples if now - RECENT_REVIEW_S - BASELINE_S < s[1] <= now - RECENT_REVIEW_S
@@ -225,7 +227,9 @@ def history_notes(signals: Signals, enabled: Collection[str] | None = None) -> l
     notes = []
     for name in ("reviewer_latency_ratio", "gate_failure_rate", "merge_failure_rate"):
         if shown(name) and getattr(signals, name) is None:
-            notes.append(f"{name}: too little history in the log yet (neutral, not used)")
+            # the latency ratio is also None while too few reviews run at once to be busy
+            idle = ", or too few reviews in flight to be busy" if name.startswith("rev") else ""
+            notes.append(f"{name}: too little history in the log yet{idle} (neutral, not used)")
     if shown("gate_failure_ratio") and signals.gate_failure_ratio is None:
         if signals.gate_failure_rate is not None:
             # the recent hour is there: the 7-day baseline is what is short

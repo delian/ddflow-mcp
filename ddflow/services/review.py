@@ -325,6 +325,10 @@ class ReviewResult:
     chunks_reviewed: int = 0
     chunks_off_contract: int = 0
     elapsed_s: float = 0.0
+    #: How many rounds the sent chunks needed at the reviewer's concurrency (one when they
+    #: all went out at once): `elapsed_s / waves` is the reviewer's time per request,
+    #: which the adaptive flow controller reads as reviewer latency (bug B1c5dbe3103).
+    waves: int = 1
     raw: str = ""
     #: One entry per chunk that produced no review: ``{"chunk", "files", "reason"}``.
     #: Every one of them, not the first -- a PARTIAL that names one cause for three
@@ -369,6 +373,7 @@ class ReviewResult:
             "diff_sha": self.diff_sha,
             "max_chunk_chars": self.max_chunk_chars,
             "chunks_total": self.chunks_total,
+            "waves": self.waves,
             "chunk_findings": [
                 {
                     "chunk": f.chunk,
@@ -1488,6 +1493,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
 
     # `_race` and the retry index the SENT chunks (positions in `wanted`); progress and
     # absorption speak chunk numbers.
+    res.waves = -(-len(users) // _concurrency(rev, len(users))) if users else 1
     first = _race(
         rev,
         system,

@@ -266,5 +266,41 @@ def test_a_triage_gap_before_a_hand_recorded_outcome_is_not_a_sample():
         review = next(e for e in log.events if e.subject == f"r{i}" and e.kind == "gate.passed")
         log.add("gate.passed", f"r{i}", NOW - 30, gate="critic", evidence=review.data["evidence"])
     assert _signals(log).reviewer_latency_ratio == 1.0
-    samples = FS._review_samples(log.events)
+    samples = FS._review_samples(log.events, NOW)
     assert len(samples) == 20 + 5 * 4  # the baseline, and each busy review once
+
+
+def test_a_review_dated_after_now_is_neither_a_sample_nor_in_flight():
+    log = Log()
+    _baseline(log)
+    for i in range(5):  # one at a time: not busy
+        log.review(f"r{i}", "critic", 25 * MIN - i * 300, 300)
+    # a skewed clock: an outcome stamped in the future, "running" across every recent start
+    log.review("skew", "critic", 30 * MIN, 30 * MIN + 60)
+    assert _signals(log).reviewer_latency_ratio is None
+
+
+def test_recorded_waves_beat_the_estimate():
+    log = Log()
+    _baseline(log)
+    _busy(log, 300, chunks=1)
+    for e in log.events:  # these reviews say they went out in 3 waves (a capped reviewer)
+        if isinstance(e.data.get("evidence"), dict) and e.subject[0] in "rc":
+            e.data["evidence"]["waves"] = 3
+    assert _signals(log).reviewer_latency_ratio == pytest.approx(1.0)
+
+
+def test_the_idle_reviewer_is_named_in_the_note():
+    notes = FS.history_notes(FS.Signals(None, 0.1, 0.0, gate_failure_ratio=1.0))
+    assert notes == [
+        "reviewer_latency_ratio: too little history in the log yet, or too few reviews in "
+        "flight to be busy (neutral, not used)"
+    ]
+
+
+def test_a_review_records_its_waves_for_the_signal():
+    from ddflow.services import review as R
+
+    res = R.ReviewResult("lan", "m", "deepseek", waves=3)
+    assert res.evidence()["waves"] == 3
+    assert R.ReviewResult("lan", "m", "deepseek").evidence()["waves"] == 1
