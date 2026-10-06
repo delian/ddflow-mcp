@@ -65,6 +65,11 @@ def _looks_like_several(entry: str) -> bool:
     return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
+#: A next entry that is plainly a test path: `tests/x.py`, then `::`, a separator,
+#: whitespace or the end (never `]`: `t[a],b.py]` is one value).
+_NEXT_PATH = re.compile(r"\s*[\w./-]+\.py(?=::|[\s,;]|$)")
+
+
 def _closes_unopened(rest: str) -> bool:
     """Whether `rest` closes a `]` it never opened: the separator before it was INSIDE a
     parametrize id (`t[a],b]`), not between two entries."""
@@ -84,14 +89,18 @@ def _split_outside_brackets(spec: str) -> list[str]:
     value may hold `]`, `[`, `,` and `;` (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`, `t[[a],b]`).
     Counting drove the depth negative and swallowed every later separator, so a missing
     second test was never resolved (Bfc9daca269). A node id's brackets END it, so once an
-    entry has opened a `[`, a separator ends the entry only right after a `]`, and only
-    when the rest does not close a bracket it never opened.
+    entry has opened a `[`, a separator ends it only right after a `]`, and only when a
+    test path follows or the rest closes no bracket it never opened. The one shape this
+    cannot tell apart, a command holding a stray `]` after a bracketed id, stays one entry.
     """
     out, cur, bracketed = [], [], False
     for i, ch in enumerate(spec):
         if ch in ",;" and (
             not bracketed
-            or ("".join(cur).rstrip().endswith("]") and not _closes_unopened(spec[i + 1 :]))
+            or (
+                "".join(cur).rstrip().endswith("]")
+                and (_NEXT_PATH.match(spec, i + 1) or not _closes_unopened(spec[i + 1 :]))
+            )
         ):
             out.append("".join(cur))
             cur, bracketed = [], False

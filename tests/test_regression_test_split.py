@@ -58,6 +58,15 @@ def test_a_value_whose_inner_bracket_meets_a_separator_stays_one_entry(node):
         ("tests/a.py::t[1], pytest -k x", ["tests/a.py::t[1]", "pytest -k x"]),
         # two bracketed ids, the second one's value holding a bracket of its own
         ("tests/a.py::t[a],b],tests/c.py::d[e]", ["tests/a.py::t[a],b]", "tests/c.py::d[e]"]),
+        # fourth review: a LATER entry's stray `]` must not cancel an earlier split
+        (
+            "tests/a.py::t[x],tests/missing.py::t2[a]b]",
+            ["tests/a.py::t[x]", "tests/missing.py::t2[a]b]"],
+        ),
+        (
+            "tests/a.py::t[a],b],tests/c.py::d[f],e]",
+            ["tests/a.py::t[a],b]", "tests/c.py::d[f],e]"],
+        ),
     ],
 )
 def test_third_review_cases(spec, entries):
