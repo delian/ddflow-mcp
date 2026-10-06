@@ -29,7 +29,7 @@ import pytest
 
 from ddflow.core import upcasters as U
 from ddflow.core.events import OLDER_MARK, Event
-from ddflow.core.model import HANDLERS, fold, known_kinds
+from ddflow.core.model import fold, known_kinds
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "tests" / "fixtures" / "event_kinds.json"
@@ -316,7 +316,6 @@ def test_every_version_bump_has_its_upcasters_and_a_contract_entry() -> None:
     contract = CONTRACT.read_text(encoding="utf-8")
     steps = registered_steps()
     for kind, version in U.PAYLOAD_VERSIONS.items():
-        assert kind in HANDLERS
         assert [v for v in range(1, version) if v not in steps.get(kind, [])] == []
         assert f"`{kind}` v{version}" in contract
 

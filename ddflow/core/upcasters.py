@@ -44,7 +44,8 @@ VERSION_KEY = "v"
 PAYLOAD_VERSIONS: dict[str, int] = {}
 
 #: An upcaster: (kind, version-v payload) -> (kind, version-v+1 payload). Pure; it must
-#: not mutate its input.
+#: not mutate its input. One that RENAMES the kind returns a payload of the new kind, at the
+#: version its ``v`` says (absent: 1) -- so it sets or drops ``v``, never copies the old one.
 Upcaster = Callable[[str, Mapping[str, Any]], tuple[str, dict[str, Any]]]
 
 #: (kind, v) -> the upcaster from version v to v + 1 of that kind.
