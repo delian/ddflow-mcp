@@ -65,27 +65,29 @@ def _looks_like_several(entry: str) -> bool:
     return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
+#: What starts the NEXT entry of a list: a test file path (`tests/test_x.py`, then `::`,
+#: a separator, whitespace or the end).
+_NEXT_PATH = re.compile(r"\s*[\w./-]+\.py(?![\w.])")
+
+
 def _split_outside_brackets(spec: str) -> list[str]:
     """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
-    refused as a single missing test. A value may hold `]` itself (`t[x]y]`, `t[a]b]c,d]`),
-    so the id's brackets close only at a `]` that ENDS the entry -- one followed by a
-    separator, whitespace or the end. Counting every `]` drove the depth negative and
-    swallowed every later separator, so a missing second test was never resolved
-    (Bfc9daca269); clamping at zero split `t[a]b]c,d]` inside its own brackets.
+    refused as a single missing test. Brackets cannot be counted: a parametrize value may
+    hold `]`, `[`, `,` and `;` in any order (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`,
+    `t[[a],b]`). Counting drove the depth negative and swallowed every later separator,
+    so a missing second test was never resolved (Bfc9daca269); clamping it split a value
+    inside its own brackets. So once an entry has opened a `[`, a separator ends it only
+    where the next entry starts with a test file path.
     """
-    out, inside, cur = [], False, []
+    out, cur, bracketed = [], [], False
     for i, ch in enumerate(spec):
-        if ch in ",;" and not inside:
+        if ch in ",;" and (not bracketed or _NEXT_PATH.match(spec, i + 1)):
             out.append("".join(cur))
-            cur = []
+            cur, bracketed = [], False
             continue
-        if ch == "[":
-            inside = True
-        elif ch == "]" and inside:
-            after = spec[i + 1 : i + 2]
-            inside = not (after == "" or after in ",;" or after.isspace())
+        bracketed = bracketed or ch == "["
         cur.append(ch)
     out.append("".join(cur))
     return [e.strip() for e in out if e.strip()]
