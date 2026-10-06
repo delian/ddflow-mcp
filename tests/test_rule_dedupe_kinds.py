@@ -1,0 +1,148 @@
+"""D-rule-dedupe-everywhere: a rule is compared with every record kind when it is added or
+edited -- decisions, lessons, research, tasks -- with the same ask / extend / related
+answers as every other add, on the CLI and over MCP. Before, a rule was compared only with
+the other rules, so a rule restating a binding decision was filed without a word."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from conftest import run_cli
+
+from ddflow.api import rules as R
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+from ddflow.surfaces.mcp import Server
+
+DECISION = (
+    "every migration script runs inside one database transaction and is rolled back "
+    "whole when any statement in it fails"
+)
+RESTATED = (
+    "each migration script must run inside a single database transaction and be rolled "
+    "back whole when any of its statements fails"
+)
+UNRELATED = "name every test after the behaviour it pins, never after the function it calls"
+
+
+@pytest.fixture
+def proj(repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    code, out, err = run_cli(repo, "init")
+    assert code == 0, (code, out, err)
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "off")
+    code, out, err = run_cli(
+        repo, "decision", "add", "--id", "D-mig", "--title", DECISION, "--decision", DECISION
+    )
+    assert code == 0, (code, out, err)
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "ask")
+    return repo
+
+
+def _rules(proj: Path) -> set[str]:
+    return {r.id for r in R.RulesStorage(proj).list()}
+
+
+def test_a_rule_restating_a_decision_is_refused(proj):
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-mig", "--title", "Migrations", "--content", RESTATED
+    )
+    assert code == 3, (code, out, err)
+    assert "refused: possible duplicate" in err and "D-mig" in err
+    assert "r-mig" not in _rules(proj), "a refusal files nothing"
+
+
+def test_an_unrelated_rule_is_filed(proj):
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-names", "--title", "Test names", "--content", UNRELATED
+    )
+    assert code == 0, (code, out, err)
+    assert "r-names" in _rules(proj)
+
+
+def test_new_files_it(proj):
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-mig", "--title", "Migrations", "--content", RESTATED,
+        "--new",
+    )  # fmt: skip
+    assert code == 0, (code, out, err)
+    assert "r-mig" in _rules(proj)
+
+
+def test_related_files_it_and_names_the_decision(proj):
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-mig", "--title", "Migrations", "--content", RESTATED,
+        "--related", "D-mig",
+    )  # fmt: skip
+    assert code == 0, (code, out, err)
+    assert "r-mig" in _rules(proj) and "related to D-mig" in out
+
+
+def test_extends_puts_the_text_on_the_open_decision_and_files_no_rule(proj):
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-mig", "--title", "Migrations", "--content", RESTATED,
+        "--extends", "D-mig",
+    )  # fmt: skip
+    assert code == 0, (code, out, err)
+    assert "r-mig" not in _rules(proj)
+    assert "D-mig" in out
+    st = fold(EventLog(proj, "t").read_all(), strict=False)
+    added = st.links["D-mig"].additions.values()
+    assert any(RESTATED in (a.get("text") or "") for a in added), list(added)
+
+
+def test_check_lists_the_decision_and_writes_nothing(proj):
+    code, out, err = run_cli(
+        proj, "--json", "rule", "add", "--id", "r-mig", "--title", "Migrations",
+        "--content", RESTATED, "--check",
+    )  # fmt: skip
+    assert code == 0, (code, out, err)
+    assert "D-mig" in out and "r-mig" not in _rules(proj)
+
+
+def test_an_edit_that_restates_a_decision_is_refused_until_answered(proj):
+    assert R.rule_add(proj, R.Rule(id="r-x", title="Test names", content=UNRELATED)).exit == 0
+    code, out, err = run_cli(proj, "rule", "edit", "r-x", "--content", RESTATED)
+    assert code == 3, (code, out, err)
+    assert "D-mig" in err
+    assert R.RulesStorage(proj).get("r-x").content == UNRELATED, "a refused edit changes nothing"
+    code, out, err = run_cli(
+        proj, "rule", "edit", "r-x", "--content", RESTATED, "--related", "D-mig"
+    )
+    assert code == 0, (code, out, err)
+    assert R.RulesStorage(proj).get("r-x").content == RESTATED
+    assert "related to D-mig" in out
+
+
+def _mcp(proj: Path, name: str, args: dict) -> dict:
+    srv = Server(proj, agent="m")
+    srv.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    r = srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        }
+    )
+    return json.loads(r["result"]["content"][0]["text"])
+
+
+def test_mcp_refuses_then_takes_the_answer(proj):
+    args = {"id": "r-mig", "title": "Migrations", "content": RESTATED}
+    body = _mcp(proj, "ddflow_rule_add", args)
+    assert body.get("refusal"), body
+    assert any(c["id"] == "D-mig" for c in body["candidates"])
+    body = _mcp(proj, "ddflow_rule_add", {**args, "related": "D-mig"})
+    assert body.get("related") == "D-mig", body
+    assert "r-mig" in _rules(proj)
+
+
+def test_mcp_edit_takes_new(proj):
+    assert R.rule_add(proj, R.Rule(id="r-x", title="Test names", content=UNRELATED)).exit == 0
+    body = _mcp(proj, "ddflow_rule_edit", {"id": "r-x", "content": RESTATED})
+    assert body.get("refusal"), body
+    body = _mcp(proj, "ddflow_rule_edit", {"id": "r-x", "content": RESTATED, "new": True})
+    assert "refusal" not in body, body
+    assert R.RulesStorage(proj).get("r-x").content == RESTATED
