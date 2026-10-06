@@ -41,7 +41,9 @@ def h_granted(st: State, ev: Event) -> None:
     if not row["digest"]:
         return
     st.approvals.setdefault(subject, []).append(row)
-    if subject.startswith(REVIEWER) and row["human"]:  # the trust table holds people's only
+    # Only a grant that says a person made it: `agent_marker` is the gate at grant time,
+    # and like every human checkpoint this makes a forgery visible, not impossible.
+    if subject.startswith(REVIEWER) and row["human"]:
         st.reviewer_approvals[row["digest"]] = {
             "name": subject[len(REVIEWER) :],
             "user": row["user"],

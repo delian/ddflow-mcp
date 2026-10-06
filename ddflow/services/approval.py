@@ -152,7 +152,8 @@ def check(state, subject: str, digest: str, *, token: str = "") -> Verdict:
     single-use one whose ``token`` is presented and not yet spent. An approval of an
     earlier digest does not carry over to a later edit.
     """
-    # A person's approval only: a hand-written grant that does not say `human` is none.
+    # A grant that says a person made it (`human`; `agent_marker` refused the rest at
+    # grant time). An event written by hand without it approves nothing.
     rows = [r for r in state.approvals.get(subject, []) if r.get("human")]
     if not rows:
         return Verdict(False, f"{subject} has not been approved")
