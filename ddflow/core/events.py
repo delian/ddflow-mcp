@@ -238,7 +238,7 @@ def canonical(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def content_digest(obj: Any, *, size: int = 12) -> str:
+def canonical_digest(obj: Any, *, size: int = 12) -> str:
     """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id, and a
     definition record's content digest (`core.defs`). One hash for both, so the same
     content always reads as the same digest."""
@@ -307,7 +307,7 @@ class Event:
         }
 
     def compute_id(self) -> str:
-        return "e" + content_digest(self.body())
+        return "e" + canonical_digest(self.body())
 
     def to_json(self) -> str:
         d = self.body()

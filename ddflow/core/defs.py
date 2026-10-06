@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .events import content_digest
+from .events import canonical_digest
 
 #: The definition kinds, and what each is. A family starts writing its definitions here
 #: by name; a kind not listed is refused at the write path (`api.defs`), so a typo cannot
@@ -59,7 +59,7 @@ def key(kind: str, rid: str) -> str:
 
 def digest(fields: dict[str, Any]) -> str:
     """The content digest of a definition's fields: equal fields, equal digest."""
-    return content_digest(fields, size=16)
+    return canonical_digest(fields, size=16)
 
 
 @dataclass

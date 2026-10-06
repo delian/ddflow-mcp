@@ -19,7 +19,7 @@ from conftest import run_cli
 
 from ddflow.api import defs as A
 from ddflow.core import defs as D
-from ddflow.core.events import PROVENANCE_KINDS, Event, canonical, content_digest
+from ddflow.core.events import PROVENANCE_KINDS, Event, canonical, canonical_digest
 from ddflow.core.model import HANDLERS, fold
 from ddflow.infra.log import EventLog
 
@@ -43,12 +43,12 @@ def test_the_five_kinds_are_folded_and_kept_as_provenance():
 
 
 def test_event_ids_are_unchanged_by_the_shared_digest():
-    """`compute_id` now goes through `content_digest`; every id already in a log must
+    """`compute_id` now goes through `canonical_digest`; every id already in a log must
     still be the id its content hashes to."""
     ev = _ev("task.added", "T1", {"title": "x"}, 7, ts="2026-01-01T00:00:00Z")
     want = "e" + hashlib.blake2b(canonical(ev.body()).encode(), digest_size=12).hexdigest()
     assert ev.compute_id() == want
-    assert D.digest({"a": 1}) == content_digest({"a": 1}, size=16)
+    assert D.digest({"a": 1}) == canonical_digest({"a": 1}, size=16)
     assert D.digest({"a": 1, "b": 2}) == D.digest({"b": 2, "a": 1})
 
 
