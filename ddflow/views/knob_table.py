@@ -100,8 +100,12 @@ def hand_edited(readme: str) -> bool:
 
 def main(argv: list[str]) -> int:
     """Rewrite the generated region of the README named in `argv` (default README.md).
-    A region edited by hand is refused (exit 3) unless `--force`: rewriting it would
-    drop the edit, and the table is the declarations' to change, not the README's."""
+
+    A region edited by hand is refused (exit 3) unless `--force`: rewriting it would drop
+    the edit, and the table is the declarations' to change, not the README's. This is the
+    interim policy: D-doc-regions' refresh -- a 3-way merge of the edit, stopping only on a
+    conflict, with --keep-mine -- arrives with its region engine (B-tpl-regions,
+    B-tpl-merge), which this region then moves onto."""
     force = "--force" in argv
     paths = [a for a in argv if a != "--force"]
     path = Path(paths[0] if paths else "README.md")
@@ -113,8 +117,8 @@ def main(argv: list[str]) -> int:
     if hand_edited(text) and not force:
         print(
             f"{path}: the {REGION} region was edited by hand (its body no longer matches its "
-            "sha); change the knob declarations instead, then rerun with --force to discard "
-            "the edit",
+            "sha). Move the edit outside the region (or into the knob declarations), then "
+            "rerun; --force rewrites the region and discards the edit",
             file=sys.stderr,
         )
         return 3
