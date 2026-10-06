@@ -3656,11 +3656,10 @@ that is broken is refused before anything is written. Two enabled jobs may not r
 same time when they share a concurrency group or their scope globs overlap (shared globs
 exempt). A job's runs are the `cadence.ran` records under its id.
 
-```console
-$ ddflow schedule list            # --tag T, --enabled
-$ ddflow schedule show bug-audit  # source, shadows, needs and needed-by, conflicts, runs
-$ ddflow schedule search weekly audit
-```
+The read verbs are `list` (by tag, enabled only), `show` (source, what it shadows, needs and
+needed-by, the jobs it may not run beside, runs) and `search` (every word must match). They
+are built with their parser (`surfaces/commands/schedule.py`); the `schedule` CLI group and
+its MCP tool are mounted together with job authoring (add, edit, enable, disable).
 
 ---
 
