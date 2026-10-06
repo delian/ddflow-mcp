@@ -1,0 +1,6 @@
+# Upstream files, byte for byte, held to their sha256 by tests/test_mcp_protocol_conformance.py.
+# `binary` (-diff -merge -text): shown as binary in a diff, so a review reads the code that
+# uses them and not 15,000 lines of vendored JSON Schema (`git diff --text` still shows
+# them), and never converted to CRLF on checkout, which would break the sha256 check.
+*/schema.json binary linguist-vendored
+LICENSE binary linguist-vendored
