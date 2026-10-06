@@ -460,7 +460,7 @@ def cmd_bug(a, c: Ctx) -> int:
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
-        out.body(("id", "regression_verified", "lesson_capture")),
+        out.body(("id", "regression_verified", "lesson_captured", "lesson_capture")),
     )
     return OK
 
