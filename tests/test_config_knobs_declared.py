@@ -116,3 +116,24 @@ def test_a_knob_declared_twice_is_an_error() -> None:
 
     with pytest.raises(ValueError, match="declared twice"):
         K._doc("loops", "on_detect", "again")
+
+
+def _literal_keys() -> set[str]:
+    """Keys written out in config.py's knob tables and its hand-written checks."""
+    keys: set[str] = set()
+    for node in ast.parse(CONFIG_PY.read_text("utf-8")).body:
+        name = getattr(getattr(node, "target", None), "id", "")
+        if name in (*_TABLES, "_VALUE_CHECKS") and isinstance(node.value, ast.Dict):
+            keys |= {k.value for k in node.value.keys if isinstance(k, ast.Constant)}
+    return keys
+
+
+def test_no_declared_knob_is_left_in_a_config_table() -> None:
+    """A table literal comes after the declared entries, so one left behind would shadow
+    the field's declaration with no error."""
+    assert not set(K.DECLARED) & _literal_keys()
+
+
+def test_a_section_declares_only_its_own_knobs() -> None:
+    for key, module in K.DECLARED_IN.items():
+        assert module == f"ddflow.config_sections.{key.split('.', 1)[0]}", (key, module)

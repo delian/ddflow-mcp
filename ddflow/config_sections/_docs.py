@@ -18,8 +18,9 @@ outward values and value check into `DECLARED`, from which `ddflow.config` build
 `KNOB_CHOICES`, `KNOB_STRICTEST`, `KNOB_OUTWARD` and the load/`config --set` checks. The
 older form -- a bare field, a separate `_doc(...)` call and an entry in each of those
 tables in config.py -- still works while the sections move over; a ratchet
-(tests/test_config_knobs_declared.py) counts what is left of it and only lets it shrink,
-and a knob declared both ways is an error at import.
+(tests/test_config_knobs_declared.py) counts what is left of it and only lets it shrink.
+A knob declared twice is an error: at import for its doc, and in that test for a table
+entry left behind in config.py (where it would silently shadow the declared value).
 """
 
 from __future__ import annotations
@@ -57,6 +58,8 @@ class Knob:
 
 #: Every knob declared through `knob()`, by "section.knob", in declaration order.
 DECLARED: dict[str, Knob] = {}
+#: The module whose `declare()` registered each of them (a section declares only its own).
+DECLARED_IN: dict[str, str] = {}
 
 
 def knob(
@@ -96,6 +99,7 @@ def declare(section: str) -> Callable[[type], type]:
                 raise ValueError(f"knob {key} is declared twice")
             KNOB_DOCS[key] = meta.doc
             DECLARED[key] = meta
+            DECLARED_IN[key] = cls.__module__
         return cls
 
     return register
