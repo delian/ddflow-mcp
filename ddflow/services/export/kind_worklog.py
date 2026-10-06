@@ -17,12 +17,12 @@ entry in the log (never "now": the same log must give the same bytes).
 
 from __future__ import annotations
 
-import re
 from datetime import date, timedelta
 from typing import Any
 
 from . import registry
 from .frame import one_line
+from .kind_changelog import _fixed_bugs
 from .query import Query
 
 #: Window used when no ``--since`` is given.
@@ -41,7 +41,6 @@ _LABEL = {
     "research.recorded": "research",
 }
 _KINDS = (*_LABEL, "session.note")
-_FIXES = re.compile(r"\(fixes bugs? ([^)]*)\)")
 
 
 def _day(e: Any) -> str:
@@ -163,11 +162,10 @@ def _fold_bug_fixes(q: Query, groups: dict[tuple[str, str, str], dict[str, Any]]
         if kind != "item" or ("completed" not in g["labels"] and "merged" not in g["labels"]):
             continue
         it = q.item(subject)
-        m = _FIXES.search(it.title) if it else None
-        if not m:
-            continue
-        for raw in m.group(1).split(","):
-            bug = raw.strip()
+        # The changelog's parser: "(fixes bugs A, B and X)" names A, B and X. Splitting
+        # on commas alone read "B and X" as one id and left both bugs on their own lines
+        # (Bf228d082de).
+        for bug in _fixed_bugs(it.title) if it else []:
             other = groups.get((day, "item", bug))
             if other is not None and set(other["labels"]) <= {"bug fixed"}:
                 g["labels"].setdefault("bug fixed", other["labels"]["bug fixed"])
