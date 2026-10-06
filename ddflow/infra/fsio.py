@@ -273,9 +273,14 @@ class Region:
         at = 0
         for line in text.splitlines(keepends=True):
             bare = line.rstrip("\n").removesuffix("\r")
-            if b.fullmatch(bare):
+            is_end = e.fullmatch(bare) is not None
+            # An open region's closing line is its end even when it also matches `begin`:
+            # one marker line can open and close (`---` around front matter).
+            if is_end and len(begins) > len(ends):
+                ends.append((at, at + len(line)))
+            elif b.fullmatch(bare):
                 begins.append((at, at + len(line)))
-            elif e.fullmatch(bare):
+            elif is_end:
                 ends.append((at, at + len(line)))
             at += len(line)
         if not begins and not ends:
