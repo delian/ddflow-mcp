@@ -15,6 +15,7 @@ its docstring, which is the discoverability contract this module exists to keep.
 from __future__ import annotations
 
 import dataclasses
+import functools
 import json
 import os
 import sys
@@ -72,6 +73,14 @@ from .config_sections.flow import (
 )
 from .config_sections.gates import (
     GatesConfig,
+)
+from .config_sections.ids import (  # noqa: F401
+    ID_KINDS,
+    ID_PREFIXES,
+    ID_TOKENS,
+    IdsConfig,
+    id_problem,
+    id_template_problem,
 )
 from .config_sections.imports import (
     ImportConfig,
@@ -194,6 +203,7 @@ class Config:
     export: ExportConfig = field(default_factory=ExportConfig)
     rules: RulesConfig = field(default_factory=RulesConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
+    ids: IdsConfig = field(default_factory=IdsConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "local" | "env",
     #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong
@@ -696,7 +706,9 @@ def strictest(key: str) -> str:
 #: does not know is tolerated with a warning rather than refused -- an enum knob then
 #: takes its strictest value (`KNOB_STRICTEST`); the write paths (`config --set`,
 #: `ddflow_configure`) and the environment still refuse it.
-_TOLERANT_VALUES = frozenset({*KNOB_CHOICES, "export.tables"})
+_TOLERANT_VALUES = frozenset(
+    {*KNOB_CHOICES, "export.tables", "bugs.phase", *(f"ids.{k}" for k in ID_KINDS)}
+)
 
 
 def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
@@ -751,6 +763,11 @@ _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
         else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
     ),
     "enforce.trailer_waivers": _waivers_problem,
+    # [ids] templates and the one fixed id (the bugs phase): ids are file names, branch
+    # names and glob tokens (D-id-schemes-final). Tolerated in a file (the default stays,
+    # doctor names it), refused by the write paths.
+    **{f"ids.{k}": functools.partial(id_template_problem, k) for k in ID_KINDS},
+    "bugs.phase": id_problem,
     "schedule.max_parallel_tasks": _int_at_least(1),
     "schedule.max_parallel_min": _int_at_least(1),
     "schedule.max_parallel_max": _int_at_least(1),
