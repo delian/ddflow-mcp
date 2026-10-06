@@ -2180,7 +2180,8 @@ entirely. Adding an id that already exists keeps the refusal or merge it always 
 the log before the add writes, so it is advisory across agents: two adds of the same text
 racing in different clones can both pass, and a later `similar` will show the pair. The
 check is also a function, `api.dedupe_check_add`, taking a config that may have `on_match`
-replaced (`api._dedupe.with_check`), so a bulk caller need not go through the add paths. The
+replaced (`dataclasses.replace` on `cfg.dedupe`), so a bulk caller need not go through the
+add paths. The
 importer applies the same engine and `[dedupe]` thresholds to a batch with its own
 reconciliation (see the import section), not through this function.
 
