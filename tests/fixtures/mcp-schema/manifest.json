@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/modelcontextprotocol/modelcontextprotocol",
+  "commit": "8e12bf3c8f01f374146acfa19b8ece0018bfc86c",
+  "fetched": "2026-10-06",
+  "path": "schema/<revision>/schema.json",
+  "licence": "Apache-2.0, or MIT for contributions not yet relicensed: the upstream LICENSE at that commit, copied beside this file",
+  "license_sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+  "files": {
+    "2024-11-05": {"sha256": "61cea2392d4f284092d09bc84b9ac488c0d5618ac2b38a56942fc5b99fd960ce"},
+    "2025-03-26": {"sha256": "e720669548c8100a4282c49e580efd6ddf7f28899ea786fc8db251dbdb356131"},
+    "2025-06-18": {"sha256": "af845e7e5b9d27107d1690f0936022546177a1403e63ffb11470135b296a2e01"},
+    "2025-11-25": {"sha256": "268a5f82ba70fd7e4b6dc4aa1e64f116f74b4d0edcb69dc046829c79dd4e97e7"},
+    "2026-07-28": {"sha256": "ef70b61f99b6d2e5e3b46863822eab08dff6a45bedc7a08914e0e5b133f40203"}
+  }
+}
