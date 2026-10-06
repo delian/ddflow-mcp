@@ -543,7 +543,9 @@ def test_cli_with_an_unloadable_registry_fails_like_the_plain_report(repo, tmp_p
     """No per-companion result exists, so there is nothing to call a non-server: it is the
     same failure (exit 1, the reason on stderr) `ddflow companions` gives for that file."""
     (repo / ".ddflow").mkdir(exist_ok=True)
-    (repo / ".ddflow" / "companions.toml").write_text('[[companion]]\nid = "x"\nbogus = 1\n')
+    # A bad `kind`, not an unknown field: outside the code tree that is a newer checkout's
+    # field and is skipped with a warning (B0016a65167).
+    (repo / ".ddflow" / "companions.toml").write_text('[[companion]]\nid = "x"\nkind = "bogus"\n')
     plain = _cli(repo, "companions")
     verify = _cli(repo, "companions", "--verify")
     assert plain[0] == 1 and verify[0] == 1

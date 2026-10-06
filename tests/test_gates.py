@@ -120,7 +120,11 @@ def test_gates_overlay_rather_than_replace(repo, cfg):
     assert gates["bug_hunt"].prompt, "unmentioned gates must keep their defaults"
 
 
-def test_an_unknown_gate_field_is_an_error_not_a_silent_drop(repo, cfg):
+def test_an_unknown_gate_field_is_an_error_not_a_silent_drop(repo, cfg, monkeypatch):
+    # In the code tree; elsewhere it is a newer checkout's field, skipped (B0016a65167).
+    import ddflow.config as C
+
+    monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())
     (repo / ".ddflow").mkdir(exist_ok=True)
     (repo / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncomand = "typo"\n')
     with pytest.raises(ValueError, match="unknown field"):
