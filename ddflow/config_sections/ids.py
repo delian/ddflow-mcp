@@ -102,7 +102,7 @@ def id_template_problem(kind: str, template: Any) -> str:
             "only ASCII letters, digits, '.', '_' and '-' may appear outside the tokens"
         )
     shape = re.sub(r"\{[^{}]*\}", "x", template)  # each token stands for some text
-    if shape[0] in ".-" or shape.endswith(".") or ".." in literal or shape.endswith(".lock"):
+    if shape[0] in ".-" or shape.endswith(".") or ".." in shape or shape.endswith(".lock"):
         return (
             "must not start with '.' or '-', end with '.' or '.lock', or hold '..' (git "
             "refuses such branch names)"
