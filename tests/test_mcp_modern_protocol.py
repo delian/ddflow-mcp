@@ -319,3 +319,16 @@ def test_input_validation_errors_are_tool_execution_errors(repo):
     assert (
         "unknown argument(s) for ddflow_show: no_such_argument" in r["result"]["content"][0]["text"]
     )
+
+
+def test_a_valid_as_agent_wins_over_a_malformed_meta_name(repo):
+    """Rubber-duck and critic: `_meta` was validated first, so a bad `_meta` name refused
+    a call whose `as_agent` -- documented to win -- was fine."""
+    _project(repo)
+    srv = Server(repo, agent="")
+    res = _tool(
+        srv, "ddflow_update", {"id": "T1", "title": "a", "as_agent": "alice"},
+        **{M.META_AGENT: "not a name!"},
+    )  # fmt: skip
+    assert not res.get("isError"), res["content"][0]["text"]
+    assert _authors(repo)["T1"] == "alice"
