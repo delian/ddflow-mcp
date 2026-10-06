@@ -45,4 +45,26 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
     from ..services.choices import overlay
 
     overlay(cfg, st)
+    _sample_flow(repo, log, cfg, st)
     return log, cfg, st
+
+
+def _sample_flow(repo: Path, log: EventLog, cfg: Config, st: State) -> None:
+    """Take an adaptive-parallelism sample when one is due (B-af-sampler).
+
+    Here, because every operation loads the project through `_load`: `next`, `brief`,
+    `claim` and `heartbeat` sample without a daemon, and heartbeats already run every
+    `lease.heartbeat_s` on every platform. Throttled to one sample per
+    `schedule.signal_interval_s`, writing only under the git-ignored `.ddflow/local/`,
+    and never raising: a sample that cannot be taken costs this command nothing.
+    """
+    if cfg.schedule.parallel != "auto" or not (Path(repo) / ".ddflow").is_dir():
+        return
+    try:
+        from ..infra import signals as SIG
+        from ..services import flowstate as FL
+
+        ctx = FL.FlowCtx(repo=Path(repo), cfg=cfg, state=st, events=log.read_all())
+        FL.sample_if_due(ctx, SIG.HostSignals(repo))
+    except Exception:
+        return
