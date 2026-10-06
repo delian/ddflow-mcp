@@ -499,6 +499,40 @@ class Server:
         own = self.agent or _default_agent(self.repo)[0]
         return per_call != own
 
+    def _caller(
+        self, params: dict[str, Any], args: dict[str, Any], modern: bool
+    ) -> tuple[str, str, dict[str, Any], str]:
+        """(the agent this call runs as, the name the call itself gave -- "" for none --,
+        the arguments without `as_agent`, why the name cannot be used -- "" when it can).
+
+        The connection's identity, unless the call names one: on a stateless request its
+        `_meta` agent (D-mcp-identity-per-call), and on any request the `as_agent`
+        argument, which wins over both."""
+        agent, per_call = self.agent, ""
+        if modern:
+            per_call, bad = _meta_agent(params)
+            if bad:
+                return agent, "", args, bad
+            agent = per_call or agent
+        if AS_AGENT not in args:
+            return agent, per_call, args, ""
+        args = dict(args)
+        want = args.pop(AS_AGENT)
+        if not isinstance(want, str):
+            return agent, "", args, f"{AS_AGENT} must be a string"
+        want = want.strip()
+        if want and not _VALID_AGENT.fullmatch(want):
+            return (
+                agent,
+                "",
+                args,
+                (
+                    f"{want!r} is not a usable agent name: use letters, digits, "
+                    f"'.', '_' or '-', up to 64 characters."
+                ),
+            )
+        return want or agent, want or per_call, args, ""
+
     def _invoke(self, spec, args, agent, per_call, params):
         """Run a tool's typed `api`; the connection facts it needs are passed in."""
         # `called_from` only where the tool asks for it. `claim` is the one
@@ -656,30 +690,9 @@ class Server:
             # The per-call identity, stripped BEFORE the tool sees its arguments so no
             # api lambda has to know it exists. Validated with the same rule as a
             # declaration: it becomes a log shard filename either way.
-            agent = self.agent
-            per_call = ""  # the `as_agent` (or modern `_meta` agent) this call named
-            if modern:  # D-mcp-identity-per-call; `as_agent` below still wins over it
-                per_call, bad = _meta_agent(params)
-                if bad:
-                    return _ok(mid, _text(bad, error=True))
-                agent = per_call or agent
-            if AS_AGENT in args:
-                args = dict(args)
-                want = args.pop(AS_AGENT)
-                if not isinstance(want, str):
-                    return _ok(mid, _text(f"{AS_AGENT} must be a string", error=True))
-                want = want.strip()
-                if want and not _VALID_AGENT.fullmatch(want):
-                    return _ok(
-                        mid,
-                        _text(
-                            f"{want!r} is not a usable agent name: use letters, digits, "
-                            f"'.', '_' or '-', up to 64 characters.",
-                            error=True,
-                        ),
-                    )
-                per_call = want
-                agent = want or agent
+            agent, per_call, args, bad = self._caller(params, args, modern)
+            if bad:
+                return _ok(mid, _text(bad, error=True))
             # The typed path, when this tool has one. No argv, no re-parsing, no
             # scraping stdout, and no swapping process-global streams -- which is what
             # made the string path non-reentrant. `api` is where a protocol adapter
