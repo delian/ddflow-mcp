@@ -89,6 +89,27 @@ def test_exclusive_works_where_hard_links_do_not(tmp_path, monkeypatch, err):
     assert _leftovers(tmp_path) == []
 
 
+def test_a_failed_in_place_exclusive_write_leaves_nothing(tmp_path, monkeypatch):
+    def no_links(*_a, **_k):
+        raise OSError(errno.EPERM, "no hard links here")
+
+    real_fsync = os.fsync
+    calls = {"n": 0}
+
+    def fsync_fails_second_time(fd):
+        calls["n"] += 1  # the temp file's fsync passes; the in-place one fails
+        if calls["n"] == 2:
+            raise OSError("disk full")
+        real_fsync(fd)
+
+    monkeypatch.setattr(fsio.os, "link", no_links)
+    monkeypatch.setattr(fsio.os, "fsync", fsync_fails_second_time)
+    with pytest.raises(OSError, match="disk full"):
+        fsio.atomic_write(tmp_path / "once", "data", exclusive=True)
+    assert not (tmp_path / "once").exists()
+    assert _leftovers(tmp_path) == []
+
+
 def test_a_failed_write_leaves_the_old_file_and_no_temp(tmp_path, monkeypatch):
     p = tmp_path / "config.toml"
     p.write_text("keep = 1\n")
