@@ -214,6 +214,10 @@ def trigger_show(repo: Path, tid: str, *, agent: str = "") -> O.Outcome:
     )
 
 
+class _Unreadable(Exception):
+    """The trigger evaluator met an event log it cannot fully read."""
+
+
 def trigger_evaluate(
     repo: Path, *, now: str = "", dry_run: bool = False, agent: str = ""
 ) -> O.Outcome:
@@ -236,9 +240,15 @@ def trigger_evaluate(
 
     def decide():
         events = log.read_all()
-        # Strict: an event this ddflow cannot read could be the open remediation or the
-        # fire the cap must count; deciding without it could file twice (critic).
-        st = fold(events, strict=True)
+        # An event this ddflow cannot read -- a kind or schema it does not know, or a line
+        # it cannot parse -- could be the open remediation or a fire the cap must count:
+        # deciding without it could file twice (critic, roborev). Refuse instead.
+        if log.skipped_lines:
+            raise _Unreadable(f"{log.skipped_lines} unparseable line(s)")
+        try:
+            st = fold(events, strict=True)
+        except ValueError as exc:
+            raise _Unreadable(str(exc)) from exc
         defs = SV.definitions(repo, cfg, st)
         trigs, errors = TR.load(repo, defs.jobs)
         at = given or datetime.now(UTC)
@@ -252,11 +262,12 @@ def trigger_evaluate(
                 if log.extent() != before:
                     at, st, defs, trigs, errors, decisions = decide()
                 _apply(log, st, defs, trigs, decisions, at, errors)
-    except ValueError as exc:  # the strict fold met an event or schema it does not know
+    except _Unreadable as exc:  # raised before anything is written
         return O.failed(
             "trigger.evaluated",
-            f"the log holds what this ddflow cannot read ({exc}): nothing was evaluated; "
-            f"upgrade ddflow",
+            f"the log holds what this ddflow cannot read ({exc}): nothing was evaluated "
+            f"or written. A newer ddflow wrote it (upgrade) or a line is damaged "
+            f"(`ddflow doctor`).",
         )
     fired = sum(1 for d in decisions if d.fire)
     data = {"decisions": [asdict(d) for d in decisions], "errors": errors, "fired": fired}
