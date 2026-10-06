@@ -9,7 +9,10 @@
 # When a refactor moves an import (a module split, a call site moved to its one home),
 # edit the entry in the same change; never add one to make a new import pass.
 #
-# Entries marked "home" are permanent: the one module allowed to own that import.
+# Entries marked "home" are permanent: the one module allowed to own that import. A home
+# module that does not exist yet (ddflow.infra.git, ddflow.infra.fsio, ddflow.core.digest,
+# the extras' adapters) has no entry -- an entry matching no import is an error -- and the
+# task that creates the module adds its home entry in the same change.
 
 [importlinter]
 root_package = ddflow
@@ -120,7 +123,7 @@ ignore_imports =
     ddflow.services.review -> subprocess
     ddflow.surfaces.mcp -> subprocess
 
-# Atomic writes, temporary files and locks live in ddflow.infra.fsio.
+# Atomic writes, temporary files and locks belong in ddflow.infra.fsio (not written yet).
 [importlinter:contract:fsio-home]
 name = tempfile and fcntl are imported only by ddflow.infra.fsio
 type = forbidden
@@ -147,7 +150,7 @@ ignore_imports =
     ddflow.services.onboard_verify -> tempfile
     ddflow.services.version_files -> tempfile
 
-# Content digests live in ddflow.core.digest.
+# Content digests belong in ddflow.core.digest (not written yet).
 [importlinter:contract:digest-home]
 name = hashlib is imported only by ddflow.core.digest
 type = forbidden
