@@ -399,7 +399,7 @@ def test_hop_counts_every_new_event_of_the_key_not_only_the_cluster():
     """rubber-duck on B-trigger-model: the cluster's earliest events set the hop, and the
     remediation's own later failure slipped past the hop limit."""
     evs = [*_fired("R1", "", 0, trig="other", hop=1)]
-    evs += [_ev("gate.failed", "T1", 1), _ev("gate.failed", "R1", 30)]
+    evs += [_ev("gate.failed", "R1", 1), _ev("gate.failed", "T1", 30)]
     [d] = _run(evs, _trig(count=1, window=5, hop_limit=1), 40)
     assert (d.reason, d.hop) == ("hop_limit", 2)
 
