@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
+
 from ddflow.api.knowledge.regression import _split_outside_brackets, _unresolved_tests
 
 
@@ -31,6 +33,24 @@ def test_a_value_holding_brackets_and_a_comma_stays_one_entry():
     assert _split_outside_brackets("tests/a.py::t[[1]] , tests/b.py::u") == [
         "tests/a.py::t[[1]]",
         "tests/b.py::u",
+    ]
+
+
+@pytest.mark.parametrize(
+    "node", ["tests/a.py::t[a],b]", "tests/a.py::t[[a],b]", "tests/a.py::t[[a] b,c]"]
+)
+def test_a_value_whose_inner_bracket_meets_a_separator_stays_one_entry(node):
+    """Second review of Bfc9daca269: a `]` followed by a separator is not necessarily the
+    end of the id."""
+    assert _split_outside_brackets(node) == [node]
+    assert _split_outside_brackets(f"{node};tests/b.py::u") == [node, "tests/b.py::u"]
+
+
+def test_entries_without_brackets_split_as_before():
+    assert _split_outside_brackets("tests/a.py::t, pytest -k x ;tests/b.py") == [
+        "tests/a.py::t",
+        "pytest -k x",
+        "tests/b.py",
     ]
 
 
