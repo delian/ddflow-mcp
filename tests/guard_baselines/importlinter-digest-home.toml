@@ -10,22 +10,4 @@
 ignore_imports = [
     # home
     "ddflow.core.digest -> hashlib",
-    "ddflow.api.review -> hashlib",
-    "ddflow.core.events -> hashlib",
-    "ddflow.core.ids -> hashlib",
-    "ddflow.core.textsim -> hashlib",
-    "ddflow.services.bugreport -> hashlib",
-    "ddflow.services.ci -> hashlib",
-    "ddflow.services.docscheck -> hashlib",
-    "ddflow.services.export.frame -> hashlib",
-    "ddflow.services.export.registry -> hashlib",
-    "ddflow.services.gates.evidence -> hashlib",
-    "ddflow.services.ledger -> hashlib",
-    "ddflow.services.legacy -> hashlib",
-    "ddflow.services.quota -> hashlib",
-    "ddflow.services.review -> hashlib",
-    "ddflow.services.reviewer_trust -> hashlib",
-    "ddflow.services.sessions -> hashlib",
-    "ddflow.services.triggers -> hashlib",
-    "ddflow.services.waits -> hashlib",
 ]

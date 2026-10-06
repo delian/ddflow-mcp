@@ -13,12 +13,12 @@ store and to show. Judging a ledger against the repository is the next task (B-v
 
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ..core.digest import content_digest
 from ..core.events import Event
 from ..core.model import Item, fold
 
@@ -32,7 +32,7 @@ _TEST = re.compile(
 def requirement_digest(title: str, body: str, globs: Sequence[str]) -> str:
     """12 hex digits over what the task asked for: its title, body and declared files."""
     text = "\x00".join([title, body, *sorted(globs)])
-    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()[:12]
+    return content_digest(text, errors="surrogatepass", length=12)
 
 
 def item_digest(it: Item) -> str:

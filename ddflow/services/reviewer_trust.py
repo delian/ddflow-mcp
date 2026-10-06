@@ -22,10 +22,10 @@ Like human gates, this makes tampering VISIBLE; it does not stop a shell edit of
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any
 
+from ..core.digest import content_digest
 from ..core.events import canonical
 from ..infra import tomlcfg as TC
 
@@ -48,7 +48,7 @@ class ReviewerRefused(ValueError):
 def digest(rev: Any) -> str:
     """A stable fingerprint of a reviewer's identity fields."""
     body = {k: str(getattr(rev, k, "") or "") for k in IDENTITY}
-    return hashlib.sha256(canonical(body).encode("utf-8")).hexdigest()[:16]
+    return content_digest(canonical(body), length=16)
 
 
 def snapshot(repo: Path) -> dict[str, tuple[str, str]] | None:
