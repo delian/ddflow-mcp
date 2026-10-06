@@ -2121,7 +2121,15 @@ prompt or note — runs the same check against the log **before it writes**, wit
   check against the other rules: content against content, and title against title for
   rules with no content (two title-only rules no longer read as copies of each other).
   `--related ID` files the rule and reports `related` (a rule carries no link); `--check`
-  compares the title too.
+  compares the title too. A rule is ALSO checked against every other kind -- decisions,
+  lessons, research, tasks, bugs, memories -- by the same check every add runs (`rule` is
+  in `[dedupe].kinds`; remove it to stop): a rule restating a decision is refused with
+  the decision as the candidate. `--new` files it; `--related D` files it and reports
+  `related`; `--extends D` / `--duplicate-of D` put the rule's text on that record while it
+  is open (`record.extended`, no rule filed) and otherwise file the rule naming it;
+  `--check` lists both. `rule edit` (`ddflow_rule_edit`) runs it on a new title or
+  content and takes `--new` / `--related ID` (`new` / `related` over MCP); an edit cannot
+  be folded into another record.
 - **Where the check does not run, a test says why.** `tests/test_coherence_coverage.py`
   classifies every event kind, every function that appends an add kind, and every CLI
   verb and MCP tool that records text as checked or exempt with a reason (a split's parts,

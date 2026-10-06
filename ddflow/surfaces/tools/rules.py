@@ -40,6 +40,8 @@ TOOLS: dict[str, dict[str, Any]] = {
                 repo,
                 a.get("content", "") or "",
                 title=a.get("title", "") or "",
+                rule_id=a.get("id", "") or "",
+                agent=agent,
             )
             if bool(a.get("check"))
             else _api().rule_add(
@@ -74,7 +76,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 ),
             )
         ),
-        "payload": ("id", "candidates", "related"),
+        "payload": (
+            "id",
+            "candidates",
+            "related",
+            "options",
+            "extended",
+            "extended_kind",
+            "relation",
+        ),
     },
     "ddflow_rule_list": {
         "description": (
@@ -116,7 +126,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_edit": {
         "description": (
-            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest."
+            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest. "
+            "A new title or content is duplicate-checked against every record kind (answer new | related:ID)."
         ),
         "properties": {
             "id": ("string", "Rule id to edit.", True),
@@ -126,10 +137,18 @@ TOOLS: dict[str, dict[str, Any]] = {
             "scope": ("string", "New scope.", False),
             "priority": ("integer", "New priority.", False),
             "globs": ("string", "Comma-separated globs.", False),
+            "new": ("boolean", "Dedup answer: a different record.", False),
+            "related": ("string", "Dedup answer: related to ID.", False),
         },
         "api": lambda repo, a, agent: _api().rule_update(
             repo,
             a["id"],
+            dedup_answer=(
+                _api().RuleDedupAnswer("new", "")
+                if bool(a.get("new"))
+                else (_api().RuleDedupAnswer("related", a["related"]) if a.get("related") else None)
+            ),
+            agent=agent,
             **(
                 {
                     "title": a["title"],
@@ -173,7 +192,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 else {}
             ),
         ),
-        "payload": ("id",),
+        "payload": ("id", "candidates", "related", "options"),
     },
     "ddflow_rule_remove": {
         "description": (

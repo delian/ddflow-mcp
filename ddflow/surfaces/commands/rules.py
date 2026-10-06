@@ -26,8 +26,8 @@ from ..context import FAIL, Ctx
 _PAYLOADS = {
     "list": ("rows", "count"),
     "search": ("rows", "count", "query"),
-    "add": ("id", "candidates", "related"),
-    "edit": ("id",),
+    "add": ("id", "candidates", "related", "options", "extended", "extended_kind", "relation"),
+    "edit": ("id", "candidates", "related", "options"),
     "remove": ("id",),
     "show": ("id", "title", "content", "tags", "scope", "priority", "globs", "created", "updated"),
 }
@@ -37,8 +37,12 @@ def _csv(text: str) -> list[str]:
     return [p.strip() for p in (text or "").split(",") if p.strip()]
 
 
+def _agent(c: Ctx) -> str:
+    return c.log.agent_id if getattr(c, "log", None) else ""
+
+
 def _answer(a) -> RuleDedupAnswer | None:
-    if a.new:
+    if getattr(a, "new", False):
         return RuleDedupAnswer("new", "")
     for rel in ("extends", "duplicate_of", "related"):
         if getattr(a, rel, ""):
@@ -64,6 +68,32 @@ def _emit(c: Ctx, out, verb: str, human: str) -> int:
 
 def _rule_line(r: dict) -> str:
     return f"{r['id']}  [{r.get('scope', '')}] {r.get('title', '')}"
+
+
+def _cmd_edit(a, c: Ctx) -> int:
+    verb = "edit"
+    fields: dict = {}
+    for name in ("title", "content", "scope"):
+        if getattr(a, name) is not None:
+            fields[name] = getattr(a, name)
+    if a.tags is not None:
+        fields["tags"] = _csv(a.tags)
+    if a.globs is not None:
+        fields["globs"] = _csv(a.globs)
+    if a.priority is not None:
+        fields["priority"] = a.priority
+    out = rule_update(c.repo, a.id, dedup_answer=_answer(a), agent=_agent(c), **fields)
+    if out.exit != 0 and out.data.get("candidates"):
+        print(out.reason, file=sys.stderr)
+        return _emit(c, out, verb, "") if c.json else out.exit
+    related = out.data.get("related")
+    return _emit(
+        c,
+        out,
+        verb,
+        f"updated {a.id}: {', '.join(sorted(fields)) or 'nothing'}"
+        + (f" (related to {related})" if related else ""),
+    )
 
 
 def cmd_rule(a, c: Ctx) -> int:
@@ -96,20 +126,11 @@ def cmd_rule(a, c: Ctx) -> int:
         out = rule_remove(c.repo, a.id)
         return _emit(c, out, verb, f"removed {a.id}")
     if verb == "edit":
-        fields: dict = {}
-        for name in ("title", "content", "scope"):
-            if getattr(a, name) is not None:
-                fields[name] = getattr(a, name)
-        if a.tags is not None:
-            fields["tags"] = _csv(a.tags)
-        if a.globs is not None:
-            fields["globs"] = _csv(a.globs)
-        if a.priority is not None:
-            fields["priority"] = a.priority
-        out = rule_update(c.repo, a.id, **fields)
-        return _emit(c, out, verb, f"updated {a.id}: {', '.join(sorted(fields)) or 'nothing'}")
+        return _cmd_edit(a, c)
     if a.check:
-        out = rule_dedup_check_dry_run(c.repo, a.content or "", title=a.title or "")
+        out = rule_dedup_check_dry_run(
+            c.repo, a.content or "", title=a.title or "", rule_id=a.id, agent=_agent(c)
+        )
         return _emit(c, out, verb, "\n".join(str(x) for x in out.data.get("candidates", [])))
     out = rule_add(
         c.repo,
@@ -122,7 +143,7 @@ def cmd_rule(a, c: Ctx) -> int:
             priority=a.priority if a.priority is not None else 50,
             globs=_csv(a.globs or ""),
         ),
-        agent=c.log.agent_id if getattr(c, "log", None) else "",
+        agent=_agent(c),
         dedup_answer=_answer(a),
     )
     if out.exit != 0 and out.data.get("candidates"):
@@ -130,7 +151,14 @@ def cmd_rule(a, c: Ctx) -> int:
         if c.json:
             return _emit(c, out, "add", "")
         return out.exit
-    related = out.data.get("related")
-    return _emit(
-        c, out, verb, f"added rule {a.id}" + (f" (related to {related})" if related else "")
-    )
+    if out.data.get("extended"):
+        return _emit(
+            c,
+            out,
+            verb,
+            f"rule text added to {out.data['extended']} ({out.data.get('extended_kind', '')}); "
+            f"no rule {a.id} filed",
+        )
+    said = {"related": "related to", "duplicate_of": "duplicate of", "extends": "extends"}
+    linked = next((f" ({said[r]} {out.data[r]})" for r in said if out.data.get(r)), "")
+    return _emit(c, out, verb, f"added rule {a.id}{linked}")
