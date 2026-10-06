@@ -39,6 +39,7 @@ SECTION_NAMES = (
     "enforce",
     "agent",
     "ids",
+    "triggers",
 )
 
 SECTION_MODULES = tuple(importlib.import_module(f"{__name__}.{n}") for n in SECTION_NAMES)
