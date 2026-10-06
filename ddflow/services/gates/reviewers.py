@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ...config import Config
 from ...core.model import State
-
-if TYPE_CHECKING:
-    from .defs import GateDef
+from .defs import DEFAULT_GATES, GateDef
 
 
 def family_of(model: str, cfg: Config) -> str:
@@ -59,11 +57,13 @@ REVIEWER_GATES = ("rubber_duck", "critic", "standards")
 
 def is_reviewer_gate(gate: str, gdef: GateDef | None) -> bool:
     """Is `gate` one a cross-family reviewer records through? Its definition says so
-    (B0e1330bf74): `reviewer = "different_family"` is one, `same_family_ok` is not -- a
-    same-family reviewer is enough there, so its record shows no independence and its
-    model is not the author-family mistake `gate record` refuses. A gate declaring
-    neither is one when built in (`REVIEWER_GATES`: `standards` declares nothing, and
-    roborev records the model that reviewed)."""
+    (B0e1330bf74) -- `gdef`, or the built-in definition when none is given:
+    `reviewer = "different_family"` is one, `same_family_ok` is not (a same-family
+    reviewer is enough there, so its record shows no independence and its model is not
+    the author-family mistake `gate record` refuses). A gate declaring neither is one
+    only when it is in `REVIEWER_GATES`: that is `standards`, which declares nothing
+    and counts because roborev records the model that reviewed."""
+    gdef = gdef if gdef is not None else DEFAULT_GATES.get(gate)
     declared = gdef.reviewer if gdef is not None else ""
     if declared:
         return declared == "different_family"
@@ -71,13 +71,10 @@ def is_reviewer_gate(gate: str, gdef: GateDef | None) -> bool:
 
 
 def reviewer_gates(gates: Mapping[str, GateDef] | None) -> list[str]:
-    """Every reviewer gate among `gates` (a built-in one undefined there included). With
-    no definitions to read, the built-in set."""
-    gates = gates or {}
-    builtin = [g for g in REVIEWER_GATES if is_reviewer_gate(g, gates.get(g))]
-    return builtin + [
-        g for g, d in gates.items() if g not in REVIEWER_GATES and is_reviewer_gate(g, d)
-    ]
+    """Every reviewer gate among `gates` (a built-in one they leave undefined included);
+    with no definitions to read, among the built-in ones."""
+    defs = {**DEFAULT_GATES, **(gates or {})}
+    return [g for g, d in defs.items() if is_reviewer_gate(g, d)]
 
 
 def reviewer_independence(

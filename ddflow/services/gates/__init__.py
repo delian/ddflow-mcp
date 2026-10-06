@@ -52,7 +52,7 @@ from collections.abc import Callable, Iterable, Mapping  # noqa: F401
 from dataclasses import dataclass, field, fields  # noqa: F401
 from datetime import UTC, datetime  # noqa: F401
 from pathlib import Path  # noqa: F401
-from typing import TYPE_CHECKING, Any  # noqa: F401
+from typing import Any  # noqa: F401
 
 from ...config import Config, _is_code_tree  # noqa: F401
 from ...core.digest import content_digest  # noqa: F401
