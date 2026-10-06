@@ -1,0 +1,7 @@
+# Ratchet `subprocess_calls` (tests/test_architecture_guards.py) counts
+# subprocess.run/Popen/call/check_*/getoutput, os.system/popen, and the thin
+# infra.proc.run/popen wrappers, outside ddflow.infra.proc and ddflow.infra.git.
+#
+# Lower the baseline in the same change that removes sites; the failure message
+# prints the exact value. Never raise it.
+baseline = 42
