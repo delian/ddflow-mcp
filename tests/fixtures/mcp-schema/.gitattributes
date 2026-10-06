@@ -1,0 +1,5 @@
+# Upstream files, byte for byte, held to their sha256 by tests/test_mcp_protocol_conformance.py.
+# Shown as binary in a diff so a review reads the code that uses them, not 15,000 lines of
+# vendored JSON Schema; `git diff --text` still shows them.
+*/schema.json -diff linguist-vendored
+LICENSE -diff linguist-vendored
