@@ -5,6 +5,7 @@ Real files in a temporary directory; concurrency through real threads and proces
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import stat
@@ -67,6 +68,21 @@ def test_an_explicit_mode_wins(tmp_path):
 def test_exclusive_refuses_an_existing_file_and_leaves_it_alone(tmp_path):
     p = tmp_path / "once"
     fsio.atomic_write(p, "first", exclusive=True)
+    with pytest.raises(FileExistsError):
+        fsio.atomic_write(p, "second", exclusive=True)
+    assert p.read_text() == "first"
+    assert _leftovers(tmp_path) == []
+
+
+@pytest.mark.parametrize("err", [errno.EPERM, errno.EOPNOTSUPP])
+def test_exclusive_works_where_hard_links_do_not(tmp_path, monkeypatch, err):
+    def no_links(*_a, **_k):
+        raise OSError(err, os.strerror(err))
+
+    monkeypatch.setattr(fsio.os, "link", no_links)
+    p = tmp_path / "once"
+    fsio.atomic_write(p, "first", exclusive=True, mode=0o640)
+    assert (p.read_text(), _mode(p)) == ("first", 0o640)
     with pytest.raises(FileExistsError):
         fsio.atomic_write(p, "second", exclusive=True)
     assert p.read_text() == "first"

@@ -15,6 +15,7 @@ POSIX only, as the rest of the package (`fcntl`).
 from __future__ import annotations
 
 import contextlib
+import errno
 import fcntl
 import os
 import secrets
@@ -25,6 +26,8 @@ from pathlib import Path
 
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
+#: What `link(2)` says on a filesystem that has no hard links at all.
+_NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EXDEV})
 
 
 class LockTimeout(TimeoutError):
@@ -89,7 +92,7 @@ def atomic_write(
         if want is not None:
             os.chmod(tmp, want)
         if exclusive:
-            os.link(tmp, path)
+            _link_exclusive(tmp, path, raw, want)
             tmp.unlink()
         else:
             os.replace(tmp, path)
@@ -97,6 +100,34 @@ def atomic_write(
         # Only this call's own temp file: unlinking any other is what let one writer
         # delete another's file in flight.
         tmp.unlink(missing_ok=True)
+        raise
+
+
+def _link_exclusive(tmp: Path, path: Path, raw: bytes, want: int | None) -> None:
+    """Give the finished `tmp` the name `path` only if nothing has it: a hard link fails
+    with `FileExistsError` when it does, so the check and the write are one step.
+
+    A filesystem without hard links (FAT, many SMB and FUSE mounts) refuses the link
+    itself; there the file is created with `O_EXCL` -- still never replacing one -- and
+    written in place, which is exclusive though no longer atomic for a reader."""
+    try:
+        os.link(tmp, path)
+        return
+    except FileExistsError:
+        raise
+    except OSError as exc:
+        if exc.errno not in _NO_HARD_LINKS:
+            raise
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if want is not None else 0o666)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(raw)
+            fh.flush()
+            os.fsync(fh.fileno())
+        if want is not None:
+            os.chmod(path, want)
+    except BaseException:
+        path.unlink(missing_ok=True)
         raise
 
 
