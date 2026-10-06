@@ -104,6 +104,10 @@ MODERN_PROTOCOLS = ("2026-07-28",)
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
 META_CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
 META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
+#: The caller's agent name in a modern request's `params._meta` (D-mcp-identity-per-call):
+#: with no connection to declare it on, a stateless request names its caller itself --
+#: here, or with the `as_agent` argument, which wins when both are given.
+META_AGENT = "ddflow/agent"
 UNSUPPORTED_PROTOCOL_VERSION = -32022
 INVALID_PARAMS = -32602
 
@@ -491,7 +495,8 @@ class Server:
         return say
 
     def _someone_else(self, per_call: str) -> bool:
-        """Does a per-call `as_agent` name an agent OTHER than this connection's own?
+        """Does a per-call name -- `as_agent`, or a stateless request's `_meta` agent --
+        name an agent OTHER than this connection's own?
 
         The connection's own identity is the declared one, else the derived default --
         the same answer `ddflow_identify` reports. Naming it again per call is the same
@@ -501,6 +506,41 @@ class Server:
             return False
         own = self.agent or _default_agent(self.repo)[0]
         return per_call != own
+
+    def _caller(
+        self, params: dict[str, Any], args: dict[str, Any], modern: bool
+    ) -> tuple[str, str, dict[str, Any], str]:
+        """(the agent this call runs as, the name the call itself gave -- "" for none --,
+        the arguments without `as_agent`, why the name cannot be used -- "" when it can).
+
+        The connection's identity, unless the call names one: on a stateless request its
+        `_meta` agent (D-mcp-identity-per-call), and on any request the `as_agent`
+        argument, which wins over both. Either is a PER-CALL name everywhere it counts:
+        naming anyone but the connection's own identity, a claim does not adopt the tree
+        the server stands in (`_someone_else`) -- a stateless caller cannot be told
+        apart from a subagent riding the connection (B7c7a0d9222)."""
+        if AS_AGENT in args:  # the argument first: when it is given, `_meta` is not read
+            args = dict(args)
+            want = args.pop(AS_AGENT)
+            if not isinstance(want, str):
+                return self.agent, "", args, f"{AS_AGENT} must be a string"
+            want = want.strip()
+            if want and not _VALID_AGENT.fullmatch(want):
+                return (
+                    self.agent,
+                    "",
+                    args,
+                    (
+                        f"{want!r} is not a usable agent name: use letters, digits, "
+                        f"'.', '_' or '-', up to 64 characters."
+                    ),
+                )
+            if want:
+                return want, want, args, ""
+        if not modern:
+            return self.agent, "", args, ""
+        per_call, bad = _meta_agent(params)
+        return per_call or self.agent, per_call, args, bad
 
     def _invoke(self, spec, args, agent, per_call, params):
         """Run a tool's typed `api`; the connection facts it needs are passed in."""
@@ -568,7 +608,7 @@ class Server:
         if method == "server/discover":
             reply: dict[str, Any] | None = _ok(msg.get("id"), self._discover())
         else:
-            reply = self._dispatch(msg)
+            reply = self._dispatch(msg, modern=True)
         return _modernize(method, reply)
 
     def _discover(self) -> dict[str, Any]:
@@ -582,7 +622,7 @@ class Server:
             "instructions": _instructions(self.repo, self.agent, self.tier),
         }
 
-    def _dispatch(self, msg: dict[str, Any]) -> dict[str, Any] | None:
+    def _dispatch(self, msg: dict[str, Any], *, modern: bool = False) -> dict[str, Any] | None:
         method = msg.get("method", "")
         mid = msg.get("id")
         if method == "initialize":
@@ -659,29 +699,15 @@ class Server:
             # The per-call identity, stripped BEFORE the tool sees its arguments so no
             # api lambda has to know it exists. Validated with the same rule as a
             # declaration: it becomes a log shard filename either way.
-            agent = self.agent
-            per_call = ""  # the `as_agent` this call named, if any
-            if AS_AGENT in args:
-                args = dict(args)
-                want = args.pop(AS_AGENT)
-                if not isinstance(want, str):
-                    return _ok(mid, _text(f"{AS_AGENT} must be a string", error=True))
-                want = want.strip()
-                if want and not _VALID_AGENT.fullmatch(want):
-                    return _ok(
-                        mid,
-                        _text(
-                            f"{want!r} is not a usable agent name: use letters, digits, "
-                            f"'.', '_' or '-', up to 64 characters.",
-                            error=True,
-                        ),
-                    )
-                per_call = want
-                agent = want or agent
+            agent, per_call, args, bad = self._caller(params, args, modern)
+            if bad:
+                return _ok(mid, _text(bad, error=True))
             # The typed path, when this tool has one. No argv, no re-parsing, no
             # scraping stdout, and no swapping process-global streams -- which is what
             # made the string path non-reentrant. `api` is where a protocol adapter
             # belongs: above the domain, beside the other surface, not THROUGH it.
+            if spec.get("identify") and modern:
+                return _ok(mid, _text(_modern_identify_note(agent)))
             if spec.get("identify"):
                 want = args.get("agent", "")
                 if not isinstance(want, str):
@@ -956,6 +982,31 @@ def _capabilities() -> dict[str, Any]:
         # operator's side, from not having written them.
         "prompts": {"listChanged": False},
     }
+
+
+def _meta_agent(params: dict[str, Any]) -> tuple[str, str]:
+    """(the agent a stateless request names in its `_meta`, "" for none; why it cannot
+    be used, "" when it can)."""
+    meta = params.get("_meta")
+    want = meta.get(META_AGENT, "") if isinstance(meta, dict) else ""
+    if isinstance(want, str) and (not want.strip() or _VALID_AGENT.fullmatch(want.strip())):
+        return want.strip(), ""
+    return "", (
+        f"_meta {META_AGENT!r} = {want!r} is not a usable agent name: "
+        f"use letters, digits, '.', '_' or '-', up to 64 characters."
+    )
+
+
+def _modern_identify_note(agent: str) -> str:
+    """What `ddflow_identify` answers on a stateless request: nothing is declared."""
+    who = agent or "the tree-derived default"
+    return (
+        f"not declared: on a {MODERN_PROTOCOLS[0]} request identity is per request, so "
+        f"nothing persists for the connection (D-mcp-identity-per-call). Name yourself on "
+        f"EVERY call: the `{AS_AGENT}` argument, or {META_AGENT!r} in params._meta "
+        f"({AS_AGENT} wins when both are given). A request that names nobody is "
+        f"attributed to the tree-derived default. This request: {who!r}."
+    )
 
 
 def _modern_check(msg: dict[str, Any]) -> str | dict[str, Any] | None:

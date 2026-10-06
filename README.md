@@ -505,8 +505,17 @@ instructions `initialize` carries; a version not served per request is refused w
 in `_meta`, and `tools/list`, `resources/list`, `resources/read`, `prompts/list` and
 `server/discover` carry `ttlMs` and `cacheScope: "private"` (an hour for the two lists
 fixed for the life of the server, 0 for everything read from the repository's state).
-`ddflow_identify` still names the agent for the rest of the connection in both eras;
-`as_agent` is the per-call form.
+Identity is per request in that era (D-mcp-identity-per-call): a modern request names its
+caller with the `as_agent` argument or `ddflow/agent` in `params._meta` (the argument wins
+when both are given, and `_meta` is then not read; a malformed name that is read is a tool
+error), and one that names nobody is
+attributed to the tree-derived default. Like `as_agent`, a `_meta` name other than the
+connection's own does not adopt the tree the server stands in on `ddflow_claim` (it could
+be a subagent riding the connection): the item gets a tree of its own, as from the CLI in
+the primary. `ddflow_identify` on a modern request persists
+nothing for the connection and answers how to name yourself instead; a connection that
+opened with `initialize` keeps connection-wide `ddflow_identify` exactly as before, with
+`as_agent` as the per-call form.
 
 ### What goes in AGENTS.md / CLAUDE.md
 
