@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
-from .config_sections._docs import KNOB_DOCS, _doc  # noqa: F401
+from .config_sections._docs import KNOB_DOCS, _doc, declared_tables  # noqa: F401
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
     AgentConfig,
@@ -569,8 +569,9 @@ def _unit_interval(v: Any) -> str:
 _BLOCK_WARN_OFF = ("block", "warn", "off")
 PROGRESS_MODES = ("on", "phase", "off")
 CI_ON_MERGE_MODES = ("off", "fast", "full")
+_DC, _DS, _DO, _DK = declared_tables()  # the knobs declared on their fields (_docs.knob)
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
-    "lease.reclaim_policy": ("report", "auto"),
+    **_DC,
     "worktree.merge_strategy": ("no-ff", "ff-only", "squash"),
     "flow.model": FLOW_MODELS,
     "flow.integration": FLOW_INTEGRATIONS,
@@ -595,7 +596,6 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "enforce.stale_rules": _BLOCK_WARN_OFF,
     "enforce.readme_with_code": _BLOCK_WARN_OFF,
     "enforce.behind": _BLOCK_WARN_OFF,
-    "loops.on_detect": ("warn", "block"),
     "review.on_exceed": ("refuse", "warn"),
     "upgrade.skew": UPGRADE_SKEW_POLICIES,
     "mcp.tools": MCP_TOOL_TIERS,
@@ -615,7 +615,7 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
 #: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key here
 #: and in `KNOB_OUTWARD`, and that no fallback is an outward value.
 KNOB_STRICTEST: dict[str, tuple[str, str]] = {
-    "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
+    **_DS,
     "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
     "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
     # D-fallback-no-remote: a typo never makes ddflow push, open a pull request or write
@@ -648,7 +648,6 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "enforce.stale_rules": ("block", "the hook refuses"),
     "enforce.readme_with_code": ("block", "complete refuses"),
     "enforce.behind": ("block", "the hook refuses"),
-    "loops.on_detect": ("block", "claim refuses an item that is looping"),
     "review.on_exceed": ("refuse", "a round past the budget is refused"),
     "upgrade.skew": ("refuse", "an older ddflow's write is refused"),
     "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
@@ -663,7 +662,7 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
 #: the test requires the two key sets to match: a new knob fails it until its author
 #: answers the question here (a seeded default would answer it for them).
 KNOB_OUTWARD: dict[str, frozenset[str]] = {
-    "lease.reclaim_policy": frozenset(),
+    **_DO,
     "worktree.merge_strategy": frozenset(),
     "flow.model": frozenset(),
     "flow.integration": frozenset({"pr"}),  # pushes the branch, opens a pull request
@@ -688,7 +687,6 @@ KNOB_OUTWARD: dict[str, frozenset[str]] = {
     "enforce.stale_rules": frozenset(),
     "enforce.readme_with_code": frozenset(),
     "enforce.behind": frozenset(),
-    "loops.on_detect": frozenset(),
     "review.on_exceed": frozenset(),
     "upgrade.skew": frozenset(),
     "mcp.tools": frozenset(),
@@ -761,6 +759,7 @@ def _int_at_least(n: int) -> Callable[[Any], str]:
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
 _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
+    **_DK,
     "export.tables": _export_tables_problem,
     "export.max_bytes": lambda v: (
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else "must be an integer >= 0"

@@ -65,3 +65,10 @@ max-branches = 18
 # readable: each names one reason and leaves. Collapsing them into a single exit would
 # require a result variable threaded through every branch.
 max-returns = 14
+
+[lint.flake8-bugbear]
+# `knob(...)` returns a dataclasses.field() carrying the knob's declaration
+# (config_sections/_docs.py), exactly as `field(...)` does: a list default goes in through
+# `factory=`, never as a shared instance. Without this, RUF009 reads it as an arbitrary call
+# in a dataclass default.
+extend-immutable-calls = ["ddflow.config_sections._docs.knob"]
