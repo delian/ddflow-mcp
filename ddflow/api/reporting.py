@@ -150,7 +150,14 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
             for t in sorted(done, key=lambda t: t.completed_at)
         ],
         "in_flight": [
-            {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
+            {
+                "id": t.id,
+                "title": t.title,
+                "holder": t.lease.holder if t.lease else "",
+                # D-contest-redisplay: a contestant displayed again after the claim that
+                # took it over was released. Only when it was, so the shape is unchanged.
+                **({"taken_over_by": by} if (by := t.lease_taken_over_by()) else {}),
+            }
             for t in running
         ],
         # A task RUNNING with no live lease is offered as ready -- someone must resume it

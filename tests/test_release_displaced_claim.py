@@ -71,3 +71,51 @@ def test_a_takeover_victim_is_not_revived_as_the_releasers_claim():
     # nothing of c's can be displayed again; b's unreleased claim is what remains.
     assert [h["holder"] for h in it.lease_contest] in ([], ["b"]), it.lease_contest
     assert it.lease is None or it.lease.holder == "b", it.lease
+
+
+# -- D-contest-redisplay: a taken-over claim is displayed again, and says so ---------------
+
+
+def _taken_over_then_released():
+    """A and B overlap (a contest; B displayed); B lapses and C takes it over; C releases."""
+    a, b, c = _at(2, "A", 100.0, 50), _at(3, "B", 120.0, 50), _at(4, "C", 300.0, 50)
+    rel = _ev("lease.released", 5, "C", holder="C", event=c.id)
+    return fold([_ev("task.added", 1, title="t"), a, b, c, rel]).items["T"], b
+
+
+def test_releasing_a_takeover_displays_the_taken_over_contestant_again():
+    """The rule on main, kept by the operator: an unresolved contest always shows a live
+    claim, so the latest contestant -- B, though C took it over -- is displayed again."""
+    it, b = _taken_over_then_released()
+    assert it.lease is not None and it.lease.holder == "B" and it.lease.event == b.id
+    assert it.lease_taken_over_by() == "C"
+
+
+def test_a_claim_nobody_took_over_is_not_marked():
+    c1, h1 = _acq(2, "C", 100.0), _acq(3, "H", 150.0)
+    it = fold([_ev("task.added", 1, title="t"), c1, h1]).items["T"]
+    assert it.lease is not None and it.lease_taken_over_by() == ""
+
+
+def test_show_and_status_mark_the_redisplayed_claim(monkeypatch):
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import reporting as R
+
+    it, _ = _taken_over_then_released()
+    assert "previously taken over by C" in R.taken_over_note(it)
+    from collections import defaultdict
+
+    render = defaultdict(list, {"running": [it], "parallel": ""})
+    lines = R._queue_lines(render)
+    assert any("previously taken over by C" in ln for ln in lines), lines
+    assert R.taken_over_note(SimpleNamespace(lease=None)) == ""
+
+
+def test_the_redisplay_docstring_states_the_rule():
+    from ddflow.core.handlers.leases import _redisplay
+
+    doc = " ".join((_redisplay.__doc__ or "").split())
+    # It said "a displaced claim is never promoted" -- false for a contestant taken over.
+    assert "A displaced claim is never promoted" not in doc
+    assert "displayed again" in doc and "taken over" in doc.lower()

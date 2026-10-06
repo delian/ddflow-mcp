@@ -2647,7 +2647,11 @@ Keeping a claim releases every claim that overlapped it and starts the kept clai
 window **now**: a claim that had already lapsed is not stretched back over the gap, so a
 claim another agent legitimately made in the meantime is not retroactively contested. A
 holder's own lapsed claim, every displaced claim (no cap), and a contestant's late renewal
-are all kept in the record. `--keep` may also name the current holder when it met no part
+are all kept in the record. An unresolved contest always displays a live claim: when a
+holder who took over one contestant's lapsed claim releases, that contestant is displayed
+again, and `show` and `status` mark it `previously taken over by <holder>` (`status
+--json` adds `taken_over_by` to its in-flight entry) -- its holder may have moved on, so
+settle it with `resolve`. `--keep` may also name the current holder when it met no part
 of the contest. An item that is not contested is refused.
 
 **More than one person or clone: [the multi-user model](docs/ddflow/MULTI-USER.md).** The log
