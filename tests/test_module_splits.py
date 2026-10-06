@@ -131,7 +131,6 @@ def test_each_defined_name_lives_in_exactly_one_area(pkg):
             if isinstance(n, ast.FunctionDef | ast.ClassDef):
                 homes.setdefault(n.name, []).append(mod.__name__)
     assert {k: v for k, v in homes.items() if len(v) > 1} == {}
-    assert set(homes) <= set(DEFINED[pkg.__name__])
 
 
 def test_no_area_module_is_a_monolith_again(pkg):

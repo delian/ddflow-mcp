@@ -92,10 +92,15 @@ from .pairs import (  # noqa: F401
     pairs_from,
 )
 from .regression import (  # noqa: F401
+    _NODE_PATH,
+    _PARAMS,
+    _PARAMS_LOOSE,
+    _bare_names,
     _defines,
     _definitions,
     _inside,
     _looks_like_several,
+    _malformed,
     _member,
     _split_outside_brackets,
     _unresolved_tests,
