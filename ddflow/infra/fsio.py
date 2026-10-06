@@ -58,6 +58,7 @@ def atomic_write(
     mode: int | None = None,
     exclusive: bool = False,
     encoding: str = "utf-8",
+    fsync: bool = True,
 ) -> None:
     """Replace `path` with `data` so that no reader ever sees a partial file.
 
@@ -74,7 +75,9 @@ def atomic_write(
     with no hard links (FAT, many SMB and FUSE mounts) an exclusive write is created with
     `O_EXCL` and written in place: still never replacing a file, but NOT atomic for a
     reader there, and a failure removes what it created. Otherwise, on any failure the
-    temporary file is removed and `path` is untouched.
+    temporary file is removed and `path` is untouched. `fsync=False` skips the flush to
+    disk: still never torn for a reader, but a crash may lose the new content -- for a
+    cache that is rebuilt anyway.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +94,8 @@ def atomic_write(
         with os.fdopen(fd, "wb") as fh:
             fh.write(raw)
             fh.flush()
-            os.fsync(fh.fileno())
+            if fsync:
+                os.fsync(fh.fileno())
         if want is not None:
             os.chmod(tmp, want)
         if exclusive:
@@ -141,11 +145,14 @@ def lock_path_for(path: Path | str) -> Path:
 
 
 @contextlib.contextmanager
-def file_lock(lock: Path | str, timeout_s: float | None = None) -> Iterator[None]:
+def file_lock(
+    lock: Path | str, timeout_s: float | None = None, *, poll_s: float = LOCK_POLL_S
+) -> Iterator[None]:
     """Hold an exclusive `flock` on the file `lock` (created if missing) for the block.
 
     `timeout_s=None` waits as long as it takes; a number gives up with `LockTimeout` when
-    someone else still holds it after that many seconds (0: one try). The lock is released
+    someone else still holds it after that many seconds (0: one try), retrying every
+    `poll_s` until then. The lock is released
     when the block ends, by an exception too, and with the process if it dies.
     """
     lock = Path(lock)
@@ -163,7 +170,7 @@ def file_lock(lock: Path | str, timeout_s: float | None = None) -> Iterator[None
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
                         raise LockTimeout(lock, timeout_s) from None
-                    time.sleep(LOCK_POLL_S)
+                    time.sleep(poll_s)
         try:
             yield
         finally:

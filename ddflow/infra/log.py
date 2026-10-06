@@ -17,9 +17,7 @@ from __future__ import annotations
 
 import bisect
 import contextlib
-import fcntl
 import getpass
-import hashlib
 import itertools
 import json
 import marshal
@@ -36,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import LogConfig
+from ..core import digest as D
 from ..core.events import (
     OLDER_MARK,
     PROVENANCE_KINDS,
@@ -51,6 +50,7 @@ from ..core.events import (
     utcnow,
 )
 from ..core.model import known_kinds
+from . import fsio
 from . import proc as P
 
 __all__ = [
@@ -160,7 +160,7 @@ def _write_seen_marker(root: Path, version: str) -> None:
         ignore = path.parent / ".gitignore"
         if not ignore.exists():
             ignore.write_text("*\n", "utf-8")
-        path.write_text(json.dumps({"version": version, "at": utcnow()}) + "\n", "utf-8")
+        fsio.atomic_write(path, json.dumps({"version": version, "at": utcnow()}) + "\n")
     except OSError:
         pass
 
@@ -311,7 +311,7 @@ def _digest(data: bytes) -> str:
     over a multi-megabyte buffer — where `sha256` wins on CPU acceleration, measured at
     4.3 ms per 3.58 MB against blake2b's 10.4 ms.
     """
-    return hashlib.sha256(data).hexdigest()
+    return D.content_digest(data)
 
 
 def _parser_stamp() -> str:
@@ -322,7 +322,7 @@ def _parser_stamp() -> str:
     bytecode and constants of `Event.from_json` and `Event.compute_id` is cheap and needs
     no list of "things that affect parsing" to keep current.
     """
-    h = hashlib.sha256()
+    h = D.hasher()
     for fn in (
         Event.from_json,
         Event.compute_id,
@@ -558,24 +558,11 @@ def _clone_suffix(root: Path) -> str:
         ignore = path.parent / ".gitignore"
         if not ignore.exists():
             ignore.write_text("*\n", "utf-8")
-        tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}")
-        tmp.write_text(secrets.token_hex(3) + "\n", "utf-8")
-        try:
-            os.link(tmp, path)
-        except FileExistsError:
-            pass
-        except OSError:
-            # No hard links here (some FUSE and SMB mounts). An exclusive create still
-            # picks ONE winner; a reader racing it may see it empty for an instant, and
-            # an empty read is not cached, so that caller simply asks again.
-            with contextlib.suppress(FileExistsError):
-                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-                try:
-                    os.write(fd, tmp.read_bytes())
-                finally:
-                    os.close(fd)
-        finally:
-            tmp.unlink()
+        # Exclusive: the first writer wins and the rest read its value. Where there are no
+        # hard links (some FUSE and SMB mounts) a reader racing it may see it empty for an
+        # instant, and an empty read is not cached, so that caller simply asks again.
+        with contextlib.suppress(FileExistsError):
+            fsio.atomic_write(path, secrets.token_hex(3) + "\n", exclusive=True)
         return path.read_text("utf-8").strip()
     except OSError:
         return ""
@@ -716,29 +703,18 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
     A timeout says how long this process waited and, on Linux, who holds the lock (B184:
     a timeout under machine load was suspected and could not be told from a wedged agent).
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
     started = time.monotonic()
-    deadline = started + timeout_s
-    try:
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(
-                        f"could not acquire {path} within {timeout_s}s "
-                        f"(waited {time.monotonic() - started:.1f}s, this is pid {os.getpid()})."
-                        f"{_holder_note(path)} Another agent may be wedged, or the machine is "
-                        f"overloaded -- check `ddflow doctor`"
-                    ) from None
-                time.sleep(0.02)
+    with contextlib.ExitStack() as held:
+        try:  # only the acquisition: a timeout raised inside the block is not ours
+            held.enter_context(fsio.file_lock(path, timeout_s, poll_s=0.02))
+        except fsio.LockTimeout:
+            raise TimeoutError(
+                f"could not acquire {path} within {timeout_s}s "
+                f"(waited {time.monotonic() - started:.1f}s, this is pid {os.getpid()})."
+                f"{_holder_note(path)} Another agent may be wedged, or the machine is "
+                f"overloaded -- check `ddflow doctor`"
+            ) from None
         yield
-    finally:
-        with contextlib.suppress(OSError):
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
 
 
 class EventLog:
@@ -1142,7 +1118,7 @@ class EventLog:
             # there. Not the inode, not the size, not the mtime -- all three are proxies,
             # and the inode proxy was wrong about the case it was written for.
             view = memoryview(data)  # slicing bytes would COPY the whole prefix
-            h = hashlib.sha256(view[: cached.consumed])
+            h = D.hasher(view[: cached.consumed])
             if h.hexdigest() == cached.digest:
                 start, skipped = cached.consumed, cached.skipped
                 base = cached
@@ -1233,7 +1209,7 @@ class EventLog:
                 or meta["fields"] != list(_EVENT_FIELDS)
                 or meta["parser"] != _parser_stamp()
                 or meta["size"] != len(payload)
-                or meta["sha256"] != hashlib.sha256(payload).hexdigest()
+                or meta["sha256"] != D.content_digest(payload)
             ):
                 return entries
             # Only reached after the file's own sha256, size, ddflow version and parser
@@ -1271,7 +1247,7 @@ class EventLog:
         consumed, digest, skipped, tuples = entry
         if not 0 <= consumed <= len(data):
             return None
-        h = hashlib.sha256(memoryview(data)[:consumed])
+        h = D.hasher(memoryview(data)[:consumed])
         if h.hexdigest() != digest:
             return None  # the shard is not the one the snapshot describes
         try:
@@ -1329,16 +1305,15 @@ class EventLog:
                 "fields": list(_EVENT_FIELDS),
                 "parser": _parser_stamp(),
                 "size": len(payload),
-                "sha256": hashlib.sha256(payload).hexdigest(),
+                "sha256": D.content_digest(payload),
             }
             target = self._snapshot_path()
             target.parent.mkdir(parents=True, exist_ok=True)
             ignore = target.parent / ".gitignore"
             if not ignore.exists():
                 ignore.write_text("*\n", "utf-8")
-            tmp = target.with_name(f"{target.name}.{os.getpid()}.tmp")
-            tmp.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
-            os.replace(tmp, target)
+            # A cache: never torn for a reader, but no fsync -- a crash costs a cold read.
+            fsio.atomic_write(target, json.dumps(meta).encode() + b"\n" + payload, fsync=False)
             _SNAP_COVERED[self.dir] = total
         except (OSError, ValueError):
             pass
