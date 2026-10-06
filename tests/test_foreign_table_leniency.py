@@ -68,3 +68,23 @@ def test_in_the_code_tree_an_unknown_field_is_still_an_error(tmp_path, monkeypat
     _write(tmp_path, text)
     with pytest.raises(ValueError, match="knob_from_the_future"):
         load(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "name, text, load",
+    [
+        ("gates.toml", GATE, lambda r: G.load_gates(r, Config())),
+        ("macros.toml", MACRO, macros.load_macros),
+        ("companions.toml", COMPANION, companions.load),
+    ],
+)
+def test_the_machine_local_layer_is_lenient_even_in_the_code_tree(
+    tmp_path, monkeypatch, capsys, name, text, load
+):
+    """`.ddflow/local/` is git-ignored and shared by every checkout on the machine, so a
+    newer branch's ddflow may have written it: lenient always, as config.toml's is."""
+    monkeypatch.setattr(C, "_CODE_TREE", tmp_path.resolve())
+    (tmp_path / ".ddflow" / "local").mkdir(parents=True)
+    (tmp_path / ".ddflow" / "local" / name).write_text(text)
+    load(tmp_path)
+    assert "knob_from_the_future" in capsys.readouterr().err

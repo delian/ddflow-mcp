@@ -46,6 +46,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
 from ..infra.tomlcfg import value as toml_value
@@ -261,7 +262,6 @@ def load(repo: Path) -> list[Companion]:
     `companions add` would write into an agent's config as a launch line failing
     mid-task.
     """
-    from ..config import _is_code_tree
     from ..infra import tomlcfg
 
     out: dict[str, Companion] = {}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from ...config import Config
+from ...config import Config, _is_code_tree
 from ...core.model import Item
 
 # Exit vocabulary lives in ONE place: `cli.py`. It used to be declared here too, with a
@@ -329,7 +329,6 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     policy. A file that had to restate all thirteen gates to change one would be copied
     once and then drift.
     """
-    from ...config import _is_code_tree
     from ...infra import tomlcfg
 
     # A newer checkout's gate field warns and is skipped by older code (B0016a65167).
