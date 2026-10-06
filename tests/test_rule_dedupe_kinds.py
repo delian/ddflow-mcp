@@ -236,3 +236,20 @@ def test_mcp_refuses_two_answers_at_once(proj):
     )  # fmt: skip
     assert r["result"]["isError"] and "not several" in r["result"]["content"][0]["text"]
     assert "r-mig" not in _rules(proj)
+
+
+def test_an_answer_naming_a_rule_does_not_skip_the_other_kinds(proj):
+    """Rubber-duck and critic: `related <rule>` relates two rules and says nothing about
+    the decision the text restates; add and edit still check the other kinds."""
+    other = R.Rule(id="r-lint", title="Lint", content="run the linter before every commit")
+    assert R.rule_add(proj, other).exit == 0
+    ans = R.RuleDedupAnswer("related", "r-lint")
+    add = R.rule_add(proj, R.Rule(id="r-mig", title="M", content=RESTATED), dedup_answer=ans)
+    assert add.exit == 3 and "D-mig" in add.reason
+    assert R.rule_add(proj, R.Rule(id="r-x", title="Test names", content=UNRELATED)).exit == 0
+    edit = R.rule_update(proj, "r-x", content=RESTATED, dedup_answer=ans)
+    assert edit.exit == 3 and "D-mig" in edit.reason
+    fine = R.rule_add(
+        proj, R.Rule(id="r-y", title="Y", content="zebra quantum marmalade"), dedup_answer=ans
+    )
+    assert fine.exit == 0 and fine.data["related"] == "r-lint"
