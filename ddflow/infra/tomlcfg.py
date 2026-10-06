@@ -32,16 +32,16 @@ its table name, and an **array of tables** (`[[reviewer]]`) keyed by a field ins
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
-import os
 import re
 import sys
-import tempfile
 import tomllib
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
+
+# The file layer lives in fsio; `atomic_write` stays importable from here for its callers.
+from .fsio import atomic_write, file_lock, lock_path_for  # noqa: F401
 
 #: (where, field) already warned about in this process: a loader runs several times per
 #: command, and the same warning repeated reads as several problems.
@@ -141,18 +141,10 @@ def locked(path: Path) -> Iterator[None]:
     several agents working at once -- so two of them calling `ddflow workflow gate ...`
     is the normal case, not an exotic one. Unlocked, 40 concurrent pairs lost half their
     edits and every call returned success. The event log has always taken a lock for
-    exactly this; the config writer did not.
+    exactly this; the config writer did not. (`fsio.file_lock`, waiting as long as it takes.)
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lock = path.with_name(f".{path.name}.lock")
-    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with file_lock(lock_path_for(path)):
         yield
-    finally:
-        with contextlib.suppress(OSError):
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
 
 
 def basic_string(value: str) -> str:
@@ -202,36 +194,3 @@ def _key(k: object) -> str:
     """A TOML key: bare when it may be, else quoted."""
     k = str(k)
     return k if re.fullmatch(r"[A-Za-z0-9_-]+", k) else basic_string(k)
-
-
-def atomic_write(path: Path, text: str) -> None:
-    """Write via a UNIQUE temp file in the same directory, then one `os.replace`.
-
-    A plain `write_text` truncates first: interrupted between truncate and write -- a
-    crash, a full disk, a killed agent -- it leaves an EMPTY config, which loads as "no
-    overrides at all" rather than as an error. Every knob silently reverts to its
-    default and nothing says so, which is the failure mode this module exists to
-    prevent one layer up.
-
-    The temp name is unique, and that is not fussiness. A FIXED name is shared: two
-    writers raced, one `os.replace`d the other's half-written file into place, and a
-    watcher caught `config.toml` TORN at 118 KB of a 400 KB write -- the truncated
-    config this function was written to make impossible. The `finally` unlink also
-    deleted whichever tmp existed, including the other writer's in flight, so 199 of
-    400 calls died with `FileNotFoundError` out of `os.replace`.
-
-    Same directory, so the rename stays within one filesystem and is therefore atomic.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    tmp = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(text)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        # Only on failure. Unconditionally is what let one writer delete another's.
-        tmp.unlink(missing_ok=True)
-        raise

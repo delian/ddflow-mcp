@@ -28,9 +28,11 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         if not path.endswith(".py") or any(c.isspace() for c in path):
             unchecked.append(entry)
             continue
-        # The parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
-        # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
-        wanted = names.split("[", 1)[0].split("::") if sep else []
+        # Each parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
+        # `[...]`, and splitting them refused a real test (B-bfu-param-sep). Each, not the
+        # first: a class-parametrized `TestC[1]::test_m` resolved to `TestC` alone, so a
+        # method the class lacks was accepted (Bb3ef73d53b).
+        wanted = _bare_names(names) if sep else []
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
         # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
         # resolved `t` and accepted the unchecked rest (B227585c781).
@@ -41,6 +43,27 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         ):
             missing.append(entry)
     return missing, unchecked
+
+
+#: A parametrize id: `[` to the nearest `]` that ends a name -- before `::` or the end
+#: (_PARAMS); failing that, before whitespace too (_PARAMS_LOOSE: `t[1] other`).
+_PARAMS = re.compile(r"\[.*?\](?=::|$)", re.S)
+_PARAMS_LOOSE = re.compile(r"\[.*?\](?=::|\s|$)", re.S)
+
+
+def _bare_names(names: str) -> list[str]:
+    """`TestC[1]::test_m[a::b]` -> ['TestC', 'test_m']: every parametrize id removed, then
+    anything after whitespace (tests joined by spaces are `_looks_like_several`'s), then
+    -- for an id that never closes -- everything from its `[`. A value holding `]::` or
+    `] ` cannot be told from an id boundary, so a piece left holding a bracket is dropped:
+    the permissive side, since a phantom name would refuse a real test and lock the bug
+    open; such an id resolves to the names around it."""
+    bare = _PARAMS.sub("", names)
+    if "[" in bare:
+        bare = _PARAMS_LOOSE.sub("", bare)
+    bare = bare.split(None, 1)[0] if bare.strip() else ""
+    parts = bare.split("[", 1)[0].split("::")
+    return [p for p in parts if "]" not in p] or [""]
 
 
 def _looks_like_several(entry: str) -> bool:
@@ -65,22 +88,60 @@ def _looks_like_several(entry: str) -> bool:
     return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
+#: A node id's path: no whitespace, ends in `.py`, then `::` or nothing.
+_NODE_PATH = re.compile(r"[^\s:]+\.py(::|$)")
+
+
+def _malformed(entry: str) -> bool:
+    """A piece no list was written with: a node id (or a bare token) with a `]` before any
+    `[`, or with brackets followed by anything but `::name` (`TestC[x]::test_m` is a
+    class-parametrized id) or whitespace. A command -- whitespace, not a node id -- is never malformed:
+    `pytest -k "a]b"` must not be glued onto the id before it."""
+    e = entry.strip()
+    if not e or (not _NODE_PATH.match(e) and any(c.isspace() for c in e)):
+        return False
+    if "]" in e and ("[" not in e or e.index("]") < e.index("[")):
+        return True
+    if "[" not in e:
+        return False
+    if "]" not in e:
+        return True
+    # After the brackets: nothing, `::name`, or whitespace and more words -- tests joined
+    # by spaces, which `_looks_like_several` refuses with its own hint.
+    tail = e[e.rindex("]") + 1 :]
+    return not (tail == "" or tail[0].isspace() or (tail.startswith("::") and "[" not in tail))
+
+
 def _split_outside_brackets(spec: str) -> list[str]:
     """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
-    refused as a single missing test.
+    refused as a single missing test. Brackets cannot be counted: a parametrize value may
+    hold `]`, `[`, `,` and `;` (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`, `t[a],b.py,c]`). Counting drove the depth negative and swallowed every later
+    separator, so a missing second test was never resolved (Bfc9daca269), and every local
+    rule tried after it had a counterexample. So the whole list is parsed at once: of all
+    the ways to cut it at its separators, the one with the fewest malformed entries
+    (`_malformed`), then the most cuts -- every separator is one unless cutting there
+    breaks an entry. Where two readings are both well-formed
+    (`t[a],tests/b.py::u[x]`), the one with more entries wins: a list of tests is likelier
+    than a value shaped like one.
     """
-    out, depth, cur = [], 0, []
-    for ch in spec:
-        if ch in ",;" and depth == 0:
-            out.append("".join(cur))
-            cur = []
-            continue
-        depth += {"[": 1, "]": -1}.get(ch, 0)
-        cur.append(ch)
-    out.append("".join(cur))
-    return [e.strip() for e in out if e.strip()]
+    cuts = [-1, *(i for i, ch in enumerate(spec) if ch in ",;"), len(spec)]
+    # best[j] for spec[: cuts[j]]: (malformed entries, -cuts made, the cut before)
+    best: list[tuple[int, int, int]] = [(0, 0, -1)]
+    for j in range(1, len(cuts)):
+        best.append(
+            min(
+                (best[i][0] + _malformed(spec[cuts[i] + 1 : cuts[j]]), best[i][1] - 1, i)
+                for i in range(j)
+            )
+        )
+    out, j = [], len(cuts) - 1
+    while j > 0:
+        i = best[j][2]
+        out.append(spec[cuts[i] + 1 : cuts[j]])
+        j = i
+    return [e.strip() for e in reversed(out) if e.strip()]
 
 
 def _inside(tree: Path, path: str) -> Path | None:
