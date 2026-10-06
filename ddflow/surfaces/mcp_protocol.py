@@ -247,8 +247,12 @@ def _unb64(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
-def _mac(data: bytes) -> bytes:
-    return hmac.new(_KEY["state"], data, "sha256").digest()
+def _mac(purpose: bytes, data: bytes) -> bytes:
+    """An HMAC under this process's key, DOMAIN-SEPARATED by `purpose`. The sealed state
+    carries the MAC of its binding, whose preimage the client can rebuild from its own
+    request; with one domain for both, that preimage and that MAC were a state the seal
+    accepted (B3c910a1147)."""
+    return hmac.new(_KEY["state"], purpose + b"\0" + data, "sha256").digest()
 
 
 def _binding(params: dict[str, Any], method: str) -> str:
@@ -257,7 +261,7 @@ def _binding(params: dict[str, Any], method: str) -> str:
     meta = params.get("_meta")
     who = meta.get(META_AGENT, "") if isinstance(meta, dict) else ""
     body = json.dumps([method, salient, who], sort_keys=True, separators=(",", ":"), default=str)
-    return _b64(_mac(body.encode()))
+    return _b64(_mac(b"binding", body.encode()))
 
 
 def input_required(
@@ -292,7 +296,7 @@ def input_required(
         result["inputRequests"] = input_requests
     payload = {"b": _binding(params, method), "x": int(time.time()) + ttl_s, "s": state}
     raw = json.dumps(payload, separators=(",", ":"), default=str).encode()
-    result["requestState"] = f"{_b64(raw)}.{_b64(_mac(raw))}"
+    result["requestState"] = f"{_b64(raw)}.{_b64(_mac(b'state', raw))}"
     return result
 
 
@@ -310,11 +314,17 @@ def round_trip(params: dict[str, Any], method: str) -> Any:
         raw, mac = _unb64(body), _unb64(tag)
     except (binascii.Error, ValueError):
         raise ValueError("not a state this server issued") from None
-    if not hmac.compare_digest(mac, _mac(raw)):
+    if not hmac.compare_digest(mac, _mac(b"state", raw)):
         raise ValueError("not a state this server issued")
-    payload = json.loads(raw)
-    if not hmac.compare_digest(payload["b"], _binding(params, method)):
+    try:
+        payload = json.loads(raw)
+        bound, expiry, state = payload["b"], payload["x"], payload["s"]
+    except (ValueError, TypeError, KeyError):
+        raise ValueError("not a state this server issued") from None
+    if not isinstance(bound, str) or not isinstance(expiry, int):
+        raise ValueError("not a state this server issued")
+    if not hmac.compare_digest(bound, _binding(params, method)):
         raise ValueError("issued for a different request or caller")
-    if time.time() > payload["x"]:
+    if time.time() > expiry:
         raise ValueError("expired; send the request again without it")
-    return payload["s"]
+    return state
