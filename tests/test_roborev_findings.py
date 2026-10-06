@@ -28,7 +28,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 # -- D1: a typo in companions.toml must be an error, like everywhere else -------------
 
 
-def test_an_unknown_companion_field_is_refused_not_dropped(repo):
+def test_an_unknown_companion_field_is_refused_not_dropped(repo, monkeypatch):
     """`gates.load_gates` and `load_reviewers` raise on a typo; companions dropped it.
 
     A misspelt `commmand` produced a companion with an EMPTY command, which
@@ -36,14 +36,24 @@ def test_an_unknown_companion_field_is_refused_not_dropped(repo):
     fails mid-task — at the moment a gate told the agent to reach for the tool. This is
     the silent-knob-drop class in a package whose config loader raises on a typo'd
     *section* specifically to prevent it.
+
+    Refused in the tree the code came from; in any other tree the file may be newer than
+    the code, so the field is skipped -- but still named, on stderr (B0016a65167).
     """
+    import pytest
+
+    import ddflow.config as C
+    from ddflow.services import companions
+
     run_cli(repo, "init")
     (repo / ".ddflow" / "companions.toml").write_text(
         '[[companion]]\nid = "mine"\ntitle = "x"\ncommmand = "typo"\n'
     )
-    code, out, err = run_cli(repo, "companions", "list", "--no-probe")
-    assert code == FAIL, f"a typo must be reported, not absorbed:\n{out}"
-    assert "commmand" in (out + err), out + err
+    _code, out, err = run_cli(repo, "companions", "list", "--no-probe")
+    assert "commmand" in err, f"a typo must be named, not absorbed:\n{out}{err}"
+    monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())
+    with pytest.raises(ValueError, match="commmand"):
+        companions.load(repo)
 
 
 def test_companions_may_be_configured_in_the_main_config_file(repo):

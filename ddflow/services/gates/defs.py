@@ -329,11 +329,14 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     policy. A file that had to restate all thirteen gates to change one would be copied
     once and then drift.
     """
+    from ...config import _is_code_tree
     from ...infra import tomlcfg
 
+    # A newer checkout's gate field warns and is skipped by older code (B0016a65167).
+    lenient = not _is_code_tree(root)
     gates = {k: GateDef(**{**v.__dict__}) for k, v in DEFAULT_GATES.items()}
     for gid, spec in tomlcfg.overlay_table(
-        tomlcfg.config_paths(root, "gates.toml"), "gate", GateDef
+        tomlcfg.config_paths(root, "gates.toml"), "gate", GateDef, lenient=lenient
     ).items():
         base = gates.get(gid) or GateDef(id=gid)
         for k, v in spec.items():
@@ -344,7 +347,7 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     # git-ignored local layer: a `human = false` there never appears in a diff or a
     # review, so it would quietly hand the operator's gate to any agent on this machine.
     committed = tomlcfg.config_paths(root, "gates.toml")[:2]
-    for gid, spec in tomlcfg.overlay_table(committed, "gate", GateDef).items():
+    for gid, spec in tomlcfg.overlay_table(committed, "gate", GateDef, lenient=lenient).items():
         if spec.get("human") and gid in gates:
             gates[gid].human = True
     for gid in cfg.gates.required:

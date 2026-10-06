@@ -108,11 +108,17 @@ def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
     the error, and one clashing block made every other macro vanish from `prompts list`,
     MCP `prompts/list` and `prompts show` while doctor said nothing (B-macro-clash-silent).
     """
+    from ..config import _is_code_tree
     from ..infra import tomlcfg
     from .prompts import COMMANDS
 
     blocks = tomlcfg.overlay_array(
-        tomlcfg.config_paths(root, "macros.toml"), "macro", Macro, key="name"
+        tomlcfg.config_paths(root, "macros.toml"),
+        "macro",
+        Macro,
+        key="name",
+        # A newer checkout's macro field warns and is skipped by older code (B0016a65167).
+        lenient=not _is_code_tree(root),
     )
     refused = {
         name: (

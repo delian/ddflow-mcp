@@ -26,7 +26,11 @@ def _get(repo, name):
         ('\n[[macro]]\nname = "x"\nprompt = \n', "Invalid value"),
     ],
 )
-def test_prompts_get_names_why_the_macro_config_could_not_be_loaded(repo, config, why):
+def test_prompts_get_names_why_the_macro_config_could_not_be_loaded(repo, config, why, monkeypatch):
+    import ddflow.config as C
+
+    # An unknown field is an error in the code tree only (B0016a65167).
+    monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())
     (repo / ".ddflow").mkdir(exist_ok=True)
     with (repo / ".ddflow" / "config.toml").open("a") as fh:
         fh.write(config)
