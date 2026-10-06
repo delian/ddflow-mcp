@@ -91,6 +91,13 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         "schedule.defined",
         "schedule.updated",
         "schedule.removed",
+        # B-uni-def-records: a managed definition (doc type, schedule, trigger, skill,
+        # agent, research claim, rule) and every revision of it is operator intent.
+        "def.recorded",
+        "def.updated",
+        "def.retired",
+        "def.superseded",
+        "def.merged",
     }
 )
 
@@ -231,6 +238,13 @@ def canonical(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+def content_digest(obj: Any, *, size: int = 12) -> str:
+    """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id, and a
+    definition record's content digest (`core.defs`). One hash for both, so the same
+    content always reads as the same digest."""
+    return hashlib.blake2b(canonical(obj).encode(), digest_size=size).hexdigest()
+
+
 #: The keep-a-changelog categories an item.completed / bug.fixed `changelog` field may carry
 #: (decision D-export (4)).
 CHANGELOG_CATEGORIES = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
@@ -293,7 +307,7 @@ class Event:
         }
 
     def compute_id(self) -> str:
-        return "e" + hashlib.blake2b(canonical(self.body()).encode(), digest_size=12).hexdigest()
+        return "e" + content_digest(self.body())
 
     def to_json(self) -> str:
         d = self.body()
