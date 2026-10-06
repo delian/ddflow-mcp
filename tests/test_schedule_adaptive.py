@@ -196,3 +196,18 @@ def test_wait_plans_with_the_same_limit_as_next(repo, monkeypatch) -> None:
     lifecycle.wait(repo, agent="a1", timeout_s=0)
     assert n >= 1 and len(seen) > n, seen  # wait asked for the limit too
     assert all(seen), seen  # and every caller handed over the log
+
+
+def test_the_fallback_survives_a_failing_params(repo, monkeypatch) -> None:
+    from ddflow.core.model import State
+    from ddflow.services import flowstate as FL
+
+    def boom(*a, **k):
+        raise RuntimeError("no params")
+
+    monkeypatch.setattr(FL, "current_limit", boom)
+    monkeypatch.setattr(FL.FP, "params", boom)
+    cfg = Config()
+    cfg.schedule.max_parallel_tasks = 3
+    d = FL.limit_for(repo, cfg, State())
+    assert d.limit == 3 and d.limited_by == "unavailable"
