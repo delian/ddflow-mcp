@@ -271,6 +271,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes.extend(FL.doctor_notes(repo))
+    notes.extend(FL.history_notes(cfg, events))  # log signals with too little history yet
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)

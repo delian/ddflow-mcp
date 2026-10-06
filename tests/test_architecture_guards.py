@@ -74,10 +74,9 @@ KEPT_UNREFERENCED: dict[str, str] = {
     # Claude Code's server approval (B-onboard-harness): the per-descriptor approval step
     # of B-hx-onboard-generic is its caller; the onboard prompt does it by hand until then.
     "ddflow/services/harness.py:enable_project_servers": "B-hx-onboard-generic",
-    # Adaptive flow (D-adaptive-flow): the admission target and the doctor's
-    # too-little-history notes; the quota signal is the remaining wiring.
+    # Adaptive flow (D-adaptive-flow): the admission target; the quota signal is the
+    # remaining wiring. (The doctor's too-little-history notes are wired: Bc6784dab3c.)
     "ddflow/core/flowcontrol.py:decide_admission": "B-af-quota-signal",
-    "ddflow/core/flowsignals.py:history_notes": "B-af-quota-signal",
     # Usage quotas (D-quotas): the api awaits its surfaces.
     "ddflow/api/quota.py:quota_declare": "BL-quotas",
     "ddflow/api/quota.py:quota_show": "BL-quotas",

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import copy
 import statistics
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from ..config import Config
@@ -186,18 +186,28 @@ def compute(events: Sequence[Event], state: State, cfg: Config, now: float) -> S
     )
 
 
-def history_notes(signals: Signals) -> list[str]:
+def history_notes(signals: Signals, enabled: Collection[str] | None = None) -> list[str]:
     """Neutral one-line notes for ``doctor``: which log-derived signals have too little
-    history yet. Informational, never a failure: such a signal is simply not used."""
+    history yet. Informational, never a failure: such a signal is simply not used.
+    ``enabled`` (default: all) limits them to the signals the controller reads."""
+
+    def shown(name: str) -> bool:
+        return enabled is None or name in enabled
+
     notes = []
     for name in ("reviewer_latency_ratio", "gate_failure_rate", "merge_failure_rate"):
-        if getattr(signals, name) is None:
+        if shown(name) and getattr(signals, name) is None:
             notes.append(f"{name}: too little history in the log yet (neutral, not used)")
-    # gate_failure_ratio shares gate_failure_rate's recent hour (noted above when short);
-    # with that hour present, a None ratio means the 7-day baseline is what is short.
-    if signals.gate_failure_ratio is None and signals.gate_failure_rate is not None:
-        notes.append(
-            f"gate_failure_ratio: under {MIN_BASELINE_GATE_OUTCOMES} gate outcomes in the "
-            "7-day baseline yet (neutral, not used)"
-        )
+    if shown("gate_failure_ratio") and signals.gate_failure_ratio is None:
+        if signals.gate_failure_rate is not None:
+            # the recent hour is there: the 7-day baseline is what is short
+            notes.append(
+                f"gate_failure_ratio: under {MIN_BASELINE_GATE_OUTCOMES} gate outcomes in "
+                "the 7-day baseline yet (neutral, not used)"
+            )
+        elif not shown("gate_failure_rate"):
+            # the recent hour is short and gate_failure_rate's note is not there to say so
+            notes.append(
+                "gate_failure_ratio: too little history in the log yet (neutral, not used)"
+            )
     return notes
