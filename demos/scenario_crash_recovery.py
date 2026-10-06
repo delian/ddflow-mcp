@@ -43,7 +43,7 @@ def _while_live(sc: Scenario, check, holder: str = "delta"):
     it returned.
 
     Judged against the LEASE'S OWN CLOCK, not a margin: the check counts only when it
-    FINISHED before the lease that DELTA's last heartbeat started could expire -- an
+    FINISHED before the lease that the holder's last heartbeat started could expire -- an
     upper bound on when it looked. At load average 100-190 one process could outlive an
     8 s lease, and the scenario failed on a correct answer (B11e64b1e8c, after
     Bdc7fe4dbbb widened the margin once). So a check that ran too late is re-observed
@@ -255,7 +255,8 @@ def run(sc: Scenario) -> None:
     sc.step("The event log tells the full story of the incident")
     # Inside EPSILON's live lease (8 s): under load the steps since its claim outlived it,
     # and doctor rightly reported the expired lease as a problem (bug Bfb0e454b49).
-    _, out, _ = _while_live(sc, lambda: sc.ddflow("doctor", expect=None), holder="epsilon")
+    code, out, err = _while_live(sc, lambda: sc.ddflow("doctor", expect=None), holder="epsilon")
+    sc.check("doctor exits 0 inside the live lease", code == 0, out + err)
     sc.check(
         "doctor reports a healthy log after recovery",
         "Healthy" in out or "problem" not in out.lower(),
