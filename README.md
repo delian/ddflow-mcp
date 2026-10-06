@@ -2262,7 +2262,7 @@ ddflow loops       # circular references and runtime loops (exit 2 = none)
 
 `progress` counts a landing once (`commits` holds distinct shas). `ddflow show <id>` takes a
 **bug** id too: its state, where it was found, the fix task(s) — a task that says "fixes
-bug X" is a fix, a mention is not — the regression tests it was closed with, and an
+bug X", or names X in a fix list ("fixes bugs A, B and X"), is a fix, a mention is not — the regression tests it was closed with, and an
 invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON (a task under no phase is listed in an **Unphased** section of the board, and under `unphased` in the JSON);
 `--agent`, `--repo` and `--json` are accepted after the subcommand as well as before it.
 
