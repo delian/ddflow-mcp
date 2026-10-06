@@ -35,6 +35,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..config import _is_code_tree
+
 
 @dataclass
 class Macro:
@@ -101,6 +103,8 @@ def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
     Read from `.ddflow/config.toml`, then `.ddflow/macros.toml` -- the same two-file
     precedence as reviewers and companions. A block that cannot be read at all (an
     unknown field, invalid TOML) still raises: that is the whole file, not one macro.
+    An unknown field raises only in the tree the code came from; elsewhere the file may
+    be newer than the code, and the field is skipped with a warning (B0016a65167).
 
     A macro named like a shipped command is REFUSED BY NAME rather than left to lose to
     it silently -- a `bug-hunt` block that does nothing, with every surface reporting the
@@ -108,7 +112,6 @@ def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
     the error, and one clashing block made every other macro vanish from `prompts list`,
     MCP `prompts/list` and `prompts show` while doctor said nothing (B-macro-clash-silent).
     """
-    from ..config import _is_code_tree
     from ..infra import tomlcfg
     from .prompts import COMMANDS
 

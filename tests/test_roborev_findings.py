@@ -49,7 +49,9 @@ def test_an_unknown_companion_field_is_refused_not_dropped(repo, monkeypatch):
     (repo / ".ddflow" / "companions.toml").write_text(
         '[[companion]]\nid = "mine"\ntitle = "x"\ncommmand = "typo"\n'
     )
-    _code, out, err = run_cli(repo, "companions", "list", "--no-probe")
+    code, out, err = run_cli(repo, "companions", "list", "--no-probe")
+    # Loaded, not refused: exit 2 is the report's own "companions missing" answer.
+    assert code in (OK, NOTHING) and "mine" in out, f"the field must be skipped:\n{out}{err}"
     assert "commmand" in err, f"a typo must be named, not absorbed:\n{out}{err}"
     monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())
     with pytest.raises(ValueError, match="commmand"):
