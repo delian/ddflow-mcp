@@ -3563,6 +3563,24 @@ Every number the older ddflow shows is computed without those events, so the rem
 last stamped by (next section); the note names it. An event whose `schema` is newer than
 this code knows is counted the same way (`phase.added (schema 2) x1`).
 
+**Payload versions and upcasters.** The log is never rewritten, so when an event's `data`
+has to change shape the kind's payload version goes up (`"v": 2` in `data`; absent means 1)
+and a pure upcaster in `ddflow/core/upcasters.py` turns the old shape into the new one as
+the log is read: every handler sees the current shape, and the events every released
+ddflow wrote keep folding. A payload version newer than this code knows is counted like an
+unknown kind (`phase.added (payload v2) x1`), never guessed at.
+`tests/fixtures/event_kinds.json` is the committed snapshot of every kind's fields and
+types; a removed kind, a removed field or a changed type fails the suite unless it comes
+with a version bump, its upcasters and an entry in the compatibility contract. An added
+kind or field only has to be recorded (`python tests/test_event_upcasters.py --write`).
+
+**One malformed event no longer stops the fold.** An event whose handler raises (a
+hand-edited shard, a ddflow bug) used to abort every read of the log. It is now recorded
+as a fold problem and the fold goes on; `ddflow doctor` adds a note naming each one
+(`<event id> <kind> at lamport N by <agent>: <error>`) with the advice to file it; what that
+event would have changed is missing from every number (what its handler changed before it
+raised stays). A strict fold (the tests' default) still raises.
+
 ### The compatibility contract
 
 What ddflow promises not to break is written down in

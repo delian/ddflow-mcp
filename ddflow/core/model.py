@@ -163,6 +163,7 @@ from .records import (  # noqa: F401
     RUNNING,
     Bug,
     Decision,
+    FoldProblem,
     GateRecord,
     Item,
     Job,
@@ -181,6 +182,7 @@ from .records import (  # noqa: F401
     _overlaps,
     _span,
 )
+from .upcasters import NewerPayload, upcast
 
 # ---------------------------------------------------------------------------------
 # Event handlers.
@@ -303,12 +305,28 @@ def known_kinds() -> frozenset[str]:
 _SESSION_TEXT = ("session.prompt", "session.note")
 
 
+def _problem(st: State, ev: Event, exc: Exception) -> None:
+    st.fold_problems.append(
+        FoldProblem(
+            event=ev.id,
+            kind=ev.kind,
+            lamport=ev.lamport,
+            agent=ev.agent,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+    )
+
+
 def fold(events: list[Event], *, strict: bool = True) -> State:
     """Replay events into state. Pure; no I/O; deterministic.
 
-    ``strict`` raises on an unknown kind. Non-strict is for reading a log written by a
-    NEWER ddflow than this one, where forward compatibility beats correctness of the
-    unknown part -- but it counts what it skipped so the caller can refuse to act.
+    Each event is first brought to the current shape of its kind (`upcasters.upcast`).
+
+    ``strict`` raises on an unknown kind, a payload newer than this code, and an event its
+    handler cannot apply. Non-strict is for reading a log written by a NEWER ddflow than
+    this one, where forward compatibility beats correctness of the unknown part -- but it
+    counts what it skipped (`skipped_kinds`) and records what it could not apply
+    (`fold_problems`), which doctor names.
     """
     st = State()
     # An adopted orphan lives on as the copy under its session; the id-less original
@@ -316,7 +334,7 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
     adopted = {
         ev.data["adopted_from"]
         for ev in events
-        if ev.kind in _SESSION_TEXT and ev.data.get("adopted_from")
+        if ev.kind in _SESSION_TEXT and isinstance(ev.data, dict) and ev.data.get("adopted_from")
     }
     for ev in events:
         st.event_count += 1
@@ -335,14 +353,39 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
             key = f"{ev.kind} (schema {ev.schema})"
             st.skipped_kinds[key] = st.skipped_kinds.get(key, 0) + 1
             continue
+        try:
+            cur = upcast(ev)  # the current shape of its kind; the same object at version 1
+        except NewerPayload:
+            # A payload shape from a NEWER ddflow: preserved in the log, counted, never
+            # guessed at -- the same handling and advice as an unknown kind (D-compat 2).
+            if strict:
+                raise
+            key = f"{ev.kind} (payload v{ev.data.get('v')})"
+            st.skipped_kinds[key] = st.skipped_kinds.get(key, 0) + 1
+            continue
+        except Exception as exc:
+            if strict:
+                raise
+            _problem(st, ev, exc)
+            continue
+        # Provenance the LOG added to the payload, not part of the kind's shape: read from
+        # the event as written, so an upcaster that rebuilds the payload cannot drop it.
         older = ev.data.get(OLDER_MARK)
         if older:
             st.older_version_events[str(older)] = st.older_version_events.get(str(older), 0) + 1
-        handler = HANDLERS.get(ev.kind)
+        handler = HANDLERS.get(cur.kind)
         if handler is None:
             if strict:
-                raise ValueError(f"unknown event kind {ev.kind!r} at lamport {ev.lamport}")
-            st.skipped_kinds[ev.kind] = st.skipped_kinds.get(ev.kind, 0) + 1
+                raise ValueError(f"unknown event kind {cur.kind!r} at lamport {cur.lamport}")
+            st.skipped_kinds[cur.kind] = st.skipped_kinds.get(cur.kind, 0) + 1
             continue
-        handler(st, ev)
+        if strict:
+            handler(st, cur)
+            continue
+        try:
+            handler(st, cur)
+        except Exception as exc:
+            # One malformed event no longer aborts the fold and hides every event after it
+            # (B-uni-compat-events): it is recorded, `doctor` names it, and the fold goes on.
+            _problem(st, cur, exc)
     return st

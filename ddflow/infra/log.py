@@ -35,6 +35,7 @@ from typing import Any
 
 from ..config import LogConfig
 from ..core import digest as D
+from ..core import upcasters as UP
 from ..core.events import (
     OLDER_MARK,
     PROVENANCE_KINDS,
@@ -868,6 +869,10 @@ class EventLog:
         self, kind: str, subject: str, data: dict[str, Any], observed: Iterable[Event] = ()
     ) -> Event:
         """Write one event. The caller holds the lock."""
+        # The kind's payload version (`core.upcasters`), here where EVERY write passes --
+        # the version stamp and the skew override call this directly. Absent at version 1,
+        # so the bytes written are unchanged until a kind's shape changes.
+        data = UP.stamp(kind, data)
         # Re-read inside the lock: another agent may have advanced the clock.
         high = self._highest_lamport()
         for e in observed:
