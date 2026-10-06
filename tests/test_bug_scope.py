@@ -216,7 +216,7 @@ def test_extending_an_open_bug_carries_severity_and_scope_onto_it(repo):
 def test_the_offer_is_produced_once_the_command_is_set(repo, monkeypatch):
     # The production constant is empty until the command exists; this proves the offer
     # path in-process (a CLI subprocess would not see the patch).
-    monkeypatch.setattr(K, "BUG_REPORT_COMMAND", "ddflow bug example {id}")
+    monkeypatch.setattr(K.bugs, "BUG_REPORT_COMMAND", "ddflow bug example {id}")
     run_cli(repo, "init")
     out = K.bug_found(repo, summary="x", id="B-o", scope="ddflow", agent="a")
     assert out.data["offer"].count("`ddflow bug example B-o`") == 1, out.data
