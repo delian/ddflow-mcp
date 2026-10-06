@@ -671,13 +671,30 @@ def _holder_note(path: Path) -> str:
 _LOCK_FIELDS = 6
 
 
+#: The most of a holder's command line a lock-timeout message shows.
+_CMD_SHOWN = 200
+
+
 def _describe_pid(pid: int) -> str:
-    """`pid N (command line)` -- the command from /proc, or just the pid."""
+    """`pid N (command line)` -- the command from /proc, or just the pid.
+
+    The interpreter (and a script it runs) is shown by its base name: a venv under a deep
+    directory filled the whole budget with its path, cutting off the arguments that say
+    WHAT holds the lock (bug B3a4bf051b4). A line still too long keeps its head and tail.
+    """
     try:
         raw = Path(f"/proc/{pid}/cmdline").read_bytes()
-        cmd = raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()[:200]
     except OSError:
-        cmd = ""
+        return f"pid {pid}"
+    argv = [a.decode("utf-8", "replace") for a in raw.split(b"\0") if a]
+    if argv:
+        argv[0] = os.path.basename(argv[0]) or argv[0]
+    if len(argv) > 1 and argv[0].startswith("python") and argv[1].startswith("/"):
+        argv[1] = os.path.basename(argv[1]) or argv[1]  # the script it runs, never an argument
+    cmd = " ".join(argv).strip()
+    if len(cmd) > _CMD_SHOWN:
+        tail = _CMD_SHOWN // 3
+        cmd = f"{cmd[: _CMD_SHOWN - tail - 3]}...{cmd[-tail:]}"
     return f"pid {pid} ({cmd})" if cmd else f"pid {pid}"
 
 
