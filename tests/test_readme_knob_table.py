@@ -118,9 +118,11 @@ def test_main_refuses_a_hand_edited_region_unless_forced(tmp_path, capsys):
 
 def _count_claims(text: str) -> list[tuple[str, str]]:
     """Every knob count `text` states, as (knobs, sections or ""). The contract: "N knobs
-    [across M sections]"; and "knobs (K of the N)" -- the word, then only spaces, bold
-    markers or one line wrap, then the parenthetical. A wrapped line is still the claim;
-    punctuation between them (`knobs, (...)`) is another sentence's aside, not a count."""
+    [across M sections]"; and "knobs (K of the N)" -- the word, its closing bold markers
+    (`knobs**`), then only spaces or one line wrap, then the parenthetical. Only N, the
+    total, is returned: K is one section's share, which the sentence names in prose. A
+    wrapped line is still the claim; punctuation between them (`knobs, (...)`) is another
+    sentence's aside, not a count."""
     claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", text)
     claims += [(n, "") for n in re.findall(r"knobs\**[ ]*\n?[ ]*\(\d+ of the (\d+)\)", text)]
     return claims
