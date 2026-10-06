@@ -466,7 +466,7 @@ def _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence: Evidence, skip
     if skip:
         return _Vetted()
     if evidence.model and not evidence.model_is_reviewer:
-        if why := _author_model_on_reviewer_gate(st, cfg, log, gate, evidence.model):
+        if why := _author_model_on_reviewer_gate(st, cfg, log, gate, gdef, evidence.model):
             return _Vetted(refusal=why)
     if not evidence.reviewed_sha:
         return _Vetted()
@@ -474,7 +474,7 @@ def _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence: Evidence, skip
     return _Vetted(refusal=why, note=note, evidence={"reviewed_sha": full} if full else {})
 
 
-def _author_model_on_reviewer_gate(st, cfg, log, gate: str, model: str) -> str:
+def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) -> str:
     """A refusal when ``model`` is the AUTHOR's family on a reviewer gate, else "".
 
     `gate record --model` names the REVIEWER's model; `complete --model` the author's.
@@ -483,7 +483,7 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, model: str) -> str:
     author is the model this agent declared at `session start`; with none declared there
     is nothing to compare, and the record stands.
     """
-    if gate not in G.REVIEWER_GATES:
+    if not G.is_reviewer_gate(gate, gdef):
         return ""
     from .lifecycle import _session_model
 
@@ -560,7 +560,14 @@ def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple
 
 
 def _roborev_reviewer(
-    repo: Path, wt: Path | None, gate: str, ev: dict[str, Any], typed: str, *, skip: bool
+    repo: Path,
+    wt: Path | None,
+    gate: str,
+    ev: dict[str, Any],
+    typed: str,
+    *,
+    skip: bool,
+    gdef=None,
 ) -> tuple[str, str]:
     """(the reviewer to record, a note) for a reviewer gate recorded with --reviewed-sha.
 
@@ -575,7 +582,7 @@ def _roborev_reviewer(
     """
     from ..services import roborev as RR
 
-    if skip or gate not in G.REVIEWER_GATES or not ev.get("reviewed_sha"):
+    if skip or not G.is_reviewer_gate(gate, gdef) or not ev.get("reviewed_sha"):
         return typed, ""
     where = wt if wt is not None and wt.exists() else repo
     rv, note = RR.review_of(where, str(ev["reviewed_sha"]))
@@ -717,7 +724,7 @@ def record(
         return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
     ev.update(vetted.evidence)
     warning = " ".join(filter(None, [warning, vetted.note]))
-    by, note = _roborev_reviewer(repo, wt, gate, ev, evidence.model, skip=skip)
+    by, note = _roborev_reviewer(repo, wt, gate, ev, evidence.model, skip=skip, gdef=gdef)
     warning = " ".join(filter(None, [warning, note]))
 
     try:
