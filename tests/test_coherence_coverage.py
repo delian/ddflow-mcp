@@ -132,6 +132,10 @@ EXEMPT: dict[str, str] = {
         "replaces it) and validated by api.schedule; the authoring surfaces that add a "
         "duplicate check are B-sched-author",
     ),
+    **dict.fromkeys(
+        ("trigger.evaluated", "trigger.fired", "trigger.suppressed"),
+        "the trigger evaluator's own record of a run, a fire or a suppression: no authored text",
+    ),
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
 }
@@ -147,6 +151,8 @@ WRITERS_EXEMPT: dict[str, str] = {
     "to a duplicate, not a new record",
     "api/knowledge.py:bug_file_tasks": "attaches a fix task to an existing bug (same id)",
     "api/bug_reopen.py:refile_reported": "attaches a fix task to an existing bug (same id)",
+    "api/schedule.py:trigger_evaluate": "a trigger's remediation item, generated from its job; "
+    "de-duplicated by the trigger's dedupe key (one open remediation per key)",
     "services/promotions.py:add": "a generated 'Promote X to Y' task; one open promotion per "
     "environment is enforced instead",
     "services/importer.py:apply_import": "the plan was de-duplicated against the queue with "
