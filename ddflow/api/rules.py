@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+
 from ..core import outcome as O
 from ..services.rules import Rule, RulesStorage
 from ._base import _load
@@ -59,7 +61,6 @@ def _cross_kind(
     itself, with its refusal, its candidates and its answers. None while ``rule`` is not
     in ``[dedupe].kinds``. The other rules are compared by `rule_dedup_check`: rules are
     files, so the index this check reads holds none of them."""
-    from . import _dedupe as DD
 
     log, cfg, st = _load(repo, agent)
     if "rule" not in cfg.dedupe.kinds:
@@ -86,7 +87,6 @@ def _answer_other_kind(
     the rule's text on that record (`record.extended`) and file no rule, as every other
     add does; onto a closed or claimed one, and ``related``, the rule is filed and the
     result names the record (a rule is a file: it carries no link in the log)."""
-    from . import _dedupe as DD
 
     if not DD.kind_of(_load(repo, agent)[2], answer.target):
         return O.failed(
@@ -125,7 +125,6 @@ def _add_checked_against_others(
 ) -> O.Outcome:
     """File ``rule`` -- no other rule reads like it -- unless it reads like a record of
     another kind and nobody has answered ``new``."""
-    from . import _dedupe as DD
 
     chk = _cross_kind(repo, rule, agent, DD.Answer("new") if answer else None)
     if chk is not None and chk.refusal is not None:
@@ -224,7 +223,6 @@ def rule_dedup_check_dry_run(
 
     is_duplicate, candidates = rule_dedup_check(content, existing_rules, threshold, title=title)
     # And every other kind (D-rule-dedupe-everywhere), as `rule add` would meet it.
-    from . import _dedupe as DD
 
     probe = Rule(id=rule_id or "rule-check", title=title, content=content)
     chk = _cross_kind(repo, probe, agent, DD.Answer(check_only=True), event_kind="rule.check")
@@ -619,7 +617,6 @@ def rule_update(
                 f"{dedup_answer.target}",
                 id=rule_id,
             )
-        from . import _dedupe as DD
 
         edited = dataclasses.replace(
             current,
