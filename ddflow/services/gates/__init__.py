@@ -27,23 +27,24 @@ treated as "no problem".
 """
 
 # The gate machinery lives one module per area in this package (B-uni-splits); every name --
-# public, private and the modules the single file imported -- is re-exported, so
-# `from ddflow.services import gates as G; G.run_command_gate(...)` keeps working. A
-# REBINDING is not shared: each function reads names from its own module, so to replace a
-# helper or a constant in a test, patch the module that defines it
+# public, private and the modules the single file imported, except the three below -- is
+# re-exported, so `from ddflow.services import gates as G; G.run_command_gate(...)` keeps
+# working. A REBINDING is not shared: each function reads names from its own module, so to
+# replace a helper or a constant in a test, patch the module that defines it
 # (`gates.evidence.MAX_UNTRACKED_HASHED`), not this package.
+
+# `subprocess`, `tempfile` and `hashlib` are imported by the areas that use them and NOT
+# re-exported here: each is confined to its one home by .importlinter, and the package
+# importing them again would be one more violation (nothing reads `gates.subprocess`).
 
 from __future__ import annotations
 
 import getpass  # noqa: F401
-import hashlib  # noqa: F401
 import os  # noqa: F401
 import re  # noqa: F401
 import shlex  # noqa: F401
 import shutil  # noqa: F401
 import socket  # noqa: F401
-import subprocess  # noqa: F401
-import tempfile  # noqa: F401
 import time  # noqa: F401
 import tomllib  # noqa: F401
 from collections.abc import Callable, Iterable  # noqa: F401
