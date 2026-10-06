@@ -2786,6 +2786,26 @@ that already breaks it still loads, the controller clamps it, and `doctor` says 
 unknown signal name is refused with the list of signals. A signal with no marks (all but
 `load_per_core`, as shipped) is read but never moves the limit until marks are set for it.
 
+### Adaptive parallelism: the sample ring and the derived limit
+
+The adaptive limit is **derived and local, never committed**. There is no daemon: every
+command that loads the project -- `next`, `brief`, `claim` and `heartbeat` among them, and
+heartbeats already run every `lease.heartbeat_s` on every platform -- appends at most one
+sample per `schedule.signal_interval_s` to `.ddflow/local/flow/samples.jsonl`: the host
+signals (below), the log-derived rates, how many items were in flight and whether the
+limit was binding. The ring lives under the git-ignored `.ddflow/local/` (which also
+ignores itself, for a project whose `.ddflow/.gitignore` predates it), keeps the last six
+hours, and is folded through the controller with the `[schedule]` parameters whenever the
+limit is asked for, with the log-derived rates re-read at that moment (`plan` asks for it
+once the wiring task lands; until then the ring is recorded and auto holds at its start). A corrupt or
+truncated line is skipped (and the file rewritten on the next sample), a clock that went
+backwards drops the sample, a short `O_EXCL` lock file keeps concurrent samplers to one
+sample per interval (the file's integrity does not depend on it: whole lines are appended
+and rewrites are atomic renames), and a directory that cannot be written leaves the limit at
+its start value with the reason. In `fixed` mode nothing is
+sampled. `ddflow doctor` notes a ring that cannot be read or written and a `.ddflow/local/`
+that git does not ignore.
+
 ### Adaptive parallelism: host signals
 
 The adaptive parallelism controller steers by the host as well as by the log.
