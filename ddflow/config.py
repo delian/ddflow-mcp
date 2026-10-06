@@ -718,7 +718,8 @@ def strictest(key: str) -> Any:
 #: Knobs whose VALUE set can grow in a later release (every enum, and `export.tables`, whose
 #: sub-tables carry enums of their own), so a config FILE carrying a value this version
 #: does not know is tolerated with a warning rather than refused -- an enum knob then
-#: takes its strictest value (`KNOB_STRICTEST`); the write paths (`config --set`,
+#: takes its strictest value (`KNOB_STRICTEST`), as does a number knob with one
+#: (`KNOB_STRICTEST_NUMBER`); the write paths (`config --set`,
 #: `ddflow_configure`) and the environment still refuse it.
 _TOLERANT_VALUES = frozenset(
     {*KNOB_CHOICES, *KNOB_STRICTEST_NUMBER, "export.tables", "bugs.phase"}

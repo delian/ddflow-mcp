@@ -33,7 +33,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from ..config import TriggersConfig
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
 
@@ -395,11 +394,12 @@ def evaluate(
     triggers: dict[str, Trigger],
     now: datetime,
     *,
-    max_per_hour: int = TriggersConfig().max_fires_per_hour,
+    max_per_hour: int,
 ) -> list[Decision]:
     """Every (trigger, key) whose condition is met now, and what it decided. Pure: the
     caller writes the events and files the items. ``max_per_hour`` is
-    `[triggers].max_fires_per_hour` (D-trigger-cap-knob): 0 suppresses every fire as
+    `[triggers].max_fires_per_hour` (D-trigger-cap-knob), required so no caller can fall
+    back to a cap the operator did not set: 0 suppresses every fire as
     `global_cap`. The hourly cap is counted from each trigger's fire tail, so it may not
     exceed what the tail keeps."""
     if not 0 <= max_per_hour <= TRIGGER_FIRES_KEPT:
