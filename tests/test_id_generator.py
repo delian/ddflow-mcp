@@ -277,9 +277,11 @@ def test_a_short_sha_refiling_round_trips() -> None:
         assert ids.is_filing_of(ids.refile("Bci-x-0123456789", sha), "Bci-x-0123456789")
 
 
-def test_a_sequence_numbered_id_is_not_a_refiling() -> None:
-    assert not ids.is_filing_of("fix-B1-1234", "fix-B1")
-    assert not ids.is_filing_of("promote-prod-1234", "promote-prod")
+def test_only_a_seven_digit_suffix_is_a_refiling_of_a_stable_id() -> None:
+    base = ids.make(Config(), "ci_bug", slug="x", digest="0123456789").id
+    assert ids.is_filing_of(base + "-abc1234", base)
+    for other in (base + "-abc12", base + "-abc12345", base + "-ffffffffff", base + "x"):
+        assert not ids.is_filing_of(other, base), other
 
 
 def test_a_repeated_parent_token_reads_back() -> None:
