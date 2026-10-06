@@ -173,6 +173,89 @@ def test_offload_own_replies_are_modern(repo, monkeypatch):
     assert sent[0]["result"]["_meta"] == {"exit": 2, SERVER_KEY: SERVER_INFO}
 
 
+# -- D-mcp-identity-per-call: on the stateless revision, identity is per request ----------
+
+
+def _tool(srv, name, args, *, modern=True, mid=1, **meta_kw):
+    msg = {"jsonrpc": "2.0", "id": mid, "method": "tools/call",
+           "params": {"name": name, "arguments": args}}  # fmt: skip
+    if modern:
+        msg = req("tools/call", {"name": name, "arguments": args}, mid=mid, **meta_kw)
+    return srv.handle(msg)["result"]
+
+
+def _project(repo):
+    from conftest import run_cli
+
+    assert run_cli(repo, "init")[0] == 0
+    for t in ("T1", "T2", "T3"):
+        assert run_cli(repo, "task", "add", t, "--globs", f"{t}.py")[0] == 0
+
+
+def _authors(repo):
+    from ddflow.infra.log import EventLog
+
+    return {e.subject: e.agent for e in EventLog(repo).read_all() if e.kind == "task.updated"}
+
+
+def test_a_modern_identify_persists_nothing_and_says_why(repo):
+    _project(repo)
+    srv = Server(repo, agent="")
+    before = srv.agent
+    res = _tool(srv, "ddflow_identify", {"agent": "sub-x"})
+    text = res["content"][0]["text"]
+    assert not res.get("isError"), text
+    assert "per request" in text and "as_agent" in text and M.META_AGENT in text
+    assert srv.agent == before, "a modern identify changed the connection's identity"
+    _tool(srv, "ddflow_update", {"id": "T1", "title": "after identify"}, mid=2)
+    assert _authors(repo)["T1"] != "sub-x"
+
+
+def test_meta_agent_and_as_agent_name_the_caller_per_request(repo):
+    _project(repo)
+    srv = Server(repo, agent="")
+    _tool(srv, "ddflow_update", {"id": "T1", "title": "a"}, **{M.META_AGENT: "via-meta"})
+    _tool(srv, "ddflow_update", {"id": "T2", "title": "b", "as_agent": "via-arg"}, mid=2)
+    # the argument is the more specific of the two
+    _tool(
+        srv, "ddflow_update", {"id": "T3", "title": "c", "as_agent": "arg-wins"}, mid=3,
+        **{M.META_AGENT: "meta-loses"},
+    )  # fmt: skip
+    assert _authors(repo) == {"T1": "via-meta", "T2": "via-arg", "T3": "arg-wins"}
+    assert srv.agent == "", "a per-request name leaked into the connection"
+
+
+def test_a_bad_meta_agent_is_refused_as_a_tool_error(repo):
+    _project(repo)
+    srv = Server(repo, agent="")
+    res = _tool(srv, "ddflow_update", {"id": "T1", "title": "a"}, **{M.META_AGENT: "a b/c"})
+    assert res.get("isError") and "not a usable agent name" in res["content"][0]["text"]
+
+
+def test_a_modern_request_without_identity_uses_the_derived_default(repo):
+    from ddflow.surfaces.mcp import _default_agent
+
+    _project(repo)
+    srv = Server(repo, agent="")
+    _tool(srv, "ddflow_update", {"id": "T1", "title": "a"})
+    assert _authors(repo)["T1"] == _default_agent(repo)[0]
+
+
+def test_an_initialize_era_connection_keeps_identify(repo):
+    _project(repo)
+    srv = Server(repo, agent="")
+    srv.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {"protocolVersion": SUPPORTED_PROTOCOLS[0]}})  # fmt: skip
+    _tool(srv, "ddflow_identify", {"agent": "legacy-a"}, modern=False, mid=2)
+    assert srv.agent == "legacy-a"
+    _tool(srv, "ddflow_update", {"id": "T1", "title": "a"}, modern=False, mid=3)
+    # `_meta` agent is a modern-era field: a legacy request's `_meta` is not read for it
+    srv.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+        "name": "ddflow_update", "arguments": {"id": "T2", "title": "b"},
+        "_meta": {M.META_AGENT: "ignored"}}})  # fmt: skip
+    assert _authors(repo) == {"T1": "legacy-a", "T2": "legacy-a"}
+
+
 # -- Bac0bb04c9f: 2025-11-25, the last initialize-era revision ----------------------------
 
 LATEST_LEGACY = "2025-11-25"
@@ -236,3 +319,16 @@ def test_input_validation_errors_are_tool_execution_errors(repo):
     assert (
         "unknown argument(s) for ddflow_show: no_such_argument" in r["result"]["content"][0]["text"]
     )
+
+
+def test_a_valid_as_agent_wins_over_a_malformed_meta_name(repo):
+    """Rubber-duck and critic: `_meta` was validated first, so a bad `_meta` name refused
+    a call whose `as_agent` -- documented to win -- was fine."""
+    _project(repo)
+    srv = Server(repo, agent="")
+    res = _tool(
+        srv, "ddflow_update", {"id": "T1", "title": "a", "as_agent": "alice"},
+        **{M.META_AGENT: "not a name!"},
+    )  # fmt: skip
+    assert not res.get("isError"), res["content"][0]["text"]
+    assert _authors(repo)["T1"] == "alice"
