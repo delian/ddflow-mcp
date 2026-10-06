@@ -144,6 +144,18 @@ def _add_checked_against_others(
     return out
 
 
+def _related_to_rule(
+    repo: Path, rule: Rule, agent: str, answer: RuleDedupAnswer | None
+) -> O.Outcome:
+    """File ``rule`` with an answer that names another RULE: checked against the other
+    kinds as if unanswered -- a relation to a rule says nothing about a decision it may
+    restate -- and reported as ``related`` when it is one."""
+    out = _add_checked_against_others(repo, rule, agent, None)
+    if out.exit == O.OK and answer is not None and answer.relation == "related":
+        out.data["related"] = answer.target
+    return out
+
+
 def _compared(rule: Rule, title: str, content: str) -> tuple[float, str, str]:
     """(score, my text, its text) for a new rule against `rule`.
 
@@ -537,9 +549,10 @@ def rule_add(
     if not is_duplicate and (dedup_answer is None or dedup_answer.relation == "new"):
         return _add_checked_against_others(repo, rule, agent, dedup_answer)
 
-    # If no duplicates found, proceed with add
+    # No other rule reads like it, and the answer names a rule: that answers nothing about
+    # the other kinds, so they are still checked (rubber-duck, critic).
     if not is_duplicate:
-        return apply_rule_update(repo, rule, agent=agent, operation="created")
+        return _related_to_rule(repo, rule, agent, dedup_answer)
 
     # Duplicates found - handle based on answer
     if dedup_answer is None:
@@ -589,10 +602,7 @@ def rule_add(
     # there is no link to record; the answer is reported (bug B3be768717c: it was
     # advertised by both surfaces and failed as an unknown relation).
     if dedup_answer.relation == "related":
-        out = apply_rule_update(repo, rule, agent=agent, operation="created")
-        if out.exit == O.OK:
-            out.data["related"] = dedup_answer.target
-        return out
+        return _related_to_rule(repo, rule, agent, dedup_answer)
 
     # "extends" or "duplicate_of": always extend the existing rule (merge new content)
     if dedup_answer.relation in ("extends", "duplicate_of"):
@@ -632,7 +642,9 @@ def _check_edit(
         ), {}
     related = {"related": answer.target} if answer and answer.relation == "related" else {}
     if answer is not None and answer.target and _is_rule(repo, answer.target):
-        return None, related
+        # A relation to another rule answers nothing about the other kinds: they are
+        # checked as if unanswered (rubber-duck, critic).
+        answer = None
     edited = dataclasses.replace(
         current,
         title=fields.get("title", current.title),
