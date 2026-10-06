@@ -353,6 +353,7 @@ class Config:
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
                 value = _coerce_layer_knob(sec, knob, raw, known[knob].type, lenient)
+                written = value  # what THIS layer says, before any merge: what a note names
                 if f"{sec}.{knob}" == "schedule.signals" and isinstance(value, dict):
                     # merged over the layers below, mark by mark (`merge_signals`)
                     value = merge_signals(getattr(target, knob), value)
@@ -368,7 +369,7 @@ class Config:
                             self._bad_values.append(len(self.unknown_knobs))
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
-                        bad, value = value, strictest(f"{sec}.{knob}", getattr(target, knob))
+                        bad, value = written, strictest(f"{sec}.{knob}", getattr(target, knob))
                         # an earlier layer's note names what THIS layer wrote, not the
                         # fallback; each bad value stays its own (true) report
                         self._forget_fallback(
