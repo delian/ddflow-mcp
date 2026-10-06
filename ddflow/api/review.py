@@ -896,23 +896,34 @@ def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
     base = base or W.default_branch(repo)
     wt = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt and wt.exists():
-        start = _delta_start(wt, "HEAD", head, base)
-        if start != head:
-            committed = W.git(wt, "diff", "--no-color", start, "HEAD")
-            working = W.git(wt, "diff", "--no-color", "HEAD")
-            if committed.ok and working.ok:  # else: everything since head, never "nothing"
-                return "\n".join(p.out for p in (committed, working) if p.out.strip())
-        return W.capture_diff(wt, head, include_untracked=False)
+        return _delta_of_tree(wt, head, base)
     tip = branch or (it.branch if it and it.branch else "")
     if tip:
-        start = _delta_start(repo, tip, head, base)
-        d = W.git(repo, "diff", "--no-color", start, tip) if start != head else None
-        if d is None or not d.ok:  # nothing merged in, or that diff failed: since head
-            d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
-        if not d.ok:  # could not run: never "nothing changed"
-            raise RuntimeError(f"git diff {head[:10]}...{tip} failed: {d.err or d.out}")
-        return (d.out + "\n") if d.out else ""
+        return _delta_of_branch(repo, tip, head, base)
     return W.capture_diff(repo, head, include_untracked=False, exclude=SELF_MANAGED)
+
+
+def _delta_of_tree(wt: Path, head: str, base: str) -> str:
+    """The delta of an item's worktree: its commits and tracked edits since the start."""
+    start = _delta_start(wt, "HEAD", head, base)
+    if start != head:
+        committed = W.git(wt, "diff", "--no-color", start, "HEAD")
+        working = W.git(wt, "diff", "--no-color", "HEAD")
+        if committed.ok and working.ok:  # else: everything since head, never "nothing"
+            return "\n".join(p.out for p in (committed, working) if p.out.strip())
+    return W.capture_diff(wt, head, include_untracked=False)
+
+
+def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
+    """The delta of a named branch. Raises RuntimeError when no diff can be produced: a
+    delta that could not run is never "nothing changed"."""
+    start = _delta_start(repo, tip, head, base)
+    d = W.git(repo, "diff", "--no-color", start, tip) if start != head else None
+    if d is None or not d.ok:  # nothing merged in, or that diff failed: since head
+        d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
+    if not d.ok:
+        raise RuntimeError(f"git diff {head[:10]}...{tip} failed: {d.err or d.out}")
+    return (d.out + "\n") if d.out else ""
 
 
 def _log_started(log, it, item: str, gate: str) -> None:
