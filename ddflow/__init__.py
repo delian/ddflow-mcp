@@ -15,3 +15,8 @@ decided each choice.
 #: from server.template.json. Keep it a plain `__version__ = "X.Y.Z"` literal: hatch and
 #: scripts/render_server_json.py both read it as text.
 __version__ = "0.1.18"
+
+#: The on-disk format level (docs/ddflow/compatibility.md): raised by any change an older
+#: ddflow cannot read or write safely, never by an additive one. Separate from `__version__`,
+#: which changes with every release whether or not anything on disk did.
+FORMAT_LEVEL = 1
