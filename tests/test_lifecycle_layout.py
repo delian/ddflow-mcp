@@ -64,12 +64,11 @@ def _top_level_names(path: Path) -> set[str]:
     """Every name a module binds at top level: defs, classes, assignments, imports."""
     names: set[str] = set()
     for n in ast.parse(path.read_text("utf-8")).body:
-        if isinstance(n, ast.FunctionDef | ast.ClassDef):
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             names.add(n.name)
-        elif isinstance(n, ast.Assign):
-            names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
-        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
-            names.add(n.target.id)
+        elif isinstance(n, ast.Assign | ast.AnnAssign):
+            targets = n.targets if isinstance(n, ast.Assign) else [n.target]
+            names |= {x.id for t in targets for x in ast.walk(t) if isinstance(x, ast.Name)}
         elif isinstance(n, ast.Import | ast.ImportFrom):
             names |= {a.asname or a.name.split(".")[0] for a in n.names}
     return names - {"annotations"}
