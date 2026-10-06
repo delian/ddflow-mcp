@@ -178,7 +178,9 @@ def test_with_nothing_else_ready_the_cap_line_does_not_say_more(repo):
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(
-        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 1\n", 1)
+        cfg.read_text().replace(
+            "[schedule]\n", '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 1\n', 1
+        )
     )
     for i in range(1, 4):
         run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")

@@ -272,6 +272,16 @@ def _explicit(cfg: Config, key: str) -> bool:
     return cfg.sources.get(key, "default") != "default"
 
 
+def _in_local(cfg: Config, key: str) -> bool:
+    return cfg.sources.get(key, "").startswith("local")
+
+
+def _set_cmd(cfg: Config, key: str, value: str) -> str:
+    """The command that changes `key` in the layer its value comes from: a value in the
+    local layer is overridden only there."""
+    return f"`ddflow config{' --local' if _in_local(cfg, key) else ''} --set {key} {value}`"
+
+
 def _parallel_findings(cfg: Config) -> list[Finding]:
     """Advice, never a problem, about what keeps adaptive parallelism from working: an
     inconsistent auto range (the controller clamps it) and the explicit 4s an older
@@ -300,7 +310,7 @@ def _parallel_findings(cfg: Config) -> list[Finding]:
                 "worktree.max_parallel",
                 f"is set to {OLD_PARALLEL_DEFAULT}, the old default an earlier `adopt` "
                 f"wrote, so it caps auto at {OLD_PARALLEL_DEFAULT} worktrees whatever the "
-                "limit allows. `ddflow config --set worktree.max_parallel 0` follows the "
+                f"limit allows. {_set_cmd(cfg, 'worktree.max_parallel', '0')} follows the "
                 "schedule limit instead; keep it only if this machine cannot hold more "
                 "trees (then set it with --local).",
             )
@@ -318,7 +328,12 @@ def _parallel_findings(cfg: Config) -> list[Finding]:
                 "wrote. Under auto (now the default) it is only the START value, so the "
                 "limit may rise to schedule.max_parallel_max. To keep exactly "
                 f"{OLD_PARALLEL_DEFAULT}: `ddflow config --set schedule.parallel fixed`; "
-                "to accept auto, remove the line.",
+                "to accept auto, remove the line from "
+                + (
+                    ".ddflow/local/config.toml."
+                    if _in_local(cfg, "schedule.max_parallel_tasks")
+                    else ".ddflow/config.toml."
+                ),
             )
         )
     return out

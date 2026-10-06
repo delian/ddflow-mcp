@@ -444,7 +444,9 @@ def test_a_cap_blocked_item_wait_agrees_with_claim(proj):
     `claim` then does: ready means claim grants it, blocked means claim refuses it."""
     cfg = proj / ".ddflow" / "config.toml"
     cfg.write_text(
-        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 1\n", 1)
+        cfg.read_text().replace(
+            "[schedule]\n", '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 1\n', 1
+        )
     )
     run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
     out = A.wait(proj, item="U1", timeout_s=0, agent=WAITER)

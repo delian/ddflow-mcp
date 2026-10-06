@@ -358,3 +358,33 @@ def test_a_disabled_signal_has_no_say() -> None:
     p = FP.params(cfg)
     assert p.thresholds == {}  # load_per_core has marks but is not enabled
     assert p.host_signals == ("disk_pressure",)
+
+
+def test_a_local_cap_is_given_a_local_remedy(repo: Path) -> None:
+    from ddflow.services import workflow as WF
+    from ddflow.services.gates import load_gates
+
+    assert run_cli(repo, "init")[0] == OK
+    assert run_cli(repo, "config", "--local", "--set", "worktree.max_parallel", "4")[0] == OK
+    cfg = Config.load(repo)
+    [f] = [f for f in WF.check(cfg, load_gates(repo, cfg)) if f.subject == "worktree.max_parallel"]
+    assert "ddflow config --local --set worktree.max_parallel 0" in f.detail
+
+
+def test_fixed_params_cannot_move() -> None:
+    from ddflow.core import flowparams as FP
+
+    cfg = Config()
+    cfg.schedule.parallel = "fixed"
+    cfg.schedule.max_parallel_tasks = 5
+    assert FP.params(cfg).bounds() == (5, 5, 5)
+
+
+def test_an_edit_is_judged_even_when_the_old_local_layer_is_unreadable(repo: Path) -> None:
+    """The range guard never refuses an edit for problems it cannot attribute to it."""
+    from ddflow.services.configwrite import _new_range_problems
+
+    before = "[schedule]\nmax_parallel_min = 'x'\n"  # does not load
+    after = "[schedule]\nmax_parallel_tasks = 10\n"
+    assert _new_range_problems(repo, before, after, False) == set()
+    assert _new_range_problems(repo, "", after, False)
