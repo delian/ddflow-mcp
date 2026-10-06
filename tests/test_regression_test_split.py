@@ -20,6 +20,20 @@ def test_a_closing_bracket_inside_an_id_does_not_swallow_the_next_entry():
     ]
 
 
+def test_a_value_holding_brackets_and_a_comma_stays_one_entry():
+    """Review of Bfc9daca269: clamping the depth at zero split this real node id (a
+    parametrize value `a]b]c,d`) inside its own brackets."""
+    assert _split_outside_brackets("tests/a.py::test[a]b]c,d]") == ["tests/a.py::test[a]b]c,d]"]
+    assert _split_outside_brackets("tests/a.py::test[a]b]c,d],tests/b.py::u") == [
+        "tests/a.py::test[a]b]c,d]",
+        "tests/b.py::u",
+    ]
+    assert _split_outside_brackets("tests/a.py::t[[1]] , tests/b.py::u") == [
+        "tests/a.py::t[[1]]",
+        "tests/b.py::u",
+    ]
+
+
 def test_separators_inside_brackets_still_do_not_split():
     assert _split_outside_brackets("tests/a.py::t[1,2;3],tests/b.py::u") == [
         "tests/a.py::t[1,2;3]",
