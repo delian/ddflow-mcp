@@ -26,7 +26,7 @@ from ..context import FAIL, Ctx
 _PAYLOADS = {
     "list": ("rows", "count"),
     "search": ("rows", "count", "query"),
-    "add": ("id", "candidates"),
+    "add": ("id", "candidates", "related"),
     "edit": ("id",),
     "remove": ("id",),
     "show": ("id", "title", "content", "tags", "scope", "priority", "globs", "created", "updated"),
@@ -109,7 +109,7 @@ def cmd_rule(a, c: Ctx) -> int:
         out = rule_update(c.repo, a.id, **fields)
         return _emit(c, out, verb, f"updated {a.id}: {', '.join(sorted(fields)) or 'nothing'}")
     if a.check:
-        out = rule_dedup_check_dry_run(c.repo, a.content or "")
+        out = rule_dedup_check_dry_run(c.repo, a.content or "", title=a.title or "")
         return _emit(c, out, verb, "\n".join(str(x) for x in out.data.get("candidates", [])))
     out = rule_add(
         c.repo,
@@ -130,4 +130,7 @@ def cmd_rule(a, c: Ctx) -> int:
         if c.json:
             return _emit(c, out, "add", "")
         return out.exit
-    return _emit(c, out, verb, f"added rule {a.id}")
+    related = out.data.get("related")
+    return _emit(
+        c, out, verb, f"added rule {a.id}" + (f" (related to {related})" if related else "")
+    )
