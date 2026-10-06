@@ -240,11 +240,12 @@ def bug_id(check: str, cfg: Config | None = None) -> str:
     return IDS.render(cfg if cfg is not None else Config(), "ci_bug", slug=slug, digest=digest)
 
 
-def is_filing_of(bug: str, base: str) -> bool:
-    """Whether ``bug`` is ``base`` itself or one of its re-filings (the id service's)."""
+def is_filing_of(bug: str, base: str, cfg: Config | None = None) -> bool:
+    """Whether ``bug`` is the CI bug ``base`` itself or one of its re-filings (the id
+    service decides, from the `[ids].ci_bug` template)."""
     from ..core import ids as IDS
 
-    return IDS.is_filing_of(bug, base)
+    return IDS.is_filing_of(cfg if cfg is not None else Config(), "ci_bug", bug, base)
 
 
 def refile_id(base: str, sha: str) -> str:
