@@ -2797,9 +2797,11 @@ ignores itself, for a project whose `.ddflow/.gitignore` predates it), keeps the
 hours, and is folded through the controller with the `[schedule]` parameters whenever the
 limit is asked for, with the log-derived rates re-read at that moment (`plan` asks for it
 once the wiring task lands; until then the ring is recorded and auto holds at its start). A corrupt or
-truncated line is skipped, a clock that went backwards drops the sample, two agents
-sampling at once are serialised by a short `O_EXCL` lock file, and a directory that cannot
-be written leaves the limit at its start value with the reason. In `fixed` mode nothing is
+truncated line is skipped (and the file rewritten on the next sample), a clock that went
+backwards drops the sample, a short `O_EXCL` lock file keeps concurrent samplers to one
+sample per interval (the file's integrity does not depend on it: whole lines are appended
+and rewrites are atomic renames), and a directory that cannot be written leaves the limit at
+its start value with the reason. In `fixed` mode nothing is
 sampled. `ddflow doctor` notes a ring that cannot be read or written and a `.ddflow/local/`
 that git does not ignore.
 
