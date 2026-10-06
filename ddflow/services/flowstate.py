@@ -340,6 +340,26 @@ def current_limit(
     return _fold(ctx, read_ring(ctx.repo), now, fresh=True)
 
 
+def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.Decision:
+    """The limit `plan(parallel=...)` uses, without sampling (the project load already
+    took any sample that was due). ``events`` is the log or a callable reading it.
+
+    Never raises, and never silently becomes fixed: when the limit cannot be derived the
+    answer is the start value with the reason, so `status` and `brief` still say what is
+    in force and why."""
+    try:
+        return current_limit(FlowCtx(repo=Path(repo), cfg=cfg, state=state, events=events))
+    except Exception as exc:  # never let the derived limit stop a command
+        from ..core.schedule import LIMIT_UNAVAILABLE
+
+        try:
+            start = FP.params(cfg).bounds()[1]  # (floor, start, ceiling)
+        except Exception:
+            start = max(1, int(cfg.schedule.max_parallel_tasks or 1))
+        why = f"the adaptive limit could not be derived ({type(exc).__name__}: {exc})"
+        return FC.Decision(start, "start", LIMIT_UNAVAILABLE, why)
+
+
 def doctor_notes(repo: Path) -> list[str]:
     """Notes, never problems, and writing nothing: a ring that cannot be read or written
     (auto then holds at its start value), and a local directory git does not ignore."""
