@@ -45,6 +45,11 @@ ALLOWED: dict[str, set[str]] = {
     "surfaces": {"config", "core", "infra", "services", "views", "api"},
 }
 
+#: Packages that are PART of a layer rather than a layer of their own: `config` is one
+#: module's worth of rule ("read by every layer; imports none") split into a package of
+#: sections, and an import between the two is an import within the layer.
+LAYER_PACKAGES = {"config_sections": "config"}
+
 #: `services` and `views` are deliberately mutual: a service may render a markdown view
 #: as its result (`ddflow render`), and a view reads service types to render them. The
 #: pair is one layer split by role rather than two layers stacked, and saying so here is
@@ -55,7 +60,7 @@ PEERS = {("services", "views"), ("views", "services")}
 def _layer(path: Path) -> str:
     rel = path.relative_to(PKG)
     if len(rel.parts) > 1:
-        return rel.parts[0]
+        return LAYER_PACKAGES.get(rel.parts[0], rel.parts[0])
     # `__main__.py` IS an entry point — `python -m ddflow` — so it belongs with the
     # surfaces even though it sits at the top level next to `config.py`.
     if rel.name == "__main__.py":
@@ -84,7 +89,8 @@ def _imported_layers(path: Path) -> set[tuple[str, int]]:
             # `from ..core.model import X` -> module="core.model"
             mod = node.module or ""
             if node.level == depth_of_pkg and mod:
-                out.add((mod.split(".")[0], node.lineno))
+                top = mod.split(".")[0]
+                out.add((LAYER_PACKAGES.get(top, top), node.lineno))
             elif node.level < depth_of_pkg:
                 # Shallower than the package root: a sibling or parent WITHIN this
                 # layer (e.g. `..context` from `surfaces/commands/`). Same layer by
@@ -93,7 +99,8 @@ def _imported_layers(path: Path) -> set[tuple[str, int]]:
                 continue
             elif node.level == depth_of_pkg and not mod:
                 for alias in node.names:
-                    out.add((alias.name.split(".")[0], node.lineno))
+                    top = alias.name.split(".")[0]
+                    out.add((LAYER_PACKAGES.get(top, top), node.lineno))
     return out
 
 
@@ -185,7 +192,7 @@ def test_every_layer_is_declared():
     on_disk = {
         p.name for p in PKG.iterdir() if p.is_dir() and p.name not in ("__pycache__", "templates")
     }
-    undeclared = on_disk - set(ALLOWED)
+    undeclared = on_disk - set(ALLOWED) - set(LAYER_PACKAGES)
     assert not undeclared, (
         f"{sorted(undeclared)} exist but are in no layer. Add them to ALLOWED with "
         f"what they may import, or put the code in an existing layer."
