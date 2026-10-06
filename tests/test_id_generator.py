@@ -306,3 +306,7 @@ def test_only_a_stable_kind_has_refilings() -> None:
     cfg.ids.ci_bug = "{digest}-{slug}"  # any stable shape, the digest anywhere
     base = ids.make(cfg, "ci_bug", slug="x", digest="0123456789abcdef").id
     assert ids.is_filing_of(cfg, "ci_bug", ids.refile(base, "deadbeef"), base)
+
+
+def test_a_foreign_base_has_no_refilings_of_a_stable_kind() -> None:
+    assert not ids.is_filing_of(Config(), "ci_bug", "promote-prod-abcdef1", "promote-prod")
