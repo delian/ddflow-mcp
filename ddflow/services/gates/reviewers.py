@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import shlex
+from collections.abc import Mapping
 from typing import Any
 
 from ...config import Config
 from ...core.model import State
+from .defs import DEFAULT_GATES, GateDef
 
 
 def family_of(model: str, cfg: Config) -> str:
@@ -47,12 +49,40 @@ def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
     return ""
 
 
-#: The gates whose recorded model counts toward reviewer independence.
+#: The built-in gates whose recorded model counts toward reviewer independence. A gate
+#: whose definition declares `reviewer = "different_family"` counts too (`reviewer_gates`).
+#: `standards` is here without declaring it: roborev records the model that reviewed.
 REVIEWER_GATES = ("rubber_duck", "critic", "standards")
 
 
+def is_reviewer_gate(gate: str, gdef: GateDef | None) -> bool:
+    """Is `gate` one a cross-family reviewer records through? Its definition says so
+    (B0e1330bf74) -- `gdef`, or the built-in definition when none is given:
+    `reviewer = "different_family"` is one, `same_family_ok` is not (a same-family
+    reviewer is enough there, so its record shows no independence and its model is not
+    the author-family mistake `gate record` refuses). A gate declaring neither is one
+    only when it is in `REVIEWER_GATES`: that is `standards`, which declares nothing
+    and counts because roborev records the model that reviewed."""
+    gdef = gdef if gdef is not None else DEFAULT_GATES.get(gate)
+    declared = gdef.reviewer if gdef is not None else ""
+    if declared:
+        return declared == "different_family"
+    return gate in REVIEWER_GATES
+
+
+def reviewer_gates(gates: Mapping[str, GateDef] | None) -> list[str]:
+    """Every reviewer gate among `gates` (a built-in one they leave undefined included);
+    with no definitions to read, among the built-in ones."""
+    defs = {**DEFAULT_GATES, **(gates or {})}
+    return [g for g, d in defs.items() if is_reviewer_gate(g, d)]
+
+
 def reviewer_independence(
-    state: State, cfg: Config, item_id: str, author_model: str
+    state: State,
+    cfg: Config,
+    item_id: str,
+    author_model: str,
+    gates: Mapping[str, GateDef] | None = None,
 ) -> tuple[bool, str]:
     """Did at least one reviewer come from a different pretraining family?
 
@@ -74,7 +104,7 @@ def reviewer_independence(
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     unapproved: list[tuple[str, str]] = []
-    for gname in REVIEWER_GATES:
+    for gname in reviewer_gates(gates):
         rec = it.gates.get(gname)
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue
