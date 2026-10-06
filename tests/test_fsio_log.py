@@ -161,3 +161,14 @@ def test_the_lock_waits_for_a_holder_in_another_process(tmp_path):
     os.waitpid(pid, 0)
     os.close(r)
     assert waited >= 0.15
+
+
+def test_an_exclusive_write_without_hard_links_honours_fsync_false(tmp_path, monkeypatch):
+    def no_links(*_a, **_k):
+        raise PermissionError("hard links not supported")  # no errno, as some mounts say
+
+    syncs: list[int] = []
+    monkeypatch.setattr(fsio.os, "link", no_links)
+    monkeypatch.setattr(fsio.os, "fsync", syncs.append)
+    fsio.atomic_write(tmp_path / "cache", "x", exclusive=True, fsync=False)
+    assert (tmp_path / "cache").read_text() == "x" and syncs == []
