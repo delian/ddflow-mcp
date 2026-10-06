@@ -40,9 +40,13 @@ def _bad(kind: str, rid: str) -> str:
     return ""
 
 
-def _fields_problem(fields: Any) -> str:
+def _fields_problem(fields: Any, *, nulls: bool = False) -> str:
+    """Why ``fields`` cannot be stored, or "". A null removes a field in an update, so a
+    whole definition holds none (``nulls`` is the update's allowance)."""
     if not isinstance(fields, dict):
         return "fields must be a JSON object"
+    if not nulls and (empty := sorted(k for k, v in fields.items() if v is None)):
+        return f"field(s) {', '.join(map(str, empty))} are null: leave them out instead"
     try:
         json.dumps(fields, allow_nan=False)
     except (TypeError, ValueError) as exc:
@@ -142,15 +146,16 @@ def def_update(
 ) -> O.Outcome:
     """Change some fields of an ACTIVE definition (`def.updated`); a field set to None is
     removed. Exit 2 when the result is what is already recorded."""
-    if bad := _fields_problem(fields):
+    if bad := _fields_problem(fields, nulls=True):
         return O.failed("def.updated", bad, def_kind=kind, id=rid)
     log, cfg, st = _load(repo, agent)
     rec, refusal = _live(st, kind, rid, "def.updated")
     if refusal is not None:
         return refusal
-    merged = {k: v for k, v in {**rec.fields, **fields}.items() if v is not None}
+    merged = {**rec.fields, **fields}
+    merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
     digest = D.digest(merged)
-    if digest == rec.digest and (source is None or source == rec.source):
+    if digest == rec.digest and (source is None or source == rec.source) and not provenance:
         return O.nothing("def.updated", f"{kind} {rid}: nothing changed", def_kind=kind, id=rid)
     data = _envelope(cfg, kind, rid, source, provenance)
     data.update(fields=dict(fields), digest=digest)
