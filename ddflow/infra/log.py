@@ -35,6 +35,7 @@ from typing import Any
 
 from ..config import LogConfig
 from ..core import digest as D
+from ..core import upcasters as UP
 from ..core.events import (
     OLDER_MARK,
     PROVENANCE_KINDS,
@@ -856,7 +857,9 @@ class EventLog:
             else _flock(self.lock_path, self.lock_timeout_s)
         )
         with ctx:
-            payload = dict(data or {})
+            # The kind's payload version (`core.upcasters`): absent at version 1, so the
+            # bytes written are unchanged until a kind's shape changes.
+            payload = UP.stamp(kind, data or {})
             if kind not in _STAMP_EXEMPT and self.stamp:
                 # The version stamp and the skew guard, in the same lock as the write: a
                 # refusal must not be raced past, and the stamp must precede the event
