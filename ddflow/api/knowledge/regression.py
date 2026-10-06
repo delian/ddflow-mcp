@@ -45,9 +45,10 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
     return missing, unchecked
 
 
-#: A parametrize id: `[` to the nearest `]` that ends a name -- before `::`, whitespace
-#: or the end.
-_PARAMS = re.compile(r"\[.*?\](?=::|\s|$)", re.S)
+#: A parametrize id: `[` to the nearest `]` that ends a name -- before `::` or the end
+#: (_PARAMS); failing that, before whitespace too (_PARAMS_LOOSE: `t[1] other`).
+_PARAMS = re.compile(r"\[.*?\](?=::|$)", re.S)
+_PARAMS_LOOSE = re.compile(r"\[.*?\](?=::|\s|$)", re.S)
 
 
 def _bare_names(names: str) -> list[str]:
@@ -58,6 +59,8 @@ def _bare_names(names: str) -> list[str]:
     the permissive side, since a phantom name would refuse a real test and lock the bug
     open; such an id resolves to the names around it."""
     bare = _PARAMS.sub("", names)
+    if "[" in bare:
+        bare = _PARAMS_LOOSE.sub("", bare)
     bare = bare.split(None, 1)[0] if bare.strip() else ""
     parts = bare.split("[", 1)[0].split("::")
     return [p for p in parts if "]" not in p] or [""]

@@ -151,3 +151,13 @@ def test_a_value_holding_a_bracket_and_colons_adds_no_phantom_name():
     assert _bare_names("TestC[a]::b]::test_m") == ["TestC", "test_m"]
     assert _bare_names("TestC[1]::test_m") == ["TestC", "test_m"]
     assert _bare_names("[p]") == [""]
+    # a value holding `] ` keeps the method after it
+    assert _bare_names("TestC[a] b]::test_m") == ["TestC", "test_m"]
+    assert _bare_names("t[1] other") == ["t"]
+    assert _bare_names("TestC[1]::test_m other") == ["TestC", "test_m"]
+
+
+def test_a_missing_method_after_a_spaced_class_value_is_reported(tmp_path):
+    repo = _repo_with(tmp_path, "class TestC:\n    def test_m(self):\n        pass\n")
+    missing, _ = _unresolved_tests(repo, "tests/test_a.py::TestC[a] b]::test_m_missing")
+    assert missing == ["tests/test_a.py::TestC[a] b]::test_m_missing"], missing
