@@ -517,6 +517,18 @@ nothing for the connection and answers how to name yourself instead; a connectio
 opened with `initialize` keeps connection-wide `ddflow_identify` exactly as before, with
 `as_agent` as the per-call form.
 
+One module, `ddflow/surfaces/mcp_protocol.py`, holds everything that differs between
+revisions; no tool sees which one a request came in under. It also carries the
+`2026-07-28` multi round-trip: a `tools/call`, `resources/read` or `prompts/get` may be
+answered `resultType: "input_required"` with `inputRequests` (only the kinds the client
+declared in its capabilities) and a sealed `requestState` that the client echoes on its
+retry. The state is HMAC-bound to the method, the request's name/arguments/uri, the
+`ddflow/agent` caller and a 10-minute expiry, for the life of the server process. A retry
+whose `requestState` is forged, tampered with, presented on another request or expired is
+refused with `-32602`. No tool asks for input yet. CI replays every reply against the
+official `schema.json` of each revision served (`tests/fixtures/mcp-schema/`, the upstream
+files pinned by commit and sha256).
+
 ### What goes in AGENTS.md / CLAUDE.md
 
 `ddflow adopt` writes it as a managed block between `<!-- DDFLOW:BEGIN -->` and

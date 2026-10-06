@@ -13,11 +13,10 @@ and it is why an agent with neither (a human, a CI job, a `Makefile`) loses noth
 
 Notes on protocol handling:
 
-* At ``initialize`` (the legacy revisions) the client's ``protocolVersion`` is echoed
-  back when we recognise it, else we answer with our newest. Refusing an unknown version
-  outright breaks on every client that ships ahead of us, which for a tool meant to work
-  with five different agents is the likelier direction of drift. A ``2026-07-28``
-  request names its version per request instead; see ``MODERN_PROTOCOLS``.
+* Which revisions are served and how each shapes a reply -- ``initialize`` for the legacy
+  ones, per-request ``_meta`` for ``2026-07-28``, multi round-trip -- is
+  ``mcp_protocol``, the one module that knows about revisions. This one routes methods
+  to ddflow; neither it nor any tool sees which revision a request came in under.
 * Every tool returns text content. Structured results are JSON *inside* that text,
   because ``structuredContent`` support is uneven across clients and a result an agent
   cannot read is worse than a verbose one it can.
@@ -38,14 +37,33 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-# Absolute on purpose: `ddflow/__init__.py` is the one declaration of the version and has no
-# dependencies, so this cannot cycle; a relative `from .. import` would read as a layer.
-# A plain import, never importlib.metadata: installed metadata is stale in a source tree.
-from ddflow import __version__ as _VERSION
 from ddflow.core.events import SkewRefused
 
-# The tool registry lives in `surfaces/tools/`; this module is the protocol engine. Every
-# name below is re-exported so imports of `ddflow.surfaces.mcp.<name>` keep working.
+# The protocol engine -- revisions, negotiation, the modern envelope, multi round-trip --
+# is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
+from . import mcp_protocol as protocol
+from .mcp_protocol import (  # noqa: F401
+    CACHE_SCOPE,
+    CACHE_TTL_MS,
+    INVALID_PARAMS,
+    META_AGENT,
+    META_CLIENT_CAPS,
+    META_SERVER_INFO,
+    META_VERSION,
+    MODERN_PROTOCOLS,
+    SERVER_INFO,
+    SUPPORTED_PROTOCOLS,
+    UNSUPPORTED_PROTOCOL_VERSION,
+)
+from .mcp_protocol import capabilities as _capabilities  # noqa: F401
+from .mcp_protocol import err as _err
+from .mcp_protocol import modern_check as _modern_check
+from .mcp_protocol import modernize as _modernize
+from .mcp_protocol import ok as _ok
+
+# The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
+# this module routes between them. Every name below is re-exported so imports of
+# `ddflow.surfaces.mcp.<name>` keep working.
 from .tools import ADD_TOOLS, DEDUPE_PROPERTIES, TOOLS  # noqa: F401
 from .tools._common import (  # noqa: F401
     _AGENT_KEYS,
@@ -72,59 +90,6 @@ from .tools.tiers import (  # noqa: F401
     tier_note,
     tier_tools,
 )
-
-#: The LEGACY revisions: negotiated once, by `initialize`, for the life of the process.
-#: Newest first: an unknown version is answered with the first. `2025-11-25`
-#: (Bac0bb04c9f) asks nothing new of a stdio server offering tools, resources and
-#: prompts: everything it adds is optional (icons, tasks, URL elicitation, sampling with
-#: tools, `Implementation.description`) or already done here -- a bad argument is a tool
-#: result with `isError` (SEP-1303), tool names keep to `[A-Za-z0-9_.-]{1,128}`
-#: (SEP-986), and the input schemas name no `$schema`, so they read as JSON Schema
-#: 2020-12, its default dialect (SEP-1613).
-SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "ddflow", "version": _VERSION, "title": "ddflow work-queue kernel"}
-
-# -- the modern (stateless) revisions ---------------------------------------------------
-#
-# From `2026-07-28` there is no handshake: every request names its protocol version and
-# the client's capabilities in `params._meta`, and the server answers each on its own.
-# This server is DUAL-ERA, as that revision allows: a request carrying the modern `_meta`
-# is served by the modern rules below, and `initialize` still selects the legacy ones, so
-# no client that works today stops working (B149).
-#
-# Adding the version string is not what honours the revision; its MUSTs are: answer
-# `server/discover`; refuse a version it does not serve with -32022 naming the ones it
-# does; refuse a modern request missing a required `_meta` field with -32602; give every
-# result a `resultType`; and give list/read results their cache hints. Its SHOULD -- the
-# server's identity in each result's `_meta` -- is done too. Nothing here sends
-# `notifications/message`, a server-initiated request, or the retired -32002.
-
-#: Served per request, statelessly.
-MODERN_PROTOCOLS = ("2026-07-28",)
-META_VERSION = "io.modelcontextprotocol/protocolVersion"
-META_CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
-META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
-#: The caller's agent name in a modern request's `params._meta` (D-mcp-identity-per-call):
-#: with no connection to declare it on, a stateless request names its caller itself --
-#: here, or with the `as_agent` argument, which wins when both are given.
-META_AGENT = "ddflow/agent"
-UNSUPPORTED_PROTOCOL_VERSION = -32022
-INVALID_PARAMS = -32602
-
-#: `ttlMs` per cacheable method (`CacheableResult`). The tool list and the resource list
-#: are fixed for the life of the process (`listChanged` is false), so a client may keep
-#: them an hour; everything else is read from the repository's live state -- the prompt
-#: list includes the operator's macros, discovery carries instructions that name the
-#: work left over from a crash -- so it is fresh on every read. `private` throughout: the
-#: content is one operator's repository, never something a shared cache should hold.
-CACHE_TTL_MS = {
-    "tools/list": 3_600_000,
-    "resources/list": 3_600_000,
-    "resources/read": 0,
-    "prompts/list": 0,
-    "server/discover": 0,
-}
-CACHE_SCOPE = "private"
 
 #: The per-CALL identity override every tool accepts except `ddflow_identify` itself.
 #:
@@ -616,11 +581,7 @@ class Server:
         modern client would otherwise have learned from `initialize`. `resultType`, the
         identity in `_meta` and the cache hints are added by `_modernize`, like every
         modern result's."""
-        return {
-            "supportedVersions": [*MODERN_PROTOCOLS, *SUPPORTED_PROTOCOLS],
-            "capabilities": _capabilities(),
-            "instructions": _instructions(self.repo, self.agent, self.tier),
-        }
+        return protocol.discover(_instructions(self.repo, self.agent, self.tier))
 
     def _dispatch(self, msg: dict[str, Any], *, modern: bool = False) -> dict[str, Any] | None:
         method = msg.get("method", "")
@@ -628,17 +589,14 @@ class Server:
         if method == "initialize":
             params = msg.get("params") or {}
             want = params.get("protocolVersion", "")
-            self.protocol = want if want in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0]
+            self.protocol = protocol.legacy_version(want)
             ci = params.get("clientInfo")
             self.client_info = dict(ci) if isinstance(ci, dict) else {}
             return _ok(
                 mid,
-                {
-                    "protocolVersion": self.protocol,
-                    "capabilities": _capabilities(),
-                    "serverInfo": SERVER_INFO,
-                    "instructions": _instructions(self.repo, self.agent, self.tier),
-                },
+                protocol.initialize_result(
+                    self.protocol, _instructions(self.repo, self.agent, self.tier)
+                ),
             )
         if method in ("notifications/initialized", "notifications/cancelled"):
             return None
@@ -971,19 +929,6 @@ class Server:
         return _err(mid, -32601, f"method not found: {method}")
 
 
-def _capabilities() -> dict[str, Any]:
-    """What this server offers, for `initialize` and `server/discover` alike."""
-    return {
-        "tools": {"listChanged": False},
-        "resources": {"listChanged": False},
-        # Prompts are how a client surfaces a workflow as a slash command. Omitting the
-        # capability means a spec-respecting client never calls prompts/list, so the
-        # commands exist and are unreachable — which is indistinguishable, from the
-        # operator's side, from not having written them.
-        "prompts": {"listChanged": False},
-    }
-
-
 def _meta_agent(params: dict[str, Any]) -> tuple[str, str]:
     """(the agent a stateless request names in its `_meta`, "" for none; why it cannot
     be used, "" when it can)."""
@@ -1007,57 +952,6 @@ def _modern_identify_note(agent: str) -> str:
         f"({AS_AGENT} wins when both are given). A request that names nobody is "
         f"attributed to the tree-derived default. This request: {who!r}."
     )
-
-
-def _modern_check(msg: dict[str, Any]) -> str | dict[str, Any] | None:
-    """The modern version a message is served under, the error that refuses it, or None.
-
-    None: no `io.modelcontextprotocol/protocolVersion` in `params._meta`, so a legacy
-    message, served as one -- except `server/discover`, which exists only in the modern
-    era: answering it "method not found" would tell a dual-era client's probe that this
-    is a legacy server, so a discovery without the version is refused as malformed.
-
-    A version this server does not serve per request is -32022 naming every version it
-    supports (the legacy ones through `initialize`, as the spec's dual-era example does);
-    a modern request without its required `clientCapabilities` is -32602.
-    """
-    params = msg.get("params")
-    meta = params.get("_meta") if isinstance(params, dict) else None
-    mid = msg.get("id")
-    if not isinstance(meta, dict) or META_VERSION not in meta:
-        if msg.get("method") == "server/discover":
-            return _err(mid, INVALID_PARAMS, f"server/discover requires _meta {META_VERSION!r}")
-        return None
-    want = meta[META_VERSION]
-    if not isinstance(want, str):
-        return _err(mid, INVALID_PARAMS, f"_meta {META_VERSION!r} must be a string")
-    if want not in MODERN_PROTOCOLS:
-        return _err(
-            mid,
-            UNSUPPORTED_PROTOCOL_VERSION,
-            "Unsupported protocol version",
-            data={"supported": [*MODERN_PROTOCOLS, *SUPPORTED_PROTOCOLS], "requested": want},
-        )
-    if not isinstance(meta.get(META_CLIENT_CAPS), dict):
-        return _err(mid, INVALID_PARAMS, f"a {want} request requires _meta {META_CLIENT_CAPS!r}")
-    return want
-
-
-def _modernize(method: str, reply: dict[str, Any] | None) -> dict[str, Any] | None:
-    """A reply as the modern revision shapes it: every result carries `resultType`
-    (this server never asks for more input, so it is always "complete") and the server's
-    identity in `_meta`; a cacheable method's result carries `ttlMs` and `cacheScope`.
-    Errors and silence pass through unchanged."""
-    if reply is None or not isinstance(reply.get("result"), dict):
-        return reply
-    res = reply["result"]
-    res.setdefault("resultType", "complete")
-    meta = res.get("_meta")
-    res["_meta"] = {**(meta if isinstance(meta, dict) else {}), META_SERVER_INFO: dict(SERVER_INFO)}
-    if method in CACHE_TTL_MS:
-        res["ttlMs"] = CACHE_TTL_MS[method]
-        res["cacheScope"] = CACHE_SCOPE
-    return reply
 
 
 def _obligation_footer(server) -> str:
@@ -1437,17 +1331,6 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
         )
 
 
-def _ok(mid: Any, result: dict[str, Any]) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": mid, "result": result}
-
-
-def _err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any]:
-    error: dict[str, Any] = {"code": code, "message": message}
-    if data is not None:
-        error["data"] = data
-    return {"jsonrpc": "2.0", "id": mid, "error": error}
-
-
 def _text(body: str, *, error: bool = False, meta: dict | None = None) -> dict[str, Any]:
     """One tool result.
 
@@ -1553,6 +1436,9 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
         "called_from": str(srv.called_from),
         "agent": srv.agent,
         "msg": msg,
+        # A `requestState` the worker issues must verify on the retry, which another
+        # worker -- or this process -- serves (`mcp_protocol.state_key`).
+        "state_key": protocol.state_key().hex(),
     }
     # The worker must import THIS code, not whatever ddflow the path would find first.
     root = str(Path(__file__).resolve().parents[2])
@@ -1636,6 +1522,8 @@ def _worker_main() -> None:
             pass
 
     msg = job["msg"]
+    if job.get("state_key"):
+        protocol.state_key(bytes.fromhex(job["state_key"]))
     srv = Server(Path(job["repo"]), job.get("agent", ""), called_from=Path(job["called_from"]))
     srv.notify = write
     try:
