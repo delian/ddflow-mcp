@@ -232,6 +232,16 @@ def test_the_fold_hands_handlers_the_upcast_shape(monkeypatch) -> None:
     assert st.items["P1"].title == "renamed"
 
 
+def test_the_older_ddflow_mark_is_read_from_the_event_as_written(monkeypatch) -> None:
+    """An upcaster rebuilds the payload from the fields of the kind's shape; the log's own
+    older-version mark is not one of them and must still be counted (rubber_duck #1)."""
+    monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
+    monkeypatch.setitem(U.UPCASTERS, ("phase.added", 1), lambda k, d: (k, {"title": d["title"]}))
+    st = fold([_ev("phase.added", {"title": "t", OLDER_MARK: "0.1.3"}, subject="P1")])
+    assert st.older_version_events == {"0.1.3": 1}
+    assert st.items["P1"].title == "t"
+
+
 # -- the fold, isolated per event ---------------------------------------------------------
 
 
