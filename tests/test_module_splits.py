@@ -108,7 +108,8 @@ CONFINED = {"subprocess", "tempfile", "hashlib", "fcntl"}
 def test_every_name_an_area_binds_is_the_same_object_on_the_package(pkg):
     """Functions, constants and the modules an area imports alike: whatever an area binds
     is reachable as `<package>.<name>`, the same object (two areas binding one name would
-    leave the package holding only one of them)."""
+    leave the package holding only one of them). The one exception is CONFINED: a module
+    .importlinter keeps in its one home is not imported by the package to re-export it."""
     for mod in _areas(pkg):
         for name in _top_level_names(Path(mod.__file__)) - CONFINED:
             assert getattr(pkg, name, None) is getattr(mod, name), (
