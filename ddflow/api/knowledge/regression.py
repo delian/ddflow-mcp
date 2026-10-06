@@ -65,25 +65,34 @@ def _looks_like_several(entry: str) -> bool:
     return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
-#: What starts the NEXT entry of a list: a test file path (`tests/test_x.py`, then `::`,
-#: a separator, whitespace or the end).
-_NEXT_PATH = re.compile(r"\s*[\w./-]+\.py(?![\w.])")
+def _closes_unopened(rest: str) -> bool:
+    """Whether `rest` closes a `]` it never opened: the separator before it was INSIDE a
+    parametrize id (`t[a],b]`), not between two entries."""
+    depth = 0
+    for ch in rest:
+        depth += {"[": 1, "]": -1}.get(ch, 0)
+        if depth < 0:
+            return True
+    return False
 
 
 def _split_outside_brackets(spec: str) -> list[str]:
     """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
-    refused as a single missing test. Brackets cannot be counted: a parametrize value may
-    hold `]`, `[`, `,` and `;` in any order (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`,
-    `t[[a],b]`). Counting drove the depth negative and swallowed every later separator,
-    so a missing second test was never resolved (Bfc9daca269); clamping it split a value
-    inside its own brackets. So once an entry has opened a `[`, a separator ends it only
-    where the next entry starts with a test file path.
+    refused as a single missing test. Brackets cannot simply be counted: a parametrize
+    value may hold `]`, `[`, `,` and `;` (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`, `t[[a],b]`).
+    Counting drove the depth negative and swallowed every later separator, so a missing
+    second test was never resolved (Bfc9daca269). A node id's brackets END it, so once an
+    entry has opened a `[`, a separator ends the entry only right after a `]`, and only
+    when the rest does not close a bracket it never opened.
     """
     out, cur, bracketed = [], [], False
     for i, ch in enumerate(spec):
-        if ch in ",;" and (not bracketed or _NEXT_PATH.match(spec, i + 1)):
+        if ch in ",;" and (
+            not bracketed
+            or ("".join(cur).rstrip().endswith("]") and not _closes_unopened(spec[i + 1 :]))
+        ):
             out.append("".join(cur))
             cur, bracketed = [], False
             continue
