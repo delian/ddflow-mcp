@@ -2984,6 +2984,38 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
         plan.notes.append("\n".join(lines))
 
 
+def _memories_within(repo: Path, plan: ImportPlan) -> tuple[list[Found], dict[str, int]]:
+    """The memories to record, and a count of those left out for their length.
+
+    Refused over `[memory] max_chars`, never cut: the rule `memory add` and the
+    onboarding harness apply -- a memory cut mid-sentence says something its author did
+    not (B021a859d56). Counted, so the apply report says what was left out.
+    """
+    limit = Config.load(repo).memory.max_chars
+    found = plan.by_kind("memory")
+    kept = [f for f in found if len(f.body) <= limit]
+    left = len(found) - len(kept)
+    return kept, ({f"memory over [memory] max_chars ({limit}) not recorded": left} if left else {})
+
+
+def _imported_research(f: Found) -> dict[str, Any]:
+    """The `research.recorded` payload for a scraped research entry.
+
+    A scraped CONFIRMED/REFUTED has no probe behind it, which `research add` refuses as
+    an opinion wearing a label: it is imported as THEORETICAL, the source's label kept
+    as a tag, and the claim whole rather than cut to 600 characters (B021a859d56).
+    """
+    scraped = f.extra.get("verdict", "THEORETICAL")
+    tags = ["imported"] + ([f"source-verdict:{scraped}"] if scraped != "THEORETICAL" else [])
+    return {
+        "question": f.title,
+        "claim": f.body,
+        "verdict": "THEORETICAL",
+        "sources": [f.source],
+        "tags": tags,
+    }
+
+
 def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     """Write the proposal to the log. Called only after someone has looked at it.
 
@@ -3089,12 +3121,14 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     # OptMem records are operational MEMORIES -- the thing `brief` shows first and
     # `recall` searches -- not journal notes. Their store numbered them, so the id is
     # the store's (`M-0041`) and a re-import skips what is already remembered.
-    for f in plan.by_kind("memory"):
+    kept, too_long = _memories_within(repo, plan)
+    counts.update(too_long)
+    for f in kept:
         log.append(
             "memory.recorded",
             f.ident,
             {
-                "text": f.body[:4000],
+                "text": f.body,
                 "origin_at": f.extra.get("at", ""),
                 "source": f.source,
                 "tags": ["imported"],
@@ -3102,17 +3136,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
         )
         bump("memory")
     for f in plan.by_kind("research"):
-        log.append(
-            "research.recorded",
-            f.ident,
-            {
-                "question": f.title,
-                "claim": f.body[:600],
-                "verdict": f.extra.get("verdict", "THEORETICAL"),
-                "sources": [f.source],
-                "tags": ["imported"],
-            },
-        )
+        log.append("research.recorded", f.ident, _imported_research(f))
         bump("research")
     for f in plan.by_kind("branch"):
         log.append(
