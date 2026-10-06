@@ -76,11 +76,26 @@ Homepage = "https://github.com/delian/ddflow-mcp"
 Repository = "https://github.com/delian/ddflow-mcp"
 Issues = "https://github.com/delian/ddflow-mcp/issues"
 
+[project.optional-dependencies]
+search = [
+    "rapidfuzz>=3.14.6",
+]
+watch = [
+    "watchfiles>=1.3.0",
+]
+rag = [
+    "model2vec>=0.9.0",
+    "sqlite-vec>=0.1.9",
+]
+mcp-sdk = [
+    "mcp>=2.3.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["ddflow"]
 
 [tool.hatch.build.targets.sdist]
-include = ["ddflow/", "docs/", "tests/", "demos/", "probes/",
+include = ["ddflow/", "docs/", "tests/", "demos/", "probes/", ".importlinter",
            "README.md", "server.json", "LICENSE"]
 
 # Templates need no force-include: they live under `ddflow/`, and hatchling ships
@@ -116,8 +131,11 @@ addopts = "-m 'not slow'"
 # `uv.lock`, so a fresh clone reproduces the versions the suite last passed on.
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
+    "pylint>=4.1.2",
     "pytest>=9.1.1",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.8.0",
+    "radon>=6.0.1",
     "ruff>=0.16.9",
 ]
