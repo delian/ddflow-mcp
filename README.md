@@ -2350,7 +2350,8 @@ need it most.
 Same-family reviewers share the author's blind spots, so their agreement measures shared
 priors rather than correctness. `complete` refuses unless one reviewer came from a
 different pretraining family — and a reviewer whose model is not in `[agent].families`
-counts as *unknown*, never as *different*. (It used to count as different: `gate record`
+counts as *unknown*, never as *different*. Each `families` key is a case-blind substring of
+the model name, as each `routers` key is; an empty key matches nothing. (It used to count as different: `gate record`
 defaults the reviewer to the agent id, so a `standards` gate recorded with no `--model`
 arrived as family "host-12345", compared unequal to "anthropic", and satisfied the
 independence requirement on its own.)

@@ -54,7 +54,10 @@ def family_for(model: str, families: dict[str, str] | None = None) -> str:
     """
     low = (model or "").lower()
     for needle, fam in (families if families is not None else FAMILY_HINTS).items():
-        if needle in low:
+        # Case-blind, and an empty key matches nothing -- exactly as `router_set` reads
+        # its needles. A capitalised key used to be ignored and an empty one matched
+        # every model (B7f815b7d88).
+        if needle and needle.lower() in low:
             return fam
     return ""
 
@@ -116,7 +119,7 @@ _doc(
 _doc(
     "agent",
     "families",
-    "Model-name substring to pretraining-family map, used to enforce the rule above. Extend it as new families appear; an unknown model establishes nothing -- an unrecognised author is refused, an unrecognised reviewer is not counted as different.",
+    "Model-name substring (matched case-blind; an empty key matches nothing) to pretraining-family map, used to enforce the rule above. Extend it as new families appear; an unknown model establishes nothing -- an unrecognised author is refused, an unrecognised reviewer is not counted as different.",
 )
 _doc(
     "agent",
