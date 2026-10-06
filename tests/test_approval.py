@@ -163,13 +163,14 @@ def test_a_reviewer_approval_from_before_the_primitive_still_counts():
     assert st.reviewer_approvals["abc"]["user"] == "op"
 
 
-def test_a_grant_that_is_not_a_persons_approves_nothing():
-    """A hand-written `approval.granted` without `human` neither passes the check nor
-    reaches the reviewer-trust table."""
+@pytest.mark.parametrize("human", [{"human": False}, {}], ids=["false", "absent"])
+def test_a_grant_that_is_not_a_persons_approves_nothing(human):
+    """A hand-written `approval.granted` that does not say `human` (false, or no key at
+    all) neither passes the check nor reaches the reviewer-trust table -- and folds."""
     ev = Event(
         kind="approval.granted",
         subject="reviewer:evil",
-        data={"subject": "reviewer:evil", "digest": "abc", "human": False},
+        data={"subject": "reviewer:evil", "digest": "abc", **human},
         agent="bot",
         lamport=1,
         ts="t",
