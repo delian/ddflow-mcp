@@ -59,10 +59,36 @@ def test_the_records_are_re_exported():
             assert getattr(model, name) is obj, f"model.{name} is not re-exported"
 
 
+def _model_imports(n: ast.AST) -> list[str]:
+    """What an import statement pulls in that is the `model` module, in any spelling."""
+    if isinstance(n, ast.Import):
+        return [a.name for a in n.names if a.name.split(".")[-1] == "model"]
+    if not isinstance(n, ast.ImportFrom):
+        return []
+    base = (n.module or "").split(".")
+    hits = [n.module] if base[-1] == "model" else []
+    hits += [a.name for a in n.names if not n.module or base[-1] == "core"]
+    return [h for h in hits if h and h.split(".")[-1] == "model"]
+
+
 def test_no_handler_module_imports_the_model():
-    """`model` imports the handlers; the reverse edge would be a cycle."""
+    """`model` imports the handlers; the reverse edge would be a cycle. Every spelling:
+    `from ..model import x`, `from .. import model`, `from ddflow.core import model`,
+    `import ddflow.core.model`."""
     for mod in _handler_modules():
         tree = ast.parse(Path(mod.__file__).read_text("utf-8"))
         for n in ast.walk(tree):
-            if isinstance(n, ast.ImportFrom) and n.level:
-                assert n.module != "model", f"{mod.__name__} imports ..model"
+            hits = _model_imports(n)
+            assert not hits, f"{mod.__name__}:{n.lineno} imports the model ({hits})"
+
+
+def test_the_import_guard_can_fail():
+    """Planted: each spelling of the reverse edge is caught, and an unrelated one is not."""
+    for line in (
+        "from ..model import fold",
+        "from .. import model",
+        "from ddflow.core import model",
+        "import ddflow.core.model",
+    ):
+        assert _model_imports(ast.parse(line).body[0]), line
+    assert not _model_imports(ast.parse("from ..records import State").body[0])

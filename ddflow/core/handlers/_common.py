@@ -1,6 +1,4 @@
-"""Fold handlers: what every handler module shares: the item an event is about.
-
-Assembled into `model.HANDLERS`; each is `(State, Event) -> None` and pure."""
+"""What every fold-handler module shares: the item an event is about. Pure."""
 
 from __future__ import annotations
 
