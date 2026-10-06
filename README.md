@@ -2798,7 +2798,10 @@ is free and, under auto, what limits it: "N more are ready but held by the paral
 (auto: limit 6, limited by load per core)". Both print one line about the limit in force,
 `parallel: 6 (auto: ceiling 8; limited by load per core)` or `parallel: 4 (fixed)` (`status
 --json` and `ddflow_status` carry it as `parallel`); "limited by independent work" means the
-offer already holds every ready item that can run beside what is in flight. In fixed mode
+offer already holds every ready item that can run beside what is in flight. A signal is named
+only while it is over its `low` mark; with every signal healthy the line says "limited by
+growth step (next in Ns)" while in flight has reached the limit (it rises one step per
+`adapt_up_after_s`), and "limited by demand (N in flight)" while it has not. In fixed mode
 the cap's words are exactly what they always were (`schedule.max_parallel_tasks=N`). A
 shrink never touches a running lease: in flight above the new limit simply leaves no slot
 until enough finish; the limit is never below 1, and a critical signal pauses new
