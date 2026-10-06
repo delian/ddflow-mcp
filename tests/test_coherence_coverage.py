@@ -126,6 +126,11 @@ EXEMPT: dict[str, str] = {
     ),
     "session.prompt": "the operator's words, verbatim: never refused or merged (D-no-duplicates)",
     "session.note": "a journal entry of what happened, verbatim (D-no-duplicates)",
+    **dict.fromkeys(
+        ("schedule.defined", "schedule.updated", "schedule.removed"),
+        "a scheduled job's definition, keyed by its id and validated by api.schedule; the "
+        "duplicate check joins with job authoring (B-sched-author adds the kind to _dedupe)",
+    ),
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
 }
