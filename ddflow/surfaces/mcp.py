@@ -514,7 +514,10 @@ class Server:
 
         The connection's identity, unless the call names one: on a stateless request its
         `_meta` agent (D-mcp-identity-per-call), and on any request the `as_agent`
-        argument, which wins over both."""
+        argument, which wins over both. Either is a PER-CALL name everywhere it counts:
+        naming anyone but the connection's own identity, a claim does not adopt the tree
+        the server stands in (`_someone_else`) -- a stateless caller cannot be told
+        apart from a subagent riding the connection (B7c7a0d9222)."""
         agent, per_call = self.agent, ""
         if modern:
             per_call, bad = _meta_agent(params)
