@@ -142,6 +142,19 @@ def test_python_named_tools_keep_their_first_argument(monkeypatch):
     assert L._describe_pid(4245) == "pid 4245 (python-lint /home/u/x.py)"
 
 
+@pytest.mark.parametrize("interp", ["python3.13t", "python3.13d", "python3-dbg", "python"])
+def test_a_build_suffixed_interpreter_names_its_script(monkeypatch, interp):
+    real = Path.read_bytes
+
+    def fake(self, *a, **k):
+        if str(self) == "/proc/4246/cmdline":
+            return f"/usr/bin/{interp}\0/deep/entry.py\0-m\0x\0".encode()
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", fake)
+    assert L._describe_pid(4246) == f"pid 4246 ({interp} entry.py -m x)"
+
+
 def test_the_script_an_interpreter_runs_is_named_but_arguments_keep_their_paths(monkeypatch):
     real = Path.read_bytes
     argv = b"/v/bin/python3\0/deep/v/bin/ddflow\0merge\0/abs/arg\0"
