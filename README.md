@@ -1115,6 +1115,16 @@ an agent must not be able to mint one (decision D-reviewer-trust):
 Like human gates, this makes a forged reviewer visible in the log; it cannot stop a shell
 edit of the local files.
 
+The approval is the shared approve-by-digest primitive (`services/approval.py`,
+B-uni-approval). It records one event, `approval.granted`, with the subject
+(`reviewer:<name>`), the digest a person approved, the OS user, the host and `human`. It has
+one check: the digest of what is about to run must equal a digest a person approved, so a
+later edit is not approved. A single-use approval also carries the hash of a token minted
+for the person; whoever presents the token may act once (`approval.used`), and the token
+itself is never written. The planned approvals (skill installs, upstream reports, drafts,
+schedule escalations, upgrades) use the same primitive. A log from before it holds
+`reviewer.approved`, which still counts.
+
 ```toml
 [[reviewer]]
 name   = "local-qwen"
