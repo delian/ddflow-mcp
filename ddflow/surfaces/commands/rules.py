@@ -46,11 +46,11 @@ def _csv(text: str) -> list[str]:
     return [p.strip() for p in (text or "").split(",") if p.strip()]
 
 
-def _check_note(out) -> str:
-    """What a filed rule's result says about the duplicate check: that it could not run
-    (the rule was filed UNCHECKED), or the records it reads like (a warning)."""
+def _check_note(out, done: str = "filed") -> str:
+    """What a filed or edited rule's result says about the duplicate check: that it could
+    not run (``done`` UNCHECKED), or the records it reads like (a warning)."""
     if why := out.data.get("dedupe_unavailable"):
-        return f"\n  filed UNCHECKED: the duplicate check could not run ({why})"
+        return f"\n  {done} UNCHECKED: the duplicate check could not run ({why})"
     shown = [c for c in out.data.get("candidates", []) if c.get("kind") != "rule"]
     if not shown:
         return ""
@@ -115,7 +115,7 @@ def _cmd_edit(a, c: Ctx) -> int:
         verb,
         f"updated {a.id}: {', '.join(sorted(fields)) or 'nothing'}"
         + (f" (related to {related})" if related else "")
-        + _check_note(out),
+        + _check_note(out, "edited"),
     )
 
 

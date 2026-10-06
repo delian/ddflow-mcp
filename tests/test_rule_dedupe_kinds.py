@@ -185,3 +185,25 @@ def test_an_unknown_answer_is_refused_before_anything_is_filed(proj):
     )
     assert out.exit == 1 and "unknown answer" in out.reason
     assert "r-q" not in _rules(proj)
+
+
+def test_the_rules_limits_still_refuse(proj):
+    """roborev: `_over_limits(...) or ...` read the (falsy) refusal as nothing."""
+    from ddflow.config import Config
+
+    cap = Config.load(proj).rules.max_size_bytes
+    big = R.rule_add(proj, R.Rule(id="r-big", title="Big", content="x" * (cap + 1)))
+    assert big.exit == 3 and "max_size_bytes" in big.reason
+    assert "r-big" not in _rules(proj)
+
+
+def test_an_edit_cannot_relate_a_rule_to_itself(proj):
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import rules as C
+
+    assert R.rule_add(proj, R.Rule(id="r-a", title="Test names", content=UNRELATED)).exit == 0
+    out = R.rule_update(proj, "r-a", content="zz", dedup_answer=R.RuleDedupAnswer("related", "r-a"))
+    assert out.exit == 1 and "itself" in out.reason
+    note = C._check_note(SimpleNamespace(data={"dedupe_unavailable": "x"}), "edited")
+    assert note.strip().startswith("edited UNCHECKED")
