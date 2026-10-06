@@ -507,7 +507,8 @@ in `_meta`, and `tools/list`, `resources/list`, `resources/read`, `prompts/list`
 fixed for the life of the server, 0 for everything read from the repository's state).
 Identity is per request in that era (D-mcp-identity-per-call): a modern request names its
 caller with the `as_agent` argument or `ddflow/agent` in `params._meta` (the argument wins
-when both are given; a malformed name is a tool error), and one that names nobody is
+when both are given, and `_meta` is then not read; a malformed name that is read is a tool
+error), and one that names nobody is
 attributed to the tree-derived default. Like `as_agent`, a `_meta` name other than the
 connection's own does not adopt the tree the server stands in on `ddflow_claim` (it could
 be a subagent riding the connection): the item gets a tree of its own, as from the CLI in
