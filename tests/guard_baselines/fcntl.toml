@@ -1,0 +1,6 @@
+# Ratchet `fcntl` (tests/test_architecture_guards.py) counts
+# any use of the fcntl module outside ddflow.infra.fsio.
+#
+# Lower the baseline in the same change that removes sites; the failure message
+# prints the exact value. Never raise it.
+baseline = 0
