@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ...infra import fsio
 from ...infra import proc as P
 from .defs import GateDef
 from .evidence import diff_stat, digest, source_tree, tree_fingerprint
@@ -57,11 +58,10 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
     ``repo``. The newest KEEP_RUN_LOGS per item and gate are kept."""
 
     def keep(out: str) -> str:
-        runs = Path(repo) / ".ddflow" / RUNS_DIR
-        runs.mkdir(parents=True, exist_ok=True)
-        ignore = runs / ".gitignore"
-        if not ignore.exists():
-            ignore.write_text("# gate run output logs: machine-local, never committed\n*\n")
+        runs = fsio.ensure_ignored_dir(
+            Path(repo) / ".ddflow" / RUNS_DIR,
+            comment="gate run output logs: machine-local, never committed",
+        )
         where = runs / item_id
         where.mkdir(exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
