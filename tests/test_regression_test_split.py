@@ -67,6 +67,11 @@ def test_a_value_whose_inner_bracket_meets_a_separator_stays_one_entry(node):
             "tests/a.py::t[a],b],tests/c.py::d[f],e]",
             ["tests/a.py::t[a],b]", "tests/c.py::d[f],e]"],
         ),
+        # fifth review: a `.py` token or a node-id shape INSIDE a value
+        ("tests/x.py::t[a],b.py,c]", ["tests/x.py::t[a],b.py,c]"]),
+        ("tests/a.py::t[a],tests/b.py::u]", ["tests/a.py::t[a],tests/b.py::u]"]),
+        # nothing well-formed exists: the best cut still separates the command
+        ('tests/a.py::t[x], pytest -k "a]b"', ["tests/a.py::t[x]", 'pytest -k "a]b"']),
     ],
 )
 def test_third_review_cases(spec, entries):
