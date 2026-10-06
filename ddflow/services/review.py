@@ -325,9 +325,10 @@ class ReviewResult:
     chunks_reviewed: int = 0
     chunks_off_contract: int = 0
     elapsed_s: float = 0.0
-    #: How many rounds the sent chunks needed at the reviewer's concurrency (one when they
-    #: all went out at once): `elapsed_s / waves` is the reviewer's time per request,
-    #: which the adaptive flow controller reads as reviewer latency (bug B1c5dbe3103).
+    #: How many rounds the sent chunks' FIRST copies needed at the reviewer's concurrency
+    #: (`_race` queues every first copy before any hedge copy, so hedging adds no round):
+    #: `elapsed_s / waves` is the reviewer's time per request, which the adaptive flow
+    #: controller reads as reviewer latency (bug B1c5dbe3103).
     waves: int = 1
     raw: str = ""
     #: One entry per chunk that produced no review: ``{"chunk", "files", "reason"}``.
