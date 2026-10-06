@@ -28,6 +28,8 @@ from .events import (
     SKEW_OVERRIDDEN_KIND,
     UPGRADE_APPLIED_KIND,
     Event,
+    changelog_of,  # noqa: F401  -- re-exported: model.py imported it before the split
+    version_key,  # noqa: F401  -- re-exported: model.py imported it before the split
 )
 from .handlers._common import (  # noqa: F401
     _item,

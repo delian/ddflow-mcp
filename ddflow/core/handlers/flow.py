@@ -1,6 +1,7 @@
 """Fold handlers: worktrees, pull requests, ports, deploys, the branching flow and releases.
 
-Assembled into `model.HANDLERS`; each is `(State, Event) -> None` and pure."""
+Each `_h_*` is a `(State, Event) -> None` fold handler, assembled into `model.HANDLERS`;
+the other functions here are the helpers they share. All of it is pure."""
 
 from __future__ import annotations
 
