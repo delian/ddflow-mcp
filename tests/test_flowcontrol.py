@@ -325,7 +325,30 @@ def test_limited_by_stops_naming_a_signal_that_recovered():
     run = [Sample(i * STEP, {LOAD: 0.05, "q": 5}) for i in range(3)]
     run += [Sample((3 + i) * STEP, {LOAD: 0.1, "q": 0}) for i in range(40)]
     d = fold(run, p)
-    assert d.mode == "increase" and d.limited_by == LOAD
+    # every signal is healthy now: none is named (bug B277cc2591b); the limit is binding,
+    # so what holds it is the growth step, just taken
+    assert d.mode == "increase" and d.limited_by == "growth step (next in 600s)"
+
+
+def test_a_healthy_signal_is_never_named_however_close():
+    p = params(thresholds={LOAD: Threshold(0.15, 0.75), "q": Threshold(1, 4)})
+    run = [Sample(i * STEP, {LOAD: 0.15, "q": 1}) for i in range(3)]  # both AT their low mark
+    assert fold(run, p).limited_by.startswith("growth step")
+    assert fold(run, p, binding=False).limited_by == "demand (0 in flight)"
+    run = [Sample(i * STEP, {LOAD: 0.15, "q": 1.5}) for i in range(3)]  # q in its band
+    assert fold(run, p).limited_by == "q"
+
+
+def test_a_blind_latest_sample_is_not_reported_as_health():
+    run = [Sample(i * STEP, dict(GOOD)) for i in range(5)]
+    run.append(Sample(5 * STEP, {}))  # every sampler failed this time
+    assert fold(run).limited_by == "start (no signals)"
+    assert fold(run, binding=False).limited_by == "start (no signals)"
+
+
+def test_at_the_ceiling_the_ceiling_is_named_not_a_growth_step():
+    p = params(start=4, ceiling=4)
+    assert fold(series([GOOD] * 30), p).limited_by == "ceiling"
 
 
 def test_a_blind_sample_breaks_the_healthy_streak():

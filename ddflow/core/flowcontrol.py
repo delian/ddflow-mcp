@@ -140,10 +140,12 @@ def _classify(sample: Sample, params: Params):
 
 
 def _closest(sample: Sample, params: Params) -> str | None:
+    """The signal nearest its high mark among those NOT healthy (over their low mark): a
+    signal at or under its low mark limits nothing, however close it is (bug B277cc2591b)."""
     best: tuple[float, str] | None = None
     for name in sorted(params.thresholds):
         v = sample.signals.get(name)
-        if v is None:
+        if v is None or v <= params.thresholds[name].low:
             continue
         key = (_ratio(v, params.thresholds[name].high), name)
         if best is None or key > best:
@@ -184,6 +186,17 @@ class _Replay:
 
     def __post_init__(self) -> None:
         self.limit = self.params.bounds()[1]
+
+    def why_not_higher(self, now: float) -> str:
+        """With every signal healthy: the growth step, while the limit is binding (it
+        rises one per `adapt_up_after_s` of that), else the demand that does not reach it."""
+        flying = _in_flight_at(self.history, self.times, now)
+        if flying < self.limit:
+            return f"demand ({flying} in flight)"
+        wait = self.params.adapt_up_after_s - self.accum
+        if self.quiet(now) and self.last_dec is not None:
+            wait += self.last_dec + self.params.quiet_after_decrease_s - now
+        return f"growth step (next in {max(0, round(wait))}s)"
 
     def quiet(self, at: float) -> bool:
         return self.last_dec is not None and at - self.last_dec < self.params.quiet_after_decrease_s
@@ -275,7 +288,11 @@ def fold_limit(
     elif st.dec_signal:
         limited_by = st.dec_signal
     else:
-        limited_by = _closest(ring[-1], params) or NO_SIGNALS
+        # growth or demand only when the latest sample SHOWS health: a blind one says so
+        healthy = _classify(ring[-1], params)[2]
+        limited_by = _closest(ring[-1], params) or (
+            st.why_not_higher(now) if healthy else NO_SIGNALS
+        )
     reason = st.last_change or f"holding at {st.limit}"
     if paused_by:
         reason = f"{paused_by} is critical: admission paused; {reason}"
