@@ -11,6 +11,8 @@ So this module **classifies before it acts**, and the classification is the prod
 * ``merged``      — every commit is already on the base branch. Safe to remove.
 * ``unmerged``    — carries commits the base branch does not have. Can be merged.
 * ``dirty``       — uncommitted edits. NEVER touched automatically; a human looks.
+* ``unreadable``  — git could not read it or count its commits. Unknown is never clean:
+                    NEVER touched automatically; a human looks.
 * ``orphan``      — a worktree no queue item claims. Reported with its contents.
 * ``stale_branch``— a branch with our prefix and no worktree. Removable if merged.
 * ``held``        — its item has a LIVE lease: an agent is working in it now.
@@ -199,15 +201,27 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         if item:
             t.item, t.item_state = item.id, item.state
         wt = W.Worktree(item=t.item or t.name, path=Path(path), branch=branch, base=base)
-        t.dirty_files = len(W.dirty(wt))
-        t.ahead = max(0, W.ahead(wt))
+        dirty, ahead = W.dirty(wt), W.ahead(wt)
+        # Unknown is never clean: a tree git could not read, or whose commits could not
+        # be counted, is not "fully merged" however empty it looks (B028b11b4cb).
+        unknown = W.unreadable(dirty) or ahead < 0
+        t.dirty_files = 0 if W.unreadable(dirty) else len(dirty)
+        t.ahead = max(0, ahead)
         t.behind = max(0, W.behind(wt))
 
         protected, reason = guard.why(path, branch)
-        if protected == "held" or (protected and not t.dirty_files):
+        if protected == "held" or (protected and not t.dirty_files and not unknown):
             # A held tree's edits are its holder's work in progress, not a question for
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
+        elif unknown:
+            t.kind = "unreadable"
+            t.action = ""
+            why = dirty[0][len(W.UNREADABLE) :] if W.unreadable(dirty) else "no commit count"
+            t.done = (
+                f"LEAVE ALONE — could not measure it ({why[:120]}). "
+                f"Inspect first: `git -C {path} status` and `git -C {path} log {base}..HEAD`."
+            )
         elif t.dirty_files:
             t.kind = "dirty"
             t.action = ""
