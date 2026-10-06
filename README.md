@@ -2795,7 +2795,8 @@ signals (below), the log-derived rates, how many items were in flight and whethe
 limit was binding. The ring lives under the git-ignored `.ddflow/local/` (which also
 ignores itself, for a project whose `.ddflow/.gitignore` predates it), keeps the last six
 hours, and is folded through the controller with the `[schedule]` parameters whenever the
-limit is asked for, with the log-derived rates re-read at that moment. A corrupt or
+limit is asked for, with the log-derived rates re-read at that moment (`plan` asks for it
+once the wiring task lands; until then the ring is recorded and auto holds at its start). A corrupt or
 truncated line is skipped, a clock that went backwards drops the sample, two agents
 sampling at once are serialised by a short `O_EXCL` lock file, and a directory that cannot
 be written leaves the limit at its start value with the reason. In `fixed` mode nothing is

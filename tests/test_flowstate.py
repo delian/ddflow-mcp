@@ -139,7 +139,8 @@ def test_two_threads_sampling_at_once_leave_a_valid_file(repo):
     lines = _lines(repo)
     assert all(json.loads(ln) for ln in lines)  # every line parses
     ats = [json.loads(ln)["at"] for ln in lines]
-    assert ats == sorted(ats) and len(ats) <= 30
+    assert ats and ats == sorted(ats) and len(ats) <= 30
+    assert len(set(ats)) == len(ats)
     assert not F.ring_path(repo).with_name("samples.jsonl.lock").exists()
     del clock
 
@@ -198,9 +199,12 @@ def test_the_ring_is_ignored_and_nothing_new_is_tracked(repo):
 def test_without_init_the_local_dir_ignores_itself(repo):
     F.sample_if_due(_ctx(repo), SIG.FakeSource(GOOD), Clock())
     status = subprocess.run(
-        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+        ["git", "-C", str(repo), "status", "--porcelain", "-uall"],
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
-    assert ".ddflow/local" not in status, status
+    assert ".ddflow" not in status, status  # every untracked file listed, none of ours
 
 
 def test_commands_sample_through_the_api_loader(repo, monkeypatch):
@@ -225,3 +229,65 @@ def test_doctor_names_a_local_dir_git_does_not_ignore(repo):
     (repo / ".ddflow" / "local" / ".gitignore").unlink()
     notes = F.doctor_notes(repo)
     assert any("not ignored by git" in n for n in notes), notes
+
+
+def test_a_torn_last_line_is_repaired_not_appended_onto(repo):
+    clock, src = Clock(), SIG.FakeSource(BAD)
+    F.sample_if_due(_ctx(repo), src, clock)
+    with F.ring_path(repo).open("a", encoding="utf-8") as fh:
+        fh.write('{"at": 1, "signals": {"gate')  # a crash mid-write: no newline
+    for _ in range(3):
+        clock.t += 60
+        assert F.sample_if_due(_ctx(repo), src, clock).written
+    assert len(F.read_ring(repo)) == 4
+    assert F.ring_path(repo).read_text("utf-8").endswith("\n")
+
+
+def test_a_semantically_bad_line_is_skipped_not_raised(repo):
+    clock, src = Clock(), SIG.FakeSource(BAD)
+    F.sample_if_due(_ctx(repo), src, clock)
+    with F.ring_path(repo).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"at": T0 + 1, "signals": {"load_per_core": "x"}}) + "\n")
+        fh.write(json.dumps({"at": T0 + 2, "signals": {}, "in_flight": "many"}) + "\n")
+    assert len(F.read_ring(repo)) == 1
+    clock.t += 60
+    F.current_limit(_ctx(repo), src, clock)  # does not raise
+
+
+def test_a_lock_is_removed_only_by_its_owner(repo):
+    path = F.ring_path(repo)
+    path.parent.mkdir(parents=True)
+    lock = path.with_name(path.name + ".lock")
+    with F._lock(path) as held:
+        assert held
+        lock.write_bytes(b"someone-else")  # the lock was taken over meanwhile
+    assert lock.read_bytes() == b"someone-else"
+
+
+def test_a_stale_lock_is_taken_over(repo):
+    path = F.ring_path(repo)
+    path.parent.mkdir(parents=True)
+    lock = path.with_name(path.name + ".lock")
+    lock.write_bytes(b"crashed")
+    old = lock.stat().st_mtime - F.STALE_LOCK_S - 5
+    os.utime(lock, (old, old))
+    with F._lock(path) as held:
+        assert held
+    assert not lock.exists()
+
+
+def test_the_log_is_read_only_when_a_sample_is_due(repo):
+    calls = []
+
+    def events():
+        calls.append(1)
+        return ()
+
+    clock, src = Clock(), SIG.FakeSource(GOOD)
+    ctx = F.FlowCtx(repo=repo, cfg=Config(), state=State(), events=events)
+    F.sample_if_due(ctx, src, clock)
+    n = len(calls)
+    assert n >= 1
+    clock.t += 10
+    F.sample_if_due(ctx, src, clock)
+    assert len(calls) == n  # not due: the log was not read
