@@ -25,7 +25,9 @@ from ..infra.tomlcfg import value
 
 REGION = "README/knobs"
 END = f"<!-- ddflow:end {REGION} -->"
-_BEGIN = re.compile(rf"^<!-- ddflow:begin {re.escape(REGION)} sha=[0-9a-f]{{12}} -->(?=\r?$)", re.M)
+_BEGIN = re.compile(
+    rf"^<!-- ddflow:begin {re.escape(REGION)} sha=(?P<sha>[0-9a-f]{{12}}) -->(?=\r?$)", re.M
+)
 _END = re.compile(rf"^{re.escape(END)}(?=\r?$)", re.M)
 #: A default longer than this is not shown in a cell: `config --explain` prints it whole.
 SHOWN = 40
@@ -72,25 +74,52 @@ def render(cfg: Config | None = None, choices: dict[str, tuple[str, ...]] | None
     return f"<!-- ddflow:begin {REGION} sha={content_digest(body, length=12)} -->\n{body}\n{END}"
 
 
-def replace(readme: str, block: str) -> str:
-    """`readme` with its `README/knobs` region (markers included) replaced by `block`."""
+def _region(readme: str) -> tuple[re.Match[str], re.Match[str]]:
+    """The begin and end marker matches of the `README/knobs` region, or ValueError."""
     begin = _BEGIN.search(readme)
     end = _END.search(readme, begin.end()) if begin else None
     if begin is None or end is None:
         raise ValueError(f"README has no {REGION} region (ddflow:begin ... {END})")
+    return begin, end
+
+
+def replace(readme: str, block: str) -> str:
+    """`readme` with its `README/knobs` region (markers included) replaced by `block`."""
+    begin, end = _region(readme)
     return readme[: begin.start()] + block + readme[end.end() :]
 
 
+def hand_edited(readme: str) -> bool:
+    """Was the region's body changed since it was rendered: does it no longer hash to the
+    `sha` its begin marker recorded (D-doc-regions)?"""
+    begin, end = _region(readme)
+    body = readme[begin.end() : end.start()].replace("\r\n", "\n")
+    body = body.removeprefix("\n").removesuffix("\n")
+    return content_digest(body, length=12) != begin["sha"]
+
+
 def main(argv: list[str]) -> int:
-    """Rewrite the generated block of the README named by `argv[0]` (default README.md)."""
-    path = Path(argv[0] if argv else "README.md")
+    """Rewrite the generated region of the README named in `argv` (default README.md).
+    A region edited by hand is refused (exit 3) unless `--force`: rewriting it would
+    drop the edit, and the table is the declarations' to change, not the README's."""
+    force = "--force" in argv
+    paths = [a for a in argv if a != "--force"]
+    path = Path(paths[0] if paths else "README.md")
     text = path.read_text("utf-8")
     new = replace(text, render())
-    if new != text:
-        atomic_write(path, new)
-        print(f"{path}: knob table rewritten")
-    else:
+    if new == text:
         print(f"{path}: knob table already current")
+        return 0
+    if hand_edited(text) and not force:
+        print(
+            f"{path}: the {REGION} region was edited by hand (its body no longer matches its "
+            "sha); change the knob declarations instead, then rerun with --force to discard "
+            "the edit",
+            file=sys.stderr,
+        )
+        return 3
+    atomic_write(path, new)
+    print(f"{path}: knob table rewritten")
     return 0
 
 
