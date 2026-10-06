@@ -60,5 +60,5 @@ _doc(
 _doc(
     "dedupe",
     "kinds",
-    "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it. Default: bug, task, phase, lesson, decision, research, memory, rule. A rule (a file, not a log record) is checked on `rule add` and on an `rule edit` of its title or content against every other kind, and compared with the other rules by its own check; it is never offered as a candidate.",
+    "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it. Default: bug, task, phase, lesson, decision, research, memory, rule. A rule (a file, not a log record) is checked on `rule add` and on a `rule edit` of its title or content against every other kind, and compared with the other rules by its own check; it is never offered as a candidate.",
 )
