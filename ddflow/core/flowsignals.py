@@ -151,7 +151,7 @@ def gate_failure_ratio(events: Sequence[Event], now: float) -> float | None:
         return None
     # The baseline rate is floored at one failure in the minimum baseline: a ratio to a
     # near-zero rate would make one failure after a clean busy week read as 100x, while a
-    # clean baseline must still let a burst register (2x the floor is 2 in 10 recent).
+    # clean baseline must still let a burst register (over 2x the floor: 2 in 10 recent).
     base = max(b_failed / (b_passed + b_failed), GATE_BASELINE_FLOOR)
     return (failed / (passed + failed)) / base
 
