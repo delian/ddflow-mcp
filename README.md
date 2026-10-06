@@ -4872,10 +4872,10 @@ tests the change reaches — changed test files, tests importing a changed modul
 or one step removed, tests named after a changed file, everything under a changed
 `conftest.py`, tests that name a changed data file kept below a test directory (a
 fixture, a golden file, a guard baseline: by its name with its directory, else by its
-directory, else by its name) — each with why, and prints one command that runs them in
-parallel with the project's own runner and worker flags. It is fast feedback and never a
-gate: the `unit_tests` gate always runs the whole suite, in parallel, because a targeted
-run hides breakage that was already there. The agent driver tells agents to run it after
+nearest directory) — each with why, and prints one command that runs them in parallel
+with the project's own runner and worker flags. It is fast feedback and never a gate:
+the `unit_tests` gate always runs the whole suite, in parallel, because a targeted run
+hides breakage that was already there. The agent driver tells agents to run it after
 each change; `ddflow workflow` and `ddflow doctor` say when the configured test command
 uses one core.
 
