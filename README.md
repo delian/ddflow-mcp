@@ -4578,7 +4578,7 @@ The table is generated from the knob declarations themselves (`uv run python -m
 ddflow.views.knob_table README.md` rewrites it) and a test fails when it differs, so its
 count and defaults cannot drift. A long default is left to `ddflow config --explain`.
 
-<!-- ddflow:knobs:begin (generated from the knob declarations; do not edit) -->
+<!-- ddflow:begin README/knobs sha=30cc606b5e44 -->
 <details><summary>All 189 knobs across 27 sections</summary>
 
 | Knob | Default | Values |
@@ -4774,7 +4774,7 @@ count and defaults cannot drift. A long default is left to `ddflow config --expl
 | `triggers.max_fires_per_hour` | `10` |  |
 
 </details>
-<!-- ddflow:knobs:end -->
+<!-- ddflow:end README/knobs -->
 
 ---
 

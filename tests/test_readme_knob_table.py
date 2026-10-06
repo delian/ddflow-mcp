@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from ddflow.config import KNOB_CHOICES, Config
+from ddflow.core.digest import content_digest
 from ddflow.views import knob_table as KT
 
 README = Path(__file__).resolve().parents[1] / "README.md"
@@ -29,7 +30,8 @@ def test_the_readme_knob_table_is_what_the_declarations_render():
     """The generated block is current. When this fails, a knob, its default or its values
     changed: run `uv run python -m ddflow.views.knob_table README.md` and commit."""
     readme = _readme()
-    assert readme.count(KT.BEGIN) == 1 and readme.count(KT.END) == 1
+    assert readme.count(f"<!-- ddflow:begin {KT.REGION} sha=") == 1
+    assert readme.count(KT.END) == 1
     assert KT.replace(readme, KT.render()) == readme, (
         "README.md's knob table is stale: `uv run python -m ddflow.views.knob_table README.md`"
     )
@@ -54,18 +56,33 @@ def test_a_cell_escapes_a_pipe_and_points_a_long_default_at_explain():
     assert KT._default({"k": 1}) == "`{k = 1}`"
 
 
-def test_replace_swaps_only_the_block_and_refuses_a_readme_without_one():
-    text = f"head\n{KT.BEGIN}\nold\n{KT.END}\ntail\n"
+#: A begin marker as an older render left it: any 12-hex digest.
+OLD_BEGIN = f"<!-- ddflow:begin {KT.REGION} sha=0123456789ab -->"
+
+
+def test_the_region_uses_the_one_marker_grammar_with_the_body_digest():
+    """D-doc-regions: `ddflow:begin <doc>/<region> sha=<12hex>` ... `ddflow:end <doc>/<region>`,
+    the sha being the digest of the body between the markers."""
+    begin, *body, end = KT.render().split("\n")
+    assert end == f"<!-- ddflow:end {KT.REGION} -->"
+    m = re.fullmatch(rf"<!-- ddflow:begin {KT.REGION} sha=([0-9a-f]{{12}}) -->", begin)
+    assert m and m.group(1) == content_digest("\n".join(body), length=12)
+
+
+def test_replace_swaps_only_the_region_and_refuses_a_readme_without_one():
+    text = f"head\n{OLD_BEGIN}\nold\n{KT.END}\ntail\n"
     assert KT.replace(text, "NEW") == "head\nNEW\ntail\n"
     with pytest.raises(ValueError):
         KT.replace("no markers here", "NEW")
     with pytest.raises(ValueError):
-        KT.replace(f"{KT.BEGIN} but no end", "NEW")
+        KT.replace(f"{OLD_BEGIN}\nbut no end", "NEW")
+    with pytest.raises(ValueError):
+        KT.replace(f"{KT.END}\n{OLD_BEGIN}\n", "NEW")
 
 
-def test_main_rewrites_a_stale_block_and_leaves_a_current_one(tmp_path, capsys):
+def test_main_rewrites_a_stale_region_and_leaves_a_current_one(tmp_path, capsys):
     path = tmp_path / "README.md"
-    path.write_text(f"x\n{KT.BEGIN}\nstale\n{KT.END}\n", "utf-8")
+    path.write_text(f"x\n{OLD_BEGIN}\nstale\n{KT.END}\n", "utf-8")
     assert KT.main([str(path)]) == 0
     assert path.read_text("utf-8") == f"x\n{KT.render()}\n"
     assert KT.main([str(path)]) == 0
