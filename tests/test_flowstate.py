@@ -354,3 +354,15 @@ def test_a_rewrite_keeps_the_rings_mode(repo):
     clock.t += 60
     F.sample_if_due(_ctx(repo), src, clock)  # the rewrite branch
     assert F.ring_path(repo).stat().st_mode & 0o777 == before
+
+
+def test_a_rewrite_needs_no_fchmod(repo, monkeypatch):
+    """`os.fchmod` is Unix-only before Python 3.13: the rewrite must not depend on it."""
+    monkeypatch.delattr(os, "fchmod", raising=False)
+    clock, src = Clock(), SIG.FakeSource(GOOD)
+    F.sample_if_due(_ctx(repo), src, clock)
+    with F.ring_path(repo).open("a", encoding="utf-8") as fh:
+        fh.write("torn")
+    clock.t += 60
+    assert F.sample_if_due(_ctx(repo), src, clock).written
+    assert len(F.read_ring(repo)) == 2

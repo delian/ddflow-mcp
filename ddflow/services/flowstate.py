@@ -210,10 +210,11 @@ def _replace(path: Path, body: str) -> None:
     fd, name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
     try:
         try:
-            os.fchmod(fd, _mode(path))  # mkstemp makes 0600; keep the ring's usual mode
             _write_all(fd, body.encode("utf-8"))
         finally:
             os.close(fd)
+        with contextlib.suppress(OSError):  # mkstemp makes 0600: keep the ring's mode
+            os.chmod(name, _mode(path))  # by path, which every platform supports
         os.replace(name, path)
     finally:
         with contextlib.suppress(OSError):
