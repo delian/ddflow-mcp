@@ -154,6 +154,33 @@ def test_crash_recovery_survives_a_check_slower_than_the_lease(tmp_path):
 @pytest.mark.slow
 @pytest.mark.scenarios
 @pytest.mark.timeout(1800)
+def test_crash_recovery_doctor_is_read_inside_the_new_holders_lease(tmp_path):
+    """Bfb0e454b49: the last step ran `doctor` long after EPSILON's claim; under ci load
+    its 8 s lease had expired by then and doctor, correctly, reported the expired lease
+    as a problem. Simulated by a `next` that starts later than the TTL."""
+    import scenario_crash_recovery as S
+    from harness import Fail, Scenario
+
+    class SlowNext(Scenario):
+        delayed = False
+
+        def ddflow(self, *argv, **kw):
+            if "next" in argv and not self.delayed:
+                self.delayed = True
+                time.sleep(S.TTL_S + 1)
+            return super().ddflow(*argv, **kw)
+
+    sc = SlowNext("crash-recovery-slow-next", tmp_path / "slow")
+    try:
+        S.run(sc)
+    except Fail as exc:
+        pytest.fail(f"crash-recovery with a slow step before doctor: {exc}")
+    assert sc.delayed, "the slow step was never injected: the scenario changed shape"
+
+
+@pytest.mark.slow
+@pytest.mark.scenarios
+@pytest.mark.timeout(1800)
 def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(tmp_path):
     """B11e64b1e8c, sustained load: every `claim` and every `recover` is slow enough that
     the two together outlive the lease but each alone does not. Observing both in one
