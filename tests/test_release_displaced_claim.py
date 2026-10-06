@@ -67,4 +67,7 @@ def test_a_takeover_victim_is_not_revived_as_the_releasers_claim():
     c1, c2, b1 = _at(2, "c", 100.0, 50), _at(3, "c", 200.0, 50), _at(4, "b", 100.0, 50)
     rel = _ev("lease.released", 5, "c", holder="c", event=c2.id)
     it = fold([_ev("task.added", 1, title="t"), c1, c2, b1, rel]).items["T"]
-    assert it.lease is None or it.lease.holder != "c", it.lease
+    # c's superseded claim leaves the contest with the release (it stayed, on main), so
+    # nothing of c's can be displayed again; b's unreleased claim is what remains.
+    assert [h["holder"] for h in it.lease_contest] in ([], ["b"]), it.lease_contest
+    assert it.lease is None or it.lease.holder == "b", it.lease
