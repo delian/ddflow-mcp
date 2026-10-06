@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import importlib
 
-#: Every section module, in the order the sections were declared in `config.py`.
+#: Every section module, in the order their dataclasses sat in the single `config.py` before
+#: the split. Nothing depends on it: `config --explain` follows `Config`'s field order.
 SECTION_NAMES = (
     "lease",
     "worktree",
