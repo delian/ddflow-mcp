@@ -29,6 +29,7 @@ from typing import Any
 
 from ..config import Config
 from ..core.flow import safe_name as _core_safe_name
+from ..infra import fsio
 from ..infra import proc as P
 
 
@@ -114,12 +115,10 @@ def _ignore_inside(repo: Path, wt_root: Path) -> None:
         wt_root.resolve().relative_to(Path(repo).resolve())
     except ValueError:
         return
-    marker = wt_root / ".gitignore"
     # A convenience, never a reason to fail a claim: a read-only root still works, and
     # `.ddflow/.gitignore` covers the default location anyway.
     with contextlib.suppress(OSError):
-        if not marker.exists():
-            marker.write_text("# ddflow worktrees: never committed\n*\n", "utf-8")
+        fsio.ensure_ignored_dir(wt_root, comment="ddflow worktrees: never committed")
 
 
 def default_branch(repo: Path) -> str:
@@ -708,32 +707,9 @@ def diff_covers_everything(
     return (not missing), missing
 
 
-def repo_relative(repo: Path, path: Path | str, *, as_given: bool = False) -> str | None:
-    """`path` relative to `repo` as a POSIX string, or None when it lies outside it.
-
-    By default both sides are resolved, so a repo reached through a symlink and a path
-    that was resolved (or the other way round) still compare equal, and "outside" means
-    the real file is outside. `store_path`, `enforce._rel` and the pins report make
-    their "inside the repository, and as what" decision here.
-
-    `as_given=True` is for REPORTS: "inside" then also means "named inside". It first
-    tries `path` exactly as written, against `repo` as written and as resolved, and
-    resolves only when neither holds it, so a file the operator listed (a symlinked
-    suite or document, or one under a symlinked directory, even one pointing out of the
-    repo) prints by that name, not wherever the link points. A `path` containing `..`
-    is never taken as written, since `..` can leave the repository: it is resolved.
-    """
-    root = Path(repo).resolve()
-    if as_given:
-        p = Path(path)
-        for base in (Path(repo), root):
-            # `..` is not collapsed lexically: `repo/../x` lies outside, so resolve it
-            if p.is_relative_to(base) and ".." not in p.relative_to(base).parts:
-                return p.relative_to(base).as_posix()
-    try:
-        return Path(path).resolve().relative_to(root).as_posix()
-    except ValueError:
-        return None
+#: `path` relative to `repo` as a POSIX string, or None outside it: now `fsio.repo_rel`,
+#: kept under this name so existing imports keep working.
+repo_relative = fsio.repo_rel
 
 
 def store_path(repo: Path, path: Path | str) -> str:
@@ -748,7 +724,7 @@ def store_path(repo: Path, path: Path | str) -> str:
     repository tree AND `os.path.relpath` cannot express it portably. That case is
     reported by `ddflow doctor` rather than silently accepted.
     """
-    inside = repo_relative(repo, path)
+    inside = fsio.repo_rel(repo, path)
     if inside is not None:
         return inside
     p = Path(path).resolve()

@@ -35,6 +35,7 @@ import tomllib
 from pathlib import Path
 
 from ..config import Config, InvalidValue, parallel_range_problems
+from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import reviewer_trust as RT
 
@@ -61,12 +62,7 @@ def ensure_local_dir(repo: Path) -> Path:
     whose ignore file predates `local/`, or that never ran `init`, must still not commit
     the endpoint, key variable or worker count it is about to receive.
     """
-    d = Path(repo) / LOCAL_DIR
-    d.mkdir(parents=True, exist_ok=True)
-    ignore = d / ".gitignore"
-    if not ignore.exists():
-        ignore.write_text("*\n", "utf-8")
-    return d
+    return fsio.ensure_ignored_dir(Path(repo) / LOCAL_DIR)
 
 
 def _human_cleared(data: dict) -> list[str]:
@@ -817,7 +813,7 @@ def append_block(
 
     with TC.locked(path):
         prev = path.read_text("utf-8") if path.exists() else ""
-        merged = prev.rstrip() + "\n" + block.rstrip() + "\n"
+        merged = fsio.APPEND.splice(prev, block.rstrip() + "\n")
         # Parsed before it replaces anything: a block that does not parse would leave
         # a config no later command can load, and the reader's error would blame a file
         # the operator never edited.
