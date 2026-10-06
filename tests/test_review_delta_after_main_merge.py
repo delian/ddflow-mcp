@@ -102,3 +102,20 @@ def test_a_conflicted_merge_still_sends_none_of_mains_other_work(repo, tmp_path)
     diff = RV._delta_diff(repo, _item(tree), "", head)
     assert "theirs.py" not in diff
     assert "resolved" in diff
+
+
+def test_a_commit_made_before_the_merge_is_still_sent(repo, tmp_path):
+    """Reviewed at H; the item commits B; THEN merges main. The start is H merged with
+    main's work (a tree), not the merge commit, so B is in the delta."""
+    tree = tmp_path / "item"
+    _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
+    head = _commit(tree, "own.py", "x = 1\n", "item: reviewed")
+    _commit(tree, "before.py", "made_before_the_merge = True\n", "item: B")
+    _commit(repo, "theirs.py", "unrelated = 1\n", "main: other item")
+    _git(tree, "merge", "-q", "--no-edit", "main")
+    for diff in (
+        RV._delta_diff(repo, _item(tree), "", head),
+        RV._delta_diff(repo, _item(Path("/nonexistent")), "item", head),
+    ):
+        assert "made_before_the_merge" in diff
+        assert "theirs.py" not in diff
