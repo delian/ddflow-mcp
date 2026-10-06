@@ -145,7 +145,6 @@ def test_gate_failure_ratio_is_the_recent_rate_over_the_baseline_rate():
 @pytest.mark.parametrize(
     "events",
     [
-        _outcomes(T0 - 2 * DAY, 40, 0) + _outcomes(T0 - 10 * MIN, 5, 5),  # a clean baseline
         _outcomes(T0 - 2 * DAY, 15, 4) + _outcomes(T0 - 10 * MIN, 5, 5),  # 19 baseline
         _outcomes(T0 - 2 * DAY, 32, 8) + _outcomes(T0 - 10 * MIN, 5, 4),  # 9 recent
         _outcomes(T0 - 9 * DAY, 32, 8) + _outcomes(T0 - 10 * MIN, 5, 5),  # baseline too old
@@ -153,6 +152,20 @@ def test_gate_failure_ratio_is_the_recent_rate_over_the_baseline_rate():
 )
 def test_gate_failure_ratio_without_a_baseline_is_unavailable(events):
     assert FS.gate_failure_ratio(events, T0) is None
+
+
+def test_a_clean_baseline_counts_as_one_failure():
+    # 40 baseline outcomes, none failed: the rate is taken as 1/40, so half failing now is 20x
+    events = _outcomes(T0 - 2 * DAY, 40, 0) + _outcomes(T0 - 10 * MIN, 5, 5)
+    assert FS.gate_failure_ratio(events, T0) == pytest.approx(20.0)
+
+
+def test_the_strictest_fallback_ignores_a_partial_table():
+    """Marks are never mixed from a table that is not valid on its own: a lone `high` under
+    the shipped `low` would otherwise invert the band."""
+    out = strictest_signals({"memory_pressure": {"high": 0.5}})
+    assert out["memory_pressure"] == SHIPPED_MARKS["memory_pressure"]
+    assert _signals_problem(out) == ""
 
 
 def test_the_baseline_ends_where_the_recent_hour_begins():
