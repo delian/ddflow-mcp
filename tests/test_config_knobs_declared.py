@@ -42,12 +42,10 @@ def _legacy_counts() -> dict[str, int]:
             if (getattr(node.func, "id", "") or getattr(node.func, "attr", "")) == "_doc":
                 calls += 1
     out = {"_doc() calls": calls}
-    tree = ast.parse(CONFIG_PY.read_text("utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") in _TABLES:
-            assert isinstance(node.value, ast.Dict), node.target.id
+    for name, table in _table_literals().items():
+        if name in _TABLES:
             # `**_DC` and friends (keys None) are the declared knobs, not legacy entries
-            out[f"{node.target.id} entries"] = sum(k is not None for k in node.value.keys)
+            out[f"{name} entries"] = sum(k is not None for k in table.keys)
     return out
 
 
@@ -121,14 +119,24 @@ def test_a_knob_declared_twice_is_an_error() -> None:
         K._doc("loops", "on_detect", "again")
 
 
+def _table_literals() -> dict[str, ast.Dict]:
+    """config.py's knob tables and hand-written checks, by name, annotated or not."""
+    found: dict[str, ast.Dict] = {}
+    for node in ast.parse(CONFIG_PY.read_text("utf-8")).body:
+        targets = [node.target] if isinstance(node, ast.AnnAssign) else []
+        targets += node.targets if isinstance(node, ast.Assign) else []
+        for t in targets:
+            if getattr(t, "id", "") in (*_TABLES, "_VALUE_CHECKS"):
+                assert isinstance(node.value, ast.Dict), t.id
+                found[t.id] = node.value
+    return found
+
+
 def _literal_keys() -> set[str]:
     """Keys written out in config.py's knob tables and its hand-written checks."""
-    keys: set[str] = set()
-    for node in ast.parse(CONFIG_PY.read_text("utf-8")).body:
-        name = getattr(getattr(node, "target", None), "id", "")
-        if name in (*_TABLES, "_VALUE_CHECKS") and isinstance(node.value, ast.Dict):
-            keys |= {k.value for k in node.value.keys if isinstance(k, ast.Constant)}
-    return keys
+    tables = _table_literals()
+    assert set(tables) == {*_TABLES, "_VALUE_CHECKS"}, "a table moved: this guard went blind"
+    return {k.value for d in tables.values() for k in d.keys if isinstance(k, ast.Constant)}
 
 
 def test_no_declared_knob_is_left_in_a_config_table() -> None:
