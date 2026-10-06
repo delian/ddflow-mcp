@@ -1125,11 +1125,6 @@ def _running_from_source() -> bool:
 DIST_NAME = _INSTALL.DIST_NAME
 
 
-def _own_distribution():
-    """The installed distribution that THIS `ddflow` package came from, or None."""
-    return _INSTALL.own_distribution()
-
-
 def _installed_from_index() -> bool:
     """True when this installation came from a package index, so `uvx ddflow-mcp`
     reaches the same project (PEP 610; see `install_info`)."""

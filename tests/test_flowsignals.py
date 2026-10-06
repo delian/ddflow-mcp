@@ -183,4 +183,10 @@ def test_no_new_config_keys_are_needed():
 def test_history_notes_name_each_signal_lacking_history_and_nothing_else():
     notes = FS.history_notes(_signals(Log()))
     assert len(notes) == 3 and all("neutral" in n for n in notes)
-    assert FS.history_notes(FS.Signals(0.5, 0.1, 0.0)) == []
+    assert FS.history_notes(FS.Signals(0.5, 0.1, 0.0, gate_failure_ratio=1.0)) == []
+
+
+def test_a_short_gate_baseline_is_noted_for_the_ratio():
+    """The last hour has outcomes but the week before has too few: only the ratio is out."""
+    notes = FS.history_notes(FS.Signals(0.5, 0.1, 0.0, gate_failure_ratio=None))
+    assert len(notes) == 1 and notes[0].startswith("gate_failure_ratio: under 20")

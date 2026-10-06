@@ -236,6 +236,7 @@ def _log_signals(events: Sequence[Event], now: float) -> dict[str, float | None]
     return {
         "reviewer_latency_ratio": FS.reviewer_latency_ratio(evs, now),
         "gate_failure_rate": FS.gate_failure_rate(evs, now),
+        "gate_failure_ratio": FS.gate_failure_ratio(evs, now),
         "merge_failure_rate": FS.merge_failure_rate(evs, now),
     }
 

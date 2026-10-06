@@ -83,7 +83,14 @@ def test_the_default_marks_are_the_controllers() -> None:
 
     default = FC.Params().thresholds
     marks = {k: v for k, v in Config().schedule.signals.items() if k != "enabled"}
-    assert marks == {k: {"low": t.low, "high": t.high} for k, t in default.items()}
+    assert marks == {
+        k: {
+            "low": t.low,
+            "high": t.high,
+            **({} if t.critical is None else {"critical": t.critical}),
+        }
+        for k, t in default.items()
+    }
 
 
 def test_an_old_config_with_explicit_fours_loads_unchanged(tmp_path: Path) -> None:
@@ -349,7 +356,8 @@ def test_the_controller_params_come_from_the_knobs() -> None:
     assert p.bounds() == (3, 5, 9)
     assert (p.adapt_up_after_s, p.cooldown_s, p.sample_every_s) == (900, 120, 30)
     assert p.quiet_after_decrease_s == 1800
-    assert p.thresholds["memory_pressure"] == FC.Threshold(0.7, 0.9)
+    # merged mark by mark: the shipped critical mark stays
+    assert p.thresholds["memory_pressure"] == FC.Threshold(0.7, 0.9, 0.95)
 
 
 def test_a_disabled_signal_has_no_say() -> None:
@@ -358,7 +366,8 @@ def test_a_disabled_signal_has_no_say() -> None:
     cfg = Config()
     cfg.schedule.signals = C.merge_signals(cfg.schedule.signals, {"enabled": ["disk_pressure"]})
     p = FP.params(cfg)
-    assert p.thresholds == {}  # load_per_core has marks but is not enabled
+    # load_per_core and the others have marks but are not enabled
+    assert set(p.thresholds) == {"disk_pressure"}
     assert p.host_signals == ("disk_pressure",)
 
 
