@@ -2095,13 +2095,16 @@ prompt or note — runs the same check against the log **before it writes**, wit
   candidates shown), `new` included, and an automatic merge is marked `auto`.
 - **A lesson captured by `bug fixed --lesson-title`** runs the same check. Nobody can be
   asked there (the bug is already closed), so the answer is automatic and marked `auto`:
-  identical text goes onto the open lesson it copies (`lesson_extended` in the result, no
-  new id), and a lesson that merely reads like one is filed **linked** to it (`related`), so
-  the pair meets in the next sweep rather than drifting apart.
+  identical text goes onto the open lesson it copies (no new id), and a lesson that merely
+  reads like one is filed **linked** to it (`related`), so the pair meets in the next sweep
+  rather than drifting apart. The result says which (`lesson_capture`: `captured`,
+  `extended`, `related`, `candidates`, and `dedupe_unavailable` when the check could not
+  run), on the CLI line, in `--json` and over MCP.
 - **Rules** (`rule add`, `ddflow_rule_add`) are files, not log records, and run their own
   check against the other rules: content against content, and title against title for
   rules with no content (two title-only rules no longer read as copies of each other).
-  `--related ID` files the rule and reports `related` (a rule carries no link).
+  `--related ID` files the rule and reports `related` (a rule carries no link); `--check`
+  compares the title too.
 - **Where the check does not run, a test says why.** `tests/test_coherence_coverage.py`
   classifies every event kind, every function that appends an add kind, and every CLI
   verb and MCP tool that records text as checked or exempt with a reason (a split's parts,

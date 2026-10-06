@@ -1291,7 +1291,7 @@ def bug_fixed(
             **({"changelog": entry} if entry else {}),
         },
     )
-    capture: dict[str, Any] = {"lesson_captured": ""}
+    capture: dict[str, Any] = {}
     if cfg.lessons.auto_capture_on_bug and lesson_title:
         capture = _capture_lesson(repo, log, cfg, st, item, lesson_title, lesson_rule)
     return O.ok(
@@ -1302,7 +1302,8 @@ def bug_fixed(
         regression_verified=verified,
         regression_verify=verify_ev,
         unchecked=unchecked,
-        **capture,
+        lesson_captured=capture.get("captured", ""),
+        lesson_capture=capture,
     )
 
 
@@ -1312,7 +1313,9 @@ def _capture_lesson(repo: Path, log, cfg, st, bug: str, title: str, rule: str) -
     twice). Nobody can answer a question here -- the bug is already closed -- so the
     answer is automatic and on the record (`dedupe.auto`): an identical open lesson
     receives the text (no new id), and a lesson that merely reads like one is filed
-    LINKED to it (`related`), so the two meet in the next sweep instead of drifting."""
+    LINKED to it (`related`), so the two meet in the next sweep instead of drifting.
+    Returns `lesson_capture`: {captured, extended | related | not_captured, candidates,
+    dedupe_unavailable}, as `chk.data()` names them."""
     rid = f"L-{bug}"
     rec = DD.Record(
         kind="lesson", event_kind="lesson.recorded", rid=rid, title=title, body=rule, item=bug
@@ -1323,19 +1326,17 @@ def _capture_lesson(repo: Path, log, cfg, st, bug: str, title: str, rule: str) -
         if "dedupe" in chk.fields:
             chk.fields["dedupe"]["auto"] = True
     if chk.refusal is not None:
-        return {"lesson_captured": "", "lesson_not_captured": chk.refusal.reason}
+        return {"captured": "", "not_captured": chk.refusal.reason, **chk.data()}
     if chk.extension:
         DD.extend(log, cfg, chk, "lesson.recorded")
-        return {"lesson_captured": "", "lesson_extended": chk.extension["target"]}
+        return {"captured": "", "extended": chk.extension["target"], **chk.data()}
     data = {"title": title, "rule": rule, "seen_in": [bug], "tags": ["bug"], **chk.fields}
     with log.transaction():
         log.append("lesson.recorded", rid, data)
         DD.after_add(log, cfg, rid, chk)
-    out: dict[str, Any] = {"lesson_captured": rid}
-    for relation in ("related", "extends", "duplicate_of"):
-        if relation in chk.fields:
-            out[f"lesson_{relation}"] = chk.fields[relation]
-    return out
+    # `chk.data()` carries `related` / `extends` / `duplicate_of`, the candidates shown and
+    # `dedupe_unavailable` when the check could not run: never reported as a clean capture.
+    return {"captured": rid, **chk.data()}
 
 
 def bug_invalid(
