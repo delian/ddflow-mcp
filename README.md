@@ -4463,9 +4463,19 @@ sets one; an invalid template (`BUG-{date}`: nothing makes it unique) is refused
 one in a file is warned about, named by `ddflow doctor`, and the default stays in effect.
 `[bugs].phase`, the one fixed id, is held to the same characters.
 
-_Rollout: the templates load, validate and render today; the one id service that every
-place minting an id goes through (so a changed template changes the ids minted) is the
-next id-scheme task. Until it lands every id is minted in today's default shape._
+Every place that mints a record id goes through one id service (`ddflow/core/ids.py`); a
+ratchet test fails on a module that builds one of those ids by hand (the shapes the service
+replaced: salted hashes, `fix-`/`promote-`/`Bci-` ids, session stamps, split children) or
+reads a kind back from such a prefix. A minted id is checked against every
+id the log holds -- and a key against every key, again under the log's lock as the record
+is written -- and, when taken, gets `-2`, `-3`; a `{seq}` is the highest number that
+template has used plus one, never reused. A stable template (`{digest}`) returns the same
+id for the same content -- the same failing CI check is one bug while it is open -- and is
+refused when the id is held by a record of another kind. When a kind whose shipped id has
+no `{seq}` is given a `{seq}` template (`bug = "BUG-{seq}"`), the record keeps the internal
+id ddflow always minted (`B9c56de9d58`), which every event names, and `BUG-1` is its KEY,
+recorded on its event (`key`); resolving keys wherever an id is accepted is the aliases
+task's.
 
 ## What is automated, and what is not
 

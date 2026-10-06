@@ -237,10 +237,12 @@ def _tests(led: dict[str, Any], tracked: set[str] | None) -> Claim:
     return Claim("tests", OK, f"{len(d['tests'])} test file(s) among {d['files_total']} changed")
 
 
-def _regression(st: State, item_id: str, tracked: set[str] | None) -> Claim | None:
+def _regression(
+    st: State, item_id: str, tracked: set[str] | None, cfg: Config | None = None
+) -> Claim | None:
     # What the item was filed to fix, as `complete` asks it: a bug merely reported
     # against it stays open after it, and is not a broken claim of its (B7bdcc6b212).
-    bugs = [st.bugs[b] for b in sorted(fixes_of(st, item_id))]
+    bugs = [st.bugs[b] for b in sorted(fixes_of(st, item_id, cfg))]
     if not bugs:
         return None
     for b in bugs:
@@ -363,7 +365,7 @@ def check(
         _gates(cfg, led, pipeline),
         _survives(led, tracked),
     ]
-    if reg := _regression(st, item_id, tracked):
+    if reg := _regression(st, item_id, tracked, cfg):
         claims.append(reg)
     if led["requirement_changed_after"]:
         claims.append(

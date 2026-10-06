@@ -11,14 +11,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.model import ABANDONED, DONE, fold
 from ..services.completion import fixes_of
 from ._base import _load
-from .knowledge import FIX_TASK_PREFIX
 
 
-def _fix_task_after(st, bug) -> str:
+def _fix_task_after(st, cfg, bug) -> str:
     """The task that fixes the reopened bug: a task filed to fix it (its current
     `fix_task`, else its own `fix-<bug>`), an open one first. A DONE one is kept -- it is
     the bug's own fix, which did not hold, and `ddflow verify <task> --reopen` sends it
@@ -28,8 +28,8 @@ def _fix_task_after(st, bug) -> str:
     files one."""
     mine = [
         st.items[t]
-        for t in dict.fromkeys((bug.fix_task, FIX_TASK_PREFIX + bug.id))
-        if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t)
+        for t in dict.fromkeys((bug.fix_task, IDS.render(cfg, "fix_task", parent=bug.id)))
+        if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t, cfg)
     ]
     for it in mine:
         if it.state not in (DONE, ABANDONED):
@@ -72,7 +72,7 @@ def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outco
                 "bug.reopened", f"bug {bug} is open; there is nothing to reopen.", id=bug
             )
         was = rec.resolution
-        fix_task = _fix_task_after(st, rec)
+        fix_task = _fix_task_after(st, _cfg, rec)
         log.append("bug.reopened", bug, {"reason": reason, "was": was, "fix_task": fix_task})
     state = st.items[fix_task].state if fix_task else ""
     return O.ok(
