@@ -48,15 +48,15 @@ BASELINE: dict[str, int] = {
     # Path.write_text outside ddflow.infra.fsio
     "write_text": 42,
     # any use of the tempfile module outside ddflow.infra.fsio
-    "tempfile": 14,
+    "tempfile": 13,
     # os.replace outside ddflow.infra.fsio
-    "os_replace": 4,
+    "os_replace": 3,
     # any use of the fcntl module outside ddflow.infra.fsio
     "fcntl": 9,
     # any use of the hashlib module outside ddflow.core.digest
     "hashlib": 29,
     # an import statement inside a function body
-    "deferred_imports": 621,
+    "deferred_imports": 620,
     # functions and methods of radon cyclomatic-complexity grade D or worse (CC > 20)
     "complexity_d_or_worse": 112,
     # pylint duplicate-code (R0801) clusters, with DUPLICATE_ARGS below
@@ -71,11 +71,9 @@ BASELINE: dict[str, int] = {
 #: (Not counted at all, so not listed: argparse `Action.__call__`'s `option_string`, which
 #: vulture reports at cli.py and is the protocol's signature, not dead code.)
 KEPT_UNREFERENCED: dict[str, str] = {
-    # The onboarding harness (B-onboard-harness) is what the onboard prompt's stage 2 does
-    # by hand: enabledMcpjsonServers, a sibling's machine-local config, a shell wrapper.
+    # Claude Code's server approval (B-onboard-harness): the per-descriptor approval step
+    # of B-hx-onboard-generic is its caller; the onboard prompt does it by hand until then.
     "ddflow/services/harness.py:enable_project_servers": "B-hx-onboard-generic",
-    "ddflow/services/harness.py:copy_local_configs": "B-onboard-harness-stage",
-    "ddflow/services/harness.py:install_shell_command": "B-onboard-harness-stage",
     # Adaptive flow (D-adaptive-flow): the admission target and the doctor's
     # too-little-history notes; the quota signal is the remaining wiring.
     "ddflow/core/flowcontrol.py:decide_admission": "B-af-quota-signal",
