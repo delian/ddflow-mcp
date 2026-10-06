@@ -30,7 +30,10 @@ def _wire_hit(table: str, label: str, r: dict) -> dict:
     origin = PV.hit_origin(table, r)
     if origin is not None:
         kind = PV.hit_kind(table, r)
-        hit["headline"] = f"{r.get('id')} ({origin.label()})"
+        # A prompt's headline is ddflow's own label (date, `operator asked:`, `SESSION
+        # SUMMARY (sid):`), never the record's text, so it stays outside the fence.
+        label = f" {head}" if table == "prompts" and head else ""
+        hit["headline"] = f"{r.get('id')}{label} ({origin.label()})"
         hit["body"] = PV.fence(kind, str(r.get("id")), head + (f": {body}" if body else ""), origin)
         if r.get("provenance"):
             hit["provenance"] = r["provenance"]
