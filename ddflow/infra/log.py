@@ -25,6 +25,7 @@ import json
 import marshal
 import operator
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -671,8 +672,12 @@ def _holder_note(path: Path) -> str:
 _LOCK_FIELDS = 6
 
 
-#: The most of a holder's command line a lock-timeout message shows.
+#: How much of a holder's command line a lock-timeout message shows: its first
+#: _CMD_SHOWN characters, as always, and past that its last _CMD_TAIL.
 _CMD_SHOWN = 200
+_CMD_TAIL = 60
+#: An interpreter whose first argument is the script it runs (`python3`, `python3.13`).
+_PYTHON = re.compile(r"python[0-9.]*")
 
 
 def _describe_pid(pid: int) -> str:
@@ -680,7 +685,8 @@ def _describe_pid(pid: int) -> str:
 
     The interpreter (and a script it runs) is shown by its base name: a venv under a deep
     directory filled the whole budget with its path, cutting off the arguments that say
-    WHAT holds the lock (bug B3a4bf051b4). A line still too long keeps its head and tail.
+    WHAT holds the lock (bug B3a4bf051b4). A line still too long keeps its first
+    _CMD_SHOWN characters and gains its tail, so nothing shown before is lost.
     """
     try:
         raw = Path(f"/proc/{pid}/cmdline").read_bytes()
@@ -689,12 +695,11 @@ def _describe_pid(pid: int) -> str:
     argv = [a.decode("utf-8", "replace") for a in raw.split(b"\0") if a]
     if argv:
         argv[0] = os.path.basename(argv[0]) or argv[0]
-    if len(argv) > 1 and argv[0].startswith("python") and argv[1].startswith("/"):
+    if len(argv) > 1 and _PYTHON.fullmatch(argv[0]) and argv[1].startswith("/"):
         argv[1] = os.path.basename(argv[1]) or argv[1]  # the script it runs, never an argument
     cmd = " ".join(argv).strip()
-    if len(cmd) > _CMD_SHOWN:
-        tail = _CMD_SHOWN // 3
-        cmd = f"{cmd[: _CMD_SHOWN - tail - 3]}...{cmd[-tail:]}"
+    if len(cmd) > _CMD_SHOWN + _CMD_TAIL + 3:
+        cmd = f"{cmd[:_CMD_SHOWN]}...{cmd[-_CMD_TAIL:]}"
     return f"pid {pid} ({cmd})" if cmd else f"pid {pid}"
 
 
