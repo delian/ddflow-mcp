@@ -460,3 +460,17 @@ def test_a_log_this_ddflow_cannot_read_is_refused_not_half_evaluated(proj):
     assert any(e.kind == "from.the.future" for e in log.read_all())
     out = A.trigger_evaluate(proj)
     assert out.exit == FAIL and "cannot read" in out.reason
+
+
+def test_a_damaged_line_is_refused_too_and_a_broken_trigger_file_is_not_blamed_on_the_log(proj):
+    """roborev on B-trigger-model: read_all drops an unparseable line silently; and the
+    refusal must not swallow other errors (rubber-duck, critic)."""
+    _file(proj, "bad.toml", "event = [\n")
+    out = A.trigger_evaluate(proj)
+    assert out.exit == NOTHING and any("bad.toml" in e for e in out.data["errors"])
+    shard = next((proj / ".ddflow" / "events").rglob("*.jsonl"))
+    shard.write_text(shard.read_text() + "{not json\n")
+    before = shard.read_text()
+    out = A.trigger_evaluate(proj)
+    assert out.exit == FAIL and "unparseable" in out.reason
+    assert shard.read_text() == before
