@@ -10,7 +10,9 @@ cross-family critic pass. The operator's decision (option C):
   `reviewer.configured` (who, and a digest of the entry);
 * `gates.record` stamps that digest into the evidence `ddflow review` writes;
 * reviewer independence does not count a review from a digest a tool wrote until a
-  person runs `ddflow reviewers approve <name>`, which appends `reviewer.approved`.
+  person runs `ddflow reviewers approve <name>`, which records an approval of that digest
+  through the shared primitive (`services.approval`: `approval.granted`, subject
+  ``reviewer:<name>``; a log from before it holds `reviewer.approved`, which still counts).
 
 An entry no tool ever wrote has no `reviewer.configured` event, so it is the operator's
 and counts exactly as before: nothing configured by hand stops counting when this lands.
@@ -169,11 +171,8 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
     """
     from .review import load_reviewers
 
-    if why := agent_marker(requested_agent):
-        raise ReviewerRefused(
-            f"refusing: approving a reviewer is a person's act, and this command runs "
-            f"under an agent identity ({why}). Run it from your own terminal."
-        )
+    if why := agent_marker(requested_agent):  # before anything is read: not an agent's to see
+        raise ReviewerRefused(AP.refusal(why))
     revs = {r.name: r for r in load_reviewers(Path(repo))}
     rev = revs.get(name)
     if rev is None:

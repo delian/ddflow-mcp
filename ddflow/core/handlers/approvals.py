@@ -41,7 +41,7 @@ def h_granted(st: State, ev: Event) -> None:
     if not row["digest"]:
         return
     st.approvals.setdefault(subject, []).append(row)
-    if subject.startswith(REVIEWER):
+    if subject.startswith(REVIEWER) and row["human"]:  # the trust table holds people's only
         st.reviewer_approvals[row["digest"]] = {
             "name": subject[len(REVIEWER) :],
             "user": row["user"],

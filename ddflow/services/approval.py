@@ -60,6 +60,14 @@ def agent_marker(requested_agent: str = "") -> str:
     return ""
 
 
+def refusal(why: str) -> str:
+    """The one refusal of an approval asked for under an agent identity."""
+    return (
+        f"refusing: approving is a person's act, and this command runs under an agent "
+        f"identity ({why}). Run it from your own terminal."
+    )
+
+
 def os_user() -> str:
     """The OS user, or "unknown-user": an approval whose approver is unknown is still
     real, and saying so is honest where inventing a name would not be."""
@@ -117,10 +125,7 @@ def grant(
     Raises `ApprovalRefused` under an agent identity or without a subject and digest.
     """
     if why := agent_marker(requested_agent):
-        raise ApprovalRefused(
-            f"refusing: approving is a person's act, and this command runs under an agent "
-            f"identity ({why}). Run it from your own terminal."
-        )
+        raise ApprovalRefused(refusal(why))
     if not subject or not digest:
         raise ApprovalRefused("an approval needs a subject and the digest of what it approves")
     actor = Actor(user=os_user(), host=socket.gethostname().split(".")[0])
@@ -147,7 +152,8 @@ def check(state, subject: str, digest: str, *, token: str = "") -> Verdict:
     single-use one whose ``token`` is presented and not yet spent. An approval of an
     earlier digest does not carry over to a later edit.
     """
-    rows = state.approvals.get(subject, [])
+    # A person's approval only: a hand-written grant that does not say `human` is none.
+    rows = [r for r in state.approvals.get(subject, []) if r.get("human")]
     if not rows:
         return Verdict(False, f"{subject} has not been approved")
     same = [r for r in rows if r["digest"] == digest]
