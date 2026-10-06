@@ -69,7 +69,9 @@ def _split_outside_brackets(spec: str) -> list[str]:
     """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
-    refused as a single missing test.
+    refused as a single missing test. The depth never goes below zero: a value may hold
+    `]` itself (`t[x]y]`), and a negative depth swallowed every later separator, so a
+    missing second test was never resolved (Bfc9daca269).
     """
     out, depth, cur = [], 0, []
     for ch in spec:
@@ -77,7 +79,7 @@ def _split_outside_brackets(spec: str) -> list[str]:
             out.append("".join(cur))
             cur = []
             continue
-        depth += {"[": 1, "]": -1}.get(ch, 0)
+        depth = max(0, depth + {"[": 1, "]": -1}.get(ch, 0))
         cur.append(ch)
     out.append("".join(cur))
     return [e.strip() for e in out if e.strip()]
