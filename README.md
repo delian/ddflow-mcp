@@ -2904,7 +2904,7 @@ raising it.
 |---|---|---|---|
 | `reviewer_latency_ratio` | median seconds from `gate.started` to a review gate's outcome, over the project's median for the 7 days before the window | last 30 minutes | under 5 recent or under 20 baseline reviews |
 | `gate_failure_rate` | `gate.failed / (passed + failed)` | last 60 minutes | under 10 outcomes |
-| `gate_failure_ratio` | `gate_failure_rate` over the project's own rate for the 7 days before the window | last 60 minutes | under 10 recent or 20 baseline outcomes (the baseline rate is floored at 1/20, so one failure after a clean week is not a huge ratio) |
+| `gate_failure_ratio` | `gate_failure_rate` over the project's own rate for the 7 days before the window | last 60 minutes | under 10 recent or 20 baseline outcomes (a clean baseline counts as one failure; a single recent failure counts as at most 1.0, the usual rate) |
 | `merge_failure_rate` | failed merge-gate outcomes over merge attempts | last 2 hours | no merge attempt |
 | `loop_findings` | findings of `ddflow loops` | now | never (0 when none) |
 | `independent_ready` | ready items overlapping neither anything in flight nor each other, by the same selection `ddflow next` offers (parallelism caps lifted) | now | never (0 when none) |

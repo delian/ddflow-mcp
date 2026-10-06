@@ -15,9 +15,8 @@ Windows (all ending at ``now``):
   None under 10 outcomes.
 * ``gate_failure_ratio``: that rate divided by the project's own rate over the 7 days
   before the window, so its marks mean "N times the usual" (D-unify 8: shrink at 2x).
-  None under 10 recent or 20 baseline outcomes. The baseline rate is floored at 1/20 (one
-  failure in the minimum baseline), so a clean or near-clean week neither hides a burst nor
-  turns a single failure into a huge ratio.
+  None under 10 recent or 20 baseline outcomes. A clean baseline counts as one failure; a
+  single recent failure counts as at most the usual rate (1.0), since one is not a burst.
 * ``merge_failure_rate``: failed merge-gate outcomes over merge attempts in the last
   2 hours. None with no attempt.
 * ``loop_findings``: how many findings the loops detector reports now.
@@ -45,7 +44,7 @@ MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0
 MIN_GATE_OUTCOMES = 10
 MIN_BASELINE_GATE_OUTCOMES = 20
-GATE_BASELINE_FLOOR = 1 / MIN_BASELINE_GATE_OUTCOMES
+MIN_RECENT_FAILURES = 2
 MERGE_WINDOW_S = 120 * 60.0
 MERGE_GATE = "merge"
 
@@ -149,11 +148,12 @@ def gate_failure_ratio(events: Sequence[Event], now: float) -> float | None:
     b_passed, b_failed = _failure_rate(events, start, BASELINE_S, None)
     if b_passed + b_failed < MIN_BASELINE_GATE_OUTCOMES:
         return None
-    # The baseline rate is floored at one failure in the minimum baseline: a ratio to a
-    # near-zero rate would make one failure after a clean busy week read as 100x, while a
-    # clean baseline must still let a burst register (over 2x the floor: 2 in 10 recent).
-    base = max(b_failed / (b_passed + b_failed), GATE_BASELINE_FLOOR)
-    return (failed / (passed + failed)) / base
+    # The measured baseline, as it is; a clean one counts as one failure, the smallest rate
+    # it could have shown, so a burst after a clean week still registers.
+    ratio = (failed / (passed + failed)) / (max(b_failed, 1) / (b_passed + b_failed))
+    # One failure is not a burst: against a clean busy week it would read as 100x and
+    # shrink the limit for a whole hour, so a lone failure counts as the usual rate at most.
+    return ratio if failed >= MIN_RECENT_FAILURES else min(ratio, 1.0)
 
 
 def merge_failure_rate(events: Sequence[Event], now: float) -> float | None:
