@@ -208,16 +208,18 @@ def path_in_glob(path: str, glob: str) -> bool:
     Not `globs_overlap`, whose literal-prefix rule is right for "could two patterns
     share a file" and wrong here: a staged `a.md` counted as covered by a claim on
     `a.md.bak` (B1997c64c5a). Inside means: the glob itself, a file under a directory
-    glob (`src/a` or `src/a/`), or an fnmatch match (whose `*` crosses `/`, as the
-    claims written so far assume), with a leading `**/` also matching at the root.
+    glob (`src/a` or `src/a/`), an fnmatch match (whose `*` crosses `/`, as the claims
+    written so far assume), or -- for a glob with a `/` -- git's match, where a `**/` on
+    a path boundary is zero or more directories (`src/**/*.py` covers `src/b.py`).
     """
-    if path == glob:
+    if path == glob or path.startswith(glob.rstrip("/") + "/") or fnmatch(path, glob):
         return True
-    if path.startswith(glob.rstrip("/") + "/"):
-        return True
-    if fnmatch(path, glob):
-        return True
-    return glob.startswith("**/") and fnmatch(path, glob[3:])
+    if "/" not in glob.rstrip("/"):
+        return False  # git would match a bare name at any depth; a claim on `a.md` is one file
+    try:
+        return bool(_gitattributes_re(glob).match(path))
+    except re.error:
+        return False
 
 
 def shared_globs(cfg: Config) -> list[str]:

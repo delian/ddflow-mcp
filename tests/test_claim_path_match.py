@@ -36,6 +36,10 @@ from ddflow.core.schedule import path_in_glob
         ("tests/test_x.py", "tests/test_*.py", True),
         ("x.py", "**/x.py", True),
         ("d/x.py", "**/x.py", True),
+        ("src/b.py", "src/**/*.py", True),
+        ("src/a/b.py", "src/**/*.py", True),
+        ("a/x/b/c.py", "a/**/b/**/c.py", True),
+        ("docs/a.md", "a.md", False),
         ("docs/a.md", "docs/**", True),
         ("other.md", "docs/**", False),
     ],
@@ -58,7 +62,12 @@ def test_the_commit_hook_refuses_a_path_only_a_prefix_claim_covers(repo):
     _git(repo, "commit", "-qm", "scaffold", "--no-verify")
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "a.md.bak")
-    run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")
+    code, _out, err = run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")
+    assert code == 0, err  # the lease exists: the refusal below is about the path
+    (repo / "a.md.bak").write_text("bak\n")
+    _git(repo, "add", "a.md.bak")
+    ok = _git(repo, "commit", "-m", "bak", env={**os.environ, "DDFLOW_AGENT": "alpha"})
+    assert ok.returncode == 0, ok.stderr
     (repo / "a.md").write_text("two\n")
     _git(repo, "add", "a.md")
     r = _git(repo, "commit", "-m", "edit a.md", env={**os.environ, "DDFLOW_AGENT": "alpha"})
