@@ -288,7 +288,11 @@ def fold_limit(
     elif st.dec_signal:
         limited_by = st.dec_signal
     else:
-        limited_by = _closest(ring[-1], params) or st.why_not_higher(now)
+        # growth or demand only when the latest sample SHOWS health: a blind one says so
+        healthy = _classify(ring[-1], params)[2]
+        limited_by = _closest(ring[-1], params) or (
+            st.why_not_higher(now) if healthy else NO_SIGNALS
+        )
     reason = st.last_change or f"holding at {st.limit}"
     if paused_by:
         reason = f"{paused_by} is critical: admission paused; {reason}"
