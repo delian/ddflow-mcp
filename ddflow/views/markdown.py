@@ -799,8 +799,15 @@ def _brief_jobs(out: list[str], state: State, item: str = "", agent: str = "") -
     keep_stale = 0 if item else BRIEF_OTHER_JOBS
     for bucket, keep in ((remote, BRIEF_OTHER_JOBS), (stale, keep_stale)):
         shown += bucket[len(bucket) - min(keep, len(bucket)) :]  # the newest `keep`
-    # The item's own jobs first: when the section is cut to its share, they survive.
-    shown.sort(key=lambda js: (not (item and js[0].item == item), js[0].started_at))
+    # The item's own jobs first, then the agent's own: when the section is cut to its
+    # share, the end goes first.
+    shown.sort(
+        key=lambda js: (
+            not (item and js[0].item == item),
+            not (agent and js[0].by == agent),
+            js[0].started_at,
+        )
+    )
     out += ["## Long-running jobs", ""]
     for j, s in shown:
         tail = {
@@ -951,6 +958,28 @@ def _trim_section(name: str, lines: list[str], room: int, item: str) -> list[str
     return kept
 
 
+def _allowances(sections: list[tuple[str, list[str]]], sizes: list[int], room: int) -> list[int]:
+    """Each section's share of ``room``, raised to the floor, never more than it needs --
+    and never more than ``room`` in all (critic): what the floors add is taken back from
+    the sections above their floor, in proportion. Floors that cannot all fit fall back to
+    the plain shares, which sum to ``room``."""
+    want = [
+        min(size, max(int(room * _SECTION_SHARE.get(name, 0.05)), _SECTION_FLOOR))
+        for (name, _), size in zip(sections, sizes, strict=True)
+    ]
+    over = sum(want) - room
+    if over <= 0:
+        return want
+    spare = [w - min(size, _SECTION_FLOOR) for w, size in zip(want, sizes, strict=True)]
+    if sum(spare) < over:
+        return [
+            min(size, int(room * _SECTION_SHARE.get(name, 0.05)))
+            for (name, _), size in zip(sections, sizes, strict=True)
+        ]
+    total = sum(spare)
+    return [w - -(-over * sp // total) for w, sp in zip(want, spare, strict=True)]
+
+
 def _fit_sections(
     sections: list[tuple[str, list[str]]], room: int, item: str
 ) -> tuple[list[str], bool]:
@@ -959,18 +988,8 @@ def _fit_sections(
     sizes = [len("\n".join(lines)) + 1 if lines else 0 for _, lines in sections]
     if sum(sizes) <= room:
         return [line for _, lines in sections for line in lines], False
-    # Shares first (they sum to 1, so these never exceed `room`), then the floor out of
-    # what they leave -- a floor taken first could push the total past `room`, and then
-    # nothing was trimmed at all (critic).
-    allow = [
-        min(size, int(room * _SECTION_SHARE.get(name, 0.05)))
-        for (name, _), size in zip(sections, sizes, strict=True)
-    ]
+    allow = _allowances(sections, sizes, room)
     slack = room - sum(allow)
-    for i, size in enumerate(sizes):
-        extra = max(0, min(slack, min(size, _SECTION_FLOOR) - allow[i]))
-        allow[i] += extra
-        slack -= extra
     # What one section leaves goes to those that still want more, by share; a section
     # that gets all it wants returns the rest to the pool for another pass.
     while slack > 0:
