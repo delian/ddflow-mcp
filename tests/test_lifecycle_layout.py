@@ -60,11 +60,29 @@ def test_no_public_name_is_lost():
     assert callable(LC.claim) and callable(LC.wait) and callable(LC.brief)
 
 
+def _top_level_names(path: Path) -> set[str]:
+    """Every name a module binds at top level: defs, classes, assignments, imports."""
+    names: set[str] = set()
+    for n in ast.parse(path.read_text("utf-8")).body:
+        if isinstance(n, ast.FunctionDef | ast.ClassDef):
+            names.add(n.name)
+        elif isinstance(n, ast.Assign):
+            names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            names.add(n.target.id)
+        elif isinstance(n, ast.Import | ast.ImportFrom):
+            names |= {a.asname or a.name.split(".")[0] for a in n.names}
+    return names - {"annotations"}
+
+
 def test_every_name_an_area_defines_is_re_exported():
+    """Functions, constants (`_PREFIX_SHOWN`) and the modules an area imports (`W`, `O`)
+    alike: whatever an area binds is reachable as `lifecycle.<name>`, the same object."""
     for mod in _areas():
-        for name, obj in vars(mod).items():
-            if getattr(obj, "__module__", None) == mod.__name__:
-                assert getattr(LC, name) is obj, f"lifecycle.{name} is not {mod.__name__}.{name}"
+        for name in _top_level_names(Path(mod.__file__)):
+            assert getattr(LC, name, None) is getattr(mod, name), (
+                f"lifecycle.{name} is not {mod.__name__}.{name}"
+            )
 
 
 def test_the_modules_the_single_file_imported_are_still_attributes():
