@@ -367,10 +367,8 @@ def history_notes(cfg: Config, events: Sequence[Event], now: float | None = None
     none for a signal `[schedule.signals].enabled` switches off."""
     if cfg.schedule.parallel != "auto":
         return []
-    on = set(FP.enabled_signals(cfg))
     at = time.time() if now is None else now
-    notes = FS.history_notes(FS.Signals(**_log_signals(events, at)))
-    return [n for n in notes if n.split(":", 1)[0] in on]
+    return FS.history_notes(FS.Signals(**_log_signals(events, at)), FP.enabled_signals(cfg))
 
 
 def doctor_notes(repo: Path) -> list[str]:
