@@ -125,3 +125,22 @@ def test_the_last_id_of_an_and_joined_list_is_a_fix(repo):
     body = json.loads(out)
     assert body["fixing"] == ["AND2", "AND3", "OXF"], body
     assert body["mentioned_by"] == ["SEE"], body
+
+
+def test_the_fix_list_pattern_neither_backtracks_nor_matches_inside_a_word(repo):
+    """Review of Bfc863d295f: an 'and' can end a separator or be the next element, so a
+    title of many ', and's must still be answered at once; and an id embedded in a word
+    (`AX`) is never a fix of X."""
+    import time
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
+    run_cli(repo, "task", "add", "MANY", "--title", "T (fixes A" + ", and" * 200 + f" ) {bid}")
+    run_cli(repo, "task", "add", "WORD", "--title", f"Fixes A{bid} and {bid}x, see {bid}")
+    t0 = time.monotonic()
+    code, out, err = run_cli(repo, "--json", "show", bid)
+    assert code == 0, err
+    assert time.monotonic() - t0 < 10
+    body = json.loads(out)
+    assert body["fixing"] == [] and body["mentioned_by"] == ["MANY", "WORD"], body
