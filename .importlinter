@@ -117,7 +117,8 @@ ignore_imports =
     ddflow.services.bisect -> subprocess
     ddflow.services.ci -> subprocess
     ddflow.services.companions -> subprocess
-    ddflow.services.gates -> subprocess
+    ddflow.services.gates.evidence -> subprocess
+    ddflow.services.gates.runner -> subprocess
     ddflow.services.onboard_tests -> subprocess
     ddflow.services.onboard_verify -> subprocess
     ddflow.services.review -> subprocess
@@ -144,7 +145,7 @@ ignore_imports =
     ddflow.services.ci -> tempfile
     ddflow.services.companions -> tempfile
     ddflow.services.flowstate -> tempfile
-    ddflow.services.gates -> tempfile
+    ddflow.services.gates.runner -> tempfile
     ddflow.services.harness -> tempfile
     ddflow.services.onboard_tests -> tempfile
     ddflow.services.onboard_verify -> tempfile
@@ -170,7 +171,7 @@ ignore_imports =
     ddflow.services.docscheck -> hashlib
     ddflow.services.export.frame -> hashlib
     ddflow.services.export.registry -> hashlib
-    ddflow.services.gates -> hashlib
+    ddflow.services.gates.evidence -> hashlib
     ddflow.services.ledger -> hashlib
     ddflow.services.legacy -> hashlib
     ddflow.services.quota -> hashlib
