@@ -119,8 +119,10 @@ def declared_tables() -> tuple[
     dict[str, frozenset[str]],
     dict[str, Callable[[Any], str]],
 ]:
-    """`DECLARED` as the tables `ddflow.config` keeps: (choices, strictest, outward, checks),
-    each holding only the knobs that declare one. Called once every section is imported."""
+    """`DECLARED` as the tables `ddflow.config` keeps: (choices, strictest, outward, checks).
+    choices, strictest and outward have an entry for every ENUM knob -- outward is written
+    out even when empty, as `KNOB_OUTWARD` requires one per `KNOB_CHOICES` key -- and checks
+    one for each knob that declares a check. Called once every section is imported."""
     enums = {k: m for k, m in DECLARED.items() if m.choices}
     return (
         {k: m.choices for k, m in enums.items()},

@@ -36,7 +36,10 @@ def _legacy_counts() -> dict[str, int]:
     calls = 0
     for path in [*sorted(SECTIONS.glob("*.py")), CONFIG_PY]:
         for node in ast.walk(ast.parse(path.read_text("utf-8"))):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "_doc":
+            if not isinstance(node, ast.Call):
+                continue
+            # `_doc(...)` and `anything._doc(...)` alike
+            if (getattr(node.func, "id", "") or getattr(node.func, "attr", "")) == "_doc":
                 calls += 1
     out = {"_doc() calls": calls}
     tree = ast.parse(CONFIG_PY.read_text("utf-8"))
