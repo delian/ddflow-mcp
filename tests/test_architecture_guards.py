@@ -367,8 +367,8 @@ def test_import_contracts() -> None:
         "a refactor moved an allowed import -- move its ignore_imports entry; never add "
         "one for new code.\n" + output
     )
-    not_kept = [c["name"] for c in contracts.values() if f"{c['name']} KEPT" not in output]
-    assert not not_kept, f"contracts import-linter did not report as kept: {not_kept}\n{output}"
+    # Exit 0 already means "every contract it loaded was kept"; this says it loaded them all.
+    assert f"Contracts: {len(contracts)} kept, 0 broken." in output, output
 
 
 #: Extra -> the top-level import names its packages provide.
