@@ -75,6 +75,7 @@ def test_a_change_made_while_resolving_the_merge_is_sent(merged, tmp_path):
     _git(tree, "commit", "-qam", "item: touch theirs")
     diff = RV._delta_diff(repo, _item(tree), "", head)
     assert "edited by the item" in diff
+    assert "+y199 = 199" not in diff  # the rest of main's file is not the item's
 
 
 def test_without_a_main_merge_the_delta_is_unchanged(repo, tmp_path):
@@ -101,7 +102,9 @@ def test_a_conflicted_merge_still_sends_none_of_mains_other_work(repo, tmp_path)
     _git(tree, "commit", "-qam", "item: resolve")
     diff = RV._delta_diff(repo, _item(tree), "", head)
     assert "theirs.py" not in diff
-    assert "resolved" in diff
+    # exactly the resolution, against the reviewed side: not the item's whole change
+    assert "+v = 'resolved'" in diff and "-v = 'item'" in diff
+    assert "+v = 'main'" not in diff
 
 
 def test_a_commit_made_before_the_merge_is_still_sent(repo, tmp_path):

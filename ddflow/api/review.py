@@ -836,16 +836,22 @@ def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
     """What a delta diffs the tip against: ``head``, the reviewed commit -- or, when the
     branch has merged ``base`` since (Bccf6d1aec7), ``head`` merged with what came in.
     The commits from ``base`` were reviewed as their own items, so only what the branch
-    did on top of them is new: its own commits, and its side of the merge. A tree id
-    when merged; ``head`` when nothing came in; the merged-in base commit (the item's
-    whole own change since it) when the two do not merge cleanly."""
-    came = W.git(repo, "merge-base", base, tip) if base and tip else None
-    if came is None or not came.ok or not came.out.strip():
+    did on top of them is new: its own commits, and its side of the merge.
+
+    The merge is ``git merge-tree --write-tree -X ours``: where head and the incoming
+    work conflict it keeps head's side, so the diff to the tip is exactly how the item
+    resolved the conflict. ``head`` when nothing came in, or when the history has more
+    than one merge base (criss-cross: which commit "came in" is ambiguous, so the delta
+    sends everything since head, as before). The merged-in base commit -- the item's
+    whole own change on top of the base -- when even that merge cannot be written."""
+    came = W.git(repo, "merge-base", "--all", base, tip) if base and tip else None
+    bases = came.out.split() if came is not None and came.ok else []
+    if len(bases) != 1:
         return head
-    came_in = came.out.strip()
+    came_in = bases[0]
     if W.git(repo, "merge-base", "--is-ancestor", came_in, head).ok:
         return head  # nothing from base since the reviewed head
-    merged = W.git(repo, "merge-tree", "--write-tree", head, came_in)
+    merged = W.git(repo, "merge-tree", "--write-tree", "-X", "ours", head, came_in)
     if merged.ok and merged.out.strip():
         return merged.out.splitlines()[0].strip()
     return came_in
@@ -880,16 +886,18 @@ def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
     wt = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt and wt.exists():
         start = _delta_start(wt, "HEAD", head, base)
-        if start == head:
-            return W.capture_diff(wt, head, include_untracked=False)
-        committed = W.git(wt, "diff", "--no-color", start, "HEAD").out
-        working = W.git(wt, "diff", "--no-color", "HEAD").out
-        return "\n".join(part for part in (committed, working) if part.strip())
+        if start != head:
+            committed = W.git(wt, "diff", "--no-color", start, "HEAD")
+            working = W.git(wt, "diff", "--no-color", "HEAD")
+            if committed.ok and working.ok:  # else: everything since head, never "nothing"
+                return "\n".join(p.out for p in (committed, working) if p.out.strip())
+        return W.capture_diff(wt, head, include_untracked=False)
     tip = branch or (it.branch if it and it.branch else "")
     if tip:
         start = _delta_start(repo, tip, head, base)
-        rng = (f"{head}...{tip}",) if start == head else (start, tip)
-        d = W.git(repo, "diff", "--no-color", *rng)
+        d = W.git(repo, "diff", "--no-color", start, tip) if start != head else None
+        if d is None or not d.ok:  # nothing merged in, or that diff failed: since head
+            d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
         return (d.out + "\n") if d.ok and d.out else ""
     return W.capture_diff(repo, head, include_untracked=False, exclude=SELF_MANAGED)
 
