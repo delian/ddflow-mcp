@@ -39,3 +39,32 @@ def test_without_a_rival_the_release_leaves_the_item_unheld():
     h1, h2 = _acq(2, "H", 150.0), _acq(3, "H", 300.0)
     rel = _ev("lease.released", 4, "H", holder="H", event=h2.id)
     assert fold([_ev("task.added", 1, title="t"), h1, h2, rel]).items["T"].lease is None
+
+
+def _at(lamport: int, holder: str, at: float, ttl: int) -> Event:
+    return _ev("lease.acquired", lamport, holder, holder=holder, at=at, ttl_s=ttl)
+
+
+@pytest.mark.parametrize("names_event", [True, False], ids=["by-event", "holder-only"])
+def test_two_holders_each_releasing_after_reclaiming_leave_it_unheld(names_event):
+    """Review finding: both contestants re-claimed, then both released -- nobody holds it."""
+    c1, c2, h1, h2 = (
+        _acq(2, "C", 100.0),
+        _acq(3, "C", 150.0),
+        _acq(4, "H", 200.0),
+        _acq(5, "H", 250.0),
+    )
+    rel = [
+        _ev("lease.released", 6, "C", holder="C", **({"event": c2.id} if names_event else {})),
+        _ev("lease.released", 7, "H", holder="H", **({"event": h2.id} if names_event else {})),
+    ]
+    it = fold([_ev("task.added", 1, title="t"), c1, c2, h1, h2, *rel]).items["T"]
+    assert it.lease is None or it.lease.holder not in ("C", "H"), it.lease
+
+
+def test_a_takeover_victim_is_not_revived_as_the_releasers_claim():
+    """Review finding: C's superseded claim was shown again after C released its latest."""
+    c1, c2, b1 = _at(2, "c", 100.0, 50), _at(3, "c", 200.0, 50), _at(4, "b", 100.0, 50)
+    rel = _ev("lease.released", 5, "c", holder="c", event=c2.id)
+    it = fold([_ev("task.added", 1, title="t"), c1, c2, b1, rel]).items["T"]
+    assert it.lease is None or it.lease.holder != "c", it.lease
