@@ -144,28 +144,6 @@ class Ctx:
             print(human)
 
 
-def _resolved(c: Ctx, obj: Any) -> Any:
-    """Plain-data view with worktree paths resolved to absolute.
-
-    The LOG stores worktree paths relative to the repo root, which is what makes a
-    committed log true on every checkout. But a CALLER needs a path it can `cd` to: an
-    agent handed ".ddflow-worktrees/T1" has to know what it is relative to, and will
-    resolve it against its own cwd — which is frequently not the repo root. Storage
-    portable, interface usable; the conversion happens here, at the boundary.
-    """
-    out = _plain(obj)
-    if isinstance(out, dict):
-        for key in ("worktree", "path"):
-            val = out.get(key)
-            if isinstance(val, str) and val and not os.path.isabs(val):
-                out[key] = str(W.load_path(c.repo, val))
-        if isinstance(out.get("lease"), dict):
-            lv = out["lease"].get("worktree")
-            if isinstance(lv, str) and lv and not os.path.isabs(lv):
-                out["lease"]["worktree"] = str(W.load_path(c.repo, lv))
-    return out
-
-
 #: Re-exported. The recursive converter lives in `core/plain.py` — the api layer needs
 #: it too and cannot import a surface, and three copies was two too many.
 _plain = plain
