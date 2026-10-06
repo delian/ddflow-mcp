@@ -687,6 +687,10 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
     notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
+    from ..services import flowstate as FL
+
+    # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
+    notes.extend(FL.doctor_notes(repo))
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
