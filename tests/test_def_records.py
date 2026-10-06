@@ -94,13 +94,23 @@ def test_null_means_remove_in_an_update_and_is_refused_in_a_whole_definition(rep
     # a field the update does not name is kept, falsy or not
     assert A.def_update(repo, "skill", "s", {"b": 2}, agent="a").exit == 0
     assert _state(repo).defs["skill:s"].fields == {"a": 0, "b": 2}
+    # and a null in an update removes that field, and only that one
+    assert A.def_update(repo, "skill", "s", {"a": None}, agent="a").exit == 0
+    rec = _state(repo).defs["skill:s"]
+    assert rec.fields == {"b": 2} and rec.digest == D.digest({"b": 2})
 
 
 def test_a_provenance_only_update_is_written(repo):
     A.def_record(repo, "skill", "s", {"b": 1}, agent="a")
     out = A.def_update(repo, "skill", "s", {}, provenance={"reviewed": "yes"}, agent="a")
     assert out.exit == 0
-    assert _state(repo).defs["skill:s"].provenance == {"by": "a", "reviewed": "yes"}
+    rec = _state(repo).defs["skill:s"]
+    assert rec.provenance == {"by": "a", "reviewed": "yes"} and rec.fields == {"b": 1}
+    # the same provenance again is no change; an empty one clears what was added
+    again = A.def_update(repo, "skill", "s", {}, provenance={"reviewed": "yes"}, agent="a")
+    assert again.exit == 2
+    assert A.def_update(repo, "skill", "s", {}, provenance={}, agent="a").exit == 0
+    assert _state(repo).defs["skill:s"].provenance == {"by": "a"}
 
 
 def test_an_update_that_changes_nothing_is_exit_2_and_writes_nothing(repo):

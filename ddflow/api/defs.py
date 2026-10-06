@@ -155,7 +155,8 @@ def def_update(
     merged = {**rec.fields, **fields}
     merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
     digest = D.digest(merged)
-    if digest == rec.digest and (source is None or source == rec.source) and not provenance:
+    same_prov = provenance is None or {"by": cfg.agent.id, **provenance} == rec.provenance
+    if digest == rec.digest and (source is None or source == rec.source) and same_prov:
         return O.nothing("def.updated", f"{kind} {rid}: nothing changed", def_kind=kind, id=rid)
     data = _envelope(cfg, kind, rid, rec.source if source is None else source, provenance)
     data.update(fields=dict(fields), digest=digest)
