@@ -1701,7 +1701,7 @@ Seven sources, all optional, all in the places projects actually keep them:
 | Todo checklists | `docs/todo.md`, `docs/todo/open/*.md`, `tasks/todo.md`, `TODO.md`, `docs/plan.md`, `ROADMAP.md` | phases and tasks, with declared `Needs:`/`Globs:` |
 | Lessons | `docs/lessons.md`, `LESSONS.md`, `docs/retrospectives/*.md` | lessons, searchable by `ddflow recall` |
 | Decisions | `docs/adr/*.md`, `docs/decisions/*.md` | decisions, `Superseded` preserved as superseded |
-| Research | `docs/RESEARCH.md` | research notes, `CONFIRMED`/`REFUTED`/`THEORETICAL` carried across |
+| Research | `docs/RESEARCH.md` | research notes, `THEORETICAL`: a scraped `CONFIRMED`/`REFUTED` has no probe ddflow can check, so it is kept as a `source-verdict:` tag |
 | Journal | `docs/log/*.md`, `CHANGELOG.md`, `docs/journal/*.md` | session notes, dated by **when they happened** |
 | Cross-session memory | `.agent_memory/LOG.txt` (OptMem), `.memo/`, `.optmem/` | session notes, with each record's own date |
 | In-flight work | branches with commits not on the base | tasks, named with how far ahead they are |
@@ -2222,7 +2222,7 @@ and `recall` searches them — the job an OptMem store beside the repository use
 now in the log, so every worktree sees a memory the moment it is written. A memory that
 stopped being true is **forgotten with a reason**, never deleted: "we thought X until Y"
 is what stops the next agent re-learning X. An OptMem `LOG.txt` imports as memories
-dated when they became true. The log is committed: never put a secret in one.
+dated when they became true; one over `max_chars` is left out and counted, never cut. The log is committed: never put a secret in one.
 
 ## Resources and long-running jobs
 
