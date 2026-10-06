@@ -285,6 +285,9 @@ def worktree_entries(cwd: Path | str) -> TreeEntries | None:
     untracked = _git_z(root, "ls-files", "--others", "--exclude-standard", "-z")
     if index is None or changed is None or untracked is None:
         return None
+    # The cap counts the work's own files: `.ddflow/` is never hashed, so its untracked
+    # bookkeeping must not turn content evidence off (Bf0c754ec45).
+    untracked = [p for p in untracked if not _ours(p)]
     if len(untracked) > MAX_UNTRACKED_HASHED:
         return None
     out = _index_entries(index)
