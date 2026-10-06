@@ -37,14 +37,17 @@ def thresholds(cfg: Config) -> dict[str, FC.Threshold]:
 
 
 def params(cfg: Config) -> FC.Params:
-    """`[schedule]` as the controller reads it. `max_parallel_tasks` is the start value;
-    no increase follows a decrease for twice `adapt_up_after_s` (D-adaptive-flow-accepted)."""
+    """`[schedule]` as the controller reads it. `max_parallel_tasks` is the start value
+    (in fixed mode also the floor and the ceiling); no increase follows a decrease for
+    twice `adapt_up_after_s` (D-adaptive-flow-accepted)."""
     s = cfg.schedule
     enabled = set(enabled_signals(cfg))
+    # fixed: the number is the number -- a range of one, so nothing can move it
+    fixed = s.parallel != "auto"
     return FC.Params(
         start=s.max_parallel_tasks,
-        floor=s.max_parallel_min,
-        ceiling=s.max_parallel_max,
+        floor=s.max_parallel_tasks if fixed else s.max_parallel_min,
+        ceiling=s.max_parallel_tasks if fixed else s.max_parallel_max,
         adapt_up_after_s=s.adapt_up_after_s,
         cooldown_s=s.adapt_cooldown_s,
         quiet_after_decrease_s=2 * s.adapt_up_after_s,

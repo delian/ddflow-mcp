@@ -111,11 +111,19 @@ def _effective(repo: Path, text: str, local: bool):
 
 def _range_problems(repo: Path, text: str, local: bool) -> set[tuple[str, str]]:
     """The auto range problems (`config.parallel_range_problems`) a candidate TEXT would
-    have, judged as `_effective` judges it. Only NEW ones are refused, so a project whose
-    range was already inconsistent can still make an unrelated edit, or the repair."""
+    have, judged as `_effective` judges it. Raises what `_effective` raises."""
+    return set(parallel_range_problems(_effective(repo, text, local)[1]))
+
+
+def _new_range_problems(repo: Path, before: str, after: str, local: bool) -> set:
+    """Range problems the edit INTRODUCES. Only new ones are refused, so a project whose
+    range was already inconsistent can still make an unrelated edit, or the repair. When
+    the config before the edit cannot be judged, nothing can be attributed to the edit
+    and nothing is refused; the edited text itself has already passed `Config.check`."""
+    found = _range_problems(repo, after, local)
     try:
-        return set(parallel_range_problems(_effective(repo, text, local)[1]))
-    except Exception:  # a text that does not load is Config.check's to report
+        return found - _range_problems(repo, before, local)
+    except (ValueError, OSError):
         return set()
 
 
@@ -653,9 +661,7 @@ def _write_config(
             return KeyRefused(f"that edit would break the config: {exc}"), text
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"that edit would break the config: {exc}", text
-        if new_range := _range_problems(repo, text, local) - _range_problems(
-            repo, text_before, local
-        ):
+        if new_range := _new_range_problems(repo, text_before, text, local):
             return KeyRefused(_range_refusal(new_range)), text
         # `gate` is a foreign table to Config.check, so a gate block is judged here, on the
         # parsed result: `gate.a.b.command` (however spelled -- quoted, escaped) wrote
