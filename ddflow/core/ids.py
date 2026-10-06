@@ -288,10 +288,11 @@ def refile(base: str, sha: str) -> str:
 
 
 def is_filing_of(rid: str, base: str) -> bool:
-    """Whether ``rid`` is ``base`` itself or exactly one of its re-filings (`refile`):
-    the suffix must be exactly seven hex digits (`refile` always writes seven), so neither
-    another stable id that merely starts with ``base`` (its own suffix is a ten-digit
-    digest) nor a sequence-numbered id is taken for one."""
+    """Whether ``rid`` is the STABLE id ``base`` (a `{digest}` template's id, such as a CI
+    failure's bug) or one of its re-filings (`refile`: seven hex digits). Only stable ids
+    are re-filed, and no stable template holds `{seq}`, so a sequence number never follows
+    a stable id; another stable id that merely starts with ``base`` ends in its own
+    ten-digit digest, which is not seven."""
     return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
 
 
