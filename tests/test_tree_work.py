@@ -41,7 +41,7 @@ def test_dirty_of_an_unreadable_tree_is_not_empty(repo):
     assert lines, "a tree git could not read was reported clean"
     assert W.unreadable(lines)
     assert not W.unreadable(["?? work.txt"]), "an ordinary untracked file is readable"
-    assert not lines[0].startswith(("??", "!!")), "a status-code filter must not drop it"
+    assert lines[0][0] not in " MTADRCU?!", "a porcelain status filter must not drop it"
     assert W.dirty(wt, untracked=False), "the tracked-only question fails closed too"
 
 
