@@ -109,6 +109,15 @@ def _answer_other_kind(
     return out
 
 
+def _other_kind_rows(repo: Path, rule: Rule, agent: str) -> list[dict[str, Any]]:
+    """The records of other kinds ``rule`` reads like, as the check would list them;
+    nothing written. Empty while the cross-kind check is off or cannot run."""
+    chk = _cross_kind(repo, rule, agent, DD.Answer(check_only=True))
+    if chk is None or chk.refusal is None:
+        return []
+    return list(chk.refusal.data.get("candidates", []))
+
+
 def _points_elsewhere(repo: Path, rule: Rule, answer: RuleDedupAnswer | None) -> bool:
     """Whether ``answer`` points at a record that is not a rule."""
     return (
@@ -534,7 +543,10 @@ def rule_add(
 
     # Duplicates found - handle based on answer
     if dedup_answer is None:
-        # No answer provided - refuse and list candidates
+        # No answer provided - refuse and list candidates: the other rules, and the
+        # records of other kinds it reads like too (rubber-duck), so that `new` answers
+        # what the adder was actually shown.
+        others = _other_kind_rows(repo, rule, agent)
         return O.refused(
             "rule.added",
             "Possible duplicate rule. It reads like:\n"
@@ -543,11 +555,16 @@ def rule_add(
                 f"{c['title']}" + (f" [{', '.join(c['overlap'])}]" if c["overlap"] else "")
                 for c in candidates
             )
+            + "".join(
+                f"\n  {c['id']} ({c['kind']}, {c['state']}, score {c['score']:.2f}): "
+                f"{c['title'][:100]}"
+                for c in others
+            )
             + f"\n\nAnswer: new (different rule), extends {candidates[0]['id']} "
             f"(add to existing), duplicate_of {candidates[0]['id']} (same rule), or "
             f"related {candidates[0]['id']} (a different rule about the same thing)",
             id=rule.id,
-            candidates=candidates,
+            candidates=[*({**c, "kind": "rule"} for c in candidates), *others],
         )
 
     # The answer itself was validated up front (`_refused_up_front`).
@@ -555,9 +572,9 @@ def rule_add(
     if dedup_answer.target and dedup_answer.target == rule.id:
         return O.failed("rule.added", "a rule cannot point at itself", id=rule.id)
 
-    # If answer is "new", add anyway
+    # If answer is "new", add anyway -- it answered the other kinds' candidates too
     if dedup_answer.relation == "new":
-        return apply_rule_update(repo, rule, agent=agent, operation="created")
+        return _add_checked_against_others(repo, rule, agent, dedup_answer)
 
     try:
         storage.get(dedup_answer.target)  # must exist; the value is not needed here
