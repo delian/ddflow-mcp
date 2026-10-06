@@ -27,7 +27,7 @@ from pathlib import Path
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
 #: What `link(2)` says on a filesystem that has no hard links at all.
-_NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EXDEV})
+_NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP})
 
 
 class LockTimeout(TimeoutError):
@@ -70,7 +70,10 @@ def atomic_write(
     `mode`: the new file's permission bits. By default an existing file keeps its own and a
     new one gets what `write_text` would give it (0666 less the umask). `exclusive`: refuse
     with `FileExistsError` when `path` already exists, instead of replacing it (a hard link
-    of the finished temp file, so the check and the write are one step). On any failure the
+    of the finished temp file, so the check and the write are one step). On a filesystem
+    with no hard links (FAT, many SMB and FUSE mounts) an exclusive write is created with
+    `O_EXCL` and written in place: still never replacing a file, but NOT atomic for a
+    reader there, and a failure removes what it created. Otherwise, on any failure the
     temporary file is removed and `path` is untouched.
     """
     path = Path(path)
