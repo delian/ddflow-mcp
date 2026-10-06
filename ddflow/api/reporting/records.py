@@ -167,10 +167,12 @@ def _show_bug(st, bug) -> O.Outcome:
     "Fixing X"), the claim every fix task carries; any other mention is listed apart. The wire body (`item`, as for an item) is the record itself."""
     named = re.compile(rf"(?<![\w-]){re.escape(bug.id)}(?![\w-])")
     # The convention fix tasks follow: "fixes bug X", "fixes bugs A, B and X", "Fixing X"
-    # -- the verb, then the id or a list holding it, with nothing else in between.
+    # -- the verb, then the id or a list holding it, with nothing else in between. Each
+    # element before X ends in ",", ", and" or " and" (an element joined by a bare "and"
+    # was never passed over, so "fixes bugs A and X" read as a mention: Bfc863d295f).
     claims_fix = re.compile(
-        rf"\bfix(?:es|ed|ing)?\s+(?:bugs?\s+)?(?:[\w-]+\s*,\s*)*(?:and\s+)?"
-        rf"{re.escape(bug.id)}(?![\w-])",
+        rf"\bfix(?:es|ed|ing)?\s+(?:bugs?\s+)?(?:[\w-]+(?:\s*,\s*(?:and\s+)?|\s+and\s+))*"
+        rf"(?:and\s+)?{re.escape(bug.id)}(?![\w-])",
         re.I,
     )
     fixing: list[str] = []

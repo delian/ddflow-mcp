@@ -107,3 +107,21 @@ def test_a_fix_after_an_invalid_closure_reads_as_fixed(repo):
     assert code == 0 and f"{bid} [bug] fixed" in out, out
     assert "earlier closed" in out and "superseded by the fix" in out, out
     assert "regression test(s):" not in out, "no test was recorded, so none is announced"
+
+
+def test_the_last_id_of_an_and_joined_list_is_a_fix(repo):
+    """Bug Bfc863d295f: "fixes bugs A, B and X" -- the convention `_show_bug` names --
+    listed the fix of X as a mere mention: the list pattern needed a comma after every
+    element, so the element before "and" could never be passed over."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
+    run_cli(repo, "task", "add", "AND3", "--title", f"Three (fixes bugs B0, B1 and {bid})")
+    run_cli(repo, "task", "add", "AND2", "--title", f"Two (fixes bugs B0 and {bid})")
+    run_cli(repo, "task", "add", "OXF", "--title", f"Oxford (fixes bugs B0, B1, and {bid})")
+    run_cli(repo, "task", "add", "SEE", "--title", f"Fixed rows and see {bid}")
+    code, out, err = run_cli(repo, "--json", "show", bid)
+    assert code == 0, err
+    body = json.loads(out)
+    assert body["fixing"] == ["AND2", "AND3", "OXF"], body
+    assert body["mentioned_by"] == ["SEE"], body
