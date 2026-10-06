@@ -24,7 +24,6 @@ held until its definition changes.
 from __future__ import annotations
 
 import fnmatch
-import hashlib
 import json
 import re
 import tomllib
@@ -33,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ..core.digest import content_digest
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
 
@@ -85,7 +85,7 @@ class Trigger:
         """The definition, fingerprinted: a breaker holds until this changes."""
         d = asdict(self)
         d.pop("enabled", None)
-        return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
+        return content_digest(json.dumps(d, sort_keys=True), length=12)
 
 
 # -- one definition ------------------------------------------------------------------------

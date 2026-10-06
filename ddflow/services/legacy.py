@@ -23,7 +23,6 @@ the commit.
 
 from __future__ import annotations
 
-import hashlib
 import re
 import tomllib
 from collections.abc import Iterable
@@ -31,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..core.digest import hasher
 from ..infra.tomlcfg import atomic_write, basic_string
 from .adopt import BEGIN, END, NATIVE_RULES, Refused
 from .enforce import UnreadableYaml, read_precommit_yaml
@@ -277,7 +277,7 @@ def render(proposals: Iterable[Proposal]) -> str:
 
 def sha256_file(path: Path) -> str:
     """The hash of `path`'s bytes, streamed so a large file is not read into memory."""
-    digest = hashlib.sha256()
+    digest = hasher()
     with Path(path).open("rb") as fh:
         while chunk := fh.read(_CHUNK):
             digest.update(chunk)

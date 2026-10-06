@@ -39,12 +39,13 @@ re-derives them.
 from __future__ import annotations
 
 import functools
-import hashlib
 import math
 import re
 from array import array
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
+
+from .digest import content_digest
 
 #: Bumped whenever ``tokens`` or the weighting changes; ``index.db`` stores it.
 VERSION = 1
@@ -131,7 +132,7 @@ def digest(title: str, body: str = "") -> str:
     """Identity of a record's text up to case and whitespace: equal digests are the
     'identical text' D-no-duplicates records as a duplicate without asking."""
     norm = " ".join(f"{title}\n{body}".casefold().split())
-    return hashlib.blake2b(norm.encode("utf-8"), digest_size=10).hexdigest()
+    return content_digest(norm, "blake2b", size=10)
 
 
 def idf(df: int, n: int) -> float:
