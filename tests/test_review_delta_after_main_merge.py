@@ -202,3 +202,17 @@ def test_a_diff_that_cannot_run_is_never_nothing_changed(merged, monkeypatch):
     monkeypatch.setattr(RV, "_last_head", lambda *a, **k: head)
     diff, _how, why = RV._delta_scope(repo, it, _Log(), "critic", "item", "main")
     assert diff == "" and "could not be produced" in why and "boom" in why
+
+
+def test_the_worktree_delta_that_cannot_run_is_refused_not_empty(merged, monkeypatch):
+    repo, tree, head = merged
+    real = RV.W.git
+
+    def failing(where, *args, **kw):
+        if args[:1] == ("diff",):
+            return RV.W.GitResult(1, "", "simulated failure")
+        return real(where, *args, **kw)
+
+    monkeypatch.setattr(RV.W, "git", failing)
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        RV._delta_diff(repo, _item(tree), "", head)

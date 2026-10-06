@@ -1251,8 +1251,11 @@ review was ever recorded or nothing changed. A delta is the item's OWN change: a
 sent (they were reviewed as their own items). The delta diffs the tip against the reviewed
 head merged with what came in (keeping the incoming side where the two conflict), so the
 branch's own commits and where its merge result departs from main are what the reviewer
-sees. Criss-cross histories (more than one merge base) merge each base the reviewed head
-lacks.
+sees: a conflict resolved the item's own way (overriding another item's change) is
+reviewed, one where it took main's side is not. Criss-cross histories (more than one merge
+base) merge each base the reviewed head lacks. When that merge cannot be written, the delta
+is everything since the reviewed head, as before; a diff that cannot be produced at all is
+refused with the reason, never reported as "nothing changed".
 
 **Delta re-reviews are the default.** Once a gate has a recorded review that reviewed the
 whole diff, a plain `ddflow review T1 --gate critic` is a delta: it reviews only the commits
