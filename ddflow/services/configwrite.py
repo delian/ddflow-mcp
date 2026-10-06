@@ -122,19 +122,25 @@ def _new_range_problems(repo: Path, before: str, after: str, local: bool) -> set
     A local write is judged over the committed layer; when that layer cannot be read
     (it does not parse, say -- the load path reports it), the edit is judged on its own
     over the shipped defaults instead, so a broken sibling never switches the guard off;
-    and when the text BEFORE the edit does not load, every problem the result has is
-    the edit's (a repair leaves none, so it is never refused).
+    and when the text BEFORE the edit does not load, only the problems the result has
+    beyond those the committed layer brings are the edit's (a repair is never refused).
     """
     unreadable = (tomllib.TOMLDecodeError, ValueError, OSError)
-    try:
-        found = _range_problems(repo, after, local)
-    except unreadable:
-        found = _range_problems(repo, after, False)  # the sibling layer is broken
+
+    def judged(text: str, over_committed: bool) -> set | None:
+        try:
+            return _range_problems(repo, text, over_committed)
+        except unreadable:
+            return None
+
+    found = judged(after, local)
+    if found is None:  # the sibling layer is broken: judge the edit over the defaults
         local = False
-    try:
-        return found - _range_problems(repo, before, local)
-    except unreadable:  # the text before the edit does not load: the edit owns them all
-        return found
+        found = judged(after, False) or set()
+    had = judged(before, local)
+    if had is None:  # the text before the edit does not load: what it inherited stays
+        had = judged("", local) or set()
+    return found - had
 
 
 def _range_refusal(problems: set[tuple[str, str]]) -> str:
