@@ -4180,7 +4180,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 150): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 189): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4535,7 +4535,8 @@ declared once and persists — see
 
 ## Configuration
 
-189 knobs across 27 sections, every one documented in place:
+189 knobs across 27 sections, every one documented in place and listed, with its default
+and its values, in the [table below](#all-knobs):
 
 ```console
 $ ddflow config --explain --filter lease
@@ -4570,6 +4571,210 @@ is a typo in ddflow's own source tree, where the config and the code are one com
 value of a known one (exit 3, naming the key) outright, before writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
 refuses a non-string element instead of casting it (`null` is not the string `"None"`).
 A test asserts every knob carries documentation, so the reference cannot rot.
+
+### All knobs
+
+The table is generated from the knob declarations themselves (`uv run python -m
+ddflow.views.knob_table README.md` rewrites it) and a test fails when it differs, so its
+count and defaults cannot drift. A long default is left to `ddflow config --explain`.
+
+<!-- ddflow:knobs:begin (generated from the knob declarations; do not edit) -->
+<details><summary>All 189 knobs across 27 sections</summary>
+
+| Knob | Default | Values |
+|---|---|---|
+| `lease.ttl_s` | `1800` |  |
+| `lease.heartbeat_s` | `300` |  |
+| `lease.grace_s` | `120` |  |
+| `lease.acquire_timeout_s` | `30` |  |
+| `lease.waiter_reservation_s` | `300` |  |
+| `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
+| `lease.shared_globs` | `[]` |  |
+| `lease.append_only_globs` | `[]` |  |
+| `worktree.enabled` | `true` |  |
+| `worktree.root` | `".ddflow/worktrees"` |  |
+| `worktree.branch_prefix` | `"ddflow/"` |  |
+| `worktree.base_ref` | `""` |  |
+| `worktree.merge_strategy` | `"no-ff"` | `no-ff` \| `ff-only` \| `squash` |
+| `worktree.remove_on_merge` | `true` |  |
+| `worktree.max_parallel` | `0` |  |
+| `worktree.sync_before_start` | `true` |  |
+| `worktree.adopt_existing` | `true` |  |
+| `worktree.local_files` | `[]` |  |
+| `flow.model` | `"trunk"` | `trunk` \| `gitflow` |
+| `flow.integration` | `"merge"` | `merge` \| `pr` |
+| `flow.forge` | `"auto"` | `auto` \| `github` \| `gitlab` |
+| `flow.remote` | `"origin"` |  |
+| `flow.claims` | `"local"` | `local` \| `remote` |
+| `flow.develop_branch` | `"develop"` |  |
+| `flow.production_branch` | `""` |  |
+| `flow.feature_prefix` | `"feature/"` |  |
+| `flow.bugfix_prefix` | `"bugfix/"` |  |
+| `flow.hotfix_prefix` | `"hotfix/"` |  |
+| `flow.release_prefix` | `"release/"` |  |
+| `flow.bugfix_tags` | `["bug", "bugfix", "fix"]` |  |
+| `flow.hotfix_tags` | `["hotfix"]` |  |
+| `flow.pr_merge` | `"on_approval"` | `on_approval` \| `auto` \| `human` |
+| `flow.pr_draft` | `false` |  |
+| `flow.pr_labels` | `[]` |  |
+| `flow.pr_reviewers` | `[]` |  |
+| `flow.stack` | `true` |  |
+| `flow.on_changes_requested` | `"reopen"` | `reopen` \| `block` |
+| `flow.sync_on_next` | `true` |  |
+| `flow.tag_prefix` | `"v"` |  |
+| `flow.initial_version` | `"0.1.0"` |  |
+| `flow.lines` | `{}` |  |
+| `flow.current_line` | `"current"` |  |
+| `flow.port_strategy` | `"forward-merge"` | `forward-merge` \| `cherry-pick` |
+| `flow.environments` | `[]` |  |
+| `flow.auto_promote` | `[]` |  |
+| `flow.version_files` | `{}` |  |
+| `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
+| `gates.phase_pipeline` | (long: see `ddflow config --explain`) |  |
+| `gates.required` | `["implement", "unit_tests", "merge"]` |  |
+| `gates.unavailable_is_failure` | `false` |  |
+| `gates.allow_skip_with_reason` | `true` |  |
+| `gates.require_outcome` | `true` |  |
+| `gates.enforce_order` | `"warn"` | `warn` \| `block` \| `off` |
+| `gates.promotion_pipeline` | `["unit_tests", "merge"]` |  |
+| `gates.rate_min_runs` | `5` |  |
+| `gates.rate_max_fail` | `0.9` |  |
+| `gates.evidence_required` | (long: see `ddflow config --explain`) |  |
+| `lessons.search_backend` | `"fts5"` | `fts5` \| `like` |
+| `lessons.max_results` | `5` |  |
+| `lessons.snippet_chars` | `320` |  |
+| `lessons.cadence_growth_pct` | `20.0` |  |
+| `lessons.cadence_min_entries` | `25` |  |
+| `lessons.auto_capture_on_bug` | `true` |  |
+| `lessons.require_regression_test` | `true` |  |
+| `lessons.reflect_after_items` | `3` |  |
+| `session.log_prompts` | `true` |  |
+| `session.redact_patterns` | (long: see `ddflow config --explain`) |  |
+| `session.redact_extra` | `[]` |  |
+| `session.brief_max_tokens` | `1200` |  |
+| `session.brief_lesson_count` | `4` |  |
+| `session.replay_verify_diffs` | `true` |  |
+| `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
+| `session.compaction_digest_chars` | `2000` |  |
+| `schedule.parallel` | `"auto"` | `auto` \| `fixed` |
+| `schedule.max_parallel_tasks` | `4` |  |
+| `schedule.max_parallel_min` | `2` |  |
+| `schedule.max_parallel_max` | `8` |  |
+| `schedule.adapt_up_after_s` | `600` |  |
+| `schedule.adapt_cooldown_s` | `300` |  |
+| `schedule.signal_interval_s` | `60` |  |
+| `schedule.signals` | (long: see `ddflow config --explain`) |  |
+| `schedule.ready_policy` | `"deps_and_lease"` | `deps_and_lease` \| `deps_only` |
+| `schedule.cycle_policy` | `"error"` | `error` \| `warn` |
+| `schedule.unknown_dep_policy` | `"block"` | `block` \| `warn` |
+| `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
+| `schedule.bugs_first` | `true` |  |
+| `schedule.resources` | `[]` |  |
+| `schedule.repos` | `[]` |  |
+| `bugs.file_task` | `true` |  |
+| `bugs.phase` | `"bugs"` |  |
+| `importer.max_tasks` | `200` |  |
+| `importer.preview_rows` | `8` |  |
+| `importer.todo_globs` | `[]` |  |
+| `importer.lesson_globs` | `[]` |  |
+| `importer.lesson_summary_globs` | `[]` |  |
+| `importer.decision_globs` | `[]` |  |
+| `importer.research_globs` | `[]` |  |
+| `importer.journal_globs` | `[]` |  |
+| `importer.memory_globs` | `[]` |  |
+| `importer.archive_globs` | `[]` |  |
+| `memory.max_chars` | `280` |  |
+| `memory.brief_items` | `12` |  |
+| `dedupe.on_match` | `"ask"` | `ask` \| `warn` \| `off` |
+| `dedupe.show_floor` | `0.35` |  |
+| `dedupe.ask_threshold` | `0.55` |  |
+| `dedupe.max_candidates` | `3` |  |
+| `dedupe.min_words` | `8` |  |
+| `dedupe.kinds` | (long: see `ddflow config --explain`) |  |
+| `companions.probe_cache_ttl_s` | `300` |  |
+| `cadence.integration_tests_every_tasks` | `5` |  |
+| `cadence.architecture_review_every_phases` | `2` |  |
+| `cadence.mutation_tests_every_phases` | `3` |  |
+| `cadence.dedupe_sweep_every_tasks` | `4` |  |
+| `cadence.lessons_pass_every_phases` | `4` |  |
+| `cadence.max_missed` | `1` |  |
+| `cadence.every_days` | `[]` |  |
+| `reinstruct.enabled` | `true` |  |
+| `reinstruct.every_calls` | `12` |  |
+| `reinstruct.every_seconds` | `240` |  |
+| `reinstruct.max_items` | `3` |  |
+| `enforce.commit_without_lease` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.install_hooks_on_setup` | `true` |  |
+| `enforce.require_item_trailer` | `false` |  |
+| `enforce.item_trailer_keys` | `["Item"]` |  |
+| `enforce.forbidden_trailers` | `[]` |  |
+| `enforce.trailer_waivers` | `{}` |  |
+| `enforce.generated_views` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.stale_docs` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.environment_commits` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.doc_globs` | `["**/*.md", "**/*.rst", "**/*.adoc"]` |  |
+| `enforce.doc_exclude` | (long: see `ddflow config --explain`) |  |
+| `enforce.stale_rules` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.readme_with_code` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.readme_code_globs` | `["ddflow/**"]` |  |
+| `enforce.readme_files` | `["README.md"]` |  |
+| `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.max_behind` | `50` |  |
+| `loops.max_claims_per_item` | `3` |  |
+| `loops.max_gate_flaps` | `4` |  |
+| `loops.max_reopens` | `2` |  |
+| `loops.max_repeated_failures` | `3` |  |
+| `loops.max_duplicate_items` | `2` |  |
+| `loops.no_progress_window` | `60` |  |
+| `loops.on_detect` | `"warn"` | `warn` \| `block` |
+| `review.max_rounds` | `2` |  |
+| `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
+| `review.delta_default` | `true` |  |
+| `log.reuse_parsed` | `true` |  |
+| `log.max_cached_events` | `100000` |  |
+| `log.commit_events` | `true` |  |
+| `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
+| `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
+| `ci.command` | `""` |  |
+| `ci.base` | `""` |  |
+| `ci.timeout_s` | `3600` |  |
+| `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
+| `prompts.review_system` | `""` |  |
+| `prompts.review_user` | `""` |  |
+| `prompts.gate_instruction` | `""` |  |
+| `prompts.session_brief_header` | `""` |  |
+| `prompts.mcp_instructions` | `""` |  |
+| `export.documents` | `[]` |  |
+| `export.redact` | `true` |  |
+| `export.max_bytes` | `60000` |  |
+| `export.refresh` | `"off"` | `off` \| `merge` \| `phase_close` \| `docs_gate` |
+| `export.tables` | `{}` |  |
+| `rules.max_rules` | `200` |  |
+| `rules.max_size_bytes` | `50000` |  |
+| `rules.tags_allowed` | `[]` |  |
+| `rules.scopes_allowed` | `["project", "phase", "task"]` |  |
+| `agent.id` | `""` |  |
+| `agent.reviewer_family_must_differ` | `true` |  |
+| `agent.families` | (long: see `ddflow config --explain`) |  |
+| `agent.routers` | `{hydrafusion = []}` |  |
+| `ids.bug` | `"{prefix}{hash}"` |  |
+| `ids.lesson` | `"{prefix}{hash}"` |  |
+| `ids.research` | `"{prefix}{hash}"` |  |
+| `ids.decision` | `"{prefix}{hash}"` |  |
+| `ids.memory` | `"{prefix}{hash}"` |  |
+| `ids.job` | `"{prefix}{hash}"` |  |
+| `ids.session` | `"s{time}-{pid}"` |  |
+| `ids.fix_task` | `"fix-{parent}"` |  |
+| `ids.fix_task_followup` | `"fix-{parent}-{seq}"` |  |
+| `ids.promotion` | `"promote-{env}-{seq}"` |  |
+| `ids.ci_bug` | `"Bci-{slug}-{digest}"` |  |
+| `ids.split_child` | `"{parent}.{seq}"` |  |
+| `ids.imported_phase` | `"{user-text}"` |  |
+| `ids.imported_task` | `"{phase}.{slug}"` |  |
+| `triggers.max_fires_per_hour` | `10` |  |
+
+</details>
+<!-- ddflow:knobs:end -->
 
 ---
 
