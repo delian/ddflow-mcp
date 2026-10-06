@@ -827,7 +827,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 188 knobs.
+cadences, and the rest of the 189 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3809,8 +3809,11 @@ tags = ["ci"]                      # added to the items it files
 Every evaluation that finds a condition met is an event: `trigger.fired` (with the items
 it filed, the key, the hop and the definition's digest) or `trigger.suppressed` with the
 reason -- `disabled`, `debounce`, `cooldown`, `open` (the key's remediation is still open),
-`max_open`, `hop_limit`, `breaker` or `global_cap` (at most 10 fires an hour across every
-trigger) -- and each run is a `trigger.evaluated`. A trigger never counts `trigger.*` events
+`max_open`, `hop_limit`, `breaker` or `global_cap` (at most `[triggers].max_fires_per_hour`
+fires in any rolling hour across every trigger: default 10, an integer from 0 to 200, the
+fire history the log keeps; 0 stops every trigger without disabling one; a bad value in a
+config file falls back to 0, the strictest, and `config --set` refuses it) -- and each run
+is a `trigger.evaluated`. A trigger never counts `trigger.*` events
 or events about the items it filed itself, and a remediation's own failure can re-trigger
 only up to `hop_limit`. A remediation that was abandoned or removed, or finished without a
 merge, counts against the breaker; after `breaker` of them in a row the trigger is held
@@ -4416,7 +4419,7 @@ declared once and persists — see
 
 ## Configuration
 
-188 knobs across 26 sections, every one documented in place:
+189 knobs across 27 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -4435,7 +4438,8 @@ main). An enumerated knob (`[enforce].stale_docs = block | warn | off`, `[flow].
 declared values (`KNOB_CHOICES` in `ddflow/config.py`): a value outside them in a file is
 warned about and reported the same way, and the knob takes its **strictest** allowed value
 (`KNOB_STRICTEST`), not its default, so a typo makes ddflow more careful —
-`stale_docs = "blok"` acts as `block`, `[upgrade].skew = "refusee"` as `refuse`. Each
+`stale_docs = "blok"` acts as `block`, `[upgrade].skew = "refusee"` as `refuse`. A numeric limit can fail closed the same way: `[triggers].max_fires_per_hour = -1`
+(or `"ten"`) in a file acts as `0`, and no trigger fires until it is fixed. Each
 knob's doc (`ddflow config --explain`) names its fallback and why; where a knob has no
 safety dimension the fallback is the value that does the most checking or changes least
 (`[ci].on_merge` → `full`, `[mcp].tools` → `all`, `[export].refresh` → `off`), and the
