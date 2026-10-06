@@ -1,0 +1,155 @@
+"""Reviewer independence: the family of each reviewer and whether one differs from the author."""
+
+from __future__ import annotations
+
+import shlex
+from typing import Any
+
+from ...config import Config
+from ...core.model import State
+
+
+def family_of(model: str, cfg: Config) -> str:
+    """This project's view of a model's family: `[agent].families`, which defaults to
+    the shipped map. ``""`` means "not recognised" — see `config.family_for`."""
+    from ...config import family_for
+
+    return family_for(model, cfg.agent.families)
+
+
+def _declared_family(evidence: dict[str, Any]) -> str:
+    """The family `ddflow review` recorded from the operator's reviewer entry, or ``""``.
+
+    A served model name can belong to another family -- this project's Qwen critic is
+    served as `google/gemma-4-31B-it` -- which is why a reviewer entry declares one
+    (B6ed8b9edb8). Trusted only in evidence `ddflow review` wrote (it names the
+    `reviewer`); an agent's `gate record` cannot write a family, so a manual record is
+    judged by its model name as before.
+    """
+    if not evidence.get("reviewer"):
+        return ""
+    fam = str(evidence.get("family") or "").strip().lower()
+    return "" if fam == "unknown" else fam
+
+
+def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
+    """The reviewer's name when ``evidence`` came from a tool-written, unapproved entry.
+
+    `""` for everything else, and in particular for an entry no tool wrote (the
+    operator's own, which counts as it always did) and for evidence recorded before
+    digests were (nothing to judge it by, so it is judged as before).
+    """
+    dig = str(evidence.get("reviewer_digest") or "")
+    if not dig or not evidence.get("reviewer"):
+        return ""
+    if dig in state.reviewer_writes and dig not in state.reviewer_approvals:
+        return str(evidence["reviewer"])
+    return ""
+
+
+#: The gates whose recorded model counts toward reviewer independence.
+REVIEWER_GATES = ("rubber_duck", "critic", "standards")
+
+
+def reviewer_independence(
+    state: State, cfg: Config, item_id: str, author_model: str
+) -> tuple[bool, str]:
+    """Did at least one reviewer come from a different pretraining family?
+
+    Returns (satisfied, explanation). A same-family panel is reported as unsatisfied
+    even when every reviewer passed, because agreement among models trained on the same
+    distribution measures shared priors, not correctness.
+    """
+    from ...config import router_set
+
+    it = state.items.get(item_id)
+    if not it:
+        return False, f"no such item {item_id}"
+    # A router author (Copilot's HydraFusion) is a SET of families: any of them may
+    # have written the diff, so a reviewer must sit outside all of them.
+    routed = router_set(author_model, cfg.agent.routers)
+    # Compared case-blind on BOTH sides: a map value 'Alibaba' and a declared
+    # 'ALIBABA' are one family (B-fam-case).
+    author_fam = family_of(author_model, cfg).strip().lower() if routed is None else ""
+    fams: list[tuple[str, str]] = []
+    anonymous: list[str] = []
+    unapproved: list[tuple[str, str]] = []
+    for gname in REVIEWER_GATES:
+        rec = it.gates.get(gname)
+        if not rec or rec.outcome not in ("passed", "failed", "partial"):
+            continue
+        if who := _unapproved_reviewer(state, rec.evidence):
+            unapproved.append((gname, who))
+            continue
+        m = str(rec.evidence.get("model", rec.by) or "").strip()
+        fam = _declared_family(rec.evidence) or family_of(m, cfg).strip().lower()
+        # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
+        if not fam:
+            anonymous.append(f"{gname}={m or 'no model'}")
+            continue
+        fams.append((gname, fam))
+    if routed == []:
+        return False, (
+            f"the author's model {author_model!r} is a router in [agent].routers with "
+            f"no families listed, so no reviewer can be shown to sit outside the models "
+            f"it drew on. List every family your plan routes it to, e.g. "
+            f'routers = {{ hydrafusion = ["anthropic", "openai", "google"] }}.'
+        )
+    if not author_model.strip():
+        # Quoting `''` back at the agent named nothing it could act on (B7a5c63e3d2).
+        return False, (
+            "the author's model is unknown, so no reviewer can be shown to differ from "
+            "it: pass `--model <author model>` (`model` over MCP), or declare it once "
+            "with `ddflow session start --model <author model>` under the same identity."
+        )
+    if routed is None and not author_fam:
+        return False, (
+            f"the author's model {author_model!r} is not in [agent].families, so no "
+            f"reviewer can be shown to differ from it. Add it to the map (or, for a "
+            f"model that routes across providers, to [agent].routers with the families "
+            f"it draws on), or pass `--model` with a name the map recognises."
+        )
+    # `router_set` returns its members stripped and lowercased, so the router side is
+    # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
+    # overlap, or a reviewer from inside the set would pass as independent.
+    author_set = routed if routed is not None else [author_fam]
+    author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
+    if unapproved and not fams:
+        # The names as recorded, never re-parsed out of the text: a name with a space
+        # in it would print an approve command for the wrong reviewer (rubber duck).
+        names = sorted({who for _g, who in unapproved})
+        return False, (
+            f"{'; '.join(f'{g} came from reviewer {w!r}' for g, w in unapproved)}, whose entry a tool wrote and a person has "
+            f"not approved, so it is not counted (decision D-reviewer-trust): an agent can "
+            f"write a reviewer, so it cannot vouch for one. The operator reviews the "
+            f"entry and runs "
+            + " and ".join(f"`ddflow reviewers approve {shlex.quote(n)}`" for n in names)
+            + " from their own terminal."
+        )
+    if not fams:
+        if anonymous:
+            return False, (
+                f"no reviewer named a model this project recognises "
+                f"({', '.join(anonymous)}), so nothing shows the review came from a "
+                f"different family than the author ({author_desc}). Re-record with "
+                f"`--model <the reviewer's model>`, or teach [agent].families the name."
+            )
+        return False, "no reviewer ran at all"
+    different = [(g, f) for g, f in fams if f not in author_set]
+    if different:
+        return True, f"{different[0][0]} was {different[0][1]} vs author {author_desc}"
+    if routed is not None:
+        return False, (
+            f"every identified reviewer was inside the families the router "
+            f"{author_model!r} draws on: "
+            + ", ".join(f"{g}={f}" for g, f in fams)
+            + f" overlaps [agent].routers ({', '.join(author_set)}). A reviewer from a "
+            f"family the router used may be reviewing its own work."
+            + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
+        )
+    return False, (
+        f"every identified reviewer ({', '.join(g for g, _ in fams)}) was family "
+        f"{author_fam!r}, the same as the author. Same-family agreement is not "
+        f"independent evidence."
+        + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
+    )
