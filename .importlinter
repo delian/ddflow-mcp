@@ -10,9 +10,9 @@
 # edit the entry in the same change; never add one to make a new import pass.
 #
 # Entries marked "home" are permanent: the one module allowed to own that import. A home
-# module that does not exist yet (ddflow.infra.git, ddflow.infra.fsio, ddflow.core.digest,
-# the extras' adapters) has no entry -- an entry matching no import is an error -- and the
-# task that creates the module adds its home entry in the same change.
+# module that does not exist yet (ddflow.infra.git, the extras' adapters) has no entry --
+# an entry matching no import is an error -- and the task that creates the module adds its
+# home entry in the same change.
 
 [importlinter]
 root_package = ddflow
@@ -124,7 +124,7 @@ ignore_imports =
     ddflow.services.review -> subprocess
     ddflow.surfaces.mcp -> subprocess
 
-# Atomic writes, temporary files and locks belong in ddflow.infra.fsio (not written yet).
+# Atomic writes, temporary files and locks belong in ddflow.infra.fsio.
 [importlinter:contract:fsio-home]
 name = tempfile and fcntl are imported only by ddflow.infra.fsio
 type = forbidden
@@ -135,11 +135,11 @@ forbidden_modules =
     fcntl
 allow_indirect_imports = True
 ignore_imports =
+    # home
+    ddflow.infra.fsio -> fcntl
     ddflow.api.operations -> tempfile
     ddflow.infra.forge -> tempfile
     ddflow.infra.log -> fcntl
-    ddflow.infra.tomlcfg -> fcntl
-    ddflow.infra.tomlcfg -> tempfile
     ddflow.infra.worktree -> tempfile
     ddflow.services.changelog_cut -> tempfile
     ddflow.services.ci -> tempfile
@@ -150,7 +150,7 @@ ignore_imports =
     ddflow.services.onboard_verify -> tempfile
     ddflow.services.version_files -> tempfile
 
-# Content digests belong in ddflow.core.digest (not written yet).
+# Content digests belong in ddflow.core.digest.
 [importlinter:contract:digest-home]
 name = hashlib is imported only by ddflow.core.digest
 type = forbidden
@@ -160,6 +160,8 @@ forbidden_modules =
     hashlib
 allow_indirect_imports = True
 ignore_imports =
+    # home
+    ddflow.core.digest -> hashlib
     ddflow.api.review -> hashlib
     ddflow.core.events -> hashlib
     ddflow.core.ids -> hashlib

@@ -48,11 +48,11 @@ BASELINE: dict[str, int] = {
     # Path.write_text outside ddflow.infra.fsio
     "write_text": 42,
     # any use of the tempfile module outside ddflow.infra.fsio
-    "tempfile": 13,
+    "tempfile": 12,
     # os.replace outside ddflow.infra.fsio
-    "os_replace": 3,
+    "os_replace": 2,
     # any use of the fcntl module outside ddflow.infra.fsio
-    "fcntl": 9,
+    "fcntl": 5,
     # any use of the hashlib module outside ddflow.core.digest
     "hashlib": 29,
     # an import statement inside a function body
