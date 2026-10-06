@@ -309,3 +309,5 @@
 {"agent":"unifyB","data":{"at":1791250562.9673617,"holder":"unifyB"},"id":"e3ffdf381d8008f3a149a0dc7","kind":"lease.renewed","lamport":22501,"schema":1,"subject":"B-af-sampler","ts":"2026-10-06T01:36:03.012229Z"}
 {"agent":"unifyB","data":{"at":1791250684.6997056,"holder":"unifyB"},"id":"ebd6362f3ce21a97ae1e96971","kind":"lease.renewed","lamport":22507,"schema":1,"subject":"B-af-sampler","ts":"2026-10-06T01:38:04.761958Z"}
 {"agent":"unifyB","data":{"at":1791250720.2328403,"holder":"unifyB"},"id":"e21db0ba91bcdd6f623aa6202","kind":"lease.renewed","lamport":22508,"schema":1,"subject":"B-af-sampler","ts":"2026-10-06T01:38:40.286852Z"}
+{"agent":"unifyB","data":{"at":1791250806.5517488,"holder":"unifyB"},"id":"ec74ba6592e2be0b634769c7b","kind":"lease.renewed","lamport":22520,"schema":1,"subject":"B-af-sampler","ts":"2026-10-06T01:40:06.605631Z"}
+{"agent":"unifyB","data":{"at":1791250928.3409116,"holder":"unifyB"},"id":"ebcf79dac8e147988fd01b3f4","kind":"lease.renewed","lamport":22541,"schema":1,"subject":"B-af-sampler","ts":"2026-10-06T01:42:08.401069Z"}
