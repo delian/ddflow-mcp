@@ -24,9 +24,9 @@ import ddflow.api._dedupe as DD
 
 from ..config import Config, csv_list
 from ..core import globspec as GS
+from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.events import parse_changelog
-from ..core.ids import auto_id
 from ..core.model import LINK_RELATIONS, fold
 from ._base import _load
 
@@ -84,8 +84,12 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     from ..services import inventory as INV
 
     log, cfg, st = _load(repo, agent)
-    lid = draft.id or auto_id("L", draft.title, draft.rule)
+    minted = IDS.mint(
+        cfg, st, "lesson", events=log.read_all, given=draft.id, hash_parts=(draft.title, draft.rule)
+    )
+    lid = minted.id
     data: dict[str, Any] = {
+        **IDS.key_field(minted),
         "title": draft.title,
         "rule": draft.rule,
         "why": draft.why,
@@ -719,7 +723,15 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
             f"no probe was possible.",
         )
     log, cfg, st = _load(repo, agent)
-    rid = finding.id or auto_id("R", finding.question, finding.claim)
+    minted = IDS.mint(
+        cfg,
+        st,
+        "research",
+        events=log.read_all,
+        given=finding.id,
+        hash_parts=(finding.question, finding.claim),
+    )
+    rid = minted.id
     taken = _research_id_taken(st, rid, finding)
     if taken is not None:
         return taken
@@ -754,7 +766,7 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
         log.append(
             "research.recorded",
             rid,
-            _research_fields(finding) | chk.fields,
+            _research_fields(finding) | IDS.key_field(minted) | chk.fields,
         )
         DD.after_add(log, cfg, rid, chk)
     return O.ok("research.recorded", id=rid, verdict=finding.verdict, **chk.data())
@@ -862,7 +874,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     if bad:
         return O.failed("bug.found", bad)
     log, cfg, st = _load(repo, agent)
-    bid = id or auto_id("B", summary, item)
+    minted = IDS.mint(cfg, st, "bug", events=log.read_all, given=id, hash_parts=(summary, item))
+    bid = minted.id
     chk = DD.check_add(
         repo,
         log,
@@ -914,7 +927,14 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         log.append(
             "bug.found",
             bid,
-            {"item": item, "summary": summary, **extra, **linked, **chk.fields},
+            {
+                "item": item,
+                "summary": summary,
+                **extra,
+                **linked,
+                **IDS.key_field(minted),
+                **chk.fields,
+            },
         )
         DD.after_add(log, cfg, bid, chk)
         if filing:
@@ -935,9 +955,6 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     return O.ok("bug.found", id=bid, **more, **chk.data())
 
 
-#: Fix tasks are filed as `fix-<bug id>`: one obvious name per bug, so a second report
-#: of the same id finds the task already there instead of filing a twin.
-FIX_TASK_PREFIX = "fix-"
 #: A fix task's title is the bug's headline behind "Fix bug X:" -- the words `show <bug>`
 #: already recognises as a fix's own claim (`api.reporting._show_bug`). Cut, not wrapped:
 #: the whole summary is in the body.
@@ -972,18 +989,20 @@ def _open_phase_of(st, item: str) -> str:
     return ""
 
 
-def _own_fix_id(st, bug_id: str) -> str:
-    """The bug's own fix task id: `fix-<bug>`, or -- when that one was ABANDONED, which
-    nothing revives -- the first of `fix-<bug>-2`, `-3`, ... that is not abandoned too
+def _own_fix_id(st, cfg, bug_id: str) -> str:
+    """The bug's own fix task id (`[ids].fix_task`, `fix-<bug>` by default): one obvious
+    name per bug, so a second report finds the task already there instead of filing a
+    twin -- or, when that one was ABANDONED, which nothing revives, the first
+    `[ids].fix_task_followup` (`fix-<bug>-2`, `-3`, ...) that is not abandoned too
     (B974e34fa83). Decided from the fold the caller holds inside its transaction, so the
     id is free when it is filed (L-free-id-before-add)."""
     from ..core.model import ABANDONED
 
-    base = tid = FIX_TASK_PREFIX + bug_id
+    tid = IDS.render(cfg, "fix_task", parent=bug_id)
     n = 1
     while (it := st.items.get(tid)) is not None and not it.removed and it.state == ABANDONED:
         n += 1
-        tid = f"{base}-{n}"
+        tid = IDS.render(cfg, "fix_task_followup", parent=bug_id, seq=n)
     return tid
 
 
@@ -993,7 +1012,7 @@ def _fix_task_id(st, cfg, bug_id: str, item: str) -> str:
     queue). One rule, so the bug event written before the task names the task that then
     gets filed."""
     named = _fix_task_of(st, cfg, item)
-    return named.id if named is not None else _own_fix_id(st, bug_id)
+    return named.id if named is not None else _own_fix_id(st, cfg, bug_id)
 
 
 def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
@@ -1001,7 +1020,7 @@ def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
     nothing: the open bug-fix task ``item`` names, or its own fix task, not abandoned."""
     if _fix_task_of(st, cfg, item) is not None:
         return True
-    have = st.items.get(_own_fix_id(st, bug_id))
+    have = st.items.get(_own_fix_id(st, cfg, bug_id))
     return have is not None and not have.removed
 
 
@@ -1862,7 +1881,8 @@ def memory_add(
             f"`session note`.",
             id="",
         )
-    mid = id or auto_id("M", text)
+    minted = IDS.mint(cfg, st, "memory", events=log.read_all, given=id, hash_parts=(text,))
+    mid = minted.id
     chk = DD.check_add(
         repo,
         log,
@@ -1875,7 +1895,7 @@ def memory_add(
         return chk.refusal
     if chk.extension:
         return DD.extend(log, cfg, chk, "memory.recorded")
-    data: dict[str, Any] = {"text": text, **chk.fields}
+    data: dict[str, Any] = {"text": text, **IDS.key_field(minted), **chk.fields}
     if tags:
         # Only when given: the fold MERGES, keeping a field the event omits, and an
         # always-present `tags: []` made correcting a fact by `--id` wipe its tags

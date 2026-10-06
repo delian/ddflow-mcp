@@ -10,6 +10,7 @@ import ddflow.api._dedupe as DD
 
 from ..config import csv_list
 from ..core import globspec as GS
+from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.model import fold
 from ..services import leases as L
@@ -755,7 +756,7 @@ def split(
     from ..core.model import ABANDONED, DONE
     from ..services import leases as L
 
-    log, _cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
@@ -792,7 +793,8 @@ def split(
     planned: list[tuple[str, str]] = []
     for i, spec in enumerate(specs, 1):
         sub_id, _, title = spec.partition("=")
-        sub_id = sub_id.strip() or f"{item}.{i}"
+        # the parent's own spelling: an existing id is not re-checked (render check=False)
+        sub_id = sub_id.strip() or IDS.render(cfg, "split_child", check=False, parent=item, seq=i)
         if sub_id in st.items:
             return O.failed(
                 "task.split", f"{sub_id} already exists; choose another id", id=item, created=[]
