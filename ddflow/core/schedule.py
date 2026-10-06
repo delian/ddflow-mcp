@@ -30,6 +30,7 @@ from fnmatch import fnmatch
 
 from ..config import Config
 from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
+from . import flowcontrol as FC
 from .flow import FEATURE, branch_kind, line_key, stack_base, unknown_line
 
 
@@ -143,6 +144,10 @@ class Plan:
     #: item. Not cap-held: raising the cap would not offer it, only the offered item
     #: finishing would.
     overlapped: list[str] = field(default_factory=list)
+    #: The one line `status` and `brief` print about the parallelism limit -- "parallel: 6
+    #: (auto: ceiling 8; limited by load per core)" or "parallel: 4 (fixed)" -- set only
+    #: when the caller passed the limit in force (`plan(parallel=...)`).
+    parallel_line: str = ""
     #: Open phases whose every task is finished (`unpickable`'s "finished_phase"), in
     #: scope of the plan's `phase`. Offered to CLOSE -- the phase's own pipeline, then
     #: `complete` -- and never closed here: its gates still decide (B28268eba1a).
@@ -797,6 +802,7 @@ def plan(
     now: float | None = None,
     agent: str = "",
     hold: Callable[[Item], Blocked | None] | None = None,
+    parallel: FC.Decision | None = None,
 ) -> Plan:
     """Compute the ready set.
 
@@ -882,16 +888,21 @@ def plan(
     live_items = [i for i in live if i in state.items and not state.items[i].removed]
     in_flight = len(live_items)
     with_trees = len([i for i in live_items if live[i].worktree])
-    flight_slots = max(0, cfg.schedule.max_parallel_tasks - in_flight)
+    # The limit in force: the caller's Decision (adaptive or fixed, `services/flowstate`),
+    # else `max_parallel_tasks` as it always was. A shrink never touches a running lease:
+    # in flight above the limit simply leaves no slot. Floor 1.
+    limit = max(1, parallel.limit) if parallel is not None else cfg.schedule.max_parallel_tasks
+    paused = parallel is not None and parallel.admit_paused
+    flight_slots = 0 if paused else max(0, limit - in_flight)
     if cfg.worktree.enabled:
         # 0 (the default) FOLLOWS the schedule limit; it is not unlimited (B-af-config)
-        tree_cap = cfg.worktree.max_parallel or cfg.schedule.max_parallel_tasks
+        tree_cap = cfg.worktree.max_parallel or limit
         tree_slots = max(0, tree_cap - with_trees)
     else:
         tree_slots = flight_slots  # no trees are made, so no tree cap applies
     slots = min(flight_slots, tree_slots)
     if slots == flight_slots:
-        cap = f"schedule.max_parallel_tasks={cfg.schedule.max_parallel_tasks}"
+        cap = _cap_words(cfg, parallel, limit)
         live_note = f"{in_flight} in flight across the queue"
         p.cap_note = f"the parallelism cap ({cap})"
         reached = f"parallelism cap reached ({cap})"
@@ -901,6 +912,8 @@ def plan(
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
     _cut_ready(state, cfg, p, slots, flight_slots, tree_slots, live_items, live_note, reached, hold)
+    if parallel is not None:
+        p.parallel_line = parallel_line(cfg, parallel, limit, in_flight, len(p.ready), p.capped)
     # Asked of `unpickable`, the one rule `doctor` reports by; offered, never acted on.
     p.finished = [
         u.item
@@ -909,6 +922,48 @@ def plan(
         and (not phase or u.item == phase or any(a.id == phase for a in state.ancestors(u.item)))
     ]
     return p
+
+
+def _words(signal: str) -> str:
+    """A controller's ``limited_by`` as people read it: ``load_per_core`` -> "load per
+    core"; the controller's own phrases ("ceiling", "independent work") pass through."""
+    return signal.replace("_", " ")
+
+
+def _cap_words(cfg: Config, parallel: FC.Decision | None, limit: int) -> str:
+    """What the parallelism cap is, for `cap_note` and "cap reached". Without a Decision,
+    or in fixed mode, exactly the words it always had (`_blocking_leases` keys on "cap
+    reached"); in auto, the adaptive limit and what limits it."""
+    if parallel is None or parallel.mode == "fixed":
+        return f"schedule.max_parallel_tasks={cfg.schedule.max_parallel_tasks}"
+    if parallel.admit_paused:
+        return f"auto: admission paused -- {parallel.reason}"
+    return f"auto: limit {limit}, limited by {_words(parallel.limited_by)}"
+
+
+def parallel_line(
+    cfg: Config,
+    parallel: FC.Decision,
+    limit: int,
+    in_flight: int,
+    offered: int,
+    capped: list[str],
+) -> str:
+    """The one line `status` and `brief` print: "parallel: 4 (fixed)", or "parallel: 6
+    (auto: ceiling 8; limited by <what>)". When the offer already holds every
+    independent ready item and nothing is held by the cap, what limits the work is the
+    work itself: "limited by independent work"."""
+    if parallel.mode == "fixed":
+        return f"parallel: {limit} (fixed)"
+    from .flowparams import params
+
+    ceiling = params(cfg).bounds()[2]
+    by = parallel.limited_by
+    if parallel.admit_paused:
+        by = f"{by}: admission paused"
+    elif not capped and in_flight + offered < limit:
+        by = FC.INDEPENDENT
+    return f"parallel: {limit} (auto: ceiling {ceiling}; limited by {_words(by)})"
 
 
 def critical_path(state: State, phase: str = "") -> list[str]:

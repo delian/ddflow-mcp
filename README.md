@@ -2741,8 +2741,16 @@ tell them apart invents work.
 floor — adding a fifth agent to a phase whose runtime is a four-deep chain buys nothing.
 It walks nested sub-tasks: an umbrella's open sub-tasks count as steps before it, and a
 phase another depends on contributes its chain. Items held back only by a cap
-(`schedule.max_parallel_tasks`, or a resource's capacity) are counted by `status` and `brief`, and the cap's message says when a slot
-is free. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
+(the parallelism limit, `worktree.max_parallel`, or a resource's capacity) are counted by `status` and `brief`, and the cap's message says when a slot
+is free and, under auto, what limits it: "N more are ready but held by the parallelism cap
+(auto: limit 6, limited by load per core)". Both print one line about the limit in force,
+`parallel: 6 (auto: ceiling 8; limited by load per core)` or `parallel: 4 (fixed)` (`status
+--json` and `ddflow_status` carry it as `parallel`); "limited by independent work" means the
+offer already holds every ready item that can run beside what is in flight. In fixed mode
+the cap's words are exactly what they always were (`schedule.max_parallel_tasks=N`). A
+shrink never touches a running lease: in flight above the new limit simply leaves no slot
+until enough finish; the limit is never below 1, and a critical signal pauses new
+admissions for that evaluation only. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
 person — a dependency cycle, an expired lease under `reclaim_policy = "report"` — it
 refuses at once rather than sleeping to its timeout.
 
@@ -2752,10 +2760,6 @@ refuses at once rather than sleeping to its timeout.
 
 How many items may be in flight adapts by default (decision D-adaptive-flow-accepted). In
 `[schedule]`:
-
-_Rollout: these knobs load, validate and are reported today; the sampler and `plan` wiring
-that let the controller move the limit land in the next adaptive-flow tasks. Until then auto
-holds at `max_parallel_tasks`, exactly like fixed._
 
 | Knob | Default | Meaning |
 |---|---|---|
@@ -2796,8 +2800,8 @@ signals (below), the log-derived rates, how many items were in flight and whethe
 limit was binding. The ring lives under the git-ignored `.ddflow/local/` (which also
 ignores itself, for a project whose `.ddflow/.gitignore` predates it), keeps the last six
 hours, and is folded through the controller with the `[schedule]` parameters whenever the
-limit is asked for, with the log-derived rates re-read at that moment (`plan` asks for it
-once the wiring task lands; until then the ring is recorded and auto holds at its start). A corrupt or
+limit is asked for, with the log-derived rates re-read at that moment. `next`, `brief`, `status`
+and `wait` plan with that limit. A corrupt or
 truncated line is skipped (and the file rewritten on the next sample), a clock that went
 backwards drops the sample, a short `O_EXCL` lock file keeps concurrent samplers to one
 sample per interval (the file's integrity does not depend on it: whole lines are appended

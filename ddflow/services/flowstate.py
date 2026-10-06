@@ -340,6 +340,16 @@ def current_limit(
     return _fold(ctx, read_ring(ctx.repo), now, fresh=True)
 
 
+def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.Decision | None:
+    """The limit `plan(parallel=...)` should use, without sampling (the project load
+    already took any sample that was due). ``None`` when it cannot be derived, and the
+    caller then plans with ``max_parallel_tasks`` exactly as before."""
+    try:
+        return current_limit(FlowCtx(repo=Path(repo), cfg=cfg, state=state, events=events))
+    except Exception:  # never let the derived limit stop a command
+        return None
+
+
 def doctor_notes(repo: Path) -> list[str]:
     """Notes, never problems, and writing nothing: a ring that cannot be read or written
     (auto then holds at its start value), and a local directory git does not ignore."""

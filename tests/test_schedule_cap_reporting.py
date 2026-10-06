@@ -161,7 +161,9 @@ def test_status_and_brief_prose_name_the_items_the_cap_holds(repo):
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(
-        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1)
+        cfg.read_text().replace(
+            "[schedule]\n", '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 2\n', 1
+        )
     )
     for i in range(1, 5):
         run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")

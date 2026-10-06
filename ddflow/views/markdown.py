@@ -696,6 +696,8 @@ def _brief_ready(out: list[str], plan: Plan) -> None:
             ]
     else:
         out.append("_Nothing ready._")
+    if plan.parallel_line:
+        out += ["", plan.parallel_line]
     if plan.capped:
         # Ready in every sense but the cap: listed apart from "Blocked", where six lines
         # of dependency waits buried them and a reader concluded only the ready few

@@ -313,7 +313,8 @@ SCOPE = (
 
 
 def test_the_in_flight_cap_counts_the_whole_queue_not_one_phase(repo):
-    _two_phases(repo, "[schedule]\nmax_parallel_tasks = 1\n")
+    # fixed: a cap of 1 is below auto's floor of 2 (B-af-wire-plan)
+    _two_phases(repo, '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 1\n')
     run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")
 
     ready = _ready_in(repo, "P2", "beta")

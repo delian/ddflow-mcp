@@ -114,7 +114,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     st = fold(events, strict=False)
     tracked = PR.work(events, st)
     findings = PR.detect(events, st, cfg)
-    p = plan(st, cfg, agent=log.agent_id)
+    from ..services.flowstate import limit_for
+
+    p = plan(st, cfg, agent=log.agent_id, parallel=limit_for(repo, cfg, st, events))
     rec = L.scan(log, cfg, repo)
 
     phases, tasks = st.phases(), st.tasks()
@@ -165,6 +167,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "interrupted": p.interrupted,
         "held_by_cap": [{"id": t.id, "title": t.title} for t in capped],
         "cap": p.cap_note if capped else "",
+        # "parallel: 6 (auto: ceiling 8; limited by ...)" or "parallel: 4 (fixed)"
+        "parallel": p.parallel_line,
         "agent_hours": round(hours, 2),
         "commits": commits,
         "decisions": len(live_decisions),
@@ -194,6 +198,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "interrupted": p.interrupted,
         "capped": capped,
         "cap": p.cap_note,
+        "parallel": p.parallel_line,
         "blocked": blocked,
         "recoverable": rec,
         "findings": findings,
