@@ -66,7 +66,9 @@ and wrong with no error for several in one tree: your work and theirs merge into
 single identity, `ddflow_brief` answers with someone else's task, and a review gate
 compares you against yourself and passes. Nothing can detect this from the outside, so
 say who you are: a short stable name for your role or assignment. Working alone in your
-own worktree, skip it.
+own worktree, skip it. On the stateless `2026-07-28` revision (no `initialize`) there is
+no connection to declare it on: `ddflow_identify` persists nothing, so name yourself on
+every call -- the `as_agent` argument, or `ddflow/agent` in the request's `_meta`.
 
 **The loop:** `ddflow_next` → `ddflow_claim` → work in the worktree →
 `ddflow_gate_status` and satisfy each gate → `ddflow_merge` → `ddflow_complete`.

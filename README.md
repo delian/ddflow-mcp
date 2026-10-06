@@ -502,7 +502,12 @@ instructions `initialize` carries; a version not served per request is refused w
 `-32602`; every modern result carries `resultType: "complete"` and the server's identity
 in `_meta`, and `tools/list`, `resources/list`, `resources/read`, `prompts/list` and
 `server/discover` carry `ttlMs` and `cacheScope: "private"` (an hour for the two lists
-fixed for the life of the server, 0 for everything read from the repository's state).
+fixed for the life of the server, 0 for everything read from the repository's state). Identity is per request in that era (D-mcp-identity-per-call): a modern request names its
+caller with the `as_agent` argument or `ddflow/agent` in `params._meta` (the argument wins
+when both are given; a malformed name is a tool error), and one that names nobody is
+attributed to the tree-derived default. `ddflow_identify` on a modern request persists
+nothing for the connection and answers how to name yourself instead; a connection that
+opened with `initialize` keeps connection-wide `ddflow_identify` exactly as before.
 `ddflow_identify` still names the agent for the rest of the connection in both eras;
 `as_agent` is the per-call form.
 
