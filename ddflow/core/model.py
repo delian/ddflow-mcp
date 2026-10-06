@@ -368,7 +368,9 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
                 raise
             _problem(st, ev, exc)
             continue
-        older = cur.data.get(OLDER_MARK)
+        # Provenance the LOG added to the payload, not part of the kind's shape: read from
+        # the event as written, so an upcaster that rebuilds the payload cannot drop it.
+        older = ev.data.get(OLDER_MARK)
         if older:
             st.older_version_events[str(older)] = st.older_version_events.get(str(older), 0) + 1
         handler = HANDLERS.get(cur.kind)
