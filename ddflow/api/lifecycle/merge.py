@@ -424,8 +424,11 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
     from ...core.schedule import path_in_glob
     from ...services.enforce import SELF_MANAGED
 
-    d = W.git(repo, "diff", "--name-only", f"{target}...{branch}")
-    changed = [p for p in d.out.splitlines() if p.strip()] if d.ok else []
+    # -z (via git_paths): a non-ASCII name is not C-quoted into one no glob matches;
+    # --no-renames: a rename lists its old path too, which the landing removes (B20dc45f4c5).
+    changed = (
+        W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{target}...{branch}") or []
+    )
     return [
         p
         for p in changed
