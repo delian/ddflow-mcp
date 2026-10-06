@@ -121,6 +121,8 @@ from .reviewers import (  # noqa: F401
     _declared_family,
     _unapproved_reviewer,
     family_of,
+    is_reviewer_gate,
+    reviewer_gates,
     reviewer_independence,
 )
 from .runner import (  # noqa: F401

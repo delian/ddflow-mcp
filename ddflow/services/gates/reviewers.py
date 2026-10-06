@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import shlex
-from typing import Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from ...config import Config
 from ...core.model import State
+
+if TYPE_CHECKING:
+    from .defs import GateDef
 
 
 def family_of(model: str, cfg: Config) -> str:
@@ -47,12 +51,35 @@ def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
     return ""
 
 
-#: The gates whose recorded model counts toward reviewer independence.
+#: The built-in gates whose recorded model counts toward reviewer independence. A gate
+#: whose definition declares `reviewer = "different_family"` counts too (`reviewer_gates`).
+#: `standards` is here without declaring it: roborev records the model that reviewed.
 REVIEWER_GATES = ("rubber_duck", "critic", "standards")
 
 
+def is_reviewer_gate(gate: str, gdef: GateDef | None) -> bool:
+    """Is `gate` one a cross-family reviewer records through: built in, or declared by its
+    definition (`reviewer = "different_family"`, B0e1330bf74)? A `same_family_ok` gate is
+    not: it says a same-family reviewer is enough, so its record shows no independence
+    and its model is not the author-family mistake `gate record` refuses."""
+    return gate in REVIEWER_GATES or (gdef is not None and gdef.reviewer == "different_family")
+
+
+def reviewer_gates(gates: Mapping[str, GateDef] | None) -> list[str]:
+    """Every reviewer gate: `REVIEWER_GATES`, then those `gates` declare. With no
+    definitions to read, the built-in set."""
+    extra = [
+        g for g, d in (gates or {}).items() if g not in REVIEWER_GATES and is_reviewer_gate(g, d)
+    ]
+    return [*REVIEWER_GATES, *extra]
+
+
 def reviewer_independence(
-    state: State, cfg: Config, item_id: str, author_model: str
+    state: State,
+    cfg: Config,
+    item_id: str,
+    author_model: str,
+    gates: Mapping[str, GateDef] | None = None,
 ) -> tuple[bool, str]:
     """Did at least one reviewer come from a different pretraining family?
 
@@ -74,7 +101,7 @@ def reviewer_independence(
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     unapproved: list[tuple[str, str]] = []
-    for gname in REVIEWER_GATES:
+    for gname in reviewer_gates(gates):
         rec = it.gates.get(gname)
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue
