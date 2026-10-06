@@ -180,10 +180,11 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     # D-contest-redisplay: a contestant displayed again after the claim that took it over
     # was released. Such an item is CONTESTED, so it is blocked, never in flight; listed
     # here, and only when there is one, so the shape is otherwise unchanged.
+    # The blocked items only: where the prose shows the mark, so the two always agree.
     taken = {
         t.id: (t.lease.holder, by)
-        for t in tasks
-        if t.lease is not None and not t.removed and (by := t.lease_taken_over_by())
+        for t in (st.items[b.item] for b in blocked)
+        if t.lease is not None and (by := t.lease_taken_over_by())
     }
     if taken:
         data["taken_over"] = [
