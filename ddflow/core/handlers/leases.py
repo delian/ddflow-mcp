@@ -249,6 +249,12 @@ def _released_claim(claims: list[dict[str, Any]], d: dict[str, Any]) -> str:
     return max(own, key=lambda c: c["lease"]["acquired_at"])["event"] if own else ""
 
 
+def _superseded_by_self(displaced: dict[str, Any], holder: str) -> bool:
+    """A claim of `holder`'s on the displaced record that `holder`'s own later claim
+    replaced (a re-claim after it lapsed), not one a rival took over."""
+    return displaced["holder"] == holder and displaced.get("by", {}).get("holder") == holder
+
+
 def _h_lease_gone(st: State, ev: Event) -> None:
     """Handle `lease.released` and `lease.expired`.
 
@@ -273,11 +279,21 @@ def _h_lease_gone(st: State, ev: Event) -> None:
     holder = d.get("holder")
     if ev.kind == "lease.released" and holder is not None:
         # A claim given up can no longer contradict a takeover of it.
-        given_up = _released_claim(it.displaced, d)
-        it.displaced = [e for e in it.displaced if e["event"] != given_up]
+        # A holder's earlier claims that its OWN later claim displaced are superseded, not
+        # rivals: releasing the latest gives them up too. Left in the contest, the next
+        # redisplay showed the releaser holding the item through one of them
+        # (B6e15f963d2). The displaced record keeps them, as history a late claim from
+        # another clone is still weighed against. Read before the line below, which takes
+        # a holder-only release's claim off that record.
+        superseded = [e["event"] for e in it.displaced if _superseded_by_self(e, holder)]
+        gone = _released_claim(it.displaced, d)
+        it.displaced = [e for e in it.displaced if e["event"] != gone]
+        for own in superseded:
+            if any(h["event"] == own for h in it.lease_contest):
+                _withdraw_claim(it, own)
         gone = _released_claim(it.lease_contest, d)
         if gone:
-            _withdraw_claim(it, gone, given_up)
+            _withdraw_claim(it, gone)
             return
     elif ev.kind == "lease.expired" and holder is not None:
         # A contestant whose expiry is RECORDED is no longer live, so it cannot collide
@@ -317,27 +333,16 @@ def _h_lease_gone(st: State, ev: Event) -> None:
     _redisplay(it)
 
 
-def _redisplay(it: Item, given_up: str = "") -> None:
+def _redisplay(it: Item) -> None:
     """The displayed lease was released while a contest stands: the latest contestant is
     displayed -- the fold's own rule, and what the log without the released claim shows.
     A displaced claim is never promoted: it lapsed before a takeover, and reviving it
     would turn the next ordinary claim into a recovery."""
     if it.lease is None and it.lease_contest:
-        # A claim already on the displaced record stays in the contest as history, but is
-        # passed over while a live contestant remains: promoting it showed a holder's own
-        # superseded claim right after that holder released (B6e15f963d2). Only when every
-        # contestant is displaced is the latest of them shown -- a standing contest always
-        # displays a claim.
-        # `given_up`: a holder-only release also ends that holder's latest displaced claim,
-        # which has just left the displaced record but must not be shown either.
-        displaced = {_key(e) for e in it.displaced}
-        live = [
-            h for h in it.lease_contest if _key(h) not in displaced and h["event"] != given_up
-        ] or it.lease_contest
-        _hold(it, Lease(**max(live, key=lambda h: h["lease"]["acquired_at"])["lease"]))
+        _hold(it, Lease(**max(it.lease_contest, key=lambda h: h["lease"]["acquired_at"])["lease"]))
 
 
-def _withdraw_claim(it: Item, event: str, given_up: str = "") -> None:
+def _withdraw_claim(it: Item, event: str) -> None:
     """A contested claim was released: it is withdrawn -- it, and nothing else. A claim
     left with no overlap partner has nothing to resolve: it leaves the contest (all of
     them do, once no two overlapped) and goes back on the record as history the
@@ -345,7 +350,7 @@ def _withdraw_claim(it: Item, event: str, given_up: str = "") -> None:
     it.lease_contest = [h for h in it.lease_contest if h["event"] != event]
     if it.lease is not None and it.lease.event == event:
         it.lease = None
-    _redisplay(it, given_up)
+    _redisplay(it)
     alone = [h for h in it.lease_contest if not _clashing(it.lease_contest, h)]
     if not alone or it.lease is None:
         return
