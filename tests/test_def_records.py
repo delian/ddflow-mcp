@@ -87,6 +87,22 @@ def test_an_update_changes_only_what_it_names_and_none_removes(repo):
     assert rec.digest == D.digest(rec.fields)
 
 
+def test_null_means_remove_in_an_update_and_is_refused_in_a_whole_definition(repo):
+    out = A.def_record(repo, "skill", "s", {"a": None, "b": 1}, agent="a")
+    assert out.exit == 1 and "null" in out.reason
+    A.def_record(repo, "skill", "s", {"a": 0, "b": 1}, agent="a")
+    # a field the update does not name is kept, falsy or not
+    assert A.def_update(repo, "skill", "s", {"b": 2}, agent="a").exit == 0
+    assert _state(repo).defs["skill:s"].fields == {"a": 0, "b": 2}
+
+
+def test_a_provenance_only_update_is_written(repo):
+    A.def_record(repo, "skill", "s", {"b": 1}, agent="a")
+    out = A.def_update(repo, "skill", "s", {}, provenance={"reviewed": "yes"}, agent="a")
+    assert out.exit == 0
+    assert _state(repo).defs["skill:s"].provenance == {"by": "a", "reviewed": "yes"}
+
+
 def test_an_update_that_changes_nothing_is_exit_2_and_writes_nothing(repo):
     A.def_record(repo, "doctype", "adr", {"sections": "context,decision"}, agent="a")
     before = len(EventLog(repo, "a").read_all())
@@ -187,13 +203,17 @@ def test_an_update_before_its_definition_is_kept_and_the_definition_then_replace
     ]
 
 
-def test_the_fold_is_deterministic():
-    env = {"kind": "rule", "id": "r"}
-    evs = [
-        _ev("def.recorded", "rule:r", {**env, "fields": {"c": "x"}}, 1),
-        _ev("def.retired", "rule:r", {**env, "reason": "old"}, 2),
-    ]
-    assert fold(evs).defs == fold(list(evs)).defs
+def test_a_merge_is_listed_by_its_successor_whichever_arrives_first():
+    """Shards merge out of order: ``merged_from`` must not depend on whether the merge or
+    the successor's definition was folded first. (A's own definition precedes its merge in
+    every order: recorded AFTER a merge, a definition is brought back, by design.)"""
+    a = _ev("def.recorded", "skill:A", {"kind": "skill", "id": "A", "fields": {}}, 1)
+    merge = _ev("def.merged", "skill:A", {"kind": "skill", "id": "A", "successor": "B"}, 2)
+    b = _ev("def.recorded", "skill:B", {"kind": "skill", "id": "B", "fields": {}}, 3)
+    for order in ([a, b, merge], [a, merge, b], [b, a, merge]):
+        st = fold(order)
+        assert st.defs["skill:B"].merged_from == ["A"], [e.kind for e in order]
+        assert st.defs["skill:A"].status == "merged"
 
 
 # -- the add-time duplicate check -------------------------------------------------------------

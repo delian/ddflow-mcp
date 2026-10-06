@@ -39,6 +39,13 @@ def _record(st: State, ev: Event) -> DefRecord:
     rec = st.defs.get(k)
     if rec is None:
         rec = st.defs[k] = DefRecord(kind=kind, id=rid, at=ev.ts, by=ev.agent)
+        # A merge into this one folded before it existed (shards out of order) still
+        # counts: the absorbed records are found by their successor, in either order.
+        rec.merged_from = [
+            o.id
+            for o in st.defs.values()
+            if o.kind == kind and o.status == MERGED and o.successor == rid and o.id != rid
+        ]
     return rec
 
 
