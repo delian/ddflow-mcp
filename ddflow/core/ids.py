@@ -294,8 +294,9 @@ def is_filing_of(cfg: Config, kind: str, rid: str, base: str) -> bool:
     kind minted any other way (a `{seq}` or `{hash}` one) has no re-filings at all."""
     if rid == base:
         return True
-    if "{digest}" not in TEMPLATE_OF[kind](cfg):
-        return False
+    template = TEMPLATE_OF[kind](cfg)
+    if "{digest}" not in template or not _pattern(template).fullmatch(base):
+        return False  # not a stable kind, or ``base`` is not an id of it
     return re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
 
 
