@@ -13,7 +13,31 @@ is the layer check doing exactly what it is for.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
+
+
+def calendar(cfg) -> dict[str, float]:
+    """`[cadence] every_days` as name -> days. Raises ValueError naming the knob for an
+    entry that is not `name=<positive number>`: one typo raised a bare float() error,
+    and an entry without `=` was DROPPED -- a weekly pass never reported due, and
+    nothing said the knob was ignored (roborev 830)."""
+    out: dict[str, float] = {}
+    for spec in cfg.cadence.every_days:
+        name, sep, days = spec.partition("=")
+        try:
+            value = float(days) if sep and name.strip() else 0.0
+        except ValueError:
+            value = 0.0
+        # Not `value <= 0`: nan and inf (also "1e309") pass that, and a period no elapsed
+        # time reaches is a pass that silently never falls due (bug B1c68fe5e9c).
+        if not (math.isfinite(value) and value > 0):
+            raise ValueError(
+                f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
+                f'number of days (e.g. "bug_hunt=7")'
+            )
+        out[name.strip()] = value
+    return out
 
 
 def count_due(st, cfg, *, replaced: set[str] = frozenset()) -> list[dict[str, Any]]:
@@ -47,19 +71,14 @@ def phase_overdue(st, cfg) -> list[str]:
     """Blockers for completing a phase: every phase-counted pass that is due. A calendar entry
     replaces a count-based pass only while every entry is well-formed; one malformed entry
     leaves all count-based passes in force."""
-    replaced: set[str] = set()
-    for spec in cfg.cadence.every_days:
-        name, _, days = spec.partition("=")
-        try:
-            ok = bool(name.strip()) and float(days) > 0
-        except ValueError:
-            ok = False
-        if not ok:
-            # `ddflow cadence` refuses a malformed list outright, so no calendar pass
-            # can fire in place of a count-based one: replace nothing.
-            replaced = set()
-            break
-        replaced.add(name.strip())
+    try:
+        # The ONE parse of every_days (`calendar`): a second copy here accepted inf as a
+        # period, so a pass it "replaced" stopped blocking the phase (roborev, B1c68fe5e9c).
+        replaced = set(calendar(cfg))
+    except ValueError:
+        # `ddflow cadence` refuses a malformed list outright, so no calendar pass
+        # can fire in place of a count-based one: replace nothing.
+        replaced = set()
     return [
         f"periodic pass overdue: {d['cadence']} ({d['since']} of {d['every']} phases since "
         f"the last). Run it, then `ddflow cadence --ran {d['cadence']}`; to skip it on the "
