@@ -91,7 +91,7 @@ repos:
           uv run pytest tests/ -m "not slow or scenarios" -q --timeout=420
           -n auto --dist worksteal
         language: system
-        files: ^(ddflow/|tests/|demos/|pyproject\.toml$|uv\.lock$)
+        files: ^(ddflow/|tests/|demos/|pyproject\.toml$|uv\.lock$|\.importlinter$)
         pass_filenames: false
 
   # A workflow file that does not validate fails on GitHub before any job runs.
