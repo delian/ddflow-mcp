@@ -735,6 +735,9 @@ class ImportPlan:
     #: board reading "0/3" for a phase whose other boxes shipped is otherwise read as
     #: "nothing shipped" (B45d5aa72fa).
     ticked_left_out: int = 0
+    #: Memories over `[memory] max_chars` the plan left out (never cut): counted in the
+    #: apply report as well as noted in the preview (B021a859d56).
+    long_memories_left_out: int = 0
     #: Records the import did NOT propose because they repeat one already held: each
     #: `Duplicate` says which and how closely. Reported, never written -- the operator
     #: or the onboarding agent decides what to do with them (decision D-no-duplicates).
@@ -3007,16 +3010,19 @@ def _leave_out_long_memories(repo: Path, plan: ImportPlan) -> None:
     _, too_long, limit = _memories_within(repo, plan)
     if too_long:
         plan.found = [f for f in plan.found if f not in too_long]
+        plan.long_memories_left_out = len(too_long)
+        named = ", ".join(f"{f.ident} ({f.source})" for f in too_long[:_NOTE_EXAMPLES])
+        more = ", ..." if len(too_long) > _NOTE_EXAMPLES else ""
         plan.notes.append(
             f"{len(too_long)} memory record(s) over [memory] max_chars ({limit}) not "
-            f"imported, never cut: {', '.join(f'{f.ident} ({f.source})' for f in too_long)}. "
-            f"Write each as a lesson, or shorten it in its source."
+            f"imported, never cut: {named}{more}. Write each as a lesson, or shorten it "
+            f"in its source."
         )
 
 
-def _count_long_memories(counts: dict[str, int], too_long: list[Found], limit: int) -> None:
-    if too_long:
-        counts[f"memory over [memory] max_chars ({limit}) not recorded"] = len(too_long)
+def _count_long_memories(counts: dict[str, int], left_out: int, limit: int) -> None:
+    if left_out:
+        counts[f"memory over [memory] max_chars ({limit}) not recorded"] = left_out
 
 
 def _imported_research(f: Found) -> dict[str, Any]:
@@ -3142,9 +3148,9 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     # OptMem records are operational MEMORIES -- the thing `brief` shows first and
     # `recall` searches -- not journal notes. Their store numbered them, so the id is
     # the store's (`M-0041`) and a re-import skips what is already remembered.
-    # A plan built by hand still gets the rule; `plan_import` already left them out.
+    # `plan_import` left them out and counted them; a plan built by hand gets the rule here.
     kept, too_long, limit = _memories_within(repo, plan)
-    _count_long_memories(counts, too_long, limit)
+    _count_long_memories(counts, len(too_long) + plan.long_memories_left_out, limit)
     for f in kept:
         log.append(
             "memory.recorded",
