@@ -189,3 +189,15 @@ def test_a_second_name_for_the_same_launch_is_reported_not_taken_for_the_id(tmp_
     )
     status, msg = CO.register(tmp_path, c, "claude")
     assert status == "unchanged" and "`ctx`" in msg, (status, msg)
+
+
+def test_an_id_given_before_add_reaches_it():
+    """B9969ac4fd9: `companions --id X add` parsed to id '' -- the add subparser's own
+    default overwrote what the parent parsed."""
+    from ddflow.surfaces import cli
+
+    p = cli.build_parser()
+    assert p.parse_args(["companions", "--id", "foo", "add"]).id == "foo"
+    assert p.parse_args(["companions", "add", "--id", "bar"]).id == "bar"
+    assert p.parse_args(["companions", "add"]).id == ""
+    assert p.parse_args(["companions", "--id", "foo", "list"]).id == "foo"

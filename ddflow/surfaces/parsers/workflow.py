@@ -137,7 +137,11 @@ def register(s: argparse._SubParsersAction) -> None:
             help="with --verify: comma-separated ids to launch (even if not installed)",
         )
     co_add = co_s.add_parser("add", help="register installed companions in an agent's MCP config")
-    co_add.add_argument("--id", default="", help="comma-separated; default: every installed one")
+    # SUPPRESS, as on `list`: the parent already defaults --id to "", and a subparser
+    # default would overwrite `companions --id X add` (bug B9969ac4fd9).
+    co_add.add_argument(
+        "--id", default=argparse.SUPPRESS, help="comma-separated; default: every installed one"
+    )
     co_add.add_argument("--agents", default="", help="comma-separated (default: claude)")
     co_add.add_argument(
         "--dry-run",
