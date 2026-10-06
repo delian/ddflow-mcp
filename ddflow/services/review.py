@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import family_for
+from ..core.digest import content_digest
 from ..infra import proc as P
 from ..services.gates import _missing_executable
 
@@ -303,10 +304,9 @@ def finding_digest(severity: str, location: str, title: str, detail: str) -> str
     triage of one is a triage of both. Telling them apart by position was tried and
     dropped: a position moves when an earlier chunk is re-reviewed, and the triage then
     lands on the wrong copy (three reviewers, d2b337f)."""
-    import hashlib
 
     text = "\x1f".join((severity.upper(), location.strip(), title.strip(), detail.strip()))
-    return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16]
+    return content_digest(text, errors="replace", length=16)
 
 
 #: How much of a finding's detail the gate evidence keeps for a later merge.
@@ -1558,9 +1558,8 @@ def _settle(res: ReviewResult) -> None:
 
 def diff_digest(diff: str) -> str:
     """What a chunk number refers to: the diff as reviewers are sent it."""
-    import hashlib
 
-    return hashlib.sha256(strip_hunk_context(diff).encode("utf-8", "replace")).hexdigest()
+    return content_digest(strip_hunk_context(diff), errors="replace")
 
 
 def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:

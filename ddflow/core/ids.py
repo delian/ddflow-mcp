@@ -8,7 +8,6 @@ place.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import time
@@ -17,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import ID_PREFIXES, Config, id_problem
+from .digest import content_digest
 
 
 def auto_id(prefix: str, *parts: str) -> str:
@@ -39,7 +39,7 @@ def auto_id(prefix: str, *parts: str) -> str:
     existing logs hold these ids and must replay identically.
     """
     seed = "|".join(parts) + f"|{time.time_ns()}"
-    return prefix + hashlib.blake2b(seed.encode("utf-8"), digest_size=5).hexdigest()
+    return prefix + content_digest(seed, "blake2b", size=5)
 
 
 def _hash(parts: tuple[str, ...] | list[str]) -> str:
@@ -283,7 +283,7 @@ def refile(base: str, sha: str) -> str:
     always recognises the result."""
     short = sha[:7].lower()
     if not re.fullmatch(r"[0-9a-f]{7}", short):
-        short = hashlib.blake2b(sha.encode("utf-8"), digest_size=4).hexdigest()[:7]
+        short = content_digest(sha, "blake2b", size=4, length=7)
     return "-".join((base, short))
 
 
