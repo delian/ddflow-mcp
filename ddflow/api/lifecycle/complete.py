@@ -9,7 +9,7 @@ from typing import Any
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import ABANDONED, DONE, REVIEW, State
+from ...core.model import ABANDONED, DONE, REVIEW, State, fold
 from ...services import leases as L
 from .._base import _load
 from ._common import _require
@@ -217,8 +217,6 @@ def _complete_umbrella(repo: Path, log, cfg, st: State, it) -> O.Outcome:
 
 def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> list[str]:
     """Every task umbrella above ``item`` that its completion settled, nearest first."""
-    from ...core.model import fold
-
     out: list[str] = []
     st = fold(log.read_all(), strict=False)
     for anc in st.ancestors(item):
