@@ -208,7 +208,8 @@ def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(
 
     monkeypatch.setattr(S, "TTL_S", LOADED_TTL_S)
     slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease
-    room = S.TTL_S - (slow + CI_LATENCY_S)  # what one loaded check leaves the machine
+    injected = slow + CI_LATENCY_S  # what each slowed check sleeps
+    room = S.TTL_S - injected  # what one loaded check leaves the machine
     assert room >= CI_LATENCY_S, f"one check leaves {room:.1f}s, less than CI's own cost"
 
     class Loaded(Scenario):
@@ -218,7 +219,7 @@ def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(
             # The two live-window checks: `recover`, and the claim whose answer is read.
             if argv[:1] == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
                 self.slowed = self.slowed | {argv[0]}
-                time.sleep(slow + CI_LATENCY_S)
+                time.sleep(injected)
             return super().ddflow(*argv, **kw)
 
     sc = Loaded("crash-recovery-loaded", tmp_path / "loaded")
