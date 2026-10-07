@@ -57,7 +57,10 @@ DATA_DAMAGE_TAG = "data-damage"
 
 #: Bug id -> why no repair is needed: the damage is mended by reading the log as it is
 #: (the fold or the reader already interprets the old shape correctly).
-FOLD_ONLY: dict[str, str] = {}
+FOLD_ONLY: dict[str, str] = {
+    "B5035a55092": "the reader split lines on U+2028, U+2029 and U+0085 written raw inside a "
+    "string; the fixed reader reads every such line whole, so nothing needs appending",
+}
 
 
 def by_id(rid: str) -> Repair:
