@@ -210,9 +210,11 @@ def verify_regression_test(
         with CI.merge_tree(repo, after, "") as (landed, why):
             if landed is None:
                 return REGRESSION_COULD_NOT_RUN, {"reason": why}
-            return verify_regression_test(
+            status, ev = verify_regression_test(
                 repo, cfg, tree=landed, base=base, tests=tests, gates=gates
             )
+        # The scratch checkout is gone once this returns: record the commit it was.
+        return status, {**ev, "tree": after}
     defn = (gates or load_gates(repo, cfg)).get("unit_tests")
     command = TS.run_command(defn.command if defn else "", tests, tree)
     if not command:
