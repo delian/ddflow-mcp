@@ -85,8 +85,10 @@ def test_the_scan_finds_the_knobs_the_bug_named() -> None:
         "ci.on_merge",
         "dedupe.on_match",
     ):
-        assert key in LISTED, key
-    assert len(LISTED) >= 21
+        # a knob declared with knob(choices=) lists nothing in a comment: its choices ARE
+        # the declaration (B-uni-knobs-sections-c)
+        assert key in LISTED or key in C.KNOB_CHOICES, key
+    assert len(set(LISTED) | set(C.KNOB_CHOICES)) >= 21
 
 
 @pytest.mark.parametrize("key", sorted(LISTED))

@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ._docs import _doc
+from ._docs import declare, knob
 
 #: The most fires the cap may allow in an hour: the cap is counted from each trigger's
 #: fire tail, and the fold keeps `core.handlers.jobs.TRIGGER_FIRES_KEPT` of them (config
@@ -30,16 +30,14 @@ def max_fires_problem(v: Any) -> str:
     return f"must be an integer from 0 to {TRIGGERS_MAX_FIRES_LIMIT} (0 = no trigger fires)"
 
 
+@declare("triggers")
 @dataclass
 class TriggersConfig:
     """Event triggers (D-sched-triggers-separate): limits across every trigger."""
 
     #: Fires across EVERY trigger in any rolling hour, at most (D-trigger-cap-knob).
-    max_fires_per_hour: int = 10
-
-
-_doc(
-    "triggers",
-    "max_fires_per_hour",
-    f"How many times triggers may fire, counted across EVERY trigger, in any rolling hour (default 10). A met condition past it is recorded as `trigger.suppressed` with the reason `global_cap` and files nothing. An integer from 0 to {TRIGGERS_MAX_FIRES_LIMIT} (the fire history the log keeps per trigger, which the count reads); 0 stops every trigger at once without disabling any definition.",
-)
+    max_fires_per_hour: int = knob(
+        10,
+        doc=f"How many times triggers may fire, counted across EVERY trigger, in any rolling hour (default 10). A met condition past it is recorded as `trigger.suppressed` with the reason `global_cap` and files nothing. An integer from 0 to {TRIGGERS_MAX_FIRES_LIMIT} (the fire history the log keeps per trigger, which the count reads); 0 stops every trigger at once without disabling any definition.",
+        check=max_fires_problem,
+    )
