@@ -56,11 +56,20 @@ def host() -> str:
     return socket.gethostname()
 
 
+def _stat(pid: int) -> str | None:
+    """`/proc/<pid>/stat`, or None. Bytes decoded leniently: the command name is whatever
+    bytes the process set, and as text a non-UTF-8 one raised UnicodeDecodeError -- not an
+    OSError, so no caller caught it (B7395b84149)."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_bytes().decode("utf-8", "replace")
+    except OSError:
+        return None
+
+
 def proc_start(pid: int) -> str:
     """The kernel's start time for `pid` (Linux `/proc/<pid>/stat` field 22), or ""."""
-    try:
-        raw = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
+    raw = _stat(pid)
+    if raw is None:
         return ""
     # The command name (field 2) is parenthesised and may contain spaces or ')'.
     rest = raw.rsplit(")", 1)[-1].split()
@@ -99,11 +108,10 @@ def alive(pid: int) -> bool:
     except PermissionError:
         return True
     # A zombie still answers kill(0): its entry exists until someone reaps it.
-    try:
-        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[-1].split()[0]
-    except OSError:
+    raw = _stat(pid)
+    if raw is None:
         return True
-    return state != "Z"
+    return raw.rsplit(")", 1)[-1].split()[0] != "Z"
 
 
 def logged_exit(log: str) -> int | None:

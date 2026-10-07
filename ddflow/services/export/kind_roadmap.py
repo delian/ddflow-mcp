@@ -2,10 +2,15 @@
 
 A phase is in NOW when any of its tasks is running or in review, NEXT when it has an open
 task nothing blocks, LATER when every open task waits on something (a dependency of its
-own or of an ancestor, or the blocked state), and DONE (a count only) when all its tasks
-are. A phase with no live tasks is DONE when its own state says so, else NEXT (nothing
-waits on it) or LATER (it names a dependency not met). A dependency in review with a branch
-counts as met, the scheduler's default stacking policy. Abandoned tasks are not counted. Pure over the Query: built from the single-pass
+own or of an ancestor, or the blocked state), and DONE (a count only) when it is closed and
+all its tasks are done. A phase with no open task -- none yet, or all done but the phase
+not closed -- is NEXT (nothing waits on it: there is work, or the phase is there to close)
+or LATER (it names a dependency not met). Whether one dependency is met is the scheduler's
+own answer (`schedule.dep_status`, under the project's `[flow].stack` and
+`[schedule].unknown_dep_policy`), so a phase counts as met when it is closed, as for `next`
+(B58010c24b3). Per dependency only: what `next` judges across several (two review branches
+to stack on) is not reflected here.
+Abandoned tasks are not counted. Pure over the Query: built from the single-pass
 children index, so a log of thousands of items renders in milliseconds.
 """
 
@@ -13,8 +18,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...config import Config
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, State
-from ...core.schedule import inherited_deps
+from ...core.schedule import dep_status, inherited_deps
 from . import registry
 from .frame import one_line
 from .query import ExportError, Query
@@ -27,31 +33,16 @@ _LANE_LABELS = (
 _LANES = tuple(k for k, _, _ in _LANE_LABELS)
 
 
-def _met(state: State, dep: str) -> bool:
-    """Is one dependency satisfied? Unknown or unobserved ids are NOT (the scheduler's
-    default policy), so a typo shows as blocked rather than as work that may start."""
-    it = state.items.get(dep)
-    if it is None or it.removed:
-        seen = state.external.get(dep)
-        return bool(seen and seen.get("state") == DONE)
-    if it.state == DONE or (it.state == REVIEW and it.branch):
-        return True
-    if it.kind == "phase":
-        kids = [t for t in state.tasks(it.id) if t.state != ABANDONED]
-        return bool(kids) and all(t.state == DONE for t in kids)
-    return False
-
-
-def waits_on(state: State, it: Item) -> list[str]:
+def waits_on(state: State, it: Item, cfg: Config) -> list[str]:
     """The ids ``it`` is waiting for, sorted (own and inherited dependencies not met)."""
-    return sorted({d for _, d in inherited_deps(state, it) if not _met(state, d)})
+    return sorted({d for _, d in inherited_deps(state, it) if not dep_status(state, d, cfg)[0]})
 
 
-def _task_row(q: Query, t: Item) -> dict[str, Any]:
+def _task_row(q: Query, t: Item, cfg: Config) -> dict[str, Any]:
     if t.state in (RUNNING, REVIEW):
         status, waits = t.state, []
     else:
-        waits = waits_on(q.state, t)
+        waits = waits_on(q.state, t, cfg)
         status = BLOCKED if (t.state == BLOCKED or waits) else "ready"
     return {
         "id": t.id,
@@ -65,6 +56,8 @@ def _task_row(q: Query, t: Item) -> dict[str, Any]:
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
         raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
+    # The project's config when the Query has a repo; the shipped defaults otherwise.
+    cfg = Config.load(q.repo) if q.repo is not None else Config()
     lanes: dict[str, list[dict[str, Any]]] = {k: [] for k in _LANES}
     done = 0
     open_tasks = 0
@@ -73,12 +66,12 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
             continue
         tasks = [t for t in q.tasks_under(p.id) if t.state != ABANDONED]
         n_done = sum(1 for t in tasks if t.state == DONE)
-        if (tasks and n_done == len(tasks)) or (not tasks and p.state == DONE):
+        if p.state == DONE and n_done == len(tasks):
             done += 1
             continue
-        rows = [_task_row(q, t) for t in tasks if t.state != DONE]
+        rows = [_task_row(q, t, cfg) for t in tasks if t.state != DONE]
         open_tasks += len(rows)
-        own_waits = waits_on(q.state, p) if not rows else []
+        own_waits = waits_on(q.state, p, cfg) if not rows else []
         # tasks_under is in item_key order (priority, id): the lane's own order is stable.
         if any(r["status"] in (RUNNING, REVIEW) for r in rows):
             lane = "now"

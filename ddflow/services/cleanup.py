@@ -147,6 +147,16 @@ def _protected(root: Path, cfg: Config, state: State, now: float | None = None) 
     return p
 
 
+def record_removed(log: EventLog, root: Path, path: str) -> None:
+    """`worktree.removed` for every item whose recorded tree is ``path``, as `merge`
+    writes it, so the fold stops pointing at a directory that is gone (B5e83fb22cb).
+    Call it under ``log.transaction()``, right after the removal."""
+    gone = _key(path)
+    for it in fold(log.read_all(), strict=False).items.values():
+        if it.worktree and _key(str(W.load_path(root, it.worktree))) == gone:
+            log.append("worktree.removed", it.id, {"path": it.worktree})
+
+
 def our_prefixes(cfg: Config) -> list[str]:
     """Branch prefixes that mark a branch as ddflow's: ``worktree.branch_prefix``, plus
     the feature/bugfix/hotfix prefixes when the project runs gitflow (B177), where
@@ -348,6 +358,8 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
                     item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base
                 )
                 r = W.remove(repo, cfg, wt)
+                if r.ok:
+                    record_removed(log, root, t.path)
             done.append(
                 f"{'removed' if r.ok else 'kept'} worktree {t.name}"
                 + ("" if r.ok else f": {(r.err or r.out).splitlines()[0][:120]}")
