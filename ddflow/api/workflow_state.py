@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..core.schedule import plan
+from ..services.gates import pipelines
 from ._base import _load
 
 _READY_SHOWN, _BLOCKED_SHOWN, _BUGS_SHOWN = 10, 5, 5
@@ -27,6 +28,7 @@ def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
         if i.kind == "task":
             tasks[i.state] = tasks.get(i.state, 0) + 1
     bugs = _bugs(st)
+    promotion = pipelines(cfg, running=True).get("promotion", [])
 
     overview = {
         "workflow": {
@@ -35,8 +37,10 @@ def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
             "max_parallel_tasks": cfg.schedule.max_parallel_tasks,
             "task_pipeline": list(cfg.gates.task_pipeline),
             "phase_pipeline": list(cfg.gates.phase_pipeline),
+            # Only where it runs, as `ddflow workflow` shows it (B726755d8f7).
+            "promotion_pipeline": promotion,
         },
-        "workflow_diagram": _diagram(list(cfg.gates.task_pipeline)),
+        "workflow_diagram": _diagram(list(cfg.gates.task_pipeline), promotion),
         "rules": _rules(repo),
         "decisions": _decisions(st),
         "active_work": {
@@ -103,11 +107,27 @@ def _rules(repo: Path) -> dict:
     return {"total": len(rules), "by_scope": by_scope}
 
 
-def _diagram(pipeline: list[str]) -> str:
-    """Mermaid flowchart of the task pipeline: claim, each gate in order, merge, complete."""
-    nodes = ["Claim"] + [re.sub(r"\W", "_", g) or "gate" for g in pipeline] + ["Complete"]
-    labels = ["Claim", *pipeline, "Complete"]
+def _diagram(pipeline: list[str], promotion: list[str] = ()) -> str:
+    """Mermaid flowchart of an item's way: claim, each task gate in order, complete, and
+    -- where one runs -- each promotion gate, ending promoted (B726755d8f7)."""
+    steps = [("", "Claim"), *(("", g) for g in pipeline), ("", "Complete")]
+    if promotion:
+        steps += [*(("promote_", g) for g in promotion), ("", "Promoted")]
+    # One node per step: a gate in both pipelines is a different step in each, and an id
+    # already taken (a task gate `promote_x`, two gates that both sanitise to `a_b`, a
+    # gate called `Complete`) gets a suffix rather than merging two steps.
+    nodes: list[str] = []
+    for prefix, name in steps:
+        node = prefix + _node(name)
+        while node in nodes:
+            node += "_"
+        nodes.append(node)
+    labels = [name for _prefix, name in steps]
     lines = ["flowchart LR"]
     for a, b, lb in zip(nodes, nodes[1:], labels[1:], strict=False):
         lines.append(f"    {a} --> {b}[{lb}]")
     return "\n".join(lines)
+
+
+def _node(gate: str) -> str:
+    return re.sub(r"\W", "_", gate) or "gate"
