@@ -27,9 +27,9 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 @pytest.fixture(autouse=True)
 def _every_review_is_a_full_round(monkeypatch):
-    """These tests count FULL rounds by repeating a plain review. With the shipped
-    `[review].delta_default` the second plain review would be a delta (that is
-    tests/test_review_delta.py), so this file runs the pre-delta behaviour."""
+    """These tests count FULL rounds by repeating a plain review, so they pin
+    `[review].delta_default` off (the shipped default since D-gate-economy 3) against a
+    machine that turned it on; the delta itself is tests/test_review_delta.py."""
     monkeypatch.setenv("DDFLOW_REVIEW_DELTA_DEFAULT", "0")
 
 
