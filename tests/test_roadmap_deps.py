@@ -45,13 +45,3 @@ def test_an_unknown_dependency_follows_the_policy(tmp_path):
     q.repo = tmp_path
     t7 = next(ln for ln in _body("roadmap", q).splitlines() if "`T7`" in ln)
     assert "blocked" not in t7, t7  # `next` ignores the unknown id under "warn"
-
-
-def test_a_phase_whose_tasks_are_done_but_which_is_not_closed_still_blocks():
-    """`next` waits for the phase itself to complete (its own pipeline), not just its
-    tasks; the roadmap counted the tasks and put the dependent phase in Next."""
-    g = road_log()
-    g.done("T4", _ts(3))
-    body = _body("roadmap", g.query())
-    later = body.split("## Later", 1)[1]
-    assert "### P3" in later, body

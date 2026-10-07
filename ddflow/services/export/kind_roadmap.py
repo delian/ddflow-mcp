@@ -4,9 +4,11 @@ A phase is in NOW when any of its tasks is running or in review, NEXT when it ha
 task nothing blocks, LATER when every open task waits on something (a dependency of its
 own or of an ancestor, or the blocked state), and DONE (a count only) when all its tasks
 are. A phase with no live tasks is DONE when its own state says so, else NEXT (nothing
-waits on it) or LATER (it names a dependency not met). Whether a dependency is met is the
+waits on it) or LATER (it names a dependency not met). Whether one dependency is met is the
 scheduler's own answer (`schedule.dep_status`, under the project's `[flow].stack` and
-`[schedule].unknown_dep_policy`), so the lanes and `ddflow next` agree (B58010c24b3).
+`[schedule].unknown_dep_policy`, B58010c24b3) -- except a phase whose tasks are all done,
+which this document counts DONE and so as met. Per dependency only: what `next` judges
+across several (two review branches to stack on) is not reflected here.
 Abandoned tasks are not counted. Pure over the Query: built from the single-pass
 children index, so a log of thousands of items renders in milliseconds.
 """
@@ -30,9 +32,19 @@ _LANE_LABELS = (
 _LANES = tuple(k for k, _, _ in _LANE_LABELS)
 
 
+def _met(state: State, dep: str, cfg: Config) -> bool:
+    it = state.items.get(dep)
+    if it is not None and not it.removed and it.kind == "phase" and it.state != DONE:
+        # The lanes count such a phase DONE; its dependents must not wait on it here.
+        kids = [t for t in state.tasks(it.id) if t.state != ABANDONED]
+        if kids and all(t.state == DONE for t in kids):
+            return True
+    return dep_status(state, dep, cfg)[0]
+
+
 def waits_on(state: State, it: Item, cfg: Config) -> list[str]:
     """The ids ``it`` is waiting for, sorted (own and inherited dependencies not met)."""
-    return sorted({d for _, d in inherited_deps(state, it) if not dep_status(state, d, cfg)[0]})
+    return sorted({d for _, d in inherited_deps(state, it) if not _met(state, d, cfg)})
 
 
 def _task_row(q: Query, t: Item, cfg: Config) -> dict[str, Any]:
