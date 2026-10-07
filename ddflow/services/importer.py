@@ -32,7 +32,6 @@ Three rules hold this together:
 
 from __future__ import annotations
 
-import fnmatch
 import os
 import re
 import stat
@@ -42,6 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.globs import match as glob_match
 from ..core.ids import free
 from ..core.model import ABANDONED, DONE, OPEN
 from ..core.schedule import is_external
@@ -900,7 +900,7 @@ def scan_todos(
         # of what the operator intends, not of the text. Held, not dropped: still
         # searchable, still resolvable as a dependency, and `ddflow unblock <phase>`
         # releases a whole section.
-        archived = any(fnmatch.fnmatch(rel, g) for g in archive)
+        archived = any(glob_match(rel, g) for g in archive)
         heading = ""
         heading_line = 0
         phase_ident = ""
