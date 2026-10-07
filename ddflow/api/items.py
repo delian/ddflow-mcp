@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -112,7 +111,6 @@ def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
     be merged or recovered apart), and for an item whose LIVE lease another agent holds
     -- moving someone's work out from under them is theirs to do.
     """
-    import time
 
     from ..infra import worktree as W
     from .lifecycle import _worktree_held_by
@@ -147,11 +145,7 @@ def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
             conflicts_with=held,
         )
     lease = it.lease
-    live = (
-        lease is not None
-        and not lease.expired_at
-        and not lease.expired(time.time(), cfg.lease.grace_s)
-    )
+    live = lease is not None and lease.live(time.time(), cfg.lease.grace_s)
     if live and lease.holder != me:
         return O.refused(
             "item.updated",
@@ -172,14 +166,9 @@ def _rebind(log, cfg, it, stored: str, branch: str) -> dict[str, str]:
     fail half-way. Recorded as `worktree.adopted`, as a claim that adopts a tree is:
     ddflow did not make it, so `merge` never removes it.
     """
-    import time
 
     lease = it.lease
-    if (
-        lease is not None
-        and not lease.expired_at
-        and not lease.expired(time.time(), cfg.lease.grace_s)
-    ):
+    if lease is not None and lease.live(time.time(), cfg.lease.grace_s):
         L.acquire(log, cfg, it.id, worktree=stored, branch=branch, force=True)
     log.append("worktree.adopted", it.id, {"path": stored, "branch": branch, "base": ""})
     return {"worktree": stored, "branch": branch}
@@ -616,18 +605,6 @@ def _options(it) -> str:
     return "; ".join(rows)
 
 
-def _drop_remote_claims(log, cfg, item: str, holders: list[str], kept: str) -> None:
-    """Outside the lock, as `leases.release` does: each released claim's remote ref goes
-    too, or with `[flow].claims = "remote"` it outlived the claim -- and the kept holder
-    takes the ref, which a displaced contestant did not hold (Bd45d1ad60e). Best effort,
-    as a renewal is: a ref not taken now is taken by the kept holder's next heartbeat."""
-    for holder in holders:
-        L._remote_drop(log, item, holder)
-    if kept and cfg.flow.claims == "remote":
-        with contextlib.suppress(L.LeaseError):
-            L._remote_take(log, cfg, item, kept, time.time())
-
-
 def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str = "") -> O.Outcome:
     """Settle a contested item: keep one definition and/or one claim, recorded as an event.
 
@@ -651,7 +628,6 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
     item over after every contestant had ended -- and then every contestant is released
     and the item stays where it is (B-resolve-cannot-keep-holder).
     """
-    import time
 
     log, cfg, _st = _load(repo, agent)
     with log.transaction():
@@ -723,21 +699,24 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
         # Releases FIRST: folded before the resolution, each withdraws a losing claim,
         # and the resolution then re-applies the kept one whichever was displayed.
         for h in losers:
-            log.append(
-                "lease.released",
+            L.release_claim(
+                log,
                 item,
-                {
-                    "holder": h["holder"],
-                    "event": h["event"],
-                    "by": log.agent_id,
-                    "note": f"lost the contest for {item}: {claims[0]['holder']} keeps it",
-                },
+                holder=h["holder"],
+                event=h["event"],
+                note=f"lost the contest for {item}: {claims[0]['holder']} keeps it",
             )
         log.append("item.resolved", item, data)
         for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
             log.append(f"{it.kind}.added", nid, d["data"])
-    _drop_remote_claims(
-        log, cfg, item, [h["holder"] for h in losers], claims[0]["holder"] if claims else ""
+    # Outside the lock: each released claim's remote ref goes too, and the kept holder
+    # takes the ref a displaced contestant did not hold (Bd45d1ad60e).
+    L.settle_remote(
+        log,
+        cfg,
+        item,
+        dropped=[h["holder"] for h in losers],
+        kept=claims[0]["holder"] if claims else "",
     )
     return O.ok(
         "item.resolved",

@@ -28,6 +28,7 @@ from ..config import Config
 from ..core import flow as F
 from ..core.model import DONE, REVIEW, GateRecord, Item, State, fold
 from ..infra import forge as FG
+from ..infra import git as GIT
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -305,13 +306,11 @@ def _remove_tree(repo: Path, cfg: Config, log: EventLog, it: Item, info: FG.PRIn
 
 def _diff_patch_id(repo: Path, a: str, b: str) -> str:
     """The patch-id of the combined change ``a`` -> ``b``; "" when git cannot say."""
-    diff = P.run(["git", "-C", str(repo), "diff", "--no-ext-diff", a, b], capture_output=True)
-    if diff.returncode != 0 or not diff.stdout:
+    diff = GIT.run(repo, "diff", "--no-ext-diff", a, b, binary=True)
+    if not diff.ok or not diff.out_bytes:
         return ""
-    ids = P.run(
-        ["git", "-C", str(repo), "patch-id", "--stable"], input=diff.stdout, capture_output=True
-    )
-    out = ids.stdout.decode("utf-8", "replace").split() if ids.returncode == 0 else []
+    ids = GIT.run(repo, "patch-id", "--stable", input=diff.out_bytes)
+    out = ids.out.split() if ids.ok else []
     return out[0] if out else ""
 
 
@@ -1007,19 +1006,12 @@ _SQUASH_SEARCH = 1000
 
 def _patch_ids(repo: Path, *log_args: str) -> dict[str, str]:
     """``{patch-id: commit}`` for the commits ``git log`` names, newest first; {} on failure."""
-    log = P.run(
-        ["git", "-C", str(repo), "log", "-p", "--no-ext-diff", "--no-merges", *log_args],
-        capture_output=True,
-    )
-    if log.returncode != 0 or not log.stdout:
+    log = GIT.run(repo, "log", "-p", "--no-ext-diff", "--no-merges", *log_args, binary=True)
+    if not log.ok or not log.out_bytes:
         return {}
-    ids = P.run(
-        ["git", "-C", str(repo), "patch-id", "--stable"],
-        input=log.stdout,
-        capture_output=True,
-    )
+    ids = GIT.run(repo, "patch-id", "--stable", input=log.out_bytes)
     out: dict[str, str] = {}
-    for line in ids.stdout.decode("utf-8", "replace").splitlines() if ids.returncode == 0 else []:
+    for line in ids.out.splitlines() if ids.ok else []:
         pid, _, commit = line.partition(" ")
         out.setdefault(pid, commit.strip())
     return out

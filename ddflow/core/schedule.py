@@ -21,18 +21,23 @@ losing their work. The asymmetry is not close, so the comparison errs toward "ye
 
 from __future__ import annotations
 
-import functools
-import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from fnmatch import fnmatch
 
 from ..config import Config
 from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
 from . import flowcontrol as FC
 from .flow import FEATURE, branch_kind, line_key, stack_base, unknown_line
+from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
+from .globs import match as glob_match
+from .globs import overlap as globs_overlap
+from .globs import regex as _glob_regex
 from .graph import closure, find_cycles, longest_chains
+
+
+def _gitattributes_re(pattern: str):  # kept until services/shared_files moves to core.globs
+    return _glob_regex(pattern, True)
 
 
 @dataclass
@@ -184,45 +189,6 @@ class Plan:
         )
 
 
-def globs_overlap(a: str, b: str) -> bool:
-    """Do two path patterns plausibly cover a common file?
-
-    Exact match, either pattern matching the other as a literal, or a shared literal
-    prefix. Deliberately approximate: computing true regular-language intersection of
-    two globs is both hard and beside the point, since the answer only decides whether
-    to re-order.
-    """
-    if a == b:
-        return True
-    if fnmatch(a, b) or fnmatch(b, a):
-        return True
-    pa = a.split("*", maxsplit=1)[0].split("?", maxsplit=1)[0]
-    pb = b.split("*", maxsplit=1)[0].split("?", maxsplit=1)[0]
-    if not pa or not pb:
-        return True  # a bare "*" covers everything
-    return pa.startswith(pb) or pb.startswith(pa)
-
-
-def path_in_glob(path: str, glob: str) -> bool:
-    """Is the concrete ``path`` INSIDE the claim glob ``glob``?
-
-    Not `globs_overlap`, whose literal-prefix rule is right for "could two patterns
-    share a file" and wrong here: a staged `a.md` counted as covered by a claim on
-    `a.md.bak` (B1997c64c5a). Inside means: the glob itself, a file under a directory
-    glob (`src/a` or `src/a/`), an fnmatch match (whose `*` crosses `/`, as the claims
-    written so far assume), or -- for a glob with a `/` -- git's match, where a `**/` on
-    a path boundary is zero or more directories (`src/**/*.py` covers `src/b.py`).
-    """
-    if path == glob or path.startswith(glob.rstrip("/") + "/") or fnmatch(path, glob):
-        return True
-    if "/" not in glob.rstrip("/"):
-        return False  # git would match a bare name at any depth; a claim on `a.md` is one file
-    try:
-        return bool(_gitattributes_re(glob).match(path))
-    except re.error:
-        return False
-
-
 def stale_package_globs(globs: Iterable[str], tracked: Iterable[str]) -> list[tuple[str, str]]:
     """(glob, correction) for each literal `x.py` glob that is not a tracked file while a
     package `x/` is: the module was split into a package, and a lease on the old name covers
@@ -253,77 +219,14 @@ def shared_globs(cfg: Config) -> list[str]:
     ]
 
 
-def _class_end(pat: str, i: int) -> int:
-    """Index of the `]` closing the class opened at ``pat[i]``, or -1 (then `[` is literal).
-
-    A `]` right after `[`, `[!` or `[^` is a MEMBER, as in git and Python: `[]]`, `[^]]`.
-    Taken as the closer, it left `[^]` -- an invalid regex that crashed a claim.
-    """
-    k = i + 1
-    if k < len(pat) and pat[k] in "!^":
-        k += 1
-    if k < len(pat) and pat[k] == "]":
-        k += 1
-    return pat.find("]", k)
-
-
-@functools.lru_cache(maxsize=256)
-def _gitattributes_re(pattern: str) -> re.Pattern[str]:
-    """``pattern`` as git matches it in `.gitattributes` (gitignore rules).
-
-    `*` and `?` stop at `/`; `**/` is any leading directories (none included), `/**` and
-    `**` anything below; a pattern with no `/` matches the name at any depth, one with a
-    `/` is anchored at the root. fnmatch's `*` crosses `/` and its `**/x` needs a `/`, so
-    it disagreed with the very line `merge=union` is written as (review finding).
-    """
-    anchored = "/" in pattern.rstrip("/")
-    pat = pattern.lstrip("/")
-    out: list[str] = []
-    i = 0
-    while i < len(pat):
-        # `**` is "any depth" only on a path boundary -- a leading `**/`, a `/**/`, a
-        # trailing `/**`; elsewhere it is two plain `*`s, which stop at `/` (gitignore(5)).
-        at_start = i == 0 or pat[i - 1] == "/"
-        if at_start and pat.startswith("**/", i):
-            out.append("(?:.*/)?")
-            i += 3
-        elif at_start and pat.startswith("**", i) and i + 2 == len(pat):
-            out.append(".*")
-            i += 2
-        elif pat[i] == "*":
-            out.append("[^/]*")
-            i += 1
-        elif pat[i] == "?":
-            out.append("[^/]")
-            i += 1
-        elif pat[i] == "[" and _class_end(pat, i) != -1:
-            j = _class_end(pat, i)
-            body = pat[i + 1 : j].replace("\\", "\\\\")
-            # git negates with `[!...]` as well as `[^...]`; Python knows only `^`.
-            if body.startswith("!"):
-                body = "^" + body[1:]
-            out.append("[" + body + "]")
-            i = j + 1
-        else:
-            out.append(re.escape(pat[i]))
-            i += 1
-    return re.compile(("" if anchored else "(?:.*/)?") + "".join(out) + r"\Z")
-
-
 def is_shared(glob: str, shared: list[str]) -> bool:
     """Is ``glob`` (a claim's glob or a staged path) INSIDE one of the ``shared`` globs?
 
     Inside, not overlapping: `docs/**` merely overlaps a shared `docs/CHANGELOG.md` and
     still claims the rest of `docs/`, so it stays exclusive. Matched as git matches the
-    `.gitattributes` line (`_gitattributes_re`), so "shared" and "merged with union" agree.
+    `.gitattributes` line (`core.globs`), so "shared" and "merged with union" agree.
     """
-    for s in shared:
-        try:
-            if glob == s or _gitattributes_re(s).match(glob):
-                return True
-        except re.error:
-            continue  # a pattern git would read and we cannot: equality only, never a crash
-    return False
+    return any(glob_match(glob, s, bare_any_depth=True) for s in shared)
 
 
 def conflicts(

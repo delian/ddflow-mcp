@@ -2131,6 +2131,18 @@
   
   '''
 # ---
+# name: test_help[ddflow version lint]
+  '''
+  usage: ddflow version lint [-h] [--waive CHANGE] [--reason REASON]
+  
+  options:
+    -h, --help       show this help message and exit
+    --waive CHANGE   let one unmanifested change (<kind>:<key>) ship, recorded with --reason: the
+                     operator's decision
+    --reason REASON  why --waive
+  
+  '''
+# ---
 # name: test_help[ddflow version show]
   '''
   usage: ddflow version show [-h] [--bump {,major,minor,patch}] [--line LINE]
@@ -2144,15 +2156,17 @@
 # ---
 # name: test_help[ddflow version]
   '''
-  usage: ddflow version [-h] {show,cut} ...
+  usage: ddflow version [-h] {show,lint,cut} ...
   
   positional arguments:
-    {show,cut}
-      show      current version, next version, why, release notes
-      cut       tag the next version (gitflow: via a release branch, or a release request)
+    {show,lint,cut}
+      show           current version, next version, why, release notes
+      lint           is every knob and event-kind change in this tree announced in the upgrade
+                     manifest?
+      cut            tag the next version (gitflow: via a release branch, or a release request)
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help       show this help message and exit
   
   '''
 # ---
@@ -2501,6 +2515,7 @@
     'ddflow verify',
     'ddflow version',
     'ddflow version cut',
+    'ddflow version lint',
     'ddflow version show',
     'ddflow wait',
     'ddflow workflow',

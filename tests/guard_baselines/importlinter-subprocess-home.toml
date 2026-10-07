@@ -17,7 +17,6 @@ ignore_imports = [
     "ddflow.services.bisect -> subprocess",
     "ddflow.services.ci -> subprocess",
     "ddflow.services.companions -> subprocess",
-    "ddflow.services.gates.evidence -> subprocess",
     "ddflow.services.gates.runner -> subprocess",
     "ddflow.services.onboard_tests -> subprocess",
     "ddflow.services.onboard_verify -> subprocess",

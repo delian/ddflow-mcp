@@ -102,6 +102,11 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "See NOT_EXPOSED for the full reason; the property is asserted end to end by "
         "test_no_mcp_tool_can_clear_a_human_gate rather than resting on this line."
     ),
+    ("version", "lint"): (
+        "the release lint runs inside ddflow_version_cut (also with dry_run), and its waiver "
+        "is the operator's decision, from the CLI; a tool of its own would cost every "
+        "client's tools/list for a check only a release-maker runs"
+    ),
     ("hooks", "status"): "covered by ddflow_hooks, whose action argument selects it",
     ("hooks", "install"): "covered by ddflow_hooks, whose action argument selects it",
     ("hooks", "uninstall"): "covered by ddflow_hooks, whose action argument selects it",
