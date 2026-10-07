@@ -179,8 +179,14 @@ def test_a_manifest_that_breaks_the_schema_is_refused(body, why):
 def test_a_release_that_is_not_a_table_is_refused():
     with pytest.raises(UM.ManifestError, match="not a table"):
         UM.parse('release = ["0.1.1"]\n' + BASE)
-    with pytest.raises(UM.ManifestError, match=r"\[base.knobs\] is a table"):
-        UM.parse('schema_version = 1\n[base]\nversion = "0.1.0"\nknobs = "x"\n')
+    for bad in ('"x"', '""', "[]", "0", "false"):
+        with pytest.raises(UM.ManifestError, match=r"\[base.knobs\] is a table"):
+            UM.parse(f'schema_version = 1\n[base]\nversion = "0.1.0"\nknobs = {bad}\n')
+    for bad in ('""', "0", "[1]"):
+        with pytest.raises(UM.ManifestError, match="event_kinds"):
+            UM.parse(f'schema_version = 1\n[base]\nversion = "0.1.0"\nevent_kinds = {bad}\n')
+    with pytest.raises(UM.ManifestError, match="array of tables"):
+        UM.parse('release = ""\n' + BASE)
 
 
 def test_the_manifest_ships_inside_the_package():

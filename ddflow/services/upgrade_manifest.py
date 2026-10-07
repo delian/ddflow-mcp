@@ -165,7 +165,7 @@ def _toml(text: str, what: str) -> dict[str, Any]:
 def _releases(data: dict[str, Any]) -> list[tuple[str, str, list[Change]]]:
     out: list[tuple[str, str, list[Change]]] = []
     seen: set[str] = set()
-    rels = data.get("release") or []
+    rels = data.get("release", [])
     if not isinstance(rels, list):
         raise ManifestError("`release` is an array of tables: write [[release]], not [release]")
     for i, rel in enumerate(rels):
@@ -211,11 +211,14 @@ def parse(text: str, fragments: list[tuple[str, str]] | None = None) -> Manifest
     base = data.get("base")
     if not isinstance(base, dict) or not base.get("version"):
         raise ManifestError("the manifest has no [base] with a version")
-    raw_knobs = base.get("knobs") or {}
+    raw_knobs = base.get("knobs", {})
     if not isinstance(raw_knobs, dict):
         raise ManifestError("[base.knobs] is a table of JSON-encoded defaults")
     knobs = {k: _decode(v, f"base.knobs.{k}") for k, v in raw_knobs.items()}
-    out = Manifest(str(base["version"]), knobs, sorted(base.get("event_kinds") or []))
+    kinds = base.get("event_kinds", [])
+    if not isinstance(kinds, list) or not all(isinstance(k, str) for k in kinds):
+        raise ManifestError("[base] event_kinds is an array of event kind names")
+    out = Manifest(str(base["version"]), knobs, sorted(kinds))
     out.releases = _releases(data)
     loose = _fragments(fragments or [])
     if loose and out.releases and out.releases[-1][0] == UNRELEASED:
