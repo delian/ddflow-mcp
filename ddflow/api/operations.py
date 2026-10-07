@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core import outcome as O
 from ..core.plain import plain
 from ._base import _load
@@ -70,8 +71,6 @@ def _calendar_due(
     st, cfg, now: float | None = None, calendar: dict[str, float] | None = None
 ) -> list[dict[str, Any]]:
     """Calendar cadences not recorded as run within their period -- or ever."""
-    from ..core.progress import epoch
-
     now = time.time() if now is None else now
     due = []
     for name, days in (calendar if calendar is not None else _calendar(cfg)).items():
@@ -79,13 +78,15 @@ def _calendar_due(
         # The NEWEST run by its own timestamp, not the last in fold order: the log is
         # ordered by Lamport clock, and two machines' runs can fold older-last
         # (rubber-duck).
-        last = max((epoch(r["at"]) for r in runs), default=0.0)
+        last = max((clock.epoch(r["at"], naive="local") for r in runs), default=0.0)
         age_days = (now - last) / 86400 if last else None
         if age_days is None or age_days >= days:
             due.append(
                 {
                     "cadence": name,
-                    "since": "never" if age_days is None else f"{age_days:.1f} days",
+                    "since": "never"
+                    if age_days is None
+                    else clock.fmt_age(now - last, "days", places=1),
                     "every": days,
                     "unit": "days",
                 }

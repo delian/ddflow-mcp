@@ -13,6 +13,7 @@ import json
 import sys
 
 from ...api import knowledge as A
+from ...core import clock
 from ...core import provenance as PV
 from ...core.events import OLDER_MARK
 from ...core.model import LINK_RELATIONS
@@ -177,7 +178,7 @@ def cmd_memory(a, c: Ctx) -> int:
         return NOTHING
     for m in out.data["memories"]:
         gone = f"  [FORGOTTEN: {m['forgotten']}]" if m["forgotten"] else ""
-        print(f"{m['id']}  {m['at'][:10]}  {m['text']}{gone}")
+        print(f"{m['id']}  {clock.fmt_date(m['at'])}  {m['text']}{gone}")
     return OK
 
 
@@ -610,8 +611,7 @@ def _history_line(ev) -> str:
     if d.get(OLDER_MARK):  # after the cut: the mark is the part that must never be lost
         detail = f"{detail} [older ddflow {d[OLDER_MARK]}]"
     return (
-        f"  {ev.ts[:16].replace('T', ' ')}  {ev.agent:<14.14s} "
-        f"{ev.subject:<22.22s} {verb:<22s} {detail}"
+        f"  {clock.fmt_minute(ev.ts)}  {ev.agent:<14.14s} {ev.subject:<22.22s} {verb:<22s} {detail}"
     )
 
 

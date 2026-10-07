@@ -12,6 +12,7 @@ import json
 import sys
 
 from ...api import export as A
+from ...core import clock
 from ..context import NOTHING, OK, REFUSED, Ctx
 
 
@@ -100,7 +101,7 @@ def _list(c: Ctx, *, may_ack: bool = True) -> int:
         if r.get("locked"):
             state += " (locked by the operator)"
         if r.get("enabled_by"):
-            when = str(r.get("enabled_at", ""))[:16].replace("T", " ")
+            when = clock.fmt_minute(str(r.get("enabled_at", "")))
             state += f" -- enabled by {r['enabled_by']} {when}"
             state += (
                 " (not acknowledged)" if r.get("by_agent") and not r.get("acknowledged") else ""
