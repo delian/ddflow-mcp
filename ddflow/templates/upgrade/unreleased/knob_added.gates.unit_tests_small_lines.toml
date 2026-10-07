@@ -1,4 +1,4 @@
-#  One unreleased change; cutting a version folds it into that release.
+# One unreleased change; cutting a version folds it into that release.
 
 [[change]]
 kind = "knob_added"

@@ -222,7 +222,10 @@ def load(path: Path | str | None = None) -> Manifest:
 def changes_since(version: str, manifest: Manifest | None = None) -> list[Change]:
     """Every change in a release NEWER than ``version``, oldest release first: what a
     project last worked on by ``version`` meets when it upgrades. An unparsable
-    ``version`` (none recorded) is older than everything: every change is returned."""
+    ``version`` (none recorded) is older than everything: every change is returned.
+
+    The base is a floor: a project older than ``base_version`` gets every listed change,
+    but not what changed before the base (its knobs are in ``replay(upto=base)``)."""
     m = manifest or load()
     since = release_key(version) if version_key(version) or version == UNRELEASED else (0, ())
     return [c for v, _d, cs in m.releases if release_key(v) > since for c in cs]
