@@ -48,8 +48,10 @@ def exit_for(exc: BaseException) -> int | None:
     (B5f3a650c40), which disagreed: MCP called every Key/Type/ValueError "bad arguments",
     so a refusal that subclasses ValueError (`ReviewerRefused`) read as a malformed call,
     and a `LeaseError` as an internal error. A class declares its own exit with
-    `exit_code` (every refusal: `REFUSED`); a ValueError or KeyError is an error in what
-    was asked (`FAIL`); None means a bug, which each surface lets surface as one."""
+    `exit_code` (every refusal: `REFUSED`; `GitError`: `FAIL`); a ValueError or KeyError
+    is an error in what was asked (`FAIL`); None means a bug, which each surface lets
+    surface as one. One surface-specific reading stays with MCP: a TypeError there is a
+    malformed call (JSON arguments are untyped), where argparse has typed the CLI's."""
     if isinstance(exc, KeyboardInterrupt):
         return INTERRUPTED
     declared = getattr(type(exc), "exit_code", None)

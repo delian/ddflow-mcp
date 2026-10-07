@@ -37,7 +37,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ddflow.core.outcome import REFUSED, exit_for
+from ddflow.core.outcome import NOTHING, OK, REFUSED, exit_for
 
 # The protocol engine -- revisions, negotiation, the modern envelope, multi round-trip --
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
@@ -726,7 +726,8 @@ class Server:
                     if code == REFUSED:
                         return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
                     if getattr(type(exc), "exit_code", None) is not None:
-                        return _ok(mid, _text(str(exc), error=True, meta={"exit": code}))
+                        failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
+                        return _ok(mid, _text(str(exc), error=failed, meta={"exit": code}))
                     if code is not None or isinstance(exc, TypeError):
                         return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                     raise

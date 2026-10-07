@@ -26,7 +26,6 @@ import sys
 from ..api import items as A_ITEMS
 from ..core.model import fold
 from ..core.outcome import INTERRUPTED, exit_for
-from ..infra import worktree as W
 from ..services import gates as G
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
@@ -331,18 +330,14 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
         return int(args.fn(args, ctx))
-    except KeyboardInterrupt:
-        return INTERRUPTED
-    except W.GitError as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        return FAIL
-    except Exception as exc:
+    except BaseException as exc:
         # One table with MCP (`exit_for`, B5f3a650c40): a refusal says only its message
         # (the remedy), an error names its kind, and anything else is a bug -- re-raised.
         code = exit_for(exc)
         if code is None:
             raise
-        print(str(exc) if code == REFUSED else f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        if code != INTERRUPTED:
+            print(str(exc) if code == REFUSED else f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return code
 
 
