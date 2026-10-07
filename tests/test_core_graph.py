@@ -73,7 +73,24 @@ def test_find_cycles_finds_one_exactly_when_networkx_does(adj):
     for cyc in cycles:
         assert cyc[0] == cyc[-1] == min(cyc)
         assert all(b in adj[a] for a, b in itertools.pairwise(cyc))
+    # every item on a cycle is named in one (Bfdaf61894b)
+    g = nx_of(adj)
+    on_a_cycle = {
+        n
+        for scc in nx.strongly_connected_components(g)
+        for n in scc
+        if len(scc) > 1 or g.has_edge(n, n)
+    }
+    assert {n for cyc in cycles for n in cyc} == on_a_cycle
     assert find_cycles is G.find_cycles  # the old import path still works
+
+
+def test_find_cycles_names_an_item_only_on_a_cycle_through_a_finished_node():
+    """Bfdaf61894b: n3 is on n0 -> n3 -> n1 -> n0, but the DFS finishes n1 before it
+    reaches n3, so the back-edge cycles alone never named it."""
+    adj = {"n0": ["n3", "n1"], "n1": ["n0"], "n2": ["n0", "n2"], "n3": ["n1"]}
+    items = {k: Item(id=k, kind="task", needs=list(v)) for k, v in adj.items()}
+    assert G.find_cycles(items) == [["n0", "n1", "n0"], ["n0", "n3", "n1", "n0"], ["n2", "n2"]]
 
 
 @settings(max_examples=150, deadline=None)
@@ -104,8 +121,10 @@ def test_longest_chains_match_networkx(adj):
 
 def test_longest_chains_refuses_a_cycle_instead_of_looping():
     adj = {"a": ["b"], "b": ["c"], "c": ["a"]}
-    with pytest.raises(graphlib.CycleError):
+    with pytest.raises(graphlib.CycleError) as e:
         G.longest_chains(adj, lambda n: adj[n])
+    cyc = e.value.args[1]
+    assert isinstance(cyc, list) and cyc[0] == cyc[-1] and len(cyc) == 4
     with pytest.raises(graphlib.CycleError):
         G.longest_chains(["s"], lambda n: ["s"])
 
