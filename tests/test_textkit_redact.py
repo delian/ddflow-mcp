@@ -11,7 +11,8 @@ from ddflow.core import redact as R
 from ddflow.services import bugreport, redact_report, sessions
 from ddflow.services.export import safe
 
-LEAKY = "key sk-abcdefghijklmnop1234 at 10.20.30.40 in /home/someone/proj mail a.b@example.org"
+LAN = ".".join(("10", "20", "30", "40"))
+LEAKY = f"key sk-abcdefghijklmnop1234 at {LAN} in /home/someone/proj mail a.b@example.org"
 
 
 def test_the_old_homes_re_export_the_one_engine():
@@ -30,7 +31,7 @@ def test_an_unknown_profile_is_refused():
 def test_every_text_profile_removes_the_full_set_and_is_idempotent(name):
     red = redact_report.redactor(name, Config())
     out = red.text(LEAKY).text
-    for leaked in ("sk-abcdefghijklmnop1234", "10.20.30.40", "/home/someone", "a.b@example.org"):
+    for leaked in ("sk-abcdefghijklmnop1234", LAN, "/home/someone", "a.b@example.org"):
         assert leaked not in out, (name, leaked)
     assert red.text(out).text == out
 

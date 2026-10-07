@@ -30,12 +30,9 @@ a control that silently stops matching is the failure mode that matters.
 from __future__ import annotations
 
 import ipaddress
-import os
 import re
-import socket
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 
 #: The tool's own names are public, and a report about ddflow must still say "ddflow".
 PUBLIC_NAMES = frozenset({"ddflow", "ddflow-mcp", "ddflow_mcp"})
@@ -170,32 +167,8 @@ def _coerce(text: object) -> str:
         return ""
 
 
-def redact_text(
-    text: object,
-    *,
-    secret_patterns: Iterable[str],
-    hostname: str | None = None,
-    names: Iterable[str] = (),
-    home: str | os.PathLike[str] | None = None,
-    repo_root: str | os.PathLike[str] | None = None,
-    secret_style: str = "marker",
-) -> Redacted:
-    """Redact `text` for an upstream report. Returns the text and a count per kind.
-
-    Kinds: `secret`, `email`, `path`, `ipv4`, `ipv6`, `host`, `hostname`, `name`.
-
-    `names` is the caller's list of project names (literal words, matched
-    case-insensitively on word boundaries); the caller adds `[upstream].redact_extra`
-    once that section exists. The repo directory name is added here. `hostname`, `home`
-    and `repo_root` default to the machine's own at run time (the repo root is found by
-    walking up from the working directory to a `.git`). Secrets use `secret_patterns` (the
-    session `redact_patterns` and `redact_extra`; the services layer supplies them from the
-    config, since `core` cannot read it).
-    `secret_style` "mask" keeps the surrounding words (`api_key: [REDACTED]`, the event
-    log's style); "marker" (the default) replaces the match by `[REDACTED:secret]`.
-    """
-    p = _Pass(_coerce(text))
-    for pat in secret_patterns:
+def _secrets(p: _Pass, patterns: Iterable[str], style: str) -> None:
+    for pat in patterns:
         try:
             compiled = re.compile(pat)
         except re.error as exc:
@@ -206,15 +179,51 @@ def redact_text(
                 f"it. Pass the list as JSON instead:\n"
                 f"""  DDFLOW_SESSION_REDACT_PATTERNS='["pattern one", "pattern two"]'"""
             ) from exc
-        p.sub(compiled, "secret", fill=_mask if secret_style == "mask" else None)
+        p.sub(compiled, "secret", fill=_mask if style == "mask" else None)
+
+
+def mask_secrets(text: object, secret_patterns: Iterable[str]) -> tuple[str, int]:
+    """Only the secrets, context-preserving (`api_key: [REDACTED]`); (clean text, count)."""
+    p = _Pass(_coerce(text))
+    _secrets(p, secret_patterns, "mask")
+    return p.text, p.counts.get("secret", 0)
+
+
+def redact_text(
+    text: object,
+    *,
+    secret_patterns: Iterable[str],
+    hostname: str | None = None,
+    names: Iterable[str] = (),
+    home: str | None = None,
+    repo_root: str | None = None,
+    secret_style: str = "marker",
+) -> Redacted:
+    """Redact `text` for an upstream report. Returns the text and a count per kind.
+
+    Kinds: `secret`, `email`, `path`, `ipv4`, `ipv6`, `host`, `hostname`, `name`.
+
+    `names` is the caller's list of project names (literal words, matched
+    case-insensitively on word boundaries); the caller adds `[upstream].redact_extra`
+    once that section exists. The repo directory name is added here. `hostname`, `home`
+    and `repo_root` are the values to remove (`None` or empty: none; the services layer
+    resolves "the machine's own" before it calls, since `core` reads no environment).
+    Secrets use `secret_patterns` (the
+    session `redact_patterns` and `redact_extra`; the services layer supplies them from the
+    config, since `core` cannot read it).
+    `secret_style` "mask" keeps the surrounding words (`api_key: [REDACTED]`, the event
+    log's style); "marker" (the default) replaces the match by `[REDACTED:secret]`.
+    """
+    p = _Pass(_coerce(text))
+    _secrets(p, secret_patterns, secret_style)
 
     p.sub(_EMAIL, "email")
 
-    root = Path(repo_root) if repo_root is not None else _cwd_repo_root()
-    home_dir = str(home) if home is not None else os.path.expanduser("~")
+    root = _coerce(repo_root)
+    home_dir = _coerce(home)
     # The repo root keeps its tail: `<root>/ddflow/x.py` is a useful frame.
-    if root and str(root) not in ("", "/", "."):
-        p.sub(re.compile(re.escape(str(root)) + r"(?![\w.-])"), "path")
+    if root not in ("", "/", "."):
+        p.sub(re.compile(re.escape(root) + r"(?![\w.-])"), "path")
     if home_dir and home_dir not in ("/", "~", ".", ""):
         p.sub(
             re.compile(
@@ -233,12 +242,14 @@ def redact_text(
 
     p.sub(_HOST, "host")
 
-    machine = hostname if hostname is not None else _machine_name()
-    for h in _host_forms(machine):
+    for h in _host_forms(_coerce(hostname)):
         p.sub(_term(h), "hostname")
 
     words: set[str] = set()
-    for raw in [*names, root.name if str(root) not in ("", ".") else ""]:
+    for raw in [
+        *names,
+        root.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] if root not in ("", ".") else "",
+    ]:
         word = _coerce(raw).strip()
         if len(word) >= _MIN_TERM and word.lower() not in PUBLIC_NAMES:
             words.add(word)
@@ -255,24 +266,6 @@ def _host_forms(machine: str) -> list[str]:
         (f for f in forms if len(f) >= _MIN_TERM and f.lower() not in _GENERIC_HOSTS),
         key=lambda f: (-len(f), f),
     )
-
-
-def _machine_name() -> str:
-    try:
-        return socket.gethostname()
-    except OSError:
-        return ""
-
-
-def _cwd_repo_root() -> Path:
-    try:
-        cwd = Path.cwd()
-    except OSError:
-        return Path("")
-    for d in (cwd, *cwd.parents):
-        if (d / ".git").exists():
-            return d
-    return cwd
 
 
 #: A `Bearer <token>` match splits into exactly two parts: the scheme and the secret.
@@ -301,8 +294,9 @@ def _mask(s: str) -> str:
 
 @dataclass(frozen=True)
 class Profile:
-    """Which machine-local inputs a profile reads. `None` means "the machine's own at run
-    time"; `""` means "none", so the output is byte-identical on every machine."""
+    """Which machine-local inputs a profile removes. `None` means "the machine's own",
+    which `services.redact_report.redactor` resolves from the environment; `""` means
+    "none", so the output is byte-identical on every machine."""
 
     name: str
     hostname: str | None
