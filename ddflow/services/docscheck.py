@@ -40,7 +40,7 @@ from urllib.parse import unquote
 
 from ..config import EnforceConfig
 from ..core.digest import content_digest
-from ..infra import proc as P
+from ..infra import git as G
 from .docsync import glob_regex
 
 #: Files larger than this are not scanned for names: a lockfile or a data dump is not a
@@ -231,15 +231,11 @@ def check_docs(
 def _tree(root) -> list[str]:
     """Tracked files plus untracked-but-not-ignored ones: a doc written alongside the file
     it links to is checked before either is committed."""
-    r = P.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-        capture_output=True,
-        timeout=60,
-    )
-    if r.returncode != 0:
-        raise OSError(f"git ls-files failed in {root}: {r.stderr.decode('utf-8', 'replace')[:200]}")
-    names = r.stdout.decode("utf-8", "surrogateescape").split("\0")
-    return sorted({n for n in names if n and (root / n).is_file()})
+    r = G.run(root, "ls-files", "--cached", "--others", "--exclude-standard", z=True)
+    names = r.paths()
+    if names is None:
+        raise OSError(f"git ls-files failed in {root}: {r.err[:200]}")
+    return sorted({n for n in names if (root / n).is_file()})
 
 
 class _Tree:

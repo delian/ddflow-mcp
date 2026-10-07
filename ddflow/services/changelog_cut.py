@@ -50,12 +50,10 @@ class Prepared:
 
 
 def _git(repo: Path, *args: str) -> W.GitResult:
-    try:
-        return W.git(repo, *args)
-    except Exception as exc:  # a timeout or a missing git
-        raise ExportError(
-            f"could not run git: {type(exc).__name__}: {exc}", EXIT_UNAVAILABLE
-        ) from exc
+    r = W.git(repo, *args)
+    if r.unavailable:  # a timeout or a missing git
+        raise ExportError(f"could not run git: {r.err}", EXIT_UNAVAILABLE)
+    return r
 
 
 def prepare(repo: Path, cfg: Config, *, version: str, ref: str, fallback_notes: str) -> Prepared:
