@@ -431,13 +431,28 @@ def _is_umbrella(state: State, it: Item) -> bool:
     return bool(state.open_descendants(it.id))
 
 
-def _is_settled_umbrella(state: State, it: Item) -> bool:
-    """A task whose sub-tasks are all settled, at least one done: its work is finished,
-    so it is never ready work (`complete` records it; see api.lifecycle.complete)."""
+def _settled_umbrella_detail(state: State, it: Item) -> str:
+    """Why a task whose sub-tasks are ALL settled is not ready work, or "" when it is not
+    one. Self-contained (it does not lean on the open-umbrella check before it).
+
+    With at least one sub-task done, the work is finished and `complete` records it
+    (`api.lifecycle.complete._umbrella_children` is the same rule on the api side; core
+    cannot import it). With every one abandoned there is nothing to complete: it is the
+    operator's call to abandon it too or give it work."""
     if it.kind != "task":
-        return False
+        return ""
     below = state.descendants(it.id)
-    return bool(below) and any(state.items[i].state == DONE for i in below)
+    if not below or state.open_descendants(it.id):
+        return ""
+    if any(state.items[i].state == DONE for i in below):
+        return (
+            f"its sub-tasks are all settled: `ddflow complete {it.id}` records it with them "
+            "(an open bug it was filed to fix still needs its --regression-test)."
+        )
+    return (
+        f"every sub-task was abandoned: abandon it too (`ddflow abandon {it.id} --reason ...`) "
+        "or give it work."
+    )
 
 
 def plan_blocker(
@@ -492,15 +507,11 @@ def plan_blocker(
             f"{', '.join(k.id for k in kids[:6])}. Work those; this closes when they do.",
             [k.id for k in kids],
         )
-    if _is_settled_umbrella(state, it):
+    settled = _settled_umbrella_detail(state, it)
+    if settled:
         # Settled before its last sub-task's completion closed it (B797aff72d8): there is
-        # nothing to claim, only the completion to record.
-        return Blocked(
-            it.id,
-            "umbrella",
-            f"its sub-tasks are all done: `ddflow complete {it.id}` completes it with them.",
-            [],
-        )
+        # nothing to claim, only a decision to record.
+        return Blocked(it.id, "umbrella", settled, [])
     if it.id in in_cycle and cfg.schedule.cycle_policy == "error":
         cyc = next(c for c in cycles if it.id in c)
         return Blocked(it.id, "cycle", " -> ".join(cyc), [])
