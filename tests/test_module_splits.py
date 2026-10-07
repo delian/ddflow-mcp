@@ -47,7 +47,7 @@ DEFINED = {
         BUG_REPORT_COMMAND BUG_SCOPES BUG_SEVERITIES Finding LessonDraft NOTHING_TO_REMOVE
         STILL_QUEUED VERDICTS _EMPTY_SESSION_TEXT _FIX_TITLE_MAX _MIN_PAIR _bug_fields_problem
         _capture_lesson _defines _definitions _drop_fix_task _drop_fix_task_unchecked
-        _file_fix_task _fix_task_id _fix_task_of _has_fix_task _inside _is_open _link _live
+        _file_fix_task _fix_task_id _fixing_item _fix_task_of _has_fix_task _inside _is_open _link _live
         _looks_like_several _member _memory_row _needs_fix_task _open_phase_of _origin
         _own_fix_id _record_kind _research_fields _research_id_taken _settled
         _split_outside_brackets _store _sweep_records _titled _unknown_bug _unresolved_tests

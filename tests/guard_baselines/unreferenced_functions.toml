@@ -23,3 +23,5 @@ baseline = 6
 "ddflow/api/quota.py:quota_show" = "BL-quotas"
 "ddflow/api/quota.py:quota_list" = "BL-quotas"
 "ddflow/api/quota.py:quota_forget" = "BL-quotas"
+# One DAG module (B-uni-graph): the transitively reduced phase graph is its first caller.
+"ddflow/core/graph.py:transitive_reduction" = "B-rm-graph"
