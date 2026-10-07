@@ -93,7 +93,23 @@ def find_cycles(
                 path.append(dep)
                 stack.append((dep, edge(items[dep])))
     named = {n for cyc in found for n in cyc}
-    for n in sorted(items):
+    # Every cycle holds a back edge, so an unnamed item on one shares a strongly
+    # connected component with a named item: it is reachable from one and reaches one.
+    # Only those candidates are searched, so an acyclic plan (nothing named) costs no
+    # more than the DFS above.
+    candidates: set[str] = set()
+    if named:
+        out = {n: [d for d in edge(items[n]) if d in items] for n in items}
+        into: dict[str, list[str]] = {}
+        for n, ds in out.items():
+            for d in ds:
+                into.setdefault(d, []).append(n)
+        roots = sorted(named)
+        # one walk from all named items at once: "" is no item id (ids are never empty)
+        down = set(closure("", lambda x: out[x] if x else roots))
+        up = set(closure("", lambda x: into.get(x, []) if x else roots))
+        candidates = (down & up) - named
+    for n in sorted(candidates):
         if n not in named and (cyc := _shortest_cycle(n, items, edge)):
             lo = cyc.index(min(cyc))
             found.append(cyc[lo:] + cyc[:lo] + [cyc[lo]])
@@ -163,10 +179,11 @@ def longest_chains(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> di
                 p = preds[i]
                 if p in open_:
                     path = [f[0] for f in stack]
-                    # graphlib's shape: the cycle as a list, first node repeated last
-                    raise CycleError(
-                        "longest_chains needs an acyclic graph", [*path[path.index(p) :], p]
-                    )
+                    # graphlib's shape: each node an immediate predecessor of the next,
+                    # first repeated last. The stack runs dependent -> predecessor, so
+                    # the cycle is the stack from p onwards, reversed.
+                    cyc = [p, *reversed(path[path.index(p) + 1 :]), p]
+                    raise CycleError("longest_chains needs an acyclic graph", cyc)
                 if p not in memo:
                     open_.add(p)
                     stack.append((p, [q for q in before(p) if q in members], 0))

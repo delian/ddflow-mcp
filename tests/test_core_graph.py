@@ -85,6 +85,29 @@ def test_find_cycles_finds_one_exactly_when_networkx_does(adj):
     assert find_cycles is G.find_cycles  # the old import path still works
 
 
+def test_find_cycles_stays_linear_on_an_acyclic_plan():
+    """The pass that names items missed by the back-edge cycles runs only inside a
+    cyclic component; an acyclic chain asks each item's edges once."""
+    calls = 0
+
+    def needs(it):
+        nonlocal calls
+        calls += 1
+        return list(it.needs)
+
+    n = 5000
+    items = {
+        f"t{i:05d}": Item(id=f"t{i:05d}", kind="task", needs=[f"t{i - 1:05d}"] if i else [])
+        for i in range(n)
+    }
+    assert G.find_cycles(items, needs) == []
+    assert calls == n
+    items["t00000"].needs = ["t04999"]  # one big cycle: still one search, not one per item
+    calls = 0
+    assert len(G.find_cycles(items, needs)) == 1
+    assert calls <= 3 * n
+
+
 def test_find_cycles_names_an_item_only_on_a_cycle_through_a_finished_node():
     """Bfdaf61894b: n3 is on n0 -> n3 -> n1 -> n0, but the DFS finishes n1 before it
     reaches n3, so the back-edge cycles alone never named it."""
@@ -125,6 +148,8 @@ def test_longest_chains_refuses_a_cycle_instead_of_looping():
         G.longest_chains(adj, lambda n: adj[n])
     cyc = e.value.args[1]
     assert isinstance(cyc, list) and cyc[0] == cyc[-1] and len(cyc) == 4
+    # graphlib's orientation: each node is an immediate predecessor of the next
+    assert all(a in adj[b] for a, b in itertools.pairwise(cyc))
     with pytest.raises(graphlib.CycleError):
         G.longest_chains(["s"], lambda n: ["s"])
 
