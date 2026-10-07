@@ -1201,16 +1201,15 @@ BUILTIN_COVERAGE: dict[str, tuple[str, ...]] = {"rules": (BUILTIN_MEMORY,)}
 
 
 def coverage_gates(cfg) -> list[str]:
-    """The gates an item here passes through, in order, as coverage judges them: the
-    task pipeline, then the promotion pipeline where one runs (B726755d8f7).
-
-    Promotion only where `flow.environments` exist, as `ddflow workflow` shows it: a
-    pipeline nothing passes through advertises gates nothing is served for (Bc0cd05d0c5).
+    """Every gate a pipeline that runs here names, in pipeline order, once: what the
+    coverage views judge (B726755d8f7). Read off `gates.pipelines`, as `ddflow workflow`
+    reads it, rather than naming pipelines -- naming task alone dropped the promotion
+    pipeline, and a list would drop the next one the same way. `running`: a promotion
+    pipeline with no `flow.environments` advertises gates nothing passes (Bc0cd05d0c5).
     """
     out: list[str] = []
-    for gid in [*cfg.gates.task_pipeline, *pipelines(cfg, running=True).get("promotion", [])]:
-        if gid not in out:
-            out.append(gid)
+    for ids in pipelines(cfg, running=True).values():
+        out.extend(g for g in ids if g not in out)
     return out
 
 

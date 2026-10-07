@@ -23,7 +23,7 @@
     unchecked_companions    list  nobody probed (the handshake does not) — NOT "absent"
     rules_drift        list    {path, state, detail} for each rules file that is missing,
                                stripped or drifted. Empty when they are current.
-    gate_gaps          list    gate ids in the task pipeline with no companion behind them
+    gate_gaps          list    gate ids in the pipelines that run here with no companion behind them
     recoverable        int     crashed agents' worktrees that may hold work (dirty,
                                unmerged or unmeasurable), one per tree; clean ones are
                                not counted

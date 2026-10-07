@@ -113,9 +113,14 @@ def _diagram(pipeline: list[str], promotion: list[str] = ()) -> str:
     labels = ["Claim", *pipeline, "Complete"]
     nodes = ["Claim"] + [_node(g) for g in pipeline] + ["Complete"]
     if promotion:
-        # Prefixed: a gate in both pipelines is a different step in each.
         labels += [*promotion, "Promoted"]
-        nodes += ["promote_" + _node(g) for g in promotion] + ["Promoted"]
+        for g in [*promotion, "Promoted"]:
+            # A gate in both pipelines is a different step in each, and any id already
+            # taken (a task gate called `promote_x`) gets a suffix: one node per step.
+            node = _node(g) if g == "Promoted" else "promote_" + _node(g)
+            while node in nodes:
+                node += "_"
+            nodes.append(node)
     lines = ["flowchart LR"]
     for a, b, lb in zip(nodes, nodes[1:], labels[1:], strict=False):
         lines.append(f"    {a} --> {b}[{lb}]")
