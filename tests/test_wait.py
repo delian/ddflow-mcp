@@ -70,19 +70,45 @@ def test_a_conflicted_waiter_wakes_when_the_holder_releases(proj):
     assert WT.live_waiters(proj) == [], "a finished wait left its registration behind"
 
 
-def test_the_holder_is_told_at_heartbeat_who_it_is_holding_up(proj):
-    seen: dict = {}
+def _holder_beats_once_the_waiter_is_registered(proj: Path, seen: dict):
+    """The holder's side, on a thread: heartbeat once the waiter's registration exists --
+    not after a fixed delay, which a loaded machine outran (B5b15b15047) -- then release."""
 
-    def beat_then_release():
+    def run():
+        deadline = time.monotonic() + 15
+        while not WT.live_waiters(proj) and time.monotonic() < deadline:
+            time.sleep(0.02)
         seen["hb"] = A.heartbeat(proj, "T1", agent=HOLDER)
         return A.release(proj, "T1", agent=HOLDER)
 
-    t, _ = _later(0.4, beat_then_release)
+    return _later(0, run)
+
+
+def _assert_the_holder_was_told(proj: Path) -> None:
+    seen: dict = {}
+    t, _ = _holder_beats_once_the_waiter_is_registered(proj, seen)
     out = A.wait(proj, item="T2", timeout_s=20, poll_s=0.05, agent=WAITER)
     t.join(5)
     assert out.ok
     rows = seen["hb"].data["waiters"]
     assert [(w["agent"], w["item"], w["waiting_on"]) for w in rows] == [(WAITER, "T2", ["T1"])]
+
+
+def test_the_holder_is_told_at_heartbeat_who_it_is_holding_up(proj):
+    _assert_the_holder_was_told(proj)
+
+
+def test_the_holder_is_told_even_when_the_waiter_registers_late(proj, monkeypatch):
+    """B5b15b15047: under load the waiter registered after the holder's fixed-delay
+    heartbeat, which then saw no waiters. A slow registration reproduces it."""
+    register = WT.register
+
+    def slow_register(*args, **kw):
+        time.sleep(1.0)
+        return register(*args, **kw)
+
+    monkeypatch.setattr(WT, "register", slow_register)
+    _assert_the_holder_was_told(proj)
 
 
 def test_a_dependency_waiter_wakes_when_the_dependency_completes(proj):
