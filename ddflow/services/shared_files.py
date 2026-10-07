@@ -330,13 +330,13 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     """
     import re
 
-    from ..core.globs import regex as _glob_regex
+    from ..core.schedule import _gitattributes_re
 
     problems: list[str] = []
     notes: list[str] = []
     for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
         try:
-            _glob_regex(g, True)
+            _gitattributes_re(g)
         except re.error as exc:
             # `is_shared` treats it as matching only itself rather than crash a claim;
             # this is where that is said out loud.
