@@ -60,6 +60,7 @@ from .adopt import (
     place_server,
     server_entry_for,
 )
+from .gates import pipelines
 
 #: How long a detection probe may take. These are `--version`/`--help` calls, but one
 #: of them is `npx`, which will happily spend a minute fetching a package the first
@@ -1197,6 +1198,19 @@ BUILTIN_MEMORY = "ddflow memory"
 #: behind it" sent operators to install a second store beside the first. Named, not
 #: silently dropped from the gap list, so the report says WHAT covers the gate.
 BUILTIN_COVERAGE: dict[str, tuple[str, ...]] = {"rules": (BUILTIN_MEMORY,)}
+
+
+def coverage_gates(cfg) -> list[str]:
+    """Every gate a pipeline that runs here names, in pipeline order, once: what the
+    coverage views judge (B726755d8f7). Read off `gates.pipelines`, as `ddflow workflow`
+    reads it, rather than naming pipelines -- naming task alone dropped the promotion
+    pipeline, and a list would drop the next one the same way. `running`: a promotion
+    pipeline with no `flow.environments` advertises gates nothing passes (Bc0cd05d0c5).
+    """
+    out: list[str] = []
+    for ids in pipelines(cfg, running=True).values():
+        out.extend(g for g in ids if g not in out)
+    return out
 
 
 def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> dict[str, list[str]]:
