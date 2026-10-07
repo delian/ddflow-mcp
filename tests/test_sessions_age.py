@@ -34,3 +34,7 @@ def test_an_unparseable_timestamp_is_still_infinitely_old():
 
 def test_a_timestamp_before_1970_has_a_real_age():
     assert S._age_s("1969-12-31T23:59:59Z", now=THEN) == pytest.approx(THEN + 1)
+
+
+def test_the_epoch_instant_itself_has_a_real_age():
+    assert S._age_s("1970-01-01T00:00:00Z", now=THEN) == pytest.approx(THEN)
