@@ -30,3 +30,7 @@ def test_the_age_is_the_same_for_every_precision(ts):
 def test_an_unparseable_timestamp_is_still_infinitely_old():
     assert S._age_s("yesterday", now=THEN) == float("inf")
     assert S._age_s("", now=THEN) == float("inf")
+
+
+def test_a_timestamp_before_1970_has_a_real_age():
+    assert S._age_s("1969-12-31T23:59:59Z", now=THEN) == pytest.approx(THEN + 1)
