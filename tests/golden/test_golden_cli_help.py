@@ -12,6 +12,7 @@ import argparse
 import re
 
 import pytest
+from goldenfix import _pinned_environment  # noqa: F401 -- fixtures
 
 from ddflow.surfaces.cli import build_parser
 

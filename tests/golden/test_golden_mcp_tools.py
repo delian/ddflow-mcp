@@ -4,12 +4,14 @@ The names first, so an added, removed or reordered tool is one short diff; then 
 tool's full definition (description and input schema), keyed by name.
 """
 
+# ruff: noqa: F811 -- the goldenfix fixtures are imported, then named as parameters
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import pytest
+from goldenfix import _pinned_environment, project  # noqa: F401 -- fixtures
 
 from ddflow.surfaces.mcp import Server
 
