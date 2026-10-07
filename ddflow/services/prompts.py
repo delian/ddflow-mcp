@@ -543,6 +543,57 @@ def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) 
     return out
 
 
+def suite_gates(repo: Path) -> list[str]:
+    """Every configured gate that looks like a test suite, beyond `unit_tests`.
+
+    Read from the project's own config so the `all-tests` command names the suites
+    that actually exist here, rather than a generic list the reader has to translate.
+    """
+    try:
+        from ..config import Config
+        from .gates import load_gates
+
+        cfg = Config.load(repo)
+        gates = load_gates(repo, cfg)
+    except Exception:
+        return []
+    return sorted(
+        g.id
+        for g in gates.values()
+        if g.id != "unit_tests"
+        and g.is_command_gate
+        and any(w in g.id for w in ("test", "e2e", "smoke", "integration", "ui"))
+    )
+
+
+def render_command(name: str, repo: Path, args: dict[str, Any] | None = None) -> str:
+    """A workflow command or `[[macro]]` as an agent receives it: the ONE rendering MCP
+    `prompts/get`, the `ddflow_prompts` tool's `get` and `ddflow prompts get` share (B5a2a2933c9).
+
+    A shipped command binds every declared argument, empty when absent: the renderer is
+    strict about undefined names, and a command that raises because the operator omitted
+    an optional argument is a command nobody uses twice. A macro's declared params are
+    REQUIRED and its tool preamble goes on top (`macros.render`): an operator who declares
+    a parameter is saying the mode does not make sense without it.
+
+    Raises `TemplateError` for an unknown name and `macros.MacroError` for a macro that
+    refuses (a missing parameter).
+    """
+    args = dict(args or {})
+    if name in COMMANDS:
+        declared = dict.fromkeys(COMMANDS[name][2], "")
+        return render(
+            resolve_command(name, repo), **{**declared, **args, "test_gates": suite_gates(repo)}
+        )
+    from . import macros as M
+
+    macro = M.load_macros(repo).get(name)
+    if macro is None:
+        resolve_command(name, repo)  # raises the "unknown command ... Known:" error
+        raise TemplateError(f"unknown command {name!r}")
+    return M.render(macro, repo, {k: str(v) for k, v in args.items()})
+
+
 def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] | None = None):
     """A template or a command, whichever this name is.
 
