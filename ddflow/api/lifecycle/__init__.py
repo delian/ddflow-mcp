@@ -95,7 +95,6 @@ from .heartbeat import (  # noqa: F401
     release,
 )
 from .merge import (  # noqa: F401
-    NOT_LISTED,
     _branch_to_land,
     _dispose_tree,
     _lands_nothing,
