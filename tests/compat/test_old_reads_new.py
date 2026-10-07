@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,7 @@ from pathlib import Path
 import pytest
 from projection import differences, plain, project
 
+from ddflow.core.events import version_key
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
@@ -49,11 +51,9 @@ RELEASES = ROOT / "tests" / "fixtures" / "releases"
 MATRIX = ROOT / "scripts" / "ci" / "compat-matrix"
 
 
-def _key(version: str) -> tuple[tuple[int, int, str], ...]:
-    return tuple((0, int(x), "") if x.isdigit() else (1, 0, x) for x in version.split("."))
-
-
-FIXTURES = sorted((p.name for p in RELEASES.iterdir() if (p / "meta.json").is_file()), key=_key)
+FIXTURES = sorted(
+    (p.name for p in RELEASES.iterdir() if (p / "meta.json").is_file()), key=version_key
+)
 #: the project the current release wrote is the newest fixture; every earlier one is an old
 #: release to run against it
 NEWEST, OLD = FIXTURES[-1], FIXTURES[:-1]
@@ -61,13 +61,18 @@ NEWEST, OLD = FIXTURES[-1], FIXTURES[:-1]
 #: releases whose guard (D-upgrade-skew-guard) refuses every log write on a log stamped by a
 #: newer ddflow. A release that stops refusing, or one that starts, fails the test: edit here.
 LOG_GUARDED = {"0.1.15", "0.1.18"}
-#: version -> what its `adopt` rewrites of the files a newer ddflow stamped
-ADOPT_OVERWRITES = {
-    "0.1.3": "rewrites .mcp.json, .ddflow/.gitignore and the driver document",
-    "0.1.10": "rewrites .mcp.json and the driver document",
-    "0.1.15": "rewrites .mcp.json and the driver document",
-    "0.1.18": "rewrites .claude/settings.json, .mcp.json and the driver document",
+#: version -> the files its `adopt` rewrites although a newer ddflow stamped them, exactly
+ADOPT_OVERWRITES: dict[str, set[str]] = {
+    "0.1.3": {".mcp.json", ".ddflow/.gitignore", "docs/ddflow/drivers/implement-phase.md"},
+    "0.1.10": {".mcp.json", ".ddflow/.gitignore", "docs/ddflow/drivers/implement-phase.md"},
+    "0.1.15": {".mcp.json", ".claude/settings.json", "docs/ddflow/drivers/implement-phase.md"},
+    "0.1.18": {".claude/settings.json", ".mcp.json", "docs/ddflow/drivers/implement-phase.md"},
 }
+
+#: (version, command) -> a read that fails in that release on ITS OWN projects too, so it says
+#: nothing about the newer one: 0.1.3's `decision list` dies with `KeyError: 'live'` on any
+#: project that has a decision. Declared so a fixed or unrelated failure is told apart.
+OWN_BUGS = {("0.1.3", "decision list"): "KeyError: 'live'"}
 
 FUTURE_SHARD = "zz-future.jsonl"
 FUTURE_CONFIG_TOP = "future_top_level_key = 1\n"
@@ -153,9 +158,10 @@ def _venv(version: str) -> Path:
         proc = subprocess.run(
             [sys.executable, str(MATRIX), "venv", version], capture_output=True, text=True
         )
-        if proc.returncode != 0:
-            # an environment without the release history (a shallow clone) cannot build the
-            # old wheel: say so, never pass
+        assert proc.returncode in (0, 2), proc.stderr[-1500:]
+        if proc.returncode == 2:
+            # exit 2: the release's commit is not in this checkout (a shallow clone). Say so,
+            # never pass; any other failure -- a build, uv, a version mismatch -- is a failure
             pytest.skip(f"cannot build ddflow {version}: {proc.stderr.strip()[-300:]}")
         _VENVS[version] = Path(proc.stdout.strip())
     return _VENVS[version]
@@ -252,8 +258,13 @@ def test_old_reads_the_newer_project(old: Old, argv: tuple[str, ...]) -> None:
     before = old.snapshot()
     code, out, err = old.run(*argv)
     assert "Traceback" not in err + out, (err + out)[-1500:]
+    own = OWN_BUGS.get((old.version, " ".join(argv)))
+    if own:
+        assert code == 1 and own in err + out, (code, out, err)
+        return
+    assert not re.search(r"^\w*Error\b", err + out, re.M), (err + out)[-1500:]
     # doctor's exit 1 is a finding about the project, not a failure to read it
-    assert code in (0, 1, 2), (code, out, err)
+    assert code in ((0, 1, 2) if argv[0] == "doctor" else (0, 2)), (code, out, err)
     assert out.strip() or err.strip()
     assert _changed(old, before) == set()
 
@@ -317,6 +328,11 @@ def test_old_log_write_on_a_stamped_log(old: Old) -> None:
     else:
         assert code == 0, f"{old.version} is not in LOG_GUARDED but refused: {out}{err}"
         assert _changed(old, before) == set()
+        # wrote something: a release that exits 0 and records nothing is not "written"
+        assert any(
+            p.startswith(".ddflow/events/") and p.endswith(".jsonl") and p not in before
+            for p in old.snapshot()
+        )
 
 
 def test_old_adopt_over_newer_managed_files(old: Old) -> None:
@@ -331,6 +347,6 @@ def test_old_adopt_over_newer_managed_files(old: Old) -> None:
         assert changed == set()
         pytest.fail(f"{old.version} refuses adopt now; ADOPT_OVERWRITES must drop it")
     assert code == 0, (code, out, err)
-    assert changed, f"ADOPT_OVERWRITES says {old.version} {ADOPT_OVERWRITES[old.version]}"
+    assert changed == ADOPT_OVERWRITES[old.version]
     # the event log is not among the things it rewrote
     assert not any(p.startswith(".ddflow/events/") for p in changed)

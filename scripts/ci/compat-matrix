@@ -364,7 +364,8 @@ def release_venv(version: str) -> Path:
     Keyed by version and commit; a lock keeps concurrent callers from building it twice."""
     commit = release_commit(version)
     if commit is None:
-        raise SystemExit(f"cannot find the commit that released {version}")
+        print(f"cannot find the commit that released {version}", file=sys.stderr)
+        raise SystemExit(2)  # could not run: the history is not in this checkout
     dest = BUILD_ROOT / "venvs" / f"{version}-{commit[:10]}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     with (dest.parent / f"{dest.name}.lock").open("w") as lock:
