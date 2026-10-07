@@ -60,6 +60,7 @@ def cmd_onboard(a, c: Ctx) -> int:
     else:
         # Exit 2 is "nothing to do", a REPORT: it belongs on stdout like a success.
         print(text)
+    return out.exit
 
 
 def _result_lines(data: dict) -> str:
