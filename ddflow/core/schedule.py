@@ -433,7 +433,8 @@ def _is_umbrella(state: State, it: Item) -> bool:
 
 def _settled_umbrella_detail(state: State, it: Item) -> str:
     """Why a task whose sub-tasks are ALL settled is not ready work, or "" when it is not
-    one. Self-contained (it does not lean on the open-umbrella check before it).
+    one -- nor for a task that is itself done or abandoned. Self-contained (it does not lean
+    on the open-umbrella check before it).
 
     With at least one sub-task done, the work is finished and `complete` records it
     (`api.lifecycle.complete._umbrella_children` is the same rule on the api side; core
