@@ -102,15 +102,16 @@ def register(s: argparse._SubParsersAction) -> None:
     rw.add_argument(
         "--delta",
         action="store_true",
-        help="recheck ONLY what changed since the head the gate's last review covered: "
-        "not a full round, never refused by [review].max_rounds (this is the default once "
-        "the gate has a recorded review; [review].delta_default = false turns that off)",
+        help="recheck ONLY what changed since the head the gate's last review covered, for "
+        "a diff too large to send twice: not a full round, never refused by "
+        "[review].max_rounds. A plain re-review is a full round with the previous "
+        "findings; [review].delta_default = true makes it a delta instead",
     )
     rw.add_argument(
         "--full",
         action="store_true",
-        help="review the item's WHOLE diff even though the gate has a recorded review: a "
-        "full round, counted against [review].max_rounds",
+        help="review the item's WHOLE diff even when [review].delta_default would make it a "
+        "delta: a full round, counted against [review].max_rounds",
     )
     rw.add_argument(
         "--force",

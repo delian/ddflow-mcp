@@ -1029,9 +1029,11 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     it nor triage is ever refused.
     `force` with a `reason` runs a full round past the cap, recorded in the evidence.
 
-    With `[review].delta_default` (on unless a project turns it off) a plain review of a
-    gate that already has a recorded review is a `delta` too; `full` forces a full round.
-    A delta's findings are merged into the gate's record (`_merge_delta`).
+    A plain review of a gate that already has a recorded review is a FULL re-review whose
+    prompt carries the previous findings and their triage (`_with_previous_findings`,
+    decision D-gate-economy 3); with `[review].delta_default` (off unless a project turns
+    it on) it is a `delta` instead, and `full` forces a full round. A delta's findings are
+    merged into the gate's record (`_merge_delta`).
 
     `chunks` re-reviews only those chunks (numbered as the recorded review printed
     them) and merges the result into that record -- see `_rerun_scope`.
