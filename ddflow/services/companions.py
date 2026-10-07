@@ -49,6 +49,7 @@ from pathlib import Path
 from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
+from ..infra.fsio import atomic_write
 from ..infra.tomlcfg import value as toml_value
 from .adopt import (
     AGENT_TARGETS,
@@ -867,15 +868,16 @@ def _cache_path(repo: Path) -> Path:
     return repo / ".ddflow" / "local" / "companion-probes.json"
 
 
-def _read_cache(repo: Path, ttl_s: int) -> dict[str, tuple[bool, str]]:
-    """Cached probe results still inside the TTL. Unreadable cache = no cache."""
+def _read_cache(repo: Path, ttl_s: int) -> dict[str, tuple[bool, str, float]]:
+    """Cached probe results still inside the TTL, each with WHEN it was probed.
+    Unreadable cache = no cache."""
     if ttl_s <= 0:
         return {}
     try:
         raw = json.loads(_cache_path(repo).read_text("utf-8"))
         cutoff = time.time() - ttl_s
         return {
-            cid: (bool(e["installed"]), str(e["detail"]))
+            cid: (bool(e["installed"]), str(e["detail"]), float(e["at"]))
             for cid, e in raw.items()
             if isinstance(e, dict) and float(e.get("at", 0)) >= cutoff
         }
@@ -885,16 +887,21 @@ def _read_cache(repo: Path, ttl_s: int) -> dict[str, tuple[bool, str]]:
         return {}
 
 
-def _write_cache(repo: Path, fresh: dict[str, tuple[bool, str]]) -> None:
+def _write_cache(repo: Path, fresh: dict[str, tuple]) -> None:
+    """Each entry with its OWN probe time -- ``(installed, detail, at)``, or without
+    ``at`` for one probed just now: one stamped `now` on every write never expired while
+    any other companion was probed inside the TTL (Bc87ca3936a). Replaced atomically, so a
+    concurrent reader never sees half a file."""
     path = _cache_path(repo)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         now = time.time()
         merged = {
-            cid: {"installed": inst, "detail": detail, "at": now}
-            for cid, (inst, detail) in fresh.items()
+            # the entry's own `at` when it carries one, else now
+            cid: {"installed": e[0], "detail": e[1], "at": (*e[2:], now)[0]}
+            for cid, e in fresh.items()
         }
-        path.write_text(json.dumps(merged, indent=2), "utf-8")
+        atomic_write(path, json.dumps(merged, indent=2), fsync=False)
     except OSError:
         pass  # a cache that cannot be written is a cache miss next time; nothing breaks
 
@@ -922,11 +929,11 @@ def scan(repo: Path, *, probe: bool = True, ttl_s: int | None = None) -> list[St
         if not probe:
             inst, detail = None, "not probed"
         elif c.id in cached:
-            inst, detail = cached[c.id]
+            inst, detail, _at = cached[c.id]
         else:
             inst, detail = is_installed(c)
             if inst is not None:
-                fresh[c.id] = (inst, detail)
+                fresh[c.id] = (inst, detail, time.time())
         regs = registrations(repo, c)
         out.append(Status(c, inst, list(regs), detail, regs))
     if probe and ttl_s > 0 and fresh != cached:
