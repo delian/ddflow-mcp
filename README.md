@@ -1940,9 +1940,10 @@ Ready (1 ready, 0 running, 1 blocked):
 
 The refusal names *where* the dependency came from, because an operator told only
 "P2.T1 needs P1" goes looking for a declaration that is not written there. The one
-dependency **not** inherited is one pointing into your own subtree: an umbrella that
-declares a dependency on its own child would otherwise make the child wait for itself,
-turning a plan typo into a permanent hang.
+dependency **not** inherited is one pointing into your own subtree or at one of your own
+ancestors: an umbrella that declares a dependency on its own child would otherwise make
+the child -- and that child's sub-tasks -- wait for something that closes only after
+they do, turning a plan typo into a permanent hang.
 
 `ddflow claim` asks the *same* predicate `ddflow next` does. They used to disagree —
 `next` withheld a task on its dependencies and `claim` handed out a worktree for it a
@@ -2334,6 +2335,12 @@ ddflow loops       # circular references and runtime loops (exit 2 = none)
 bug X", or names X in a fix list ("fixes bugs A, B and X"), is a fix, a mention is not — the regression tests it was closed with, and an
 invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON (a task under no phase is listed in an **Unphased** section of the board, and under `unphased` in the JSON);
 `--agent`, `--repo` and `--json` are accepted after the subcommand as well as before it.
+
+**A phase's done/total is the same number everywhere** — the board, `phase list` (and
+`ddflow_read kind=phase`), the progress line after `complete` and the ROADMAP export. A phase counts every live task nested any depth below it, sub-tasks and bug-fix
+tasks included; an abandoned task is settled, so it is out of the total and shown as
+"N abandoned" where there is room. The progress line after completing a sub-task names
+the sub-task's phase, not its parent task.
 
 `next --phase`, `brief --phase` and `board --phase` refuse an id that is not an item
 and `next` names the phases that start with it; `board --phase` given a task id refuses,

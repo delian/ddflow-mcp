@@ -4,9 +4,9 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section.""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from ._docs import _doc
+from ._docs import declare, knob
 
 #: Model-name substring -> pretraining family, used to answer the one question the
 #: review stack rests on: "is this reviewer independent of the author?"
@@ -93,36 +93,37 @@ def router_set(model: str, routers: dict[str, list[str]]) -> list[str] | None:
     return None if found is None else sorted(found)
 
 
+@declare("agent")
 @dataclass
 class AgentConfig:
     """How ddflow talks to whichever agent is driving it."""
 
-    id: str = ""  # "" = derive from hostname+pid
-    reviewer_family_must_differ: bool = True
-    families: dict[str, str] = field(default_factory=lambda: dict(FAMILY_HINTS))
+    #: "" = derive from hostname+pid
+    id: str = knob(
+        "",
+        doc="Stable identity for this agent process, used to shard the event log so concurrent agents never write the same file. Empty auto-derives host-pid.",
+    )
+    reviewer_family_must_differ: bool = knob(
+        True,
+        doc="Require at least one reviewer from a different pretraining family than the author. A same-family reviewer shares the author's blind spots, so its agreement is not independent evidence.",
+    )
+    families: dict[str, str] = knob(
+        factory=lambda: dict(FAMILY_HINTS),
+        doc="Model-name substring (matched case-blind; an empty key matches nothing) to pretraining-family map, used to enforce the rule above. Extend it as new families appear; an unknown model establishes nothing -- an unrecognised author is refused, an unrecognised reviewer is not counted as different.",
+    )
     # HydraFusion ships with NO members: GitHub publishes no fixed roster (research
     # R-hydrafusion-families), and a guessed set that misses a provider passes that
     # provider's reviewer as independent.
-    routers: dict[str, list[str]] = field(default_factory=lambda: {"hydrafusion": []})
-
-
-_doc(
-    "agent",
-    "id",
-    "Stable identity for this agent process, used to shard the event log so concurrent agents never write the same file. Empty auto-derives host-pid.",
-)
-_doc(
-    "agent",
-    "reviewer_family_must_differ",
-    "Require at least one reviewer from a different pretraining family than the author. A same-family reviewer shares the author's blind spots, so its agreement is not independent evidence.",
-)
-_doc(
-    "agent",
-    "families",
-    "Model-name substring (matched case-blind; an empty key matches nothing) to pretraining-family map, used to enforce the rule above. Extend it as new families appear; an unknown model establishes nothing -- an unrecognised author is refused, an unrecognised reviewer is not counted as different.",
-)
-_doc(
-    "agent",
-    "routers",
-    'Model-name substring to the SET of families a router author draws on -- a model that routes each task across providers, such as Copilot\'s HydraFusion. A reviewer is independent of a router only when its family is outside the whole set; every entry whose name matches adds its families, and one left empty makes the set unknown. Checked before `families`. Default {hydrafusion = []}: GitHub publishes no fixed roster, so the set is empty and `complete --model hydrafusion` refuses until you list the families your plan routes to, e.g. routers = { hydrafusion = ["anthropic", "openai", "google"] }. From the env, JSON only.',
-)
+    routers: dict[str, list[str]] = knob(
+        factory=lambda: {"hydrafusion": []},
+        doc='Model-name substring to the SET of families a router author draws on -- a model that routes each task across providers, such as Copilot\'s HydraFusion. A reviewer is independent of a router only when its family is outside the whole set; every entry whose name matches adds its families, and one left empty makes the set unknown. Checked before `families`. Default {hydrafusion = []}: GitHub publishes no fixed roster, so the set is empty and `complete --model hydrafusion` refuses until you list the families your plan routes to, e.g. routers = { hydrafusion = ["anthropic", "openai", "google"] }. From the env, JSON only.',
+        # TOML arrives typed and `_coerce` passes it through untouched, so a string where a
+        # list belongs (`hydrafusion = "openai"`) would iterate as letters: a set of nonsense
+        # families that matches no reviewer, and so clears every one.
+        check=lambda v: (
+            ""
+            if isinstance(v, dict)
+            and all(isinstance(m, list) and all(isinstance(x, str) for x in m) for m in v.values())
+            else 'must be a table of lists of family names, e.g. { hydrafusion = ["openai"] }'
+        ),
+    )

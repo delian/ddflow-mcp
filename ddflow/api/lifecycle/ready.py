@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core import outcome as O
+from ...core import progress as PR
 from ...core.model import REVIEW
 from ...core.plain import plain
 from .._base import _load
@@ -143,7 +144,7 @@ def _unknown_phase(st, phase: str, *, phases_only: bool = False) -> str:
         if not phases_only or it.kind == "phase":
             return ""
         # `board` slices by PHASE id: a task id would answer an empty board at exit 0.
-        owner = next((a.id for a in st.ancestors(it.id) if a.kind == "phase"), "")
+        owner = PR.phase_of(st, it.id)
         where = f" -- it is under phase {owner!r}" if owner else ""
         return f"{phase!r} is a {it.kind}, not a phase{where}."
     under = sorted(

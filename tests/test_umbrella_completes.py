@@ -121,3 +121,39 @@ def test_an_umbrella_held_by_an_open_bug_says_so_instead_of_completing_silently(
     from ddflow.surfaces.tools import TOOLS
 
     assert "umbrella_refused" in TOOLS["ddflow_complete"]["payload"]
+
+
+def test_next_never_offers_a_settled_umbrella(repo):
+    """B797aff72d8: an umbrella settled before the last sub-task completed it (as
+    B-uni-fsio-writers was) is not ready work; next names the command that closes it."""
+    _split(repo)
+    log = EventLog(repo)
+    for child in ("P.T.a", "P.T.b"):
+        log.append("item.completed", child, {"sha": "", "kind": "task", "forced": True})
+    _code, out, _err = run_cli(repo, "--json", "next")
+    data = json.loads(out)
+    assert "P.T" not in [r["id"] for r in data.get("ready") or []], out
+    held = [b for b in data.get("blocked") or [] if b.get("item") == "P.T"]
+    assert held and "ddflow complete P.T" in held[0]["detail"], data.get("blocked")
+
+
+def test_next_does_not_offer_an_umbrella_whose_sub_tasks_were_all_abandoned(repo):
+    _split(repo)
+    for child in ("P.T.a", "P.T.b"):
+        assert run_cli(repo, "abandon", child, "--reason", "dropped")[0] == OK
+    _code, out, _err = run_cli(repo, "--json", "next")
+    data = json.loads(out)
+    assert "P.T" not in [r["id"] for r in data.get("ready") or []], out
+    held = [b for b in data.get("blocked") or [] if b.get("item") == "P.T"]
+    assert held and "ddflow abandon P.T" in held[0]["detail"], data.get("blocked")
+
+
+def test_a_half_done_umbrella_is_not_called_settled(repo):
+    """The predicate stands on its own: one sub-task open is not settled."""
+    from ddflow.core.schedule import _settled_umbrella_detail
+
+    _split(repo)
+    log = EventLog(repo)
+    log.append("item.completed", "P.T.a", {"sha": "", "kind": "task", "forced": True})
+    st = fold(log.read_all(), strict=False)
+    assert _settled_umbrella_detail(st, st.items["P.T"]) == ""
