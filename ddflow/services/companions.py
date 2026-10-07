@@ -49,7 +49,7 @@ from pathlib import Path
 from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
-from ..infra.fsio import atomic_write, replace_text
+from ..infra.fsio import Unreadable, atomic_write, read_json, replace_text
 from ..infra.tomlcfg import value as toml_value
 from .adopt import (
     AGENT_TARGETS,
@@ -1155,12 +1155,17 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
 
     data: dict = {}
     if path.exists():
-        try:
-            data = json.loads(path.read_text("utf-8") or "{}")
-        except json.JSONDecodeError:
-            # Checked BEFORE the dry run reports, so a preview never promises a write
-            # that the real call would decline.
+        # Checked BEFORE the dry run reports, so a preview never promises a write that
+        # the real call would decline.
+        read = read_json(path)
+        if isinstance(read, Unreadable) and read.kind == "invalid":
             return "refused", f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
+        if isinstance(read, Unreadable) and read.kind == "unreadable":
+            return "refused", (
+                f"SKIPPED {rel}: it could not be read ({read.detail}); add {c.id} by hand"
+            )
+        # Not an object: the placement below refuses it in its own words, as it always has.
+        data = read.value if isinstance(read, Unreadable) else read
     want = server_entry_for(target.shape, c.entry())
     if get_server(data, target.shape, c.id) == want:
         # IDENTICAL, not merely present. The previous version returned early whenever the

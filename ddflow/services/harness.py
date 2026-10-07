@@ -18,10 +18,10 @@ B-uni-dead-code removed them; the onboard prompt describes both steps for the op
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
+from ..infra.fsio import Unreadable, read_json
 from .adopt import SHAPE_MCP_SERVERS, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
 
@@ -49,12 +49,11 @@ def project_servers(repo: Path, *, mcp_rel: str = MCP_REL) -> dict[str, Any]:
     path = Path(repo) / mcp_rel
     if not path.is_file():
         return {}
-    try:
-        data = json.loads(path.read_text("utf-8") or "{}")
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
-        raise HarnessError(f"{mcp_rel} could not be read ({exc}); fix it by hand") from exc
-    if not isinstance(data, dict):
+    data = read_json(path)
+    if isinstance(data, Unreadable) and data.kind == "not-object":
         raise HarnessError(f"{mcp_rel} is not a JSON object; fix it by hand")
+    if isinstance(data, Unreadable):
+        raise HarnessError(f"{mcp_rel} could not be read ({data.detail}); fix it by hand")
     return get_servers(data, SHAPE_MCP_SERVERS)
 
 
