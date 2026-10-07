@@ -92,3 +92,23 @@ def test_a_flag_on_a_settled_umbrella_is_not_dropped(repo):
     code, out, err = run_cli(repo, "complete", "P.T", "--regression-test", "tests/x.py")
     assert code == 3 and "not the fix task of any open bug" in out + err, out + err
     assert _state(repo, "P.T") == "open"
+
+
+def test_an_umbrella_held_by_an_open_bug_says_so_instead_of_completing_silently(repo):
+    """A split fix task: its bug closes with a regression test, so the last sub-task's
+    completion cannot complete it -- and must say so, not report a silent success."""
+    import json as _json
+
+    _split(repo)
+    code, out, err = run_cli(repo, "--json", "bug", "found", "--summary", "a bug", "--item", "P.T")
+    assert code == OK, out + err
+    fix = _json.loads(out)["fix_task"]
+    code, out, err = run_cli(repo, "split", fix, "--into", f"{fix}.a=a", "--into", f"{fix}.b=b")
+    assert code == OK, out + err
+    assert run_cli(repo, "complete", f"{fix}.a", "--force")[0] == OK
+    from ddflow.api.lifecycle import complete
+
+    out = complete(repo, f"{fix}.b", force=True)
+    assert out.exit == OK, out.reason
+    assert fix in out.data.get("umbrella_refused", {}), out.data
+    assert _state(repo, fix) == "open"

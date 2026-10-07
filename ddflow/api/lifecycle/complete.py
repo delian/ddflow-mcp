@@ -177,7 +177,7 @@ def complete(
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
     # A split task "completes when its children do" (B651a63e574): the last sub-task's
     # completion completes its umbrella, and that one's, up the chain.
-    extra["umbrellas_completed"] = _complete_umbrellas_above(repo, log, cfg, item, agent)
+    extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
@@ -196,21 +196,28 @@ def _umbrella_children(st: State, it) -> list[str]:
     return [i for i in below if st.items[i].state == DONE]
 
 
-def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> list[str]:
-    """Every task umbrella above ``item`` that its completion settled, nearest first --
-    each completed through `complete` itself, so it is recorded like any completion."""
-    out: list[str] = []
+def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> dict[str, Any]:
+    """Complete the task umbrella just above ``item`` if this completion settled it --
+    through `complete` itself, so it is recorded like any completion and climbs on from
+    there. ``{"umbrellas_completed": [...]}``, plus ``umbrella_refused`` with the reason
+    when that umbrella's own completion was refused (an open bug it was filed to fix):
+    the caller's success must not hide an umbrella left open."""
     st = fold(log.read_all(), strict=False)
-    for anc in st.ancestors(item):
-        if not _umbrella_children(st, anc):
-            break
-        done = complete(repo, anc.id, agent=agent)
-        if done.exit != O.OK:
-            break
-        out.append(anc.id)
-        out += done.data.get("umbrellas_completed", [])
-        break  # the completion above climbs on from there
-    return out
+    parents = st.ancestors(item)
+    if not parents or not _umbrella_children(st, parents[0]):
+        return {"umbrellas_completed": []}
+    up = parents[0].id
+    done = complete(repo, up, agent=agent)
+    if done.exit != O.OK:
+        return {"umbrellas_completed": [], "umbrella_refused": {up: done.reason}}
+    return {
+        "umbrellas_completed": [up, *done.data.get("umbrellas_completed", [])],
+        **(
+            {"umbrella_refused": done.data["umbrella_refused"]}
+            if done.data.get("umbrella_refused")
+            else {}
+        ),
+    }
 
 
 def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
