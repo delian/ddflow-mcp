@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -614,6 +616,18 @@ def _options(it) -> str:
     return "; ".join(rows)
 
 
+def _drop_remote_claims(log, cfg, item: str, holders: list[str], kept: str) -> None:
+    """Outside the lock, as `leases.release` does: each released claim's remote ref goes
+    too, or with `[flow].claims = "remote"` it outlived the claim -- and the kept holder
+    takes the ref, which a displaced contestant did not hold (Bd45d1ad60e). Best effort,
+    as a renewal is: a ref not taken now is taken by the kept holder's next heartbeat."""
+    for holder in holders:
+        L._remote_drop(log, item, holder)
+    if kept and cfg.flow.claims == "remote":
+        with contextlib.suppress(L.LeaseError):
+            L._remote_take(log, cfg, item, kept, time.time())
+
+
 def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str = "") -> O.Outcome:
     """Settle a contested item: keep one definition and/or one claim, recorded as an event.
 
@@ -722,6 +736,9 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
         log.append("item.resolved", item, data)
         for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
             log.append(f"{it.kind}.added", nid, d["data"])
+    _drop_remote_claims(
+        log, cfg, item, [h["holder"] for h in losers], claims[0]["holder"] if claims else ""
+    )
     return O.ok(
         "item.resolved",
         id=item,
