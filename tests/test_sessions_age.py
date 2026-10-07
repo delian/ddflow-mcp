@@ -40,13 +40,21 @@ def test_the_epoch_instant_itself_has_a_real_age():
     assert S._age_s("1970-01-01T00:00:00Z", now=THEN) == pytest.approx(THEN)
 
 
-def test_a_timestamp_without_a_zone_is_utc_not_host_local(monkeypatch):
+@pytest.mark.skipif(not hasattr(__import__("time"), "tzset"), reason="needs time.tzset")
+def test_a_timestamp_without_a_zone_is_utc_not_host_local():
+    import os
     import time as _time
 
-    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Tokyo"
     _time.tzset()
     try:
+        if _time.localtime(THEN).tm_gmtoff == 0:
+            pytest.skip("no tzdata for Asia/Tokyo here: local time would be UTC anyway")
         assert S._age_s("2026-09-21T14:13:20", now=THEN + 90) == pytest.approx(90)
     finally:
-        monkeypatch.delenv("TZ")
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
         _time.tzset()

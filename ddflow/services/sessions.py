@@ -135,11 +135,11 @@ HOOK_START_MAX_S = 30
 
 def _age_s(ts: str, now: float | None = None) -> float:
     """Seconds from `ts` to `now` (default: the current time); infinite when `ts` is not a
-    timestamp. Parsed as ISO 8601 (as `progress.epoch` falls back to), so `...:00Z` without
-    microseconds is as young as `...:00.000000Z` (Bbf85f6576f)."""
-    # `progress.epoch`'s own fallback parse, kept here because epoch's 0.0 failure value
-    # is also the epoch instant; a time with no zone is UTC, as the log writes it, never
-    # the host's local time.
+    timestamp. Any ISO 8601 shape, so `...:00Z` without microseconds is as young as
+    `...:00.000000Z` (Bbf85f6576f)."""
+    # Not `progress.epoch`: its 0.0 failure value is also the epoch instant, and it reads
+    # a time with no zone as host-local. Here a zone-less time is UTC, as the log writes
+    # it -- deliberately different, until the shared clock (B-uni-clock) settles both.
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         then = (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
