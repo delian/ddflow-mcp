@@ -5200,18 +5200,19 @@ with the project's own runner and worker flags. The agent driver tells agents to
 after each change; `ddflow workflow` and `ddflow doctor` say when the configured test
 command uses one core.
 
-**The whole suite runs once per item** (decision D-gate-economy 1). For a **bug fix** (a
-task that fixes a bug) or a **small task** (fewer than `gates.unit_tests_small_lines`
-changed lines since its base, default 150), `ddflow gate run <id> unit_tests` runs only
-that selection, plus the regression tests of the bugs it fixes, and its evidence says so:
-`scope = "selected"`, `scope_why`, `changed_lines` and `selected_tests` (each path with
-why). The whole suite then runs in the `ci` gate, on the branch merged with the base,
-before the merge -- so the selection is taken only where the item's pipeline has a `ci`
-gate. Everything else runs the whole suite in `unit_tests`, in parallel, because a
-targeted run hides breakage that was already there: a phase, a promotion, a larger task,
-`gates.unit_tests_scope = "full"`, and any selection that cannot be made -- no base, git
-cannot say what changed, no test reaches the change (running nothing would pass
-vacuously), or a command that does not run pytest; `scope_why` names which.
+**The whole suite runs once per small change** (decision D-gate-economy 1). The `ci` gate
+runs it on the branch merged with the base. Once ci has **passed on the source the item's
+tree holds now**, `ddflow gate run <id> unit_tests` for a **bug fix** (a task that fixes a
+bug) or a **small task** (fewer than `gates.unit_tests_small_lines` changed lines since its
+base, default 150) runs only that selection, plus the pytest regression tests of the bugs
+it fixes, and its evidence says so: `scope = "selected"`, `scope_why`, `changed_lines` and
+`selected_tests` (each path with why). So run `ci` first. Everything else runs the whole
+suite in `unit_tests`, in parallel, because a targeted run hides breakage that was already
+there: a ci that has no outcome, was skipped, could not run, failed or ran on other source
+(an edit after it); a phase, a promotion, a larger task; `gates.unit_tests_scope = "full"`;
+and any selection that cannot be made -- no base, git cannot say what changed, no test
+reaches the change (running nothing would pass vacuously), or a command that does not run
+pytest. `scope_why` names which.
 
 | knob | default | meaning |
 |---|---|---|

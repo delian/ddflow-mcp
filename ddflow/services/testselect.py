@@ -417,27 +417,29 @@ def changed_lines(tree: Path, base: str) -> int | None:
     return n
 
 
-def unit_tests_scope(cfg, st, it, command: str, tree: Path, pipeline: list[str]) -> Scope:
+def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     """Whether the unit_tests gate runs the selection or the whole suite for item ``it``.
 
     The selection (D-gate-economy 1) is for a BUG FIX (the task fixes a bug) or a SMALL
-    task (fewer changed lines than `[gates].unit_tests_small_lines`), and only where a
-    full run still happens before the merge: a `ci` gate in the item's pipeline runs the
-    whole suite on the merge result. Everything else -- a phase, a promotion, a larger
-    task, a project with `[gates].unit_tests_scope = "full"`, no ci gate -- runs the
-    whole suite, and so does a selection that cannot be made: no base, git cannot say
-    what changed, no test reaches the change (running nothing would pass vacuously), or
-    the command does not run pytest. Each answer says why. The base is the item's, else
-    the configured base ref, else the default branch."""
+    task (fewer changed lines than `[gates].unit_tests_small_lines`), and only once the
+    whole suite has PASSED on this very tree: the item's `ci` gate is recorded `passed`
+    with the source this tree holds now (ci runs the whole suite on the branch merged
+    with the base). A ci that was skipped, could not run, failed, or ran on other source
+    proves nothing about this tree, so the gate runs the whole suite (roborev on
+    7da06042: a selection resting on a ci that never passed let a fix merge with the whole
+    suite never run). Everything else -- a phase, a promotion, a larger task, a project
+    with `[gates].unit_tests_scope = "full"` -- runs the whole suite, and so does a
+    selection that cannot be made: no base, git cannot say what changed, no test reaches
+    the change (running nothing would pass vacuously), or the command does not run
+    pytest. Each answer says why. The base is the item's, else the configured base ref,
+    else the default branch."""
     if cfg.gates.unit_tests_scope != "selected":
         return Scope("full", f'[gates].unit_tests_scope = "{cfg.gates.unit_tests_scope}"')
     if it.kind == "phase" or it.promote_to:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
-    if "ci" not in pipeline:
-        return Scope(
-            "full", "no ci gate in this item's pipeline runs the whole suite before the merge"
-        )
+    if why := _ci_not_passed_here(it, tree):
+        return Scope("full", why)
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
@@ -447,6 +449,21 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path, pipeline: list[str])
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
     return _selected(st, it, command, tree, base, kind, lines)
+
+
+def _ci_not_passed_here(it, tree: Path) -> str:
+    """ "" when the item's ci gate PASSED on the source ``tree`` holds now; else why not."""
+    ci = it.gates.get("ci")
+    if ci is None or ci.outcome != "passed":
+        state = "has no outcome" if ci is None else f"is {ci.outcome}"
+        return (
+            f"the ci gate {state}: the whole suite has not passed on this tree, so this "
+            "gate runs it (run ci first, and a bug fix or small task then runs the selection)"
+        )
+    ran_on = (ci.evidence or {}).get("source_tree", "")
+    if not ran_on or ran_on != G.source_tree(tree):
+        return "the ci gate passed on other source than this tree holds now: this gate runs the whole suite"
+    return ""
 
 
 def _selectable(cfg, it, lines: int | None) -> str:
@@ -469,8 +486,16 @@ def _selected(st, it, command: str, tree: Path, base: str, kind: str, lines: int
             "full", f"{kind}, but git could not say what changed since {base}", changed_lines=lines
         )
     picked = {s.path for s in sel.tests}
+    # Only what pytest runs: a `scripts/check.sh` regression check is run by no command
+    # built here, and listing it would claim a test that never ran.
     regression = sorted(
-        {t for b in it.fixes if (bug := st.bugs.get(b)) is not None for t in bug.regression_tests}
+        {
+            t
+            for b in it.fixes
+            if (bug := st.bugs.get(b)) is not None
+            for t in bug.regression_tests
+            if t.endswith(".py") or "::" in t
+        }
         - picked
     )
     tests = [
@@ -486,7 +511,7 @@ def _selected(st, it, command: str, tree: Path, base: str, kind: str, lines: int
         )
     return Scope(
         "selected",
-        f"{kind}: {len(tests)} test(s) its change reaches; the ci gate runs the whole suite on the merge result",
+        f"{kind}: {len(tests)} test(s) its change reaches; the ci gate passed the whole suite on this tree",
         command=cmd,
         tests=tests,
         changed_lines=lines,

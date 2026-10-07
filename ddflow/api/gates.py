@@ -402,11 +402,7 @@ def run(
     repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
     if repeated is not None:
         return repeated
-    scope = (
-        TS.unit_tests_scope(cfg, st, it, gdef.command, cwd, G.pipeline_for(it, cfg))
-        if gate == "unit_tests"
-        else None
-    )
+    scope = TS.unit_tests_scope(cfg, st, it, gdef.command, cwd) if gate == "unit_tests" else None
     if scope is not None and scope.command:
         gdef = replace(gdef, command=scope.command)
     log.append("gate.started", item, {"gate": gate})

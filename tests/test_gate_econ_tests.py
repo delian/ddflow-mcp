@@ -1,7 +1,7 @@
-"""D-gate-economy 1: the unit_tests gate of a bug fix or a small task runs only the tests
-its change reaches, and says which and why; the ci gate runs the whole suite once, on the
-merge result. Anything else -- and any selection that cannot be made -- runs the whole
-suite, and says why (B-gate-econ-tests).
+"""D-gate-economy 1: once the ci gate has passed the whole suite on an item's tree, the
+unit_tests gate of a bug fix or a small task runs only the tests its change reaches, and
+says which and why. Anything else -- no passing ci on this tree, a larger task, any
+selection that cannot be made -- runs the whole suite, and says why (B-gate-econ-tests).
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ REACHES_F = (
 UNRELATED_RED = "def test_elsewhere_is_red():\n    assert False\n"
 
 CI_PIPELINE = json.dumps(["research", "implement", "standards", "ci", "unit_tests", "merge"])
-NO_CI_PIPELINE = json.dumps(["research", "implement", "standards", "unit_tests", "merge"])
 
 
 def _git(tree: Path, *args: str) -> None:
@@ -48,13 +47,13 @@ def _cli(repo: Path, *argv: str) -> str:
     return out
 
 
-def _project(repo: Path, *, pipeline: str = CI_PIPELINE) -> None:
+def _project(repo: Path) -> None:
     _cli(repo, "init")
     (repo / "src.py").write_text("def f():\n    return 1\n")
     (repo / "tests").mkdir()
     (repo / "tests" / "test_elsewhere.py").write_text(UNRELATED_RED)
     _cli(repo, "config", "--set", "gate.unit_tests.command", f"{sys.executable} -m pytest -q tests")
-    _cli(repo, "config", "--set", "gates.task_pipeline", pipeline)
+    _cli(repo, "config", "--set", "gates.task_pipeline", CI_PIPELINE)
     _commit(repo, "a project whose suite has one unrelated red test")
 
 
@@ -86,6 +85,12 @@ def _task(repo: Path, item: str, lines: int) -> Path:
     return wt
 
 
+def _ci(repo: Path, item: str, outcome: str = "passed") -> None:
+    """The ci gate's outcome on the item's tree as it is now (ddflow measures the tree)."""
+    extra = [] if outcome == "passed" else ["--reason", "for the test"]
+    _cli(repo, "gate", "record", item, "ci", "--outcome", outcome, "--evidence", "suite", *extra)
+
+
 def _run_unit_tests(repo: Path, item: str) -> tuple[int, dict]:
     code, out, _err = run_cli(repo, "--json", "gate", "run", item, "unit_tests")
     body = json.loads(out)
@@ -95,6 +100,7 @@ def _run_unit_tests(repo: Path, item: str) -> tuple[int, dict]:
 def test_a_bug_fix_runs_only_the_tests_its_change_reaches(repo):
     _project(repo)
     _fix(repo)
+    _ci(repo, "fix-B1")
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == OK, ev
     assert ev["scope"] == "selected", ev
@@ -104,18 +110,34 @@ def test_a_bug_fix_runs_only_the_tests_its_change_reaches(repo):
     assert "tests/test_f.py" in ev["command"] and "test_elsewhere" not in ev["command"]
 
 
-def test_without_a_ci_gate_the_fix_runs_the_whole_suite(repo):
-    _project(repo, pipeline=NO_CI_PIPELINE)
+def test_without_a_passing_ci_the_fix_runs_the_whole_suite(repo):
+    """roborev on 7da06042: a selection resting on a ci that never passed let a fix merge
+    with the whole suite never run."""
+    _project(repo)
     _fix(repo)
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == FAIL, ev  # the unrelated red test ran
-    assert ev["scope"] == "full" and "no ci gate" in ev["scope_why"], ev
+    assert ev["scope"] == "full" and "ci gate has no outcome" in ev["scope_why"], ev
     assert "selected_tests" not in ev
+    _ci(repo, "fix-B1", "skipped")
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == FAIL and "ci gate is skipped" in ev["scope_why"], ev
+
+
+def test_a_ci_pass_on_older_source_does_not_select(repo):
+    _project(repo)
+    wt = _fix(repo)
+    _ci(repo, "fix-B1")
+    (wt / "src.py").write_text("def f():\n    return 2  # edited after ci\n")
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == FAIL, ev
+    assert ev["scope"] == "full" and "other source" in ev["scope_why"], ev
 
 
 def test_scope_full_runs_the_whole_suite(repo):
     _project(repo)
     _fix(repo)
+    _ci(repo, "fix-B1")
     _cli(repo, "config", "--set", "gates.unit_tests_scope", "full")
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == FAIL, ev
@@ -125,6 +147,7 @@ def test_scope_full_runs_the_whole_suite(repo):
 def test_a_small_task_runs_the_selection(repo):
     _project(repo)
     _task(repo, "T1", lines=5)
+    _ci(repo, "T1")
     code, ev = _run_unit_tests(repo, "T1")
     assert code == OK, ev
     assert ev["scope"] == "selected" and "a small task" in ev["scope_why"], ev
@@ -135,6 +158,7 @@ def test_a_larger_task_runs_the_whole_suite(repo):
     _project(repo)
     _cli(repo, "config", "--set", "gates.unit_tests_small_lines", "20")
     _task(repo, "T1", lines=40)
+    _ci(repo, "T1")
     code, ev = _run_unit_tests(repo, "T1")
     assert code == FAIL, ev
     assert ev["scope"] == "full" and "not a bug fix" in ev["scope_why"], ev
@@ -148,6 +172,7 @@ def test_a_change_no_test_reaches_runs_the_whole_suite_rather_than_nothing(repo)
     wt = _worktree(repo, "fix-B1")
     (wt / "NOTES.txt").write_text("fixed\n")
     _commit(wt, "a change no test reaches")
+    _ci(repo, "fix-B1")
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == FAIL, ev  # running nothing would have passed
     assert ev["scope"] == "full" and "no test reaches" in ev["scope_why"], ev
@@ -161,3 +186,23 @@ def test_the_knobs_are_declared_with_a_strict_fallback():
     assert KNOB_STRICTEST["gates.unit_tests_scope"][0] == "full"
     assert "D-gate-economy" in KNOB_DOCS["gates.unit_tests_scope"]
     assert KNOB_DOCS["gates.unit_tests_small_lines"]
+
+
+def test_only_regression_tests_pytest_runs_are_listed_as_selected(repo):
+    """roborev on 7da06042: a non-pytest regression check was listed as selected though
+    the command built here never runs it."""
+    _project(repo)
+    wt = _fix(repo)
+    (wt / "scripts").mkdir()
+    (wt / "scripts" / "check.sh").write_text("#!/bin/sh\nexit 0\n")
+    _commit(wt, "a shell check")
+    _cli(
+        repo, "bug", "fixed", "B1",
+        "--regression-test", "tests/test_f.py::test_f;scripts/check.sh",
+        "--skip-regression-verify", "--verify-reason", "this test is about the listing",
+    )  # fmt: skip
+    _ci(repo, "fix-B1")
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == OK, ev
+    listed = {t["path"] for t in ev["selected_tests"]}
+    assert "scripts/check.sh" not in listed and "tests/test_f.py" in listed, ev
