@@ -2,6 +2,7 @@
 """The compatibility matrix's release fixtures (B-uni-compat-tests; decision D-compat).
 
     scripts/ci/compat-matrix build [VERSION ...]     # default: every RELEASES entry + current
+    scripts/ci/compat-matrix venv VERSION            # print the path of that release's cached venv
 
 For each version: build its wheel from the release commit (ddflow is not on a package index,
 so the wheel is built from `git archive` of the commit that released it), install it in a
@@ -357,13 +358,52 @@ def _build_locked(version: str, commit: str, work: Path) -> None:
         shutil.rmtree(work, ignore_errors=True)
 
 
+def release_venv(version: str) -> Path:
+    """A venv holding RELEASED ``version``, built once and kept under BUILD_ROOT/venvs (the
+    old-reads-new tests run the release against projects; a wheel build per test is waste).
+    Keyed by version and commit; a lock keeps concurrent callers from building it twice."""
+    commit = release_commit(version)
+    if commit is None:
+        print(f"cannot find the commit that released {version}", file=sys.stderr)
+        raise SystemExit(2)  # could not run: the history is not in this checkout
+    dest = BUILD_ROOT / "venvs" / f"{version}-{commit[:10]}"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with (dest.parent / f"{dest.name}.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if (dest / "ok").is_file():
+            return dest / "venv"
+        shutil.rmtree(dest, ignore_errors=True)
+        (dest / "home").mkdir(parents=True)
+        env = hermetic_env(dest / "home", dest / "venv")
+        install(build_wheel(commit, dest, env), dest, env)
+        declared = sh(
+            [
+                str(dest / "venv" / "bin" / "python"),
+                "-I",
+                "-c",
+                "import ddflow; print(ddflow.__version__)",
+            ],
+            cwd=dest,
+            env=env,
+        ).strip()
+        if declared != version:
+            raise SystemExit(f"{commit[:10]} declares {declared}, not {version}")
+        shutil.rmtree(dest / "src", ignore_errors=True)
+        (dest / "ok").write_text(commit + "\n")
+        return dest / "venv"
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="compat-matrix", description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="(re)build release fixtures")
     b.add_argument("versions", nargs="*", help="released versions, or 'current' (default: all)")
+    v = sub.add_parser("venv", help="print the path of a released version's cached venv")
+    v.add_argument("version")
     args = parser.parse_args(argv)
-    if args.cmd == "build":
+    if args.cmd == "venv":
+        print(release_venv(args.version))
+    elif args.cmd == "build":
         for version in args.versions or [*RELEASES, "current"]:
             if version == "current":
                 text = (ROOT / "ddflow" / "__init__.py").read_text()
