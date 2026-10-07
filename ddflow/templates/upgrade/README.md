@@ -13,3 +13,12 @@ Read it with `ddflow.services.upgrade_manifest`: `changes_since(version)` is eve
 in a newer release, oldest first; `replay()` is what a release has. In the ddflow source
 tree, `scripts/upgrade_manifest.py backfill` rebuilds it from the release commits and keeps
 every hand-written `why`, `effect`, `impact` and `enable`.
+
+## The release lint
+
+`ddflow version lint` compares the code's knob defaults and event kinds with the manifest's
+replay: a change with no entry is reported by name, with the fragment that would announce it
+and the operator's options (write the entries; `--waive <change> --reason ...`, recorded in
+`waivers.toml` beside the manifest; or change `[release].manifest_lint`). `ddflow version
+cut`, `scripts/release.sh` and the publish workflow run it, and `block` (the default) stops
+the release.

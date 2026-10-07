@@ -903,3 +903,14 @@ impact = "additive"
 kind = "event_kind_added"
 key = "def.updated"
 impact = "additive"
+
+[[release]]
+version = "unreleased"
+date = ""
+
+[[release.change]]
+kind = "knob_added"
+key = "release.manifest_lint"
+new = "\"block\""
+why = "What a release does about a knob or event kind change the upgrade manifest does not announce: block (default), warn or off."
+impact = "additive"

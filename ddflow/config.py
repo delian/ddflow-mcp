@@ -110,6 +110,10 @@ from .config_sections.prompts import (
 from .config_sections.reinstruct import (
     ReinstructConfig,
 )
+from .config_sections.release import (
+    RELEASE_LINT_POLICIES,  # noqa: F401
+    ReleaseConfig,
+)
 from .config_sections.review import (
     ReviewConfig,
 )
@@ -205,6 +209,7 @@ class Config:
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
+    release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
