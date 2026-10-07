@@ -62,6 +62,8 @@ def complete(
     it = _require(st, item, "item.completed")
     if isinstance(it, O.Outcome):
         return it
+    if _settled_umbrella(st, it):
+        return _complete_umbrella(repo, log, cfg, st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()]
@@ -168,8 +170,64 @@ def complete(
         rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
         if rr.outcomes:
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
+    # A split task "completes when its children do" (B651a63e574): the last sub-task's
+    # completion completes its umbrella, and that one's, up the chain.
+    extra["umbrellas_completed"] = _complete_umbrellas_above(repo, log, cfg, item, agent)
     extra.update(_commit_events(log, cfg, f"complete {item}"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _settled_umbrella(st: State, it) -> bool:
+    """A task split into sub-tasks, every one of them settled and at least one done.
+
+    Its work is its sub-tasks', each of which ran its own pipeline; the umbrella has no
+    diff of its own for `implement`, `unit_tests` or `merge` to judge (B651a63e574). All
+    of them abandoned is not the work finished, and a phase keeps its own close."""
+    if it.kind != "task" or it.state in (DONE, ABANDONED):
+        return False
+    below = [st.items[i] for i in st.descendants(it.id)]
+    return bool(below) and not st.open_descendants(it.id) and any(k.state == DONE for k in below)
+
+
+def _complete_umbrella(repo: Path, log, cfg, st: State, it) -> O.Outcome:
+    """Record a settled umbrella done: no gates of its own, its sub-tasks named."""
+    below = sorted(st.descendants(it.id))
+    done = [i for i in below if st.items[i].state == DONE]
+    log.append(
+        "item.completed",
+        it.id,
+        {"sha": "", "kind": it.kind, "forced": False, "overridden": [], "umbrella": done},
+    )
+    L.release(log, it.id, note="completed with its sub-tasks")
+    return O.ok(
+        "item.completed",
+        id=it.id,
+        sha="",
+        forced=False,
+        independence="",
+        coverage_gaps=[],
+        note=f"completed with its sub-tasks: {', '.join(done)}",
+        warnings=[],
+        blockers=[],
+        bugs_closed=[],
+        woke=[],
+        umbrella=done,
+    )
+
+
+def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> list[str]:
+    """Every task umbrella above ``item`` that its completion settled, nearest first."""
+    from ...core.model import fold
+
+    out: list[str] = []
+    st = fold(log.read_all(), strict=False)
+    for anc in st.ancestors(item):
+        if not _settled_umbrella(st, anc):
+            break
+        _complete_umbrella(repo, log, cfg, st, anc)
+        out.append(anc.id)
+        st = fold(log.read_all(), strict=False)
+    return out
 
 
 def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:

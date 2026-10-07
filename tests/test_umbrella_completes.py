@@ -1,0 +1,69 @@
+"""A split task completes when its sub-tasks do (bug B651a63e574).
+
+`split` turns a task into an umbrella and says it "completes when its children do"; the
+README says the same. Nothing did it: after B-uni-fsio-writers' three sub-tasks were
+merged and completed, the umbrella stayed open, `next` offered it as ready work, and
+`complete` refused it for gates (implement, unit_tests, merge) that have no diff of the
+umbrella's own to run on.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
+
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+
+OK = 0
+
+
+def _split(repo: Path) -> None:
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P", "--title", "phase")
+    run_cli(repo, "task", "add", "P.T", "--title", "big task", "--globs", "a.py")
+    code, out, err = run_cli(repo, "split", "P.T", "--into", "P.T.a=one", "--into", "P.T.b=two")
+    assert code == OK, out + err
+
+
+def _state(repo: Path, item: str) -> str:
+    return fold(EventLog(repo).read_all(), strict=False).items[item].state
+
+
+def test_the_last_sub_task_completing_completes_the_umbrella(repo):
+    _split(repo)
+    assert run_cli(repo, "complete", "P.T.a", "--force")[0] == OK
+    assert _state(repo, "P.T") != "done", "one sub-task is still open"
+    code, out, err = run_cli(repo, "--json", "complete", "P.T.b", "--force")
+    assert code == OK, out + err
+    assert _state(repo, "P.T") == "done", "the umbrella stayed open after its last sub-task"
+    done = [
+        e for e in EventLog(repo).read_all() if e.kind == "item.completed" and e.subject == "P.T"
+    ]
+    assert done and done[-1].data.get("umbrella") == ["P.T.a", "P.T.b"], done
+
+
+def test_a_settled_umbrella_completes_without_a_pipeline_of_its_own(repo):
+    """The state B-uni-fsio-writers was left in: every child done, the umbrella open."""
+    _split(repo)
+    log = EventLog(repo)
+    for child in ("P.T.a", "P.T.b"):
+        log.append("item.completed", child, {"sha": "", "kind": "task", "forced": True})
+    assert _state(repo, "P.T") == "open"
+
+    code, out, err = run_cli(repo, "complete", "P.T")
+
+    assert code == OK, out + err
+    assert _state(repo, "P.T") == "done"
+
+
+def test_an_umbrella_whose_sub_tasks_were_all_abandoned_does_not_complete(repo):
+    """Nothing was done: that is not the umbrella's work finished."""
+    _split(repo)
+    for child in ("P.T.a", "P.T.b"):
+        assert run_cli(repo, "abandon", child, "--reason", "dropped")[0] == OK
+    assert _state(repo, "P.T") != "done"
+    assert run_cli(repo, "complete", "P.T")[0] != OK
