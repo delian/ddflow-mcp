@@ -612,6 +612,11 @@ validate the **result**, then replace the file atomically.
   *disk*, which is a writer checking the state it is replacing.
 - **Dropping a gate takes it out of `required` too**, or it becomes a requirement that
   quietly requires nothing.
+- **What is required is `[gates].required`, only.** `required = true` inside a
+  `[gate.<id>]` table used to be accepted and ignored, so the gate was never enforced (and
+  `required = false` left a listed gate required). A table that disagrees with the knob is
+  now warned about on every command (and refused in ddflow's own tree), naming the edit to
+  `[gates].required` that does what it says; one that agrees is redundant and passes.
 
 `ddflow workflow` and `ddflow doctor` both re-run those checks against what is on
 disk. Everything is a file you can also edit by hand: gates in `[gate.<id>]`, reviewers
