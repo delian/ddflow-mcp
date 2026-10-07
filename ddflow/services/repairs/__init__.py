@@ -25,7 +25,7 @@ from ...core.events import REPAIR_APPLIED_KIND
 from ...core.model import State
 from ...infra.log import EventLog, running_version
 from .base import AGENT, OPERATOR, Context, Corrective, Finding, Repair, Unavailable, context
-from .seeds import SEEDS
+from .seeds import AUTHORS, MISMATCHED, SEEDS, TORN, unknown_author_shards
 
 __all__ = [
     "AGENT",
@@ -43,6 +43,8 @@ __all__ = [
     "by_id",
     "context",
     "doctor_notes",
+    "integrity",
+    "unknown_authors",
     "pending",
     "settled",
     "uncovered",
@@ -85,13 +87,20 @@ class Pending:
         }
 
 
+def _split(ctx: Context, r: Repair) -> tuple[list[Finding], int]:
+    """`(findings still open, how many a repair.applied already holds)` for `r`."""
+    found = r.detect(ctx)
+    done = settled(ctx.st, r.id)
+    still = [f for f in found if f.key not in done]
+    return still, len(found) - len(still)
+
+
 def _detect(ctx: Context, r: Repair) -> Pending:
     try:
-        found = r.detect(ctx)
+        still, _held = _split(ctx, r)
     except Unavailable as exc:
         return Pending(r, unavailable=str(exc))
-    done = settled(ctx.st, r.id)
-    return Pending(r, [f for f in found if f.key not in done])
+    return Pending(r, still)
 
 
 def pending(ctx: Context, ids: Iterable[str] | None = None) -> list[Pending]:
@@ -134,10 +143,16 @@ def apply(
     return applied
 
 
-def doctor_notes(ctx: Context) -> list[str]:
-    """One line per repair with pending findings or a detector that could not run."""
+#: Repairs whose damage `ddflow doctor` already words itself (`integrity`, the orphan note
+#: and the unknown-author note): `doctor_notes` leaves them out so nothing is said twice.
+DOCTOR_WORDED = frozenset({TORN.id, MISMATCHED.id, AUTHORS.id, "orphan-prompts"})
+
+
+def doctor_notes(ctx: Context, *, skip: Iterable[str] = ()) -> list[str]:
+    """One line per repair with pending findings or a detector that could not run, less
+    the repairs named in `skip`."""
     notes = []
-    for p in pending(ctx):
+    for p in pending(ctx, [r.id for r in REGISTRY if r.id not in set(skip)]):
         if p.unavailable:
             notes.append(f"unavailable: data repair {p.repair.id} could not check ({p.unavailable})")
             continue
@@ -148,6 +163,35 @@ def doctor_notes(ctx: Context) -> list[str]:
             f"{p.repair.action}"
         )
     return notes
+
+
+def integrity(ctx: Context) -> tuple[list[str], list[str]]:
+    """`(problems, notes)` of the log's integrity -- what `EventLog.verify` reports -- less
+    what a quarantine repair recorded: an edited event or unreadable line already on a
+    `repair.applied` is a note, not a problem that would fail `doctor` forever."""
+    edited, held = _split(ctx, MISMATCHED)
+    problems = [
+        f"{f.key}: content does not match its address (edited after the fact?)" for f in edited
+    ]
+    try:
+        torn, held_torn = _split(ctx, TORN)
+    except Unavailable as exc:
+        torn, held_torn = [], 0
+        problems.append(f"unavailable: the event shards could not be read ({exc})")
+    if torn:
+        problems.append(f"{len(torn)} unparseable line(s) — likely a torn append after a crash")
+    held += held_torn
+    if not held:
+        return problems, []
+    return problems, [f"{held} damaged log line(s) quarantined by a data repair, left in place"]
+
+
+def unknown_authors(ctx: Context) -> tuple[list[str], str]:
+    """The unknown-author shards no operator has reviewed (`unknown-author-shards`), and
+    the base branch. Raises `Unavailable` when git cannot say."""
+    new, base = unknown_author_shards(ctx)
+    done = settled(ctx.st, AUTHORS.id)
+    return [n for n in new if n not in done], base
 
 
 def uncovered(st: State) -> list[str]:

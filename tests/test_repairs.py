@@ -244,3 +244,37 @@ def test_this_projects_own_data_damage_bugs_are_all_covered():
     root = Path(__file__).resolve().parents[1]
     st = fold(EventLog(root, "reader").read_all(), strict=False)
     assert R.uncovered(st) == []
+
+
+# -- doctor ------------------------------------------------------------------------------
+
+
+def _doctor(repo: Path) -> tuple[list[str], list[str]]:
+    from ddflow import api as A
+
+    out = A.doctor(repo, agent="repairer")
+    return out.data["problems"], out.data["notes"]
+
+
+def test_doctor_turns_quarantined_damage_into_a_note(old):
+    _torn(old)
+    _mismatched(old)
+    problems, _notes = _doctor(old)
+    assert any("2 unparseable line(s)" in p for p in problems)
+    assert any("content does not match its address" in p for p in problems)
+    R.apply(old, EventLog(old, "repairer"), Config.load(old))
+    problems, notes = _doctor(old)
+    assert not any("unparseable" in p or "does not match" in p for p in problems)
+    assert "3 damaged log line(s) quarantined by a data repair, left in place" in notes
+
+
+def test_doctor_reports_a_pending_repair_once_and_forgets_a_reviewed_author(old):
+    _forced(old)
+    _stranger(old)
+    _problems, notes = _doctor(old)
+    assert [n for n in notes if n.startswith("data repair forced-completions")]
+    assert [n for n in notes if "no committed history" in n and "stranger" in n]
+    assert not [n for n in notes if "unknown-author-shards" in n], "doctor words it once"
+    R.apply(old, EventLog(old, "repairer"), Config.load(old), ["forced-completions", "unknown-author-shards"])
+    _problems, notes = _doctor(old)
+    assert not [n for n in notes if "forced-completions" in n or "no committed history" in n]
