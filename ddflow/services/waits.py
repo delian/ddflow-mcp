@@ -40,6 +40,7 @@ from pathlib import Path
 from ..core.digest import content_digest
 from ..infra import fsio
 from ..infra.tomlcfg import atomic_write
+from .jobs import alive, proc_start
 
 #: Where waits are registered. Under `.ddflow/local/`, which carries its own `*`
 #: `.gitignore` -- see `infra.log._clone_suffix`.
@@ -116,8 +117,6 @@ class Waiter:
 def _pid_alive(pid: int, started: str = "") -> bool:
     # `jobs.alive` is the one liveness test (it also sees through zombies). pid 0 is
     # guarded here because `kill(0, 0)` signals the whole process GROUP and succeeds.
-    from .jobs import alive, proc_start
-
     if not (pid > 0 and alive(pid)):
         return False
     # Alive -- but the same process? A start time that differs is a reused pid. One that
@@ -146,8 +145,6 @@ def register(repo: Path, w: Waiter) -> Waiter:
         fsio.ensure_ignored_dir(d.parent)
     w.pid = w.pid or os.getpid()
     if not w.pid_start:
-        from .jobs import proc_start
-
         w.pid_start = proc_start(w.pid)
     w.host = w.host or socket.gethostname()
     w.since = w.since or time.time()
