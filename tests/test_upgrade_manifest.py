@@ -91,6 +91,14 @@ def test_a_cut_version_takes_over_the_unreleased_entries():
     assert (e["effect"], e["impact"]) == ("e", "breaking")
 
 
+def test_holds_asks_git_and_never_reads_could_not_tell_as_absent():
+    script = _script()
+    assert script.holds("HEAD", "ddflow/templates/upgrade/changes.toml")
+    assert not script.holds("HEAD", "ddflow/templates/upgrade/unreleased/no-such.toml")
+    with pytest.raises(SystemExit, match="git cannot list"):
+        script.holds("0" * 40, "ddflow/templates/upgrade/changes.toml")
+
+
 def test_the_why_is_the_docs_first_sentence_even_with_an_abbreviation():
     doc = "Files bumped, as a regex (e.g. `0.1.2`). The rest."
     assert _script()._why(doc) == "Files bumped, as a regex (e.g. `0.1.2`)."
@@ -204,7 +212,7 @@ def test_a_release_that_is_not_a_table_is_refused():
             UM.parse(f'schema_version = 1\n[base]\nversion = "0.1.0"\nknobs = {bad}\n')
     with pytest.raises(UM.ManifestError, match="not a release"):
         UM.parse('schema_version = 1\n[base]\nversion = "main"\n[[release]]\nversion = "0.2.0"\n')
-    with pytest.raises(ValueError, match="not a release"):
+    with pytest.raises(UM.ManifestError, match="not a release"):
         UM.replay(UM.load(), upto="main")
     for bad in ('""', "0", "[1]"):
         with pytest.raises(UM.ManifestError, match="event_kinds"):
