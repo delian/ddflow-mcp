@@ -36,31 +36,28 @@ import json
 import os
 import re
 import select
-import shlex
 import shutil
 import signal
 import subprocess
 import tempfile
 import time
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
-from ..infra.fsio import Unreadable, atomic_write, read_json, replace_text
-from ..infra.tomlcfg import value as toml_value
-from .adopt import (
-    AGENT_TARGETS,
-    SHAPE_TOML,
-    UnplaceableConfig,
-    get_server,
-    get_servers,
-    place_server,
-    server_entry_for,
-)
+from ..infra.fsio import atomic_write
+from . import mcpconfig as MC
+from .adopt import AGENT_TARGETS, SHAPE_TOML, get_servers
 from .gates import pipelines
+from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
+    _declared,
+    _launch_of,
+    _load_toml,
+    _serves,
+    _toml_without,
+)
 
 #: How long a detection probe may take. These are `--version`/`--help` calls, but one
 #: of them is `npx`, which will happily spend a minute fetching a package the first
@@ -618,32 +615,6 @@ def _norm_args(cmd: str, args: list[str]) -> list[str]:
     return [m.group(1) if (m := _NPM_TAG.match(a)) else a for a in args]
 
 
-def _launch_of(entry: object) -> tuple[str, list[str]] | None:
-    """``(command, args)`` of one stored server entry, whatever the agent's shape.
-
-    opencode/Kilo keep one `command` ARRAY holding the arguments; a few configs write the
-    whole launch as one `command` string. A remote server (`url`) has no launch.
-    """
-    if not isinstance(entry, dict):
-        return None
-    cmd, args = entry.get("command"), entry.get("args") or []
-    if not isinstance(args, list):
-        return None  # checked BEFORE the array form merges it: `*5` raised, `*"a b"` split
-    if isinstance(cmd, list) and cmd and all(isinstance(x, str) for x in cmd):
-        # Already tokenised: an element holding a space is ONE token (`/Apps/My App/x`).
-        return (cmd[0], [*cmd[1:], *map(str, args)]) if cmd[0].strip() else None
-    if not isinstance(cmd, str) or not cmd.strip():
-        return None
-    # A whole launch written as one string is split -- unless the string names a file
-    # that exists, which is a path with a space in it, not a command line.
-    if not args and any(ch.isspace() for ch in cmd.strip()) and not Path(cmd).exists():
-        try:
-            cmd, *args = shlex.split(cmd)
-        except ValueError:
-            return None
-    return cmd, [str(a) for a in args]
-
-
 def launches_as(c: Companion, entry: object) -> bool:
     """Does this stored server entry launch companion ``c``?
 
@@ -735,23 +706,6 @@ def _in_order_with_flags(want: list[str], have: list[str], value_flags: frozense
     return i == len(want)
 
 
-def _load_toml(text: str) -> dict | None:
-    """Parsed TOML, or None when it does not parse. ONE guard for the readers.
-
-    `_servers_in`, `_toml_without`, `_toml_stale_entry` and `_toml_present` each wrapped
-    `tomllib.loads` by hand; a fifth that forgot the guard would let an unparseable config
-    read as an empty one -- the module's own recurring failure. (`_register_toml` called it
-    unguarded, safe only because `_toml_stale_entry` had already parsed the same text; it
-    goes through here now too.) What `None` then MEANS stays at each call site, because it
-    differs: a reader treats it as unreadable, `_toml_present` as a refusal that names the
-    file.
-    """
-    try:
-        return tomllib.loads(text)
-    except tomllib.TOMLDecodeError:
-        return None
-
-
 def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     """(servers by name, raw text) of one agent config; None when unreadable."""
     try:
@@ -777,36 +731,6 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     # does not write. They used to disagree by construction, the reader checking both
     # field names for every agent while the writer special-cased one agent by name.
     return get_servers(data, shape), text
-
-
-#: The keys agents use for a REMOTE server's address: Claude/Cursor/VS Code `url`, Gemini
-#: CLI `httpUrl`, Windsurf `serverUrl`. A remote server has no launch and is still one.
-_REMOTE_KEYS = ("url", "httpUrl", "serverUrl")
-
-
-def _serves(entry: object) -> bool:
-    """Does one stored entry start or reach SOME server -- a launch, or a remote address?
-
-    What it serves is not asked: an operator's own wrapper under the companion's id is
-    theirs. Only an entry that can serve nothing -- `{}`, `"x"`, `5`, `[]`, a `null`
-    placeholder -- is refused, because counting it reported the gate as covered while no
-    agent could reach the tool, and `register` would have written over it (B768503a43a).
-    """
-    if _launch_of(entry) is not None:
-        return True
-    return isinstance(entry, dict) and any(
-        isinstance(entry.get(k), str) and entry[k].strip() for k in _REMOTE_KEYS
-    )
-
-
-def _declared(servers: dict, cid: str) -> bool:
-    """Is ``cid`` declared AND does its entry serve something (`_serves`)?
-
-    The reader (`_registered_name`), the writer (`_toml_present`) and the stale-entry test
-    (`_toml_stale_entry`) must agree on what "already registered" means; written once, so
-    one of them cannot quietly count a `{}` placeholder the others refuse (B768503a43a).
-    """
-    return cid in servers and _serves(servers[cid])
 
 
 def _launched_name(servers: dict, c: Companion, *, skip_id: bool = False) -> str | None:
@@ -942,27 +866,6 @@ def scan(repo: Path, *, probe: bool = True, ttl_s: int | None = None) -> list[St
     return out
 
 
-def _toml(value: object) -> str:
-    """Serialise one value as TOML. There is no stdlib writer; `tomllib` only reads.
-
-    This was `json.dumps`, which is *nearly* right and therefore worse than obviously
-    wrong: JSON and TOML agree on strings, numbers and arrays, and disagree on exactly
-    one thing — an object. `json.dumps({"A": "b"})` is `{"A": "b"}`, and a TOML inline
-    table needs `{A = "b"}`. So a companion carrying `env` (the normal shape for
-    anything needing an API key) wrote a config the agent's TOML parser rejects
-    outright, which takes down *every* MCP server in that file, not just this one —
-    while `registered_in` still reported the companion as registered, because it looks
-    for the section header with a substring test.
-
-    String escaping matters for the same reason: a `"` or a backslash in a command or
-    an argument produced invalid TOML, silently, for anyone whose path has one.
-
-    One serialiser now, `tomlcfg.value`: `json.dumps` also wrote an emoji as a surrogate
-    pair TOML refuses (Bb11e7a8186).
-    """
-    return toml_value(value)
-
-
 def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -> str:
     """The message when config ``rel`` already launches ``c`` under ANOTHER name, else "".
 
@@ -983,134 +886,6 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
     elif c.id in servers:
         msg += f". The entry under `{c.id}` is not this launch: remove it by hand"
     return msg
-
-
-def _toml_without(text: str, cid: str) -> str | None:
-    """``text`` minus every ``[mcp_servers.<cid>]`` table and sub-table, or None.
-
-    Textual, since `tomllib` cannot write. The cut is trusted only when the result still
-    parses and differs from the original by exactly that server: an inline table, a dotted
-    key, or a header inside a multi-line string fails the check and is left alone.
-    """
-    name = "(?:{0}|\"{0}\"|'{0}')".format(re.escape(cid))
-    header = re.compile(rf"^\s*\[\s*mcp_servers\s*\.\s*{name}\s*(?:\.[^\]]*)?\]\s*(?:#.*)?$")
-    kept: list[str] = []
-    cut: list[str] = []  # the lines of the table being dropped
-    for line in text.splitlines(keepends=True):
-        if header.match(line):
-            cut.append(line)
-        elif cut and line.lstrip().startswith("["):
-            # Comments and blank lines just above the NEXT header describe it, not the
-            # table that is going: keep them.
-            tail = []
-            while cut[-1].strip() == "" or cut[-1].lstrip().startswith("#"):
-                tail.insert(0, cut.pop())
-            kept.extend(tail)
-            cut = []
-            kept.append(line)
-        elif cut:
-            cut.append(line)
-        else:
-            kept.append(line)
-    out = "".join(kept)
-    before, after = _load_toml(text), _load_toml(out)
-    if before is None or after is None:
-        return None
-    srv = before.get("mcp_servers")
-    if not isinstance(srv, dict):
-        return None
-    expect = {**before, "mcp_servers": {k: v for k, v in srv.items() if k != cid}}
-    # A bare `[mcp_servers]` header is an empty table on both sides, or on neither.
-    for d in (expect, after):
-        if d.get("mcp_servers") == {}:
-            d.pop("mcp_servers")
-    return out if after == expect else None
-
-
-def _toml_stale_entry(text: str, c: Companion) -> bool:
-    """Does the table under the id launch something that is not ``c``'s launch?"""
-    data = _load_toml(text)
-    if data is None:
-        return False
-    servers = data.get("mcp_servers", {})
-    if not isinstance(servers, dict):
-        return False
-    return _declared(servers, c.id) and not launches_as(c, servers[c.id])
-
-
-def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str, str] | None:
-    """What a TOML config already says about ``c``, or None when ``new_text`` may be written.
-
-    The same judgement the reader makes (`_registered_name`): an entry under the id counts
-    only when it launches something, and a launch under another name counts too. Anything
-    else is appended -- but only when the result still PARSES. A table under the id that
-    launches nothing, or an `mcp_servers` that is not a table, would turn the append into
-    a file the agent rejects whole; that is refused by name, never reported as already
-    registered (B768503a43a). Nor is anything appended to a file that does not parse.
-    """
-    data = _load_toml(text)
-    if data is None:
-        return "refused", f"SKIPPED {rel}: it is not valid TOML; add {c.id} by hand"
-    servers = data.get("mcp_servers", {})
-    if not isinstance(servers, dict):
-        # `mcp_servers = 5`, or `[[mcp_servers]]`: an appended header would either break
-        # the file or land inside the last array element, where no agent reads it.
-        return "refused", f"SKIPPED {rel}: its `mcp_servers` is not a table; add {c.id} by hand"
-    if _declared(servers, c.id) and launches_as(c, servers[c.id]):
-        return "unchanged", f"{rel} already registers {c.id}"
-    if other := _launched_elsewhere((servers, text), c, rel):
-        return "unchanged", other
-    try:
-        tomllib.loads(new_text)
-    except tomllib.TOMLDecodeError as exc:
-        what = (
-            f"[mcp_servers.{c.id}] is there but launches nothing"
-            if c.id in servers
-            else f"adding [mcp_servers.{c.id}] would not parse ({exc})"
-        )
-        return "refused", f"SKIPPED {rel}: {what}; fix it by hand"
-    return None
-
-
-def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[str, str]:
-    """The TOML (codex) half of `register`."""
-    try:
-        text = path.read_text("utf-8") if path.exists() else ""
-    except (UnicodeDecodeError, OSError) as exc:  # B26e804cd45, the TOML half
-        return "refused", f"SKIPPED {rel}: it could not be read ({exc}); add {c.id} by hand"
-    block = f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
-    if c.env:
-        block += f"env = {_toml(dict(c.env))}\n"
-    replaced = False
-    if _toml_stale_entry(text, c):
-        # Refreshed like the JSON path (B662a1ace82): the old table is cut out and the
-        # registry's launch appended -- unless the same launch already runs under
-        # another name (a second copy), or the table is not one that can be cut out.
-        servers = (_load_toml(text) or {}).get("mcp_servers", {})
-        if other := _launched_elsewhere((servers, text), c, rel):
-            return "unchanged", other
-        if (cut := _toml_without(text, c.id)) is None:
-            return "refused", (
-                f"SKIPPED {rel}: [mcp_servers.{c.id}] launches something other than the "
-                f"registry's launch and is not a plain table that can be rewritten; "
-                f"replace it by hand"
-            )
-        text, replaced = cut, True
-    new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
-    if verdict := _toml_present(text, new_text, c, rel):
-        return verdict
-    if dry_run and replaced:
-        return "written", f"WOULD replace in {rel}:\n{block.lstrip()}"
-    if dry_run:
-        # The block as it will be APPENDED, minus the leading blank line that only
-        # separates it from what is above. `test_the_preview_matches_the_write_for_a
-        # _TOML_target_too` asserts this text appears verbatim in the written file,
-        # which is the guarantee that matters; showing the whole merged file here
-        # would bury one added stanza in the operator's entire config.
-        return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    replace_text(path, new_text)
-    return "written", f"{'refreshed' if replaced else 'registered'} {c.id} in {rel}"
 
 
 def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> tuple[str, str]:
@@ -1146,53 +921,20 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
             f"with: {json.dumps(c.entry())}"
         )
     rel = target.config
-    path = Path(repo) / rel
-
-    # ONE decision, made once, for both paths. The dry run used to re-derive the entry
-    # by copy-paste, so the two already disagreed: the TOML preview omitted the leading
-    # newline the write prepends, and the JSON preview happily reported "WOULD add"
-    # over a file the write would REFUSE as unparseable -- an operator signing off on a
-    # change that could not happen, which is the failure the preview exists to prevent.
-    if target.shape == SHAPE_TOML:
-        return _register_toml(path, rel, c, dry_run)
-
-    data: dict = {}
-    if path.exists():
-        # Checked BEFORE the dry run reports, so a preview never promises a write that
-        # the real call would decline.
-        read = read_json(path)
-        if isinstance(read, Unreadable) and read.kind == "invalid":
-            return "refused", f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
-        if isinstance(read, Unreadable) and read.kind == "unreadable":
-            return "refused", (
-                f"SKIPPED {rel}: it could not be read ({read.detail}); add {c.id} by hand"
-            )
-        # Not an object: the placement below refuses it in its own words, as it always has.
-        data = read.value if isinstance(read, Unreadable) else read
-    want = server_entry_for(target.shape, c.entry())
-    if get_server(data, target.shape, c.id) == want:
-        # IDENTICAL, not merely present. The previous version returned early whenever the
-        # id existed at all, which lost the refresh the unconditional assignment used to
-        # give: an entry whose command had changed in the registry stayed stale forever,
-        # and re-running `companions add` -- the obvious remedy -- reported success and
-        # did nothing.
-        return "unchanged", f"{rel} already registers {c.id} with the same launch command"
-    # Checked even when the id holds a STALE entry: refreshing it to this launch would
-    # start the server twice, once under each name. The other name already serves it.
-    if other := _launched_elsewhere((get_servers(data, target.shape), ""), c, rel):
-        return "unchanged", other
-    try:
-        place_server(data, target.shape, c.id, c.entry())
-    except UnplaceableConfig as exc:
-        return "refused", f"SKIPPED {rel}: {exc}; add {c.id} by hand"
-    if dry_run:
-        # The MERGED result, not a lone entry: the write merges into a file holding the
-        # operator's other servers, and a preview showing only the addition misleads in
-        # the one way that matters.
-        return "written", f"WOULD add to {rel}:\n{json.dumps(data, indent=2)}"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    replace_text(path, json.dumps(data, indent=2) + "\n")
-    return "written", f"registered {c.id} in {rel}"
+    # ONE decision, made once, for both paths and for the preview: `mcpconfig.register`,
+    # the writer `adopt` uses for ddflow itself. What is companion-specific is passed in:
+    # a TOML entry is this companion when it LAUNCHES it (`launches_as`), and a launch
+    # under another name is a second copy not to write (`_launched_elsewhere`).
+    return MC.register(
+        Path(repo) / rel,
+        target.shape,
+        c.id,
+        c.entry(),
+        dry_run=dry_run,
+        rel=rel,
+        same=lambda stored: launches_as(c, stored),
+        elsewhere=lambda servers: _launched_elsewhere((servers, ""), c, rel),
+    )
 
 
 #: What stands in `gate_coverage` for ddflow's OWN operational memory.

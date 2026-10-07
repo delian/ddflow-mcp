@@ -707,7 +707,11 @@ MCP launch, hooks or command files -- and refuses a project that was never adopt
 
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
 them and leaves your own prose alone. It writes the MCP registration into each agent's
-own config location, **merged** with whatever servers are already there. From a source
+own config location, **merged** with whatever servers are already there, through the same
+writer `companions add` uses: an entry that already holds this launch is left untouched, a
+stale `ddflow` entry is refreshed (in `.codex/config.toml` too, where a header that is only
+text -- a comment, say -- no longer counts as a registration), and a config it cannot parse
+is refused with "add the server by hand". From a source
 checkout it points the config at that checkout instead of the published package, so
 developing ddflow does not silently configure your project against the released
 version.
