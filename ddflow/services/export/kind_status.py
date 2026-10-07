@@ -12,12 +12,10 @@ from __future__ import annotations
 from typing import Any
 
 from ...core import progress
-from ...core.model import ABANDONED, BLOCKED, DONE, OPEN, REVIEW, RUNNING
+from ...core.model import DONE, REVIEW, RUNNING
 from . import registry
 from .frame import one_line
 from .query import Query
-
-_ORDER = (DONE, RUNNING, REVIEW, OPEN, BLOCKED, ABANDONED)
 
 
 def _seconds(q: Query) -> float:
@@ -36,7 +34,7 @@ def _seconds(q: Query) -> float:
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     tasks = q.tasks()
     phases = q.phases()
-    counts = {s: sum(1 for t in tasks if t.state == s) for s in _ORDER}
+    counts = progress.state_counts(tasks)
     seconds = _seconds(q)
     live = [d for d in q.decisions() if getattr(d, "live", False)]
     in_flight = [
@@ -53,7 +51,7 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         "phases_total": len(phases),
         "phases_done": sum(1 for p in phases if p.state == DONE),
         "tasks_total": len(tasks),
-        "task_counts": [{"state": s, "n": counts[s]} for s in _ORDER if counts[s]],
+        "task_counts": [{"state": s, "n": n} for s, n in counts.items() if n],
         "tasks_done": counts[DONE],
         "agent_hours": round(seconds / 3600, 1),
         "in_flight": in_flight,

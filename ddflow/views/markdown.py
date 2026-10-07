@@ -21,8 +21,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Config
+from ..core import progress as PR
 from ..core import provenance as PV
-from ..core.graph import closure
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
 from ..core.schedule import Plan, critical_path
 from ..core.tier import tier_of
@@ -42,53 +42,12 @@ def _bar(done: int, total: int, width: int = 18) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
-def _depth(state: State, item, root: str) -> int:
-    """How far below the phase this item sits. Bounded, because a parent chain is
-    operator-authored and a cycle in it must not hang the renderer."""
-
-    def parent(i: str) -> list[str]:
-        up = (item if i == item.id else state.items[i]).parent
-        return [up] if up and up != root and up in state.items else []
-
-    above = [n for n in closure(item.id, parent) if n != item.id]
-    # A chain that ends in an item that is its own parent counts that last step once.
-    last = state.items[above[-1]] if above else item
-    return min(len(above) + (last.parent == last.id != root), 6)
-
-
-def unphased(state: State) -> list:
-    """Live tasks that sit under no phase, a sub-task after its parent (Bc896ea5d16: the
-    board listed only phases' tasks, so a task added with no phase never appeared)."""
-    under: set[str] = set()
-    for ph in state.phases():
-        under |= set(state.descendants(ph.id))
-    return _nested(state, "", [t for t in state.tasks() if t.id not in under])
-
-
-def _nested(state: State, phase: str, tasks: list | None = None) -> list:
-    """Tasks under a phase, each sub-task immediately after its parent. ``tasks``
-    overrides the set (the unphased ones, whose root is the empty id)."""
-    if tasks is None:
-        tasks = state.tasks(phase)
-    by_parent: dict[str, list] = {}
-    for t in tasks:
-        by_parent.setdefault(t.parent, []).append(t)
-    out: list = []
-
-    def walk(parent: str, seen: set) -> None:
-        for t in sorted(by_parent.get(parent, []), key=lambda x: (x.priority, x.id)):
-            if t.id in seen:
-                continue
-            seen.add(t.id)
-            out.append(t)
-            walk(t.id, seen)
-
-    walk(phase, set())
-    # Anything whose parent chain does not reach the phase (an orphan, or a cycle)
-    # still belongs on the board: silently dropping it is how work disappears.
-    listed = {t.id for t in out}
-    out.extend(t for t in tasks if t.id not in listed)
-    return out
+# The board's structure lives in core.progress (B-uni-tallies): the markdown here and the
+# `board --json` rows are rendered from the one `board_rows`. Re-exported under the old
+# names, which other modules import.
+_depth = PR.depth
+_nested = PR.nested
+unphased = PR.unphased
 
 
 def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
@@ -103,81 +62,68 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
     from ..services.gates import pipeline_for
 
     out = [GENERATED, "", "# Work queue", ""]
-    phases = [p for p in state.phases() if not phase or p.id == phase]
-    loose = [] if phase else unphased(state)
-    if not phases and not loose:
+    default = list(Config().gates.task_pipeline)
+    sections = PR.board_rows(
+        state, (lambda t: pipeline_for(t, cfg)) if cfg is not None else (lambda t: default), phase
+    )
+    if not sections:
         out.append("_No phases yet. `ddflow phase add <id> --title '...'`_")
         return "\n".join(out)
 
-    def table(tasks: list, root: str) -> None:
+    def table(rows: list[dict]) -> None:
         out.append("| | Task | State | Needs | Globs | Gates | Owner |")
         out.append("|---|---|---|---|---|---|---|")
-        for t in tasks:
+        for r in rows:
             mark = {DONE: "x", RUNNING: "~", REVIEW: "r", BLOCKED: "!", ABANDONED: "-"}.get(
-                t.state, " "
+                r["state"], " "
             )
-            pipeline = (
-                pipeline_for(t, cfg) if cfg is not None else list(Config().gates.task_pipeline)
-            )
-            gates = "".join(OUTCOME_MARK.get(t.gate_outcome(g), " ") for g in pipeline)
-            indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * _depth(state, t, root)
+            gates = "".join(OUTCOME_MARK.get(o, " ") for o in r["gates"].values())
+            indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * r["depth"]
             # Every free-text cell goes through _cell (B2eaa1e5e8e): a `|` in a title
             # invented a column and a newline split the row.
-            needs = ", ".join(_cell(n, cfg) for n in t.needs) or "—"
-            globs = ", ".join(f"`{_cell(g, cfg)}`" for g in t.globs) or "—"
-            owner = _cell(t.lease.holder, cfg) if t.lease else "—"
+            needs = ", ".join(_cell(n, cfg) for n in r["needs"]) or "—"
+            globs = ", ".join(f"`{_cell(g, cfg)}`" for g in r["globs"]) or "—"
+            owner = _cell(r["owner"], cfg) if r["owner"] else "—"
             out.append(
-                f"| [{mark}] | {indent}**{_id_cell(t.id, cfg)}** {_cell(t.title, cfg)} | "
-                f"{t.state} | {needs} | {globs} | `{gates}` | {owner} |"
+                f"| [{mark}] | {indent}**{_id_cell(r['id'], cfg)}** {_cell(r['title'], cfg)} | "
+                f"{r['state']} | {needs} | {globs} | `{gates}` | {owner} |"
             )
         out.append("")
-        caption = " · ".join(
-            pipeline_for(tasks[0], cfg) if cfg is not None else list(Config().gates.task_pipeline)
-        )
+        caption = " · ".join(rows[0]["gates"])
         out.append(
             f"<sub>Gate column order: {caption}. "
             "`x` passed `!` failed `?` unavailable `~` partial `-` skipped</sub>"
         )
         out.append("")
 
-    for ph in sorted(phases, key=lambda p: (p.priority, p.id)):
+    for sec in sections:
         # Ordered so a sub-task follows its parent, and indented by depth: a flat list
         # of "P1.T1, P1.T1a, P1.T1b" hides that two of them are halves of the first.
-        tasks = _nested(state, ph.id)
-        # Abandoned tasks are SETTLED, not outstanding. Counting them in the
-        # denominator made a completed phase render as "3/4 tasks", which reads as
-        # unfinished work that no longer exists.
-        abandoned = [t for t in tasks if t.state == ABANDONED]
-        live = [t for t in tasks if t.state != ABANDONED]
-        done = sum(1 for t in live if t.state == DONE)
-        out.append(f"## {ph.id} — {ph.title or '(untitled)'}")
-        out.append("")
-        bits = [f"`{ph.state}`", f"{_bar(done, len(live))} {done}/{len(live)} tasks"]
-        if abandoned:
-            bits.append(f"{len(abandoned)} abandoned")
-        if ph.needs:
-            bits.append("needs " + ", ".join(f"`{n}`" for n in ph.needs))
-        if ph.lease:
+        # Abandoned tasks are SETTLED, not outstanding: out of the total (core.progress).
+        n = sec.tally
+        ph = sec.phase
+        if ph is None:
+            out.append("## Unphased — tasks under no phase")
+            out.append("")
+            bits = []
+        else:
+            out.append(f"## {ph.id} — {ph.title or '(untitled)'}")
+            out.append("")
+            bits = [f"`{ph.state}`"]
+        bits.append(f"{_bar(n.done, n.live)} {n.done}/{n.live} tasks")
+        if n.abandoned:
+            bits.append(f"{n.abandoned} abandoned")
+        if ph is not None and ph.needs:
+            bits.append("needs " + ", ".join(f"`{x}`" for x in ph.needs))
+        if ph is not None and ph.lease:
             bits.append(f"held by **{ph.lease.holder}**")
         out.append(" · ".join(bits))
         out.append("")
-        if ph.body:
+        if ph is not None and ph.body:
             out.append(textwrap.indent(ph.body.strip(), "> "))
             out.append("")
-        if tasks:
-            table(tasks, ph.id)
-    if loose:
-        abandoned = [t for t in loose if t.state == ABANDONED]
-        live = [t for t in loose if t.state != ABANDONED]
-        done = sum(1 for t in live if t.state == DONE)
-        out.append("## Unphased — tasks under no phase")
-        out.append("")
-        bits = [f"{_bar(done, len(live))} {done}/{len(live)} tasks"]
-        if abandoned:
-            bits.append(f"{len(abandoned)} abandoned")
-        out.append(" · ".join(bits))
-        out.append("")
-        table(loose, "")
+        if sec.rows:
+            table(sec.rows)
     cp = critical_path(state, phase)
     if len(cp) > 1:
         out.append(

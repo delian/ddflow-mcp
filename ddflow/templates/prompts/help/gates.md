@@ -41,7 +41,7 @@ unavailable — never as a pass.
 A gate gets `[review].max_rounds` (default 2) review rounds per item, full and delta
 alike; a third is refused. After that, `ddflow review triage` settles each remaining
 finding (always allowed): refute it with the run that shows it false, or confirm it with
-the test that now passes; then record the gate on that triage, or ask the operator. Change the cap with `ddflow config review.max_rounds N` (0 =
+the test that now passes; the triage that settles the last finding records the gate passed on refutation (flagged in `gate status`), and one you cannot settle goes to the operator. Change the cap with `ddflow config review.max_rounds N` (0 =
 unlimited; add `--local` for this machine) or `review.on_exceed = "warn"`.
 
 Once a gate has a recorded review, `ddflow review <id> --gate G` is a full re-review: the

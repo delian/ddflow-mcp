@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..core import progress as PR
 from ..services import search as S
 from ..services import session_view as SV
 from ..services import viewers as V
@@ -57,13 +58,10 @@ def view_list(
 
 
 def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
-    """(done, total) of the live tasks below a phase."""
-    below = [
-        st.items[i]
-        for i in st.descendants(phase_id)
-        if i in st.items and st.items[i].kind == "task" and not st.items[i].removed
-    ]
-    return sum(1 for t in below if t.state == "done"), len(below)
+    """(done, total) of the tasks below a phase: ``core.progress.phase_tally``, so an
+    abandoned task is out of the total as on the board (B01281f654e)."""
+    n = PR.phase_tally(st, phase_id)
+    return n.done, n.live
 
 
 #: The selector arguments each kind takes, beyond the state/owner/since filters, which the
