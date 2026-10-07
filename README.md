@@ -1616,6 +1616,12 @@ task per independently-shippable step. Declare each task's globs — the files i
 write — and its needs, the tasks that must finish first. Then show me `ddflow next`.
 ```
 
+A glob names files as they are when the task is filed. When a module later becomes a
+package (`api/reporting.py` split into `api/reporting/`), an open task's lease on the old
+name covers none of the new files, and the conflict detector cannot see the overlap:
+`ddflow doctor` notes each such glob with the `ddflow update <id> --globs ...` that
+corrects it.
+
 What the agent does with that:
 
 ```console
