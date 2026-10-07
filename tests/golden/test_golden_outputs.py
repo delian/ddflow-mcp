@@ -1,13 +1,15 @@
 """Golden: what ddflow prints about a fixed project -- brief, recall, next, status, every
 export and `config --explain` -- byte for byte, exit code included.
 
-The project is `fixtures/project.jsonl` (see `project` in this directory's conftest): a
+The project is `fixtures/project.jsonl` (see `project` in goldenfix.py): a
 committed log with fixed timestamps, so nothing here depends on when the test runs.
 """
 
+# ruff: noqa: F811 -- the goldenfix fixtures are imported, then named as parameters
 from __future__ import annotations
 
 import pytest
+from goldenfix import _pinned_environment, ddflow, project  # noqa: F401 -- fixtures
 
 OUTPUTS = {
     "brief": ["brief"],

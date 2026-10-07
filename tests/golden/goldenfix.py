@@ -1,5 +1,10 @@
 """Golden snapshots of what ddflow shows (B-uni-property-tests; D-unify 4).
 
+Fixtures shared by this directory's tests, imported by each module rather than kept in a
+`conftest.py`: the suite's own modules do `from conftest import run_cli`, and a second
+`conftest.py` here would shadow tests/conftest.py under that name for every module
+collected after it.
+
 Every P-unify interface task moves code behind these surfaces and must leave them
 byte-identical, or explain the diff. A snapshot that changes on purpose is re-recorded
 with `--snapshot-update` in the same commit as the change, so the diff is reviewed with it:
