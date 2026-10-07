@@ -72,6 +72,7 @@ FAKE_PUBLISHER = r"""#!/usr/bin/env bash
 #             was lost, and the GET before this call raced it (listed from now on)
 #   bad       400 validation failure -- permanent
 #   hang      the request is accepted and never answered
+#   slow-ok   published, after 2 s: a loaded host, not a hang
 echo "$*" >> "$FAKE_DIR/publisher.log"
 [ "$1" = login ] && exit 0
 n=0; [ -e "$FAKE_DIR/publishes" ] && n=$(wc -l < "$FAKE_DIR/publishes"); echo x >> "$FAKE_DIR/publishes"
@@ -83,6 +84,7 @@ case "$word" in
   dup)      echo 'Error: publish failed: server returned status 400: {"detail":"Failed to publish server","errors":[{"message":"invalid version: cannot publish duplicate version: x already exists"}]}' >&2; exit 1 ;;
   dup-race) touch "$FAKE_DIR/listed"; echo 'Error: publish failed: server returned status 400: {"detail":"Failed to publish server","errors":[{"message":"invalid version: cannot publish duplicate version: x already exists"}]}' >&2; exit 1 ;;
   hang)     exec /bin/sleep 600 ;;
+  slow-ok)  /bin/sleep 2; touch "$FAKE_DIR/listed"; echo "Successfully published"; exit 0 ;;
   bad)      echo 'Error: publish failed: server returned status 400: {"detail":"Failed to publish server","errors":[{"message":"description too long"}]}' >&2; exit 1 ;;
 esac
 """
@@ -98,7 +100,9 @@ echo "$1" >> "$FAKE_DIR/sleeps"
 """
 
 
-def _run(tmp_path: Path, plan: str, *, listed: bool = False, last: str = "504"):
+def _run(
+    tmp_path: Path, plan: str, *, listed: bool = False, last: str = "504", call_timeout: int = 20
+):
     fake = tmp_path / "fake"
     fake.mkdir(parents=True)
     for name, body in (
@@ -123,7 +127,10 @@ def _run(tmp_path: Path, plan: str, *, listed: bool = False, last: str = "504"):
         "FAKE_PLAN": plan,
         "FAKE_LAST": last,
         **ENV,
-        "MCP_CALL_TIMEOUT": "1",  # the hang case; every other call returns at once
+        # Generous by default: on a loaded host even these fake calls can take over a
+        # second, and a 1 s bound cut them off as hangs and retried them (B6797d49e48).
+        # Only the hang case asks for a shorter one.
+        "MCP_CALL_TIMEOUT": str(call_timeout),
     }
     # GitHub runs `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`.
     proc = subprocess.run(
@@ -229,9 +236,18 @@ def test_duplicate_is_success_only_once_the_registry_confirms_it(tmp_path):
 
 def test_a_call_that_hangs_is_cut_off_and_retried(tmp_path):
     # mcp-publisher's HTTP client has no timeout; a starved request can be held open.
-    proc, r = _run(tmp_path, "hang ok")
+    # The bound covers the `ok` after the hang too: 10 s, so load cannot cut THAT off.
+    proc, r = _run(tmp_path, "hang ok", call_timeout=10)
     assert proc.returncode == 0, r["out"]
     assert r["publishes"] == 2
+
+
+def test_a_slow_answer_is_not_cut_off_as_a_hang(tmp_path):
+    """A call that answers late (a loaded host) is one publish, not a hang retried
+    (B6797d49e48)."""
+    proc, r = _run(tmp_path, "slow-ok")
+    assert proc.returncode == 0, r["out"]
+    assert r["publishes"] == 1 and r["sleeps"] == [], r
 
 
 def test_a_permanent_rejection_fails_at_once(tmp_path):
