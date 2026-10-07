@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ...core import clock
 from ...core import outcome as O
 from ...core.plain import plain
 from .._base import _load
@@ -17,12 +18,7 @@ _TEXT_CAP = 600
 
 def _epoch(ts: str) -> float:
     """An event's ISO timestamp as epoch seconds; 0.0 for one that does not parse."""
-    from datetime import datetime
-
-    try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-    except (ValueError, AttributeError):
-        return 0.0
+    return clock.epoch(ts, naive="local", default=0.0)
 
 
 def record_summary(st, rid: str) -> dict[str, Any]:

@@ -16,9 +16,9 @@ the same log renders the same bytes.
 from __future__ import annotations
 
 import re
-from datetime import date
 from typing import Any
 
+from ...core import clock
 from ...core.model import Bug
 from . import registry
 from .frame import one_line
@@ -40,7 +40,7 @@ def _day(ts: str) -> str:
 
 def _age_days(found: str, until: str) -> int | None:
     try:
-        return max(0, (date.fromisoformat(until[:10]) - date.fromisoformat(found[:10])).days)
+        return max(0, (clock.parse_date(until[:10]) - clock.parse_date(found[:10])).days)
     except ValueError:
         return None
 
