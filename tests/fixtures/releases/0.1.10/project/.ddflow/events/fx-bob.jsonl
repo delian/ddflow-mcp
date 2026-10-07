@@ -1,0 +1,4 @@
+{"agent":"fx-bob","data":{"at":1791381541.7397883,"branch":"","globs":["docs/**"],"holder":"fx-bob","kind":"task","note":"","resources":[],"ttl_s":1800,"worktree":""},"id":"ec2e4705c7967b9ba979f7bb0","kind":"lease.acquired","lamport":32,"schema":1,"subject":"T3","ts":"2026-10-07T13:59:01.740739Z"}
+{"agent":"fx-bob","data":{},"id":"ed19bb47529fc2d7bb60738ca","kind":"item.started","lamport":33,"schema":1,"subject":"T3","ts":"2026-10-07T13:59:01.773531Z"}
+{"agent":"fx-bob","data":{"at":1791381542.2086391,"holder":"fx-bob"},"id":"ec06ec6a108fdfb79b331c067","kind":"lease.renewed","lamport":34,"schema":1,"subject":"T3","ts":"2026-10-07T13:59:02.208827Z"}
+{"agent":"fx-bob","data":{"by":"fx-bob","event":"ec2e4705c7967b9ba979f7bb0","holder":"fx-bob","note":"out of time"},"id":"e4a6a09635063942dafd5bb95","kind":"lease.released","lamport":35,"schema":1,"subject":"T3","ts":"2026-10-07T13:59:02.603851Z"}

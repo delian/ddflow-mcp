@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
+from ...core import clock
 from ...services import session_view as V
 from ..context import NOTHING, OK, REFUSED, Ctx
 
@@ -27,7 +28,7 @@ def add_session_view_parsers(sub) -> None:
 
 
 def _day(ts: str) -> str:
-    return ts[:16].replace("T", " ") if ts else "-"
+    return clock.fmt_minute(ts) if ts else "-"
 
 
 def cmd_session_list(a, c: Ctx) -> int:

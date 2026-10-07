@@ -2089,7 +2089,8 @@ decision **accepted** — what changes is that none of it is shown anonymously:
 - `ddflow doctor` notes event shards whose agent id has no committed history on the default
   branch (`.ddflow/events/<id>.jsonl` absent from its tree), naming them so a stranger's
   first records are looked at; your own shard is never listed, and when git cannot say the
-  note reads `unavailable`, never clean.
+  note reads `unavailable`, never clean. A shard the operator reviewed (data repair
+  `unknown-author-shards`) is not named again.
 
 ### Similar — "is this already filed?"
 
@@ -3679,7 +3680,7 @@ below is the current, version-based form of that refusal.
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
 checkout running an older ddflow than its teammates, is a fact instead of a guess
-(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Three event kinds, all skipped
+(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Four event kinds, all skipped
 with a note by a ddflow that predates them:
 
 | kind | written | carries |
@@ -3687,6 +3688,7 @@ with a note by a ddflow that predates them:
 | `ddflow.seen` | once per (agent, version), on that agent's first write after a version change | `version`, install kind (`installed` or `source-tree`) |
 | `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version, session, the reason |
 | `upgrade.applied` | when an upgrade is applied (the apply step is a later task) | from, to, categories, backup |
+| `repair.applied` | when a versioned data repair is applied (below) | repair id, since, version, the settled findings' keys and details |
 
 The fold keeps the **highest** version stamped (`State.ddflow_versions`; `ddflow status
 --json` shows it in its ddflow_version field, and `ddflow doctor` names it when there is
@@ -3716,6 +3718,62 @@ guard can refuse; releases before it cannot.
 
 `[upgrade].skew` is the policy: `refuse` (default), `warn` (write, say so on stderr) or
 `off`. Set it with `ddflow config` or `ddflow_configure`.
+
+### Versioned data repairs
+
+Some bugs leave damage in the log that outlives the fix: events an older ddflow wrote
+before the fix still carry it. A **data repair** finds that damage in a log and mends it by
+appending corrective events. It never edits or deletes a line, so history is never
+rewritten (decision D-upgrade-model, `ddflow/services/repairs/`). Each repair has an id,
+`since` (the first release that no longer causes the damage), a detector, the corrective
+step and a test fixture: a crafted old log carrying that damage. The test checks that the
+detector finds it, the repair mends it, a second run finds nothing, and every original line
+is byte-identical. Applying a repair appends `repair.applied` (the repair id, `since`, the
+version applying it, the keys and descriptions of the findings it settled), so the same
+findings are never offered again. `ddflow history --kind repair` shows it.
+
+| repair | finds | applying it |
+|---|---|---|
+| `orphan-prompts` | prompts and notes recorded with no session id | appends a copy under the nearest session, as `ddflow session adopt-orphans` does |
+| `forced-completions` | items completed with `--force` over unmet conditions, still done | reports and annotates them (the record names each item and what was overridden); the completion stands and `ddflow verify <id>` re-checks it |
+| `unreadable-lines` | shard lines that are not events (a torn append, non-object JSON) | quarantine note: records each line's shard, number and digest |
+| `mismatched-ids` | events whose content does not match their id | quarantine note: records each event id |
+| `unknown-author-shards` | shards by an agent id with no committed history on the default branch | records that the operator reviewed the author. Runs only when named: it is the operator's decision |
+| `old-export-renders` | selected whole-file generated documents rendered by an older ddflow that regenerating would change | regenerates them, as `ddflow export <doc> --update` does. A hand-edited file is never touched |
+
+`ddflow doctor` reports what is pending. A torn line or an edited event is a PROBLEM until
+a repair has quarantined it, and a NOTE after that. A reviewed unknown author is no longer
+named. Doctor only reports: it never applies a repair. A bug fix task tagged
+`data-damage` must ship a repair that names the bug, or a `FOLD_ONLY` entry saying why
+reading the log is already enough. A test on this project's own log enforces this.
+
+### The upgrade manifest: what changed since your version
+
+Every release ships `ddflow/templates/upgrade/changes.toml` in the wheel: a machine-readable
+list, per release, of what a project upgrading from an older version will meet
+(B-upgrade.2-changes). Each entry is one change:
+
+| kind | carries |
+|---|---|
+| `knob_added`, `knob_changed`, `knob_removed` | the `section.knob`, its old and new default, a one-line `why`, and for a changed default the `effect` a project that never set it will see |
+| `event_kind_added`, `event_kind_removed` | the event kind |
+| `refresh`, `repair`, `feature` | an instruction, hook or template refresh; a data repair by id; an opt-in feature with the command that `enable`s it |
+
+The file starts from a base (every knob default and event kind of 0.1.3) and lists every
+release since. Replaying it gives exactly the knobs and event kinds of the ddflow that ships
+it, and a test holds that: a branch that adds a knob, flips a default or adds an event kind
+without an entry fails until it has one. Run `uv run python scripts/upgrade_manifest.py
+backfill` (it snapshots every release commit and the working tree), commit
+`ddflow/templates/upgrade/`, and write the `why` (and `effect`) it could not know. A change
+not yet released is a fragment file of its own under `templates/upgrade/unreleased/`, so two
+branches adding knobs never edit the same file; cutting a version folds the fragments into
+its release. The history it backfilled from 0.1.3 to 0.2.0: 63 new knobs, 7 changed
+defaults (among them `dedupe.on_match`, `warn` in 0.1.9 and `ask` again in 0.1.10).
+
+In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
+a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
+The upgrade plan (B-upgrade.3-plan, still to come) reads it to tell a project what its
+upgrade will change.
 
 Two such kinds describe how records relate (decision D-no-duplicates). Add events
 (`task.added`, `phase.added`, `bug.found`, `lesson.recorded`, `research.recorded`,

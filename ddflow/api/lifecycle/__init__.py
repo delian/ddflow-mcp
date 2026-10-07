@@ -37,6 +37,7 @@ from datetime import (
 from pathlib import Path  # noqa: F401
 from typing import Any  # noqa: F401
 
+from ...core import clock  # noqa: F401
 from ...core import globspec as GS  # noqa: F401
 from ...core import outcome as O  # noqa: F401
 from ...core import progress as PR  # noqa: F401
