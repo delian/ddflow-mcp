@@ -27,7 +27,7 @@ from . import legacy as L
 from . import onboard_tests as T
 
 #: How long the registered server may take to answer initialize + tools/list.
-_HANDSHAKE_TIMEOUT = 30
+_HANDSHAKE_TIMEOUT = P.TIMEOUTS["probe"]
 #: The trailer the commit-msg probe tries to sneak past the hook.
 _TRAILER = "Co-Authored-By: onboard-verify <verify@example.invalid>"
 #: A message the probe expects the hook to read.

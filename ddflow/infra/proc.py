@@ -76,14 +76,18 @@ def kill_group(p: subprocess.Popen) -> None:
             pass  # gone already, or not ours: the direct child is all we can still reach
     else:
         with contextlib.suppress(OSError, subprocess.SubprocessError):
-            run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True, timeout=10)
+            run(
+                ["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                capture_output=True,
+                timeout=TIMEOUTS["instant"],
+            )
     with contextlib.suppress(OSError):
         p.kill()
 
 
 #: Every named timeout in seconds, in one table (D-unify: one process layer). A call site
 #: names the entry that describes it; the number is changed here, once.
-TIMEOUTS: dict[str, float] = {
+TIMEOUTS: dict[str, int] = {
     #: a git command (`infra.git.run`'s default); a merge, a worktree add
     "git": 300,
     #: a git path listing (`infra.git.git_paths`)
@@ -156,7 +160,13 @@ def run_shell(
     if on_tick is not None and tick_s <= 0:
         raise ValueError("run_shell: on_tick needs tick_s > 0, or it would never be called")
     start = time.monotonic()
-    kwargs: dict[str, Any] = {"cwd": cwd, "env": env, "text": True, "errors": "replace"}
+    kwargs: dict[str, Any] = {
+        "cwd": cwd,
+        "env": env,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+    }
     if merge_stderr:
         kwargs["stderr"] = subprocess.STDOUT
     try:
@@ -248,12 +258,12 @@ def _drain(p: subprocess.Popen) -> tuple[Any, Any]:
     read), and ``p`` reaped. Bounded: a grandchild that left the group (its own `setsid`)
     can hold the pipes open forever."""
     try:
-        return p.communicate(timeout=10)
+        return p.communicate(timeout=TIMEOUTS["drain"])
     except subprocess.TimeoutExpired:
         for f in (p.stdin, p.stdout, p.stderr):
             if f is not None:
                 with contextlib.suppress(OSError):
                     f.close()
         with contextlib.suppress(subprocess.TimeoutExpired):
-            p.wait(timeout=10)
+            p.wait(timeout=TIMEOUTS["drain"])
         return None, None
