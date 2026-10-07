@@ -615,7 +615,7 @@ validate the **result**, then replace the file atomically.
 - **What is required is `[gates].required`, only.** `required = true` inside a
   `[gate.<id>]` table used to be accepted and ignored, so the gate was never enforced; it
   is now warned about on every command (and refused in ddflow's own tree), naming
-  `ddflow workflow gate <id> --required`.
+  `[gates].required` as the place to list it.
 
 `ddflow workflow` and `ddflow doctor` both re-run those checks against what is on
 disk. Everything is a file you can also edit by hand: gates in `[gate.<id>]`, reviewers
