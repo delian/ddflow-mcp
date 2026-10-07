@@ -100,6 +100,17 @@ def rounds_line(it, gate: str) -> str:
     return f"{n(full, 'full')}, {n(delta, 'delta')}"
 
 
+def on_refutation(it, gate: str) -> dict[str, Any] | None:
+    """The `passed_on_refutation` flag of ``gate``'s recorded PASS (its refuted and
+    confirmed counts and the rounds it took), or None: passed by a clean review, or not
+    passed (decision D-unify 5: such a pass is allowed, and always visible)."""
+    rec = it.gates.get(gate)
+    if rec is None or rec.outcome != "passed":
+        return None
+    flag = (rec.evidence or {}).get("passed_on_refutation")
+    return flag if isinstance(flag, dict) else None
+
+
 def triage_line(counts: dict[str, int]) -> str:
     return (
         f"{counts['findings']} finding(s): {counts['refuted']} refuted, "
@@ -139,7 +150,11 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         complete=complete,
         rows=rows,
         silent=[g for g, o in rows if not o],
-        triage={g: triage_line(c) for g, _o in rows if (c := triage_counts(it, g))},
+        triage={
+            g: triage_line(c) + (" -- PASSED ON REFUTATION" if on_refutation(it, g) else "")
+            for g, _o in rows
+            if (c := triage_counts(it, g))
+        },
         rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
     )
 

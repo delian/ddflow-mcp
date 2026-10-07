@@ -269,12 +269,13 @@ def triage(
             "location": f.get("location", ""),
         },
     )
-    _log, _cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     counts = G.triage_counts(st.items[item], gate) or {}
     text = (
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{G.triage_line(counts)}"
     )
+    settled = _settle_after_cap(log, cfg, st.items[item], gate, counts)
     return O.ok(
         "review.triage",
         id=item,
@@ -282,7 +283,55 @@ def triage(
         finding=finding,
         verdict=verdict,
         counts=counts,
-        text=text,
+        text=f"{text}\n{settled}" if settled else text,
+        passed_on_refutation=settled.startswith("recorded"),
+    )
+
+
+def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int]) -> str:
+    """What the triage means for a gate whose review budget is spent (decision
+    D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
+
+    Once `[review].max_rounds` rounds are used and EVERY finding on the gate's record
+    has a verdict with its probe, the gate is recorded passed ON REFUTATION: the
+    review's own evidence and reviewer, plus `passed_on_refutation` (the refuted and
+    confirmed counts and the rounds), which gate status shows so the operator can
+    spot-check it. A finding still without a verdict holds the gate where it is, and the
+    answer says how to finish: settle it, or ask the operator for one more round."""
+    cap = cfg.review.max_rounds
+    used = _rounds_used(log, it.id, gate)
+    rec = it.gates.get(gate)
+    if cap <= 0 or used < cap or rec is None or rec.outcome == "passed":
+        return ""
+    if counts.get("untriaged", 1):
+        return (
+            f"the review budget is spent ({used} of {cap} rounds) and "
+            f"{counts.get('untriaged')} finding(s) have no verdict: settle each with `ddflow "
+            f"review triage`, and the gate is recorded passed on refutation; one you cannot "
+            f'settle goes to the operator (`ddflow review {it.id} --gate {gate} --force --reason "..."` '
+            "is theirs to grant)"
+        )
+    flag = {
+        "refuted": counts["refuted"],
+        "confirmed": counts["confirmed"],
+        "rounds": used,
+        "max_rounds": cap,
+    }
+    GD.record(
+        log,
+        cfg,
+        it.id,
+        gate,
+        "passed",
+        reason="",
+        evidence={**(rec.evidence or {}), "passed_on_refutation": flag},
+        by=rec.by,
+    )
+    return (
+        f"recorded {it.id}.{gate} = passed ON REFUTATION (flagged): every one of the "
+        f"{counts['findings']} finding(s) has a verdict with its probe "
+        f"({counts['refuted']} refuted, {counts['confirmed']} confirmed) after {used} of "
+        f"{cap} review rounds"
     )
 
 
@@ -641,7 +690,8 @@ def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
         f"  ddflow review triage {item} --gate {gate} --finding N --refuted|--confirmed "
         '--probe "..."    settle each remaining finding: refute it with the run that shows it '
         "false, or confirm it with the test that now passes (always allowed)\n"
-        "  then record the gate on that triage, or ask the operator\n"
+        "  the triage that settles the last finding records the gate passed on refutation "
+        "(flagged); one you cannot settle goes to the operator\n"
         f'  ddflow review {item} --gate {gate} --force --reason "..."    one more round, '
         "recorded\n"
         "To change the budget: ddflow config --set review.max_rounds N [--local] "
