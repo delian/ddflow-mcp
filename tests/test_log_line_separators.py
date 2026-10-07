@@ -1,7 +1,8 @@
 """B5035a55092: an event whose text holds a character `str.splitlines` breaks on is read whole.
 
-`canonical` writes JSON with ensure_ascii=False, so U+2028, U+0085, \\x1c and friends land in
-a shard raw. The reader split lines with `splitlines()`, which cut such an event in two:
+`canonical` writes JSON with ensure_ascii=False, so U+2028, U+2029 and U+0085 land in a shard
+raw (the C0 controls `splitlines` also breaks on, such as \\x1c and \\r, are escaped by the
+JSON encoder and never did). The reader split lines with `splitlines()`, which cut such an event in two:
 both halves were unparseable, the event was lost from every fold and doctor called it a
 torn append. A line is what the writer terminates: "\\n" alone.
 """
@@ -14,7 +15,8 @@ import pytest
 
 from ddflow.infra.log import EventLog
 
-SEPARATORS = ["\u2028", "\u2029", "\x85", "\x1c", "\x1d", "\x1e", "\x0b", "\x0c", "\r"]
+#: The characters `str.splitlines` breaks on that the JSON encoder writes raw.
+SEPARATORS = ["\u2028", "\u2029", "\x85"]
 
 
 @pytest.mark.parametrize("sep", SEPARATORS, ids=[f"U+{ord(s):04X}" for s in SEPARATORS])
