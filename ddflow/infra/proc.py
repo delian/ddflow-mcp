@@ -24,6 +24,7 @@ import signal
 import subprocess
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 #: Re-exported so callers need only import this module.
@@ -80,7 +81,111 @@ def kill_group(p: subprocess.Popen) -> None:
         p.kill()
 
 
+#: Every named timeout in seconds, in one table (D-unify: one process layer). A call site
+#: names the entry that describes it; the number is changed here, once.
+TIMEOUTS: dict[str, float] = {
+    #: a git command (`infra.git.run`'s default); a merge, a worktree add
+    "git": 300,
+    #: a git path listing (`infra.git.git_paths`)
+    "git_listing": 60,
+    #: a quick probe of the environment: `git config`, `rev-parse`, a version flag
+    "probe": 30,
+    #: a call that must answer at once: a process-table read, a taskkill
+    "instant": 10,
+    #: a command gate or a `[ci]` run that sets no timeout of its own
+    "gate": 1800,
+    #: a project's own test suite run for a baseline (onboarding)
+    "suite_baseline": 900,
+    #: the grace after a kill before giving up on draining a child's pipes
+    "drain": 10,
+}
+
+
+@dataclass
+class ShellResult:
+    """How a shell line ended, as a value (never an exception).
+
+    ``code`` is the exit status, None when the command did not finish (``timed_out``) or
+    never started (``could_not_run``: no such directory, an environment the OS refused).
+    The two are what a caller must not read as "the command failed": a tool that quietly
+    stopped being installed, or a suite killed at its bound, says nothing about the code.
+    """
+
+    code: int | None
+    out: str = ""
+    err: str = ""
+    timed_out: bool = False
+    could_not_run: bool = False
+    #: Seconds from start to the end (or the kill).
+    elapsed_s: float = 0.0
+
+    @property
+    def ok(self) -> bool:
+        return self.code == 0
+
+    @property
+    def finished(self) -> bool:
+        """The command ran to an exit status of its own."""
+        return self.code is not None
+
+    @property
+    def output(self) -> str:
+        return self.out + self.err
+
+
 def run_shell(
+    command: str,
+    *,
+    timeout_s: float | None,
+    cwd: Any = None,
+    env: dict[str, str] | None = None,
+    on_tick: Callable[[], None] | None = None,
+    tick_s: float = 0,
+    merge_stderr: bool = False,
+) -> ShellResult:
+    """Run an operator's shell line to completion and report how it ended.
+
+    The line leads a session of its own, so a timeout kills its whole process group
+    (Bed0f5b6d99); the output is text decoded with ``replace``; stdin is /dev/null.
+    ``on_tick`` is called every ``tick_s`` seconds meanwhile, on this thread. With
+    ``merge_stderr`` stderr is folded into ``out`` in the order written. This never raises
+    for the command's own trouble: a timeout is ``timed_out``, a command that could not be
+    started is ``could_not_run`` with the reason in ``err``. (A bad ``on_tick``/``tick_s``
+    pair is the caller's bug and still raises ValueError.)
+    """
+    if on_tick is not None and tick_s <= 0:
+        raise ValueError("run_shell: on_tick needs tick_s > 0, or it would never be called")
+    start = time.monotonic()
+    kwargs: dict[str, Any] = {"cwd": cwd, "env": env, "text": True, "errors": "replace"}
+    if merge_stderr:
+        kwargs["stderr"] = subprocess.STDOUT
+    try:
+        p = _shell_group(command, timeout=timeout_s, on_tick=on_tick, tick_s=tick_s, **kwargs)
+    except subprocess.TimeoutExpired as exc:
+        return ShellResult(
+            None,
+            _text(exc.output),
+            _text(exc.stderr),
+            timed_out=True,
+            elapsed_s=round(time.monotonic() - start, 3),
+        )
+    except (OSError, ValueError) as exc:
+        return ShellResult(None, err=str(exc), could_not_run=True)
+    return ShellResult(
+        p.returncode,
+        p.stdout or "",
+        p.stderr or "",
+        elapsed_s=round(time.monotonic() - start, 3),
+    )
+
+
+def _text(raw: Any) -> str:
+    if raw is None:
+        return ""
+    return raw if isinstance(raw, str) else raw.decode("utf-8", "replace")
+
+
+def _shell_group(
     command: str,
     *,
     timeout: float | None,
@@ -99,7 +204,7 @@ def run_shell(
     the group too.
 
     ``on_tick`` is called every ``tick_s`` seconds while the command runs, on THIS
-    thread (a long gate renews its lease that way; see `gates._run_ticking`).
+    thread (a long gate renews its lease that way; see `run_command_gate`).
     Output is captured unless ``capture_output=False`` or ``stdout``/``stderr`` say
     otherwise; the other keywords go to `popen` (stdin stays /dev/null). There is no
     ``input=``: no caller feeds one, and resuming a write across ticks is not supported.

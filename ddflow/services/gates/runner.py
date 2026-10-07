@@ -6,7 +6,6 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import tempfile
 import time
 import tomllib
@@ -85,34 +84,6 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
     return keep
 
 
-def _run_ticking(
-    command: str,
-    cwd: str,
-    env: dict[str, str],
-    timeout_s: float,
-    on_tick: Callable[[], None],
-    tick_s: float,
-) -> subprocess.CompletedProcess:
-    """Run a shell command to completion, calling `on_tick` every `tick_s` meanwhile.
-
-    On THIS thread. The first keep-alive for long gates renewed the lease from a
-    background thread, and the event log's parse cache and lock bookkeeping are
-    process-global and unlocked because nothing in this process was concurrent -- a
-    renewal slower than the join timeout could race the caller's own write (roborev
-    827). Polling keeps the process single-threaded. Raises TimeoutExpired like
-    `subprocess.run`, after killing the command's whole process group (Bed0f5b6d99).
-    """
-    return P.run_shell(
-        command,
-        timeout=timeout_s,
-        on_tick=on_tick,
-        tick_s=tick_s,
-        cwd=cwd,
-        env=env,
-        text=True,
-    )
-
-
 def run_command_gate(
     gdef: GateDef,
     cwd: Path,
@@ -186,37 +157,41 @@ def run_command_gate(
             **(env or {}),
         }
         start = time.time()
-        try:
-            if on_tick is not None and tick_s > 0:
-                p = _run_ticking(gdef.command, str(cwd), full_env, gdef.timeout_s, on_tick, tick_s)
-            else:
-                # A command gate IS a shell command line the operator wrote in gates.toml;
-                # on timeout its whole process group dies, not just the shell (Bed0f5b6d99).
-                p = P.run_shell(
-                    gdef.command, timeout=gdef.timeout_s, cwd=str(cwd), env=full_env, text=True
-                )
-        except subprocess.TimeoutExpired:
-            return "unavailable", {
-                "reason": f"timed out after {gdef.timeout_s}s",
-                "command": gdef.command,
-                "elapsed_s": round(time.time() - start, 1),
-            }
-        except (OSError, ValueError) as exc:
-            return "unavailable", {"reason": f"could not execute: {exc}", "command": gdef.command}
-    out = (p.stdout or "") + (p.stderr or "")
+        # A command gate IS a shell command line the operator wrote in gates.toml. It ticks
+        # on THIS thread (the first keep-alive renewed the lease from a background thread,
+        # and the log's parse cache and lock bookkeeping are process-global and unlocked:
+        # roborev 827); on timeout its whole process group dies (Bed0f5b6d99).
+        ticking = on_tick is not None and tick_s > 0
+        p = P.run_shell(
+            gdef.command,
+            timeout_s=gdef.timeout_s,
+            cwd=str(cwd),
+            env=full_env,
+            on_tick=on_tick if ticking else None,
+            tick_s=tick_s if ticking else 0,
+        )
+    if p.timed_out:
+        return "unavailable", {
+            "reason": f"timed out after {gdef.timeout_s}s",
+            "command": gdef.command,
+            "elapsed_s": round(time.time() - start, 1),
+        }
+    if p.could_not_run:
+        return "unavailable", {"reason": f"could not execute: {p.err}", "command": gdef.command}
+    out = p.output
     # Belt and braces for the compound-command case the pre-flight cannot inspect
     # (pipes, &&, subshells): POSIX reserves 127 for "command not found" and 126 for
     # "found but not executable", and the shell says so on stderr.
-    if p.returncode in (126, 127) and _looks_like_not_found(p.stderr or ""):
+    if p.code in (126, 127) and _looks_like_not_found(p.err):
         return "unavailable", {
-            "reason": f"shell reported exit {p.returncode} (command not found / not "
-            f"executable): {(p.stderr or '').strip()[:200]}",
+            "reason": f"shell reported exit {p.code} (command not found / not "
+            f"executable): {p.err.strip()[:200]}",
             "command": gdef.command,
-            "exit": p.returncode,
+            "exit": p.code,
         }
     ev = {
         "command": gdef.command,
-        "exit": p.returncode,
+        "exit": p.code,
         "elapsed_s": round(time.time() - start, 1),
         "output_digest": digest(out),
         "output_bytes": len(out),
@@ -247,13 +222,13 @@ def run_command_gate(
             ev["output_log"] = keep_output(out)
         except (OSError, ValueError) as exc:  # ValueError: an encoding the log refused
             ev["output_log_error"] = str(exc)[:200]
-    outcome, why = classify_exit(gdef, p.returncode, out)
+    outcome, why = classify_exit(gdef, p.code, out)
     if why:
         ev["reason"] = why
     if outcome == "failed":
         # Only a FAILURE is worth the git calls: a pass under drift is main's command
         # passing here, which is what the gate asks, and an unavailable already says so.
-        outcome = _account_for_drift(gdef, cwd, p.returncode, out, ev)
+        outcome = _account_for_drift(gdef, cwd, p.code, out, ev)
     return outcome, ev
 
 

@@ -21,8 +21,6 @@ import json
 import os
 import re
 import shutil
-import signal
-import subprocess
 import tempfile
 import time
 import tomllib
@@ -219,28 +217,8 @@ def _run_bounded(command: str, cwd: Path, timeout: int) -> tuple[int | None, str
     workers) keeps the pipes open -- the bound is not enforced and orphans keep running
     against a tree that is about to be deleted (rubber_duck on 4e5160bb).
     """
-    proc = P.popen(
-        command,
-        cwd=cwd,
-        shell=True,  # nosec B604: the command IS a configured shell line, by design
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        start_new_session=True,
-    )
-    try:
-        out, _ = proc.communicate(timeout=timeout)
-        return proc.returncode, out or ""
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            proc.kill()
-        try:
-            out, _ = proc.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            out = ""
-        return None, out or ""
+    r = P.run_shell(command, timeout_s=timeout, cwd=cwd, merge_stderr=True)
+    return (None if r.timed_out or r.could_not_run else r.code), r.out
 
 
 def _summary(out: str) -> str:
