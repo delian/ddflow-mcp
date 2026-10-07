@@ -161,3 +161,4 @@ def test_a_lint_that_cannot_run_stops_the_cut_only_under_block(tree, monkeypatch
         out = api.version_lint(tree)
         assert out.exit == OK
         assert ("could not run" in out.data["warning"]) is (policy == "warn")
+        assert bool(out.data.get("unavailable")) is (policy == "warn")
