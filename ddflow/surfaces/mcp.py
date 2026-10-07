@@ -1180,7 +1180,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
             {**by_id[st.companion.id], "state_word": word}
             for st, word in CO.actionable(statuses, grouped=True)
         ]
-        cover = CO.gate_coverage(repo, statuses, v["task_pipeline"])
+        cover = CO.gate_coverage(repo, statuses, CO.coverage_gates(cfg))
         # A gate is only a GAP if every companion that could serve it is known absent.
         # With `probe=False` the cli companions are all `None`, so a plain "no ids"
         # test reported `rules` as unserved on every connection even with the tool on
