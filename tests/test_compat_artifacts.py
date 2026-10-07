@@ -33,7 +33,7 @@ def test_absent_and_unstamped():
 def test_older_and_newer_by_version_and_format():
     t = _text(version="0.1.5", fmt=1)
     assert M.state(t, version="0.2.0", fmt=1) == "older"
-    assert M.state(t, version="0.1.4", fmt=1) == "newer"
+    assert M.state(t, version="0.1.4", fmt=1) == "current"  # a version alone never refuses
     assert M.state(t, version="9.9.9", fmt=2) == "older"
     assert M.state(t, version="9.9.9", fmt=0) == "newer"
 
@@ -56,8 +56,6 @@ def test_older_writer_never_downgrades_a_newer_region():
     with pytest.raises(NewerContent) as e:
         M.splice(t, "old\n", version="0.1.5", fmt=1)
     assert "upgrade ddflow to >= 0.3.0" in str(e.value) and e.value.needs == "0.3.0"
-    # nothing was written: the caller still has the original text
-    assert "one" in t
 
 
 def test_unknown_attributes_survive_a_same_level_rewrite():
@@ -93,3 +91,8 @@ def test_a_non_ascii_digit_in_fmt_is_an_unstamped_header_not_a_crash():
 def test_unknown_attributes_are_not_carried_across_a_format_level():
     t = _text(version="0.1.5", fmt=1, extra=(("future", "yes"),))
     assert "future" not in M.splice(t, "two\n", version="0.2.0", fmt=2)
+
+
+def test_a_newer_version_at_the_same_level_is_rewritable():
+    t = _text(version="0.9.0", fmt=1)
+    assert "two" in M.splice(t, "two\n", version="0.1.5", fmt=1)
