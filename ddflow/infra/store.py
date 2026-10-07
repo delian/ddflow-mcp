@@ -26,7 +26,6 @@ import contextlib
 import errno
 import json
 import os
-import re
 import secrets
 import sqlite3
 import sys
@@ -505,7 +504,7 @@ class Store:
             # searching "db" found a lesson on the machine whose SQLite has FTS5 and
             # found nothing on the machine whose SQLite does not — the same query,
             # two answers, decided by a build flag nobody sets deliberately.
-            terms = [t for t in re.split(r"\W+", query) if len(t) >= MIN_TERM_CHARS][:8]
+            terms = _like_terms(query)
             if not terms:
                 return []
             where = " or ".join(f"{c} like ?" for c in cols for _ in terms)
@@ -529,8 +528,17 @@ def _fts_query(text: str) -> str:
     character inert; ORing is what makes a multi-word question behave like a
     relevance query instead of a conjunction that matches nothing.
     """
-    terms = [t for t in re.split(r"[^\w]+", text) if len(t) >= MIN_TERM_CHARS]
-    return " OR ".join(f'"{t}"' for t in terms[:12])
+    terms = textsim.words(text, min_len=MIN_TERM_CHARS)
+    return " OR ".join(f'"{t}"' for t in terms[:_FTS_TERMS])
+
+
+#: How many terms of a query reach FTS5, and how many reach the LIKE fallback.
+_FTS_TERMS, _LIKE_TERMS = 12, 8
+
+
+def _like_terms(query: str) -> list[str]:
+    """The terms of the LIKE fallback: the same words FTS5 would be asked for, fewer."""
+    return textsim.words(query, min_len=MIN_TERM_CHARS)[:_LIKE_TERMS]
 
 
 #: What `recall` searches, in the order a reader should weigh them. Decisions first
