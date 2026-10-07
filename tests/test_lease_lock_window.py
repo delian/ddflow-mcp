@@ -144,7 +144,7 @@ def test_a_release_landing_in_the_same_window_is_also_seen(repo, monkeypatch):
 # -- the fingerprint itself ----------------------------------------------------------------
 
 
-def test_the_extent_changes_on_every_kind_of_append(repo):
+def test_the_mark_changes_on_every_kind_of_append(repo):
     """Sizes, not mtimes: mtime granularity is one second on some filesystems and two
     appends inside one second is exactly the case this has to catch. A new shard from
     another agent changes the KEY set, so that is caught too."""
@@ -154,32 +154,36 @@ def test_the_extent_changes_on_every_kind_of_append(repo):
     # One append first, so this agent's own shard already exists and the next append
     # exercises GROWTH rather than creation — the two cases are checked separately below.
     log.append("item.blocked", "T1", {"reason": "create this agent's shard"})
-    before = log.extent()
+    before = log.mark()
     assert before, "no shards at all, so the comparison below is vacuous"
 
     log.append("item.blocked", "T1", {"reason": "same shard grows"})
-    grown = log.extent()
+    grown = log.mark()
     assert grown != before, "a same-shard append did not change the fingerprint"
-    assert set(grown) == set(before), "expected the same shard to grow, not a new one"
+    assert [n for n, _s, _h in grown.shards] == [n for n, _s, _h in before.shards], (
+        "expected the same shard to grow, not a new one"
+    )
 
     EventLog(repo, "agent-b").append("item.blocked", "T2", {"reason": "new shard appears"})
-    with_new = log.extent()
-    assert set(with_new) > set(grown), "a new agent's first write must change the key set"
+    with_new = log.mark()
+    assert {n for n, _s, _h in with_new.shards} > {n for n, _s, _h in grown.shards}, (
+        "a new agent's first write must change the key set"
+    )
 
 
-def test_the_extent_is_taken_before_the_read_not_after():
+def test_the_mark_is_taken_before_the_read_not_after():
     """The ordering IS the safety property, and it is invisible in the result.
 
-    Fingerprint AFTER the read and a write landing in between is recorded in the size, so
+    Fingerprint AFTER the read and a write landing in between is recorded in the mark, so
     the later comparison says "unchanged" while the folded state is missing that event.
-    Before, the sizes differ and the caller re-reads. Asserted on the source because the
+    Before, the marks differ and the caller re-reads. Asserted on the source because the
     two orderings are indistinguishable from the outside until the day they are not.
     """
     import inspect
 
-    src = inspect.getsource(L._decide_from)
-    assert src.index("log.extent()") < src.index("log.read_all()"), (
-        "the extent must be taken BEFORE the read; after it, a write in between is "
+    src = inspect.getsource(EventLog.decide_then_append)
+    assert src.index("self.mark()") < src.index("decided = decide()"), (
+        "the mark must be taken BEFORE the read; after it, a write in between is "
         "silently absorbed and the stale state is used to decide"
     )
 
@@ -187,33 +191,34 @@ def test_the_extent_is_taken_before_the_read_not_after():
 def test_an_unchanged_log_is_not_re_read_under_the_lock(repo):
     """The optimisation, asserted rather than assumed.
 
-    Without this, `_still_current` could re-fold every time and every test above would
-    still pass — the correctness tests cannot tell a fast path from a slow one, which is
-    how an optimisation comes to be reverted by accident and nobody notices.
+    Without this, `decide_then_append` could re-decide every time and every test above
+    would still pass -- the correctness tests cannot tell a fast path from a slow one,
+    which is how an optimisation comes to be reverted by accident and nobody notices.
     """
     _queue(repo)
     log = EventLog(repo, "agent-a")
-    snapshot, before = L._decide_from(log)
-
     reads = {"n": 0}
-    real = EventLog.read_all
 
-    def counting(self):
+    def decide():
         reads["n"] += 1
-        return real(self)
+        return object()
 
-    EventLog.read_all = counting
-    try:
-        same = L._still_current(log, snapshot, before)
-        assert reads["n"] == 0, "the log was re-read even though nothing was appended"
-        assert same is snapshot, "the folded state was rebuilt for no reason"
+    with log.decide_then_append(decide):
+        pass
+    assert reads["n"] == 1, "the log was re-read even though nothing was appended"
 
-        log.append("item.blocked", "T1", {"reason": "now it changed"})
-        fresh = L._still_current(log, snapshot, before)
-        assert reads["n"] == 1, "a grown log must be re-read"
-        assert fresh is not snapshot
-    finally:
-        EventLog.read_all = real
+    reads["n"] = 0
+    reads["n"] = 0
+
+    def decide_and_race():
+        reads["n"] += 1
+        if reads["n"] == 1:
+            EventLog(repo, "agent-b").append("item.blocked", "T1", {"reason": "raced"})
+        return object()
+
+    with log.decide_then_append(decide_and_race):
+        pass
+    assert reads["n"] == 2, "a log that changed must be decided from again, under the lock"
 
 
 # -- B8: one body, not three ---------------------------------------------------------------

@@ -714,7 +714,7 @@ def test_an_omitted_field_is_still_left_alone(repo):
 
 
 def test_head_observes_each_shard_exactly_once(repo, monkeypatch):
-    """`head()` used to stat every shard, then walk them all AGAIN for the clock.
+    """`mark()` used to stat every shard, then walk them all AGAIN for the clock.
 
     An append landing between the two walks, carrying a Lamport value at or below the
     current high — a second agent whose clock is behind, which is the ordinary case on
@@ -738,7 +738,7 @@ def test_head_observes_each_shard_exactly_once(repo, monkeypatch):
     monkeypatch.setattr(
         EventLog, "shards", lambda self: (walks.append(1), original(self))[1], raising=True
     )
-    log.head()
+    log.mark()
     assert len(walks) == 1, (
         f"the size and the clock are read in {len(walks)} separate walks over the "
         f"shards, so an append landing between them is missed by both"
@@ -756,14 +756,14 @@ def test_a_second_agents_append_changes_the_fingerprint_even_with_a_lower_clock(
     log = EventLog(repo, "agent-a")
     for _ in range(5):
         log.append("session.started", "s1", {})
-    before = log.head()
+    before = log.mark()
 
     stale_line = json.dumps(
         {"kind": "session.note", "subject": "s1", "lamport": 1, "agent": "agent-b", "data": {}}
     )
     (log.dir / "agent-b.jsonl").write_text(stale_line + "\n")
 
-    after = log.head()
+    after = log.mark()
     assert after != before, (
         f"a whole shard appeared and the fingerprint did not move: {before} == {after}"
     )
