@@ -286,6 +286,23 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
     return t.id, ""
 
 
+def _fixing_item(st, bug_id: str) -> Any:
+    """The item whose source is the fix: the bug's fix task, else -- for `bug found
+    --item X --no-task`, fixed in the commit that found it -- X while it works in a
+    worktree (B3eeb47ca9b). Only then: a landed X (merged here, or through a pull
+    request, which records only `merged_sha`) may have been merely where an older bug
+    was seen, and its base already holds the fix."""
+    rec = st.bugs.get(bug_id)
+    if rec is None:
+        return None
+    if rec.fix_task:
+        return st.items.get(rec.fix_task)
+    found_on = st.items.get(rec.item) if rec.item else None
+    if found_on is None or not found_on.worktree:
+        return None
+    return None if (found_on.landed_after or found_on.merged_sha) else found_on
+
+
 def _verify_regression(
     repo: Path,
     cfg,
@@ -314,16 +331,7 @@ def _verify_regression(
     from ...infra import worktree as W
     from ...services import gates as G
 
-    rec = st.bugs.get(bug_id)
-    fx = st.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
-    if fx is None and rec is not None and rec.item:
-        # `bug found --item X --no-task`: X fixes it in the commit that found it, and
-        # while X works in a worktree that worktree is the fix (B3eeb47ca9b). Only then:
-        # a landed X may have been merely where an older bug was seen, not its fix.
-        found_on = st.items.get(rec.item)
-        landed = found_on is not None and (found_on.landed_after or found_on.merged_sha)
-        if found_on is not None and found_on.worktree and not landed:
-            fx = found_on
+    fx = _fixing_item(st, bug_id)
     if fx is not None and fx.landed_before and fx.landed_after:
         # Merged already: the landing's own before and after, never the base by NAME,
         # which now holds the fix -- the driver merges first and completes after
