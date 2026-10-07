@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..core import clock
 from ..core import flowcontrol as FC
 from ..core import flowparams as FP
 from ..core import flowsignals as FS
@@ -143,7 +144,7 @@ def _lock(path: Path) -> Iterator[bool]:
     drops one -- but no interleaving tears a line. The token keeps a holder from
     removing a lock that is no longer its own in the ordinary case."""
     lock = path.with_name(path.name + ".lock")
-    token = f"{os.getpid()}-{time.time_ns()}".encode()
+    token = f"{os.getpid()}-{clock.run_stamp()}".encode()
     deadline = time.monotonic() + LOCK_WAIT_S
     fd = None
     while fd is None:
