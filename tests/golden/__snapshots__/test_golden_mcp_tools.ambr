@@ -3387,6 +3387,22 @@
        }
       }
     ''',
+    'ddflow_version_lint': '''
+      {
+       "name": "ddflow_version_lint",
+       "description": "The release lint: is every config knob and event-kind change in this tree announced in the shipped upgrade manifest? Names each one that is not, with the entry that would announce it and the operator's options. Exit 3 when `[release].manifest_lint` is `block` and one is not. Reads only: waiving a change is the operator's, from the CLI.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_version_show': '''
       {
        "name": "ddflow_version_show",
@@ -3715,6 +3731,7 @@
     'ddflow_update',
     'ddflow_verify',
     'ddflow_version_cut',
+    'ddflow_version_lint',
     'ddflow_version_show',
     'ddflow_wait',
     'ddflow_workflow',

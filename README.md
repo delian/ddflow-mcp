@@ -861,7 +861,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 192 knobs.
+cadences, and the rest of the 193 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3736,6 +3736,21 @@ branches adding knobs never edit the same file; cutting a version folds the frag
 its release. The history it backfilled from 0.1.3 to 0.2.0: 63 new knobs, 7 changed
 defaults (among them `dedupe.on_match`, `warn` in 0.1.9 and `ask` again in 0.1.10).
 
+**The release lint** (decision D-upgrade-manifest-lint). `ddflow version lint` compares the
+code's knob defaults and event kinds with that replay; `ddflow version cut`,
+`scripts/release.sh` and the publish workflow run it. With `[release].manifest_lint = "block"`
+(the default) a change with no entry stops the release, exit 3, and the message is never a
+bare failure: it lists each unmanifested change (`knob_added:section.knob`, ...) and the
+operator's options. (1) Have an agent write the entries and whatever upgrade repair or note
+a safe upgrade needs: the message pre-fills one fragment per change from the diff, then
+re-run the lint. (2) Waive a named change for this release with `ddflow version lint
+--waive <change> --reason "..."`, recorded in `templates/upgrade/waivers.toml` and shown in
+the next upgrade plan. (3) Change the policy: `ddflow config release.manifest_lint warn|off`.
+`warn` prints the same and carries on; `off` is silent. An agent may prepare entries and
+propose; waiving or lowering the policy is the operator's decision, so the MCP tool
+`ddflow_version_lint` only reads. In a project that does not ship ddflow's own manifest the
+lint does nothing.
+
 In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
 a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
 The upgrade plan (B-upgrade.3-plan, still to come) reads it to tell a project what its
@@ -4586,6 +4601,7 @@ ddflow pr status               every item's request, from the log (no forge call
 ddflow pr threads <id> [--thread T [--reply TEXT] [--resolve]]  review threads, live from the forge; reply and resolve one (2 = forge unreachable)
 ddflow version show            current and next version, why, release notes (2 = nothing new)
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
+ddflow version lint [--waive CHANGE --reason WHY]  is every knob / event-kind change announced in the upgrade manifest? (3 = not, under `[release].manifest_lint = block`)
 ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
 ddflow task add <id> --port-of FIX  a follow-up to FIX: takes the lines FIX reached
@@ -4869,6 +4885,7 @@ long default is left to `ddflow config --explain`.
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
+| `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |

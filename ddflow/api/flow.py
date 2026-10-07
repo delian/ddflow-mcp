@@ -14,6 +14,7 @@ from typing import Any
 
 from ..core import outcome as O
 from ..core.model import REVIEW
+from ..services import upgrade_manifest as UM
 from ._base import _load
 
 
@@ -149,6 +150,48 @@ def version_show(repo: Path, *, bump: str = "", line: str = "", agent: str = "")
     return O.ok("version.show", **data)
 
 
+def _lint_outcome(op: str, repo: Path, cfg, *, waive: str = "", reason: str = ""):
+    """The upgrade-manifest lint as an Outcome, or None when it has nothing to say:
+    the policy is `off`, or ``repo`` is not the tree that ships the manifest (a project's
+    own releases are not ddflow's). Exit 3 when the policy blocks."""
+    policy = cfg.release.manifest_lint
+    if policy == "off" and not waive:
+        return None
+    if not UM.MANIFEST.resolve().is_relative_to(repo.resolve()):
+        return None
+    try:
+        res = UM.lint()
+        if waive:
+            UM.waive(waive, reason, result=res)
+            res = UM.lint()
+    except UM.ManifestError as exc:
+        return O.refused(op, str(exc))
+    data: dict[str, Any] = {
+        "policy": policy,
+        "unmanifested": [{"change": u.id, "entry": u.fragment_name} for u in res.unmanifested],
+        "waived": [{"change": u.id, "reason": w.reason} for u, w in res.waived],
+    }
+    if res.clean:
+        return O.ok(op, **data, warning="")
+    text = UM.report(res)
+    if policy == "block":
+        return O.refused(op, text, **data)
+    return O.ok(op, **data, warning=text)
+
+
+def version_lint(repo: Path, *, waive: str = "", reason: str = "", agent: str = "") -> O.Outcome:
+    """Is every knob and event-kind change in this tree announced in the upgrade manifest?
+    Exit 3 when `[release].manifest_lint` is `block` and one is not; ``waive`` records an
+    exception for one change (the operator's decision; ``reason`` required)."""
+    _log, cfg, _st = _load(repo, agent)
+    out = _lint_outcome("version.lint", repo, cfg, waive=waive, reason=reason)
+    if out is None:
+        return O.ok(
+            "version.lint", policy=cfg.release.manifest_lint, unmanifested=[], waived=[], warning=""
+        )
+    return out
+
+
 def version_cut(
     repo: Path,
     *,
@@ -168,6 +211,10 @@ def version_cut(
     from ..services import flow as FS
 
     log, cfg, _st = _load(repo, agent)
+    blocked = _lint_outcome("version.cut", repo, cfg)
+    if blocked is not None and blocked.exit != 0:
+        return blocked
+    lint_warning = blocked.data["warning"] if blocked is not None else ""
     c = FS.cut(
         repo,
         cfg,
@@ -191,7 +238,7 @@ def version_cut(
         "changelog": c.changelog,
         "version_files": c.version_files,
         "notes": c.plan.notes if c.plan else "",
-        "warning": c.reason if c.ok else "",
+        "warning": "\n".join(w for w in (c.reason if c.ok else "", lint_warning) if w),
     }
     if c.refused:
         return O.refused("version.cut", c.reason, **data)

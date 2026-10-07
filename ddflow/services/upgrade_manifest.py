@@ -21,7 +21,10 @@ edit the same file; cutting a version folds the fragments into its release block
 A default is stored JSON-encoded (`'"ask"'`, `'4'`, `'["bug"]'`), because TOML has no null
 and a knob's value can be a table; `Change.old` and `Change.new` are the decoded values.
 
-Pure over the file: reads it, never writes it.
+The release lint (D-upgrade-manifest-lint) is `lint()`: the replay compared with the code
+as it stands, a change with no entry reported by name with the entry that would announce
+it, and `waive()` the operator's recorded exception (`waivers.toml`, beside the manifest).
+Everything but `waive()` is pure over the files: it reads them, never writes them.
 """
 
 from __future__ import annotations
@@ -295,3 +298,205 @@ def knob_defaults(cfg: Any = None) -> dict[str, Any]:
 def event_kinds() -> set[str]:
     """The event vocabulary of the running code (`core.model.HANDLERS`)."""
     return set(HANDLERS)
+
+
+#: The operator's recorded waivers, beside the manifest; absent until the first is written.
+WAIVERS = MANIFEST.parent / "waivers.toml"
+
+#: What `[release].manifest_lint` accepts.
+LINT_POLICIES = ("block", "warn", "off")
+
+_WHY_CHARS = 160
+
+
+@dataclass(frozen=True)
+class Unmanifested:
+    """A difference between the code and the manifest's replay: a change nobody announced.
+
+    ``kind`` is a `KINDS` member the code can find on its own (a knob or event kind added,
+    changed or removed); ``old`` and ``new`` the replay's value and the code's."""
+
+    kind: str
+    key: str
+    old: Any = None
+    new: Any = None
+    has_old: bool = False
+    has_new: bool = False
+    why: str = ""
+
+    @property
+    def id(self) -> str:
+        """The name `--waive` takes: ``<kind>:<key>``."""
+        return f"{self.kind}:{self.key}"
+
+    def line(self) -> str:
+        if self.kind == "knob_added":
+            return f"{self.id}  (new default {json.dumps(self.new)})"
+        if self.kind == "knob_changed":
+            return f"{self.id}  (default {json.dumps(self.old)} -> {json.dumps(self.new)})"
+        if self.kind == "knob_removed":
+            return f"{self.id}  (was {json.dumps(self.old)})"
+        return self.id
+
+    def fragment(self) -> str:
+        """The unreleased fragment (`unreleased/<kind>.<key>.toml`) that would announce it,
+        pre-filled from the diff; the operator-facing `why`/`effect` are the author's to
+        refine."""
+        out = ["[[change]]", f"kind = {json.dumps(self.kind)}", f"key = {json.dumps(self.key)}"]
+        if self.has_old:
+            out.append(f"old = {json.dumps(json.dumps(self.old, sort_keys=True))}")
+        if self.has_new:
+            out.append(f"new = {json.dumps(json.dumps(self.new, sort_keys=True))}")
+        out.append(f"why = {json.dumps(self.why or 'TODO: one line, why')}")
+        if self.kind == "knob_changed":
+            out.append('effect = "TODO: what a project that never set it will see"')
+        if self.kind in ("knob_added", "event_kind_added"):
+            out.append('impact = "additive"')
+        return "\n".join(out) + "\n"
+
+    @property
+    def fragment_name(self) -> str:
+        return f"{FRAGMENTS}/{self.kind}.{self.key}.toml"
+
+
+@dataclass(frozen=True)
+class Waiver:
+    """One change the operator let through unmanifested, and why."""
+
+    change: str
+    reason: str
+    version: str = ""
+
+
+@dataclass
+class LintResult:
+    """What `lint()` found: the changes with no entry and the ones a waiver covers."""
+
+    unmanifested: list[Unmanifested] = field(default_factory=list)
+    waived: list[tuple[Unmanifested, Waiver]] = field(default_factory=list)
+
+    @property
+    def clean(self) -> bool:
+        return not self.unmanifested
+
+
+def _first_sentence(doc: str) -> str:
+    first = doc.strip().replace("e.g.", "e\0g\0").replace("i.e.", "i\0e\0").split(". ", 1)[0]
+    first = first.replace("\0", ".")
+    return first if len(first) <= _WHY_CHARS else first[: _WHY_CHARS - 3].rstrip(" .") + "..."
+
+
+def load_waivers(path: Path | str | None = None) -> list[Waiver]:
+    """The recorded waivers; none when the file does not exist."""
+    p = Path(path or WAIVERS)
+    if not p.exists():
+        return []
+    rows = _toml(p.read_text("utf-8"), "the waivers file").get("waiver", [])
+    out = []
+    for i, w in enumerate(_tables(rows, "waivers")):
+        if not isinstance(w, dict) or not w.get("change") or not w.get("reason"):
+            raise ManifestError(f"waiver #{i + 1}: a waiver names its change and its reason")
+        out.append(Waiver(str(w["change"]), str(w["reason"]), str(w.get("version", ""))))
+    return out
+
+
+def lint(
+    manifest: Manifest | None = None,
+    *,
+    waivers: list[Waiver] | None = None,
+    knobs: dict[str, Any] | None = None,
+    kinds: set[str] | None = None,
+    docs: dict[str, str] | None = None,
+) -> LintResult:
+    """Compare the code's knob defaults and event kinds (``knobs``/``kinds``, default: the
+    running code's) with the manifest's replay; whatever differs is a change nobody
+    announced. A change a waiver names moves to ``waived``."""
+    m = manifest or load()
+    have_k, have_e = (
+        knob_defaults() if knobs is None else knobs,
+        event_kinds() if kinds is None else kinds,
+    )
+    said_k, said_e = replay(m)
+    notes = C.KNOB_DOCS if docs is None else docs
+    found: list[Unmanifested] = []
+    for k in sorted(have_k):
+        why = _first_sentence(notes.get(k, ""))
+        if k not in said_k:
+            found.append(Unmanifested("knob_added", k, new=have_k[k], has_new=True, why=why))
+        elif said_k[k] != have_k[k]:
+            found.append(
+                Unmanifested(
+                    "knob_changed", k, said_k[k], have_k[k], has_old=True, has_new=True, why=why
+                )
+            )
+    found += [
+        Unmanifested("knob_removed", k, old=said_k[k], has_old=True)
+        for k in sorted(set(said_k) - set(have_k))
+    ]
+    found += [Unmanifested("event_kind_added", k) for k in sorted(have_e - said_e)]
+    found += [Unmanifested("event_kind_removed", k) for k in sorted(said_e - have_e)]
+    by_change = {w.change: w for w in (load_waivers() if waivers is None else waivers)}
+    out = LintResult()
+    for u in found:
+        (
+            out.waived.append((u, by_change[u.id]))
+            if u.id in by_change
+            else out.unmanifested.append(u)
+        )
+    return out
+
+
+def waive(
+    change: str, reason: str, *, path: Path | str | None = None, result: LintResult | None = None
+) -> Waiver:
+    """Record that ``change`` (``<kind>:<key>``, or a bare key naming exactly one) may
+    ship with no manifest entry, for ``reason``. ManifestError when it is not one of the
+    changes `lint()` reports, or ``reason`` is blank: a waiver is a decision with a why."""
+    if not reason.strip():
+        raise ManifestError("a waiver needs a reason (--reason)")
+    res = result or lint()
+    hits = [u for u in res.unmanifested if change in (u.id, u.key)]
+    if len(hits) != 1:
+        names = ", ".join(u.id for u in res.unmanifested) or "none"
+        raise ManifestError(
+            f"{change!r} is not one unmanifested change to waive (unmanifested now: {names})"
+        )
+    target = Path(path or WAIVERS)
+    w = Waiver(hits[0].id, " ".join(reason.split()))
+    head = (
+        ""
+        if target.exists()
+        else "# Changes the operator let a release ship with no manifest entry.\n"
+    )
+    with target.open("a", encoding="utf-8") as fh:
+        fh.write(
+            f"{head}\n[[waiver]]\nchange = {json.dumps(w.change)}\nreason = {json.dumps(w.reason)}\n"
+        )
+    return w
+
+
+def report(res: LintResult) -> str:
+    """The block message: what is unmanifested and the operator's three options."""
+    out = [
+        f"release manifest lint: {len(res.unmanifested)} change(s) the upgrade manifest does "
+        "not announce (a project upgrading would meet them unannounced):"
+    ]
+    out += [f"  {u.line()}" for u in res.unmanifested]
+    out += [
+        "",
+        "Options (the operator decides):",
+        "  1. Have an agent write the entries and the upgrade repairs or notes a SAFE upgrade "
+        "needs, then re-run `ddflow version lint`. Pre-filled from the diff, one fragment "
+        "file each under ddflow/templates/upgrade/:",
+    ]
+    for u in res.unmanifested:
+        out += [
+            f"       {u.fragment_name}",
+            *("         " + ln for ln in u.fragment().splitlines()),
+        ]
+    out += [
+        '  2. Waive a change for this release: `ddflow version lint --waive <change> --reason "<why>"` '
+        "(recorded in ddflow/templates/upgrade/waivers.toml and shown in the next upgrade plan).",
+        "  3. Change the policy: `ddflow config release.manifest_lint warn|off [--local]`.",
+    ]
+    return "\n".join(out)
