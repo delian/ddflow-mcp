@@ -22,6 +22,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import provenance as PV
+from ..core.graph import closure
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
 from ..core.schedule import Plan, critical_path
 from ..core.tier import tier_of
@@ -44,14 +45,15 @@ def _bar(done: int, total: int, width: int = 18) -> str:
 def _depth(state: State, item, root: str) -> int:
     """How far below the phase this item sits. Bounded, because a parent chain is
     operator-authored and a cycle in it must not hang the renderer."""
-    depth, node, seen = 0, item, set()
-    while node.parent and node.parent != root and node.parent not in seen:
-        seen.add(node.id)
-        node = state.items.get(node.parent)
-        if node is None:
-            break
-        depth += 1
-    return min(depth, 6)
+
+    def parent(i: str) -> list[str]:
+        up = (item if i == item.id else state.items[i]).parent
+        return [up] if up and up != root and up in state.items else []
+
+    above = [n for n in closure(item.id, parent) if n != item.id]
+    # A chain that ends in an item that is its own parent counts that last step once.
+    last = state.items[above[-1]] if above else item
+    return min(len(above) + (last.parent == last.id != root), 6)
 
 
 def unphased(state: State) -> list:
