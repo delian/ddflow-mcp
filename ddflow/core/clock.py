@@ -74,6 +74,7 @@ def age_s(text: str, now: float | None = None, *, naive: Naive = "utc") -> float
 
 
 def parse_date(text: str) -> date:
-    """A calendar date, ``YYYY-MM-DD`` exactly. Raises ValueError otherwise; a caller
-    that holds a timestamp passes its first ten characters."""
+    """A calendar date in an ISO-8601 date form (``YYYY-MM-DD``; Python also reads the
+    basic ``YYYYMMDD`` and week forms). Raises ValueError for anything else, a time
+    included; a caller that holds a timestamp passes its first ten characters."""
     return date.fromisoformat(text)
