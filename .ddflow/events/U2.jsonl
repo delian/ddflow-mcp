@@ -2148,3 +2148,8 @@
 {"agent":"U2","data":{"at":1791393738.4647636,"holder":"U2"},"id":"e5593d35fdea19d7baf75cb1c","kind":"lease.renewed","lamport":33330,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:22:18.531333Z"}
 {"agent":"U2","data":{"at":1791393860.7362666,"holder":"U2"},"id":"e6354ba28002bfa6c74c28a0a","kind":"lease.renewed","lamport":33335,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:24:20.802482Z"}
 {"agent":"U2","data":{"at":1791393934.7798414,"holder":"U2"},"id":"e254d6baa05948b8effc9d21c","kind":"lease.renewed","lamport":33349,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:25:34.849173Z"}
+{"agent":"U2","data":{"at":1791393982.9942794,"holder":"U2"},"id":"ee53f60afde0d3356e22edbfc","kind":"lease.renewed","lamport":33371,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:26:23.061587Z"}
+{"agent":"U2","data":{"at":1791394057.2194102,"holder":"U2"},"id":"e521ab7236c00a79587c423f1","kind":"lease.renewed","lamport":33386,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:27:37.347220Z"}
+{"agent":"U2","data":{"at":1791394105.399599,"holder":"U2"},"id":"e9402ee409068256046afa463","kind":"lease.renewed","lamport":33389,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:28:25.475823Z"}
+{"agent":"U2","data":{"at":1791394180.7726047,"holder":"U2"},"id":"e8a9321f34b674aa118410588","kind":"lease.renewed","lamport":33395,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:29:40.924391Z"}
+{"agent":"U2","data":{"at":1791394228.5936966,"holder":"U2"},"id":"e697da9610a0028d8fc8dc0e2","kind":"lease.renewed","lamport":33399,"schema":1,"subject":"B-uni-knobs-sections-b","ts":"2026-10-07T17:30:28.735163Z"}
