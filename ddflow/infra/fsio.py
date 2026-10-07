@@ -465,7 +465,7 @@ class Managed:
     extended by version, format level and body digest).
 
     `owns` says whether a text holds the region, `stamp` what wrote it, `state` how it
-    compares with this ddflow -- `newer` (a higher format level or version), `older`, `edited`
+    compares with this ddflow -- `newer` (a higher FORMAT LEVEL; a higher version alone never refuses), `older`, `edited`
     (the body no longer matches its digest, so a person changed it) or `current` -- and
     `splice` replaces it, refusing (NewerContent) only a write that would downgrade a
     newer region. The 3-way merge of an `edited` region is the caller's (D-doc-regions).
@@ -519,11 +519,11 @@ class Managed:
         s = self.stamp(text)
         if s is None:
             return "older"
-        if s.fmt > fmt or (s.fmt == fmt and _vkey(s.version) > _vkey(version)):
+        if s.fmt > fmt:
             return "newer"
         if s.sha != _digest(text[at[1] : at[2]]):
             return "edited"
-        return "current" if (s.fmt, _vkey(s.version)) == (fmt, _vkey(version)) else "older"
+        return "older" if (s.fmt, _vkey(s.version)) < (fmt, _vkey(version)) else "current"
 
     def render(
         self,
