@@ -61,11 +61,13 @@ def git(
     timeout: int = 300,
     check: bool = False,
     env: dict[str, str] | None = None,
+    errors: str = "strict",
 ) -> GitResult:
     p = P.run(
         ["git", "-C", str(repo), *args],
         capture_output=True,
         text=True,
+        errors=errors,
         timeout=timeout,
         env={**os.environ, **env} if env else None,
     )
@@ -685,22 +687,20 @@ def capture_diff(
     duplicate headers when a file is both modified and re-added.
 
     ``exclude`` drops paths starting with any of those prefixes from every part of it.
+    Untracked paths are listed with `-z`, so a non-ASCII name is added as the file it
+    is rather than as its C-quoted spelling, which names no file (B7ab10b58f2).
     """
-    untracked = [
-        ln
-        for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
-        if ln.strip() and not ln.startswith(exclude)
-    ]
+    untracked = untracked_files(tree, exclude)
     spec = ["--", ".", *(f":(exclude){p}" for p in exclude)] if exclude else []
     if include_untracked and untracked:
         git(tree, "add", "-N", "--", *untracked)
     try:
         if base:
             merge_base = git(tree, "merge-base", base, "HEAD").out or base
-            committed = git(tree, "diff", f"{merge_base}..HEAD", *spec).out
+            committed = _diff_text(tree, f"{merge_base}..HEAD", *spec)
         else:
             committed = ""
-        working = git(tree, "diff", "HEAD", *spec).out
+        working = _diff_text(tree, "HEAD", *spec)
     finally:
         if include_untracked and untracked:
             # Undo intent-to-add so the caller's index is exactly as we found it. A
@@ -709,13 +709,23 @@ def capture_diff(
     return "\n".join(part for part in (committed, working) if part.strip())
 
 
+#: The prefixes `diff_covers_everything` matches: pinned, so a user's `diff.noprefix` or
+#: `diff.mnemonicPrefix` cannot make every path look absent.
+_DIFF_PREFIXES = ("--src-prefix=a/", "--dst-prefix=b/")
+
+
+def _diff_text(tree: Path, *args: str) -> str:
+    """`git diff <args>` as text a reviewer can read, whatever the bytes: a file's
+    non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
+    raised -- `git()` decodes strictly, and one such file aborted the whole review."""
+    return git(tree, "diff", *_DIFF_PREFIXES, *args, errors="replace").out
+
+
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
-    """Paths in ``tree`` git does not track and does not ignore, sorted."""
-    return sorted(
-        ln
-        for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
-        if ln.strip() and not ln.startswith(exclude)
-    )
+    """Paths in ``tree`` git does not track and does not ignore, sorted -- read with `-z`,
+    so a non-ASCII name is the file's own name (B7ab10b58f2)."""
+    listed = git_paths(tree, "ls-files", "--others", "--exclude-standard") or []
+    return sorted(p for p in listed if p.strip() and not p.startswith(exclude))
 
 
 def diff_covers_everything(
@@ -727,13 +737,81 @@ def diff_covers_everything(
     because a diff that is missing a file looks exactly like a diff of a change that
     did not touch that file.
     """
-    changed = [
-        ln[3:].strip().strip('"')
-        for ln in git(tree, "status", "--porcelain").out.splitlines()
-        if ln.strip() and not (ignore_untracked and ln.startswith("??"))
+    changed = _status_paths(tree, ignore_untracked)
+    if changed is None:  # git could not say: never read as "nothing changed"
+        return False, ["(git status failed: the diff cannot be checked)"]
+    headers = [ln for ln in diff.splitlines() if ln.startswith("diff --git ")]
+    missing = [
+        p
+        for p in changed
+        if not any(
+            _in_diff_header(headers, spelled)
+            for spelled in (p, _c_quoted(p), _c_quoted(p, raw_high=True))
+        )
     ]
-    missing = [p for p in changed if p and p not in diff]
     return (not missing), missing
+
+
+#: Bytes git prints as themselves in a quoted path: space up to (not including) DEL.
+_PRINTABLE_ASCII = (0x20, 0x7F)
+
+
+def _in_diff_header(headers: list[str], path: str) -> bool:
+    """Is ``path`` one side of a `diff --git a/<old> b/<new>` header line? Anchored at
+    both ends: never the tail of another path (`foo` in `sub/foo`), its head (`foo` in
+    `foo2`), or text inside a hunk. Git leaves a name with a space unquoted, so `foo` can
+    still match the header of `foo bar` when both changed and only `foo bar` is shown. `capture_diff` pins the `a/` and `b/`
+    prefixes, whatever `diff.noprefix` or `diff.mnemonicPrefix` say."""
+    olds = (f"diff --git a/{path} ", f'diff --git "a/{path}" ')
+    news = (f" b/{path}", f' "b/{path}"')
+    return any(h.startswith(olds) or h.endswith(news) for h in headers)
+
+
+_C_ESCAPES = {7: "a", 8: "b", 9: "t", 10: "n", 11: "v", 12: "f", 13: "r", 34: '"', 92: "\\"}
+
+
+def _c_quoted(path: str, *, raw_high: bool = False) -> str:
+    """``path`` as git spells it inside a quoted diff header (`quote_c_style`, with the
+    default `core.quotepath`): `"` and `\\` escaped, control and non-ASCII bytes as
+    `\\ooo` octal -- without the surrounding quotes. The status side is read raw with
+    `-z`, the diff side is not, so a name like `a"b` or `café` is matched in its quoted
+    form (B7ab10b58f2). ``raw_high``: as git spells it under `core.quotepath=false`,
+    which leaves bytes >= 0x80 as they are (`café\\"b`)."""
+    out: list[bytes] = []
+    for b in os.fsencode(path):
+        if b in _C_ESCAPES:
+            out.append(("\\" + _C_ESCAPES[b]).encode())
+        elif raw_high and b >= _PRINTABLE_ASCII[1] + 1:
+            out.append(bytes([b]))
+        elif not _PRINTABLE_ASCII[0] <= b < _PRINTABLE_ASCII[1]:
+            out.append(f"\\{b:03o}".encode())
+        else:
+            out.append(bytes([b]))
+    # Decoded as the diff text is (`_diff_text`: UTF-8, invalid bytes replaced), so a raw
+    # non-UTF-8 byte under `quotepath=false` compares equal to what the diff holds.
+    return b"".join(out).decode("utf-8", errors="replace")
+
+
+def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
+    """Every path `git status` reports as changed, read with `-z`: unstripped (the first
+    record keeps its leading status column), a rename as BOTH its paths rather than an
+    `a -> b` line, and a non-ASCII name unquoted (B7ab10b58f2)."""
+    records = git_paths(tree, "status", "--porcelain")
+    if records is None:
+        return None
+    out: list[str] = []
+    i = 0
+    while i < len(records):
+        rec = records[i]
+        i += 1
+        xy, path = rec[:2], rec[3:]
+        if "R" in xy or "C" in xy:  # `-z` puts the source path in the next record
+            if i < len(records):
+                out.append(records[i])
+            i += 1
+        if not (ignore_untracked and xy == "??"):
+            out.append(path)
+    return [p for p in out if p]
 
 
 #: `path` relative to `repo` as a POSIX string, or None outside it: now `fsio.repo_rel`,

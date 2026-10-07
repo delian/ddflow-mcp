@@ -56,8 +56,7 @@ def companions(repo: Path, *, no_probe: bool = False, agent: str = "") -> O.Outc
     if isinstance(statuses, O.Outcome):
         return statuses
     _log, cfg, _st = _load(repo, agent)
-    pipeline = list(cfg.gates.task_pipeline)
-    cover = CO.gate_coverage(repo, statuses, pipeline)
+    cover = CO.gate_coverage(repo, statuses, CO.coverage_gates(cfg))
     data: dict[str, Any] = {
         "companions": [
             {
