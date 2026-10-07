@@ -47,7 +47,13 @@ def register(s: argparse._SubParsersAction) -> None:
     cu.add_argument("--apply", action="store_true")
     cu.set_defaults(fn=cmd_cleanup)
 
-    s.add_parser("doctor", help="integrity + health check").set_defaults(fn=cmd_doctor)
+    dr = s.add_parser("doctor", help="integrity + health check")
+    dr.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="the upgrade plan instead (an alias of `ddflow upgrade --plan`)",
+    )
+    dr.set_defaults(fn=cmd_doctor)
     s.add_parser("rebuild", help="re-derive the index from the log").set_defaults(fn=cmd_rebuild)
 
     rn = s.add_parser("render", help="regenerate the human-readable views")
