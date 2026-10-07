@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import _doc
+from ._docs import _doc, declare, knob
 
 
+@declare("review")
 @dataclass
 class ReviewConfig:
     """The review-round budget (decision D-review-budget): a shipped default for every
@@ -17,6 +18,10 @@ class ReviewConfig:
     max_rounds: int = 2
     on_exceed: str = "refuse"  # refuse | warn
     delta_default: bool = False
+    combined_under_lines: int = knob(
+        150,
+        doc="`ddflow review <id> --gate rubber_duck,critic` on a change with fewer changed lines than this (default 150; 0 = never) sends ONE review request whose prompt carries both gates' lenses and records its outcome for each gate, with a shared `review_id` in their evidence (decision D-gate-economy 2: a small fix spent 2.9 rounds of each gate, most failing on findings later refuted). A larger change keeps one review per gate, run at once. Not for --chunk or --delta, nor when a gate past the first is out of rounds. Change it for the project (`ddflow config review.combined_under_lines 100`), for this machine (add --local), per run (DDFLOW_REVIEW_COMBINED_UNDER_LINES), or over MCP with `ddflow_configure`.",
+    )
 
 
 _doc(
