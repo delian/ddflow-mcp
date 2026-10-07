@@ -217,6 +217,7 @@ the same implementation, so neither drifts from the other.
 | **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
+| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items | `ddflow_upgrade` |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
@@ -5274,6 +5275,7 @@ All require your agreement in the instructions they carry; most offer `dry_run`.
 | `ddflow_reviewers_detect`, `ddflow_reviewers_list` | `ddflow reviewers …` |
 | `ddflow_companions`, `ddflow_companions_add`, `ddflow_companions_verify` | `ddflow companions …` |
 | `ddflow_prompts`, `ddflow_export`, `ddflow_hooks` | `ddflow prompts / export / hooks` |
+| `ddflow_upgrade` | `ddflow upgrade` (the plan; reads only) |
 | `ddflow_setup` | `ddflow adopt` |
 | `ddflow_decision_add`, `_supersede`, `_list`, `_show`, `_applicable` | `ddflow decision …` |
 

@@ -304,6 +304,7 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("ddflow_ci", "--report"): "`ci record`: see --stage",
     ("ddflow_ci", "--sha"): "`ci record`: see --stage",
     ("ddflow_verify", "--all"): "a sweep is what omitting `id` means",
+    ("ddflow_doctor", "--upgrade"): "the same as `ddflow upgrade`, which is `ddflow_upgrade`",
     ("ddflow_list", "--kind"): "carried by `sources`: `kind` selects the viewer",
     ("ddflow_list", "--exact"): "carried by `mode`=exact",
     ("ddflow_list", "--regex"): "carried by `mode`=regex",

@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 import shlex
 import shutil
-import subprocess
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -182,28 +181,29 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
         if tree is None:
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
-        try:
-            # The operator's own [ci].command, run as they wrote it; on timeout its whole
-            # process group dies, not just the shell (Bed0f5b6d99).
-            p = P.run_shell(cmd, timeout=cfg.ci.timeout_s, cwd=tree, text=True)
-        except subprocess.TimeoutExpired:
+        # The operator's own [ci].command, run as they wrote it; on timeout its whole
+        # process group dies, not just the shell (Bed0f5b6d99).
+        p = P.run_shell(cmd, timeout_s=cfg.ci.timeout_s, cwd=tree)
+        if p.timed_out:
             return Result(
                 "unavailable",
                 command=cmd,
                 sha=sha,
                 reason=f"timed out after {cfg.ci.timeout_s}s: raise [ci].timeout_s",
             )
-    out = (p.stdout or "") + (p.stderr or "")
+        if p.could_not_run:
+            return Result("unavailable", command=cmd, sha=sha, reason=f"could not execute: {p.err}")
+    out = p.output
     checks = parse_checks(out)
-    if p.returncode != 0 and not any(not c.ok for c in checks):
-        checks.append(Check("command", False, f"exit {p.returncode}"))
+    if p.code != 0 and not any(not c.ok for c in checks):
+        checks.append(Check("command", False, f"exit {p.code}"))
     return Result(
-        "passed" if p.returncode == 0 else "failed",
+        "passed" if p.code == 0 else "failed",
         checks=checks,
         sha=sha,
         merged_with=base,
         command=cmd,
-        reason="" if p.returncode == 0 else f"{cmd} exited {p.returncode}",
+        reason="" if p.code == 0 else f"{cmd} exited {p.code}",
         output_tail=out[-TAIL_CHARS:],
     )
 

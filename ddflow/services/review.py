@@ -31,7 +31,6 @@ import http.client
 import json
 import os
 import re
-import signal
 import socket
 import subprocess
 import threading
@@ -471,7 +470,7 @@ class _Cancel:
 def _abort(thing: Any) -> None:
     try:
         if isinstance(thing, subprocess.Popen):
-            os.killpg(thing.pid, signal.SIGKILL)  # the shell AND the reviewer it started
+            P.kill_group(thing)  # the shell AND the reviewer it started
         else:
             thing.shutdown(socket.SHUT_RDWR)
     except (OSError, ProcessLookupError):
