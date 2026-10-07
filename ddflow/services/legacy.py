@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.digest import hasher
+from ..infra.fsio import repo_rel
 from ..infra.tomlcfg import atomic_write, basic_string
 from .adopt import BEGIN, END, NATIVE_RULES, Refused
 from .enforce import UnreadableYaml, read_precommit_yaml
@@ -215,7 +216,7 @@ def scan(repo: Path, imported: Iterable[str], *, extra: Iterable[str] = ()) -> l
         if path in seen or not path.is_file():
             continue
         seen.add(path)
-        rel = path.relative_to(repo) if path.is_relative_to(repo) else path
+        rel = repo_rel(repo, path, as_given=True, strict=False) or str(path)
         text = path.read_text("utf-8", errors="replace")
         inside = False
         for number, line in enumerate(text.splitlines(), 1):
@@ -229,7 +230,7 @@ def scan(repo: Path, imported: Iterable[str], *, extra: Iterable[str] = ()) -> l
                 continue
             replacement = _replacement_for(line, imported)
             if replacement:
-                out.append(Proposal(str(rel), number, line.strip(), replacement))
+                out.append(Proposal(rel, number, line.strip(), replacement))
     return out
 
 
