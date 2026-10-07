@@ -54,19 +54,18 @@ ORPHANS = Repair(
 
 
 def _forced_detect(ctx: Context) -> list[Finding]:
+    last = {e.subject: e for e in ctx.events if e.kind == "item.completed"}
     out = []
-    for e in ctx.events:
-        if e.kind != "item.completed" or not e.data.get("forced"):
-            continue
-        it = ctx.st.items.get(e.subject)
-        if it is None or it.state != DONE:
-            continue  # reopened or removed since: nothing stands on the forced completion
+    for subject, e in last.items():
+        it = ctx.st.items.get(subject)
+        if not e.data.get("forced") or it is None or it.state != DONE:
+            continue  # completed cleanly since, reopened or removed: nothing stands on it
         over = "; ".join(str(b) for b in e.data.get("overridden") or []) or "unrecorded"
         out.append(
             Finding(
                 e.id or e.compute_id(),
-                f"{e.subject} was completed with --force over: {over} "
-                f"(`ddflow verify {e.subject}` re-checks it)",
+                f"{subject} was completed with --force over: {over} "
+                f"(`ddflow verify {subject}` re-checks it)",
             )
         )
     return out
