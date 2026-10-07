@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import os
 import select
-import signal
 import subprocess
 import sys
 import tempfile
@@ -137,10 +136,7 @@ def _line(proc: subprocess.Popen, timeout: float) -> str | None:
 
 
 def _stop(proc: subprocess.Popen) -> None:
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError, OSError):
-        proc.kill()
+    P.kill_group(proc)
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
