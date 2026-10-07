@@ -67,6 +67,22 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if isinstance(source, O.Outcome):
         return source
     wt, dirty, outside = source
+    if W.unreadable(dirty):
+        # Not a file list: git could not read the tree at all. Commit-or---allow-dirty is
+        # the wrong advice, and --allow-dirty must not land a tree nobody can see
+        # (Bb2f7566528). `dirty` stays a list of paths.
+        return O.refused(
+            "worktree.merged",
+            f"could not read the worktree {wt.path}: {dirty[0][len(W.UNREADABLE) :]}. "
+            f"Repair it (its .git file, permissions) or `ddflow recover`; nothing was "
+            f"merged.",
+            id=item,
+            dirty=[],
+            # Unknown, not clean: as `outside_globs_unknown`, so a caller reading `dirty`
+            # alone never takes an unread tree for an empty one.
+            dirty_unknown=True,
+            path=str(wt.path),
+        )
     if dirty and not allow_dirty:
         # LISTED, not just counted: half the time these are build artefacts the project
         # forgot to gitignore, and half the time they are a source file the agent never
