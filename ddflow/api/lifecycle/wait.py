@@ -339,7 +339,7 @@ def wait(
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
     # None, so the first pass re-judges whatever landed between the load above and
     # the registration -- a release in that gap must not cost a whole RECHECK_S.
-    seen: dict[str, int] | None = None
+    seen = None  # an EventLog.mark() once taken
     checked = started
     try:
         while True:
@@ -347,8 +347,8 @@ def wait(
             if left <= 0:
                 return result(v, time.monotonic() - started, [])
             time.sleep(min(poll, left))
-            # Fingerprint BEFORE the read, never after: see `EventLog.extent`.
-            ext = log.extent()
+            # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
+            ext = log.mark(clock=False)
             if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
                 continue
             seen, checked = ext, time.monotonic()

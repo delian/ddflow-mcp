@@ -229,7 +229,7 @@ def trigger_evaluate(
     Decided from a log nothing has appended to since: two evaluators started at once
     would otherwise both see a key with no open remediation, or the hourly cap not yet
     reached, and both file (rubber-duck and roborev). The read and the fold happen
-    OUTSIDE the append lock, as a claim's do (`leases._decide_from`); under the lock a
+    OUTSIDE the append lock, as a claim's do (`EventLog.decide_then_append`); under the lock a
     few `stat` calls prove the log did not grow, and only if it did is everything read
     and decided again -- with NOW taken again -- before anything is written. A dry run
     takes no lock: its answer is what a run would decide from the log as it was read."""
@@ -255,13 +255,12 @@ def trigger_evaluate(
         cap = cfg.triggers.max_fires_per_hour  # D-trigger-cap-knob
         return at, st, defs, trigs, errors, TR.evaluate(st, events, trigs, at, max_per_hour=cap)
 
-    before = log.extent()
     try:
-        at, st, defs, trigs, errors, decisions = decide()
-        if not dry_run:
-            with log.transaction():
-                if log.extent() != before:
-                    at, st, defs, trigs, errors, decisions = decide()
+        if dry_run:
+            at, st, defs, trigs, errors, decisions = decide()
+        else:
+            with log.decide_then_append(decide) as decided:
+                at, st, defs, trigs, errors, decisions = decided
                 _apply(log, st, defs, trigs, decisions, at, errors)
     except _Unreadable as exc:  # raised before anything is written
         return O.failed(

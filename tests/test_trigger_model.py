@@ -386,15 +386,14 @@ def test_the_evaluator_decides_outside_the_lock_and_again_under_it_if_the_log_gr
     assert seen == [False]
     # ... and decided AGAIN under it when another writer got there first
     seen.clear()
-    real_extent = EventLog.extent
+    real_mark = EventLog.mark
     calls = iter(range(100))
 
-    def growing(self):
-        out = dict(real_extent(self))
-        out["_grew"] = next(calls)
-        return out
+    def growing(self, **kw):
+        m = real_mark(self, **kw)
+        return type(m)((*m.shards, ("_grew", next(calls), 0)))
 
-    monkeypatch.setattr(EventLog, "extent", growing)
+    monkeypatch.setattr(EventLog, "mark", growing)
     A.trigger_evaluate(proj)
     assert seen == [False, True]
 
