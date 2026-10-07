@@ -5,6 +5,7 @@ The failing-first fixture is this repository's README as of commit 7a397be, the 
 before its catch-up: three lines of it, verbatim, whose drift the check must find.
 """
 
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -158,19 +159,19 @@ def test_a_directory_that_is_not_a_repository_cannot_answer(tmp_path):
         D.check_docs(tmp_path)
 
 
+def _cpu() -> float:
+    """CPU seconds of this process and of the children it waited for (`git ls-files`)."""
+    t = os.times()
+    return t.user + t.system + t.children_user + t.children_system
+
+
 def _cost(fn):
     """(CPU seconds ``fn`` spent, its result). CPU, not wall: the budget guards the
     checker's own cost, and at CI load (average ~180 on 192 threads) a wall clock also
     counts the time the process waited for a core (B4d5ffa0b90)."""
-    start = time.process_time()
+    start = _cpu()
     result = fn()
-    return time.process_time() - start, result
-
-
-def test_the_budget_does_not_count_time_spent_waiting_for_a_core():
-    """A descheduled process is modelled by a sleep: wall time passes, no CPU does."""
-    spent, _ = _cost(lambda: time.sleep(2.5))
-    assert spent < 2.0, f"the runtime budget charged {spent:.1f}s of waiting to the checker"
+    return _cpu() - start, result
 
 
 def test_runtime_on_this_repositorys_readme():
@@ -178,6 +179,19 @@ def test_runtime_on_this_repositorys_readme():
     spent, report = _cost(lambda: D.check_docs(root, docs=["README.md"]))
     assert spent < 2.0, f"check_docs(README.md) cost {spent:.2f}s of CPU"
     assert report.checked["identifiers"] > 50
+
+
+def test_the_readme_budget_does_not_charge_time_spent_waiting_for_a_core(monkeypatch):
+    """The runtime test itself, with the checker descheduled for longer than the budget:
+    a sleep passes wall time and no CPU, as waiting for a core under load does."""
+    real = D.check_docs
+
+    def descheduled(*args, **kwargs):
+        time.sleep(2.1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(D, "check_docs", descheduled)
+    test_runtime_on_this_repositorys_readme()
 
 
 def test_a_named_document_that_cannot_be_read_is_not_a_clean_report(tmp_path):
