@@ -102,14 +102,20 @@ def atomic_write(
             os.chmod(tmp, want)
         if exclusive:
             _link_exclusive(tmp, path, raw, want, fsync=fsync)
-            tmp.unlink()
         else:
             os.replace(tmp, path)
     except BaseException:
         # Only this call's own temp file: unlinking any other is what let one writer
-        # delete another's file in flight.
-        tmp.unlink(missing_ok=True)
+        # delete another's file in flight. Best effort, so the error raised is the
+        # write's own, never the cleanup's.
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
         raise
+    if exclusive:
+        # The file is in place: the write HAPPENED, and a temp name that cannot be
+        # removed (it is unique, and harmless) must not report it failed (B4dd9658753).
+        with contextlib.suppress(OSError):
+            tmp.unlink()
 
 
 def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
