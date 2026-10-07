@@ -32,7 +32,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,6 +43,8 @@ PROJECTION = ROOT / "tests" / "compat" / "projection.py"
 RELEASES = ("0.1.3", "0.1.10", "0.1.15", "0.1.18")
 
 ALICE, BOB = "fx-alice", "fx-bob"
+BUILD_ROOT = Path("/tmp/ddflow-compat")
+UV = shutil.which("uv") or "uv"
 
 
 def sh(cmd: list[str], *, cwd: Path, env: dict[str, str], check: bool = True) -> str:
@@ -55,9 +56,9 @@ def sh(cmd: list[str], *, cwd: Path, env: dict[str, str], check: bool = True) ->
     return proc.stdout
 
 
-def release_commit(version: str) -> str:
+def release_commit(version: str) -> str | None:
     """The commit that released ``version``: its tag, else the `release X` commit (the
-    releases before 0.1.9 were never tagged)."""
+    releases before 0.1.9 were never tagged); None when it was never released."""
     env = dict(os.environ)
     tag = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", f"v{version}^{{commit}}"],
@@ -75,19 +76,24 @@ def release_commit(version: str) -> str:
         capture_output=True,
         text=True,
     ).stdout.split()
-    if len(found) != 1:
-        raise SystemExit(f"cannot find the commit that released {version}: {found or 'none'}")
-    return found[0]
+    if len(found) > 1:
+        raise SystemExit(f"{version} was released by more than one commit: {found}")
+    return found[0] if found else None
 
 
-def hermetic_env(home: Path) -> dict[str, str]:
+def hermetic_env(home: Path, venv: Path) -> dict[str, str]:
+    """Only the release under test is on PATH: an ambient ddflow (a developer's venv)
+    would otherwise be what `adopt` and `hooks install` record as the launcher."""
     env = {
         k: v
         for k, v in os.environ.items()
         if not k.startswith(("DDFLOW_", "GIT_", "VIRTUAL_ENV", "PYTHON"))
     }
     env.update(
+        PATH=os.pathsep.join([str(venv / "bin"), str(Path(UV).parent), "/usr/bin", "/bin"]),
         HOME=str(home),
+        USER="fixture",
+        LOGNAME="fixture",
         XDG_CONFIG_HOME=str(home / ".config"),
         XDG_CACHE_HOME=str(home / ".cache"),
         GIT_AUTHOR_NAME="Fixture",
@@ -299,10 +305,14 @@ def scenario(ddflow: Path, proj: Path, env: dict[str, str]) -> None:
 
 
 def build(version: str, commit: str) -> None:
-    with tempfile.TemporaryDirectory(prefix=f"ddflow-compat-{version}-") as tmp:
-        work = Path(tmp)
-        env = hermetic_env(work / "home")
-        (work / "home").mkdir()
+    # A FIXED neutral directory, not a fresh temp one: the release writes absolute paths into
+    # what it records (session cwd, worktree paths, hook launchers), and a committed fixture
+    # must name neither the machine nor the person that built it.
+    work = BUILD_ROOT / version
+    shutil.rmtree(work, ignore_errors=True)
+    (work / "home").mkdir(parents=True)
+    try:
+        env = hermetic_env(work / "home", work / "venv")
         venv = install(build_wheel(commit, work, env), work, env)
         python = venv / "bin" / "python"
         declared = sh(
@@ -313,6 +323,11 @@ def build(version: str, commit: str) -> None:
         proj = work / "proj"
         scenario(venv / "bin" / "ddflow", proj, env)
         expected = sh([str(python), "-I", str(PROJECTION), str(proj)], cwd=work, env=env)
+        python_version = sh(
+            [str(python), "-I", "-c", "import sys; print(sys.version.split()[0])"],
+            cwd=work,
+            env=env,
+        ).strip()
 
         dest = OUT / version
         shutil.rmtree(dest, ignore_errors=True)
@@ -322,14 +337,11 @@ def build(version: str, commit: str) -> None:
                 (dest / "project" / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(proj / rel, dest / "project" / rel)
         (dest / "expected.json").write_text(expected)
-        python_version = sh(
-            [str(python), "-I", "-c", "import sys; print(sys.version.split()[0])"],
-            cwd=work,
-            env=env,
-        ).strip()
         meta = {"version": version, "commit": commit, "python": python_version}
         (dest / "meta.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
         print(f"{version}: {dest.relative_to(ROOT)} ({commit[:10]})")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def main(argv: list[str]) -> int:
@@ -343,6 +355,11 @@ def main(argv: list[str]) -> int:
             if version == "current":
                 text = (ROOT / "ddflow" / "__init__.py").read_text()
                 declared = re.search(r'^__version__ = "([^"]+)"', text, re.M).group(1)
+                if release_commit(declared):
+                    # HEAD still declares a released version: writing it to that version's
+                    # directory would replace the release's fixture with unreleased code's.
+                    print(f"current: HEAD declares {declared}, already released; skipped")
+                    continue
                 head = subprocess.run(
                     ["git", "rev-parse", "HEAD"],
                     cwd=ROOT,
@@ -352,7 +369,10 @@ def main(argv: list[str]) -> int:
                 ).stdout.strip()
                 build(declared, head)
             else:
-                build(version, release_commit(version))
+                commit = release_commit(version)
+                if commit is None:
+                    raise SystemExit(f"cannot find the commit that released {version}")
+                build(version, commit)
     return 0
 
 

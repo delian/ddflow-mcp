@@ -8,8 +8,10 @@ CURRENT code to read the same log. So it may only use what every release since 0
 dataclasses, read field by field.
 
 A record is dumped with every dataclass field the running release defines. The comparison
-(`differences`) walks the EXPECTED side only: a field a newer release added is not a
+(`differences`) walks the EXPECTED side's fields only: a field a newer release added is not a
 difference, a field the old release had whose value the new release reads differently is.
+RECORDS are compared both ways: a record the new release folds out of the same log that the
+old one did not is a difference too.
 
     python tests/compat/projection.py <project-root>      # prints the projection
 """
@@ -66,9 +68,12 @@ def project(root: Path | str) -> dict[str, Any]:
 
 
 def differences(expected: Any, actual: Any, path: str = "") -> list[str]:
-    """Every place ``actual`` disagrees with ``expected``, walking only expected's keys."""
+    """Every place ``actual`` disagrees with ``expected``: expected's fields only, but every
+    record of a collection either side has. Values compare by type as well (1 is not True)."""
     if isinstance(expected, dict) and isinstance(actual, dict):
         out: list[str] = []
+        if path in COLLECTIONS:
+            out.extend(f"{path}.{key}: unexpected record" for key in actual if key not in expected)
         for key, want in expected.items():
             where = f"{path}.{key}" if path else key
             if key not in actual:
@@ -81,7 +86,9 @@ def differences(expected: Any, actual: Any, path: str = "") -> list[str]:
         for i, (want, got) in enumerate(zip(expected, actual, strict=True)):
             out.extend(differences(want, got, f"{path}[{i}]"))
         return out
-    return [] if expected == actual else [f"{path}: expected {expected!r}, got {actual!r}"]
+    if type(expected) is type(actual) and expected == actual:
+        return []
+    return [f"{path}: expected {expected!r}, got {actual!r}"]
 
 
 if __name__ == "__main__":

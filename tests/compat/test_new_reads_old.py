@@ -36,7 +36,8 @@ from ddflow.infra.log import EventLog
 RELEASES = Path(__file__).resolve().parents[1] / "fixtures" / "releases"
 VERSIONS = sorted(
     (p.name for p in RELEASES.iterdir() if (p / "meta.json").is_file()),
-    key=lambda v: tuple(int(x) for x in v.split(".")),
+    # a dev or pre-release name ("0.2.0.dev1") sorts after the numbers, never fails collection
+    key=lambda v: tuple((0, int(x), "") if x.isdigit() else (1, 0, x) for x in v.split(".")),
 )
 
 
