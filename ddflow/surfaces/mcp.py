@@ -37,7 +37,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ddflow.core.events import SkewRefused
+from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
 
 # The protocol engine -- revisions, negotiation, the modern envelope, multi round-trip --
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
@@ -717,11 +717,23 @@ class Server:
                     if allow_older is not None:
                         self._override_skew(allow_older, agent)
                     result = self._invoke(spec, args, agent, per_call, params)
-                except SkewRefused as exc:
-                    # Exit 3, like every refusal: a result to act on, not a failed call.
-                    return _ok(mid, _text(str(exc), meta={"exit": 3}))
-                except (KeyError, TypeError, ValueError) as exc:
-                    return _ok(mid, _text(f"bad arguments: {exc}", error=True))
+                except Exception as exc:
+                    # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
+                    # class declaring exit 3 -- is a result to act on, not a failed call;
+                    # an undeclared Key/Type/ValueError is a malformed call; anything else
+                    # is a bug, answered as an internal error below.
+                    code = exit_for(exc)
+                    if code == REFUSED:
+                        return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
+                    if declared_exit(exc) is None and isinstance(
+                        exc, (KeyError, TypeError, ValueError)
+                    ):
+                        return _ok(mid, _text(f"bad arguments: {exc}", error=True))
+                    if code is None:
+                        raise
+                    failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
+                    body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
+                    return _ok(mid, _text(body, error=failed, meta={"exit": code}))
                 # `text` may be a bool or a predicate on the arguments: `render`
                 # returns a document with `--show` and a file list without it, and which
                 # it is cannot be known until the call.

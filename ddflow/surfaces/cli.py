@@ -24,11 +24,9 @@ import os
 import sys
 
 from ..api import items as A_ITEMS
-from ..core.events import SkewRefused
 from ..core.model import fold
-from ..infra import worktree as W
+from ..core.outcome import INTERRUPTED, exit_for
 from ..services import gates as G
-from ..services import leases as L
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
@@ -332,17 +330,15 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
         return int(args.fn(args, ctx))
-    except KeyboardInterrupt:
-        return 130
-    except SkewRefused as exc:
-        print(str(exc), file=sys.stderr)
-        return REFUSED
-    except L.LeaseError as exc:
-        print(str(exc), file=sys.stderr)
-        return REFUSED
-    except (W.GitError, ValueError, KeyError) as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        return FAIL
+    except BaseException as exc:
+        # One table with MCP (`exit_for`, B5f3a650c40): a refusal says only its message
+        # (the remedy), an error names its kind, and anything else is a bug -- re-raised.
+        code = exit_for(exc)
+        if code is None:
+            raise
+        if code != INTERRUPTED:
+            print(str(exc) if code == REFUSED else f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        return code
 
 
 if __name__ == "__main__":

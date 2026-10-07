@@ -38,6 +38,8 @@ from ..infra.log import EventLog
 class LeaseError(RuntimeError):
     """Raised when a lease cannot be acquired. Carries the blocking holder."""
 
+    exit_code = 3  # REFUSED (`core.outcome.exit_for`): someone else holds it
+
     def __init__(
         self, msg: str, holder: str = "", item: str = "", alternatives: list[str] | None = None
     ) -> None:

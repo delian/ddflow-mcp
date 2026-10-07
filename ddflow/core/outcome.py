@@ -39,6 +39,46 @@ REFUSED = 3
 
 #: Human labels, for error messages that need to name a code.
 EXIT_NAMES = {OK: "ok", FAIL: "failed", NOTHING: "nothing", REFUSED: "refused"}
+#: The exit a Ctrl-C ends a command with: 128 + SIGINT, as a shell reports it.
+INTERRUPTED = 130
+
+
+#: Exits for classes this bottom layer cannot import, by qualified name; a class that can
+#: declare `exit_code` itself does so instead. tests/test_exit_mapping.py imports each
+#: one, so a rename fails there rather than silently dropping the entry.
+_EXIT_BY_NAME = {"ddflow.infra.worktree.GitError": FAIL}
+
+
+def declared_exit(exc: BaseException) -> int | None:
+    """The exit `exc`'s class declares -- its `exit_code`, or its entry in `_EXIT_BY_NAME`
+    -- else None. The one answer to "does this class say its own exit?", for `exit_for`
+    and for MCP's bad-arguments reading, which a declared exit overrides."""
+    code = getattr(type(exc), "exit_code", None)
+    if isinstance(code, int):
+        return code
+    for cls in type(exc).__mro__:
+        if (named := _EXIT_BY_NAME.get(f"{cls.__module__}.{cls.__qualname__}")) is not None:
+            return named
+    return None
+
+
+def exit_for(exc: BaseException) -> int | None:
+    """The exit an exception raised by a command maps to -- ONE table for the CLI and MCP
+    (B5f3a650c40), which disagreed: MCP called every Key/Type/ValueError "bad arguments",
+    so a refusal that subclasses ValueError (`ReviewerRefused`) read as a malformed call,
+    and a `LeaseError` as an internal error. A class declares its own exit with
+    `exit_code` (every refusal: `REFUSED`), or is named in `_EXIT_BY_NAME` (`GitError`:
+    `FAIL`); a ValueError or KeyError is an error in what was asked (`FAIL`); None means
+    a bug, which each surface lets surface as one. One surface-specific reading stays with MCP: a Key/Type/
+    ValueError whose class declares no exit is a malformed call there (JSON arguments are
+    untyped), where argparse has typed the CLI's; a declared one keeps its own exit."""
+    if isinstance(exc, KeyboardInterrupt):
+        return INTERRUPTED
+    if (declared := declared_exit(exc)) is not None:
+        return declared
+    if isinstance(exc, (ValueError, KeyError)):
+        return FAIL
+    return None
 
 
 @dataclass
