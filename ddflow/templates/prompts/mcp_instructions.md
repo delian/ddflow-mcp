@@ -122,8 +122,8 @@ from a session that did nothing, and the log is what lets this project be rebuil
   in `gates.evidence_required` rejects a bare "it passed".
 
 A tool or reviewer that could not run is recorded `unavailable`, **never** `passed`.
-A gate gets `[review].max_rounds` (default 2) full `ddflow_review` rounds per item; then
-use `delta=true` (only what changed since the reviewed head) and `ddflow_review_triage`.
+A gate gets `[review].max_rounds` (default 2) `ddflow_review` rounds per item, full and
+delta alike; then settle each finding with `ddflow_review_triage`.
 A plain `ddflow_review` of a gate with a recorded review is a full re-review: the whole
 diff plus the previous findings and your triage of each (`[review].delta_default`, default
 off; `full=true` when it is on); `delta=true` reviews only the new commits. Changing `review.delta_default` is

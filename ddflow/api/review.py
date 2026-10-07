@@ -630,15 +630,20 @@ def _delta_rounds(log, item: str, gate: str) -> int:
     )
 
 
+def _rounds_used(log, item: str, gate: str) -> int:
+    """Every review round of ``gate`` the budget counts: full and delta alike."""
+    return _full_rounds(log, item, gate) + _delta_rounds(log, item, gate)
+
+
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
     return (
-        f"{item}.{gate} has had {done} full review rounds ([review].max_rounds = {cap}). "
-        "Later rounds find fewer defects than earlier ones, so instead:\n"
-        f"  ddflow review {item} --gate {gate} --delta    recheck ONLY what changed since the "
-        "reviewed head (always allowed)\n"
+        f"{item}.{gate} has had {done} review rounds, full and delta ([review].max_rounds = "
+        f"{cap}). Later rounds find fewer defects than earlier ones, so instead:\n"
         f"  ddflow review triage {item} --gate {gate} --finding N --refuted|--confirmed "
-        '--probe "..."    settle each remaining finding (always allowed)\n'
-        f'  ddflow review {item} --gate {gate} --force --reason "..."    one more full round, '
+        '--probe "..."    settle each remaining finding: refute it with the run that shows it '
+        "false, or confirm it with the test that now passes (always allowed)\n"
+        "  then record the gate on that triage, or ask the operator\n"
+        f'  ddflow review {item} --gate {gate} --force --reason "..."    one more round, '
         "recorded\n"
         "To change the budget: ddflow config --set review.max_rounds N [--local] "
         '(0 = unlimited), or [review].on_exceed = "warn".'
@@ -669,8 +674,11 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     kind = _kind(repo, cfg, log, item, gate, a["chunks"], delta, a["commit"], a["base"])
     done = _full_rounds(log, item, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
-    if kind == "full" and item:
-        why, forced = _budget(cfg, item, gate, done, a["force"], a["reason"], say)
+    if kind in ("full", "delta") and item:
+        # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
+        # around it, and each one was another reviewer request at the same item.
+        used = done + _delta_rounds(log, item, gate)
+        why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say)
     if why:
         return kind, done, forced, diff, how, why, None
     if delta:
@@ -846,8 +854,8 @@ def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
         return "", ""
     if cfg.review.on_exceed == "warn":
         say(
-            f"WARNING: {item}.{gate} has had {done} full review rounds, past "
-            f"[review].max_rounds = {cap}: prefer --delta and `review triage`."
+            f"WARNING: {item}.{gate} has had {done} review rounds, past "
+            f"[review].max_rounds = {cap}: prefer `review triage`."
         )
         return "", ""
     if force and reason.strip():
@@ -1103,7 +1111,7 @@ def _any_out_of_rounds(log, cfg, item: str, gates: list[str], args: dict[str, An
         return False
     quiet = lambda _line: None  # noqa: E731 -- the gate's own run says it, if it comes to that
     return any(
-        _budget(cfg, item, g, _full_rounds(log, item, g), args["force"], args["reason"], quiet)[0]
+        _budget(cfg, item, g, _rounds_used(log, item, g), args["force"], args["reason"], quiet)[0]
         for g in gates
     )
 

@@ -39,9 +39,12 @@ def _delta_on(review_toml: str) -> str:
     what these tests are about, and it is no longer the shipped default."""
     if "delta_default" in review_toml:
         return review_toml
+    # Unlimited rounds unless the test sets them: since D-gate-economy 2 deltas count
+    # against review.max_rounds, and these tests are about the delta, not the cap.
+    extra = "delta_default = true\n" + ("" if "max_rounds" in review_toml else "max_rounds = 0\n")
     if "[review]\n" in review_toml:
-        return review_toml.replace("[review]\n", "[review]\ndelta_default = true\n", 1)
-    return "[review]\ndelta_default = true\n" + review_toml
+        return review_toml.replace("[review]\n", "[review]\n" + extra, 1)
+    return "[review]\n" + extra + review_toml
 
 
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
@@ -162,7 +165,7 @@ def test_two_fix_commits_are_counted(repo, tmp_path):
 
 
 def test_full_forces_a_full_round_that_counts(repo, tmp_path):
-    _setup(repo, tmp_path)
+    _setup(repo, tmp_path, "[review]\nmax_rounds = 2\n")  # the shipped cap
     _review(repo)
     whole = _ev(repo)["diff_chars"]
     _fix(repo)
@@ -421,7 +424,7 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
 
 
 def test_force_is_a_full_round_even_when_the_default_would_make_it_a_delta(repo, tmp_path):
-    _setup(repo, tmp_path)
+    _setup(repo, tmp_path, "[review]\nmax_rounds = 2\n")  # the shipped cap
     _review(repo)
     _review(repo, full=True)  # the cap (2) is spent
     _fix(repo)
