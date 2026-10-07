@@ -1,9 +1,9 @@
 """Pins the repo-relative labels legacy.scan and export templates print (B-relpath-labels).
 
 Both now go through fsio.repo_rel(as_given=True, strict=False); every path production
-code builds must print exactly what the old lexical derivation printed, also when the
-repository is reached through a symlink. Labels are POSIX text: on Windows legacy.scan's
-label used native separators before and now uses "/", like every other repo_rel report.
+code builds prints what the old lexical derivation printed, also when the repository is
+reached through a symlink -- except that labels are POSIX text everywhere: on Windows the
+old legacy.scan label (str(path)) used native separators, now "/" like every repo_rel report.
 """
 
 from __future__ import annotations
