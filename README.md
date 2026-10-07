@@ -1301,7 +1301,8 @@ tests -- and records the outcome for each gate with the same evidence and a shar
 review <id>: N changed line(s) ...`; it is a full round of each gate. A larger change runs
 one review per gate, one after the other. `--chunk`, `--delta`, `--commit` and `--base` work
 on one gate's record, so with several gates they run per gate; so does a pair where either
-gate is out of rounds.
+gate is out of rounds, is served by other reviewers than the first, or is not one of the two
+review lenses.
 
 **Delta re-reviews, on request.** `--delta` (MCP `delta=true`), or `review.delta_default =
 true` for every plain re-review, is for a diff too large to send twice. Once a gate has a
