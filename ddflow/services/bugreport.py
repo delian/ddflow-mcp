@@ -34,8 +34,9 @@ from ..config import Config
 from ..core.digest import content_digest, hasher
 from ..core.events import Event
 from ..core.model import known_kinds
+from ..core.redact import redact_argv
 from . import install_info as _install
-from . import redact_report as _redact
+from .redact_report import redactor
 
 #: The only configuration values a report may carry: scalar behaviour switches and
 #: limits, nothing that can hold a path, an endpoint, a name, a prompt or a pattern.
@@ -82,8 +83,6 @@ _SURROGATES = re.compile("[\ud800-\udfff]")
 
 _DETECTOR = re.compile(r"[a-z][a-z0-9_.-]{0,40}")
 _CLASS = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,80}")
-_PROGRAMS = frozenset({"ddflow", "ddflow-mcp", "python", "python3", "uv", "uvx"})
-_WORD = re.compile(r"[a-z][a-z0-9_-]{0,23}")
 _FILE_LINE = re.compile(r'^(\s*File ")([^"]+)(".*)$')
 _ANY_DDFLOW_PATH = re.compile(r"(?:/[\w.@+~-]+)+/ddflow/")
 
@@ -205,45 +204,6 @@ def _frame_path(path: str) -> tuple[str, bool]:
 # ------------------------------------------------------------------------- argv
 
 
-def redact_argv(
-    argv: Sequence[str],
-    subcommands: Iterable[str] | None = None,
-    flags: Iterable[str] | None = None,
-) -> list[str]:
-    """The shape of a command line, from allowlists and nothing else.
-
-    Kept: the program (when it is ddflow or a Python launcher), the leading words the
-    caller lists in `subcommands` (the CLI's own verbs), and the flag names the caller
-    lists in `flags` (the CLI's own flags, matched exactly, with or without `=value`).
-    Everything else is a placeholder: `<flag>` for any other dash-led token, `<value>`
-    for a word right after a kept flag, `<arg>` for any other word. Nothing is inferred
-    from how a token looks -- a dash-led secret (`-hunter2`, `-psecret`, `--s3cr3t`) cannot
-    be told from a flag, so it is only ever kept if the caller named it as one."""
-    allowed = set(subcommands) if subcommands is not None else set()
-    known = {"-m", *(flags or ())}  # `-m` is the Python launcher's own
-    out: list[str] = []
-    leading = True
-    for i, raw in enumerate(argv):
-        tok = str(raw)
-        if i == 0:
-            base = tok.replace("\\", "/").rsplit("/", 1)[-1]
-            out.append(base if base in _PROGRAMS else "<program>")
-        elif tok in _PROGRAMS and out[-1] == "-m":
-            out.append(tok)  # `python -m ddflow`
-        elif tok.startswith("-") and tok != "-":
-            leading = False
-            name, eq, _value = tok.partition("=")
-            shown = name if name in known else "<flag>"
-            out.append(f"{shown}=<value>" if eq else shown)
-        elif leading and _WORD.fullmatch(tok) and tok in allowed:
-            out.append(tok)
-        else:
-            leading = False
-            after_flag = out[-1] in known and "=" not in out[-1]
-            out.append("<value>" if after_flag else "<arg>")
-    return out
-
-
 # --------------------------------------------------------------------- aliases
 
 
@@ -316,14 +276,14 @@ def build_bundle(
     counts: dict[str, int] = {}
 
     def clean(value: object) -> str:
-        r = _redact.redact_report(
-            value,
-            hostname=scrub.hostname,
+        r = redactor(
+            "upstream",
+            scrub.cfg,
             names=scrub.names,
+            hostname=scrub.hostname,
             home=scrub.home,
             repo_root=scrub.repo_root,
-            cfg=scrub.cfg,
-        )
+        ).text(value)
         for kind, n in r.counts.items():
             counts[kind] = counts.get(kind, 0) + n
         return _SURROGATES.sub("\ufffd", r.text)

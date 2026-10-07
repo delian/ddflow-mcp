@@ -31,7 +31,7 @@ ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT))
 
 from ddflow.config import Config  # noqa: E402
-from ddflow.services.sessions import redact as redact_secrets  # noqa: E402
+from ddflow.services.redact_report import redact_secrets  # noqa: E402
 from tests.test_repo_is_generic import _IPV4, _IPV6, _private_addresses  # noqa: E402
 
 CORPUS = HERE / "corpus.jsonl"
