@@ -41,7 +41,8 @@ def _remote_claims(repo: Path) -> None:
     cfg = repo / ".ddflow" / "config.toml"
     cfg.parent.mkdir(exist_ok=True)
     text = cfg.read_text() if cfg.exists() else ""
-    cfg.write_text(text + '\n[flow]\nclaims = "remote"\n' if "[flow]" not in text else text)
+    assert "[flow]" not in text, "fixture: a [flow] table would need the key set inside it"
+    cfg.write_text(text + '\n[flow]\nclaims = "remote"\n')
 
 
 def test_resolve_drops_each_losing_claims_remote_ref(repo: Path, monkeypatch):
@@ -55,6 +56,7 @@ def test_resolve_drops_each_losing_claims_remote_ref(repo: Path, monkeypatch):
     out = api.items.resolve(repo, "T", keep="bob", agent="op")
     assert out.exit == 0, out.reason
     assert ("drop", "T", "alice") in remote.calls, remote.calls
+    assert ("take", "T", "bob") in remote.calls, remote.calls
 
 
 def test_re_homing_moves_the_remote_claim_to_the_new_id(repo: Path, monkeypatch):
