@@ -695,16 +695,24 @@ def capture_diff(
     try:
         if base:
             merge_base = git(tree, "merge-base", base, "HEAD").out or base
-            committed = git(tree, "diff", f"{merge_base}..HEAD", *spec).out
+            committed = _diff_text(tree, f"{merge_base}..HEAD", *spec)
         else:
             committed = ""
-        working = git(tree, "diff", "HEAD", *spec).out
+        working = _diff_text(tree, "HEAD", *spec)
     finally:
         if include_untracked and untracked:
             # Undo intent-to-add so the caller's index is exactly as we found it. A
             # review that leaves files staged changes what the next commit contains.
             git(tree, "reset", "--quiet", "--", *untracked)
     return "\n".join(part for part in (committed, working) if part.strip())
+
+
+def _diff_text(tree: Path, *args: str) -> str:
+    """`git diff <args>` as text a reviewer can read, whatever the bytes: a file's
+    non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
+    raised -- `git()` decodes strictly, and one such file aborted the whole review."""
+    p = P.run(["git", "-C", str(tree), "diff", *args], capture_output=True, timeout=300)
+    return p.stdout.decode("utf-8", errors="replace").strip() if p.returncode == 0 else ""
 
 
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:

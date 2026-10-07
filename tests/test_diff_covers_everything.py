@@ -78,3 +78,10 @@ def test_a_non_utf8_name_does_not_break_the_review_diff(repo):
     assert "new file" in diff, diff
     ok, missing = W.diff_covers_everything(repo, diff)
     assert ok, missing
+
+
+def test_non_utf8_content_does_not_break_the_review_diff(repo):
+    _commit(repo, "latin.txt")
+    (repo / "latin.txt").write_bytes(b"caf\xe9 content\n")
+    diff = W.capture_diff(repo)
+    assert "content" in diff, diff
