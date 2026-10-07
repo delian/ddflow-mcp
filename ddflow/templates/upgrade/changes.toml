@@ -248,7 +248,7 @@ date = "2026-10-02"
 kind = "knob_added"
 key = "dedupe.ask_threshold"
 new = "0.55"
-why = "Cosine similarity (0-1) at which an add must be answered before it proceeds (under on_match = 'ask'). 0.55 from the research: on ddflow's labelled records about half of real duplicates score above it and over three quarters of what does..."
+why = "Cosine similarity (0-1) at which an add that reads like an existing record must be answered before it proceeds (under on_match = 'ask')."
 impact = "additive"
 
 [[release.change]]
@@ -276,7 +276,7 @@ impact = "additive"
 kind = "knob_added"
 key = "dedupe.on_match"
 new = "\"ask\""
-why = "What an add does when it looks like an existing record. 'ask' (default): it is refused until answered new / extends X / duplicate of X / related X -- a prompt on a terminal, exit 3 with the ready commands for a script, a re-call with rel..."
+why = "What an add does when it reads like an existing record: 'ask' refuses it until answered (--new, --extends, --duplicate-of or --related), 'warn' files it with a warning, 'off' does not check."
 impact = "additive"
 
 [[release.change]]
@@ -304,7 +304,7 @@ impact = "additive"
 kind = "knob_added"
 key = "enforce.readme_with_code"
 new = "\"warn\""
-why = "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --o..."
+why = "What complete, gate status and brief do about a task whose diff changes code but not the README and records no docs outcome: 'warn' reports it, 'block' refuses complete, 'off' says nothing."
 impact = "additive"
 
 [[release.change]]
@@ -331,7 +331,7 @@ kind = "knob_changed"
 key = "dedupe.on_match"
 old = "\"ask\""
 new = "\"warn\""
-why = "What an add does when it looks like an existing record. 'ask': it is refused until answered new / extends X / duplicate of X / related X -- a prompt on a terminal, exit 3 with the ready commands for a script, a re-call with relation=......"
+why = "What an add does when it reads like an existing record: 'ask' refuses it until answered (--new, --extends, --duplicate-of or --related), 'warn' files it with a warning, 'off' does not check."
 effect = "an add that reads like an existing record is filed with a warning instead of being refused"
 
 [[release]]
@@ -343,14 +343,14 @@ kind = "knob_changed"
 key = "dedupe.on_match"
 old = "\"warn\""
 new = "\"ask\""
-why = "What an add does when it looks like an existing record. 'ask' (default): it is refused until answered new / extends X / duplicate of X / related X -- --new / --extends ID / --duplicate-of ID / --related ID on the CLI (a prompt on a termi..."
+why = "What an add does when it reads like an existing record: 'ask' refuses it until answered (--new, --extends, --duplicate-of or --related), 'warn' files it with a warning, 'off' does not check."
 effect = "an add that reads like an existing record is refused (exit 3) until answered with --new, --extends, --duplicate-of or --related"
 
 [[release.change]]
 kind = "knob_added"
 key = "lease.waiter_reservation_s"
 new = "300"
-why = "Claims on a contended file are served first come, first served."
+why = "How long a waiter that could claim keeps its place in line for a contended file before a younger claim may take it (seconds; 0 turns the queue off and whoever claims first wins)."
 impact = "additive"
 
 [[release.change]]
@@ -396,14 +396,14 @@ impact = "additive"
 kind = "knob_added"
 key = "export.tables"
 new = "{}"
-why = "The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session,..."
+why = "The per-document export tables ([export.<doc>]: path, mode, template, filters, refresh, redact) as one map."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
 key = "mcp.tools"
 new = "\"all\""
-why = "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (d..."
+why = "Which tools tools/list advertises: 'core' (the daily loop), 'standard' or 'all' (default); a tool outside the tier stays callable by name."
 impact = "additive"
 
 [[release.change]]
@@ -455,7 +455,7 @@ date = "2026-10-04"
 kind = "knob_added"
 key = "bugs.file_task"
 new = "true"
-why = "Whether `bug found` files the bug's fix task in the queue (default true): `fix-<bug id>`, tagged as a bug fix, under the phase of the item the bug names (or `[bugs] phase`), carrying that item's globs unless `--globs` says otherwise, and..."
+why = "Whether `bug found` files the bug's fix task fix-<bug id> in the queue (default true), on the named item's files and offered before features."
 impact = "additive"
 
 [[release.change]]
@@ -469,7 +469,7 @@ impact = "additive"
 kind = "knob_added"
 key = "flow.claims"
 new = "\"local\""
-why = "'local' (default): a claim is an event in this clone's log, so two offline clones can both claim one item (detected afterwards as 'contested'). 'remote': a claim also creates refs/ddflow/claims/<id> on `remote` by compare-and-swap, so on..."
+why = "'local' (default): a claim is an event in this clone's log; 'remote': a claim also takes refs/ddflow/claims/<id> on the remote by compare-and-swap, so only one online clone wins."
 impact = "additive"
 
 [[release.change]]
@@ -580,7 +580,7 @@ impact = "additive"
 kind = "knob_added"
 key = "enforce.environment_commits"
 new = "\"block\""
-why = "What the pre-commit hook does with a commit made directly on a branch listed in [flow].environments (GitLab flow's upstream-first): 'block' (default) refuses it and names the remedy (work on a branch, then `ddflow promote status`), 'warn..."
+why = "What the pre-commit hook does with a commit made directly on an environment branch ([flow].environments): 'block' (default), 'warn' or 'off'."
 impact = "additive"
 
 [[release.change]]
@@ -627,7 +627,7 @@ date = "2026-10-05"
 kind = "knob_added"
 key = "session.compaction_digest_chars"
 new = "2000"
-why = "Before Claude Code compacts the context, the PreCompact hook (`ddflow hooks install --claude`) records the last turns of the transcript -- the operator's words and the agent's answers, no tool traffic, secrets redacted -- as a session no..."
+why = "How many characters of the last turns the PreCompact hook keeps as a session note, handed back by the SessionStart hook after Claude Code compacts the context."
 impact = "additive"
 
 [[release]]
@@ -776,7 +776,7 @@ impact = "additive"
 kind = "knob_added"
 key = "schedule.parallel"
 new = "\"auto\""
-why = "'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts between `max_parallel_min` and `max_parallel_max`, starting at `max_parallel_tasks` -- raised by one after `adapt_up_after_s` of healthy samples while the limit wa..."
+why = "'auto' (default): the number of items in flight adapts between max_parallel_min and max_parallel_max on health signals; 'fixed': it stays at max_parallel_tasks."
 impact = "additive"
 
 [[release.change]]
@@ -790,7 +790,7 @@ impact = "additive"
 kind = "knob_added"
 key = "schedule.signals"
 new = "{\"enabled\": [\"load_per_core\", \"memory_pressure\", \"disk_pressure\", \"reviewer_latency_ratio\", \"gate_failure_rate\", \"merge_failure_rate\", \"loop_findings\", \"independent_ready\"], \"load_per_core\": {\"high\": 0.75, \"low\": 0.15}}"
-why = "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, merge_failure_rate, loop_findings, independent_ready), and per sign..."
+why = "The [schedule.signals] table: which health signals adaptive flow control reads, and each signal's low, high and critical marks."
 impact = "additive"
 
 [[release.change]]
@@ -850,7 +850,7 @@ date = "2026-10-07"
 kind = "knob_added"
 key = "review.combined_under_lines"
 new = "150"
-why = "`ddflow review <id> --gate rubber_duck,critic` on a change with fewer changed lines than this (default 150; 0 = never) sends ONE review request whose prompt carries both gates' lenses and records its outcome for each gate, with a shared..."
+why = "A change with fewer changed lines than this (default 150; 0 = never) gets ONE review request covering both the rubber_duck and critic lenses, recorded for both gates."
 impact = "additive"
 
 [[release.change]]
@@ -866,7 +866,7 @@ kind = "knob_changed"
 key = "schedule.signals"
 old = "{\"enabled\": [\"load_per_core\", \"memory_pressure\", \"disk_pressure\", \"reviewer_latency_ratio\", \"gate_failure_rate\", \"merge_failure_rate\", \"loop_findings\", \"independent_ready\"], \"load_per_core\": {\"high\": 0.75, \"low\": 0.15}}"
 new = "{\"disk_pressure\": {\"critical\": 0.97, \"high\": 0.9, \"low\": 0.85}, \"enabled\": [\"load_per_core\", \"memory_pressure\", \"disk_pressure\", \"reviewer_latency_ratio\", \"gate_failure_rate\", \"gate_failure_ratio\", \"merge_failure_rate\", \"loop_findings\", \"independent_ready\"], \"gate_failure_ratio\": {\"high\": 2.0, \"low\": 1.5}, \"load_per_core\": {\"high\": 0.75, \"low\": 0.15}, \"memory_pressure\": {\"critical\": 0.95, \"high\": 0.85, \"low\": 0.75}, \"reviewer_latency_ratio\": {\"high\": 2.0, \"low\": 1.5}}"
-why = "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, gate_failure_ratio, merge_failure_rate, loop_findings, independent_..."
+why = "The [schedule.signals] table: which health signals adaptive flow control reads, and each signal's low, high and critical marks."
 effect = "adds the gate_failure_ratio signal and explicit thresholds for disk, memory and reviewer latency to adaptive flow control"
 
 [[release.change]]
