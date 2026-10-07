@@ -78,7 +78,7 @@ def normalise(text: str, *roots: Path) -> str:
     version -- with placeholders. Nothing else is touched."""
     for root in roots:
         text = text.replace(str(root), "<ROOT>")
-    return re.sub(rf"(?<![\w.]){re.escape(__version__)}(?![\w.])", "<VERSION>", text)
+    return re.sub(rf"(?<![\d.]){re.escape(__version__)}(?!\.?\d)", "<VERSION>", text)
 
 
 @pytest.fixture

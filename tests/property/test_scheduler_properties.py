@@ -104,19 +104,29 @@ def test_an_offer_is_never_made_before_its_dependencies(sc):
 @SETTINGS
 @given(scenarios())
 def test_no_two_offers_conflict_and_none_overlaps_another_agents_lease(sc):
+    """Checked twice: with `conflicts`, the predicate `plan` uses, and with an oracle that
+    does not share its code -- the same non-shared glob on both sides is always a clash, and
+    a lease is live while `now - renewed_at <= ttl_s + grace_s`."""
     state, cfg, now, agent = sc
     p = plan(state, cfg, now=now, agent=agent)
     shared = cfg.lease.shared_globs
     for i, a in enumerate(p.ready):
         for b in p.ready[i + 1 :]:
             assert not conflicts(a.globs, b.globs, shared), (a.id, b.id)
-    live = state.active_leases(now, cfg.lease.grace_s)
+            assert not (set(a.globs) & set(b.globs)) - set(shared), (a.id, b.id)
+    live = {
+        i.id: i.lease
+        for i in state.items.values()
+        if i.lease is not None and now - i.lease.renewed_at <= i.lease.ttl_s + cfg.lease.grace_s
+    }
+    assert live == state.active_leases(now, cfg.lease.grace_s)
     for it in p.ready:
         for held_id, lease in live.items():
             if lease.holder == agent:
                 continue
             assert held_id != it.id, f"{it.id} is leased by {lease.holder}"
             assert not conflicts(it.globs, lease.globs, shared), (it.id, held_id)
+            assert not (set(it.globs) & set(lease.globs)) - set(shared), (it.id, held_id)
 
 
 @SETTINGS
