@@ -4,7 +4,7 @@ B-gate-econ-review-combined).
 `ddflow review <id> --gate rubber_duck,critic` on a diff under
 `[review].combined_under_lines` (default 150 changed lines) sends ONE request whose prompt
 covers both lenses and records the outcome for both gates, with a shared `review_id` in
-their evidence. A larger diff keeps both reviews, run in parallel. Measured before the
+their evidence. A larger diff keeps both reviews, one after the other. Measured before the
 decision: a bug fix took 2.9 rounds of each gate, most failing on findings later refuted.
 """
 
@@ -127,3 +127,53 @@ def test_the_cli_takes_the_two_gates(repo, tmp_path):
     assert code == 0, (code, out, err)
     assert "recorded T1.rubber_duck = failed" in out + err, out + err
     assert "recorded T1.critic = failed" in out + err, out + err
+
+
+def test_a_first_gate_out_of_rounds_does_not_cost_the_second_its_review(repo, tmp_path):
+    """Combined only when every gate has a round left; otherwise each runs on its own."""
+    prompts = _setup(repo, tmp_path, "[review]\nmax_rounds = 1\n")
+    api.review(repo, gate="rubber_duck", item="T1", branch="feat")
+    before = len(list(prompts.iterdir()))
+
+    out = api.review(repo, gate=GATES, item="T1", branch="feat")
+
+    assert len(list(prompts.iterdir())) == before + 1, "critic was not reviewed"
+    gates = _gates(repo)
+    assert gates["critic"].outcome == "failed"
+    assert "review_id" not in gates["critic"].evidence
+    assert "rubber_duck" in out.data["by_gate"], out.data
+
+
+def test_a_combined_review_that_could_not_run_says_so_for_every_gate(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "checkout", "-q", "-b", "empty")  # no change: an empty diff
+    api.review(repo, gate=GATES, item="T1", branch="empty")
+    gates = _gates(repo)
+    assert gates["rubber_duck"].outcome == gates["critic"].outcome == "unavailable"
+
+
+def test_a_gate_with_no_known_lens_is_never_combined(repo, tmp_path):
+    prompts = _setup(repo, tmp_path)
+    (repo / ".ddflow" / "config.toml").write_text(
+        (repo / ".ddflow" / "config.toml")
+        .read_text()
+        .replace(
+            'gates = ["critic", "rubber_duck"]', 'gates = ["critic", "rubber_duck", "arbiter"]'
+        )
+    )
+    api.review(repo, gate="critic,arbiter", item="T1", branch="feat")
+    assert len(list(prompts.iterdir())) == 2
+
+
+def test_a_content_line_starting_with_two_dashes_is_counted(monkeypatch):
+    """`--- old note` removed and `+++counter;` added are content, not file headers."""
+    import ddflow.api.review as R
+
+    diff = (
+        "diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1,2 +1,2 @@\n"
+        "--- old note\n+++counter;\n context\n"
+    )
+    monkeypatch.setattr(R, "diff_for", lambda *a, **k: (diff, "test"))
+    args = {"repo": None, "item": "", "base": "", "branch": "", "called_from": None}
+    assert R._changed_lines(None, None, args) == 2
