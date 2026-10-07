@@ -67,3 +67,17 @@ def test_an_invalid_pattern_still_raises_with_the_json_remedy():
 def test_argv_shape_is_unchanged():
     got = R.redact_argv(["/usr/bin/ddflow", "bug", "--token", "x"], ["bug"], ["--token"])
     assert got == ["ddflow", "bug", "--token", "<value>"]
+
+
+def test_a_bare_padded_token_is_blanked_whole_not_kept_up_to_its_padding():
+    cfg = Config()
+    cfg.session.redact_extra = [r"[A-Za-z0-9+/]{16,}={1,2}"]
+    out = R.Redactor("log", cfg).text("c2VjcmV0IGtleSBoZXJl==").text
+    assert out == "[REDACTED]"
+
+
+def test_the_full_hostname_is_redacted_before_its_short_label():
+    out = R.Redactor("upstream", hostname="devbox.example.com", repo_root="").text(
+        "on devbox.example.com"
+    )
+    assert out.text == "on [REDACTED:hostname]"

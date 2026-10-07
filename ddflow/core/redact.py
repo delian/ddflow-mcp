@@ -259,7 +259,11 @@ def redact_report(
 def _host_forms(machine: str) -> list[str]:
     machine = _coerce(machine).strip()
     forms = {machine, machine.split(".")[0]} if machine else set()
-    return [f for f in forms if len(f) >= _MIN_TERM and f.lower() not in _GENERIC_HOSTS]
+    # longest first: the short label would otherwise cut into the full name, by hash order
+    return sorted(
+        (f for f in forms if len(f) >= _MIN_TERM and f.lower() not in _GENERIC_HOSTS),
+        key=lambda f: (-len(f), f),
+    )
 
 
 def _machine_name() -> str:
@@ -294,7 +298,9 @@ def _mask(s: str) -> str:
     """
     for sep in (":", "="):
         if sep in s:
-            head, _, _ = s.partition(sep)
+            head, _, tail = s.partition(sep)
+            if not tail.strip("= \t"):  # a bare token with padding (base64 `abc==`)
+                break
             return f"{head}{sep} [REDACTED]"
     parts = s.split(None, 1)
     if len(parts) == _SCHEME_AND_VALUE:
