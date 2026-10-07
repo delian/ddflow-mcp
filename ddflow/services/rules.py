@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..core import clock
+from ..core import clock, textsim
 from ..infra.fsio import replace_text
 from ..infra.tomlcfg import basic_string
 
@@ -241,12 +241,8 @@ def _is_valid_rule_id(rule_id: str) -> bool:
 
 
 def _tokenize(text: str) -> list[str]:
-    """Simple tokenization: split on whitespace and punctuation."""
-    # Remove common punctuation and split on whitespace
-    text = re.sub(r"[^\w\s-]", " ", text.lower())
-    tokens = text.split()
-    # Filter out very short tokens (noise)
-    return [t for t in tokens if len(t) > _MIN_TOKEN_LEN]
+    """Lowercase words longer than ``_MIN_TOKEN_LEN``, hyphens kept inside a word."""
+    return textsim.words(text, min_len=_MIN_TOKEN_LEN + 1, hyphens=True, fold=True)
 
 
 def _globs_match(pattern1: str, pattern2: str) -> bool:
