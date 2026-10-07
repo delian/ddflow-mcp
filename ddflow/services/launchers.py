@@ -109,13 +109,14 @@ def _commands(data: Any) -> list[str]:
 
 def check_settings(repo: Path) -> list[Dangling]:
     """ddflow's own hook commands in `.claude/settings.json` and `.gemini/settings.json`."""
-    from .claudehooks import GEMINI_SETTINGS, MARKER, PRECOMPACT_MARKER, PROMPT_MARKER
+    from .claudehooks import HOOKS
 
-    # Every hook ddflow installs, the pre-compact one included (B4af8a88294).
-    ours = (MARKER, PRECOMPACT_MARKER, PROMPT_MARKER)
+    # Every hook ddflow installs, the pre-compact one included (B4af8a88294): the table
+    # is the list, so a hook added to it is checked here without anyone remembering to.
+    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
 
     out: list[Dangling] = []
-    for rel in (".claude/settings.json", GEMINI_SETTINGS):
+    for rel in dict.fromkeys(h.file for h in HOOKS):
         path = Path(repo) / rel
         data = read_json(path)
         if isinstance(data, Unreadable):
