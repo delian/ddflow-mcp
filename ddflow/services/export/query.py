@@ -15,10 +15,11 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
+from ...core import clock
 from ...core.events import Event
 from ...core.model import Bug, Item, State, fold
 
@@ -166,7 +167,7 @@ def _cutoff(since: str) -> Callable[[str], bool] | None:
         if not _DATE_PREFIX.match(since):
             raise ExportError(f"--since {since!r} is not an ISO date or timestamp", EXIT_REFUSED)
         try:  # a real calendar value: not 2024-13-99
-            datetime.fromisoformat((since + "-01-01")[:10] if len(since) < _DATE_LEN else since)
+            clock.parse_date((since + "-01-01")[:10] if len(since) < _DATE_LEN else since)
         except ValueError:
             raise ExportError(f"--since {since!r} is not a real date", EXIT_REFUSED) from None
 
@@ -197,8 +198,7 @@ _DATE_PREFIX = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
 def _parse_ts(text: str) -> datetime:
-    t = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
-    return t if t.tzinfo else t.replace(tzinfo=UTC)
+    return clock.parse_ts(text, naive="utc", strip=True)
 
 
 def build(events: Iterable[Event], skipped_lines: int = 0) -> Query:

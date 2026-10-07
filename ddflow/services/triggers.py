@@ -28,10 +28,11 @@ import json
 import re
 import tomllib
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core.digest import content_digest
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
@@ -243,10 +244,9 @@ class Decision:
 
 def ts(text: str) -> datetime | None:
     try:
-        t = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
-    except ValueError:
+        return clock.parse_ts(str(text), naive="utc")
+    except clock.UNPARSEABLE:
         return None
-    return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
 def _field(ev, name: str) -> str:
