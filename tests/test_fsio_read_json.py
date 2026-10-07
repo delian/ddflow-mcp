@@ -147,3 +147,27 @@ def test_companions_add_answers_a_non_object_file_as_before(tmp_path):
             "SKIPPED .mcp.json: not a JSON object where 'mcpServers' servers belong; "
             "add context7 by hand",
         )
+
+
+@pytest.mark.parametrize("rel", [".mcp.json", ".codex/config.toml"])
+def test_companions_status_reads_an_undecodable_config_as_unreadable(tmp_path, rel):
+    """B8bd68c2e6c: `scan` (companions status) raised UnicodeDecodeError on it."""
+    (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / rel).write_bytes(BAD["unreadable"])
+    statuses = {s.companion.id: s for s in CO.scan(tmp_path, probe=False)}
+    assert statuses["context7"].registered_in == []
+
+
+def test_the_toml_mcp_config_is_refused_when_undecodable_too(git_repo, monkeypatch):
+    """B26e804cd45, the TOML (codex) half of adopt and companions add."""
+    rel = ".codex/config.toml"
+    (git_repo / ".codex").mkdir()
+    (git_repo / rel).write_bytes(BAD["unreadable"])
+    monkeypatch.setattr(A, "_launch_entry", lambda *a, **k: {"command": "ddflow", "args": []})
+    out = A._register_mcp(git_repo, "codex")
+    assert isinstance(out, A.Refused)
+    assert str(out).startswith(f"SKIPPED {rel}: it could not be read ('utf-8' codec")
+    c = {c.id: c for c in CO.load(git_repo)}["context7"]
+    status, msg = CO.register(git_repo, c, "codex")
+    assert status == "refused" and msg.startswith(f"SKIPPED {rel}: it could not be read ("), msg
+    assert (git_repo / rel).read_bytes() == BAD["unreadable"]

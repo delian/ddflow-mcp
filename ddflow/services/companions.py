@@ -756,7 +756,7 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     """(servers by name, raw text) of one agent config; None when unreadable."""
     try:
         text = path.read_text("utf-8")
-    except OSError:
+    except (UnicodeDecodeError, OSError):  # not UTF-8 is unreadable too (B8bd68c2e6c)
         return None
     if shape == SHAPE_TOML:
         data = _load_toml(text)
@@ -1074,7 +1074,10 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
 
 def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[str, str]:
     """The TOML (codex) half of `register`."""
-    text = path.read_text("utf-8") if path.exists() else ""
+    try:
+        text = path.read_text("utf-8") if path.exists() else ""
+    except (UnicodeDecodeError, OSError) as exc:  # B26e804cd45, the TOML half
+        return "refused", f"SKIPPED {rel}: it could not be read ({exc}); add {c.id} by hand"
     block = f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
     if c.env:
         block += f"env = {_toml(dict(c.env))}\n"

@@ -1184,7 +1184,10 @@ def _register_mcp(
     entry = _launch_entry(launch, image)
 
     if target.shape == SHAPE_TOML:
-        text = path.read_text("utf-8") if path.exists() else ""
+        try:
+            text = path.read_text("utf-8") if path.exists() else ""
+        except (UnicodeDecodeError, OSError) as exc:  # B26e804cd45, the TOML half
+            return Refused(f"SKIPPED {rel}: it could not be read ({exc}); add the server by hand")
         if "[mcp_servers.ddflow]" in text:
             return f"{rel} already registers ddflow"
         # tomlcfg.value, not '"{a}"': a quote or backslash in a path wrote an agent
