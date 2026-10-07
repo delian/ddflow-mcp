@@ -111,6 +111,7 @@ from .outcomes import (  # noqa: F401
     StaleNote,
     _what_differs,
     approve,
+    on_refutation,
     record,
     rounds_line,
     stale_evidence,
