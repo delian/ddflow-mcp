@@ -3747,8 +3747,9 @@ re-run the lint. (2) Waive a named change for this release with `ddflow version 
 --waive <change> --reason "..."`, recorded in `templates/upgrade/waivers.toml` and shown in
 the next upgrade plan. (3) Change the policy: `ddflow config release.manifest_lint warn|off`.
 `warn` prints the same and carries on; `off` is silent. An agent may prepare entries and
-propose; waiving or lowering the policy is the operator's decision, so the MCP tool
-`ddflow_version_lint` only reads. In a project that does not ship ddflow's own manifest the
+propose; waiving or lowering the policy is the operator's decision. Over MCP,
+`ddflow_version_cut` (also with `dry_run`) runs the lint and `ddflow_configure` sets the
+policy. In a project that does not ship ddflow's own manifest the
 lint does nothing.
 
 In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
@@ -4326,7 +4327,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 192): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 193): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4682,7 +4683,7 @@ declared once and persists — see
 
 ## Configuration
 
-192 knobs across 27 sections, every one documented in place and listed, with its default
+193 knobs across 28 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -4726,8 +4727,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ba8d15c2e471 -->
-<details><summary>All 192 knobs across 27 sections</summary>
+<!-- ddflow:begin README/knobs sha=911611452353 -->
+<details><summary>All 193 knobs across 28 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|

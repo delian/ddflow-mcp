@@ -368,7 +368,6 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_pr_status": (["pr", "status"], {}),
     "ddflow_pr_sync": (["pr", "sync"], {}),
     "ddflow_version_show": (["version", "show"], {}),
-    "ddflow_version_lint": (["version", "lint"], {}),
     # --dry-run writes nothing, so both surfaces see the same state.
     "ddflow_version_cut": (["version", "cut", "--dry-run"], {"dry_run": True}),
     "ddflow_flow_show": (["flow", "show"], {}),

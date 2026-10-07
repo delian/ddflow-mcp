@@ -51,7 +51,7 @@ FULL_ONLY_TOOLS = frozenset(
     for n in (
         "external_sync import import_verify job_add job_end job_list job_run promote_add promote_deployed "
         "promote_status workflow workflow_drop workflow_gate workflow_pipeline flow_choose "
-        "version_cut version_lint rebuild replay hooks precommit companions_add companions_verify bisect prompts pins loops cadence "
+        "version_cut rebuild replay hooks precommit companions_add companions_verify bisect prompts pins loops cadence "
         "reviewers_detect memory_forget lesson_verify export bug_file_tasks"
     ).split()
 )
