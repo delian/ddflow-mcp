@@ -1250,21 +1250,24 @@ refused (exit 1) naming the gates that have findings when several do, and resolv
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
 
 **The review-round budget (`[review]`).** A shipped default in every project, with no
-configuration: a gate (`rubber_duck`, `critic`) gets **2 full review rounds** per item, then
-a third is refused (exit 3) with the way forward — later rounds each find fewer defects
-than the one before (measured: rounds 3 and later yielded about a quarter of the confirmed findings). What stays allowed after the cap, always:
+configuration: a gate (`rubber_duck`, `critic`) gets **2 review rounds** per item, full and
+delta alike (decision D-gate-economy 2: a delta after the cap was the way around it), then a
+third is refused (exit 3) with the way forward — later rounds each find fewer defects than
+the one before (measured: rounds 3 and later yielded about a quarter of the confirmed findings). What stays allowed after the cap:
 
 ```sh
-ddflow review T1 --gate critic --delta      # recheck ONLY what changed since the head the last review covered
-ddflow review triage T1 --gate critic --finding 2 --refuted --probe "..."   # settle what is left
-ddflow review T1 --gate critic --force --reason "..."   # one more FULL round; the reason is recorded
+ddflow review triage T1 --gate critic --finding 2 --refuted --probe "..."   # settle what is left (always allowed)
+ddflow review T1 --gate critic --force --reason "..."   # one more round; the reason is recorded
 ```
+
+then record the gate on that triage, or ask the operator.
 
 A *full* round is any review that can cover the item's whole diff. What is not one is
 judged by what it covers, not by the flag: `--delta`, a `--commit <sha>` or `--base <ref>`
 at or after the head the gate's last review covered (so it can only be narrower), and a
-`--chunk` re-run of a recorded review. Those are never refused; a `--base` or `--commit`
-that reaches back past that head counts as a full round. Rounds are
+`--chunk` re-run of a recorded review. A delta still counts against the cap (a `--chunk`
+re-run does not: it repeats part of a recorded round); a `--base` or `--commit` that reaches
+back past that head counts as a full round. Rounds are
 counted from the log's recorded reviews (`review_kind`, `round`, `rounds` and `reviewed_head`
 in the gate evidence), so a re-claim, a delta or a manual `gate skip` does not reset the
 count; a round that reached no reviewer is not counted. `--delta` reads the reviewed head
@@ -1308,7 +1311,7 @@ review lenses.
 true` for every plain re-review, is for a diff too large to send twice. Once a gate has a
 recorded review that reviewed the whole diff, a delta reviews only the commits
 since the head that review covered (`reviewed_head`), says so (`delta review of 1 commit
-since a1b2c3d4e5`), is not a full round and is never refused by the cap. Its findings and
+since a1b2c3d4e5`), is not a full round but counts against the cap like one. Its findings and
 coverage are **merged into the gate's record**: earlier findings stay where they were
 (their `#N` and their triage, which is keyed by the finding's exact text, are unchanged),
 a byte-identical finding is not duplicated, the delta's new ones are appended and the
@@ -1327,7 +1330,7 @@ every re-review a full round with the previous findings. Knobs, changeable at ev
 
 | knob | default | meaning |
 |---|---|---|
-| `review.max_rounds` | `2` | full rounds per gate per item; `0` = unlimited |
+| `review.max_rounds` | `2` | review rounds (full and delta) per gate per item; `0` = unlimited |
 | `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
 | `review.combined_under_lines` | `150` | changed lines under which `--gate rubber_duck,critic` is ONE review recorded for both; `0` = never |
 | `review.delta_default` | `false` | `true` = a review of a gate with a recorded review is a delta; `false` = a full re-review with the previous findings |

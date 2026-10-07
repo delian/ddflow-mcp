@@ -27,12 +27,12 @@ class ReviewConfig:
 _doc(
     "review",
     "max_rounds",
-    'How many FULL cross-family review rounds one gate (rubber_duck, critic) may have on one item (default 2; 0 = unlimited). A round is a review of the item\'s whole diff; later rounds each find fewer defects than the one before, so after the cap the way forward is `ddflow review <id> --gate G --delta` (a recheck of ONLY what changed since the reviewed head) and `ddflow review triage` (refute or confirm each remaining finding with a probe) -- both are always allowed, as is a re-review of named chunks (--chunk). `--force --reason "..."` runs one more full round and records why. Change it for the project (`ddflow config --set review.max_rounds 3`), for this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
+    'How many cross-family review rounds one gate (rubber_duck, critic) may have on one item, full and delta alike (default 2; 0 = unlimited; decision D-gate-economy 2 -- a delta after the cap was the way around it). Later rounds each find fewer defects than the one before, so after the cap the way forward is `ddflow review triage` (refute each remaining finding with the run that shows it false, or confirm it with the test that now passes; always allowed), then recording the gate on that triage or asking the operator. A re-review of named chunks (--chunk) repeats part of a recorded round and is not counted. `--force --reason "..."` runs one more round and records why. Change it for the project (`ddflow config --set review.max_rounds 3`), for this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
 )
 _doc(
     "review",
     "on_exceed",
-    "What a full round beyond [review].max_rounds does: 'refuse' (default; exit 3, naming --delta, `review triage`, --force --reason and how to change the cap) or 'warn' (run it and say the budget is spent). A delta recheck and triage are never refused either way.",
+    "What a round beyond [review].max_rounds does: 'refuse' (default; exit 3, naming `review triage`, --force --reason and how to change the cap) or 'warn' (run it and say the budget is spent). A delta recheck and triage are never refused either way.",
 )
 _doc(
     "review",
