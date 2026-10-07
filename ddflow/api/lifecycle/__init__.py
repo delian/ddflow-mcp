@@ -101,6 +101,7 @@ from .merge import (  # noqa: F401
     _open_request,
     _outside_globs,
     _refresh_documents,
+    _scope_fields,
     _stands_in,
     _what_to_land,
     merge,

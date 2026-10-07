@@ -374,6 +374,12 @@ def cmd_merge(a, c: Ctx) -> int:
     if out.data["kept_reason"]:
         print(f"  {out.data['kept_reason']}", file=sys.stderr)
     outside = out.data.get("outside_globs") or []
+    if out.data.get("outside_globs_unknown"):
+        print(
+            f"  WARNING: git could not list what this landing changed, so whether it holds "
+            f"paths outside {a.id}'s globs is unknown",
+            file=sys.stderr,
+        )
     if outside:
         print(
             f"  WARNING: {len(outside)} landed path(s) outside {a.id}'s globs -- another "
@@ -423,6 +429,7 @@ MERGE_PAYLOAD = (
     "pr",
     "branch",
     "outside_globs",
+    "outside_globs_unknown",
     "worktree",
     "worktree_removed",
 )
