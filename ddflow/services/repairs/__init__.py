@@ -6,7 +6,8 @@ findings a `repair.applied` event already settled; `apply` appends each repair's
 events and then `repair.applied` (one per RECORD_FINDINGS findings) naming the repair and the
 keys of the findings it settled, so a second run finds nothing. Nothing here edits or deletes a log line.
 
-`ddflow upgrade` (B-upgrade.3/.4) and `ddflow doctor` are the callers.
+`ddflow doctor` calls `integrity`, `doctor_notes` and `unknown_authors`; `apply` has no
+command yet: the upgrade step (B-upgrade.3/.4) is its caller once it lands.
 
 The registry rule (`uncovered`): a fixed bug whose fix task is tagged `data-damage` left
 damage in logs written before the fix, so it ships a repair here that names it in `bugs`,
@@ -122,8 +123,13 @@ def pending(ctx: Context, ids: Iterable[str] | None = None) -> list[Pending]:
 
 
 def _apply_one(r: Repair, ctx: Context, log: EventLog) -> dict[str, Any] | None:
-    """Apply `r` to what `ctx` read; None when nothing is pending. The caller holds the lock."""
+    """Apply `r` to what `ctx` read; None when nothing is pending, a record carrying
+    `unavailable` when its detector could not run (nothing written). The caller holds the
+    lock."""
     p = _detect(ctx, r)
+    if p.unavailable:
+        # Never read as "nothing to do": the caller is told the detector did not run.
+        return {"repair": r.id, "unavailable": p.unavailable, "findings": [], "events": 0}
     if not p.findings:
         return None
     corrective = r.repair(ctx, p.findings)
@@ -157,7 +163,8 @@ def apply(
 ) -> list[dict[str, Any]]:
     """Apply the pending repairs: every `agent`-consent one, or exactly the named ones
     (an `operator`-consent repair runs only when named). Returns one record per repair
-    applied, in registry order. Raises KeyError for an unknown id."""
+    applied, in registry order, and one with `unavailable` (and no findings) per repair whose
+    detector could not run: that is never "nothing to do". Raises KeyError for an unknown id."""
     named = None if ids is None else {by_id(i).id for i in ids}
     applied: list[dict[str, Any]] = []
     for r in REGISTRY:

@@ -259,13 +259,13 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ...views import human
 
     log, cfg, st = _load(repo, agent)
-    # `verify()` already reads the whole log, and the warm parse cache makes a second read
-    # a digest rather than a re-parse (see infra/log.py), so this costs a few ms and saves
+    # One read of the whole log serves the data repairs and every pass below (the warm
+    # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
-    events = log.read_all()
+    repair_ctx = RP.context(repo, log, cfg)
+    events = repair_ctx.events
     store = Store(repo, cfg)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
-    repair_ctx = RP.context(repo, log, cfg)
     problems, notes = RP.integrity(repair_ctx)
     # A NOTE, not a problem: the log is append-only, so a shard that once had two
     # writers says so forever, and a doctor that can never pass again is one nobody

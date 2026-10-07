@@ -215,6 +215,10 @@ def test_a_detector_that_cannot_run_is_unavailable_not_clean(tmp_path):
         n.startswith("unavailable: data repair unknown-author-shards")
         for n in R.doctor_notes(_ctx(proj))
     )
+    log = EventLog(proj, "repairer")
+    (rec,) = R.apply(proj, log, Config(), ["unknown-author-shards"])
+    assert rec["unavailable"] == "not a git repository" and rec["findings"] == []
+    assert not [e for e in log.read_all() if e.kind == "repair.applied"]
 
 
 def test_repair_applied_folds_and_reads_in_history(old):
