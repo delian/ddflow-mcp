@@ -23,10 +23,10 @@ CONFIG_PY = ROOT / "ddflow" / "config.py"
 #: The older declarations still standing. Lower these in the change that moves a section
 #: onto `knob()`; the failure message prints the number to write. Never raise one.
 LEGACY_BASELINE = {
-    "_doc() calls": 107,
-    "KNOB_CHOICES entries": 19,
-    "KNOB_STRICTEST entries": 19,
-    "KNOB_OUTWARD entries": 19,
+    "_doc() calls": 42,
+    "KNOB_CHOICES entries": 9,
+    "KNOB_STRICTEST entries": 9,
+    "KNOB_OUTWARD entries": 9,
 }
 
 _TABLES = ("KNOB_CHOICES", "KNOB_STRICTEST", "KNOB_OUTWARD")
@@ -149,6 +149,15 @@ def test_no_declared_knob_is_left_in_a_config_table() -> None:
     assert not set(K.DECLARED) & _literal_keys()
 
 
+#: Sections whose module is named otherwise: `[importer]` lives in imports.py (`import`
+#: is a keyword, so neither the section nor the module can take the plain name).
+_MODULE_OF = {"importer": "imports"}
+
+
 def test_a_section_declares_only_its_own_knobs() -> None:
     for key, module in K.DECLARED_IN.items():
-        assert module == f"ddflow.config_sections.{key.split('.', 1)[0]}", (key, module)
+        section = key.split(".", 1)[0]
+        assert module == f"ddflow.config_sections.{_MODULE_OF.get(section, section)}", (
+            key,
+            module,
+        )
