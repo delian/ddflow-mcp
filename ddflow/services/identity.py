@@ -27,7 +27,6 @@ with `--agent <bare id>` (`as_agent` over MCP), the workaround B205 was filed wi
 
 from __future__ import annotations
 
-import contextlib
 import time
 from pathlib import Path
 
@@ -90,32 +89,10 @@ def rehome_pre_upgrade_leases(log: EventLog, cfg: Config, st: State, layer: str)
             lease = it.lease
             assert lease is not None
             why = f"re-homed from {bare} to {me}: the B190 per-clone id upgrade"
-            log.append(
-                "lease.released",
-                item_id,
-                {"holder": bare, "event": lease.event, "by": me, "note": why, "transfer": True},
-            )
-            log.append(
-                "lease.acquired",
-                item_id,
-                {
-                    "holder": me,
-                    "at": now,
-                    "ttl_s": lease.ttl_s,
-                    "globs": list(lease.globs),
-                    "worktree": lease.worktree,
-                    "branch": lease.branch,
-                    "note": f"{lease.note} [{why}]" if lease.note else why,
-                    "kind": it.kind,
-                    "resources": list(lease.resources),
-                },
-            )
+            L.transfer(log, item_id, lease, to=me, note=why, kind=it.kind, now=now)
     # Outside the lock, as `leases.release` does: the remote claim ref moves with the
     # lease, or it kept naming the bare id and the new holder could not renew it
     # (Bd45d1ad60e). Best effort: a ref not moved lapses at its expiry.
-    if cfg.flow.claims == "remote":
-        for item_id in moved:
-            L._remote_drop(log, item_id, bare)
-            with contextlib.suppress(L.LeaseError):
-                L._remote_take(log, cfg, item_id, me, time.time())
+    for item_id in moved:
+        L.settle_remote(log, cfg, item_id, dropped=[bare], kept=me)
     return moved

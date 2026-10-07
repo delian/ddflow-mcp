@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from ...core.digest import content_digest
-from ...infra import proc as P
+from ...infra import git as GIT
 
 #: How many untracked files `tree_fingerprint` will hash before giving up on content
 #: and falling back to their names alone. `--exclude-standard` already drops anything
@@ -224,13 +223,7 @@ def normal_fingerprint(fp: str) -> str:
 def _git_z(cwd: Path | str, *args: str) -> list[str] | None:
     """NUL-separated git output as names exactly as the filesystem spells them, or None
     when git failed -- "could not tell", never "nothing"."""
-    try:
-        p = P.run(["git", "-C", str(cwd), *args], capture_output=True, timeout=300)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if p.returncode != 0:
-        return None
-    return [os.fsdecode(x) for x in p.stdout.split(b"\0") if x]
+    return GIT.run(cwd, *args, binary=True).paths()
 
 
 def _ours(path: str) -> bool:
