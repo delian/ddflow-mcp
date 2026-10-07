@@ -56,9 +56,46 @@ def test_a_listing_git_could_not_make_is_unknown_not_empty(tmp_path: Path) -> No
     assert _scope_fields([]) == {"outside_globs": [], "outside_globs_unknown": False}
 
 
-def test_an_own_worktree_landing_says_its_scope_was_not_listed(tmp_path: Path) -> None:
-    """roborev on 2b1d60fd: an own-worktree merge lists nothing, so it must not claim a
-    checked, clean scope (`false`); it says null."""
-    from ddflow.api.lifecycle.merge import NOT_LISTED, _scope_fields
+def test_an_own_worktree_landing_says_its_scope_was_not_listed() -> None:
+    from ddflow.api.lifecycle.merge import _scope_fields
 
-    assert _scope_fields(NOT_LISTED) == {"outside_globs": [], "outside_globs_unknown": None}
+    assert _scope_fields([], listed=False) == {"outside_globs": [], "outside_globs_unknown": None}
+
+
+def test_the_merge_result_carries_the_scope_state_on_both_paths(repo) -> None:
+    """End to end (roborev on 188cf7df): an own-worktree merge says null (not listed); a
+    borrowed branch says false (listed) with its outside paths."""
+    import json
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "own tree", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    wt = Path(json.loads(out)["worktree"])
+    (wt / "a.py").write_text("x = 1\n")
+    _git(wt, "add", "a.py")
+    _git(wt, "commit", "-qm", "a")
+    code, out, err = run_cli(repo, "--json", "merge", "T1")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["outside_globs"] == [] and body["outside_globs_unknown"] is None
+
+    tree = repo.parent / "agent-tree"
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", "agent-work")
+    run_cli(repo, "task", "add", "T2", "--title", "borrowed", "--globs", "b.py")
+    code, out, err = run_cli(tree, "claim", "T2", "--no-worktree")
+    assert code == 0, out + err
+    for name in ("b.py", "c.py"):
+        (tree / name).write_text("y = 1\n")
+        _git(tree, "add", name)
+        _git(tree, "commit", "-qm", name)
+    code, out, err = run_cli(repo, "--json", "merge", "T2", "--branch", "agent-work")
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["outside_globs"] == ["c.py"] and body["outside_globs_unknown"] is False
