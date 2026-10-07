@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -307,6 +308,28 @@ DEFAULT_GATES: dict[str, GateDef] = {
 }
 
 
+#: Gates whose `[gate.<id>] required` was already warned about in this process.
+_REQUIRED_WARNED: set[str] = set()
+
+
+def _required_in_gate_table(gid: str, value: object, lenient: bool) -> None:
+    """`[gate.<id>] required` is not read: what is required is `[gates].required`, which
+    every enforcement point (status, complete, verify, workflow) reads (B4d206ede45). It
+    used to be accepted and ignored, so a gate its own table marked required was never
+    enforced. Refused in ddflow's own tree, where config and code are one commit; elsewhere
+    warned about on every command (an older checkout's config must not stop it) and
+    skipped."""
+    why = (
+        f"[gate.{gid}] sets required = {value!r}, which ddflow does not read: list the gate "
+        f"in [gates].required instead (`ddflow workflow gate {gid} --required`)"
+    )
+    if not lenient:
+        raise ValueError(why)
+    if gid not in _REQUIRED_WARNED:
+        _REQUIRED_WARNED.add(gid)
+        print(f"ddflow: warning: {why}; skipped.", file=sys.stderr)
+
+
 def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     """Defaults, overlaid by ``[gate.*]`` from the config.
 
@@ -337,6 +360,8 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     for gid, spec in tomlcfg.overlay_table(
         tomlcfg.config_paths(root, "gates.toml"), "gate", GateDef, lenient=lenient
     ).items():
+        if "required" in spec:
+            _required_in_gate_table(gid, spec.pop("required"), lenient)
         base = gates.get(gid) or GateDef(id=gid)
         for k, v in spec.items():
             setattr(base, k, v)
