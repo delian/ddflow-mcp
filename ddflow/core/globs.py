@@ -113,6 +113,7 @@ def overlap(a: str, b: str) -> bool:
     two globs is both hard and beside the point, since the answer only decides whether
     to re-order.
     """
+    a, b = a.lstrip("/"), b.lstrip("/")  # a leading `/` anchors; it names no different file
     if a == b:
         return True
     if fnmatch(a, b) or fnmatch(b, a):

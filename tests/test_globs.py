@@ -148,3 +148,10 @@ def test_a_bare_name_archive_glob_holds_a_nested_plan_file(repo):
     assert code == 0, err
     st = fold(EventLog(repo).read_all(), strict=False)
     assert st.items["159.A.1"].state == BLOCKED
+
+
+def test_a_leading_slash_does_not_make_two_claims_disjoint():
+    """B0cf7a6ddea (round 2 finding): `/src/a.md` and `src/a.md` are the same file."""
+    assert globs.overlap("/src/a.md", "src/a.md")
+    assert globs.overlap("/src/a.md", "src/*.md")
+    assert not globs.overlap("/src/a.md", "docs/a.md")
