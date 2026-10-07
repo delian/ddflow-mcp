@@ -66,7 +66,7 @@ def test_an_error_in_the_tick_callback_is_not_a_command_that_could_not_start(tmp
 
     with pytest.raises(OSError, match="lease renewal"):
         P.run_shell(
-            f"echo $$ > {pidfile}; sleep 30", cwd=tmp_path, timeout_s=10, on_tick=tick, tick_s=0.2
+            f"sleep 30 & echo $! > {pidfile}; wait", cwd=tmp_path, timeout_s=10, on_tick=tick, tick_s=0.2
         )
     pid = int(pidfile.read_text())
     import time
