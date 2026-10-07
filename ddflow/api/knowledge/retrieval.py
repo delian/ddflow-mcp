@@ -165,7 +165,7 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
         found = sim.assess(matcher, {"kind": scope[0], "title": text, "body": ""}, scoped)
         # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
         cands = [c for c in found.candidates if c.kind in scope]
-        rows = DD.rows(st, matcher, cands, text)
+        rows = DD.rows(st, matcher, cands, text, grace_s=cfg.lease.grace_s)
     data = {
         "text": text,
         "kinds": scope,

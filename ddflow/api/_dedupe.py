@@ -22,6 +22,7 @@ add function: ``task_add`` already carries twelve (BACKLOG B179).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -133,14 +134,23 @@ def kind_of(st, rid: str) -> str:
     return "memory" if mm is not None and mm.live else ""
 
 
-def record_state(state, rid: str, kind: str) -> tuple[str, str]:
+def _held(it, now: float | None, grace_s: int) -> bool:
+    """Is ``it`` held by a LIVE lease: no recorded expiry and inside its TTL plus grace.
+    A claim whose holder stopped renewing is not "claimed", recorded or not."""
+    return bool(it and it.lease and it.lease.live(time.time() if now is None else now, grace_s))
+
+
+def record_state(
+    state, rid: str, kind: str, *, now: float | None = None, grace_s: int = 0
+) -> tuple[str, str]:
     """(headline, state) of one indexed record, as a person reads them: an item's title
-    and where it is in the queue, a bug's summary and whether it is fixed."""
+    and where it is in the queue, a bug's summary and whether it is fixed. ``grace_s`` is
+    `[lease].grace_s`: a claim is held while it is live under it."""
     if kind in ("task", "phase"):
         it = state.items.get(rid)
         if it is None:
             return "", "unknown"
-        if it.lease and not it.lease.expired_at and it.state not in ("done", "abandoned"):
+        if _held(it, now, grace_s) and it.state not in ("done", "abandoned"):
             return it.title, f"claimed by {it.lease.holder}"
         return it.title, it.state
     if kind == "bug":
@@ -163,14 +173,14 @@ def record_state(state, rid: str, kind: str) -> tuple[str, str]:
     return "", "unknown"
 
 
-def extendable(st, rid: str, kind: str) -> bool:
+def extendable(st, rid: str, kind: str, *, now: float | None = None, grace_s: int = 0) -> bool:
     """May text be appended to ``rid``? Only while nobody is relying on it as written: an
     OPEN, UNCLAIMED task or phase, an unresolved bug, a lesson or decision not superseded,
     research, a live memory. Claimed, running, done, fixed or superseded: file a new
     record that links to it instead."""
     if kind in ("task", "phase"):
         it = st.items.get(rid)
-        return bool(it and it.state == "open" and not (it.lease and not it.lease.expired_at))
+        return bool(it and it.state == "open" and not _held(it, now, grace_s))
     if kind == "bug":
         bg = st.bugs.get(rid)
         return bool(bg and not bg.resolution)
@@ -183,7 +193,7 @@ def extendable(st, rid: str, kind: str) -> bool:
     return kind in ("research", "memory")
 
 
-def rows(st, matcher, cands, text: str) -> list[dict[str, Any]]:
+def rows(st, matcher, cands, text: str, *, grace_s: int = 0) -> list[dict[str, Any]]:
     """Candidates as a person reads them: what it is, where it stands, how close it
     scored and which words it shares. One implementation for ``similar`` and the add
     check, so the two show the same thing."""
@@ -197,7 +207,7 @@ def rows(st, matcher, cands, text: str) -> list[dict[str, Any]]:
         r = records.get(c.id, {"title": "", "body": ""})
         shared = set(textsim.tokens(r["title"], r["body"])) & mine
         ranked = sorted(shared, key=lambda t: (-textsim.idf(df.get(t, 0), n), t))
-        headline, where = record_state(st, c.id, c.kind)
+        headline, where = record_state(st, c.id, c.kind, grace_s=grace_s)
         row = {
             "id": c.id,
             "kind": c.kind,
@@ -280,7 +290,11 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
                 "item": rec.item,
             }
             found = sim.assess(matcher, record, cfg)
-            shown = rows(st, matcher, found.candidates, rec.text) if found.candidates else []
+            shown = (
+                rows(st, matcher, found.candidates, rec.text, grace_s=cfg.lease.grace_s)
+                if found.candidates
+                else []
+            )
             return found, shown, ""
     except (LookupError, OSError) as exc:
         return sim.Assessment("off"), [], f"{type(exc).__name__}: {exc}"
@@ -350,13 +364,14 @@ def check_add(
     }
     if auto:
         note["auto"] = True
-    return _point(st, rec, chosen, note, out)
+    return _point(st, rec, chosen, note, out, cfg.lease.grace_s)
 
 
 def _dry_run(repo: Path, log, cfg: Config, st, rec: Record, taken: bool) -> Checked:
     """What an add of ``rec`` would meet, with nothing written: exit 0 with the candidates
     (and whether the add would be refused), exit 2 when none reads like it. Returned in
     ``Checked.refusal``, which every add already hands back unchanged."""
+    grace = cfg.lease.grace_s
     base = {"id": rec.rid, "check_only": True, "on_match": cfg.dedupe.on_match}
     if taken:
         # Adding an id that exists keeps its own rule and is never checked (see
@@ -382,8 +397,12 @@ def _dry_run(repo: Path, log, cfg: Config, st, rec: Record, taken: bool) -> Chec
         "would_ask": found.action == "ask" and not merged,
         # An exact copy is recorded without asking: onto the record when it is open and
         # unclaimed, else as a new record linked to it (`_point`).
-        "would_extend": exact.id if merged and extendable(st, exact.id, exact.kind) else "",
-        "would_link": exact.id if merged and not extendable(st, exact.id, exact.kind) else "",
+        "would_extend": exact.id
+        if merged and extendable(st, exact.id, exact.kind, grace_s=grace)
+        else "",
+        "would_link": exact.id
+        if merged and not extendable(st, exact.id, exact.kind, grace_s=grace)
+        else "",
         "candidates": shown,
         "options": options(shown) if shown else [],
     }
@@ -409,13 +428,15 @@ def _dry_run(repo: Path, log, cfg: Config, st, rec: Record, taken: bool) -> Chec
     return Checked(refusal=O.ok(rec.event_kind, **data), shown=shown)
 
 
-def _point(st, rec: Record, chosen: Answer, note: dict[str, Any], out: Checked) -> Checked:
+def _point(
+    st, rec: Record, chosen: Answer, note: dict[str, Any], out: Checked, grace_s: int = 0
+) -> Checked:
     """Apply an answer that points at an existing record."""
     tkind = kind_of(st, chosen.target)
     if chosen.relation == "related":
         out.fields |= {"related": chosen.target, "dedupe": note}
         out.back_links.append((chosen.target, rec.rid))
-    elif extendable(st, chosen.target, tkind):
+    elif extendable(st, chosen.target, tkind, grace_s=grace_s):
         out.extension = {
             "target": chosen.target,
             "kind": tkind,
@@ -428,10 +449,10 @@ def _point(st, rec: Record, chosen: Answer, note: dict[str, Any], out: Checked) 
     else:
         out.fields |= {chosen.relation: chosen.target, "dedupe": note}
         it = st.items.get(chosen.target)
-        live = bool(it and it.lease and not it.lease.expired_at)
+        live = _held(it, None, grace_s)
         out.notify = {
             "id": chosen.target,
-            "state": record_state(st, chosen.target, tkind)[1],
+            "state": record_state(st, chosen.target, tkind, grace_s=grace_s)[1],
             "holder": it.lease.holder if live and it and it.lease else "",
         }
     return out
