@@ -738,13 +738,24 @@ def diff_covers_everything(
     missing = [
         p
         for p in changed
-        if p not in diff and _c_quoted(p) not in diff and _c_quoted(p, raw_high=True) not in diff
+        if not any(
+            _in_diff_header(diff, spelled)
+            for spelled in (p, _c_quoted(p), _c_quoted(p, raw_high=True))
+        )
     ]
     return (not missing), missing
 
 
 #: Bytes git prints as themselves in a quoted path: space up to (not including) DEL.
 _PRINTABLE_ASCII = (0x20, 0x7F)
+
+
+def _in_diff_header(diff: str, path: str) -> bool:
+    """Is ``path`` a whole path in a `diff --git` header (` a/<path>`, ` "b/<path>`, ...)?
+    Anchored, so a path is never found as the tail of another (`foo` in `sub/foo`)."""
+    return any(f"{lead}{side}/{path}" in diff for lead in (" ", ' "') for side in "ab")
+
+
 _C_ESCAPES = {7: "a", 8: "b", 9: "t", 10: "n", 11: "v", 12: "f", 13: "r", 34: '"', 92: "\\"}
 
 
@@ -765,7 +776,9 @@ def _c_quoted(path: str, *, raw_high: bool = False) -> str:
             out.append(f"\\{b:03o}".encode())
         else:
             out.append(bytes([b]))
-    return os.fsdecode(b"".join(out))
+    # Decoded as the diff text is (`_diff_text`: UTF-8, invalid bytes replaced), so a raw
+    # non-UTF-8 byte under `quotepath=false` compares equal to what the diff holds.
+    return b"".join(out).decode("utf-8", errors="replace")
 
 
 def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
