@@ -199,6 +199,55 @@ def value(v: object) -> str:
     return basic_string(str(v))
 
 
+#: No leading zeros: TOML has no `01234` (a zero-padded id is text, so it is quoted).
+_LITERAL = re.compile(r"(true|false|-?(0|[1-9]\d*)(\.\d+)?|\[.*\]|\{.*\})")
+
+
+def literal(text: str) -> str:
+    """``text`` as a TOML value: itself when it already is a boolean, a number, an array or
+    an inline table (what a person types after ``--set key``), else a quoted, escaped string.
+    The command-line spelling of `value`."""
+    if _LITERAL.fullmatch(text.strip()):
+        return text
+    return basic_string(text)
+
+
+def upsert(text: str, dotted: str, literal_text: str) -> str:
+    """``text`` with ``<section>.<key>`` set to the TOML value ``literal_text``, everything
+    else as it was: comments, blank lines, key order and the spelling of every other value.
+
+    Pure and on TEXT, so several edits compose into one write (a half-applied change after
+    the third of four is rejected is a state nobody can reason about). The only place
+    ddflow uses tomlkit: it parses with comments and layout kept, which a hand-built line
+    editor had to approximate (multi-line strings, brackets inside values, a header with a
+    trailing comment). A key already there takes the new value in place; a new key goes at
+    the end of its section; a missing section is appended after a blank line. Raises
+    ``tomllib.TOMLDecodeError`` when ``text`` is not TOML and ``ValueError`` when the
+    section names something that is not a table."""
+    import tomlkit  # deferred: 38 ms, and most commands never edit a config
+
+    section, _, key = dotted.rpartition(".")
+    parts = [p.strip() for p in section.split(".")] if section else []  # no dot: top level
+    try:
+        doc = tomlkit.parse(text)
+        value = tomlkit.parse(f"v = {literal_text}")["v"]
+        table: Any = doc
+        for part in parts:
+            if part not in table:
+                if table is doc and len(doc):
+                    doc.add(tomlkit.nl())
+                table[part] = tomlkit.table()
+            table = table[part]
+            if not isinstance(table, dict):
+                raise ValueError(f"{section!r} is not a table")
+        table[key.strip()] = value
+        out = tomlkit.dumps(doc)
+    except tomlkit.exceptions.TOMLKitError:
+        tomllib.loads(text)  # not TOML: raise tomllib's error, which callers already handle
+        raise ValueError(f"cannot set {dotted!r} to {literal_text}") from None
+    return out.rstrip() + "\n"
+
+
 def _key(k: object) -> str:
     """A TOML key: bare when it may be, else quoted."""
     k = str(k)

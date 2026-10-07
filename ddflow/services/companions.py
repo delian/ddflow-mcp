@@ -48,7 +48,6 @@ from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
 from ..infra.fsio import atomic_write
-from ..infra.tomlcfg import value as _toml  # noqa: F401 -- re-exported
 from . import mcpconfig as MC
 from .adopt import AGENT_TARGETS, SHAPE_TOML, get_servers
 from .gates import pipelines

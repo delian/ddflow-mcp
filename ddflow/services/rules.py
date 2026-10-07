@@ -26,7 +26,7 @@ from typing import Any
 
 from ..core import clock, textsim
 from ..infra.fsio import replace_text
-from ..infra.tomlcfg import basic_string
+from ..infra.tomlcfg import value as _toml_value
 
 _FRONTMATTER_PARTS = 2  # frontmatter + content, split on the first blank line
 _MIN_TOKEN_LEN = 2  # tokens this short are noise
@@ -152,16 +152,16 @@ class Rule:
         )
 
         lines = []
-        lines.append(f"id = {_toml_str(self.id)}")
-        lines.append(f"title = {_toml_str(self.title)}")
+        lines.append(f"id = {_toml_value(self.id)}")
+        lines.append(f"title = {_toml_value(self.title)}")
         if self.tags:
-            lines.append(f"tags = [{', '.join(_toml_str(t) for t in self.tags)}]")
-        lines.append(f"scope = {_toml_str(self.scope)}")
+            lines.append(f"tags = {_toml_value(list(self.tags))}")
+        lines.append(f"scope = {_toml_value(self.scope)}")
         lines.append(f"priority = {self.priority}")
         if self.globs:
-            lines.append(f"globs = [{', '.join(_toml_str(g) for g in self.globs)}]")
-        lines.append(f"created = {_toml_str(created_str)}")
-        lines.append(f"updated = {_toml_str(updated_str)}")
+            lines.append(f"globs = {_toml_value(list(self.globs))}")
+        lines.append(f"created = {_toml_value(created_str)}")
+        lines.append(f"updated = {_toml_value(updated_str)}")
 
         frontmatter = "\n".join(lines)
         return f"{frontmatter}\n\n{self.content}"
@@ -224,11 +224,6 @@ class Rule:
 
 
 # -- Helpers ------------------------------------------------------------------
-
-
-def _toml_str(value: str) -> str:
-    """`value` as a TOML basic string (B28cab0652a): the shared writer."""
-    return basic_string(value)
 
 
 def _is_valid_rule_id(rule_id: str) -> bool:

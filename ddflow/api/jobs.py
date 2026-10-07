@@ -48,7 +48,7 @@ def _not_held(log, cfg, it) -> O.Outcome | None:
     """
     now = time.time()
     lease = it.lease
-    live = lease is not None and not lease.expired(now, cfg.lease.grace_s)
+    live = lease is not None and lease.live(now, cfg.lease.grace_s)
     if live and lease.holder == log.agent_id:
         return None
     if live:
