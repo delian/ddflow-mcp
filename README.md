@@ -3713,6 +3713,34 @@ guard can refuse; releases before it cannot.
 `[upgrade].skew` is the policy: `refuse` (default), `warn` (write, say so on stderr) or
 `off`. Set it with `ddflow config` or `ddflow_configure`.
 
+### The upgrade manifest: what changed since your version
+
+Every release ships `ddflow/templates/upgrade/changes.toml` in the wheel: a machine-readable
+list, per release, of what a project upgrading from an older version will meet
+(B-upgrade.2-changes). Each entry is one change:
+
+| kind | carries |
+|---|---|
+| `knob_added`, `knob_changed`, `knob_removed` | the `section.knob`, its old and new default, a one-line `why`, and for a changed default the `effect` a project that never set it will see |
+| `event_kind_added`, `event_kind_removed` | the event kind |
+| `refresh`, `repair`, `feature` | an instruction, hook or template refresh; a data repair by id; an opt-in feature with the command that `enable`s it |
+
+The file starts from a base (every knob default and event kind of 0.1.3) and lists every
+release since. Replaying it gives exactly the knobs and event kinds of the ddflow that ships
+it, and a test holds that: a branch that adds a knob, flips a default or adds an event kind
+without an entry fails until it has one. Run `uv run python scripts/upgrade_manifest.py
+backfill` (it snapshots every release commit and the working tree), commit
+`ddflow/templates/upgrade/`, and write the `why` (and `effect`) it could not know. A change
+not yet released is a fragment file of its own under `templates/upgrade/unreleased/`, so two
+branches adding knobs never edit the same file; cutting a version folds the fragments into
+its release. The history it backfilled from 0.1.3 to 0.2.0: 63 new knobs, 7 changed
+defaults (among them `dedupe.on_match`, `warn` in 0.1.9 and `ask` again in 0.1.10).
+
+In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
+a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
+The upgrade plan (B-upgrade.3-plan, still to come) reads it to tell a project what its
+upgrade will change.
+
 Two such kinds describe how records relate (decision D-no-duplicates). Add events
 (`task.added`, `phase.added`, `bug.found`, `lesson.recorded`, `research.recorded`,
 `decision.recorded`, `memory.recorded`) may carry `extends`, `duplicate_of`, `related`
