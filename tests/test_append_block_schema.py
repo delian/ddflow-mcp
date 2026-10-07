@@ -57,3 +57,16 @@ def test_a_valid_reviewer_block_is_still_written(repo):
     path = append_block(repo, GOOD, own="reviewers.toml")
     assert path.is_file()
     assert [r.name for r in load_reviewers(repo)] == ["x"]
+
+
+@pytest.mark.parametrize(
+    "block", ['[reviewer]\nname = "x"\nmodle = "typo"\n', 'reviewer = "x"\n', "reviewer = [1]\n"]
+)
+def test_a_reviewer_that_is_not_an_array_of_tables_is_refused(repo, block):
+    """Read back, any of these is no reviewer at all, with no error."""
+    before = _config_files(repo)
+    with pytest.raises(ValueError, match=r"\[\[reviewer\]\]"):
+        append_block(repo, block, own="reviewers.toml")
+    error, _path = _append_config(repo, block, local=True)
+    assert "[[reviewer]]" in str(error), error
+    assert _config_files(repo) == before

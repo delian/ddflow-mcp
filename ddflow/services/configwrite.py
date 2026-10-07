@@ -795,9 +795,14 @@ def _check_reviewer_fields(data: dict, path: Path) -> None:
     layer and fails every load in a committed file of ddflow's own tree -- either way not
     what was meant (B96fd182086). A writer knows every field it may write.
     """
-    for n, raw in enumerate(data.get("reviewer") or [], 1):
-        if isinstance(raw, dict):
-            TC._check(raw, set(Reviewer.__dataclass_fields__), f"[[reviewer]] #{n} of {path}")
+    blocks = data.get("reviewer")
+    if blocks is None:
+        return
+    # `[reviewer]` (one bracket) or `reviewer = "x"` is read as no reviewer at all.
+    if not isinstance(blocks, list) or not all(isinstance(b, dict) for b in blocks):
+        raise ValueError(f"`reviewer` in {path} must be `[[reviewer]]` blocks (two brackets)")
+    for n, raw in enumerate(blocks, 1):
+        TC._check(raw, set(Reviewer.__dataclass_fields__), f"[[reviewer]] #{n} of {path}")
 
 
 def append_block(
