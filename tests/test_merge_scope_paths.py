@@ -54,3 +54,11 @@ def test_a_listing_git_could_not_make_is_unknown_not_empty(tmp_path: Path) -> No
     assert _outside_globs(repo, it, "no-such-base", "work") is None
     assert _scope_fields(None) == {"outside_globs": [], "outside_globs_unknown": True}
     assert _scope_fields([]) == {"outside_globs": [], "outside_globs_unknown": False}
+
+
+def test_an_own_worktree_landing_says_its_scope_was_not_listed(tmp_path: Path) -> None:
+    """roborev on 2b1d60fd: an own-worktree merge lists nothing, so it must not claim a
+    checked, clean scope (`false`); it says null."""
+    from ddflow.api.lifecycle.merge import NOT_LISTED, _scope_fields
+
+    assert _scope_fields(NOT_LISTED) == {"outside_globs": [], "outside_globs_unknown": None}
