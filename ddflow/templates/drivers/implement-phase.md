@@ -175,7 +175,8 @@ last, so ddflow allows `[review].max_rounds` (default 2) rounds per gate per ite
 and delta alike: round 1 on the finished diff, round 2 for after you fixed a confirmed
 HIGH/MEDIUM defect. A third round is refused (exit 3). Settle the rest with `ddflow review
 triage` (always allowed) -- a confirmed finding's probe names the test that now passes --
-then record the gate on that triage, or ask the operator. `--force --reason "..."` is the operator's
+and the triage that settles the last finding records the gate passed on refutation
+(flagged in `gate status`); one you cannot settle goes to the operator. `--force --reason "..."` is the operator's
 recorded exception; `ddflow config review.max_rounds N [--local]` (0 = unlimited,
 `review.on_exceed = "warn"` to warn only) changes the cap. Once a gate has a recorded
 review, a plain `ddflow review <ID> --gate G` is a FULL re-review: the item's whole diff plus
