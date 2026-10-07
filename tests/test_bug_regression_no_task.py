@@ -69,3 +69,18 @@ def test_a_no_task_bug_whose_item_has_no_worktree_is_still_could_not_run(repo):
     out = api.bug_fixed(repo, "B2", regression_test="tests/test_x.py::test_always")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "could-not-run", out.data
+
+
+def test_a_no_task_bugs_item_that_landed_through_a_pr_is_not_its_pre_fix_source(repo):
+    """A pull-request merge records only `merged_sha`: the item's base then holds the fix,
+    and its worktree must not be taken as the pre-fix source (roborev on f6065500)."""
+    from ddflow.api._base import _load
+    from ddflow.api.knowledge import bug_close as BC
+
+    _found_in_task(repo)
+    _log, cfg, st = _load(repo, "")
+    st.items["T1"].merged_sha = "deadbeef"
+    status, ev = BC._verify_regression(
+        repo, cfg, st, "B1", ["tests/test_f.py::test_f"], verify_regression=True, reason=""
+    )
+    assert status == "could-not-run", (status, ev)

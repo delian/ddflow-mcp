@@ -321,7 +321,8 @@ def _verify_regression(
         # while X works in a worktree that worktree is the fix (B3eeb47ca9b). Only then:
         # a landed X may have been merely where an older bug was seen, not its fix.
         found_on = st.items.get(rec.item)
-        if found_on is not None and found_on.worktree and not found_on.landed_after:
+        landed = found_on is not None and (found_on.landed_after or found_on.merged_sha)
+        if found_on is not None and found_on.worktree and not landed:
             fx = found_on
     if fx is not None and fx.landed_before and fx.landed_after:
         # Merged already: the landing's own before and after, never the base by NAME,
