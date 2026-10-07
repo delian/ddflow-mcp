@@ -653,7 +653,7 @@ class Server:
                     mid,
                     _text(
                         f"unknown argument(s) for {name}: {', '.join(unknown)}. "
-                        f"Known: {', '.join(sorted(known))}",
+                        f"Known: {', '.join(sorted(set(known) - set(spec.get('deprecated') or {})))}",
                         error=True,
                     ),
                 )
