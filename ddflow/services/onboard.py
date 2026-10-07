@@ -16,13 +16,17 @@ or leave.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from ..config import Config
+from ..core.model import fold
 from ..infra import worktree as W
+from ..infra.log import EventLog
+from . import cleanup as C
 from .jobs import alive
 
 #: How a `git worktree lock --reason ...` names the process that owns it. The reason is
@@ -325,6 +329,14 @@ def _branch_exists(repo: Path, name: str) -> bool:
     return W.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").ok
 
 
+def _held(repo: Path, cfg: Config, log: EventLog | None, path: Path, branch: str) -> str:
+    """Why the tree must be left alone (a live lease, or adopted by an item), or ""."""
+    if log is None:
+        return ""
+    root = W.repo_root(repo)
+    return C._protected(root, cfg, fold(log.read_all(), strict=False)).why(str(path), branch)[1]
+
+
 def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     """Remove one approved worktree and its branch, reporting git's own answer.
 
@@ -351,8 +363,16 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     # holds nothing beyond caches. `W.remove`'s check counts an untracked `__pycache__`
     # or `.venv` as work and would refuse the very trees the report called removable
     # (critic on f0d27314); nothing else reaches here, because dirty/unique/locked items
-    # never carry action "remove".
-    r = W.remove(repo, cfg, worktree, force=True)
+    # never carry action "remove". In an adopted project, under the log lock with the
+    # leases re-read -- what `cleanup` does -- and recorded (B5e83fb22cb).
+    log = EventLog(repo) if (repo / ".ddflow" / "events").is_dir() else None
+    with log.transaction() if log else contextlib.nullcontext():
+        held = _held(repo, cfg, log, path, item.branch)
+        if held:
+            return {"name": item.name, "kind": "worktree", "outcome": "failed", "detail": held}
+        r = W.remove(repo, cfg, worktree, force=True)
+        if r.ok and log:
+            C.record_removed(log, W.repo_root(repo), str(path))
     if not r.ok:
         return {
             "name": item.name,
