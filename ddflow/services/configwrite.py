@@ -754,6 +754,7 @@ def _append_config(
         try:
             result = tomllib.loads(merged)
             Config.check(result)
+            _check_reviewer_fields(data, path)
         except InvalidValue as exc:
             return KeyRefused(f"appending this would break the config: {exc}"), Path()
         except (tomllib.TOMLDecodeError, ValueError) as exc:
@@ -784,6 +785,19 @@ def _append_config(
         except RT.ReviewerRefused as exc:
             return str(exc), Path()
     return "", path
+
+
+def _check_reviewer_fields(data: dict, path: Path) -> None:
+    """ValueError for a `[[reviewer]]` entry in ``data`` with a field `Reviewer` lacks.
+
+    Strict whichever layer it goes to: `Config.check` passes over `[[reviewer]]` (another
+    module's table), and read back an unknown field is skipped with a warning in the local
+    layer and fails every load in a committed file of ddflow's own tree -- either way not
+    what was meant (B96fd182086). A writer knows every field it may write.
+    """
+    for n, raw in enumerate(data.get("reviewer") or [], 1):
+        if isinstance(raw, dict):
+            TC._check(raw, set(Reviewer.__dataclass_fields__), f"[[reviewer]] #{n} of {path}")
 
 
 def append_block(
@@ -824,12 +838,7 @@ def append_block(
             raise ValueError(
                 f"refusing to write {path}: the result is not valid TOML: {exc}"
             ) from exc
-        # The SCHEMA too, strictly, whichever layer it goes to: read back, an unknown
-        # field is skipped with a warning in the local layer and fails every load in a
-        # committed file of ddflow's own tree -- either way not what was meant
-        # (B96fd182086). This writer knows every field it may write.
-        for n, raw in enumerate(tomllib.loads(block).get("reviewer") or [], 1):
-            TC._check(raw, set(Reviewer.__dataclass_fields__), f"[[reviewer]] #{n} of {path}")
+        _check_reviewer_fields(tomllib.loads(block), path)
         # Raises RT.ReviewerRefused (a ValueError) for an agent's command reviewer.
         _write_reviewed(repo, path, merged, person=person, agent=agent)
     return path
