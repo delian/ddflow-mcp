@@ -560,6 +560,10 @@
    "fields": {},
    "v": 1
   },
+  "repair.applied": {
+   "fields": {},
+   "v": 1
+  },
   "research.recorded": {
    "fields": {
     "budget": ["str"],

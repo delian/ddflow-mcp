@@ -149,7 +149,7 @@ def _primary_mid_merge(repo: Path, problems: list[str], notes: list[str]) -> Non
 _SHARDS_SHOWN = 8
 
 
-def _unknown_author_notes(ctx: RP.Context) -> list[str]:
+def _unknown_author_notes(repo: Path, log, ctx: RP.Context | None = None) -> list[str]:
     """ONE note naming event shards whose agent id has no committed history.
 
     A pull request can add `.ddflow/events/<anybody>.jsonl`: the log is merged by union
@@ -161,6 +161,7 @@ def _unknown_author_notes(ctx: RP.Context) -> list[str]:
     `unavailable`, never silence: a repository where the check could not run must not
     read as clean.
     """
+    ctx = ctx or RP.context(repo, log, Config.load(repo))
     try:
         new, base = RP.unknown_authors(ctx)
     except RP.Unavailable as exc:
@@ -398,7 +399,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
 
     _launcher_findings(repo, problems, notes)
     notes += _driver_drift_notes(repo)
-    notes += _unknown_author_notes(repair_ctx)
+    notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
     for f in PR.detect(log.read_all(), st, cfg):
