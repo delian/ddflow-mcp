@@ -3814,8 +3814,9 @@ bug first with `bug fixed` and completing afterwards is the same thing in two st
 The named test is RUN, not just named: `bug fixed` (and `complete --regression-test`) runs
 it on the **pre-fix source** -- the fix task's base with the new test file -- and on the
 fixed tree, and **refuses** when it passes on the pre-fix tree (it does not catch the bug)
-or fails on the fixed one. The pre-fix run needs the fix task working in a worktree, the
-project's `gate.unit_tests` runner and a base ref; when the comparison cannot be made the
+or fails on the fixed one. The pre-fix run needs the fix task working in a worktree (for a
+bug filed `--item X --no-task`, fixed in X itself: X working in its worktree, so close it
+before X merges), the project's `gate.unit_tests` runner and a base ref; when the comparison cannot be made the
 check is recorded `regression_verified = could-not-run`, never `verified`.
 `--skip-regression-verify --verify-reason "<why>"` (MCP `verify_regression` /
 `verify_reason`) records the override instead, and the reason is required.
