@@ -92,11 +92,21 @@ def find_cycles(
                 colour[dep] = GREY
                 path.append(dep)
                 stack.append((dep, edge(items[dep])))
-    named = {n for cyc in found for n in cyc}
+    found += _missed_cycles(items, edge, {n for cyc in found for n in cyc})
+    uniq = {tuple(c): c for c in found}
+    return sorted(uniq.values())
+
+
+def _missed_cycles(
+    items: Mapping[str, T], edge: Callable[[T], list[str]], named: set[str]
+) -> list[list[str]]:
+    """A shortest cycle for each item on a cycle that none of the ``named`` items'
+    cycles passes through, rotated to start at its smallest id."""
+    found: list[list[str]] = []
     # Every cycle holds a back edge, so an unnamed item on one shares a strongly
     # connected component with a named item: it is reachable from one and reaches one.
     # Only those candidates are searched, so an acyclic plan (nothing named) costs no
-    # more than the DFS above.
+    # more than the DFS in find_cycles.
     candidates: set[str] = set()
     if named:
         out = {n: [d for d in edge(items[n]) if d in items] for n in items}
@@ -114,8 +124,7 @@ def find_cycles(
             lo = cyc.index(min(cyc))
             found.append(cyc[lo:] + cyc[:lo] + [cyc[lo]])
             named.update(cyc)
-    uniq = {tuple(c): c for c in found}
-    return sorted(uniq.values())
+    return found
 
 
 def _shortest_cycle(
