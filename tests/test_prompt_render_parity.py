@@ -125,3 +125,48 @@ def test_a_malformed_argument_is_refused(repo):
     code, out, err = run_cli(repo, "prompts", "get", "implement", "--arg", "scope")
     assert code == FAIL, out
     assert "KEY=VALUE" in err, err
+
+
+def test_the_tool_takes_one_bare_string_argument_as_one_argument(repo):
+    _with_macro(repo)
+    got = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_prompts",
+                "arguments": {"action": "get", "name": "debugger", "arg": "symptom=x"},
+            },
+        }
+    )
+    text = got["result"]["content"][0]["text"]
+    assert "You are debugging: x" in text, text
+
+
+def test_get_says_why_when_the_macro_config_cannot_be_read(repo, monkeypatch):
+    """As MCP `prompts/get` does (B57fc667efc): the reason, not a traceback."""
+    import ddflow.config as C
+
+    # An unknown field is an error in the code tree only (B0016a65167).
+    monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[[macro]]\nname = "x"\nprompt = "p"\nbogus = 1\n')
+    from ddflow import api
+
+    out = api.prompts(repo, action="get", name="x")
+    assert out.exit == FAIL, out.data
+    assert "unknown prompt" in out.reason and "not loaded" in out.reason, out.reason
+
+
+def test_only_a_whole_word_ui_makes_a_gate_a_suite():
+    """`ui` inside `build` or `require` is not a UI suite (found reviewing B5a2a2933c9)."""
+    from ddflow.services import prompts as P
+
+    assert P._looks_like_a_suite("ui")
+    assert P._looks_like_a_suite("ui_tests")
+    assert P._looks_like_a_suite("e2e")
+    assert P._looks_like_a_suite("integration")
+    assert not P._looks_like_a_suite("build")
+    assert not P._looks_like_a_suite("require_review")

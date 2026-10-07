@@ -232,7 +232,7 @@ def cmd_prompts(a, c: Ctx) -> int:
         name=getattr(a, "name", "") or "",
         force=bool(getattr(a, "force", False)),
         agent=c.requested_agent,
-        arg=list(getattr(a, "arg", None) or []),
+        arg=getattr(a, "arg", None),
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
