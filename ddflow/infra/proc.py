@@ -169,8 +169,24 @@ def run_shell(
     }
     if merge_stderr:
         kwargs["stderr"] = subprocess.STDOUT
+    from_tick: list[Exception] = []
+
+    def tick() -> None:
+        assert on_tick is not None
+        try:
+            on_tick()
+        except Exception as exc:  # the callback's own trouble is not the command's
+            from_tick.append(exc)
+            raise
+
     try:
-        p = _shell_group(command, timeout=timeout_s, on_tick=on_tick, tick_s=tick_s, **kwargs)
+        p = _shell_group(
+            command,
+            timeout=timeout_s,
+            on_tick=tick if on_tick is not None else None,
+            tick_s=tick_s,
+            **kwargs,
+        )
     except subprocess.TimeoutExpired as exc:
         return ShellResult(
             None,
@@ -180,6 +196,8 @@ def run_shell(
             elapsed_s=round(time.monotonic() - start, 3),
         )
     except (OSError, ValueError) as exc:
+        if from_tick:
+            raise  # the group is already killed; the callback's error reaches its caller
         return ShellResult(None, err=str(exc), could_not_run=True)
     return ShellResult(
         p.returncode,

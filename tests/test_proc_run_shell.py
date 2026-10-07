@@ -56,3 +56,26 @@ def test_every_entry_of_the_timeout_table_has_a_reader():
         k for k in P.TIMEOUTS if f'TIMEOUTS["{k}"]' not in src.replace("P.TIMEOUTS", "TIMEOUTS")
     ]
     assert not dead, f"TIMEOUTS entries nothing reads: {dead}"
+
+
+def test_an_error_in_the_tick_callback_is_not_a_command_that_could_not_start(tmp_path):
+    pidfile = tmp_path / "pid"
+
+    def tick():
+        raise OSError("lease renewal failed")
+
+    with pytest.raises(OSError, match="lease renewal"):
+        P.run_shell(
+            f"echo $$ > {pidfile}; sleep 30", cwd=tmp_path, timeout_s=10, on_tick=tick, tick_s=0.2
+        )
+    pid = int(pidfile.read_text())
+    import time
+
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    pytest.fail("the command outlived the failed tick")
