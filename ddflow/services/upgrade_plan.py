@@ -45,6 +45,9 @@ AGENT = "agent"
 OPERATOR = "needs operator confirmation"
 NOTE = "note"
 
+#: Said after a remedy that is the apply step, which this ddflow does not have yet.
+NOT_YET = " (not available yet: this ddflow only plans)"
+
 _SHOWN = 8  #: findings quoted per repair in the text
 
 
@@ -85,7 +88,10 @@ def _net(changes: list[UM.Change]) -> dict[str, tuple[str, UM.Change, Any, Any]]
             continue
         prev = out.get(c.key)
         if c.kind == "knob_removed":
-            out[c.key] = ("knob_removed", c, c.old, None)
+            if prev is not None and prev[0] == "knob_added":
+                del out[c.key]  # added and removed inside the window: it never reached the project
+            else:
+                out[c.key] = ("knob_removed", c, c.old, None)
         elif prev is not None and prev[0] == "knob_removed":
             # It existed before the baseline (its removal is the first thing that
             # happened to it), so coming back is a changed default, not a new knob.
@@ -156,9 +162,9 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
         else:
             item["summary"] = f"knob {key} was removed; this project's config still sets it"
         item["fix"] = (
-            f"ddflow upgrade --apply --confirm {key} --reason '<why>'"
+            f"ddflow upgrade --apply --confirm {key} --reason '<why>'{NOT_YET}"
             if operator_set
-            else "ddflow upgrade --apply"
+            else f"ddflow upgrade --apply{NOT_YET}"
         )
         items.append(item)
     return items
@@ -198,7 +204,7 @@ def repair_items(repo: Path, log: Any, cfg: Config) -> list[dict[str, Any]]:
                 "finding_count": n,
                 "unavailable": p.unavailable,
                 "action": OPERATOR if r.consent == RP.OPERATOR else AGENT,
-                "fix": "ddflow upgrade --apply",
+                "fix": f"ddflow upgrade --apply{NOT_YET}",
             }
         )
     return out
