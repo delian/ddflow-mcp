@@ -192,15 +192,22 @@ def test_an_orphan_with_no_session_gets_one_implicit_session(repo):
     assert [s.subject for s in starts] == [copy.subject] and starts[0].data["implicit"]
 
 
-def test_old_render_is_regenerated_and_a_hand_edit_is_left_alone(old):
+def test_old_render_is_regenerated(old):
     _old_render(old)
     R.apply(old, EventLog(old, "repairer"), Config.load(old), ["old-export-renders"])
     head, _ = F.split((old / "ROADMAP.md").read_text())
     assert head is not None and head.version != "0.1.3"
     assert run_cli(old, "export", "roadmap", "--check")[0] == 0
+
+
+def test_a_hand_edited_render_is_never_offered_or_touched(old):
+    _old_render(old)
     doc = old / "ROADMAP.md"
-    doc.write_text(doc.read_text().replace(f" v={head.version} ", " v=0.1.3 ", 1) + "hand edit\n")
+    doc.write_text(doc.read_text() + "hand edit\n")
+    edited = doc.read_bytes()
     assert R.pending(_ctx(old), ["old-export-renders"]) == []
+    R.apply(old, EventLog(old, "repairer"), Config.load(old), ["old-export-renders"])
+    assert doc.read_bytes() == edited
 
 
 def test_a_detector_that_cannot_run_is_unavailable_not_clean(tmp_path):
