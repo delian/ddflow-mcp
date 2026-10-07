@@ -9,6 +9,7 @@ and the next items the scheduler would offer.
 from __future__ import annotations
 
 from ..config import PROGRESS_MODES, Config
+from ..core import progress as PR
 from ..core import schedule as S
 from ..core.model import ABANDONED, DONE, State
 
@@ -26,9 +27,8 @@ def _live(st: State):
     return [it for it in st.items.values() if not it.removed and it.state != ABANDONED]
 
 
-def _phase_counts(items, phase: str) -> tuple[int, int]:
-    kids = [it for it in items if it.kind != "phase" and it.parent == phase]
-    return sum(it.state == DONE for it in kids), len(kids)
+def _pct_of(n: PR.Tally) -> str:
+    return _pct(n.done, n.live)
 
 
 def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
@@ -44,8 +44,7 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
         )
         mode = "on"
     items = _live(st)
-    cur = st.items.get(item)
-    phase = cur.id if cur is not None and cur.kind == "phase" else (cur.parent if cur else "")
+    phase = PR.phase_of(st, item)
     if mode == "on":
         work = [it for it in items if it.kind != "phase" and not it.fixes]
         bugs = [b for b in st.bugs.values() if b.resolution != "invalid"]
@@ -53,21 +52,18 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
         still = [b for b in bugs if b.open]
         severe = sum(b.severity in ("high", "critical") for b in still)
         phases = [it for it in items if it.kind == "phase"]
-        closable = [
-            p.id
-            for p in phases
-            if p.state != DONE and (c := _phase_counts(items, p.id))[1] and c[0] == c[1]
-        ]
+        # A phase counts its tasks at every depth, abandoned ones out of the total
+        # (core.progress; Bb24939611d: direct children only missed every sub-task).
+        closable = [p.id for p in phases if p.state != DONE and PR.phase_tally(st, p.id).complete]
         lines.append(
-            f"Progress: tasks {_pct(sum(it.state == DONE for it in work), len(work))}"
+            f"Progress: tasks {_pct_of(PR.tally(work))}"
             f" · bugs fixed {_pct(fixed, len(bugs))}"
             + (f", {len(still)} open" + (f" ({severe} high)" if severe else "") if still else "")
             + f" · phases {_pct(sum(p.state == DONE for p in phases), len(phases))}"
             + (f", {len(closable)} ready to close" if closable else "")
         )
     if phase:
-        done, total = _phase_counts(items, phase)
-        lines.append(f"Phase {phase}: {_pct(done, total)}")
+        lines.append(f"Phase {phase}: {_pct_of(PR.phase_tally(st, phase))}")
     plan = S.plan(st, cfg)
     ready = [it.id for it in plan.ready[:NEXT_SHOWN]]
     if ready:

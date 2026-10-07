@@ -732,72 +732,52 @@ def _hook_remedy(armed, check: str) -> str:
     return "Run `ddflow hooks install`"
 
 
+def _state_line(known: tuple[bool | None, str], missing: str) -> str:
+    """One hook's status from its `claudehooks.state_spec` result: installed, UNKNOWN
+    (with why), or `missing`."""
+    on, why = known
+    if on is None:
+        return f"UNKNOWN -- {why}"
+    return "installed" if on else missing
+
+
 def _prompt_hook_line(repo: Path) -> str:
     from ..services import claudehooks as CH
 
-    parts = []
-    for name, kw in (("Claude Code", _prompt_kw(CH, False)), ("Gemini CLI", _prompt_kw(CH, True))):
-        on, why = CH.state(repo, **kw)
-        parts.append(
-            f"{name}: "
-            + ("installed" if on else f"UNKNOWN -- {why}" if on is None else "not installed")
-        )
-    return "; ".join(parts)
+    names = {"claude": "Claude Code", "gemini": "Gemini CLI"}
+    return "; ".join(
+        f"{names[h.agent]}: {_state_line(CH.state_spec(repo, h), 'not installed')}"
+        for h in CH.HOOKS
+        if h.name == "prompt"
+    )
 
 
 def _precompact_line(repo: Path) -> str:
     from ..services import claudehooks as CH
 
-    on, why = CH.state(repo, event=CH.PRECOMPACT_EVENT, marker=CH.PRECOMPACT_MARKER)
-    if on is None:
-        return f"UNKNOWN -- {why}"
-    return "installed" if on else "not installed (`ddflow hooks install --claude`)"
-
-
-def _prompt_kw(CH, gemini: bool) -> dict[str, Any]:
-    return {
-        "event": CH.GEMINI_PROMPT_EVENT if gemini else CH.PROMPT_EVENT,
-        "marker": CH.PROMPT_MARKER,
-        "rel": CH.GEMINI_SETTINGS if gemini else ".claude/settings.json",
-    }
+    return _state_line(
+        CH.state_spec(repo, CH.spec("claude", "pre-compact")),
+        "not installed (`ddflow hooks install --claude`)",
+    )
 
 
 def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list[str]:
-    """Install or remove the harness hooks: Claude's SessionStart + prompt, Gemini's prompt."""
+    """Install or remove every table hook of the named harnesses (`claudehooks.HOOKS`)."""
     from ..services import claudehooks as CH
     from ..services import enforce as E
 
+    want = {"claude": claude, "gemini": gemini}
     msgs: list[str] = []
-    if claude:
-        if action == "install":
-            line = E.command_line(CH.MARKER, refresh="ddflow hooks install --claude")
-            msgs.append(CH.install(repo, line))
-            if note := E.redirect_note(line):
-                msgs.append(note)
-        else:
-            msgs.append(CH.uninstall(repo))
-        pre = {"event": CH.PRECOMPACT_EVENT, "marker": CH.PRECOMPACT_MARKER}
-        if action == "install":
-            line = E.command_line(CH.PRECOMPACT_MARKER, refresh="ddflow hooks install --claude")
-            msgs.append(CH.install(repo, line + " || true", matcher=None, **pre))
-        else:
-            msgs.append(CH.uninstall(repo, **pre))
-    for want, kw in ((claude, _prompt_kw(CH, False)), (gemini, _prompt_kw(CH, True))):
-        if not want:
+    for h in CH.HOOKS:
+        if not want.get(h.agent):
             continue
-        if action == "install":
-            cmd = (
-                E.command_line(
-                    CH.PROMPT_MARKER,
-                    extra="--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "",
-                    refresh="ddflow hooks install "
-                    + ("--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "--claude"),
-                )
-                + " || true"
-            )
-            msgs.append(CH.install(repo, cmd, matcher=None, **kw))
-        else:
-            msgs.append(CH.uninstall(repo, **kw))
+        if action != "install":
+            msgs.append(CH.uninstall_spec(repo, h))
+            continue
+        msgs.append(CH.install_spec(repo, h))
+        # Said once, after the first hook: every line points where this one does.
+        if h.name == "session-start" and (note := E.redirect_note(CH.command(h))):
+            msgs.append(note)
     return msgs
 
 
@@ -872,15 +852,11 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             f"\n\nNOTE: the policy is 'block' but {missing}, so nothing enforces "
             f"it. {_hook_remedy(commit_hook, 'check-commit')}."
         )
-    session, unreadable = CH.state(repo)
-    if session is None:
-        session_line = f"UNKNOWN -- {unreadable}"
-    elif session:
-        session_line = "installed"
-    else:
-        session_line = (
-            "not installed (`ddflow hooks install --claude` puts the brief in every session)"
-        )
+    known = CH.state_spec(repo, CH.spec("claude", "session-start"))
+    session = known[0]
+    session_line = _state_line(
+        known, "not installed (`ddflow hooks install --claude` puts the brief in every session)"
+    )
     msg_armed = E.armed(repo, "commit-msg")
     msg_hook = bool(msg_armed.via)
     trailer_line = _hook_line("commit-msg", msg_armed)
