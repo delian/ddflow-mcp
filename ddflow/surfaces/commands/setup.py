@@ -179,6 +179,17 @@ def _config_key_value(a) -> tuple[str, str]:
     return "", ""
 
 
+def cmd_upgrade(a, c: Ctx) -> int:
+    """What upgrading would change (the plan; nothing is written). Exit 0 up to date, 1
+    while the plan has anything in it."""
+    out = A.upgrade(c.repo, plan=bool(getattr(a, "plan", True)), agent=c.requested_agent)
+    if c.json:
+        print(json.dumps(out.body(A.UPGRADE_PAYLOAD), indent=2))
+    else:
+        print(out.data["text"])
+    return out.exit
+
+
 def cmd_config(a, c: Ctx) -> int:
     key, value = _config_key_value(a)
     if getattr(a, "value", None) and not key:

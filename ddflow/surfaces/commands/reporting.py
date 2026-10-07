@@ -16,6 +16,7 @@ from ...api import reporting as A
 from ...infra import worktree as W
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, NOTHING, OK, Ctx
+from .setup import cmd_upgrade
 
 
 def taken_over_note(it) -> str:
@@ -328,6 +329,8 @@ def cmd_doctor(a, c: Ctx) -> int:
     report as its body, so a renderer in this module would mean one surface reaching into
     the other. `--json` gets the lists.
     """
+    if getattr(a, "upgrade", False):
+        return cmd_upgrade(a, c)
     out = A.doctor(c.repo, agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body(("problems", "notes", "events", "items")), indent=2))

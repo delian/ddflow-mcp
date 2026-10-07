@@ -21,6 +21,7 @@ from typing import Any
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..services import upgrade_plan as UP
 from ._base import _load
 
 
@@ -970,6 +971,37 @@ def hooks(
         return O.Outcome(kind="hooks", data=data, exit=code, reason=msg)
 
     return _hooks_status(repo, cfg)
+
+
+#: The wire fields of the plan: the body of `ddflow upgrade --json` and of `ddflow_upgrade`.
+UPGRADE_PAYLOAD = ("running", "project_version", "up_to_date", "total", "categories")
+
+
+def upgrade(repo: Path, *, plan: bool = True, agent: str = "") -> O.Outcome:
+    """What upgrading this project to the running ddflow would change: the plan, written
+    nowhere (`services.upgrade_plan`).
+
+    Exit 0 when the project is up to date; exit 1 while the plan has anything in it, the
+    way a diff exits: the plan is the finding, and an agent checking "is there work"
+    needs no parsing. The body is the same plan on the CLI's `--json` and over MCP.
+    """
+    if not plan:
+        return O.refused(
+            "upgrade",
+            "this ddflow only plans an upgrade: applying one is not available yet "
+            "(call with plan=true, the default)",
+        )
+    log, cfg, st = _load(repo, agent)
+    data = UP.build(repo, log, cfg, st)
+    data["text"] = UP.render(data)
+    if data["up_to_date"]:
+        return O.ok("upgrade", **data)
+    return O.Outcome(
+        kind="upgrade",
+        data=data,
+        exit=O.FAIL,
+        reason=f"{data['total']} upgrade item(s) pending",
+    )
 
 
 def _prompts_get(P, repo: Path, name: str, pairs: list[str], problems: list[str]) -> O.Outcome:
