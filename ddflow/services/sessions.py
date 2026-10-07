@@ -41,8 +41,8 @@ from ..config import Config
 from ..core import clock
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
-from ..core.redact import Redactor
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
+from .redact_report import redactor
 
 
 def redact(text: str, cfg: Config) -> tuple[str, int]:
@@ -51,7 +51,7 @@ def redact(text: str, cfg: Config) -> tuple[str, int]:
     **An invalid pattern raises rather than being skipped.** This is a security control
     writing to a COMMITTED log, and its failure mode is silence: see `core.redact`.
     """
-    red = Redactor("log", cfg).text(text)
+    red = redactor("log", cfg).text(text)
     return red.text, red.total
 
 

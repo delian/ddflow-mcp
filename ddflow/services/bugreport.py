@@ -34,8 +34,9 @@ from ..config import Config
 from ..core.digest import content_digest, hasher
 from ..core.events import Event
 from ..core.model import known_kinds
-from ..core.redact import Redactor, redact_argv
+from ..core.redact import redact_argv
 from . import install_info as _install
+from .redact_report import redactor
 
 #: The only configuration values a report may carry: scalar behaviour switches and
 #: limits, nothing that can hold a path, an endpoint, a name, a prompt or a pattern.
@@ -275,7 +276,7 @@ def build_bundle(
     counts: dict[str, int] = {}
 
     def clean(value: object) -> str:
-        r = Redactor(
+        r = redactor(
             "upstream",
             scrub.cfg,
             names=scrub.names,

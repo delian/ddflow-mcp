@@ -26,7 +26,7 @@ from typing import Any
 
 from ...config import Config
 from ...core import provenance
-from ...core.redact import Redacted, Redactor, names_for  # noqa: F401 -- names_for re-exported
+from ..redact_report import Redacted, names_for, redactor  # noqa: F401 -- names_for re-exported
 
 _MAX_AUTHORS = 5
 
@@ -37,7 +37,7 @@ def redact_text(text: str, cfg: Config) -> Redacted:
     ``repo_root`` is passed empty on purpose: the repository's directory name is the
     project's own and stays; absolute home paths still go.
     """
-    return Redactor("export", cfg).text(text)
+    return redactor("export", cfg).text(text)
 
 
 def redaction_attrs(counts: Mapping[str, int] | None) -> dict[str, str]:
