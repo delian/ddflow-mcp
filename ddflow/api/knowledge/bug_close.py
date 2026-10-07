@@ -316,6 +316,13 @@ def _verify_regression(
 
     rec = st.bugs.get(bug_id)
     fx = st.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
+    if fx is None and rec is not None and rec.item:
+        # `bug found --item X --no-task`: X fixes it in the commit that found it, and
+        # while X works in a worktree that worktree is the fix (B3eeb47ca9b). Only then:
+        # a landed X may have been merely where an older bug was seen, not its fix.
+        found_on = st.items.get(rec.item)
+        if found_on is not None and found_on.worktree and not found_on.landed_after:
+            fx = found_on
     if fx is not None and fx.landed_before and fx.landed_after:
         # Merged already: the landing's own before and after, never the base by NAME,
         # which now holds the fix -- the driver merges first and completes after
