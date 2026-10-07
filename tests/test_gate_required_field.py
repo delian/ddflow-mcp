@@ -38,6 +38,18 @@ def test_a_required_flag_in_a_gate_table_is_warned_about_naming_the_real_knob(re
     assert capsys.readouterr().err == "", "warned once per process, not on every load"
 
 
+def test_another_root_is_still_warned_about(repo, tmp_path, cfg, capsys):
+    """One long-lived server, two projects: the first warning must not hide the second."""
+    _write(repo, TABLE)
+    G.load_gates(repo, cfg)
+    capsys.readouterr()
+    other = tmp_path / "other"
+    other.mkdir()
+    _write(other, TABLE)
+    G.load_gates(other, cfg)
+    assert "[gate.security_review] sets required" in capsys.readouterr().err
+
+
 def test_it_is_refused_in_ddflows_own_tree(repo, cfg, monkeypatch):
     _write(repo, TABLE)
     monkeypatch.setattr(D, "_is_code_tree", lambda root: True)
