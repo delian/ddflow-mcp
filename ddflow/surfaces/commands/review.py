@@ -163,7 +163,8 @@ def _reviewers_add(a, c: Ctx) -> int:
     if a.gates:
         preset["gates"] = csv_list(a.gates)
     name = a.name or a.preset or preset.get("model", "reviewer")
-    preset.setdefault("family", R.family_of(preset.get("model", "")))
+    # No `family` guessed from the model name: a written one wins over the project's
+    # `[agent].families` for good (B98650136a8). A preset that declares one keeps it.
     if a.no_launch:
         preset.pop("launch", None)
     body = [f"\n[[reviewer]]\nname = {_toml_value(name)}"]
