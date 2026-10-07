@@ -32,6 +32,7 @@ SECTION_NAMES = (
     "prompts",
     "log",
     "upgrade",
+    "release",
     "mcp",
     "export",
     "loops",

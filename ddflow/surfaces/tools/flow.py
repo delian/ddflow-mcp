@@ -66,6 +66,18 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
+    "ddflow_version_lint": {
+        "description": (
+            "The release lint: is every config knob and event-kind change in this tree "
+            "announced in the shipped upgrade manifest? Names each one that is not, with "
+            "the entry that would announce it and the operator's options. Exit 3 when "
+            "`[release].manifest_lint` is `block` and one is not. Reads only: waiving a "
+            "change is the operator's, from the CLI."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().version_lint(repo, agent=agent),
+        "payload": "",
+    },
     "ddflow_version_cut": {
         "description": (
             "Tag the next version. trunk: tags the base branch. gitflow: release/X from "
