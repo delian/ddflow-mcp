@@ -108,7 +108,10 @@ def _commands(data: Any) -> list[str]:
 
 def check_settings(repo: Path) -> list[Dangling]:
     """ddflow's own hook commands in `.claude/settings.json` and `.gemini/settings.json`."""
-    from .claudehooks import GEMINI_SETTINGS, MARKER, PROMPT_MARKER
+    from .claudehooks import GEMINI_SETTINGS, MARKER, PRECOMPACT_MARKER, PROMPT_MARKER
+
+    # Every hook ddflow installs, the pre-compact one included (B4af8a88294).
+    ours = (MARKER, PRECOMPACT_MARKER, PROMPT_MARKER)
 
     out: list[Dangling] = []
     for rel in (".claude/settings.json", GEMINI_SETTINGS):
@@ -118,7 +121,7 @@ def check_settings(repo: Path) -> list[Dangling]:
         except (OSError, ValueError):
             continue
         for cmd in _commands(data):
-            if MARKER in cmd or PROMPT_MARKER in cmd:
+            if any(m in cmd for m in ours):
                 fix = "ddflow hooks install --claude" + (" --gemini" if "gemini" in rel else "")
                 if d := check_command(f"the hook command in {rel}", cmd, fix):
                     out.append(d)
