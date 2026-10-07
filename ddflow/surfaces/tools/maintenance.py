@@ -18,19 +18,30 @@ TOOLS: dict[str, dict[str, Any]] = {
             "operator-tunable behaviour, not code."
         ),
         "properties": {
-            "action": ("string", "list (default), show, or eject.", False),
-            "name": ("string", "Template name, for show/eject.", False),
+            "action": (
+                "string",
+                "list (default), show (a prompt's source), get (a workflow command or macro "
+                "rendered as prompts/get gives it), or eject.",
+                False,
+            ),
+            "name": ("string", "Template name, for show/get/eject.", False),
+            "arg": (
+                "array",
+                "For get: KEY=VALUE arguments (a macro's params are required).",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().prompts(
             repo,
             action=a.get("action", "list") or "list",
             name=a.get("name", "") or "",
             agent=agent,
+            arg=[str(x) for x in (a.get("arg") or [])],
         ),
-        # Prose for SOME arguments, like `render`: `show` returns the template TEXT and
+        # Prose for SOME arguments, like `render`: `show`/`get` return the prompt TEXT and
         # `eject` the files it wrote, while `list` is a table callers parse.
-        "payload": lambda a: "text" if a.get("action") in ("show", "eject") else "rows",
-        "text": lambda a: a.get("action") in ("show", "eject"),
+        "payload": lambda a: "text" if a.get("action") in ("show", "get", "eject") else "rows",
+        "text": lambda a: a.get("action") in ("show", "get", "eject"),
         "kind": "prompts",
     },
     "ddflow_hooks": {
