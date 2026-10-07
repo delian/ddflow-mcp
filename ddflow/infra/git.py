@@ -30,9 +30,9 @@ from ..core.outcome import FAIL
 from . import proc as P
 
 #: Seconds a git call may run unless the caller says otherwise.
-GIT_TIMEOUT = 300
+GIT_TIMEOUT = P.TIMEOUTS["git"]
 #: Seconds a path listing (`git_paths`) may run.
-LISTING_TIMEOUT = 60
+LISTING_TIMEOUT = P.TIMEOUTS["git_listing"]
 
 #: `GitResult.code` of a git that never produced an exit status (missing, or timed out).
 UNAVAILABLE = -1
