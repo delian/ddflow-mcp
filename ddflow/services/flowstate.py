@@ -26,7 +26,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -39,6 +38,7 @@ from ..core import flowsignals as FS
 from ..core.events import Event
 from ..core.model import State
 from ..infra import signals as SIG
+from ..infra.fsio import atomic_write
 from .configwrite import LOCAL_DIR, ensure_local_dir
 
 #: Where the ring lives, relative to the repository root: under the git-ignored local dir.
@@ -204,21 +204,11 @@ def _mode(path: Path) -> int:
 
 
 def _replace(path: Path, body: str) -> None:
-    """Write ``body`` to a temporary file of this call's own (``mkstemp``: unique per
-    call, even between threads), then rename it over ``path`` atomically: a reader sees
-    the old ring or the new one, never a mix."""
-    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
-    try:
-        try:
-            _write_all(fd, body.encode("utf-8"))
-        finally:
-            os.close(fd)
-        with contextlib.suppress(OSError):  # mkstemp makes 0600: keep the ring's mode
-            os.chmod(name, _mode(path))  # by path, which every platform supports
-        os.replace(name, path)
-    finally:
-        with contextlib.suppress(OSError):
-            os.unlink(name)
+    """Write ``body`` to a temporary file of this call's own (unique per call, even
+    between threads), then rename it over ``path`` atomically: a reader sees the old ring
+    or the new one, never a mix. It keeps the ring's mode; no fsync: a lost sample is
+    taken again."""
+    atomic_write(path, body, mode=_mode(path), fsync=False)
 
 
 def _samples(rows: Sequence[dict]) -> list[FC.Sample]:
