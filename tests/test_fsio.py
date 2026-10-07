@@ -390,3 +390,32 @@ def test_replace_text_in_place_still_fsyncs(tmp_path, monkeypatch):
     assert len(synced) == 1
     fsio.replace_text(tmp_path / "f.md", "newer\n", fsync=False)
     assert len(synced) == 1
+
+
+def _unremovable_temps(monkeypatch):
+    """Path.unlink of a temp file removes it and then raises, as a flaky filesystem can."""
+    real_unlink = Path.unlink
+
+    def stuck(self, *a, **k):
+        if self.name.endswith(".tmp"):
+            real_unlink(self, *a, **k)
+            raise PermissionError(errno.EACCES, "Permission denied")
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", stuck)
+
+
+def test_an_exclusive_write_that_happened_is_not_reported_failed(tmp_path, monkeypatch):
+    """B4dd9658753: the file was in place, and removing the temp raised from atomic_write."""
+    _unremovable_temps(monkeypatch)
+    fsio.atomic_write(tmp_path / "c.yaml", "repos: []\n", mode=0o644, exclusive=True)
+    assert (tmp_path / "c.yaml").read_text() == "repos: []\n"
+    assert _mode(tmp_path / "c.yaml") == 0o644
+
+
+def test_a_failed_temp_cleanup_does_not_mask_the_writes_own_error(tmp_path, monkeypatch):
+    (tmp_path / "c.yaml").write_text("theirs\n")
+    _unremovable_temps(monkeypatch)
+    with pytest.raises(FileExistsError):
+        fsio.atomic_write(tmp_path / "c.yaml", "ours\n", exclusive=True)
+    assert (tmp_path / "c.yaml").read_text() == "theirs\n"
