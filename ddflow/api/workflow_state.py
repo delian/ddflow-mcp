@@ -110,17 +110,19 @@ def _rules(repo: Path) -> dict:
 def _diagram(pipeline: list[str], promotion: list[str] = ()) -> str:
     """Mermaid flowchart of an item's way: claim, each task gate in order, complete, and
     -- where one runs -- each promotion gate, ending promoted (B726755d8f7)."""
-    labels = ["Claim", *pipeline, "Complete"]
-    nodes = ["Claim"] + [_node(g) for g in pipeline] + ["Complete"]
+    steps = [("", "Claim"), *(("", g) for g in pipeline), ("", "Complete")]
     if promotion:
-        labels += [*promotion, "Promoted"]
-        for g in [*promotion, "Promoted"]:
-            # A gate in both pipelines is a different step in each, and any id already
-            # taken (a task gate called `promote_x`) gets a suffix: one node per step.
-            node = _node(g) if g == "Promoted" else "promote_" + _node(g)
-            while node in nodes:
-                node += "_"
-            nodes.append(node)
+        steps += [*(("promote_", g) for g in promotion), ("", "Promoted")]
+    # One node per step: a gate in both pipelines is a different step in each, and an id
+    # already taken (a task gate `promote_x`, two gates that both sanitise to `a_b`, a
+    # gate called `Complete`) gets a suffix rather than merging two steps.
+    nodes: list[str] = []
+    for prefix, name in steps:
+        node = prefix + _node(name)
+        while node in nodes:
+            node += "_"
+        nodes.append(node)
+    labels = [name for _prefix, name in steps]
     lines = ["flowchart LR"]
     for a, b, lb in zip(nodes, nodes[1:], labels[1:], strict=False):
         lines.append(f"    {a} --> {b}[{lb}]")
