@@ -153,6 +153,13 @@ def _closest(sample: Sample, params: Params) -> str | None:
     return best[1] if best else None
 
 
+def _still_over_low(sample: Sample, params: Params, name: str | None) -> bool:
+    """Does ``name`` read over its low mark in ``sample``? False when null or unknown."""
+    v = sample.signals.get(name) if name else None
+    t = params.thresholds.get(name) if name else None
+    return v is not None and t is not None and v > t.low
+
+
 def _critical(sample: Sample, params: Params) -> str | None:
     for name in sorted(params.thresholds):
         c = params.thresholds[name].critical
@@ -285,9 +292,9 @@ def fold_limit(
     paused_by = _critical(ring[-1], params)
     if st.limit >= ceiling:
         limited_by = CEILING
-    elif st.dec_signal and ring[-1].signals.get(st.dec_signal) is not None:
-        # The decrease's signal, while it still reads; once it is null it holds nothing,
-        # and naming it hid what really did (B767745dee6).
+    elif _still_over_low(ring[-1], params, st.dec_signal):
+        # The decrease's signal, while it still reads over its low mark; null or healthy
+        # it holds nothing, and naming it hid what really did (B767745dee6).
         limited_by = st.dec_signal
     else:
         # growth or demand only when the latest sample SHOWS health: a blind one says so
