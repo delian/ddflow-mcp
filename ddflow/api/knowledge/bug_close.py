@@ -38,7 +38,8 @@ def bug_fixed(
     alone is a truthy string naming no test.
 
     The named test is then VERIFIED (B-bugfix-verified): it is run on the pre-fix source
-    (the fix task's base with the new test file) and on the fixed tree, and the bug is
+    (the fix task's base -- for a landed fix, the target just before its landing -- with
+    the new test file) and on the fixed tree, and the bug is
     REFUSED when it passes on the pre-fix tree (it does not catch the bug) or fails on the
     fixed one. When the comparison cannot be made -- no pytest runner, no fix task with a
     worktree, no base ref -- the check is `could-not-run`, recorded, and the bug closes
@@ -298,10 +299,12 @@ def _verify_regression(
     """Run a bug's regression test on the pre-fix and fixed trees (B-bugfix-verified).
 
     Returns (status, evidence). Only pytest NODE IDS are run: a spec or a shell command
-    is "not-applicable" (the static resolution already leaves it `unchecked`). The
-    comparison needs the bug's fix task working in a WORKTREE -- that is the only thing
-    that names a pre-fix source -- so an unclaimed fix task (or a removed tree) is
-    "could-not-run", recorded, never "verified".
+    is "not-applicable" (the static resolution already leaves it `unchecked`). A fix
+    task that has LANDED is checked against its landing (`landed_before` is the pre-fix
+    source, `landed_after` the fixed one), never the base by name, which then holds the
+    fix (B0d5253d31f). An unlanded one needs its WORKTREE, the only thing that then names
+    a pre-fix source: an unclaimed fix task is "could-not-run", recorded, never
+    "verified".
     """
     if not verify_regression:
         return "overridden", {"reason": reason.strip()}

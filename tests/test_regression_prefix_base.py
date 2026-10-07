@@ -30,6 +30,9 @@ def test_a_fail_first_test_is_verified_after_the_fix_merged(repo):
     res = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
     assert res.exit == OK, res.reason
     assert res.data["regression_verified"] == "verified", res.data
+    ev = res.data["regression_verify"]
+    assert ev["prefix_outcome"] == "failed" and ev["fix_outcome"] == "passed", ev
+    assert "/" not in ev["tree"], "the scratch checkout's path, which no longer exists"
 
 
 def test_a_test_that_passes_before_the_landing_is_still_refused(repo):
