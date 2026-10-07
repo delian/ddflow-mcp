@@ -5200,8 +5200,8 @@ with the project's own runner and worker flags. The agent driver tells agents to
 after each change; `ddflow workflow` and `ddflow doctor` say when the configured test
 command uses one core.
 
-**The whole suite runs once per small change** (decision D-gate-economy 1). The `ci` gate
-runs it on the branch merged with the base. Once ci has **passed on the source the item's
+**Where the whole suite runs** (decision D-gate-economy 1). The `ci` gate runs it on the
+branch merged with the base. Once ci has **passed on the source the item's
 tree holds now**, `ddflow gate run <id> unit_tests` for a **bug fix** (a task that fixes a
 bug) or a **small task** (fewer than `gates.unit_tests_small_lines` changed lines since its
 base, default 150) runs only that selection, plus the pytest regression tests of the bugs
