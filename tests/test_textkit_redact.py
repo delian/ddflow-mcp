@@ -47,15 +47,25 @@ def test_view_never_reads_the_machine_but_log_export_upstream_do(monkeypatch, tm
     text = "ran on Zeta9 and zeta9.example.test"
     assert R.Redactor("view").text(text).text == text
     for name in ("log", "export", "upstream"):
-        assert "Zeta9" not in R.Redactor(name).text(text).text, name
+        out = R.Redactor(name).text(text).text
+        assert "zeta9" not in out.lower(), name
 
 
 def test_the_export_profile_keeps_the_repository_directory_name(monkeypatch, tmp_path):
     repo = tmp_path / "myproj"
     (repo / ".git").mkdir(parents=True)
     monkeypatch.chdir(repo)
-    out = R.Redactor("export").text(f"see {repo}/x.py and myproj").text
-    assert out.endswith("x.py and myproj") and "REDACTED:name" not in out
+    out = R.Redactor("export").text("see myproj and /home/someone/myproj/x.py").text
+    assert out == "see myproj and [REDACTED:path]"
+
+
+def test_project_names_are_removed_by_every_text_profile():
+    from types import SimpleNamespace
+
+    cfg = Config()
+    cfg.upstream = SimpleNamespace(redact_extra=["acme-internal"])
+    for name in R.PROFILES:
+        assert "acme-internal" not in R.Redactor(name, cfg).text("deploy acme-internal now").text
 
 
 def test_the_session_log_writes_through_the_log_profile():
