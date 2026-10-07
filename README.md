@@ -2845,7 +2845,8 @@ is free and, under auto, what limits it: "N more are ready but held by the paral
 `parallel: 6 (auto: ceiling 8; limited by load per core)` or `parallel: 4 (fixed)` (`status
 --json` and `ddflow_status` carry it as `parallel`); "limited by independent work" means the
 offer already holds every ready item that can run beside what is in flight. A signal is named
-only while it is over its `low` mark; with every signal healthy the line says "limited by
+only while it is over its `low` mark (the one that lowered the limit, only while it still
+reads: a null one holds nothing); with every signal healthy the line says "limited by
 growth step (next in Ns)" while in flight has reached the limit (it rises one step per
 `adapt_up_after_s`), and "limited by demand (N in flight)" while it has not. In fixed mode
 the cap's words are exactly what they always were (`schedule.max_parallel_tasks=N`). A
@@ -2963,7 +2964,7 @@ raising it.
 | Signal | Definition | Window | Unavailable when |
 |---|---|---|---|
 | `reviewer_latency_ratio` | how long the reviewer takes to answer: median `elapsed_s` that `ddflow review` records, per wave of chunks it sent, over the project's median for the 7 days before the window (so a large diff, or a triage gap before a hand-recorded outcome, is not a slow reviewer) | last 30 minutes | under 5 recent or under 20 baseline reviews, or fewer than 3 reviews in flight at once (slow alone is not busy) |
-| `gate_failure_rate` | `gate.failed / (passed + failed)` | last 60 minutes | under 10 outcomes |
+| `gate_failure_rate` | `gate.failed / (passed + failed)`, review gates (`rubber_duck`, `critic`) left out: a failed review found issues, it is not saturation | last 60 minutes | under 10 outcomes |
 | `gate_failure_ratio` | `gate_failure_rate` over the project's own rate for the 7 days before the window | last 60 minutes | under 10 recent or 20 baseline outcomes (a clean baseline counts as one failure; a single recent failure counts as at most 1.0, the usual rate) |
 | `merge_failure_rate` | failed merge-gate outcomes over merge attempts | last 2 hours | no merge attempt |
 | `loop_findings` | findings of `ddflow loops` | now | never (0 when none) |
