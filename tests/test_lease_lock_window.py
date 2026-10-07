@@ -182,7 +182,7 @@ def test_the_mark_is_taken_before_the_read_not_after():
     import inspect
 
     src = inspect.getsource(EventLog.decide_then_append)
-    assert src.index("self.mark()") < src.index("decided = decide()"), (
+    assert src.index("self.mark(clock=False)") < src.index("decided = decide()"), (
         "the mark must be taken BEFORE the read; after it, a write in between is "
         "silently absorbed and the stale state is used to decide"
     )
@@ -207,7 +207,6 @@ def test_an_unchanged_log_is_not_re_read_under_the_lock(repo):
         pass
     assert reads["n"] == 1, "the log was re-read even though nothing was appended"
 
-    reads["n"] = 0
     reads["n"] = 0
 
     def decide_and_race():

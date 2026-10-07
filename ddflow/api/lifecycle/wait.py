@@ -348,7 +348,7 @@ def wait(
                 return result(v, time.monotonic() - started, [])
             time.sleep(min(poll, left))
             # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
-            ext = log.mark()
+            ext = log.mark(clock=False)
             if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
                 continue
             seen, checked = ext, time.monotonic()

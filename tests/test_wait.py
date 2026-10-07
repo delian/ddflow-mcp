@@ -253,7 +253,7 @@ def test_waiting_for_anything_with_nothing_in_flight_is_refused(repo):
 
 
 def test_an_expired_lease_wakes_the_waiter_although_no_event_is_written(repo, monkeypatch):
-    """Expiry is time passing, not an append -- so extent() never changes. The periodic
+    """Expiry is time passing, not an append -- so the log mark never changes. The periodic
     re-check is the only thing that notices, and without it this waits to its deadline."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"

@@ -115,3 +115,33 @@ def test_the_lock_is_released_when_the_body_raises(repo):
 def test_the_old_pair_is_gone():
     assert not hasattr(EventLog, "extent")
     assert not hasattr(EventLog, "head")
+
+
+def test_a_shard_vanishing_during_the_mark_is_dropped_not_raised(repo, monkeypatch):
+    """A shard can disappear between the glob and the tail read; the mark must differ
+    (the safe path) rather than raise out of every poll loop and every claim."""
+    log = EventLog(repo, "agent-a")
+    log.append("session.started", "s1", {})
+    before = log.mark()
+
+    def gone(path):
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(L, "_last_line", gone)
+    after = log.mark()
+    assert after != before
+    assert after.count == 0
+
+
+def test_the_stat_only_mark_reads_no_tail_and_still_sees_growth(repo, monkeypatch):
+    log = EventLog(repo, "agent-a")
+    log.append("session.started", "s1", {})
+    before = log.mark(clock=False)
+
+    def boom(path):
+        raise AssertionError("a stat-only mark must not read the shard")
+
+    monkeypatch.setattr(L, "_last_line", boom)
+    log.append("session.started", "s1", {})
+    assert log.mark(clock=False) != before
+    assert log.mark(clock=False).lamport == 0

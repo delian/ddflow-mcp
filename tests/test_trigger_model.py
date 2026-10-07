@@ -389,8 +389,8 @@ def test_the_evaluator_decides_outside_the_lock_and_again_under_it_if_the_log_gr
     real_mark = EventLog.mark
     calls = iter(range(100))
 
-    def growing(self):
-        m = real_mark(self)
+    def growing(self, **kw):
+        m = real_mark(self, **kw)
         return type(m)((*m.shards, ("_grew", next(calls), 0)))
 
     monkeypatch.setattr(EventLog, "mark", growing)
