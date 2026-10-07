@@ -38,7 +38,7 @@ def test_an_unreadable_tree_is_refused_as_unreadable_not_as_dirty(repo):
     assert out.exit == REFUSED, out
     assert "uncommitted file" not in out.reason, out.reason
     assert "could not read" in out.reason, out.reason
-    assert not out.data.get("dirty"), out.data
+    assert not out.data.get("dirty") and out.data.get("dirty_unknown") is True, out.data
 
 
 def test_allow_dirty_does_not_merge_a_tree_nobody_can_read(repo):
