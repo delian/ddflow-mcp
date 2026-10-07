@@ -122,7 +122,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     # exactly one and `total` is their sum (Bdcce70d036: "blocked" counted reason
     # "deps" alone, and every item a parallelism cap held back was in no bucket at all).
     done = [t for t in tasks if t.state == "done"]
-    abandoned = [t for t in tasks if t.state == "abandoned"]
+    # The settled states are counted by the one per-state count (core.progress) the
+    # STATUS.md export uses; the in-flight buckets come from the plan.
+    counts = PR.state_counts(tasks)
     running = p.running
     capped = [st.items[i] for i in p.capped]
     blocked = [b for b in p.blocked if b.item not in set(p.capped)]
@@ -135,13 +137,13 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "phases": {"total": len(phases), "done": sum(1 for x in phases if x.state == "done")},
         "tasks": {
             "total": len(tasks),
-            "done": len(done),
+            "done": counts["done"],
             "running": len(running),
             "ready": len(p.ready),
             "held_by_cap": len(capped),
             "blocked": len(blocked),
             "review": len(p.review),
-            "abandoned": len(abandoned),
+            "abandoned": counts["abandoned"],
         },
         "completed_tasks": [
             {"id": t.id, "title": t.title, "sha": t.merged_sha}

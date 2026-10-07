@@ -39,6 +39,7 @@ from typing import Any  # noqa: F401
 
 from ...core import globspec as GS  # noqa: F401
 from ...core import outcome as O  # noqa: F401
+from ...core import progress as PR  # noqa: F401
 from ...core.events import parse_changelog  # noqa: F401
 from ...core.model import (
     ABANDONED,  # noqa: F401
