@@ -3,8 +3,8 @@
 Decision D-upgrade-model (4), task B-upgrade.5-repairs. `REGISTRY` lists every repair
 (`base.Repair`: id, since, detect, repair). `pending` asks each detector and leaves out the
 findings a `repair.applied` event already settled; `apply` appends each repair's corrective
-events and then one `repair.applied` naming the repair and the keys of the findings it
-settled, so a second run finds nothing. Nothing here edits or deletes a log line.
+events and then `repair.applied` (one per RECORD_FINDINGS findings) naming the repair and the
+keys of the findings it settled, so a second run finds nothing. Nothing here edits or deletes a log line.
 
 `ddflow upgrade` (B-upgrade.3/.4) and `ddflow doctor` are the callers.
 
@@ -25,7 +25,7 @@ from ...core.events import REPAIR_APPLIED_KIND
 from ...core.model import State
 from ...infra.log import EventLog, running_version
 from .base import AGENT, OPERATOR, Context, Corrective, Finding, Repair, Unavailable, context
-from .seeds import AUTHORS, MISMATCHED, SEEDS, TORN, unknown_author_shards
+from .seeds import AUTHORS, MISMATCHED, ORPHANS, SEEDS, TORN, unknown_author_shards
 
 __all__ = [
     "AGENT",
@@ -121,6 +121,37 @@ def pending(ctx: Context, ids: Iterable[str] | None = None) -> list[Pending]:
     return [p for p in out if p.findings or p.unavailable]
 
 
+def _apply_one(r: Repair, ctx: Context, log: EventLog) -> dict[str, Any] | None:
+    """Apply `r` to what `ctx` read; None when nothing is pending. The caller holds the lock."""
+    p = _detect(ctx, r)
+    if not p.findings:
+        return None
+    corrective = r.repair(ctx, p.findings)
+    for kind, subject, data in corrective:
+        log.append(kind, subject, data)
+    record = {
+        "repair": r.id,
+        "since": r.since,
+        "version": running_version(),
+        "findings": [f.key for f in p.findings],
+        "events": len(corrective),
+    }
+    for at in range(0, len(p.findings), RECORD_FINDINGS):
+        part = p.findings[at : at + RECORD_FINDINGS]
+        log.append(
+            REPAIR_APPLIED_KIND,
+            r.id,
+            {
+                **record,
+                "findings": [f.key for f in part],
+                "details": [f.detail[:DETAIL_CHARS] for f in part],
+                "events": len(corrective) if at == 0 else 0,
+                "summary": f"{r.title}: {len(part)} finding(s) settled",
+            },
+        )
+    return record
+
+
 def apply(
     repo: Path, log: EventLog, cfg: Config, ids: Sequence[str] | None = None
 ) -> list[dict[str, Any]]:
@@ -132,40 +163,18 @@ def apply(
     for r in REGISTRY:
         if (named is None and r.consent != AGENT) or (named is not None and r.id not in named):
             continue
-        ctx = context(repo, log, cfg)  # fresh: the previous repair's events count
-        p = _detect(ctx, r)
-        if not p.findings:
-            continue
-        corrective = r.repair(ctx, p.findings)
-        for kind, subject, data in corrective:
-            log.append(kind, subject, data)
-        record = {
-            "repair": r.id,
-            "since": r.since,
-            "version": running_version(),
-            "findings": [f.key for f in p.findings],
-            "events": len(corrective),
-        }
-        for at in range(0, len(p.findings), RECORD_FINDINGS):
-            part = p.findings[at : at + RECORD_FINDINGS]
-            log.append(
-                REPAIR_APPLIED_KIND,
-                r.id,
-                {
-                    **record,
-                    "findings": [f.key for f in part],
-                    "details": [f.detail[:DETAIL_CHARS] for f in part],
-                    "events": len(corrective) if at == 0 else 0,
-                    "summary": f"{r.title}: {len(part)} finding(s) settled",
-                },
-            )
-        applied.append(record)
+        # Read, decide and append under the log's lock: two agents applying the same repair
+        # at once must not both adopt one orphan or both record the same findings.
+        with log.transaction():
+            record = _apply_one(r, context(repo, log, cfg), log)
+        if record:
+            applied.append(record)
     return applied
 
 
 #: Repairs whose damage `ddflow doctor` already words itself (`integrity`, the orphan note
 #: and the unknown-author note): `doctor_notes` leaves them out so nothing is said twice.
-DOCTOR_WORDED = frozenset({TORN.id, MISMATCHED.id, AUTHORS.id, "orphan-prompts"})
+DOCTOR_WORDED = frozenset({TORN.id, MISMATCHED.id, AUTHORS.id, ORPHANS.id})
 
 
 def doctor_notes(ctx: Context, *, skip: Iterable[str] = ()) -> list[str]:
