@@ -614,6 +614,13 @@ def _options(it) -> str:
     return "; ".join(rows)
 
 
+def _drop_remote_claims(log, item: str, holders: list[str]) -> None:
+    """Outside the lock, as `leases.release` does: each released claim's remote ref goes
+    too, or with `[flow].claims = "remote"` it outlived the claim (Bd45d1ad60e)."""
+    for holder in holders:
+        L._remote_drop(log, item, holder)
+
+
 def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str = "") -> O.Outcome:
     """Settle a contested item: keep one definition and/or one claim, recorded as an event.
 
@@ -722,6 +729,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
         log.append("item.resolved", item, data)
         for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
             log.append(f"{it.kind}.added", nid, d["data"])
+    _drop_remote_claims(log, item, [h["holder"] for h in losers])
     return O.ok(
         "item.resolved",
         id=item,
