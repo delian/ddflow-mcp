@@ -8,8 +8,11 @@ from typing import Any
 
 from ...config import Config
 from ...core import outcome as O
+from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
+from ...core.schedule import stale_package_globs
 from ...core.tier import unknown_tier_notes
+from ...infra import worktree as W
 from ...views.markdown import may_hold_work
 from .._base import _load
 
@@ -65,6 +68,28 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
                 )
             elif dep not in st.external:
                 notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
+
+
+def _stale_glob_notes(repo: Path, st) -> list[str]:
+    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
+    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
+    Each is named with the corrected glob and the command that applies it."""
+    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
+    if not any(g.endswith(".py") for i in live for g in i.globs):
+        return []
+    tracked = W.git_paths(repo, "ls-files") or []
+    notes = []
+    for it in live:
+        stale = stale_package_globs(it.globs, tracked)
+        if not stale:
+            continue
+        fixed = dict(stale)
+        globs = ",".join(fixed.get(g, g) for g in it.globs)
+        notes.append(
+            f"{it.id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
+            f"its lease covers none of those files. `ddflow update {it.id} --globs {globs}`"
+        )
+    return notes
 
 
 def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) -> str:
@@ -331,6 +356,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
+    notes += _stale_glob_notes(repo, st)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     from ...services import shared_files as SF

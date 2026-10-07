@@ -16,9 +16,11 @@ from typing import Any  # noqa: F401
 from ...config import Config  # noqa: F401
 from ...core import outcome as O  # noqa: F401
 from ...core.events import version_key  # noqa: F401
-from ...core.model import fold  # noqa: F401
+from ...core.model import ABANDONED, DONE, fold  # noqa: F401
 from ...core.plain import plain  # noqa: F401
+from ...core.schedule import stale_package_globs  # noqa: F401
 from ...core.tier import unknown_tier_notes  # noqa: F401
+from ...infra import worktree as W  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from ...views.markdown import may_hold_work  # noqa: F401
 from .._base import _load  # noqa: F401
@@ -39,6 +41,7 @@ from .health import (  # noqa: F401
     _only_ids,
     _orphan_notes,
     _primary_mid_merge,
+    _stale_glob_notes,
     _unknown_author_notes,
     _untitled,
     doctor,
