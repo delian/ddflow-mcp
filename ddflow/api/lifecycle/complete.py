@@ -62,11 +62,7 @@ def complete(
     it = _require(st, item, "item.completed")
     if isinstance(it, O.Outcome):
         return it
-    if _settled_umbrella(st, it):
-        out = _complete_umbrella(repo, log, cfg, st, it)
-        out.data["umbrellas_completed"] = _complete_umbrellas_above(repo, log, cfg, item, agent)
-        out.data.update(_commit_events(log, cfg, f"complete {item}"))
-        return out
+    umbrella = _umbrella_children(st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()]
@@ -89,6 +85,11 @@ def complete(
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
+    if umbrella:
+        # Its work is its sub-tasks', each of which ran its own pipeline: the umbrella
+        # has no diff for implement, unit_tests or merge to judge (B651a63e574). An open
+        # bug it was filed to fix still holds it, as for any item.
+        v.blockers = [b for b in v.blockers if b.startswith(CM.OPEN_BUG_BLOCKER)]
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
@@ -149,6 +150,8 @@ def complete(
             "kind": it.kind,
             "forced": forced,
             "overridden": v.blockers if force else [],
+            # Optional, like `changelog`: the sub-tasks a settled umbrella completed with.
+            **({"umbrella": umbrella} if umbrella else {}),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
@@ -179,54 +182,34 @@ def complete(
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 
-def _settled_umbrella(st: State, it) -> bool:
-    """A task split into sub-tasks, every one of them settled and at least one done.
+def _umbrella_children(st: State, it) -> list[str]:
+    """The done sub-tasks of a SETTLED umbrella, or [] when ``it`` is not one: a task split
+    into sub-tasks, every one settled and at least one done.
 
-    Its work is its sub-tasks', each of which ran its own pipeline; the umbrella has no
-    diff of its own for `implement`, `unit_tests` or `merge` to judge (B651a63e574). All
-    of them abandoned is not the work finished, and a phase keeps its own close."""
+    Its work is its sub-tasks', each of which ran its own pipeline (B651a63e574). All of
+    them abandoned is not the work finished, and a phase keeps its own close."""
     if it.kind != "task" or it.state in (DONE, ABANDONED):
-        return False
-    below = [st.items[i] for i in st.descendants(it.id)]
-    return bool(below) and not st.open_descendants(it.id) and any(k.state == DONE for k in below)
-
-
-def _complete_umbrella(repo: Path, log, cfg, st: State, it) -> O.Outcome:
-    """Record a settled umbrella done: no gates of its own, its sub-tasks named."""
+        return []
     below = sorted(st.descendants(it.id))
-    done = [i for i in below if st.items[i].state == DONE]
-    log.append(
-        "item.completed",
-        it.id,
-        {"sha": "", "kind": it.kind, "forced": False, "overridden": [], "umbrella": done},
-    )
-    L.release(log, it.id, note="completed with its sub-tasks")
-    return O.ok(
-        "item.completed",
-        id=it.id,
-        sha="",
-        forced=False,
-        independence="",
-        coverage_gaps=[],
-        note=f"completed with its sub-tasks: {', '.join(done)}",
-        warnings=[],
-        blockers=[],
-        bugs_closed=[],
-        woke=[],
-        umbrella=done,
-    )
+    if not below or st.open_descendants(it.id):
+        return []
+    return [i for i in below if st.items[i].state == DONE]
 
 
 def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> list[str]:
-    """Every task umbrella above ``item`` that its completion settled, nearest first."""
+    """Every task umbrella above ``item`` that its completion settled, nearest first --
+    each completed through `complete` itself, so it is recorded like any completion."""
     out: list[str] = []
     st = fold(log.read_all(), strict=False)
     for anc in st.ancestors(item):
-        if not _settled_umbrella(st, anc):
+        if not _umbrella_children(st, anc):
             break
-        _complete_umbrella(repo, log, cfg, st, anc)
+        done = complete(repo, anc.id, agent=agent)
+        if done.exit != O.OK:
+            break
         out.append(anc.id)
-        st = fold(log.read_all(), strict=False)
+        out += done.data.get("umbrellas_completed", [])
+        break  # the completion above climbs on from there
     return out
 
 
