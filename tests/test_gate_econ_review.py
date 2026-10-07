@@ -145,12 +145,28 @@ def test_a_first_gate_out_of_rounds_does_not_cost_the_second_its_review(repo, tm
 
 
 def test_a_combined_review_that_could_not_run_says_so_for_every_gate(repo, tmp_path):
+    """No reviewer for either gate: the one combined attempt is unavailable for both."""
     _setup(repo, tmp_path)
-    _git(repo, "checkout", "-q", "main")
-    _git(repo, "checkout", "-q", "-b", "empty")  # no change: an empty diff
-    api.review(repo, gate=GATES, item="T1", branch="empty")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace('gates = ["critic", "rubber_duck"]', 'gates = ["docs"]'))
+    out = api.review(repo, gate=GATES, item="T1", branch="feat")
+    assert "combined review" in out.data["text"], out.data["text"]
     gates = _gates(repo)
     assert gates["rubber_duck"].outcome == gates["critic"].outcome == "unavailable"
+
+
+def test_gates_with_different_reviewers_are_not_combined(repo, tmp_path):
+    """A combined review runs the first gate's reviewers: critic's own must still run."""
+    prompts = _setup(repo, tmp_path)
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace('gates = ["critic", "rubber_duck"]', 'gates = ["critic"]')
+    )
+    out = api.review(repo, gate=GATES, item="T1", branch="feat")
+    assert "combined review" not in out.data["text"]
+    gates = _gates(repo)
+    assert gates["critic"].outcome == "failed" and len(list(prompts.iterdir())) == 1
+    assert gates["rubber_duck"].outcome == "unavailable"
 
 
 def test_a_gate_with_no_known_lens_is_never_combined(repo, tmp_path):
