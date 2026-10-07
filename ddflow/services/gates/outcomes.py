@@ -38,7 +38,9 @@ class GateStatus:
     #: blocks completion.
     silent: list[str] = field(default_factory=list)
     #: gate -> "3 finding(s): 2 refuted, 1 confirmed, 0 untriaged" for a recorded review
-    #: that reported findings (`triage_counts`). The gate's outcome is NOT changed by it.
+    #: that reported findings (`triage_counts`), with "-- PASSED ON REFUTATION" when the
+    #: triage that settled its last finding after the round cap recorded the pass
+    #: (`on_refutation`). Counting changes no outcome; only that settling triage does.
     triage: dict[str, str] = field(default_factory=dict)
     #: gate -> "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed.
     rounds: dict[str, str] = field(default_factory=dict)
