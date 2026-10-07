@@ -27,14 +27,15 @@ def _lease(**kw) -> Lease:
 TABLE = [
     ("fresh", {}, 1050.0, False, True),
     ("at the ttl", {}, 1100.0, False, True),
-    ("past ttl, in grace", {}, 1150.0, True, False),  # grace=0 reading, see below
-    ("recorded expiry", {"expired_at": "t", "ttl_s": 0}, 1001.0, False, False),
+    ("past ttl", {}, 1150.0, True, False),  # no grace; see the grace test below
+    ("recorded expiry", {"expired_at": "t", "ttl_s": 0}, 1001.0, True, False),
 ]
 
 
 @pytest.mark.parametrize(("name", "kw", "now", "clock_expired", "live0"), TABLE)
 def test_live_table_with_no_grace(name, kw, now, clock_expired, live0):
     lease = Lease(holder="a", acquired_at=1000.0, renewed_at=1000.0, **{"ttl_s": 100, **kw})
+    assert lease.expired(now) is clock_expired, name
     assert lease.live(now) is live0, name
     assert lease.live(now) is (not lease.expired_at and not lease.expired(now))
 
