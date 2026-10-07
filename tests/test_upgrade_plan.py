@@ -317,3 +317,19 @@ def test_a_remedy_that_is_the_apply_step_says_apply_is_not_there_yet(old: Path) 
     fixes = [i["fix"] for i in items(body, "config") if "--apply" in i["fix"]]
 
     assert fixes and all(f.endswith(UP.NOT_YET) for f in fixes)
+
+
+def test_a_changed_then_removed_then_added_knob_keeps_the_baseline_default() -> None:
+    """The project holds 5 at the baseline; 5 -> 7, removed, re-added at 7 is a change
+    FROM 5 -- not from the 7 the removal recorded, which would net to nothing."""
+    seq = [
+        _change("knob_changed", "0.1.5", old=5, new=7, has_old=True, has_new=True),
+        _change("knob_removed", "0.2.0", old=7, has_old=True),
+        _change("knob_added", "0.3.0", new=7, has_new=True),
+    ]
+
+    kind, _c, old, new = UP._net(seq)["s.k"]
+
+    assert (kind, old, new) == ("knob_changed", 5, 7)
+    # a removal after a change reports the baseline value the project held
+    assert UP._net(seq[:2])["s.k"][2] == 5
