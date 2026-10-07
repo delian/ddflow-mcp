@@ -197,7 +197,7 @@ ddflow tests --item <ID>                         # [ddflow_tests] after EACH cha
   runs them in parallel. Do not reason about which tests matter — that is guessing, and
   the derivation is cheaper than being wrong. A regression test you are writing is in the
   set as soon as its file exists.
-- **At the gate**, commit first (`git add <explicit paths> && git commit`: ci tests the
+- **At the gate**, commit first (`git add <paths> && git commit -m "<ID>: ..."`: ci tests the
   committed HEAD), run `ci` -- it runs the **whole** suite on the branch merged with the
   base -- then `ddflow gate run <ID> unit_tests`; never record unit_tests from a run of
   your own. Once ci has passed on the clean commit the tree holds, a bug fix or a small
