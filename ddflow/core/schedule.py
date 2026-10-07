@@ -439,7 +439,7 @@ def _settled_umbrella_detail(state: State, it: Item) -> str:
     (`api.lifecycle.complete._umbrella_children` is the same rule on the api side; core
     cannot import it). With every one abandoned there is nothing to complete: it is the
     operator's call to abandon it too or give it work."""
-    if it.kind != "task":
+    if it.kind != "task" or it.state in (DONE, ABANDONED):
         return ""
     below = state.descendants(it.id)
     if not below or state.open_descendants(it.id):
