@@ -86,7 +86,11 @@ def _net(changes: list[UM.Change]) -> dict[str, tuple[str, UM.Change, Any, Any]]
         prev = out.get(c.key)
         if c.kind == "knob_removed":
             out[c.key] = ("knob_removed", c, c.old, None)
-        elif prev is None or prev[0] == "knob_removed":
+        elif prev is not None and prev[0] == "knob_removed":
+            # It existed before the baseline (its removal is the first thing that
+            # happened to it), so coming back is a changed default, not a new knob.
+            out[c.key] = ("knob_changed", c, prev[2], c.new)
+        elif prev is None:
             out[c.key] = (c.kind, c, c.old, c.new)
         elif prev[0] == "knob_added":
             out[c.key] = ("knob_added", c, None, c.new)
@@ -114,9 +118,16 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for key, (kind, c, old, new) in sorted(_net(changes).items()):
         source = cfg.sources.get(key, "default")
+        if kind == "knob_removed":
+            if (
+                key not in cfg.unknown_knobs
+                and f"[{key.partition('.')[0]}]" not in cfg.unknown_knobs
+            ):
+                continue  # the project never carried it
+            # A removed knob is unknown to the schema, so it has no source; its being in
+            # the config at all is what says someone wrote it.
+            source = "config"
         operator_set = source != "default"
-        if kind == "knob_removed" and key not in cfg.unknown_knobs:
-            continue  # the project never carried it
         if kind == "knob_added" and operator_set:
             continue
         item: dict[str, Any] = {
@@ -248,8 +259,20 @@ def hook_items(repo: Path) -> list[dict[str, Any]]:
     for h in CH.HOOKS:
         if h.agent not in adopted:
             continue
-        on, _why = CH.state_spec(repo, h)
-        if on is False:
+        on, why = CH.state_spec(repo, h)
+        if on is None:
+            # Not "installed" and not "missing": the settings file could not be read, and
+            # nobody looked. Said, so an empty hooks list never hides a check that did not run.
+            out.append(
+                {
+                    "category": "hooks",
+                    "id": f"hooks:unknown:{h.agent}:{h.name}",
+                    "summary": f"{h.agent} {h.event} hook could not be checked: {why}",
+                    "action": NOTE,
+                    "fix": "ddflow hooks status",
+                }
+            )
+        elif on is False:
             out.append(
                 {
                     "category": "hooks",
