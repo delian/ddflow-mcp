@@ -861,7 +861,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 189 knobs.
+cadences, and the rest of the 190 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -1292,6 +1292,18 @@ previous critic finding(s) and their triage`. A delta that showed the reviewer o
 follow-up commit kept reporting the fix as absent, because the code it fixed was not in
 what it saw. A re-review counts against `review.max_rounds` like any full round.
 
+**One review for both gates of a small change** (decision D-gate-economy 2). `ddflow
+review T1 --gate rubber_duck,critic` on a change with fewer than
+`review.combined_under_lines` changed lines (default 150; `0` = never) sends ONE reviewer
+request whose intent names both lenses -- refute the change, and criticise its design and
+tests -- and records the outcome for each gate with the same evidence and a shared
+`review_id` (each gate's findings are triaged on that gate); the output starts `combined
+review <id>: N changed line(s) ...`; it is a full round of each gate. A larger change runs
+one review per gate, one after the other. `--chunk`, `--delta`, `--commit` and `--base` work
+on one gate's record, so with several gates they run per gate; so does a pair where either
+gate is out of rounds, is served by other reviewers than the first, or is not one of the two
+review lenses.
+
 **Delta re-reviews, on request.** `--delta` (MCP `delta=true`), or `review.delta_default =
 true` for every plain re-review, is for a diff too large to send twice. Once a gate has a
 recorded review that reviewed the whole diff, a delta reviews only the commits
@@ -1317,6 +1329,7 @@ every re-review a full round with the previous findings. Knobs, changeable at ev
 |---|---|---|
 | `review.max_rounds` | `2` | full rounds per gate per item; `0` = unlimited |
 | `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
+| `review.combined_under_lines` | `150` | changed lines under which `--gate rubber_duck,critic` is ONE review recorded for both; `0` = never |
 | `review.delta_default` | `false` | `true` = a review of a gate with a recorded review is a delta; `false` = a full re-review with the previous findings |
 
 ```sh
@@ -4250,7 +4263,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 189): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 190): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4605,7 +4618,7 @@ declared once and persists — see
 
 ## Configuration
 
-189 knobs across 27 sections, every one documented in place and listed, with its default
+190 knobs across 27 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -4649,8 +4662,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=d993148cb81a -->
-<details><summary>All 189 knobs across 27 sections</summary>
+<!-- ddflow:begin README/knobs sha=826e37006d3d -->
+<details><summary>All 190 knobs across 27 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -4801,6 +4814,7 @@ long default is left to `ddflow config --explain`.
 | `review.max_rounds` | `2` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
 | `review.delta_default` | `false` |  |
+| `review.combined_under_lines` | `150` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |

@@ -14,6 +14,7 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,8 @@ from ..config import family_for
 from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
+from ..services import gates as GD
+from ..services import review as RV
 from ._base import _load
 
 
@@ -1022,6 +1025,198 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     reason: str = "",
     full: bool = False,
 ) -> O.Outcome:
+    """Run the reviewers configured for `gate`, and record the outcome against `item`.
+
+    `gate` may name several gates, comma-separated (`rubber_duck,critic`): under
+    `[review].combined_under_lines` changed lines that is ONE review recorded for each,
+    otherwise one review per gate (`_review_gates`, decision D-gate-economy 2).
+    One gate is `_review_gate`, whose docstring has the rest.
+    """
+    args = dict(locals())
+    asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
+    if len(asked) > 1:
+        return _review_gates(asked, args)
+    return _review_gate(**{**args, "gate": asked[0] if asked else gate})
+
+
+#: What each review gate asks of a reviewer, for a combined review's intent. A gate with
+#: no entry here is never combined: its lens is whatever its own prompt says.
+_LENSES = {
+    "rubber_duck": "refute the change: find the input that makes it wrong",
+    "critic": "criticise it: a wrong design, a missing or vacuous test, a promise the "
+    "code does not keep",
+}
+
+
+def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
+    """Several gates in one call: combined when the change is small, else one by one.
+
+    Combined: ONE full review whose intent names every gate's lens, recorded for each gate
+    with the same findings and a shared `review_id` (each gate's findings are triaged on
+    that gate). Only for a plain review of known lenses (`_LENSES`), served by the same
+    reviewers, with every gate in budget: `--chunk`, `--delta`, `--commit` and `--base` work on one gate's record, and a
+    gate out of rounds must be refused on its own -- so those run gate by gate. The change
+    is measured as the changed lines of the diff a full review would send.
+    """
+    repo, item = args["repo"], args["item"]
+    log, cfg, st = _load(repo, args["agent"])
+    under = int(cfg.review.combined_under_lines or 0)
+    plain = not (args["chunks"] or args["delta"] or args["commit"] or args["base"])
+    alike = all(g in _LENSES for g in asked) and _same_reviewers(repo, asked)
+    lines = _changed_lines(cfg, st, args) if plain and alike and under > 0 else 0
+    if 0 < lines < under and not _any_out_of_rounds(log, cfg, item, asked, args):
+        return _review_combined(asked, args, lines, under, log, cfg)
+    return _review_each(asked, args)
+
+
+def _same_reviewers(repo: Path, gates: list[str]) -> bool:
+    """Is every gate served by the same reviewers? A combined review runs the FIRST gate's,
+    so a gate with a reviewer of its own must not be recorded from another gate's (or as
+    unavailable because the first gate has none)."""
+    revs = RV.load_reviewers(repo)
+    names = [sorted(r.name for r in RV.reviewers_for(revs, g)) for g in gates]
+    return all(n == names[0] for n in names)
+
+
+def _changed_lines(cfg, st, args: dict[str, Any]) -> int:
+    """Added plus removed lines of the diff a full review of ``args`` would send: lines
+    inside a hunk only, so a content line that itself starts with `++` or `--` counts and a
+    file header never does."""
+    diff, _how = diff_for(
+        args["repo"], cfg, st, args["item"], args["base"],
+        branch=args["branch"], called_from=args["called_from"],
+    )  # fmt: skip
+    n, in_hunk = 0, False
+    for ln in diff.splitlines():
+        if ln.startswith("diff --git "):
+            in_hunk = False
+        elif ln.startswith("@@"):
+            in_hunk = True
+        elif in_hunk and ln[:1] in ("+", "-"):
+            n += 1
+    return n
+
+
+def _any_out_of_rounds(log, cfg, item: str, gates: list[str], args: dict[str, Any]) -> bool:
+    """Would a full round of any of ``gates`` be refused? Then none is combined."""
+    if not item:
+        return False
+    quiet = lambda _line: None  # noqa: E731 -- the gate's own run says it, if it comes to that
+    return any(
+        _budget(cfg, item, g, _full_rounds(log, item, g), args["force"], args["reason"], quiet)[0]
+        for g in gates
+    )
+
+
+def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome:
+    say_out: list[str] = []
+
+    def say(line: str) -> None:
+        say_out.append(line)
+        if args["on_progress"]:
+            args["on_progress"](line)
+
+    _l, _c, st = _load(args["repo"], args["agent"])
+    item = args["item"]
+    rid = secrets.token_hex(6)
+    names = " and ".join(asked)
+    intent = (args["intent"] or _item_intent(st.items.get(item))).strip()
+    intent += (
+        f"\n\nCombined review (decision D-gate-economy 2): this ONE review is recorded for the "
+        f"{names} gates, so apply each one's lens -- "
+        + "; ".join(f"{g}: {_LENSES[g]}" for g in asked)
+        + "."
+    )
+    say(
+        f"combined review {rid}: {lines} changed line(s), under [review].combined_under_lines "
+        f"= {under}, so one review stands for {names}"
+    )
+    # A FULL round whatever `delta_default` says: the other gates copy its record, and a
+    # delta's record is merged with the first gate's own earlier findings.
+    out = _review_gate(
+        **{
+            **args,
+            "gate": asked[0],
+            "intent": intent,
+            "full": True,
+            "extra_evidence": {"review_id": rid, "combined_gates": asked},
+        }
+    )
+    _l, _c, st = _load(args["repo"], args["agent"])
+    rec = st.items[item].gates.get(asked[0]) if item in st.items else None
+    gates = GD.load_gates(args["repo"], cfg)
+    if rec is not None and (rec.evidence or {}).get("review_id") == rid:
+        for g in asked[1:]:
+            ev = {**rec.evidence, **_rounds_for(log, item, g, rec.evidence)}
+            GD.record(
+                log, cfg, item, g, rec.outcome,
+                by=rec.by, reason=rec.reason, evidence=ev, gates=gates,
+            )  # fmt: skip
+            say(f"recorded {item}.{g} = {rec.outcome} (the same combined review {rid})")
+    elif item and out.data.get("outcome") == "unavailable":
+        # No review happened (no reviewer, an empty diff): each gate says so, not only the
+        # first -- a gate that was asked for and shows nothing reads as never run.
+        for g in asked[1:]:
+            GD.record(log, cfg, item, g, "unavailable", reason=out.reason, gates=gates)
+            say(f"recorded {item}.{g} = unavailable (the combined review {rid} could not run)")
+    data = {**out.data, "gates": asked, "review_id": rid}
+    data["text"] = "\n".join([say_out[0], data.get("text", ""), *say_out[1:]]).strip()
+    return O.Outcome(kind=out.kind, data=data, exit=out.exit, reason=out.reason)
+
+
+def _rounds_for(log, item: str, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
+    """The round counts of ``gate``'s own record: the combined review is one more full
+    round of each gate it stands for, and leaves each gate's delta count as it was."""
+    counted = ev.get("review_kind") == "full"
+    done = _full_rounds(log, item, gate)
+    out: dict[str, Any] = {
+        "rounds": done + (1 if counted else 0),
+        "delta_rounds": _delta_rounds(log, item, gate),
+    }
+    if counted:
+        out["round"] = done + 1
+    return out
+
+
+def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
+    """One review per gate, one after the other: the event log's read caches and its
+    transaction guard are per process and unlocked, so two reviews in threads could fold
+    an event twice or append outside the lock (why MCP offloads to a PROCESS). Each review
+    already sends its chunks at once."""
+    outs = [_review_gate(**{**args, "gate": g}) for g in asked]
+    worst = max(outs, key=lambda o: (o.exit != O.OK, o.exit))
+    text = "\n\n".join(
+        f"== {g}\n{o.data.get('text', o.reason)}" for g, o in zip(asked, outs, strict=True)
+    )
+    data = {
+        **worst.data,
+        "gates": asked,
+        "text": text,
+        "by_gate": {g: o.data for g, o in zip(asked, outs, strict=True)},
+    }
+    return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
+
+
+def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+    repo: Path,
+    *,
+    gate: str = "critic",
+    item: str = "",
+    intent: str = "",
+    context: str = "",
+    base: str = "",
+    on_progress: Callable[[str], None] | None = None,
+    commit: str = "",
+    branch: str = "",
+    called_from: Path | None = None,
+    agent: str = "",
+    chunks: list[int] | list[str] | str | None = None,
+    delta: bool = False,
+    force: bool = False,
+    reason: str = "",
+    full: bool = False,
+    extra_evidence: dict[str, Any] | None = None,
+) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
 
     A FULL round -- anything that can cover the item's whole diff -- is counted against
@@ -1214,6 +1409,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
                 _delta_rounds(log, item, gate),
             ),
             **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
+            **(extra_evidence or {}),
         }
         held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
         outcome, reason = _hold(outcome, _reason_of(best), held, say)

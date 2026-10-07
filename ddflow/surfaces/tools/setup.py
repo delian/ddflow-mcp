@@ -125,7 +125,11 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Item whose diff to review.", True),
-            "gate": ("string", "Gate: critic (default) or rubber_duck.", False),
+            "gate": (
+                "string",
+                "critic|rubber_duck|rubber_duck,critic",
+                False,
+            ),
             "intent": (
                 "string",
                 "What the change is MEANT to do. The reviewer flags where the diff "
