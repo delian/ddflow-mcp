@@ -97,3 +97,14 @@ def test_a_symlinked_template_is_labelled_by_its_own_name(tmp_path: Path):
     target.write_text("x")
     os.symlink(target, dst)
     assert T.rel(repo, dst) == ".ddflow/templates/export/bugs.md.j2"
+
+
+def test_a_named_path_with_dotdot_is_labelled_as_repo_rel_resolves_it(tmp_path: Path):
+    """The one deliberate difference (B-relpath-labels): repo_rel never trusts a '..'
+    lexically, since '..' can leave the repository. Only legacy.scan's extra= can carry
+    one, and no production caller passes extra= (api/onboard.py calls scan(repo, imported))."""
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "HANDOFF.md").write_text("Remember to update lessons.md each time.\n")
+    [proposal] = L.scan(repo, [], extra=["docs/../HANDOFF.md"])
+    assert proposal.path == "HANDOFF.md"
