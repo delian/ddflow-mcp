@@ -80,3 +80,15 @@ def test_completing_a_settled_umbrella_completes_the_one_above_it(repo):
     assert run_cli(repo, "complete", "P.T.b")[0] == OK
     assert _state(repo, "P.T.b") == "done"
     assert _state(repo, "P.T") == "done", "the outer umbrella was left open"
+
+
+def test_a_flag_on_a_settled_umbrella_is_not_dropped(repo):
+    """It completes through the same path as any item: a --regression-test on an umbrella
+    that fixes no bug is refused, not silently ignored (roborev on e08fb2ef)."""
+    _split(repo)
+    log = EventLog(repo)
+    for child in ("P.T.a", "P.T.b"):
+        log.append("item.completed", child, {"sha": "", "kind": "task", "forced": True})
+    code, out, err = run_cli(repo, "complete", "P.T", "--regression-test", "tests/x.py")
+    assert code == 3 and "not the fix task of any open bug" in out + err, out + err
+    assert _state(repo, "P.T") == "open"
