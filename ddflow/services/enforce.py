@@ -41,8 +41,10 @@ from pathlib import Path
 from ..config import Config
 from ..core import clock
 from ..core.flow import env_chain
+from ..core.globs import inside as path_in_glob
+from ..core.globs import overlap as globs_overlap
 from ..core.model import Lease, fold
-from ..core.schedule import globs_overlap, is_shared, path_in_glob, shared_globs
+from ..core.schedule import is_shared, shared_globs
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.fsio import replace_text

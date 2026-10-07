@@ -1806,6 +1806,10 @@ non-findings with an unclosed "(… refuted it" aside, which ddflow closes:
 (a 20,000-line legacy `docs/todo.md`): their open boxes import **blocked**, and
 `ddflow unblock <phase>` releases a whole section at once.
 
+Every path pattern ddflow reads (claims, shared globs, `[enforce]` doc and code globs, `archive_globs`,
+lesson globs) means what git means: `*` and `?` stop at `/`, `**/` is any number of directories
+(including none), `[...]` is a class; one implementation, `ddflow/core/globs.py`.
+
 Each source family's location is a knob — `todo_globs`, `lesson_globs`,
 `lesson_summary_globs`, `decision_globs`, `research_globs`, `journal_globs`,
 `memory_globs` — and a set knob **replaces** the defaults, because the same filename
