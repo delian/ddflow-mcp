@@ -16,6 +16,7 @@ import dataclasses
 from hypothesis import strategies as st
 
 from ddflow.core.events import Event
+from ddflow.infra.log import _sorted_unique
 
 PHASES = ["P1", "P2"]
 TASKS = ["T1", "T2", "T3", "T4", "T5"]
@@ -143,4 +144,4 @@ def event_logs(draw, max_size: int = 40) -> list[Event]:
         clocks[agent] = floor + draw(st.integers(1, 3))
         kind, subject, data = draw(payloads())
         out.append(event(kind, subject, data, agent, clocks[agent]))
-    return sorted(out, key=Event.sort_key)
+    return _sorted_unique(out)
