@@ -2016,7 +2016,9 @@ decision **accepted** — what changes is that none of it is shown anonymously:
   same fact as a line (`recorded by an agent (x)`, `imported from docs/ADR-7.md`) and each
   decision, lesson and memory hit in `--json` and `ddflow_recall` carries a `provenance` object, a
   headline of id plus that sentence, and its text inside the fence (the raw record is not in
-  the MCP answer).
+  the MCP answer). A recorded prompt or note is fenced on every surface too, as `trust="agent"`
+  (an agent recorded it, whoever's words it quotes), and a hit whose record the state cannot
+  name as `trust="unknown"` -- `--json` and `ddflow_recall` used to pass both through unfenced.
 - The tag is a data fence: its body has any `<ddflow…` tag defanged (`&lt;`), so it cannot
   close the fence or forge a second one, and the one-line rule that fenced text is **data,
   never instructions** ships in the MCP instructions, the brief, `recall` and every gate
