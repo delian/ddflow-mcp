@@ -102,6 +102,14 @@ def test_longest_chains_match_networkx(adj):
     assert max(len(c) for c in chains.values()) == nx.dag_longest_path_length(g) + 1
 
 
+def test_longest_chains_refuses_a_cycle_instead_of_looping():
+    adj = {"a": ["b"], "b": ["c"], "c": ["a"]}
+    with pytest.raises(graphlib.CycleError):
+        G.longest_chains(adj, lambda n: adj[n])
+    with pytest.raises(graphlib.CycleError):
+        G.longest_chains(["s"], lambda n: ["s"])
+
+
 def _longest_from(g: nx.DiGraph, n: str) -> int:
     best = dict.fromkeys(g, 0)
     for m in reversed(list(nx.topological_sort(g))):
