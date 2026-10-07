@@ -153,7 +153,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "full": (
                 "boolean",
-                "Force a full round (else a delta once reviewed).",
+                "Force a full round (when delta_default is on).",
                 False,
             ),
             "chunk": (
