@@ -28,10 +28,10 @@ import secrets
 import socket
 import subprocess
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from ..config import LogConfig
 from ..core import digest as D
@@ -161,6 +161,32 @@ def _write_seen_marker(root: Path, version: str) -> None:
         fsio.atomic_write(path, json.dumps({"version": version, "at": utcnow()}) + "\n")
     except OSError:
         pass
+
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class LogMark:
+    """What `EventLog.mark()` saw: `(shard name, size in bytes, clock on its last line)`
+    per shard, in name order. Equal marks mean nothing was appended; compare with `==`."""
+
+    shards: tuple[tuple[str, int, int], ...]
+
+    @property
+    def count(self) -> int:
+        return len(self.shards)
+
+    @property
+    def lamport(self) -> int:
+        """The highest TAIL clock -- not the highest clock: after a union merge of a shard
+        with two writers they differ (see `EventLog._highest_lamport`). Harmless for a
+        fingerprint, since the merge changed the size; do not take a clock from it."""
+        return max((high for _n, _s, high in self.shards), default=0)
+
+    @property
+    def bytes(self) -> int:
+        return sum(size for _n, size, _h in self.shards)
 
 
 @dataclass(slots=True)
@@ -777,36 +803,80 @@ class EventLog:
             return []
         return sorted(self.dir.glob("*.jsonl"))
 
-    def extent(self) -> dict[str, int]:
-        """A cheap fingerprint of how much log there IS: shard name -> size in bytes.
+    def mark(self, *, clock: bool = True) -> LogMark:
+        """A cheap fingerprint of how much log there IS: per shard, its size and (with
+        `clock`) the clock on its last line. `os.stat`, plus one tail read per shard when
+        the clock is asked for; never a parse.
 
-        `os.stat` per shard, no reads. Exists so a caller can fold the log OUTSIDE the
-        append lock and then, inside it, PROVE that nothing was appended in between —
-        which is the difference between holding the lock across an O(all-events) read and
-        holding it across a handful of `stat` calls. On the NFS mount this package was
-        designed against, that read is ~36x its local cost.
+        One mark answers "has anything changed?" for every caller that asks it: a
+        decision folded outside the append lock and re-proved under it
+        (`decide_then_append`), the wait loop's poll, and the index's staleness check.
+        It replaces `extent()` (sizes only) and `head()` (three totals), which each missed
+        a change the other saw: totals cannot see one shard shrink while another grows by
+        the same amount, and sizes ignore the clock.
 
-        **Take this BEFORE the read, never after.** After is unsafe in a way that looks
-        fine: a write landing between the read and the fingerprint is recorded in the
-        size, so the later comparison says "unchanged" while the folded state is missing
-        that event. Before, the same write makes the sizes differ and the caller falls
-        back to re-reading — conservative, and conservative is the only safe direction
-        here.
+        `clock=False` is `extent()`'s price -- a `stat` per shard, the clock recorded as 0
+        -- for the paths that run under the append lock or poll: shards are append-only,
+        so a size says they changed, and a tail read per shard there is ~36x dearer on
+        NFS (B4). Only the index needs the clock (`Store.stale`). Compare marks taken
+        with the same `clock`.
 
-        Sizes rather than mtimes: mtime granularity is one second on some filesystems,
-        and two appends inside one second are exactly the case this has to catch. A new
-        shard appearing (another agent's first write) changes the KEY set, so that is
-        caught too.
+        **Take it BEFORE the read, never after.** After is unsafe in a way that looks
+        fine: a write landing between the read and the mark is recorded in it, so the
+        later comparison says "unchanged" while the folded state is missing that event.
+        Before, the same write makes the marks differ and the caller re-reads -- the
+        conservative direction, the only safe one.
+
+        Sizes rather than mtimes (granularity is a second on some filesystems, and two
+        appends inside one second are the case this must catch). A new shard changes the
+        key set. **One pass, size and tail adjacent per shard**: two walks let an append
+        land between them with a clock at or below the current high and move neither
+        (B54). A rewrite in place that keeps the size and the last clock is not seen
+        here; only the prefix digest of `_read_delta` catches that.
         """
-        out: dict[str, int] = {}
-        for path in self.shards():
+        out: list[tuple[str, int, int]] = []
+        for p in self.shards():
+            high = 0
             try:
-                out[path.name] = path.stat().st_size
+                size = p.stat().st_size
             except OSError:
-                # Vanished between the glob and the stat. Recording it as absent makes
-                # the comparison differ, which sends the caller down the safe path.
+                # Vanished between the glob and the stat: absent from the mark, so the
+                # comparison differs and the caller takes the safe path.
                 continue
-        return out
+            try:
+                tail = _last_line(p) if clock else ""
+            except FileNotFoundError:
+                continue  # vanished between the stat and the tail read: the same
+            # Any other OSError (a shard that cannot be READ) propagates: the callers
+            # that ask for the clock turn it into "could not run", never into "unchanged".
+            if tail:
+                try:
+                    high = int(json.loads(tail).get("lamport", 0))
+                except (ValueError, TypeError, AttributeError):
+                    high = 0
+            out.append((p.name, size, high))
+        return LogMark(tuple(out))
+
+    @contextlib.contextmanager
+    def decide_then_append(self, decide: Callable[[], T]) -> Iterator[T]:
+        """Decide from a read made OUTSIDE the append lock, then hold the lock for the write.
+
+        Yields what `decide()` returned, with the lock held, for the caller to append
+        under. The invariant is not "the read happened inside the lock" but "the state the
+        decision is made from reflects every event at the moment of the append". Holding
+        the lock across the read is one way to get it; proving, under the lock, that the
+        log did not change is another, and it holds the lock for a handful of `stat` calls
+        (`mark(clock=False)`) instead of a read of every shard (~36x dearer on NFS). When
+        the mark HAS changed `decide()` runs again inside the lock, which is the old
+        behaviour exactly -- so `decide` must be safe to call twice, and must take any
+        clock it uses afresh.
+        """
+        before = self.mark(clock=False)
+        decided = decide()
+        with self.transaction():
+            if self.mark(clock=False) != before:
+                decided = decide()
+            yield decided
 
     # -- transactions ---------------------------------------------------------------
     @contextlib.contextmanager
@@ -1021,53 +1091,6 @@ class EventLog:
                     break
                 prev = e.lamport
         return out
-
-    def head(self) -> tuple[int, int, int]:
-        """`(shards, highest_lamport, total_bytes)` — the cheap fingerprint of the log.
-
-        O(shards): a stat per file and one tail read each, never a full parse. Exists
-        so a caller can answer "has anything changed?" without answering "what is
-        everything?" — `Store.stale` used to call `read_all()` to decide whether it
-        needed to call `read_all()`, which on the NFS mount this was designed against
-        cost ~36x the local read it was trying to avoid.
-
-        Byte count is in the fingerprint as well as the Lamport high-water mark because
-        two shards can be appended to concurrently: the highest Lamport can stay put
-        while a second agent's shard grows, and an index that missed that would serve
-        a stale answer while reporting itself current.
-
-        **One pass, size and tail read adjacently per shard.** It used to stat every
-        shard and then call `_highest_lamport()`, which walked them all again — so an
-        append landing between the two walks, carrying a Lamport value at or below the
-        current high, was invisible in BOTH components and the fingerprint came back
-        byte-identical to the pre-append one. That is exactly the interleaving the byte
-        count was added to catch, defeated by the read order. Reading a shard's size
-        and its tail together makes the two components describe the same observation of
-        that shard. (Raised THEORETICAL by the cross-family critic 2026-09-24; probe and
-        regression test in `tests/test_rubber_duck_findings.py`.)
-
-        The Lamport component is the highest TAIL, not the highest clock: after a union
-        merge of a shard with two writers they differ (see `_highest_lamport`). That is
-        harmless here -- the merge changed the byte count -- but do not take a clock
-        from it.
-        """
-        total = 0
-        shards = 0
-        high = 0
-        for p in self.shards():
-            try:
-                total += p.stat().st_size
-                shards += 1
-            except OSError:
-                continue
-            tail = _last_line(p)
-            if not tail:
-                continue
-            try:
-                high = max(high, int(json.loads(tail).get("lamport", 0)))
-            except (ValueError, TypeError):
-                continue
-        return shards, high, total
 
     # -- reading -------------------------------------------------------------------
     def _read_shard(self, path: Path) -> tuple[list[Event], int]:

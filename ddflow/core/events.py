@@ -24,7 +24,7 @@ from .digest import content_digest
 
 SCHEMA_VERSION = 1
 
-#: Initial bytes read when seeking a shard's last line (`EventLog.head`'s fingerprint),
+#: Initial bytes read when seeking a shard's last line (`EventLog.mark`'s clock),
 #: doubled until a full line is found. One page: large enough that a single read almost
 #: always suffices, small enough that the tail read stays cheap on NFS (measured ~36x
 #: local I/O cost). The Lamport clock no longer reads tails -- see

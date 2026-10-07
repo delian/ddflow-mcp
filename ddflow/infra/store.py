@@ -194,14 +194,14 @@ class Store:
             return True
         if row.get("similar_version") != str(textsim.VERSION):
             return True
-        # `EventLog.head()` is O(shards); the old comparison called `read_all()` to
+        # `EventLog.mark()` is O(shards); the old comparison called `read_all()` to
         # decide whether `read_all()` was needed, which is the shape of the problem
         # rather than a solution to it.
-        shards, lamport, size = log.head()
+        mark = log.mark()
         return (
-            row.get("lamport") != str(lamport)
-            or row.get("bytes") != str(size)
-            or row.get("shards") != str(shards)
+            row.get("lamport") != str(mark.lamport)
+            or row.get("bytes") != str(mark.bytes)
+            or row.get("shards") != str(mark.count)
         )
 
     # -- projection -----------------------------------------------------------------
@@ -253,7 +253,7 @@ class Store:
         # so at worst one unnecessary rebuild, never a missed event. (Raised
         # THEORETICAL by the cross-family critic 2026-09-24; probe in
         # `tests/test_critic_findings.py`.)
-        fingerprint = log.head()
+        fingerprint = log.mark()
         events = log.read_all()
         state = fold(events, strict=False)
         # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
@@ -372,7 +372,7 @@ class Store:
             # Written from the SAME cheap read `stale()` will use -- not recomputed
             # from `events`, which cannot produce a byte count at all -- and captured
             # BEFORE the events were read, so it can only under-report the log.
-            shards, high, size = fingerprint
+            shards, high, size = fingerprint.count, fingerprint.lamport, fingerprint.bytes
             for k, v in (("shards", shards), ("bytes", size)):
                 con.execute("insert or replace into meta values(?, ?)", (k, str(v)))
             con.execute(
