@@ -236,9 +236,7 @@ def claim(
         if exc.alternatives:
             reason += "\n\nYou could take instead: " + ", ".join(exc.alternatives)
         own = prior if prior is not None and prior.holder == exc.holder else None
-        lapsed = own is not None and bool(
-            own.expired_at or own.expired(time.time(), cfg.lease.grace_s)
-        )
+        lapsed = own is not None and not own.live(time.time(), cfg.lease.grace_s)
         if exc.holder and exc.holder != log.agent_id and not lapsed:
             _join_line(
                 repo,
@@ -427,12 +425,7 @@ def _prior_lease(st, cfg, item: str, me: str):
     re-claiming its own live lease only renews it."""
     it = st.items.get(item)
     prior = it.lease if it is not None else None
-    live = bool(
-        prior
-        and prior.holder == me
-        and not prior.expired_at
-        and not prior.expired(time.time(), cfg.lease.grace_s)
-    )
+    live = bool(prior and prior.holder == me and prior.live(time.time(), cfg.lease.grace_s))
     return prior, live
 
 

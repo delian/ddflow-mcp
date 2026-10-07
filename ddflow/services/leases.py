@@ -19,6 +19,7 @@ auto-deletes would have destroyed it. Recovery is: inspect, salvage, then releas
 
 from __future__ import annotations
 
+import contextlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -229,9 +230,7 @@ def acquire(
 def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
     it = _decide_from(log)[0].items.get(item_id)
     lease = it.lease if it else None
-    return bool(
-        lease and lease.holder == holder and not lease.expired(time.time(), cfg.lease.grace_s)
-    )
+    return bool(lease and lease.holder == holder and lease.live(time.time(), cfg.lease.grace_s))
 
 
 def _acquire_locked(
@@ -283,7 +282,7 @@ def _acquire_locked(
             )
 
         existing = it.lease
-        if existing and not existing.expired(now, cfg.lease.grace_s):
+        if existing and existing.live(now, cfg.lease.grace_s):
             if existing.holder == holder:
                 _record_claimed_globs(log, it, globs, resources)
                 return _renew_in_place(
@@ -534,10 +533,10 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         # when any new one is taken (`globs_withheld`).
         now = time.time()
         lease = it.lease
-        if lease is None or (not lease.expired_at and not lease.expired(now)):
+        if lease is None or lease.live(now):
             return False  # live even before any grace: no config to read
         cfg = Config.load(log.root)
-        if not (lease.expired_at or lease.expired(now, cfg.lease.grace_s)):
+        if lease.live(now, cfg.lease.grace_s):
             return False
         return glob_clash(state, cfg, it, holder, list(lease.globs), now) is not None
 
@@ -586,7 +585,7 @@ def plan_retarget(
     state = fold(log.read_all(), strict=False)
     it = state.items.get(item_id)
     lz = it.lease if it else None
-    if it is None or lz is None or lz.expired_at or lz.expired(now, cfg.lease.grace_s):
+    if it is None or lz is None or not lz.live(now, cfg.lease.grace_s):
         return None, ""
     clash = glob_clash(state, cfg, it, lz.holder, globs, now) if globs is not None else None
     if clash:
@@ -639,6 +638,74 @@ def retarget(
     if resources is not None:
         data["resources"] = list(resources)
     log.append("lease.renewed", item_id, data)
+
+
+def release_claim(
+    log: EventLog,
+    item_id: str,
+    *,
+    holder: str,
+    event: str,
+    by: str = "",
+    note: str = "",
+    transfer: bool = False,
+) -> None:
+    """Append the `lease.released` that ends ONE named claim (``holder``'s, granted by
+    ``event``). Used where the claim is named rather than looked up: a lost contest ends a
+    displaced claim (`resolve`), and a transfer ends the claim it hands on.
+    The caller holds ``log.transaction()`` and settles the remote claim ref itself
+    (`settle_remote`)."""
+    data: dict[str, Any] = {
+        "holder": holder,
+        "event": event,
+        "by": by or log.agent_id,
+        "note": note,
+    }
+    if transfer:
+        data["transfer"] = True
+    log.append("lease.released", item_id, data)
+
+
+def settle_remote(
+    log: EventLog, cfg: Config, item_id: str, *, dropped: list[str], kept: str = ""
+) -> None:
+    """After a claim moved: give back the remote claim ref of each ``dropped`` holder,
+    then (when ``kept``) take it for the holder that keeps the item. Outside the log
+    lock, best effort -- a ref not moved lapses at its expiry. No-op unless
+    `[flow].claims = "remote"`."""
+    if cfg.flow.claims != "remote":
+        return
+    for holder in dropped:
+        _remote_drop(log, item_id, holder)
+    if kept:
+        with contextlib.suppress(LeaseError):
+            _remote_take(log, cfg, item_id, kept, time.time())
+
+
+def transfer(
+    log: EventLog, item_id: str, lease: Lease, *, to: str, note: str, kind: str, now: float
+) -> None:
+    """Hand ``lease`` to ``to`` unchanged: release it as a transfer, then acquire it again
+    under the new holder with the same tree, branch, globs, resources and TTL. The caller
+    holds ``log.transaction()`` and calls `settle_remote` afterwards."""
+    release_claim(
+        log, item_id, holder=lease.holder, event=lease.event, by=to, note=note, transfer=True
+    )
+    log.append(
+        "lease.acquired",
+        item_id,
+        {
+            "holder": to,
+            "at": now,
+            "ttl_s": lease.ttl_s,
+            "globs": list(lease.globs),
+            "worktree": lease.worktree,
+            "branch": lease.branch,
+            "note": f"{lease.note} [{note}]" if lease.note else note,
+            "kind": kind,
+            "resources": list(lease.resources),
+        },
+    )
 
 
 def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bool:
@@ -725,7 +792,7 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
         if it.removed:
             continue
         lease = it.lease
-        if lease and lease.expired(now, cfg.lease.grace_s):
+        if lease and not lease.live(now, cfg.lease.grace_s):
             # Prefer whichever source actually names a tree. These should agree, and
             # after the renew fix they do -- but if they ever diverge, trusting the
             # empty one produces "nothing to salvage" over real work, which is the one
