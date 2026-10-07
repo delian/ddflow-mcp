@@ -29,15 +29,15 @@ def test_terminal_is_done_or_abandoned(state: str, terminal: bool) -> None:
 
 def _state() -> State:
     st = State()
-    for n, removed in (("b", False), ("a", True), ("c", False)):
+    for n, removed in (("c", False), ("a", True), ("b", False)):
         st.items[n] = Item(id=n, kind="task", removed=removed)
     return st
 
 
 def test_live_items_skips_removed_and_keeps_definition_order() -> None:
     st = _state()
-    assert [i.id for i in st.live_items()] == ["b", "c"]
-    assert list(st.live_by_id()) == ["b", "c"]
+    assert [i.id for i in st.live_items()] == ["c", "b"]
+    assert list(st.live_by_id()) == ["c", "b"]
     assert st.live_by_id()["b"] is st.items["b"]
 
 
