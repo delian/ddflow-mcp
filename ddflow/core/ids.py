@@ -205,14 +205,23 @@ def _default(kind: str) -> str:
     return str(getattr(IdsConfig(), kind))
 
 
-def _free(candidate: str, used: Any) -> str:
-    """``candidate``, or ``candidate-2``, ``-3`` ... -- the first one nobody holds."""
+def free(
+    candidate: str,
+    used: Any,
+    *,
+    numbered: Callable[[int], str] | None = None,
+    start: int = 2,
+) -> str:
+    """``candidate``, or the first numbered form of it nobody holds: ``numbered(start)``,
+    ``numbered(start + 1)`` ... -- by default ``candidate-2``, ``-3``. The one loop for
+    "the next free id" (a trigger's ``T-<trigger>-<n>``, an import's ``<id>-<n>``)."""
     if candidate not in used:
         return candidate
-    n = 2
-    while f"{candidate}-{n}" in used:
+    name = numbered or (lambda k: f"{candidate}-{k}")
+    n = start
+    while name(n) in used:
         n += 1
-    return f"{candidate}-{n}"
+    return name(n)
 
 
 def make(cfg: Config, kind: str, *, used: Any = (), **fields: Any) -> Minted:
@@ -232,10 +241,10 @@ def make(cfg: Config, kind: str, *, used: Any = (), **fields: Any) -> Minted:
         if holder not in (None, "", _record_kind(kind)):
             raise ValueError(f"the {kind} id {key} is already taken by a {holder}")
         return Minted(key, key)
-    key = _free(render(cfg, kind, used=holders, **fields), holders)
+    key = free(render(cfg, kind, used=holders, **fields), holders)
     if "{seq}" in template and template != default and "{seq}" not in default:
         # A key over an internal id minted as ever (D-id-schemes-final, 3).
-        internal = _free(_render_template(default, kind, fields), holders)
+        internal = free(_render_template(default, kind, fields), holders)
         return Minted(internal, key)
     return Minted(key, key)
 

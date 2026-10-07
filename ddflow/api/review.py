@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import family_for
+from ..core import clock
 from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
@@ -534,10 +535,8 @@ class _ReplyFile:
     def __init__(self, repo: Path, item: str, gate: str, reviewer: str) -> None:
         import re
         import threading
-        import time
-        import uuid
 
-        run = f"{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        run = clock.run_stamp()
         who = re.sub(r"[^A-Za-z0-9._-]", "_", reviewer)
         self.repo = repo
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"

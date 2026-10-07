@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core import ids as IDS
 from ..core import outcome as O
 from ._base import _load
@@ -114,9 +115,9 @@ def job_run(
         return O.failed("job.started", f"working directory {where} does not exist", id="")
     # The log path is chosen BEFORE the id exists, so it is named for the item and a
     # stamp; the id then records it.
-    # Nanoseconds, not seconds: two launches for one item in the same second shared a
+    # A token, not the time alone: two launches for one item in the same second shared a
     # log, truncating the first and interleaving both exit markers (roborev 835).
-    out = Path(log_file) if log_file else repo / JOB_LOG_DIR / f"{item}-{time.time_ns()}.log"
+    out = Path(log_file) if log_file else repo / JOB_LOG_DIR / f"{item}-{clock.run_stamp()}.log"
     try:
         pid = J.launch(command, where, out)
     except RuntimeError as exc:
