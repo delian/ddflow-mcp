@@ -757,9 +757,10 @@ _PRINTABLE_ASCII = (0x20, 0x7F)
 
 
 def _in_diff_header(headers: list[str], path: str) -> bool:
-    """Is ``path`` one side of a `diff --git a/<old> b/<new>` header line? The whole
-    token, both ends anchored: never the tail of another path (`foo` in `sub/foo`), its
-    head (`foo` in `foo2`), or text inside a hunk. `capture_diff` pins the `a/` and `b/`
+    """Is ``path`` one side of a `diff --git a/<old> b/<new>` header line? Anchored at
+    both ends: never the tail of another path (`foo` in `sub/foo`), its head (`foo` in
+    `foo2`), or text inside a hunk. Git leaves a name with a space unquoted, so `foo` can
+    still match the header of `foo bar` when both changed and only `foo bar` is shown. `capture_diff` pins the `a/` and `b/`
     prefixes, whatever `diff.noprefix` or `diff.mnemonicPrefix` say."""
     olds = (f"diff --git a/{path} ", f'diff --git "a/{path}" ')
     news = (f" b/{path}", f' "b/{path}"')
