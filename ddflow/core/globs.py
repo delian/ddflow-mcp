@@ -6,9 +6,10 @@ negate); a leading `/` anchors. Two named readings differ in ONE thing, whether 
 with no `/` is anchored at the root:
 
 * pathspec (the default): `README.md` is the root file -- git's `:(glob)` pathspec, the
-  `[enforce]` doc and code globs, importer sources and archive globs.
+  `[enforce]` doc and code globs.
 * ``bare_any_depth=True``: `README.md` is that name at any depth -- a `.gitattributes` or
-  `.gitignore` line, which is what `[lease] shared_globs` and lesson globs are written as.
+  `.gitignore` line, which is what `[lease] shared_globs`, lesson globs and `[importer]
+  archive_globs` are written as.
 
 `inside` (a claim covers a path) and `overlap` (two claims could share a file) are the two
 questions the lease conflict detector asks; they are built on the same translator.
