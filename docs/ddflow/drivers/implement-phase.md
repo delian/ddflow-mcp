@@ -178,11 +178,13 @@ A third full round is refused (exit 3). Recheck a fix with `ddflow review <ID> -
 review triage` — both are always allowed. `--force --reason "..."` is the operator's
 recorded exception; `ddflow config review.max_rounds N [--local]` (0 = unlimited,
 `review.on_exceed = "warn"` to warn only) changes the cap. Once a gate has a recorded
-review, a plain `ddflow review <ID> --gate G` IS that delta by default (`[review].delta_default`,
-on; the output says "delta review of N commits since <sha>", the findings merge into the
-gate's record and earlier triage stays); `--full` forces a full round, and a rebased branch
-falls back to a full round and says why. `ddflow config review.delta_default false [--local]`
-makes every review a full round again.
+review, a plain `ddflow review <ID> --gate G` is a FULL re-review: the item's whole diff plus
+the previous findings and your triage of each, so the reviewer checks each fix or probe and
+looks for new issues (decision D-gate-economy). `--delta` sends only the commits since the
+reviewed head (the output says "delta review of N commits since <sha>", the findings merge
+into the gate's record and earlier triage stays), for a diff too large to send twice;
+`ddflow config review.delta_default true [--local]` makes every plain re-review a delta
+(`--full` then still asks for a full round).
 
 **Tests: the relevant ones while you work, all of them at the gate, always in parallel.**
 

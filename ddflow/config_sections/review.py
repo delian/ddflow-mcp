@@ -16,7 +16,7 @@ class ReviewConfig:
 
     max_rounds: int = 2
     on_exceed: str = "refuse"  # refuse | warn
-    delta_default: bool = True
+    delta_default: bool = False
 
 
 _doc(
@@ -32,5 +32,5 @@ _doc(
 _doc(
     "review",
     "delta_default",
-    "Whether `ddflow review <id> --gate G` on a gate that already has a recorded review rechecks ONLY the commits since the head that review covered (default true) instead of the whole diff again. The delta's findings and coverage are merged into the gate's record (earlier findings keep their triage when byte-identical), it is not a full round, and the output says 'delta review of N commits since <sha>' so it is never mistaken for a full pass. `--full` forces a full round (counted against review.max_rounds); a branch that was rebased since (the reviewed head is no ancestor) and, for the automatic delta, a prior review that was partial fall back to a full round and say why; a review that never reached a reviewer records no reviewed head, so the next delta starts from the last real one. false = every review is a full round, the behaviour before this knob. Change it for the project (`ddflow config review.delta_default false`), for this machine (add --local), per run (DDFLOW_REVIEW_DELTA_DEFAULT=0), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
+    "Whether `ddflow review <id> --gate G` on a gate that already has a recorded review rechecks ONLY the commits since the head that review covered, instead of the whole diff. Default false (decision D-gate-economy 3): a re-review sends the item's WHOLE diff against its base together with the previous findings and the author's triage of each, so the reviewer confirms each one against the current code and looks for new issues -- a delta that saw only the follow-up commit kept reporting the fix as absent. A re-review is a full round (counted against review.max_rounds). true = the automatic delta: the delta's findings and coverage are merged into the gate's record (earlier findings keep their triage when byte-identical), it is not a full round, and the output says 'delta review of N commits since <sha>'; a rebased branch or a partial prior review falls back to a full round and says why. `--delta` asks for one delta whatever the default (for a very large diff); `--full` forces a full round. Change it for the project (`ddflow config review.delta_default true`), for this machine (add --local), per run (DDFLOW_REVIEW_DELTA_DEFAULT=1), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
 )
