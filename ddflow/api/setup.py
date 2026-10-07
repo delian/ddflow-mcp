@@ -997,10 +997,9 @@ def hooks(
     return _hooks_status(repo, cfg)
 
 
-def _prompts_get(repo: Path, name: str, pairs: list[str], problems: list[str]) -> O.Outcome:
-    """`prompts get`: a workflow command or macro rendered as MCP `prompts/get` gives it."""
-    from ..services import prompts as P
-    from ..services.macros import MacroError
+def _prompts_get(P, repo: Path, name: str, pairs: list[str], problems: list[str]) -> O.Outcome:
+    """`prompts get`: a workflow command or macro rendered as MCP `prompts/get` gives it.
+    ``P`` is `services.prompts`, passed in by `prompts`, which already imported it."""
 
     def failed(why: str) -> O.Outcome:
         return O.failed("prompts", why, rows=[], action="get", text="", written=[], skipped=[])
@@ -1011,15 +1010,15 @@ def _prompts_get(repo: Path, name: str, pairs: list[str], problems: list[str]) -
         if not eq or not key.strip():
             return failed(f"argument {pair!r}: expected KEY=VALUE")
         args[key.strip()] = value
-    if name in P.TEMPLATE_NAMES:
+    if name in P.TEMPLATE_NAMES and name not in P.all_commands(repo):
         return failed(
             f"{name!r} is a template, not a workflow command: it takes no arguments from a "
             f"caller. `ddflow prompts show {name}` prints it."
         )
     try:
         text = P.render_command(name, repo, args)
-    except (P.TemplateError, MacroError) as exc:
-        return failed(str(exc) + ("" if name in P.all_commands(repo) else P.not_loaded_note(repo)))
+    except P.TemplateError as exc:
+        return failed(str(exc))
     return O.ok(
         "prompts",
         rows=[],
@@ -1094,7 +1093,7 @@ def prompts(
                 "prompts", str(exc), rows=[], action=action, text="", written=[], skipped=[]
             )
     if action == "get":
-        return _prompts_get(repo, name, arg or [], problems)
+        return _prompts_get(P, repo, name, list(arg or []), problems)
     if action == "eject":
         # With no name, everything -- BOTH registries, plus any `[[macro]]`. Writing only
         # the templates would mean the documented way to edit a workflow command does not
@@ -1134,7 +1133,7 @@ def prompts(
         )
     return O.failed(
         "prompts",
-        f"unknown action {action!r}; known: list, show, eject",
+        f"unknown action {action!r}; known: list, show, get, eject",
         rows=[],
         action=action,
         text="",

@@ -560,10 +560,15 @@ def suite_gates(repo: Path) -> list[str]:
     return sorted(
         g.id
         for g in gates.values()
-        if g.id != "unit_tests"
-        and g.is_command_gate
-        and any(w in g.id for w in ("test", "e2e", "smoke", "integration", "ui"))
+        if g.id != "unit_tests" and g.is_command_gate and _looks_like_a_suite(g.id)
     )
+
+
+def _looks_like_a_suite(gate_id: str) -> bool:
+    """`ui` only as a whole word: as a substring it matched `build` and `require`
+    (B-suite-gates-ui, found reviewing B5a2a2933c9)."""
+    words = re.split(r"[^a-z0-9]+", gate_id.lower())
+    return "ui" in words or any(w in gate_id for w in ("test", "e2e", "smoke", "integration"))
 
 
 def render_command(name: str, repo: Path, args: dict[str, Any] | None = None) -> str:
@@ -576,8 +581,8 @@ def render_command(name: str, repo: Path, args: dict[str, Any] | None = None) ->
     REQUIRED and its tool preamble goes on top (`macros.render`): an operator who declares
     a parameter is saying the mode does not make sense without it.
 
-    Raises `TemplateError` for an unknown name and `macros.MacroError` for a macro that
-    refuses (a missing parameter).
+    Raises `TemplateError` for an unknown name, a macro config that could not be read
+    (with the reason, as MCP says it) and a macro that refuses (a missing parameter).
     """
     args = dict(args or {})
     if name in COMMANDS:
@@ -587,11 +592,16 @@ def render_command(name: str, repo: Path, args: dict[str, Any] | None = None) ->
         )
     from . import macros as M
 
-    macro = M.load_macros(repo).get(name)
+    macro = _macro_report(repo)[0].get(name)
     if macro is None:
-        resolve_command(name, repo)  # raises the "unknown command ... Known:" error
-        raise TemplateError(f"unknown command {name!r}")
-    return M.render(macro, repo, {k: str(v) for k, v in args.items()})
+        raise TemplateError(
+            f"unknown prompt {name!r}. Known: {', '.join(sorted(all_commands(repo)))}"
+            + not_loaded_note(repo)
+        )
+    try:
+        return M.render(macro, repo, {k: str(v) for k, v in args.items()})
+    except M.MacroError as exc:
+        raise TemplateError(str(exc)) from exc
 
 
 def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] | None = None):
