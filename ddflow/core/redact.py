@@ -23,8 +23,7 @@ Properties the callers rely on:
 * conservative about versions -- `v0.11.0.1` and `0.1.7` are not addresses.
 
 The secret patterns are the session redaction patterns (`redact_patterns` plus
-`redact_extra`), imported, not copied. Callers pass the loaded `Config` as `cfg`; with
-none, only the built-in defaults apply. A bad caller-supplied pattern is a configuration error and raises:
+`redact_extra`), passed in by the caller. A bad pattern is a configuration error and raises:
 a control that silently stops matching is the failure mode that matters.
 """
 
@@ -37,8 +36,6 @@ import socket
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from ..config import Config, SessionConfig
 
 #: The tool's own names are public, and a report about ddflow must still say "ddflow".
 PUBLIC_NAMES = frozenset({"ddflow", "ddflow-mcp", "ddflow_mcp"})
@@ -173,15 +170,14 @@ def _coerce(text: object) -> str:
         return ""
 
 
-def redact_report(
+def redact_text(
     text: object,
     *,
+    secret_patterns: Iterable[str],
     hostname: str | None = None,
     names: Iterable[str] = (),
     home: str | os.PathLike[str] | None = None,
     repo_root: str | os.PathLike[str] | None = None,
-    cfg: Config | None = None,
-    secret_patterns: Iterable[str] | None = None,
     secret_style: str = "marker",
 ) -> Redacted:
     """Redact `text` for an upstream report. Returns the text and a count per kind.
@@ -192,19 +188,14 @@ def redact_report(
     case-insensitively on word boundaries); the caller adds `[upstream].redact_extra`
     once that section exists. The repo directory name is added here. `hostname`, `home`
     and `repo_root` default to the machine's own at run time (the repo root is found by
-    walking up from the working directory to a `.git`). Secrets use the session
-    patterns of `cfg` (`redact_patterns` and `redact_extra`) or the built-in defaults.
+    walking up from the working directory to a `.git`). Secrets use `secret_patterns` (the
+    session `redact_patterns` and `redact_extra`; the services layer supplies them from the
+    config, since `core` cannot read it).
     `secret_style` "mask" keeps the surrounding words (`api_key: [REDACTED]`, the event
     log's style); "marker" (the default) replaces the match by `[REDACTED:secret]`.
     """
     p = _Pass(_coerce(text))
-    session = cfg.session if cfg is not None else SessionConfig()
-    patterns = (
-        list(secret_patterns)
-        if secret_patterns is not None
-        else [*session.redact_patterns, *session.redact_extra]
-    )
-    for pat in patterns:
+    for pat in secret_patterns:
         try:
             compiled = re.compile(pat)
         except re.error as exc:
@@ -308,12 +299,6 @@ def _mask(s: str) -> str:
     return "[REDACTED]"
 
 
-def names_for(cfg: Config | None) -> list[str]:
-    """Project names to redact as words: ``[upstream].redact_extra`` if that section exists."""
-    up = getattr(cfg, "upstream", None)
-    return [str(n) for n in (getattr(up, "redact_extra", None) or [])]
-
-
 @dataclass(frozen=True)
 class Profile:
     """Which machine-local inputs a profile reads. `None` means "the machine's own at run
@@ -348,14 +333,15 @@ _WORD = re.compile(r"[a-z][a-z0-9_-]{0,23}")
 
 
 class Redactor:
-    """`Redactor("view", cfg).text(s)` is the one way to redact a string."""
+    """`Redactor("view", secret_patterns=...).text(s)`; `services.redact_report.redactor`
+    builds one from the config."""
 
     def __init__(
         self,
         profile: str,
-        cfg: Config | None = None,
         *,
-        names: Iterable[str] | None = None,
+        secret_patterns: Iterable[str],
+        names: Iterable[str] = (),
         hostname: str | None = None,
         home: str | None = None,
         repo_root: str | None = None,
@@ -364,20 +350,20 @@ class Redactor:
             raise ValueError(f"unknown redaction profile {profile!r}; one of {', '.join(PROFILES)}")
         base = PROFILES[profile]
         self.profile = base
-        self.cfg = cfg
-        self.names = list(names) if names is not None else names_for(cfg)
+        self.secret_patterns = list(secret_patterns)
+        self.names = list(names)
         self.hostname = base.hostname if hostname is None else hostname
         self.home = base.home if home is None else home
         self.repo_root = base.repo_root if repo_root is None else repo_root
 
     def text(self, text: object) -> Redacted:
-        return redact_report(
+        return redact_text(
             text,
+            secret_patterns=self.secret_patterns,
             hostname=self.hostname,
             names=self.names,
             home=self.home,
             repo_root=self.repo_root,
-            cfg=self.cfg,
             secret_style=self.profile.secrets,
         )
 
