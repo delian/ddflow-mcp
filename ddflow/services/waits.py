@@ -67,6 +67,10 @@ class Waiter:
     since: float = 0.0
     until: float = 0.0
     pid: int = 0
+    #: The kernel's start time of ``pid`` when it registered (`jobs.proc_start`): a pid
+    #: the kernel has since handed to another process does not keep a dead wait live
+    #: (B7395b84149). "" for a registration written before this field, or off Linux.
+    pid_start: str = ""
     host: str = ""
     #: Deadline-only: valid until ``until`` whatever its process does. Set when a wait
     #: WAKES (the process then exits, and the agent claims in another one) and for a
@@ -90,7 +94,7 @@ class Waiter:
             # Another machine sharing the checkout (NFS). Its pid means nothing here, so
             # the deadline is the only evidence -- and it has not passed.
             return True
-        return _pid_alive(self.pid)
+        return _pid_alive(self.pid, self.pid_start)
 
     def reserves(self) -> bool:
         """Does this place hold a file against others? A `wait` does; a polling claim only
@@ -109,12 +113,17 @@ class Waiter:
         }
 
 
-def _pid_alive(pid: int) -> bool:
+def _pid_alive(pid: int, started: str = "") -> bool:
     # `jobs.alive` is the one liveness test (it also sees through zombies). pid 0 is
     # guarded here because `kill(0, 0)` signals the whole process GROUP and succeeds.
-    from .jobs import alive
+    from .jobs import alive, proc_start
 
-    return pid > 0 and alive(pid)
+    if not (pid > 0 and alive(pid)):
+        return False
+    # Alive -- but the same process? A start time that differs is a reused pid. One that
+    # cannot be read now ("") says nothing either way, so it does not overrule `alive`.
+    now = proc_start(pid) if started else ""
+    return not (started and now and now != started)
 
 
 def _dir(repo: Path) -> Path:
@@ -136,6 +145,10 @@ def register(repo: Path, w: Waiter) -> Waiter:
     with contextlib.suppress(OSError):
         fsio.ensure_ignored_dir(d.parent)
     w.pid = w.pid or os.getpid()
+    if not w.pid_start:
+        from .jobs import proc_start
+
+        w.pid_start = proc_start(w.pid)
     w.host = w.host or socket.gethostname()
     w.since = w.since or time.time()
     if not w.path:
@@ -277,7 +290,7 @@ def _well_formed(w: Waiter) -> bool:
             return False  # an integer too large for a float: arithmetic on it would raise
 
     return (
-        all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host))
+        all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host, w.pid_start))
         and isinstance(w.waiting_on, list)
         and all(isinstance(i, str) for i in w.waiting_on)
         and num(w.since)
