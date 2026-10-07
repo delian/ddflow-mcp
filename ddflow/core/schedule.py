@@ -24,7 +24,7 @@ from __future__ import annotations
 import functools
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
@@ -220,6 +220,23 @@ def path_in_glob(path: str, glob: str) -> bool:
         return bool(_gitattributes_re(glob).match(path))
     except re.error:
         return False
+
+
+def stale_package_globs(globs: Iterable[str], tracked: Iterable[str]) -> list[tuple[str, str]]:
+    """(glob, correction) for each literal `x.py` glob that is not a tracked file while a
+    package `x/` is: the module was split into a package, and a lease on the old name covers
+    none of its files, so the conflict detector cannot see two tasks editing them
+    (B56dc2baaf6). A glob matching nothing with no such package is a file the task will
+    create, and is left alone."""
+    files = list(tracked)
+    out = []
+    for g in globs:
+        if not g.endswith(".py") or any(c in g for c in "*?[") or g in files:
+            continue
+        pkg = g[: -len(".py")] + "/"
+        if any(f.startswith(pkg) for f in files):
+            out.append((g, pkg))
+    return out
 
 
 def shared_globs(cfg: Config) -> list[str]:
