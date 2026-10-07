@@ -314,17 +314,26 @@ DEFAULT_GATES: dict[str, GateDef] = {
 _REQUIRED_WARNED: set[tuple[str, str]] = set()
 
 
-def _required_in_gate_table(root: Path, gid: str, value: object, lenient: bool) -> None:
+def _required_in_gate_table(
+    root: Path, cfg: Config, gid: str, value: object, lenient: bool
+) -> None:
     """`[gate.<id>] required` is not read: what is required is `[gates].required`, which
     every enforcement point (status, complete, verify, workflow) reads (B4d206ede45). It
     used to be accepted and ignored, so a gate its own table marked required was never
-    enforced. Refused in ddflow's own tree, where config and code are one commit; elsewhere
-    warned about once per process and root -- every CLI command -- and skipped (an older
+    enforced -- and one marked `false` stayed required. Said when the table disagrees with
+    the knob (agreeing is redundant, not wrong), with the edit that does what it says:
+    refused in ddflow's own tree, where config and code are one commit; elsewhere warned
+    about once per process and root -- every CLI command -- and skipped (an older
     checkout's config must not stop it)."""
-    why = (
-        f"[gate.{gid}] sets required = {value!r}, which ddflow does not read: list {gid!r} "
-        f"in [gates].required in .ddflow/config.toml instead"
+    listed = gid in cfg.gates.required
+    if bool(value) == listed:
+        return
+    fix = (
+        f"list {gid!r} in [gates].required in .ddflow/config.toml to require it"
+        if value
+        else f"take {gid!r} out of [gates].required to stop requiring it"
     )
+    why = f"[gate.{gid}] sets required = {value!r}, which ddflow does not read: {fix}"
     if not lenient:
         raise ValueError(why)
     if (str(root), gid) not in _REQUIRED_WARNED:
@@ -363,7 +372,7 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
         tomlcfg.config_paths(root, "gates.toml"), "gate", GateDef, lenient=lenient
     ).items():
         if "required" in spec:
-            _required_in_gate_table(root, gid, spec.pop("required"), lenient)
+            _required_in_gate_table(root, cfg, gid, spec.pop("required"), lenient)
         base = gates.get(gid) or GateDef(id=gid)
         for k, v in spec.items():
             setattr(base, k, v)

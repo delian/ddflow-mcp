@@ -46,6 +46,7 @@ import re  # noqa: F401
 import shlex  # noqa: F401
 import shutil  # noqa: F401
 import socket  # noqa: F401
+import sys  # noqa: F401
 import time  # noqa: F401
 import tomllib  # noqa: F401
 from collections.abc import Callable, Iterable, Mapping  # noqa: F401
@@ -61,8 +62,10 @@ from ...infra import fsio  # noqa: F401
 from ...infra import proc as P  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from .defs import (  # noqa: F401
+    _REQUIRED_WARNED,
     DEFAULT_GATES,
     GateDef,
+    _required_in_gate_table,
     inert_requirements,
     load_gates,
     pipeline_for,
