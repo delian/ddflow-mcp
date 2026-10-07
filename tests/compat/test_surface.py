@@ -50,6 +50,19 @@ def load(version: str) -> dict:
     return json.loads((SURFACES / f"{version}.json").read_text())
 
 
+def _positionals(path: str, old: list, new: list) -> list[str]:
+    """Positionals are matched by place: the old ones must keep their name and stay as
+    optional as they were, and a new one may only be optional (a required one is demanded of
+    every existing caller)."""
+    out = []
+    for i, (name, required) in enumerate(old):
+        if i >= len(new) or new[i][0] != name or (new[i][1] and not required):
+            out.append(f"positionals changed: {path}")
+            break
+    out += [f"positional added as required: {path} {name}" for name, req in new[len(old) :] if req]
+    return out
+
+
 def breaking(a: dict, b: dict) -> list[str]:
     """What ``b`` took away from, or changed in, what ``a`` exposed: not what it added."""
     out: list[str] = []
@@ -59,8 +72,7 @@ def breaking(a: dict, b: dict) -> list[str]:
             out.append(f"command removed: {path}")
             continue
         out += [f"flag removed: {path} {flag}" for flag in cmd["flags"] if flag not in new["flags"]]
-        if cmd["positionals"] != new["positionals"]:  # a new positional is required of every caller
-            out.append(f"positionals changed: {path}")
+        out += _positionals(path, cmd["positionals"], new["positionals"])
     for name, args in a["tools"].items():
         new = b["tools"].get(name)
         if new is None:
@@ -129,11 +141,14 @@ def test_no_release_breaks_what_the_one_before_it_exposed_unless_declared() -> N
 
 def test_the_breaking_detector_sees_what_it_is_for() -> None:
     a = {
-        "cli": {"ddflow": {"flags": ["--x", "--y"], "positionals": ["a"]}, "ddflow gone": {}},
+        "cli": {
+            "ddflow": {"flags": ["--x", "--y"], "positionals": [["a", True]]},
+            "ddflow gone": {},
+        },
         "tools": {"t": {"k": ["string", False], "r": ["string", False]}, "gone": {}},
     }
     b = {
-        "cli": {"ddflow": {"flags": ["--x"], "positionals": ["b"]}},
+        "cli": {"ddflow": {"flags": ["--x"], "positionals": [["b", True]]}},
         "tools": {"t": {"k": ["integer", False], "r": ["string", True], "n": ["string", True]}},
     }
     assert breaking(a, b) == [
@@ -146,10 +161,25 @@ def test_the_breaking_detector_sees_what_it_is_for() -> None:
         "tool removed: gone",
     ]
     assert breaking(b, b) == []  # nothing is a break against itself
-    wider = {"cli": {"ddflow": {"flags": ["--x", "--z"], "positionals": ["b"]}}, "tools": {}}
-    assert breaking({"cli": b["cli"], "tools": {}}, wider) == []  # a new flag is allowed
-    longer = {"cli": {"ddflow": {"flags": ["--x"], "positionals": ["b", "c"]}}, "tools": {}}
-    assert breaking({"cli": b["cli"], "tools": {}}, longer) == ["positionals changed: ddflow"]
+
+
+def _cli(flags: list[str], positionals: list[list]) -> dict:
+    return {"cli": {"ddflow": {"flags": flags, "positionals": positionals}}, "tools": {}}
+
+
+def test_what_a_release_may_add_to_a_command() -> None:
+    base = _cli(["--x"], [["a", True]])
+    assert breaking(base, _cli(["--x", "--z"], [["a", True]])) == []  # a new flag
+    assert (
+        breaking(base, _cli(["--x"], [["a", True], ["b", False]])) == []
+    )  # an optional positional
+    assert breaking(base, _cli(["--x"], [["a", True], ["b", True]])) == [
+        "positional added as required: ddflow b"
+    ]
+    assert breaking(_cli([], [["a", False]]), _cli([], [["a", True]])) == [
+        "positionals changed: ddflow"
+    ]  # optional became required
+    assert breaking(base, _cli(["--x"], [])) == ["positionals changed: ddflow"]
 
 
 @pytest.mark.slow

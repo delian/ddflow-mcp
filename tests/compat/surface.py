@@ -9,8 +9,8 @@ release since 0.1.3 has: `ddflow.surfaces.cli.build_parser`, the MCP tool table
 
     python tests/compat/surface.py            # prints the surface of the running release
 
-    cli          command path -> {"flags": [...], "positionals": [...]}  (every name a
-                 sub-command answers to, aliases included; -h/--help left out)
+    cli          command path -> {"flags": [...], "positionals": [[name, required], ...]}
+                 (every name a sub-command answers to, aliases included; -h/--help left out)
     tools        MCP tool -> {argument: [type, required]}
     knobs        "section.knob" -> default
     event_kinds  every kind the fold interprets
@@ -40,7 +40,7 @@ def _cli() -> dict[str, Any]:
             elif action.option_strings:
                 flags.update(s for s in action.option_strings if s not in ("-h", "--help"))
             else:
-                positionals.append(action.dest)
+                positionals.append([action.dest, bool(action.required)])
         found[path] = {"flags": sorted(flags), "positionals": positionals}
         for name, sub in subs:
             walk(sub, f"{path} {name}")

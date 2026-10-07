@@ -21,7 +21,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow adopt": {
@@ -50,8 +53,14 @@
     "--repo"
    ],
    "positionals": [
-    "id",
-    "gate"
+    [
+     "id",
+     true
+    ],
+    [
+     "gate",
+     true
+    ]
    ]
   },
   "ddflow bisect": {
@@ -69,7 +78,10 @@
     "--timeout"
    ],
    "positionals": [
-    "victim"
+    [
+     "victim",
+     true
+    ]
    ]
   },
   "ddflow block": {
@@ -82,7 +94,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow board": {
@@ -146,7 +161,10 @@
     "--verify-reason"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow bug found": {
@@ -182,7 +200,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow bug list": {
@@ -210,7 +231,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow cadence": {
@@ -241,7 +265,10 @@
     "--stage"
    ],
    "positionals": [
-    "verb"
+    [
+     "verb",
+     false
+    ]
    ]
   },
   "ddflow claim": {
@@ -258,7 +285,10 @@
     "--resources"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow cleanup": {
@@ -326,7 +356,10 @@
     "--sha"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow config": {
@@ -343,7 +376,10 @@
     "--set"
    ],
    "positionals": [
-    "value"
+    [
+     "value",
+     false
+    ]
    ]
   },
   "ddflow decision": {
@@ -393,7 +429,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow decision list": {
@@ -419,7 +458,10 @@
     "--repo"
    ],
    "positionals": [
-    "query"
+    [
+     "query",
+     true
+    ]
    ]
   },
   "ddflow decision show": {
@@ -431,7 +473,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow decision supersede": {
@@ -444,7 +489,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow doctor": {
@@ -501,8 +549,14 @@
     "--yes"
    ],
    "positionals": [
-    "doc",
-    "target"
+    [
+     "doc",
+     false
+    ],
+    [
+     "target",
+     false
+    ]
    ]
   },
   "ddflow external": {
@@ -544,8 +598,14 @@
     "--repo"
    ],
    "positionals": [
-    "knob",
-    "value"
+    [
+     "knob",
+     true
+    ],
+    [
+     "value",
+     true
+    ]
    ]
   },
   "ddflow flow show": {
@@ -585,8 +645,14 @@
     "--reviewer-model"
    ],
    "positionals": [
-    "id",
-    "gate"
+    [
+     "id",
+     true
+    ],
+    [
+     "gate",
+     true
+    ]
    ]
   },
   "ddflow gate run": {
@@ -598,8 +664,14 @@
     "--repo"
    ],
    "positionals": [
-    "id",
-    "gate"
+    [
+     "id",
+     true
+    ],
+    [
+     "gate",
+     true
+    ]
    ]
   },
   "ddflow gate skip": {
@@ -617,8 +689,14 @@
     "--repo"
    ],
    "positionals": [
-    "id",
-    "gate"
+    [
+     "id",
+     true
+    ],
+    [
+     "gate",
+     true
+    ]
    ]
   },
   "ddflow gate status": {
@@ -630,7 +708,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow gate verify": {
@@ -642,8 +723,14 @@
     "--repo"
    ],
    "positionals": [
-    "id",
-    "gate"
+    [
+     "id",
+     true
+    ],
+    [
+     "gate",
+     true
+    ]
    ]
   },
   "ddflow heartbeat": {
@@ -655,7 +742,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow help": {
@@ -667,7 +757,10 @@
     "--repo"
    ],
    "positionals": [
-    "topic"
+    [
+     "topic",
+     false
+    ]
    ]
   },
   "ddflow history": {
@@ -714,7 +807,10 @@
     "--repo"
    ],
    "positionals": [
-    "msg_file"
+    [
+     "msg_file",
+     true
+    ]
    ]
   },
   "ddflow hooks install": {
@@ -829,7 +925,10 @@
     "--repo"
    ],
    "positionals": [
-    "item"
+    [
+     "item",
+     true
+    ]
    ]
   },
   "ddflow job end": {
@@ -844,7 +943,10 @@
     "--repo"
    ],
    "positionals": [
-    "job"
+    [
+     "job",
+     true
+    ]
    ]
   },
   "ddflow job list": {
@@ -870,8 +972,14 @@
     "--repo"
    ],
    "positionals": [
-    "item",
-    "command"
+    [
+     "item",
+     true
+    ],
+    [
+     "command",
+     true
+    ]
    ]
   },
   "ddflow lesson": {
@@ -936,7 +1044,10 @@
     "--repo"
    ],
    "positionals": [
-    "query"
+    [
+     "query",
+     true
+    ]
    ]
   },
   "ddflow lesson verify": {
@@ -962,7 +1073,10 @@
     "--repo"
    ],
    "positionals": [
-    "subject"
+    [
+     "subject",
+     true
+    ]
    ]
   },
   "ddflow loops": {
@@ -1011,7 +1125,10 @@
     "--tags"
    ],
    "positionals": [
-    "text"
+    [
+     "text",
+     true
+    ]
    ]
   },
   "ddflow memory forget": {
@@ -1023,7 +1140,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow memory list": {
@@ -1054,7 +1174,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow next": {
@@ -1080,7 +1203,10 @@
     "--repo"
    ],
    "positionals": [
-    "stage"
+    [
+     "stage",
+     false
+    ]
    ]
   },
   "ddflow phase": {
@@ -1115,7 +1241,10 @@
     "--title"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow phase list": {
@@ -1145,7 +1274,10 @@
     "--top"
    ],
    "positionals": [
-    "document"
+    [
+     "document",
+     true
+    ]
    ]
   },
   "ddflow pr": {
@@ -1191,7 +1323,10 @@
     "--thread"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow precommit": {
@@ -1215,7 +1350,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     false
+    ]
    ]
   },
   "ddflow promote": {
@@ -1238,7 +1376,10 @@
     "--repo"
    ],
    "positionals": [
-    "env"
+    [
+     "env",
+     true
+    ]
    ]
   },
   "ddflow promote deployed": {
@@ -1251,7 +1392,10 @@
     "--sha"
    ],
    "positionals": [
-    "env"
+    [
+     "env",
+     true
+    ]
    ]
   },
   "ddflow promote status": {
@@ -1284,7 +1428,10 @@
     "--repo"
    ],
    "positionals": [
-    "name"
+    [
+     "name",
+     false
+    ]
    ]
   },
   "ddflow prompts list": {
@@ -1306,7 +1453,10 @@
     "--repo"
    ],
    "positionals": [
-    "name"
+    [
+     "name",
+     true
+    ]
    ]
   },
   "ddflow rebuild": {
@@ -1331,7 +1481,10 @@
     "--sources"
    ],
    "positionals": [
-    "query"
+    [
+     "query",
+     true
+    ]
    ]
   },
   "ddflow recover": {
@@ -1356,7 +1509,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow remove": {
@@ -1369,7 +1525,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow render": {
@@ -1426,7 +1585,10 @@
     "--verdict"
    ],
    "positionals": [
-    "verb"
+    [
+     "verb",
+     false
+    ]
    ]
   },
   "ddflow resolve": {
@@ -1440,7 +1602,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow review": {
@@ -1466,7 +1631,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     false
+    ]
    ]
   },
   "ddflow reviewers": {
@@ -1506,7 +1674,10 @@
     "--repo"
    ],
    "positionals": [
-    "name"
+    [
+     "name",
+     false
+    ]
    ]
   },
   "ddflow reviewers detect": {
@@ -1550,7 +1721,10 @@
     "--repo"
    ],
    "positionals": [
-    "name"
+    [
+     "name",
+     false
+    ]
    ]
   },
   "ddflow rule": {
@@ -1602,7 +1776,10 @@
     "--title"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow rule list": {
@@ -1626,7 +1803,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow rule search": {
@@ -1643,7 +1823,10 @@
     "--tag"
    ],
    "positionals": [
-    "query"
+    [
+     "query",
+     true
+    ]
    ]
   },
   "ddflow rule show": {
@@ -1655,7 +1838,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow search": {
@@ -1675,7 +1861,10 @@
     "--state"
    ],
    "positionals": [
-    "query"
+    [
+     "query",
+     true
+    ]
    ]
   },
   "ddflow session": {
@@ -1708,7 +1897,10 @@
     "--summary"
    ],
    "positionals": [
-    "session"
+    [
+     "session",
+     true
+    ]
    ]
   },
   "ddflow session list": {
@@ -1736,7 +1928,10 @@
     "--text"
    ],
    "positionals": [
-    "session"
+    [
+     "session",
+     false
+    ]
    ]
   },
   "ddflow session prompt": {
@@ -1750,7 +1945,10 @@
     "--text"
    ],
    "positionals": [
-    "session"
+    [
+     "session",
+     false
+    ]
    ]
   },
   "ddflow session show": {
@@ -1762,7 +1960,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow session start": {
@@ -1786,7 +1987,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow similar": {
@@ -1799,7 +2003,10 @@
     "--repo"
    ],
    "positionals": [
-    "text"
+    [
+     "text",
+     true
+    ]
    ]
   },
   "ddflow split": {
@@ -1814,7 +2021,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow status": {
@@ -1863,7 +2073,10 @@
     "--title"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow task list": {
@@ -1904,7 +2117,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow update": {
@@ -1925,7 +2141,10 @@
     "--worktree"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow verify": {
@@ -1945,7 +2164,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     false
+    ]
    ]
   },
   "ddflow version": {
@@ -2023,7 +2245,10 @@
     "--repo"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow workflow gate": {
@@ -2046,7 +2271,10 @@
     "--title"
    ],
    "positionals": [
-    "id"
+    [
+     "id",
+     true
+    ]
    ]
   },
   "ddflow workflow pipeline": {
@@ -2059,8 +2287,14 @@
     "--repo"
    ],
    "positionals": [
-    "which",
-    "gates"
+    [
+     "which",
+     true
+    ],
+    [
+     "gates",
+     true
+    ]
    ]
   },
   "ddflow workflow state": {
