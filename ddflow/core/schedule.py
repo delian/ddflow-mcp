@@ -409,12 +409,16 @@ def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
     make that child wait for itself, and a plan typo would become a permanent hang.
     Beneath an umbrella, such a dependency is satisfied by running, not by waiting;
     the umbrella still carries it, and the umbrella cannot close early anyway.
+
+    Nor is one pointing at one of ``it``'s own ancestors: A needs its child C, and C's
+    sub-task D inherited "C is open" while C, an umbrella, waited on D (B43447abfc8).
+    An ancestor closes only after ``it`` does, so waiting on it is the same hang.
     """
     pairs: list[tuple[str, str]] = [(it.id, d) for d in it.needs]
     ancestors = state.ancestors(it.id)
     if not ancestors:
         return pairs
-    mine = state.descendants(it.id) | {it.id}
+    mine = state.descendants(it.id) | {it.id} | {a.id for a in ancestors}
     for anc in ancestors:
         pairs += [(anc.id, d) for d in anc.needs if d not in mine]
     seen: set[tuple[str, str]] = set()
