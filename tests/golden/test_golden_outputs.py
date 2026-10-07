@@ -37,7 +37,10 @@ def test_export(doc, ddflow, snapshot):
 
 
 def test_the_export_list_names_every_document_pinned_here(ddflow):
-    """A new export document must be added to EXPORTS, or it ships unpinned."""
+    """A new export document must be added to EXPORTS, or it ships unpinned. The listing is
+    a table: a header row, one row per document (its name first), then a blank line."""
     _, listing = ddflow("export")
-    rows = [line.split()[0] for line in listing.splitlines()[1:] if line and not line[0].isspace()]
-    assert [r for r in rows if r.islower() and r.isalpha()] == EXPORTS
+    lines = listing.splitlines()
+    assert lines[0].split()[0] == "DOCUMENT"
+    rows = [line.split()[0] for line in lines[1 : lines.index("")]]
+    assert rows == EXPORTS
