@@ -10,7 +10,6 @@
 ignore_imports = [
     # home
     "ddflow.infra.fsio -> fcntl",
-    "ddflow.api.operations -> tempfile",
     "ddflow.infra.forge -> tempfile",
     "ddflow.infra.worktree -> tempfile",
     "ddflow.services.changelog_cut -> tempfile",
