@@ -59,7 +59,7 @@ def breaking(a: dict, b: dict) -> list[str]:
             out.append(f"command removed: {path}")
             continue
         out += [f"flag removed: {path} {flag}" for flag in cmd["flags"] if flag not in new["flags"]]
-        if cmd["positionals"] != new["positionals"][: len(cmd["positionals"])]:
+        if cmd["positionals"] != new["positionals"]:  # a new positional is required of every caller
             out.append(f"positionals changed: {path}")
     for name, args in a["tools"].items():
         new = b["tools"].get(name)
@@ -146,8 +146,10 @@ def test_the_breaking_detector_sees_what_it_is_for() -> None:
         "tool removed: gone",
     ]
     assert breaking(b, b) == []  # nothing is a break against itself
-    wider = {"cli": {"ddflow": {"flags": ["--x", "--z"], "positionals": ["b", "c"]}}, "tools": {}}
-    assert breaking({"cli": b["cli"], "tools": {}}, wider) == []  # additions are allowed
+    wider = {"cli": {"ddflow": {"flags": ["--x", "--z"], "positionals": ["b"]}}, "tools": {}}
+    assert breaking({"cli": b["cli"], "tools": {}}, wider) == []  # a new flag is allowed
+    longer = {"cli": {"ddflow": {"flags": ["--x"], "positionals": ["b", "c"]}}, "tools": {}}
+    assert breaking({"cli": b["cli"], "tools": {}}, longer) == ["positionals changed: ddflow"]
 
 
 @pytest.mark.slow
