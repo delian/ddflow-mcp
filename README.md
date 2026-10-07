@@ -861,7 +861,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 190 knobs.
+cadences, and the rest of the 192 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -4267,7 +4267,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 190): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 192): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4622,7 +4622,7 @@ declared once and persists — see
 
 ## Configuration
 
-190 knobs across 27 sections, every one documented in place and listed, with its default
+192 knobs across 27 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -4666,8 +4666,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=826e37006d3d -->
-<details><summary>All 190 knobs across 27 sections</summary>
+<!-- ddflow:begin README/knobs sha=ba8d15c2e471 -->
+<details><summary>All 192 knobs across 27 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -4728,6 +4728,8 @@ long default is left to `ddflow config --explain`.
 | `gates.rate_min_runs` | `5` |  |
 | `gates.rate_max_fail` | `0.9` |  |
 | `gates.evidence_required` | (long: see `ddflow config --explain`) |  |
+| `gates.unit_tests_scope` | `"selected"` | `selected` \| `full` |
+| `gates.unit_tests_small_lines` | `150` |  |
 | `lessons.search_backend` | `"fts5"` | `fts5` \| `like` |
 | `lessons.max_results` | `5` |  |
 | `lessons.snippet_chars` | `320` |  |
@@ -5194,11 +5196,27 @@ or one step removed, tests named after a changed file, everything under a change
 `conftest.py`, tests that name a changed data file kept below a test directory (a
 fixture, a golden file, a guard baseline: by its name with its directory, else by its
 name or its nearest directory) — each with why, and prints one command that runs them in parallel
-with the project's own runner and worker flags. It is fast feedback and never a gate:
-the `unit_tests` gate always runs the whole suite, in parallel, because a targeted run
-hides breakage that was already there. The agent driver tells agents to run it after
-each change; `ddflow workflow` and `ddflow doctor` say when the configured test command
-uses one core.
+with the project's own runner and worker flags. The agent driver tells agents to run it
+after each change; `ddflow workflow` and `ddflow doctor` say when the configured test
+command uses one core.
+
+**The whole suite runs once per item** (decision D-gate-economy 1). For a **bug fix** (a
+task that fixes a bug) or a **small task** (fewer than `gates.unit_tests_small_lines`
+changed lines since its base, default 150), `ddflow gate run <id> unit_tests` runs only
+that selection, plus the regression tests of the bugs it fixes, and its evidence says so:
+`scope = "selected"`, `scope_why`, `changed_lines` and `selected_tests` (each path with
+why). The whole suite then runs in the `ci` gate, on the branch merged with the base,
+before the merge -- so the selection is taken only where the item's pipeline has a `ci`
+gate. Everything else runs the whole suite in `unit_tests`, in parallel, because a
+targeted run hides breakage that was already there: a phase, a promotion, a larger task,
+`gates.unit_tests_scope = "full"`, and any selection that cannot be made -- no base, git
+cannot say what changed, no test reaches the change (running nothing would pass
+vacuously), or a command that does not run pytest; `scope_why` names which.
+
+| knob | default | meaning |
+|---|---|---|
+| `gates.unit_tests_scope` | `"selected"` | `"full"` = every item's unit_tests gate runs the whole suite |
+| `gates.unit_tests_small_lines` | `150` | changed lines under which a task is small; `0` = only bug fixes select |
 
 The demos invent whole projects and drive them for real — real git worktrees, real
 `pytest` and `npm test` runs, real merges, real concurrent processes:
