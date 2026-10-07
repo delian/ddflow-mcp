@@ -63,6 +63,7 @@ classifiers = [
 # implementation. `tests/test_template_engines.py` runs the suite through both.
 dependencies = [
     "jinja2>=3.1.6",
+    "tomlkit>=0.13",
 ]
 
 [project.scripts]
