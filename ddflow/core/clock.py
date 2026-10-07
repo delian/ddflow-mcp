@@ -62,7 +62,10 @@ def parse_ts(text: str, *, naive: Naive = "utc", strip: bool = False) -> datetim
 
 
 def epoch(text: str, *, naive: Naive = "utc", default: float = 0.0) -> float:
-    """`text` as epoch seconds, or ``default`` when it is not a time (any `UNPARSEABLE`)."""
+    """`text` as epoch seconds, or ``default`` when it is not a time (any `UNPARSEABLE`).
+    With ``naive="refuse"`` a zone-less time is one of those: it too gives ``default``. A
+    caller that must tell "no zone" from "not a time" calls `parse_ts` and catches
+    `NoTimezone`, as quota does."""
     try:
         return parse_ts(text, naive=naive).timestamp()
     except UNPARSEABLE:
