@@ -3,6 +3,7 @@
 
     scripts/ci/compat-matrix build [VERSION ...]     # default: every RELEASES entry + current
     scripts/ci/compat-matrix venv VERSION            # print the path of that release's cached venv
+    scripts/ci/compat-matrix surfaces [VERSION ...]  # write tests/compat/surfaces/<version>.json
 
 For each version: build its wheel from the release commit (ddflow is not on a package index,
 so the wheel is built from `git archive` of the commit that released it), install it in a
@@ -37,11 +38,14 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "tests" / "fixtures" / "releases"
 PROJECTION = ROOT / "tests" / "compat" / "projection.py"
+SURFACE = ROOT / "tests" / "compat" / "surface.py"
+SURFACES = ROOT / "tests" / "compat" / "surfaces"
 
 #: Released versions in the matrix (D-compat): the first public one, then one per stretch of
 #: format change. `current` is added unless versions are named on the command line.
@@ -358,6 +362,16 @@ def _build_locked(version: str, commit: str, work: Path) -> None:
         shutil.rmtree(work, ignore_errors=True)
 
 
+def capture_surface(version: str) -> str:
+    """What RELEASED ``version`` exposes (tests/compat/surface.py run under its own wheel),
+    as the text committed under tests/compat/surfaces/<version>.json."""
+    venv = release_venv(version)
+    with tempfile.TemporaryDirectory(prefix="ddflow-surface-") as home:
+        env = hermetic_env(Path(home), venv)
+        # -I: the release's own site-packages, never the working directory
+        return sh([str(venv / "bin" / "python"), "-I", str(SURFACE)], cwd=Path(home), env=env)
+
+
 def release_venv(version: str) -> Path:
     """A venv holding RELEASED ``version``, built once and kept under BUILD_ROOT/venvs (the
     old-reads-new tests run the release against projects; a wheel build per test is waste).
@@ -400,9 +414,16 @@ def main(argv: list[str]) -> int:
     b.add_argument("versions", nargs="*", help="released versions, or 'current' (default: all)")
     v = sub.add_parser("venv", help="print the path of a released version's cached venv")
     v.add_argument("version")
+    f = sub.add_parser("surfaces", help="(re)write the surface snapshots of released versions")
+    f.add_argument("versions", nargs="*", help="released versions (default: all)")
     args = parser.parse_args(argv)
     if args.cmd == "venv":
         print(release_venv(args.version))
+    elif args.cmd == "surfaces":
+        SURFACES.mkdir(parents=True, exist_ok=True)
+        for version in args.versions or RELEASES:
+            (SURFACES / f"{version}.json").write_text(capture_surface(version))
+            print(f"{version}: {(SURFACES / f'{version}.json').relative_to(ROOT)}")
     elif args.cmd == "build":
         for version in args.versions or [*RELEASES, "current"]:
             if version == "current":
