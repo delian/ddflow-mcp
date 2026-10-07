@@ -78,6 +78,9 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             f"merged.",
             id=item,
             dirty=[],
+            # Unknown, not clean: as `outside_globs_unknown`, so a caller reading `dirty`
+            # alone never takes an unread tree for an empty one.
+            dirty_unknown=True,
             path=str(wt.path),
         )
     if dirty and not allow_dirty:
