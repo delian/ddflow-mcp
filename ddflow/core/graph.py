@@ -45,7 +45,12 @@ def closure(start: N, edges: Callable[[N], Iterable[N]]) -> list[N]:
 def find_cycles(
     items: Mapping[str, T], edges: Callable[[T], list[str]] | None = None
 ) -> list[list[str]]:
-    """Every dependency cycle, each reported once, starting at its smallest id.
+    """Dependency cycles, each reported once, starting at its smallest id: the cycle of
+    every DFS back edge, plus, for any item on a cycle that none of those passes
+    through, its shortest cycle -- so EVERY item on a cycle is in at least one reported
+    cycle (Bfdaf61894b: a cycle closing through an already-finished node was dropped,
+    and an item only on such a cycle was never named). Not every simple cycle: those
+    can be exponentially many, and naming each item on one is what a health check needs.
 
     Iterative DFS. Recursion depth here is the length of the dependency chain, which is
     operator-authored and therefore unbounded by anything the code controls; a plan with
@@ -87,8 +92,38 @@ def find_cycles(
                 colour[dep] = GREY
                 path.append(dep)
                 stack.append((dep, edge(items[dep])))
+    named = {n for cyc in found for n in cyc}
+    for n in sorted(items):
+        if n not in named and (cyc := _shortest_cycle(n, items, edge)):
+            lo = cyc.index(min(cyc))
+            found.append(cyc[lo:] + cyc[:lo] + [cyc[lo]])
+            named.update(cyc)
     uniq = {tuple(c): c for c in found}
     return sorted(uniq.values())
+
+
+def _shortest_cycle(
+    start: str, items: Mapping[str, T], edge: Callable[[T], list[str]]
+) -> list[str]:
+    """The shortest path of ``edge`` steps from ``start`` back to it, without the
+    closing repeat; ``[]`` when ``start`` is on no cycle. Breadth-first, iterative."""
+    came: dict[str, str] = {}
+    frontier = [start]
+    while frontier:
+        nxt: list[str] = []
+        for n in frontier:
+            for d in edge(items[n]):
+                if d not in items or d in came:
+                    continue
+                came[d] = n
+                if d == start:
+                    path = [n]
+                    while path[-1] != start:
+                        path.append(came[path[-1]])
+                    return path[::-1]
+                nxt.append(d)
+        frontier = nxt
+    return []
 
 
 def topological_order(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> list[N]:
@@ -127,7 +162,11 @@ def longest_chains(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> di
                 stack[-1] = (n, preds, i + 1)
                 p = preds[i]
                 if p in open_:
-                    raise CycleError("longest_chains needs an acyclic graph", p)
+                    path = [f[0] for f in stack]
+                    # graphlib's shape: the cycle as a list, first node repeated last
+                    raise CycleError(
+                        "longest_chains needs an acyclic graph", [*path[path.index(p) :], p]
+                    )
                 if p not in memo:
                     open_.add(p)
                     stack.append((p, [q for q in before(p) if q in members], 0))
