@@ -95,6 +95,26 @@ def memory_origin(m) -> Origin:
     return Origin(AGENT, m.by)
 
 
+def hit_origin(table: str, row: dict) -> Origin | None:
+    """Who recorded a recalled hit, for its fence -- ONE answer for the CLI block and the
+    JSON/MCP hit (B21178c7647): the provenance the recall attached; else a prompt or note
+    is an agent's record (whoever's words it quotes) and any other fenced kind is
+    `unknown`. None for a table that holds nobody's words (`TABLE_KIND`)."""
+    if table not in TABLE_KIND:
+        return None
+    prov = row.get("provenance")
+    if prov:
+        return Origin(prov.get("trust", UNKNOWN), prov.get("by", ""), prov.get("source", ""))
+    return Origin(AGENT if table == "prompts" else UNKNOWN)
+
+
+def hit_kind(table: str, row: dict) -> str:
+    """The kind a recalled hit is fenced as: a note is a note and a session summary a
+    summary, not the operator's prompt."""
+    role = row.get("role")
+    return role if table == "prompts" and role in ("note", "summary") else TABLE_KIND[table]
+
+
 def clean(value: str) -> str:
     """A metadata value (an agent id, a source path) made safe to print OUTSIDE a fence:
     no quotes, brackets, backticks or line breaks, and short. These come off event lines

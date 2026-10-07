@@ -16,9 +16,10 @@ from .lessons import _store
 def _wire_hit(table: str, label: str, r: dict) -> dict:
     """One hit as the `--json` / MCP body carries it.
 
-    A decision, lesson or memory is somebody's words: its headline and body travel inside
-    the data fence with the author and trust (`core/provenance.py`), and the headline
-    outside it is only the id and the provenance sentence. JSON quoting is not a fence --
+    A decision, lesson, memory or recorded prompt/note is somebody's words: its headline
+    and body travel inside the data fence with the author and trust (`core/provenance.py`,
+    `hit_origin`, the same answer the CLI block gives), and the headline outside it is
+    only the id and the provenance sentence. JSON quoting is not a fence --
     an agent reads the string, not the quotes -- so this is the surface that matters most.
     """
     from ...core import provenance as PV
@@ -26,13 +27,16 @@ def _wire_hit(table: str, label: str, r: dict) -> dict:
 
     head, body = summarise_row(table, r)
     hit: dict[str, Any] = {"id": r.get("id"), "kind": label, "headline": head, "body": body}
-    prov = r.get("provenance")
-    if prov:
-        origin = PV.Origin(prov["trust"], prov["by"], prov["source"])
-        kind = PV.TABLE_KIND[table]
-        hit["headline"] = f"{r.get('id')} ({origin.label()})"
+    origin = PV.hit_origin(table, r)
+    if origin is not None:
+        kind = PV.hit_kind(table, r)
+        # A prompt's headline is ddflow's own label (date, `operator asked:`, `SESSION
+        # SUMMARY (sid):`), never the record's text, so it stays outside the fence.
+        label = f" {head}" if table == "prompts" and head else ""
+        hit["headline"] = f"{r.get('id')}{label} ({origin.label()})"
         hit["body"] = PV.fence(kind, str(r.get("id")), head + (f": {body}" if body else ""), origin)
-        hit["provenance"] = prov
+        if r.get("provenance"):
+            hit["provenance"] = r["provenance"]
     hit["raw"] = r
     return hit
 
