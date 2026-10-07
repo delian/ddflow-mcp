@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
-from .config_sections._docs import KNOB_DOCS, _doc, declared_tables  # noqa: F401
+from .config_sections._docs import KNOB_DOCS, declared_tables
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
     AgentConfig,
@@ -132,16 +132,16 @@ from .config_sections.schedule import (  # noqa: F401
     strictest_signals,
 )
 from .config_sections.session import (
+    PROGRESS_MODES,  # noqa: F401 -- re-exported (services/progress_line)
     SessionConfig,
 )
 from .config_sections.triggers import (
     TRIGGERS_MAX_FIRES_LIMIT,  # noqa: F401 -- re-exported
     TRIGGERS_STRICTEST_NUMBER,
     TriggersConfig,
-    max_fires_problem,
 )
 from .config_sections.upgrade import (
-    UPGRADE_SKEW_POLICIES,
+    UPGRADE_SKEW_POLICIES,  # noqa: F401 -- re-exported
     UpgradeConfig,
 )
 from .config_sections.worktree import (
@@ -545,19 +545,9 @@ def _warn_unknown(
 #: value. A new enum knob is declared here, not in a comment;
 #: `tests/test_config_enum_knobs.py` finds any comment or knob doc listing `a | b` that
 #: this table does not cover.
-PROGRESS_MODES = ("on", "phase", "off")
 _DC, _DS, _DO, _DK = declared_tables()  # the knobs declared on their fields (_docs.knob)
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     **_DC,
-    "worktree.merge_strategy": ("no-ff", "ff-only", "squash"),
-    "session.progress_after_complete": PROGRESS_MODES,
-    "schedule.ready_policy": ("deps_and_lease", "deps_only"),
-    "schedule.cycle_policy": ("error", "warn"),
-    "schedule.unknown_dep_policy": ("block", "warn"),
-    "schedule.empty_phase": ("note", "problem", "off"),
-    "schedule.parallel": ("auto", "fixed"),
-    "review.on_exceed": ("refuse", "warn"),
-    "upgrade.skew": UPGRADE_SKEW_POLICIES,
 }
 
 #: The value each enum knob takes when a config FILE gives it one this code does not know
@@ -573,18 +563,6 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
 #: and in `KNOB_OUTWARD`, and that no fallback is an outward value.
 KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     **_DS,
-    "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
-    "session.progress_after_complete": ("on", "no safety dimension; reports the most"),
-    "schedule.ready_policy": ("deps_and_lease", "an item another agent leased is not offered"),
-    "schedule.cycle_policy": ("error", "a dependency cycle refuses scheduling"),
-    "schedule.unknown_dep_policy": ("block", "a dependency on an unknown id stays unmet"),
-    "schedule.empty_phase": ("problem", "an open phase with no task fails doctor"),
-    "schedule.parallel": (
-        "fixed",
-        "no safety dimension; changes least -- max_parallel_tasks is the number, nothing adapts",
-    ),
-    "review.on_exceed": ("refuse", "a round past the budget is refused"),
-    "upgrade.skew": ("refuse", "an older ddflow's write is refused"),
 }
 
 #: Each enum knob's values that make ddflow act OUTSIDE this clone: a push, a pull
@@ -595,15 +573,6 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
 #: answers the question here (a seeded default would answer it for them).
 KNOB_OUTWARD: dict[str, frozenset[str]] = {
     **_DO,
-    "worktree.merge_strategy": frozenset(),
-    "session.progress_after_complete": frozenset(),
-    "schedule.ready_policy": frozenset(),
-    "schedule.cycle_policy": frozenset(),
-    "schedule.unknown_dep_policy": frozenset(),
-    "schedule.empty_phase": frozenset(),
-    "schedule.parallel": frozenset(),
-    "review.on_exceed": frozenset(),
-    "upgrade.skew": frozenset(),
 }
 
 #: Numeric knobs whose bad FILE value takes the strictest value (D-trigger-cap-knob): as
@@ -647,33 +616,13 @@ def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
     return lambda v: "" if v in allowed else f"must be one of {', '.join(allowed)}"
 
 
-def _int_at_least(n: int) -> Callable[[Any], str]:
-    return lambda v: (
-        ""
-        if isinstance(v, int) and not isinstance(v, bool) and v >= n
-        else f"must be an integer >= {n}"
-    )
-
-
 #: Knobs whose TYPE is not the whole contract: "" means valid, else why not. Checked on
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
 _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
     **_DK,
-    "schedule.max_parallel_tasks": _int_at_least(1),
-    "schedule.max_parallel_min": _int_at_least(1),
-    "schedule.max_parallel_max": _int_at_least(1),
-    "schedule.adapt_up_after_s": _int_at_least(0),
-    "schedule.adapt_cooldown_s": _int_at_least(0),
-    "schedule.signal_interval_s": _int_at_least(1),
-    "schedule.signals": _signals_problem,
-    "worktree.max_parallel": lambda v: (
-        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-        else "must be an integer >= 0 (0 = follow the schedule limit)"
-    ),
-    "triggers.max_fires_per_hour": max_fires_problem,
-}  # fmt: skip
+}
 
 #: Every check: one derived from each KNOB_CHOICES entry, and the hand-written ones above.
 #: The two never share a key (`tests/test_config_enum_knobs.py` asserts it), so neither can

@@ -23,10 +23,10 @@ CONFIG_PY = ROOT / "ddflow" / "config.py"
 #: The older declarations still standing. Lower these in the change that moves a section
 #: onto `knob()`; the failure message prints the number to write. Never raise one.
 LEGACY_BASELINE = {
-    "_doc() calls": 42,
-    "KNOB_CHOICES entries": 9,
-    "KNOB_STRICTEST entries": 9,
-    "KNOB_OUTWARD entries": 9,
+    "_doc() calls": 0,
+    "KNOB_CHOICES entries": 0,
+    "KNOB_STRICTEST entries": 0,
+    "KNOB_OUTWARD entries": 0,
 }
 
 _TABLES = ("KNOB_CHOICES", "KNOB_STRICTEST", "KNOB_OUTWARD")
@@ -115,8 +115,7 @@ def test_a_knob_declared_twice_is_an_error() -> None:
         class Again:
             on_detect: str = K.knob("warn", doc="again")
 
-    with pytest.raises(ValueError, match="declared twice"):
-        K._doc("loops", "on_detect", "again")
+    assert not hasattr(K, "_doc"), "the older declaration is gone"
 
 
 def _table_literals() -> dict[str, list[ast.Dict]]:
