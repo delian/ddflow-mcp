@@ -3745,7 +3745,7 @@ operator's options. (1) Have an agent write the entries and whatever upgrade rep
 a safe upgrade needs: the message pre-fills one fragment per change from the diff, then
 re-run the lint. (2) Waive a named change for this release with `ddflow version lint
 --waive <change> --reason "..."`, recorded in `templates/upgrade/waivers.toml` and shown in
-the next upgrade plan. (3) Change the policy: `ddflow config release.manifest_lint warn|off`.
+the next upgrade plan. (3) Change the policy: `ddflow config --set release.manifest_lint warn|off`.
 `warn` prints the same and carries on; `off` is silent. An agent may prepare entries and
 propose; waiving or lowering the policy is the operator's decision. Over MCP,
 `ddflow_version_cut` (also with `dry_run`) runs the lint and `ddflow_configure` sets the

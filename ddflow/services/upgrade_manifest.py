@@ -505,6 +505,6 @@ def report(res: LintResult) -> str:
     out += [
         '  2. Waive a change for this release: `ddflow version lint --waive <change> --reason "<why>"` '
         "(recorded in ddflow/templates/upgrade/waivers.toml and shown in the next upgrade plan).",
-        "  3. Change the policy: `ddflow config release.manifest_lint warn|off [--local]`.",
+        "  3. Change the policy: `ddflow config --set release.manifest_lint warn|off [--local]`.",
     ]
     return "\n".join(out)
