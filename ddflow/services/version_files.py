@@ -22,7 +22,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import flow as F
-from ..infra import proc as P
+from ..infra import git as GIT
 from ..infra import worktree as W
 
 
@@ -68,13 +68,13 @@ def prepare(repo: Path, cfg: Config, *, version: str, ref: str) -> Prepared:
         if bad:
             raise VersionFileError(bad)
         # Not `W.git`: it strips the output, and a file's own trailing newline is its content.
-        shown = P.run(["git", "-C", str(repo), "show", f"{ref}:{path}"], capture_output=True)
-        if shown.returncode != 0:
+        shown = GIT.run(repo, "show", f"{ref}:{path}", binary=True)
+        if not shown.ok:
             raise VersionFileError(
                 f"[flow.version_files] {path!r} does not exist on {ref}: "
-                f"{shown.stderr.decode('utf-8', 'replace').strip() or 'git show failed'}"
+                f"{shown.err or 'git show failed'}"
             )
-        text = shown.stdout.decode("utf-8")
+        text = (shown.out_bytes or b"").decode("utf-8")
         rx = re.compile(pattern, re.MULTILINE)
         hits = list(rx.finditer(text))
         found = len(hits)
