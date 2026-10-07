@@ -640,6 +640,18 @@ def retarget(
     log.append("lease.renewed", item_id, data)
 
 
+def _released(
+    holder: str, event: str, by: str, note: str = "", transfer: bool = False
+) -> dict[str, Any]:
+    """The one shape of a `lease.released` payload. ``event`` names WHICH claim ends: one
+    holder can have held the item twice, and a fold that merges clones must not end the
+    wrong one (B191)."""
+    data: dict[str, Any] = {"holder": holder, "event": event, "by": by, "note": note}
+    if transfer:
+        data["transfer"] = True
+    return data
+
+
 def release_claim(
     log: EventLog,
     item_id: str,
@@ -655,15 +667,9 @@ def release_claim(
     displaced claim (`resolve`), and a transfer ends the claim it hands on.
     The caller holds ``log.transaction()`` and settles the remote claim ref itself
     (`settle_remote`)."""
-    data: dict[str, Any] = {
-        "holder": holder,
-        "event": event,
-        "by": by or log.agent_id,
-        "note": note,
-    }
-    if transfer:
-        data["transfer"] = True
-    log.append("lease.released", item_id, data)
+    log.append(
+        "lease.released", item_id, _released(holder, event, by or log.agent_id, note, transfer)
+    )
 
 
 def settle_remote(
@@ -719,16 +725,8 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
         "lease.released",
         mine=False,
         holder=by,
-        # `event` names WHICH claim ends: one holder can have held the item twice, and a
-        # fold that merges clones must not end the wrong one (B191).
         payload=lambda lease: (
-            owner.update(holder=lease.holder)
-            or {
-                "holder": lease.holder,
-                "event": lease.event,
-                "by": by,
-                "note": note,
-            }
+            owner.update(holder=lease.holder) or _released(lease.holder, lease.event, by, note)
         ),
     )
     if done:

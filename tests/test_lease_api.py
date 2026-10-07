@@ -109,10 +109,12 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
     """Every liveness question goes through `Lease.live`, every release through
     `services.leases`: a second copy of either is how three answers came to exist."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    allowed = {root / "core" / "records.py"}
+    home = root / "core" / "records.py"
+    # The home defines `expired` and asks it exactly once, inside `live`.
+    assert home.read_text().count(".expired(") == 1
     bad = []
     for path in root.rglob("*.py"):
-        if path in allowed:
+        if path == home:
             continue
         text = path.read_text()
         for n, line in enumerate(text.splitlines(), 1):
