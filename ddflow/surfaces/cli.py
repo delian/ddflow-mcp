@@ -24,6 +24,7 @@ import os
 import sys
 
 from ..api import items as A_ITEMS
+from ..core import clock
 from ..core.model import fold
 from ..core.outcome import INTERRUPTED, exit_for
 from ..services import gates as G
@@ -146,7 +147,7 @@ def cmd_progress(a, c: Ctx) -> int:
     print(f"{'item':<14} {'state':<10} {'att':>3} {'held':>9} {'gates':>5} {'commits':>7}  holders")
     for d in rows_d:
         secs = d["held_seconds"]
-        held = f"{secs / 60:.1f}m" if secs else "-"
+        held = clock.fmt_age(secs, places=1) if secs else "-"
         print(
             f"{d['item']:<14} {d['state']:<10} {d['attempts']:>3} {held:>9} "
             f"{d['gate_runs']:>5} {d['commits']:>7}  "
@@ -163,7 +164,7 @@ def cmd_progress(a, c: Ctx) -> int:
         print(f"\n{r.item} — {r.title}")
         for i, att in enumerate(r.attempts, 1):
             print(
-                f"  attempt {i}: {att.holder} · {att.seconds / 60:.1f}m · "
+                f"  attempt {i}: {att.holder} · {clock.fmt_age(att.seconds, places=1)} · "
                 f"ended {att.ended_by or 'still open'} · "
                 f"{att.gates_passed} passed / {att.gates_failed} failed"
             )
