@@ -70,3 +70,23 @@ def test_onboard_apply_never_removes_a_tree_an_agent_holds(repo):
     tree = _tree_of(repo, "T1")
     out = ON.apply(repo, [str(tree)])
     assert tree.exists(), f"onboard removed a live-leased tree: {out}"
+    assert out[0]["outcome"] == "refused" and "worker" in out[0]["detail"], out
+
+
+def test_onboard_apply_never_removes_a_tree_an_item_adopted(repo):
+    """The harness's own working tree, bound to an item and released: no lease protects
+    it, only adoption -- as `cleanup` already honours."""
+    import subprocess
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    tree = repo.parent / "harness-tree"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", str(tree), "-b", "agent-work"],
+        check=True,
+    )
+    code, out_, err = run_cli(tree, "claim", "T1", agent="worker")
+    assert code == OK and "adopted" in out_, out_ + err
+    assert run_cli(repo, "release", "T1", agent="worker")[0] == OK
+    out = ON.apply(repo, [str(tree)])
+    assert tree.exists(), f"onboard removed an adopted tree: {out}"

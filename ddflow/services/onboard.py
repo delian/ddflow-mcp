@@ -365,11 +365,21 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     # (critic on f0d27314); nothing else reaches here, because dirty/unique/locked items
     # never carry action "remove". In an adopted project, under the log lock with the
     # leases re-read -- what `cleanup` does -- and recorded (B5e83fb22cb).
-    log = EventLog(repo) if (repo / ".ddflow" / "events").is_dir() else None
+    log = (
+        EventLog(
+            repo,
+            cfg.agent.id or "",
+            log_cfg=cfg.log,
+            lock_timeout_s=cfg.lease.acquire_timeout_s,
+        )
+        if (repo / ".ddflow" / "events").is_dir()
+        else None
+    )
     with log.transaction() if log else contextlib.nullcontext():
         held = _held(repo, cfg, log, path, item.branch)
         if held:
-            return {"name": item.name, "kind": "worktree", "outcome": "failed", "detail": held}
+            # Refused, not failed: coordination said no, and the tree was left as it is.
+            return {"name": item.name, "kind": "worktree", "outcome": "refused", "detail": held}
         r = W.remove(repo, cfg, worktree, force=True)
         if r.ok and log:
             C.record_removed(log, W.repo_root(repo), str(path))
