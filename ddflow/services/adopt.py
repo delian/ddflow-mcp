@@ -830,25 +830,13 @@ def _install_prompt_hooks(repo: Path, agents: list[str]) -> list[str]:
     adoption.
     """
     from . import claudehooks as CH
-    from .enforce import command_line
 
     out: list[str] = []
-    for key, rel, event, flag in (
-        ("claude", ".claude/settings.json", CH.PROMPT_EVENT, ""),
-        ("gemini", CH.GEMINI_SETTINGS, CH.GEMINI_PROMPT_EVENT, " --gemini"),
-    ):
-        if key not in agents:
+    for h in CH.HOOKS:
+        if h.name != "prompt" or h.agent not in agents:
             continue
-        cmd = (
-            command_line(
-                CH.PROMPT_MARKER, extra=flag.strip(), refresh=f"ddflow hooks install --{key}"
-            )
-            + " || true"
-        )
         try:
-            out.append(
-                CH.install(repo, cmd, event=event, marker=CH.PROMPT_MARKER, matcher=None, rel=rel)
-            )
+            out.append(CH.install_spec(repo, h))
         except CH.SettingsError as exc:
             out.append(f"prompt hook not installed: {exc}")
     return out
