@@ -14,6 +14,7 @@ from pathlib import Path  # noqa: F401
 from typing import Any  # noqa: F401
 
 from ...config import Config  # noqa: F401
+from ...core import clock  # noqa: F401
 from ...core import outcome as O  # noqa: F401
 from ...core.events import version_key  # noqa: F401
 from ...core.model import ABANDONED, DONE, fold  # noqa: F401

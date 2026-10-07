@@ -115,12 +115,13 @@ def _now() -> str:
 
 def _parse_time(text: str) -> str:
     try:
-        t = clock.parse_ts(text, naive="local")
+        # Refused without a zone: the same wall-clock time is a different moment on
+        # another machine.
+        t = clock.parse_ts(text, naive="refuse")
+    except clock.NoTimezone as exc:
+        raise QuotaError(f"anchor {text!r} has no timezone: add Z or an offset") from exc
     except ValueError as exc:
         raise QuotaError(f"anchor {text!r} is not an ISO-8601 time") from exc
-    if t.tzinfo is None:
-        # The same wall-clock time is a different moment on another machine.
-        raise QuotaError(f"anchor {text!r} has no timezone: add Z or an offset")
     return t.isoformat()
 
 
