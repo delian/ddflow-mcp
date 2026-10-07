@@ -273,3 +273,47 @@ def test_apply_is_refused_rather_than_ignored(repo: Path) -> None:
 
     assert out.exit == 3 and "plan" in out.reason
     assert A.upgrade(repo).exit == 0
+
+
+def test_a_knob_added_then_removed_inside_the_window_never_reached_the_project() -> None:
+    seq = [
+        _change("knob_added", "0.2.0", new=1, has_new=True),
+        _change("knob_removed", "0.3.0", old=1, has_old=True),
+    ]
+    assert UP._net(seq) == {}
+    back = [*seq, _change("knob_added", "0.4.0", new=1, has_new=True)]
+    assert UP._net(back)["s.k"][0] == "knob_added"
+
+
+def test_over_mcp_plan_defaults_to_the_plan_and_false_is_refused(old: Path) -> None:
+    from ddflow.surfaces.mcp import Server
+
+    def call(args: dict) -> dict:
+        reply = Server(old).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "ddflow_upgrade", "arguments": args},
+            }
+        )
+        return reply["result"]
+
+    planned = call({})
+    refused = call({"plan": False})
+
+    assert json.loads(planned["content"][0]["text"])["total"] > 0
+    assert refused["_meta"]["exit"] == 3 and "plan" in json.dumps(refused)
+    assert call({"plan": True})["content"] == planned["content"]
+
+
+def test_the_cli_plan_flag_is_the_default_spelled_out(old: Path) -> None:
+    assert run_cli(old, "upgrade", "--plan")[1] == run_cli(old, "upgrade")[1]
+
+
+def test_a_remedy_that_is_the_apply_step_says_apply_is_not_there_yet(old: Path) -> None:
+    _code, body = plan(old)
+
+    fixes = [i["fix"] for i in items(body, "config") if "--apply" in i["fix"]]
+
+    assert fixes and all(f.endswith(UP.NOT_YET) for f in fixes)

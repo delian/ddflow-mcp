@@ -50,7 +50,8 @@ def register(s: argparse._SubParsersAction) -> None:
     up.add_argument(
         "--plan",
         action="store_true",
-        help="print the plan (the default; nothing is written)",
+        default=True,
+        help="print the plan (the default, and the only mode so far; nothing is written)",
     )
     up.set_defaults(fn=cmd_upgrade)
 
