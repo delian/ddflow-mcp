@@ -61,11 +61,13 @@ def git(
     timeout: int = 300,
     check: bool = False,
     env: dict[str, str] | None = None,
+    errors: str = "strict",
 ) -> GitResult:
     p = P.run(
         ["git", "-C", str(repo), *args],
         capture_output=True,
         text=True,
+        errors=errors,
         timeout=timeout,
         env={**os.environ, **env} if env else None,
     )
@@ -711,8 +713,7 @@ def _diff_text(tree: Path, *args: str) -> str:
     """`git diff <args>` as text a reviewer can read, whatever the bytes: a file's
     non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
     raised -- `git()` decodes strictly, and one such file aborted the whole review."""
-    p = P.run(["git", "-C", str(tree), "diff", *args], capture_output=True, timeout=300)
-    return p.stdout.decode("utf-8", errors="replace").strip() if p.returncode == 0 else ""
+    return git(tree, "diff", *args, errors="replace").out
 
 
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
