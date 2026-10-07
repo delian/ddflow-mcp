@@ -150,6 +150,8 @@ class SkewRefused(Exception):
     """An OLDER ddflow was asked to write to a log a newer one has worked on (exit 3).
     Carries the remedy in its message; not an error in the caller's arguments."""
 
+    exit_code = 3  # REFUSED (`core.outcome.exit_for`)
+
 
 @dataclass(frozen=True)
 class StampFacts:

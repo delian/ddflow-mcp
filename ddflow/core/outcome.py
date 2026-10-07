@@ -39,6 +39,25 @@ REFUSED = 3
 
 #: Human labels, for error messages that need to name a code.
 EXIT_NAMES = {OK: "ok", FAIL: "failed", NOTHING: "nothing", REFUSED: "refused"}
+#: The exit a Ctrl-C ends a command with: 128 + SIGINT, as a shell reports it.
+INTERRUPTED = 130
+
+
+def exit_for(exc: BaseException) -> int | None:
+    """The exit an exception raised by a command maps to -- ONE table for the CLI and MCP
+    (B5f3a650c40), which disagreed: MCP called every Key/Type/ValueError "bad arguments",
+    so a refusal that subclasses ValueError (`ReviewerRefused`) read as a malformed call,
+    and a `LeaseError` as an internal error. A class declares its own exit with
+    `exit_code` (every refusal: `REFUSED`); a ValueError or KeyError is an error in what
+    was asked (`FAIL`); None means a bug, which each surface lets surface as one."""
+    if isinstance(exc, KeyboardInterrupt):
+        return INTERRUPTED
+    declared = getattr(type(exc), "exit_code", None)
+    if isinstance(declared, int):
+        return declared
+    if isinstance(exc, (ValueError, KeyError)):
+        return FAIL
+    return None
 
 
 @dataclass
