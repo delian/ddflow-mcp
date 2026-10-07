@@ -104,9 +104,12 @@ _BANNED = {
 
 
 def test_the_replaced_expressions_live_only_in_core_clock():
+    files = sorted(ROOT.rglob("*.py"))
+    # A scan of nothing would pass: prove the checkout's package was the one scanned.
+    assert (ROOT / "core" / "clock.py") in files and len(files) > 100, ROOT
     found = [
         f"{p.relative_to(ROOT.parent)}:{n}: {name}"
-        for p in sorted(ROOT.rglob("*.py"))
+        for p in files
         if p != ROOT / "core" / "clock.py"
         for n, line in enumerate(p.read_text("utf-8").splitlines(), 1)
         for name, rx in _BANNED.items()
