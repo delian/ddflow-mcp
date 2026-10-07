@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...core import clock
 from . import registry
 from .frame import one_line
 from .query import Query
@@ -80,7 +81,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
         summary = summaries.get(s.id, "")
         prompts = [
             {
-                "at": p["at"][:16].replace("T", " "),
+                "at": clock.fmt_minute(p["at"]),
                 "who": "brief" if _is_brief(p["text"]) else "operator",
                 "text": one_line(p["text"], PROMPT_CHARS),
             }
@@ -88,7 +89,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
             if p["text"].strip()
         ]
         notes = [
-            {"at": n["at"][:16].replace("T", " "), "text": one_line(n["text"], NOTE_CHARS)}
+            {"at": clock.fmt_minute(n["at"]), "text": one_line(n["text"], NOTE_CHARS)}
             for n in s.notes
             if n["text"].strip() and not (n.get("source") or n.get("origin_at"))
         ]
@@ -98,8 +99,8 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
                 "id": s.id,
                 "agent": s.agent,
                 "model": s.model or "unrecorded",
-                "opened": opened[:16].replace("T", " "),
-                "closed": s.ended_at[:16].replace("T", " ") if s.ended_at else "open",
+                "opened": clock.fmt_minute(opened),
+                "closed": clock.fmt_minute(s.ended_at) if s.ended_at else "open",
                 "summary": one_line(summary, SUMMARY_CHARS) if summary else "",
                 "has_summary": bool(summary),
                 "prompts": prompts,

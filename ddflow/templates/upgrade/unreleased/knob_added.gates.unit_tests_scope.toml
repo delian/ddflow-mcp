@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.unit_tests_scope"
+new = "\"selected\""
+why = "What the unit_tests gate of a bug fix or small task runs (D-gate-economy 1): 'selected' (default) only the tests its change reaches plus its bugs' regression tests, once its ci gate passed; 'full' the whole suite."
+impact = "additive"

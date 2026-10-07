@@ -20,10 +20,11 @@ from __future__ import annotations
 import re
 import tomllib
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..infra.fsio import replace_text
 from ..infra.tomlcfg import basic_string
 
@@ -32,8 +33,8 @@ _MIN_TOKEN_LEN = 2  # tokens this short are noise
 
 
 def _now() -> datetime:
-    """Get current UTC time as timezone-aware datetime."""
-    return datetime.now(UTC)
+    """The current UTC time, timezone-aware: core.clock's, looked up at call time."""
+    return clock.now_utc()
 
 
 @dataclass
