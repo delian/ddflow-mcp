@@ -1,8 +1,9 @@
 """The review-round budget (decision D-review-budget): [review].max_rounds.
 
-A shipped default for every project -- 2 full rounds per gate per item, then a refusal
-naming the alternatives -- changeable at every layer. A delta recheck and `review triage`
-are never refused: rounds 3+ still find about a quarter of the confirmed defects.
+A shipped default for every project -- 2 review rounds per gate per item, full and delta
+alike (decision D-gate-economy 2), then a refusal naming the alternatives -- changeable at
+every layer. `review triage` is never refused. The tests of the delta's own mechanics give
+it a spare round (`_spare_round`).
 """
 
 from __future__ import annotations
@@ -80,6 +81,11 @@ def _rounds(repo: Path, gate: str = "critic") -> int:
     )
 
 
+def _spare_round(monkeypatch) -> None:
+    """Three rounds: two full, then room for the delta whose mechanics the test is about."""
+    monkeypatch.setenv("DDFLOW_REVIEW_MAX_ROUNDS", "3")
+
+
 def test_the_default_is_two_rounds_then_refuse_for_every_project():
     cfg = Config.load(env={})
     assert (cfg.review.max_rounds, cfg.review.on_exceed) == (2, "refuse")
@@ -96,20 +102,20 @@ def test_the_third_full_round_is_refused_with_the_alternatives(repo, tmp_path):
     calls = _calls(seen)
     out = api.review(repo, gate="critic", item="T1")
     assert out.exit == REFUSED, out.reason
-    for needle in ("2 full", "--delta", "review triage", "--force --reason", "review.max_rounds"):
+    for needle in ("2 review rounds", "review triage", "--force --reason", "review.max_rounds"):
         assert needle in out.reason, (needle, out.reason)
     assert _calls(seen) == calls, "a reviewer was called for a refused round"
     assert _rounds(repo) == 2, "a refusal must not be recorded as a round"
 
 
-def test_a_delta_recheck_and_triage_are_never_refused(repo, tmp_path):
+def test_triage_is_never_refused_but_a_delta_after_the_cap_is(repo, tmp_path):
+    """D-gate-economy 2: the cap bounds delta rounds too -- a delta was the way around it."""
     seen = _setup(repo, tmp_path)
     api.review(repo, gate="critic", item="T1")
     api.review(repo, gate="critic", item="T1")
     assert (
         api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="p").exit == OK
     )
-    # a commit that fixes it, then a delta of it
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "work")
     (repo / "x.py").write_text("x = 2  # FINDME again\n")
@@ -117,15 +123,27 @@ def test_a_delta_recheck_and_triage_are_never_refused(repo, tmp_path):
     sha = _git(repo, "rev-parse", "HEAD")
     before = _calls(seen)
     out = api.review(repo, gate="critic", item="T1", commit=sha)
-    assert out.exit in (OK, FAIL), out.reason
-    assert _calls(seen) > before, "the delta was reviewed"
-    ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
-    assert ev["review_kind"] == "delta" and ev["rounds"] == 2, "the count rides along"
-    # still capped for a full round after the delta
-    assert api.review(repo, gate="critic", item="T1").exit == REFUSED
+    assert out.exit == REFUSED and "review triage" in out.reason, out.reason
+    assert _calls(seen) == before, "a reviewer was called for a refused delta"
+    out = api.review(repo, gate="critic", item="T1", delta=True)
+    assert out.exit == REFUSED, out.reason
 
 
-def test_delta_flag_reviews_only_what_changed_since_the_reviewed_head(repo, tmp_path):
+def test_a_delta_round_counts_against_the_cap(repo, tmp_path, monkeypatch):
+    monkeypatch.setenv("DDFLOW_REVIEW_MAX_ROUNDS", "2")
+    _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+    (repo / "x.py").write_text("x = 3  # FINDME\n")
+    _git(repo, "commit", "-qam", "fix")
+    assert api.review(repo, gate="critic", item="T1", delta=True).exit == OK
+    out = api.review(repo, gate="critic", item="T1")
+    assert out.exit == REFUSED and "2 review rounds" in out.reason, out.reason
+
+
+def test_delta_flag_reviews_only_what_changed_since_the_reviewed_head(repo, tmp_path, monkeypatch):
+    _spare_round(monkeypatch)
     seen = _setup(repo, tmp_path)
     api.review(repo, gate="critic", item="T1")
     api.review(repo, gate="critic", item="T1")
@@ -198,7 +216,7 @@ def test_the_cli_has_delta_force_and_reason(repo, tmp_path):
     run_cli(repo, "review", "T1", "--gate", "critic")
     run_cli(repo, "review", "T1", "--gate", "critic")
     code, _out, err = run_cli(repo, "review", "T1", "--gate", "critic")
-    assert code == REFUSED and "--delta" in err, err
+    assert code == REFUSED and "review triage" in err, err
     code, _out, err = run_cli(
         repo, "review", "T1", "--gate", "critic", "--force", "--reason", "why"
     )
@@ -316,12 +334,15 @@ def test_a_base_reaching_before_the_reviewed_head_is_a_full_round(repo, tmp_path
     api.review(repo, gate="critic", item="T1")
     api.review(repo, gate="critic", item="T1")
     out = api.review(repo, gate="critic", item="T1", base=old)
-    assert out.exit == REFUSED and "--delta" in out.reason, "a wide --base must not dodge the cap"
+    assert out.exit == REFUSED and "review triage" in out.reason, (
+        "a wide --base must not dodge the cap"
+    )
     out = api.review(repo, gate="critic", item="T1", commit=old)
     assert out.exit == REFUSED, "nor a --commit that is not after the reviewed head"
 
 
-def test_a_base_after_the_reviewed_head_is_a_delta(repo, tmp_path):
+def test_a_base_after_the_reviewed_head_is_a_delta(repo, tmp_path, monkeypatch):
+    _spare_round(monkeypatch)
     _setup(repo, tmp_path)
     api.review(repo, gate="critic", item="T1")
     api.review(repo, gate="critic", item="T1")
@@ -335,7 +356,8 @@ def test_a_base_after_the_reviewed_head_is_a_delta(repo, tmp_path):
     assert ev["review_kind"] == "delta"
 
 
-def test_delta_survives_a_gate_skip_that_replaced_the_record(repo, tmp_path):
+def test_delta_survives_a_gate_skip_that_replaced_the_record(repo, tmp_path, monkeypatch):
+    _spare_round(monkeypatch)
     _setup(repo, tmp_path)
     api.review(repo, gate="critic", item="T1")
     api.review(repo, gate="critic", item="T1")
@@ -421,7 +443,8 @@ def test_a_non_table_review_value_does_not_crash_the_report(repo, tmp_path):
     assert report_budget_change(repo, ConfigEdit(append_toml="review = 1"), out) is out
 
 
-def test_a_ref_inside_the_items_range_is_a_delta_one_before_it_is_full(repo, tmp_path):
+def test_a_ref_inside_the_items_range_is_a_delta_one_before_it_is_full(repo, tmp_path, monkeypatch):
+    _spare_round(monkeypatch)
     _setup(repo, tmp_path)
     base = _git(repo, "rev-parse", "HEAD")
     _git(repo, "checkout", "-q", "-b", "feat")

@@ -120,8 +120,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Run the configured cross-family reviewer over an item's diff and record the "
             "result: the critic gate, performed by ddflow. "
-            "No reviewer, endpoint or verdict records UNAVAILABLE, never a pass. A gate gets [review].max_rounds (default 2) full rounds, then "
-            "delta=true and ddflow_review_triage."
+            "No reviewer, endpoint or verdict records UNAVAILABLE, never a pass. A gate gets [review].max_rounds (default 2) rounds, delta too, "
+            "then ddflow_review_triage."
         ),
         "properties": {
             "id": ("string", "Item whose diff to review.", True),

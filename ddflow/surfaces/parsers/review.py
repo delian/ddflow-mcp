@@ -65,7 +65,7 @@ def register(s: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="two commands share this parser:\n"
         "  ddflow review <id> --gate G [--chunk N | --delta]   run the reviewer(s) (slow, shared);\n"
-        "                  a gate gets [review].max_rounds (default 2) full rounds, then --delta/triage\n"
+        "                  a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage\n"
         "  ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...\n"
         "                                            record what became of one finding\n"
         "--finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the\n"
@@ -108,7 +108,7 @@ def register(s: argparse._SubParsersAction) -> None:
         "--delta",
         action="store_true",
         help="recheck ONLY what changed since the head the gate's last review covered, for "
-        "a diff too large to send twice: not a full round, never refused by "
+        "a diff too large to send twice: not a full round, but counted against "
         "[review].max_rounds. A plain re-review is a full round with the previous "
         "findings; [review].delta_default = true makes it a delta instead",
     )

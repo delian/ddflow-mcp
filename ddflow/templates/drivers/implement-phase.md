@@ -171,11 +171,11 @@ notes, nothing else. A reviewer shown a prior verdict stops being an independent
 and becomes a vote on someone else's hypothesis.
 
 **Review rounds are budgeted.** Each later round of one gate finds fewer defects than the
-last, so ddflow allows `[review].max_rounds` (default 2) FULL rounds per gate per item:
-round 1 on the finished diff, round 2 for after you fixed a confirmed HIGH/MEDIUM defect.
-A third full round is refused (exit 3). Recheck a fix with `ddflow review <ID> --gate G
---delta` (only what changed since the reviewed head) and settle the rest with `ddflow
-review triage` — both are always allowed. `--force --reason "..."` is the operator's
+last, so ddflow allows `[review].max_rounds` (default 2) rounds per gate per item, full
+and delta alike: round 1 on the finished diff, round 2 for after you fixed a confirmed
+HIGH/MEDIUM defect. A third round is refused (exit 3). Settle the rest with `ddflow review
+triage` (always allowed) -- a confirmed finding's probe names the test that now passes --
+then record the gate on that triage, or ask the operator. `--force --reason "..."` is the operator's
 recorded exception; `ddflow config review.max_rounds N [--local]` (0 = unlimited,
 `review.on_exceed = "warn"` to warn only) changes the cap. Once a gate has a recorded
 review, a plain `ddflow review <ID> --gate G` is a FULL re-review: the item's whole diff plus
