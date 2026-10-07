@@ -685,22 +685,20 @@ def capture_diff(
     duplicate headers when a file is both modified and re-added.
 
     ``exclude`` drops paths starting with any of those prefixes from every part of it.
+    Paths are listed with `-z` and the diff is written with `core.quotepath` off, so a
+    non-ASCII name is added and shown as the file it is, not C-quoted (B7ab10b58f2).
     """
-    untracked = [
-        ln
-        for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
-        if ln.strip() and not ln.startswith(exclude)
-    ]
+    untracked = untracked_files(tree, exclude)
     spec = ["--", ".", *(f":(exclude){p}" for p in exclude)] if exclude else []
     if include_untracked and untracked:
         git(tree, "add", "-N", "--", *untracked)
     try:
         if base:
             merge_base = git(tree, "merge-base", base, "HEAD").out or base
-            committed = git(tree, "diff", f"{merge_base}..HEAD", *spec).out
+            committed = git(tree, *_RAW_PATHS, "diff", f"{merge_base}..HEAD", *spec).out
         else:
             committed = ""
-        working = git(tree, "diff", "HEAD", *spec).out
+        working = git(tree, *_RAW_PATHS, "diff", "HEAD", *spec).out
     finally:
         if include_untracked and untracked:
             # Undo intent-to-add so the caller's index is exactly as we found it. A
@@ -709,13 +707,15 @@ def capture_diff(
     return "\n".join(part for part in (committed, working) if part.strip())
 
 
+#: `git -c` for output that names paths raw: a non-ASCII name as itself, not C-quoted.
+_RAW_PATHS = ("-c", "core.quotepath=false")
+
+
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
-    """Paths in ``tree`` git does not track and does not ignore, sorted."""
-    return sorted(
-        ln
-        for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
-        if ln.strip() and not ln.startswith(exclude)
-    )
+    """Paths in ``tree`` git does not track and does not ignore, sorted -- read with `-z`,
+    so a non-ASCII name is the file's own name (B7ab10b58f2)."""
+    listed = git_paths(tree, "ls-files", "--others", "--exclude-standard") or []
+    return sorted(p for p in listed if p.strip() and not p.startswith(exclude))
 
 
 def diff_covers_everything(
@@ -727,13 +727,33 @@ def diff_covers_everything(
     because a diff that is missing a file looks exactly like a diff of a change that
     did not touch that file.
     """
-    changed = [
-        ln[3:].strip().strip('"')
-        for ln in git(tree, "status", "--porcelain").out.splitlines()
-        if ln.strip() and not (ignore_untracked and ln.startswith("??"))
-    ]
-    missing = [p for p in changed if p and p not in diff]
+    changed = _status_paths(tree, ignore_untracked)
+    if changed is None:  # git could not say: never read as "nothing changed"
+        return False, ["(git status failed: the diff cannot be checked)"]
+    missing = [p for p in changed if p not in diff]
     return (not missing), missing
+
+
+def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
+    """Every path `git status` reports as changed, read with `-z`: unstripped (the first
+    record keeps its leading status column), a rename as BOTH its paths rather than an
+    `a -> b` line, and a non-ASCII name unquoted (B7ab10b58f2)."""
+    records = git_paths(tree, "status", "--porcelain")
+    if records is None:
+        return None
+    out: list[str] = []
+    i = 0
+    while i < len(records):
+        rec = records[i]
+        i += 1
+        xy, path = rec[:2], rec[3:]
+        if "R" in xy or "C" in xy:  # `-z` puts the source path in the next record
+            if i < len(records):
+                out.append(records[i])
+            i += 1
+        if not (ignore_untracked and xy == "??"):
+            out.append(path)
+    return [p for p in out if p]
 
 
 #: `path` relative to `repo` as a POSIX string, or None outside it: now `fsio.repo_rel`,
