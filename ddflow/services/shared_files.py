@@ -75,7 +75,7 @@ def _probe_paths(repo: Path, glob: str) -> list[str]:
 
 
 def _git_z(repo: Path, *args: str) -> list[str] | None:
-    """`W.git_paths` -- `-z`, read as bytes, so a non-ASCII path comes back as the file
+    """`infra.git.git_paths` -- `-z`, read as bytes, so a non-ASCII path comes back as the file
     is named, not C-quoted (B9c56de9d58) -- and None when git could not run or did not
     answer in time, never an exception out of doctor or a config write."""
     from ..infra import git as G
