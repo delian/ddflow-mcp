@@ -144,7 +144,6 @@ from .runner import (  # noqa: F401
     _missing_executable,
     _read_text,
     _run_spec,
-    _run_ticking,
     classify_exit,
     gate_config_drift,
     run_command_gate,

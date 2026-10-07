@@ -101,17 +101,28 @@ def test_a_timed_out_ci_command_kills_its_grandchild(repo, tmp_path):
     assert _gone(pidfile), "the ci command's child outlived its timeout"
 
 
-def test_run_shell_returns_like_run_when_the_command_finishes(tmp_path):
-    p = P.run_shell("echo out; echo err >&2; exit 3", cwd=tmp_path, timeout=10, text=True)
-    assert (p.returncode, p.stdout, p.stderr) == (3, "out\n", "err\n")
+def test_run_shell_returns_the_exit_and_both_streams_when_the_command_finishes(tmp_path):
+    r = P.run_shell("echo out; echo err >&2; exit 3", cwd=tmp_path, timeout_s=10)
+    assert (r.code, r.out, r.err) == (3, "out\n", "err\n")
+    assert r.finished and not r.ok and not r.timed_out and not r.could_not_run
 
 
-def test_run_shell_raises_timeout_after_killing_the_group(tmp_path):
+def test_run_shell_reports_a_timeout_after_killing_the_group(tmp_path):
     pidfile = tmp_path / "child.pid"
-    with pytest.raises(P.TimeoutExpired) as exc:
-        P.run_shell(f"echo partial; {_command(pidfile)}", cwd=tmp_path, timeout=1, text=True)
-    assert exc.value.output == "partial\n", "the output written before the timeout is kept"
+    r = P.run_shell(f"echo partial; {_command(pidfile)}", cwd=tmp_path, timeout_s=1)
+    assert r.timed_out and r.code is None and not r.could_not_run
+    assert r.out == "partial\n", "the output written before the timeout is kept"
     assert _gone(pidfile)
+
+
+def test_run_shell_reports_a_command_that_could_not_start(tmp_path):
+    r = P.run_shell("true", cwd=tmp_path / "missing", timeout_s=10)
+    assert r.could_not_run and r.code is None and not r.timed_out and r.err
+
+
+def test_run_shell_can_fold_stderr_into_stdout(tmp_path):
+    r = P.run_shell("echo a; echo b >&2; echo c", cwd=tmp_path, timeout_s=10, merge_stderr=True)
+    assert r.out == "a\nb\nc\n" and r.err == ""
 
 
 def test_run_shell_keeps_stdin_detached():
@@ -122,8 +133,8 @@ def test_run_shell_keeps_stdin_detached():
     parent = (
         f"import sys; sys.path.insert(0, {str(root)!r});"
         "from ddflow.infra import proc as P;"
-        "r = P.run_shell('cat; echo done', timeout=30, text=True);"
-        "print('CHILD_SAW=' + repr(r.stdout));"
+        "r = P.run_shell('cat; echo done', timeout_s=30);"
+        "print('CHILD_SAW=' + repr(r.out));"
         "print('PARENT_KEPT=' + repr(sys.stdin.read()))"
     )
     p = subprocess.run(
@@ -140,4 +151,4 @@ def test_run_shell_keeps_stdin_detached():
 
 def test_run_shell_refuses_a_tick_that_would_never_fire(tmp_path):
     with pytest.raises(ValueError):
-        P.run_shell("true", cwd=tmp_path, timeout=10, on_tick=lambda: None)
+        P.run_shell("true", cwd=tmp_path, timeout_s=10, on_tick=lambda: None)
