@@ -5,7 +5,9 @@ The failing-first fixture is this repository's README as of commit 7a397be, the 
 before its catch-up: three lines of it, verbatim, whose drift the check must find.
 """
 
+import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -158,12 +160,50 @@ def test_a_directory_that_is_not_a_repository_cannot_answer(tmp_path):
         D.check_docs(tmp_path)
 
 
+#: CPU seconds `check_docs(README.md)` may cost: ~0.87 s idle on the CI box.
+RUNTIME_BUDGET_S = 2.0
+
+
+def _cpu() -> float:
+    """CPU seconds of this process and of the children it waited for (`git ls-files`)."""
+    t = os.times()
+    return t.user + t.system + t.children_user + t.children_system
+
+
+def _cost(fn):
+    """(CPU seconds ``fn`` spent, its result). CPU, not wall: the budget guards the
+    checker's own cost, and at CI load (average ~180 on 192 threads) a wall clock also
+    counts the time the process waited for a core (B4d5ffa0b90)."""
+    start = _cpu()
+    result = fn()
+    return _cpu() - start, result
+
+
 def test_runtime_on_this_repositorys_readme():
     root = Path(__file__).resolve().parents[1]
-    start = time.perf_counter()
-    report = D.check_docs(root, docs=["README.md"])
-    assert time.perf_counter() - start < 2.0
+    spent, report = _cost(lambda: D.check_docs(root, docs=["README.md"]))
+    assert spent < RUNTIME_BUDGET_S, f"check_docs(README.md) cost {spent:.2f}s of CPU"
     assert report.checked["identifiers"] > 50
+
+
+def test_the_readme_budget_does_not_charge_time_spent_waiting_for_a_core(monkeypatch):
+    """The runtime test itself, with the checker descheduled for longer than the budget:
+    a sleep passes wall time and no CPU, as waiting for a core under load does."""
+    real = D.check_docs
+
+    def descheduled(*args, **kwargs):
+        time.sleep(RUNTIME_BUDGET_S + 0.1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(D, "check_docs", descheduled)
+    test_runtime_on_this_repositorys_readme()
+
+
+def test_the_budget_charges_the_cpu_of_a_child_it_waited_for():
+    """`check_docs` runs `git ls-files`: its CPU is the checker's cost too."""
+    burn = [sys.executable, "-c", "sum(range(2 * 10**7))"]
+    spent, _ = _cost(lambda: subprocess.run(burn, check=True))
+    assert spent > 0.1, f"a CPU-bound child was charged {spent:.2f}s"
 
 
 def test_a_named_document_that_cannot_be_read_is_not_a_clean_report(tmp_path):
