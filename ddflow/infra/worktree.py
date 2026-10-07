@@ -685,8 +685,8 @@ def capture_diff(
     duplicate headers when a file is both modified and re-added.
 
     ``exclude`` drops paths starting with any of those prefixes from every part of it.
-    Paths are listed with `-z` and the diff is written with `core.quotepath` off, so a
-    non-ASCII name is added and shown as the file it is, not C-quoted (B7ab10b58f2).
+    Untracked paths are listed with `-z`, so a non-ASCII name is added as the file it
+    is rather than as its C-quoted spelling, which names no file (B7ab10b58f2).
     """
     untracked = untracked_files(tree, exclude)
     spec = ["--", ".", *(f":(exclude){p}" for p in exclude)] if exclude else []
@@ -695,20 +695,16 @@ def capture_diff(
     try:
         if base:
             merge_base = git(tree, "merge-base", base, "HEAD").out or base
-            committed = git(tree, *_RAW_PATHS, "diff", f"{merge_base}..HEAD", *spec).out
+            committed = git(tree, "diff", f"{merge_base}..HEAD", *spec).out
         else:
             committed = ""
-        working = git(tree, *_RAW_PATHS, "diff", "HEAD", *spec).out
+        working = git(tree, "diff", "HEAD", *spec).out
     finally:
         if include_untracked and untracked:
             # Undo intent-to-add so the caller's index is exactly as we found it. A
             # review that leaves files staged changes what the next commit contains.
             git(tree, "reset", "--quiet", "--", *untracked)
     return "\n".join(part for part in (committed, working) if part.strip())
-
-
-#: `git -c` for output that names paths raw: a non-ASCII name as itself, not C-quoted.
-_RAW_PATHS = ("-c", "core.quotepath=false")
 
 
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
@@ -730,8 +726,30 @@ def diff_covers_everything(
     changed = _status_paths(tree, ignore_untracked)
     if changed is None:  # git could not say: never read as "nothing changed"
         return False, ["(git status failed: the diff cannot be checked)"]
-    missing = [p for p in changed if p not in diff]
+    missing = [p for p in changed if p not in diff and _c_quoted(p) not in diff]
     return (not missing), missing
+
+
+#: Bytes git prints as themselves in a quoted path: space up to (not including) DEL.
+_PRINTABLE_ASCII = (0x20, 0x7F)
+_C_ESCAPES = {7: "a", 8: "b", 9: "t", 10: "n", 11: "v", 12: "f", 13: "r", 34: '"', 92: "\\"}
+
+
+def _c_quoted(path: str) -> str:
+    """``path`` as git spells it inside a quoted diff header (`quote_c_style`, with the
+    default `core.quotepath`): `"` and `\\` escaped, control and non-ASCII bytes as
+    `\\ooo` octal -- without the surrounding quotes. The status side is read raw with
+    `-z`, the diff side is not, so a name like `a"b` or `café` is matched in its quoted
+    form (B7ab10b58f2)."""
+    out = []
+    for b in os.fsencode(path):
+        if b in _C_ESCAPES:
+            out.append("\\" + _C_ESCAPES[b])
+        elif not _PRINTABLE_ASCII[0] <= b < _PRINTABLE_ASCII[1]:
+            out.append(f"\\{b:03o}")
+        else:
+            out.append(chr(b))
+    return "".join(out)
 
 
 def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
