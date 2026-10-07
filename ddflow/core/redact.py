@@ -1,8 +1,8 @@
 """One Redactor, named profiles (D-unify 6, B-uni-textkit.4).
 
 Profiles: `log` (the committed event log: new writes only), `view` (committed views),
-`export` (exported documents), `upstream` (anything leaving the machine in a report) and
-`argv` (the shape of a command line). Every text profile is the full one: secrets, private
+`export` (exported documents) and `upstream` (anything leaving the machine in a report);
+the shape of a command line is structural, `redact_argv`, not a profile. Every text profile is the full one: secrets, private
 addresses and hosts, home paths, emails and names go; they differ only in which
 machine-local inputs they read (see `PROFILES`).
 
