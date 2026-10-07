@@ -195,6 +195,8 @@ def test_a_naive_time_means_what_the_caller_says():
         clock.parse_ts(naive, naive="refuse")
     with pytest.raises(quota.QuotaError, match="has no timezone: add Z or an offset"):
         quota._parse_time(naive)
+    assert clock.epoch(naive, naive="refuse", default=-1.0) == -1.0
+    assert clock.age_s(naive, NOW, naive="refuse") == INF
     assert clock.epoch(naive, naive="local") - clock.epoch(naive) == -5.5 * 3600
 
 
