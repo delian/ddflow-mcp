@@ -213,8 +213,13 @@ class _Sites(ast.NodeVisitor):
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
         # `datetime.fromisoformat`, `date.fromisoformat`, `datetime.strptime`: a timestamp
-        # parsed outside `core.clock` (B-uni-clock), by any receiver.
-        if isinstance(node.func, ast.Attribute) and node.func.attr in _TIME_PARSERS:
+        # parsed outside `core.clock` (B-uni-clock), by any receiver -- or by a name bound
+        # to one (`from time import strptime`).
+        if (isinstance(node.func, ast.Attribute) and node.func.attr in _TIME_PARSERS) or (
+            isinstance(node.func, ast.Name)
+            and (name or "").rpartition(".")[2] in _TIME_PARSERS
+            and "." in (name or "")
+        ):
             self.sites["time_parse"].append(node.lineno)
         self.generic_visit(node)
 
@@ -548,6 +553,12 @@ def _iter_counter_cases() -> Iterator[tuple[str, str, int]]:
         "clock.parse_ts(a)\n",
         "time_parse",
         3,
+    )
+    yield (
+        "from time import strptime\nfrom datetime import datetime as dt\n"
+        "strptime(s, f)\ndt.fromisoformat(a)\nfromisoformat = 1\n",
+        "time_parse",
+        2,
     )
 
 
