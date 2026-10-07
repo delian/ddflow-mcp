@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..config import family_for
 from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
@@ -468,7 +469,7 @@ def reviewers_detect(
     """
     from ..services import review as R
 
-    _log, _cfg, _st = _load(repo, agent)
+    _log, cfg, _st = _load(repo, agent)
     found = R.detect()
     if not found:
         none = (
@@ -479,7 +480,10 @@ def reviewers_detect(
     rows, blocks = [], []
     for url, label, models in found:
         for m in models:
-            fam = R.family_of(m)
+            # The project's map, as the review itself will resolve it -- and NOT written
+            # into the block: a written `family` wins over `[agent].families` for good,
+            # and here it would only be the shipped guess (B98650136a8).
+            fam = family_for(m, cfg.agent.families)
             rows.append({"url": url, "label": label, "model": m, "family": fam})
             # tomlcfg.value, not "{m}": a model name is whatever the endpoint reported,
             # and a quote in it broke the block (Bb11e7a8186).
@@ -487,7 +491,6 @@ def reviewers_detect(
                 "name": m.split("/")[-1].lower(),
                 "base_url": url,
                 "model": m,
-                "family": fam,
                 "gates": ["critic"],
             }
             blocks.append(
