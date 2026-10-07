@@ -57,6 +57,22 @@ def test_it_is_refused_in_ddflows_own_tree(repo, cfg, monkeypatch):
         G.load_gates(repo, cfg)
 
 
+def test_false_on_a_required_gate_says_how_to_stop_requiring_it(repo, cfg, capsys):
+    _write(repo, "[gate.unit_tests]\nrequired = false\n")
+    assert "unit_tests" in cfg.gates.required
+    assert G.load_gates(repo, cfg)["unit_tests"].required, "the knob still decides"
+    assert "take 'unit_tests' out of [gates].required" in capsys.readouterr().err
+
+
+def test_a_table_agreeing_with_the_knob_is_not_reported(repo, cfg, capsys, monkeypatch):
+    """`required = false` on an optional gate, or `true` on a listed one, is redundant:
+    no warning, and no refusal even in ddflow's own tree."""
+    monkeypatch.setattr(D, "_is_code_tree", lambda root: True)
+    _write(repo, "[gate.critic]\nrequired = false\n[gate.merge]\nrequired = true\n")
+    G.load_gates(repo, cfg)
+    assert capsys.readouterr().err == ""
+
+
 def test_the_real_knob_is_untouched(repo, cfg, capsys):
     _write(repo, '[gate.security_review]\ntitle = "Security review"\n')
     cfg.gates.required = [*cfg.gates.required, "security_review"]
