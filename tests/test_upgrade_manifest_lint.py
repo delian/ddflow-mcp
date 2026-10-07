@@ -165,3 +165,13 @@ def test_a_lint_that_cannot_run_stops_the_cut_only_under_block(tree, monkeypatch
         assert out.exit == OK
         assert ("could not run" in out.data["warning"]) is (policy == "warn")
         assert bool(out.data.get("unavailable")) is (policy == "warn")
+
+
+def test_a_ddflow_installed_inside_the_project_is_not_the_projects_manifest(
+    repo, drift, monkeypatch
+):
+    site = repo / ".venv" / "lib" / "python3" / "site-packages" / "ddflow" / "templates" / "upgrade"
+    shutil.copytree(UM.MANIFEST.parent, site)
+    monkeypatch.setattr(UM, "MANIFEST", site / "changes.toml")
+    out = api.version_lint(repo)
+    assert out.exit == OK and out.data["unmanifested"] == []
