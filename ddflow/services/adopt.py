@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra import paths
+from ..infra.fsio import replace_text
 from . import install_info as _INSTALL
 
 #: Where an operator reads the manual step for an agent with no project config.
@@ -602,7 +603,7 @@ def _append_once(path: Path, present: frozenset[str], text: str) -> bool:
     prev = path.read_text("utf-8") if path.exists() else ""
     if any(" ".join(line.split()) in present for line in prev.splitlines()):
         return False
-    path.write_text(prev + ("" if prev.endswith("\n") or not prev else "\n") + text, "utf-8")
+    replace_text(path, prev + ("" if prev.endswith("\n") or not prev else "\n") + text)
     return True
 
 
@@ -631,11 +632,11 @@ def init_files(repo: Path) -> list[str]:
     (d / "events").mkdir(parents=True, exist_ok=True)
     gi = d / ".gitignore"
     if not gi.is_file() or gi.read_text("utf-8") != DDFLOW_GITIGNORE:
-        gi.write_text(DDFLOW_GITIGNORE, "utf-8")
+        replace_text(gi, DDFLOW_GITIGNORE)
         actions.append("wrote .ddflow/.gitignore")
     cfgp = d / "config.toml"
     if not cfgp.exists():
-        cfgp.write_text(starter_config(), "utf-8")
+        replace_text(cfgp, starter_config())
         actions.append("wrote .ddflow/config.toml (starter)")
     # An in-repo worktree root (the default inside a container, where a sibling path
     # would land on the ephemeral layer) must be ignored, or every worktree shows up as
@@ -882,7 +883,7 @@ def _write_command(repo: Path, rel: str, src: Path) -> str:
                 f"the MCP prompt `implement`. Delete the file and re-run adopt to take it"
             )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, "utf-8")
+    replace_text(path, text)
     return f"wrote {rel}"
 
 
@@ -901,7 +902,7 @@ def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> s
     if rule.form == FORM_WHOLE:
         # The whole file is ours: the frontmatter has to come FIRST for the rule to bind,
         # so there is nowhere to put a marker above it.
-        path.write_text(native_rule_text(docs_dir), "utf-8")
+        replace_text(path, native_rule_text(docs_dir))
         return f"wrote {rule.path} (always-applied project rule)"
     if rule.form == FORM_BLOCK:
         # A file the project may already own (`QWEN.md`, `replit.md`, `.goosehints`), so a
@@ -961,7 +962,7 @@ def _add_aider_read(path: Path) -> str:
     m = re.search(r"^read:([^\n]*)$", text, re.M)
     if m is None:
         prefix = text.rstrip() + "\n" if text.strip() else ""
-        path.write_text(f"{prefix}read:\n  - {AIDER_READS}\n", "utf-8")
+        replace_text(path, f"{prefix}read:\n  - {AIDER_READS}\n")
         return f"{'added' if prefix else 'created'} read: {AIDER_READS} in {path.name}"
 
     existing, trailing = _aider_read_values(m.group(1))
@@ -982,7 +983,7 @@ def _add_aider_read(path: Path) -> str:
 
     values = [*dict.fromkeys([*existing, AIDER_READS])]  # de-duplicated, order kept
     block = "read:" + trailing + "\n" + "".join(f"  - {v}\n" for v in values)
-    path.write_text(text[: m.start()] + block + rest[consumed:], "utf-8")
+    replace_text(path, text[: m.start()] + block + rest[consumed:])
     return f"added {AIDER_READS} to read: in {path.name}"
 
 
@@ -1016,10 +1017,10 @@ def _upsert_block(path: Path, section: str) -> str:
     if BEGIN in existing and END in existing:
         head = existing[: existing.index(BEGIN)]
         tail = existing[existing.index(END) + len(END) :]
-        path.write_text(head + section.strip() + tail, "utf-8")
+        replace_text(path, head + section.strip() + tail)
         return f"updated the managed block in {path.name}"
     prefix = existing.rstrip() + "\n\n" if existing.strip() else f"# {path.parent.name}\n\n"
-    path.write_text(prefix + section.strip() + "\n", "utf-8")
+    replace_text(path, prefix + section.strip() + "\n")
     return f"{'appended to' if existing.strip() else 'created'} {path.name}"
 
 
@@ -1198,7 +1199,7 @@ def _register_mcp(
         # and without it the server cannot import ddflow (roborev on 5282d8d8).
         if entry.get("env"):
             block += f"env = {toml_value(dict(entry['env']))}\n"
-        path.write_text(text.rstrip() + "\n" + block if text.strip() else block.lstrip(), "utf-8")
+        replace_text(path, text.rstrip() + "\n" + block if text.strip() else block.lstrip())
         return f"registered ddflow in {rel}"
 
     data: dict = {}
@@ -1211,7 +1212,7 @@ def _register_mcp(
         place_server(data, target.shape, "ddflow", entry)
     except UnplaceableConfig as exc:
         return Refused(f"SKIPPED {rel}: {exc}; add the server by hand")
-    path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
+    replace_text(path, json.dumps(data, indent=2) + "\n")
     return f"registered ddflow in {rel}"
 
 

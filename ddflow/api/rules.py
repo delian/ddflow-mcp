@@ -14,6 +14,7 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ..core import outcome as O
+from ..infra.fsio import replace_text
 from ..services.rules import Rule, RulesStorage
 from ._base import _load
 
@@ -387,7 +388,7 @@ def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") ->
         # Update the manifest
         manifest_content = rules_manifest(storage)
         manifest_path = repo / "DDFLOW.md"
-        manifest_path.write_text(manifest_content)
+        replace_text(manifest_path, manifest_content)
 
         return O.ok(
             "rule.added",
@@ -454,7 +455,7 @@ def apply_rule_update(
         # Update the manifest
         manifest_content = rules_manifest(storage)
         manifest_path = repo / "DDFLOW.md"
-        manifest_path.write_text(manifest_content)
+        replace_text(manifest_path, manifest_content)
 
         return O.ok(
             f"rule.{operation}",
@@ -700,7 +701,7 @@ def rule_update(
         # Update the manifest
         manifest_content = rules_manifest(storage)
         manifest_path = repo / "DDFLOW.md"
-        manifest_path.write_text(manifest_content)
+        replace_text(manifest_path, manifest_content)
 
         return O.ok(
             "rule.updated",
@@ -733,7 +734,7 @@ def rule_remove(repo: Path, rule_id: str) -> O.Outcome:
         # Update the manifest
         manifest_content = rules_manifest(storage)
         manifest_path = repo / "DDFLOW.md"
-        manifest_path.write_text(manifest_content)
+        replace_text(manifest_path, manifest_content)
 
         return O.ok("rule.deleted", id=rule_id)
 
