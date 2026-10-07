@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from fnmatch import fnmatch
 from pathlib import Path
 
+from ..core.globs import match as glob_match
 from ..core.model import Lesson
 from ..infra import worktree as W
 
@@ -101,7 +101,7 @@ def _candidates(repo: Path, globs: list[str]) -> list[Path]:
     for rel in sorted(rels):
         if any(part in SKIP_DIRS for part in Path(rel).parts):
             continue
-        if globs and not any(fnmatch(rel, g) for g in globs):
+        if globs and not any(glob_match(rel, g, bare_any_depth=True) for g in globs):
             continue
         out.append(repo / rel)
     return out
