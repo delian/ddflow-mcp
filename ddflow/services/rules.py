@@ -32,7 +32,9 @@ _FRONTMATTER_PARTS = 2  # frontmatter + content, split on the first blank line
 _MIN_TOKEN_LEN = 2  # tokens this short are noise
 
 
-_now = clock.now_utc  # the current UTC time, timezone-aware (core.clock)
+def _now() -> datetime:
+    """The current UTC time, timezone-aware: core.clock's, looked up at call time."""
+    return clock.now_utc()
 
 
 @dataclass
