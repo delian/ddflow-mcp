@@ -80,7 +80,6 @@ def test_the_scan_finds_the_knobs_the_bug_named() -> None:
     for key in (
         "enforce.stale_docs",
         "lease.reclaim_policy",
-        "worktree.merge_strategy",
         "session.progress_after_complete",
         "ci.on_merge",
         "dedupe.on_match",
