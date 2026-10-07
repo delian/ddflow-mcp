@@ -140,3 +140,24 @@ def test_the_policy_knob_is_a_strict_enum():
     assert C.KNOB_CHOICES["release.manifest_lint"] == ("block", "warn", "off")
     assert C.KNOB_STRICTEST["release.manifest_lint"][0] == "block"
     assert C.Config().release.manifest_lint == "block"
+
+
+def test_a_waiver_covers_that_change_only_not_the_knobs_next_one(tree, monkeypatch):
+    real = UM.knob_defaults()
+    key = next(k for k in real if k.startswith("review.") and isinstance(real[k], int))
+    first = {**real, key: real[key] + 1}
+    UM.waive(key, "this release only", result=UM.lint(knobs=first))
+    assert UM.lint(knobs=first).clean
+    again = UM.lint(knobs={**real, key: real[key] + 2})
+    assert [u.id for u in again.unmanifested] == [f"knob_changed:{key}"]
+
+
+def test_a_lint_that_cannot_run_stops_the_cut_only_under_block(tree, monkeypatch):
+    UM.MANIFEST.write_text("not [valid toml", "utf-8")
+    assert api.version_lint(tree).exit == REFUSED
+    assert api.version_cut(tree, bump="patch", dry_run=True).exit == REFUSED
+    for policy in ("warn", "off"):
+        assert run_cli(tree, "config", "release.manifest_lint", policy, "--local")[0] == OK
+        out = api.version_lint(tree)
+        assert out.exit == OK
+        assert ("could not run" in out.data["warning"]) is (policy == "warn")

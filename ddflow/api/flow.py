@@ -165,7 +165,16 @@ def _lint_outcome(op: str, repo: Path, cfg, *, waive: str = "", reason: str = ""
             UM.waive(waive, reason, result=res)
             res = UM.lint()
     except UM.ManifestError as exc:
-        return O.refused(op, str(exc))
+        # A lint that cannot run stops a release only where the policy says a finding would.
+        if waive or policy == "block":
+            return O.refused(op, str(exc))
+        return O.ok(
+            op,
+            policy=policy,
+            unmanifested=[],
+            waived=[],
+            warning=f"manifest lint could not run: {exc}",
+        )
     data: dict[str, Any] = {
         "policy": policy,
         "unmanifested": [{"change": u.id, "entry": u.fragment_name} for u in res.unmanifested],
