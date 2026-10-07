@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import _doc
+from ._docs import declare, knob
 
 
+@declare("reinstruct")
 @dataclass
 class ReinstructConfig:
     """Re-stating the rules after a compaction — the one channel that survives it.
@@ -27,29 +28,19 @@ class ReinstructConfig:
     something specific to say — see `services/obligations.py`.
     """
 
-    enabled: bool = True
-    every_calls: int = 12
-    every_seconds: int = 240
-    max_items: int = 3
-
-
-_doc(
-    "reinstruct",
-    "enabled",
-    "Whether tool results may carry a short footer naming what this project has left undone. The instruction block is delivered once at connect; after a context compaction nothing else re-states it, and MCP has no primitive for injecting context. Set false to silence it entirely.",
-)
-_doc(
-    "reinstruct",
-    "every_calls",
-    "Minimum tool calls between two footers. A footer on every call is a banner readers learn to skip.",
-)
-_doc(
-    "reinstruct",
-    "every_seconds",
-    "Minimum seconds between two footers. BOTH this and every_calls must be satisfied, so a burst of calls does not produce a burst of footers.",
-)
-_doc(
-    "reinstruct",
-    "max_items",
-    "How many outstanding obligations a footer names. Longer than this and it is scrolled past rather than read.",
-)
+    enabled: bool = knob(
+        True,
+        doc="Whether tool results may carry a short footer naming what this project has left undone. The instruction block is delivered once at connect; after a context compaction nothing else re-states it, and MCP has no primitive for injecting context. Set false to silence it entirely.",
+    )
+    every_calls: int = knob(
+        12,
+        doc="Minimum tool calls between two footers. A footer on every call is a banner readers learn to skip.",
+    )
+    every_seconds: int = knob(
+        240,
+        doc="Minimum seconds between two footers. BOTH this and every_calls must be satisfied, so a burst of calls does not produce a burst of footers.",
+    )
+    max_items: int = knob(
+        3,
+        doc="How many outstanding obligations a footer names. Longer than this and it is scrolled past rather than read.",
+    )
