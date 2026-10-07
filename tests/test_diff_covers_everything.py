@@ -85,3 +85,12 @@ def test_non_utf8_content_does_not_break_the_review_diff(repo):
     (repo / "latin.txt").write_bytes(b"caf\xe9 content\n")
     diff = W.capture_diff(repo)
     assert "content" in diff, diff
+
+
+def test_a_mixed_name_under_quotepath_false_is_found(repo):
+    """`core.quotepath=false` escapes `"` but leaves the non-ASCII bytes raw."""
+    _git(repo, "config", "core.quotepath", "false")
+    _commit(repo, 'café"b.txt')
+    (repo / 'café"b.txt').write_text("two\n")
+    ok, missing = W.diff_covers_everything(repo, W.capture_diff(repo))
+    assert ok, missing
