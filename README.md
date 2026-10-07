@@ -1940,9 +1940,10 @@ Ready (1 ready, 0 running, 1 blocked):
 
 The refusal names *where* the dependency came from, because an operator told only
 "P2.T1 needs P1" goes looking for a declaration that is not written there. The one
-dependency **not** inherited is one pointing into your own subtree: an umbrella that
-declares a dependency on its own child would otherwise make the child wait for itself,
-turning a plan typo into a permanent hang.
+dependency **not** inherited is one pointing into your own subtree or at one of your own
+ancestors: an umbrella that declares a dependency on its own child would otherwise make
+the child -- and that child's sub-tasks -- wait for something that closes only after
+they do, turning a plan typo into a permanent hang.
 
 `ddflow claim` asks the *same* predicate `ddflow next` does. They used to disagree —
 `next` withheld a task on its dependencies and `claim` handed out a worktree for it a
