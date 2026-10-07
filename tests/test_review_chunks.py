@@ -445,6 +445,27 @@ def test_a_bystanders_review_does_not_renew_a_lease_it_does_not_hold(repo, tmp_p
     assert after == before, "a bystander's review renewed someone else's lease"
 
 
+def _quick_settles_first(lines: list[tuple[float, str]]) -> bool:
+    """The quick chunk's line came well before the slow one's -- relative to each other,
+    not to the call: under load the first line alone took over 4 s (B8858b1b659)."""
+    quick = [t for t, line in lines if "chunk" in line and "a.py" in line]
+    slow = [t for t, line in lines if "chunk" in line and "b.py" in line]
+    return bool(quick and slow) and quick[0] < slow[0] - 1.5
+
+
+def test_the_settle_check_is_relative_not_absolute():
+    """The ci run that flaked (B8858b1b659): start-up took 4.4 s, the quick chunk settled
+    at 4.56 s and the slow one at 7.98 s -- streamed as it should be."""
+    loaded = [
+        (4.43, "→ fake (google) reviewing 757 chars"),
+        (4.56, "  chunk 3/4 (a.py): reviewed, 0 finding(s), 0s"),
+        (7.98, "  chunk 4/4 (b.py): reviewed, 0 finding(s), 4s"),
+    ]
+    assert _quick_settles_first(loaded)
+    batched = [(7.98, "  chunk 3/4 (a.py): reviewed"), (7.99, "  chunk 4/4 (b.py): reviewed")]
+    assert not _quick_settles_first(batched)
+
+
 def test_progress_is_reported_as_each_chunk_settles(repo, tmp_path, monkeypatch):
     import ddflow.api.review as api
 
@@ -460,6 +481,5 @@ def test_progress_is_reported_as_each_chunk_settles(repo, tmp_path, monkeypatch)
         on_progress=lambda line: lines.append((time.time() - started, line)),
     )
     assert out.data["outcome"] == "passed", out.reason
-    quick = [t for t, line in lines if "chunk" in line and "a.py" in line]
-    assert quick and quick[0] < 2.5, f"the quick chunk was reported only at the end: {lines}"
+    assert _quick_settles_first(lines), f"the quick chunk was reported only at the end: {lines}"
     assert any("waiting" in line for _t, line in lines), f"no word while waiting: {lines}"
