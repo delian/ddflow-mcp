@@ -23,6 +23,7 @@ from typing import Any
 
 from ...config import Config
 from ...infra import tomlcfg
+from ...infra.fsio import repo_rel
 from . import registry as R
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
@@ -34,10 +35,7 @@ def project_path(repo: Path, kind: str) -> Path:
 
 
 def rel(repo: Path, p: Path) -> str:
-    try:
-        return p.relative_to(repo).as_posix()
-    except ValueError:
-        return str(p)
+    return repo_rel(repo, p, as_given=True, strict=False) or str(p)
 
 
 def split_mark(text: str) -> tuple[str, str]:
