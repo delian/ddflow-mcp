@@ -2,7 +2,8 @@
 
 Both now go through fsio.repo_rel(as_given=True, strict=False); every path production
 code builds prints exactly what the old lexical derivation printed, also when the
-repository is reached through a symlink. legacy.scan's label stays native text (a Path,
+repository is reached through a symlink -- except an operator-named legacy.scan extra=
+path containing '..', which repo_rel resolves rather than trusting lexically. legacy.scan's label stays native text (a Path,
 str()-ed), templates.rel's stays POSIX text, as each was before.
 """
 
@@ -46,7 +47,8 @@ def test_legacy_labels_rulebooks_and_commands_as_before(repo: Path):
     (repo / "docs" / "HANDOFF.md").write_text("Remember to update lessons.md each time.\n")
     proposals = L.scan(repo, [], extra=["docs/HANDOFF.md", str(repo / "CLAUDE.md")])
     labels = sorted({p.path for p in proposals})
-    assert labels == [".claude/commands/done.md", "CLAUDE.md", "docs/HANDOFF.md"]
+    expected = [".claude/commands/done.md", "CLAUDE.md", "docs/HANDOFF.md"]
+    assert labels == sorted(str(Path(e)) for e in expected)
     for label in labels:
         assert label == _old_legacy_label(repo, repo / label)
 
