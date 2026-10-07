@@ -39,6 +39,7 @@ from ..config import Config
 from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, State
 from . import clock
 from .events import Event
+from .graph import closure
 
 #: Gates whose failure is a reviewer's verdict on the work, not a failure of the work
 #: (decision D-failed-critic-not-blocking). The repeated-failure detector skips them.
@@ -557,18 +558,14 @@ def _waits_on(state: State, item_id: str) -> set[str]:
         it = state.items.get(i)
         return bool(it and not it.removed and it.state not in (DONE, ABANDONED))
 
-    seen: set[str] = set()
-    stack = [item_id]
-    while stack:
-        it = state.items[stack.pop()]
-        for _owner, dep in inherited_deps(state, it):
-            if not live(dep):
-                continue
-            for n in (dep, *sorted(state.descendants(dep))):
-                if n not in seen and live(n):
-                    seen.add(n)
-                    stack.append(n)
-    return seen
+    def waits(i: str) -> list[str]:
+        out: list[str] = []
+        for _owner, dep in inherited_deps(state, state.items[i]):
+            if live(dep):
+                out += [n for n in (dep, *sorted(state.descendants(dep))) if live(n)]
+        return out
+
+    return set(closure(item_id, waits))
 
 
 def _no_progress(events: list[Event], lc, sev: str) -> list[LoopFinding]:

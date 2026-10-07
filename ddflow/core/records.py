@@ -10,6 +10,7 @@ from typing import Any
 
 from .defs import DefRecord
 from .events import version_key
+from .graph import closure
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
 # events about it. A state field that can be set directly is a field that can drift
@@ -898,16 +899,7 @@ class State:
         both deep and — if someone makes a mistake — circular, and a health check that
         blows the stack while diagnosing a bad plan is no use.
         """
-        seen: set[str] = set()
-        stack = [item_id]
-        while stack:
-            node = stack.pop()
-            for child in self.children(node):
-                if child.id in seen:
-                    continue
-                seen.add(child.id)
-                stack.append(child.id)
-        return seen
+        return set(closure(item_id, lambda n: [c.id for c in self.children(n)]))
 
     def ancestors(self, item_id: str) -> list[Item]:
         """The parent chain above ``item_id``, nearest first.
@@ -916,16 +908,13 @@ class State:
         operator-authored, so a mistake can make it circular, and the code that walks
         it is the code that diagnoses bad plans.
         """
-        out: list[Item] = []
-        seen = {item_id}
-        node = self.items.get(item_id)
-        while node is not None and node.parent and node.parent not in seen:
-            seen.add(node.parent)
-            node = self.items.get(node.parent)
-            if node is None or node.removed:
-                break
-            out.append(node)
-        return out
+
+        def parent(n: str) -> list[str]:
+            node = self.items.get(n)
+            up = self.items.get(node.parent) if node is not None and node.parent else None
+            return [up.id] if up is not None and not up.removed else []
+
+        return [self.items[n] for n in closure(item_id, parent) if n != item_id]
 
     def open_descendants(self, item_id: str) -> list[Item]:
         """Descendants that are neither done nor abandoned — what blocks completion."""
