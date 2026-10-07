@@ -205,18 +205,14 @@ def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> di
     st = fold(log.read_all(), strict=False)
     parents = st.ancestors(item)
     if not parents or not _umbrella_children(st, parents[0]):
-        return {"umbrellas_completed": []}
+        return {"umbrellas_completed": [], "umbrella_refused": {}}
     up = parents[0].id
     done = complete(repo, up, agent=agent)
     if done.exit != O.OK:
         return {"umbrellas_completed": [], "umbrella_refused": {up: done.reason}}
     return {
         "umbrellas_completed": [up, *done.data.get("umbrellas_completed", [])],
-        **(
-            {"umbrella_refused": done.data["umbrella_refused"]}
-            if done.data.get("umbrella_refused")
-            else {}
-        ),
+        "umbrella_refused": dict(done.data.get("umbrella_refused") or {}),
     }
 
 

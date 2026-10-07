@@ -311,6 +311,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "note",
             "woke",
             "bugs_closed",
+            "umbrellas_completed",
+            "umbrella_refused",
         ),
     },
     "ddflow_merge": {

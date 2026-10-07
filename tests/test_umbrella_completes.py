@@ -9,6 +9,7 @@ umbrella's own to run on.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -40,6 +41,8 @@ def test_the_last_sub_task_completing_completes_the_umbrella(repo):
     code, out, err = run_cli(repo, "--json", "complete", "P.T.b", "--force")
     assert code == OK, out + err
     assert _state(repo, "P.T") == "done", "the umbrella stayed open after its last sub-task"
+    assert json.loads(out)["umbrellas_completed"] == ["P.T"], out
+    assert "P.T completed with its sub-tasks" in err, err
     done = [
         e for e in EventLog(repo).read_all() if e.kind == "item.completed" and e.subject == "P.T"
     ]
@@ -112,3 +115,9 @@ def test_an_umbrella_held_by_an_open_bug_says_so_instead_of_completing_silently(
     assert out.exit == OK, out.reason
     assert fix in out.data.get("umbrella_refused", {}), out.data
     assert _state(repo, fix) == "open"
+    # and the surfaces carry it: the projected body and the MCP tool's payload
+    body = out.body(("id", "umbrella_refused"))
+    assert fix in body["umbrella_refused"]
+    from ddflow.surfaces.tools import TOOLS
+
+    assert "umbrella_refused" in TOOLS["ddflow_complete"]["payload"]
