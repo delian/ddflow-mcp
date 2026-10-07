@@ -1,10 +1,12 @@
-"""Delta re-reviews by default (decision D-review-budget, item 2): [review].delta_default.
+"""Delta re-reviews (decision D-review-budget, item 2): [review].delta_default.
 
-A shipped default for every project: once a gate has a recorded review, `ddflow review`
-reviews only the commits since the head that review covered, merges the result into the
-gate's record, and `--full` forces a full round. `delta_default = false` is the old
-behaviour (every review a full round). Everything here runs in a throwaway project built
-by `ddflow init`: no companions, no network, a command reviewer that is a shell script.
+With the knob on, once a gate has a recorded review `ddflow review` reviews only the
+commits since the head that review covered, merges the result into the gate's record,
+and `--full` forces a full round. The shipped default is OFF since decision
+D-gate-economy 3 (a re-review sends the whole diff with the previous findings; see
+tests/test_gate_econ_rereview.py), so the projects here turn it on to test the delta
+itself. Everything here runs in a throwaway project built by `ddflow init`: no
+companions, no network, a command reviewer that is a shell script.
 """
 
 from __future__ import annotations
@@ -32,6 +34,16 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _delta_on(review_toml: str) -> str:
+    """``review_toml`` with `delta_default = true` unless it says otherwise: the delta is
+    what these tests are about, and it is no longer the shipped default."""
+    if "delta_default" in review_toml:
+        return review_toml
+    if "[review]\n" in review_toml:
+        return review_toml.replace("[review]\n", "[review]\ndelta_default = true\n", 1)
+    return "[review]\ndelta_default = true\n" + review_toml
+
+
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     """A project with a command reviewer that flags every `FINDME` line (the finding's
     text is the line's own, so two reviews of the same line are byte-identical findings),
@@ -51,7 +63,7 @@ def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     (repo / ".ddflow" / "config.toml").write_text(
         "[worktree]\nenabled = false\n"
         f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
-        'model = "gemini-2.5-pro"\ngates = ["critic", "rubber_duck"]\n' + review_toml
+        'model = "gemini-2.5-pro"\ngates = ["critic", "rubber_duck"]\n' + _delta_on(review_toml)
     )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
@@ -85,11 +97,12 @@ def _calls(seen: Path) -> int:
 # -- the knob ----------------------------------------------------------------------------
 
 
-def test_the_default_is_on_for_every_project_with_no_config_line(repo):
+def test_the_default_is_off_for_every_project_with_no_config_line(repo):
+    """D-gate-economy 3: a re-review is a full round over the whole diff by default."""
     run_cli(repo, "init")
     assert "delta_default" not in (repo / ".ddflow" / "config.toml").read_text()
     cfg = Config.load(repo, env={})
-    assert cfg.review.delta_default is True
+    assert cfg.review.delta_default is False
     assert cfg.sources["review.delta_default"] == "default"
     assert cfg.unknown_knobs == []
     out = run_cli(repo, "config", "--explain", "--filter", "review.delta_default")[1]

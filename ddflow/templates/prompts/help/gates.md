@@ -44,9 +44,11 @@ the reviewed head and `ddflow review triage` settles each remaining finding (bot
 always allowed). Change the cap with `ddflow config review.max_rounds N` (0 =
 unlimited; add `--local` for this machine) or `review.on_exceed = "warn"`.
 
-Once a gate has a recorded review, `ddflow review <id> --gate G` reviews only the commits
-since the head that review covered (`[review].delta_default`, on in every project): the
-output says "delta review of N commits since <sha>", the delta's findings merge into the
-gate's record and earlier triage stays on the findings that are unchanged. `--full` forces a
-full round (counted against the cap); a rebased branch falls back to a full round and says
-why. `ddflow config review.delta_default false [--local]` makes every review a full round.
+Once a gate has a recorded review, `ddflow review <id> --gate G` is a full re-review: the
+item's whole diff plus the previous findings and your triage of each, so the reviewer checks
+each fix or probe and looks for new issues (decision D-gate-economy; counted against the
+cap). `--delta` reviews only the commits since the head that review covered: the output
+says "delta review of N commits since <sha>", the delta's findings merge into the gate's
+record and earlier triage stays on the findings that are unchanged; a rebased branch falls
+back to a full round and says why. `ddflow config review.delta_default true [--local]` makes
+every plain re-review a delta (`--full` then still asks for a full round).

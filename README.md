@@ -1282,8 +1282,19 @@ merged-in main commit, or, with several merge bases, everything since the review
 delta of the item's tree or branch whose diff cannot be produced is refused with the
 reason, never reported as "nothing changed".
 
-**Delta re-reviews are the default.** Once a gate has a recorded review that reviewed the
-whole diff, a plain `ddflow review T1 --gate critic` is a delta: it reviews only the commits
+**A re-review sees the whole diff and what was said last time** (decision
+D-gate-economy 3). Once a gate has a recorded review, a plain `ddflow review T1 --gate
+critic` is a full round over the item's whole diff against its base, and the prompt lists
+each earlier finding with the author's triage -- `confirmed` (check the fix), `refuted`
+(check the probe) or `untriaged` -- asking the reviewer to report one again only if it still
+holds, then to look for new issues; the output says `re-review: the whole diff of T1, with N
+previous critic finding(s) and their triage`. A delta that showed the reviewer only the
+follow-up commit kept reporting the fix as absent, because the code it fixed was not in
+what it saw. A re-review counts against `review.max_rounds` like any full round.
+
+**Delta re-reviews, on request.** `--delta` (MCP `delta=true`), or `review.delta_default =
+true` for every plain re-review, is for a diff too large to send twice. Once a gate has a
+recorded review that reviewed the whole diff, a delta reviews only the commits
 since the head that review covered (`reviewed_head`), says so (`delta review of 1 commit
 since a1b2c3d4e5`), is not a full round and is never refused by the cap. Its findings and
 coverage are **merged into the gate's record**: earlier findings stay where they were
@@ -1299,19 +1310,19 @@ is no ancestor of the current head (the branch was rebased or amended) or, for t
 automatic delta, the earlier review was partial; a review that never reached a reviewer
 records no reviewed head at all, so the next delta starts from the last real one; with nothing changed since the reviewed
 head the review is refused and names `--full`. A `--force --reason` review is a full round, like `--full` (and, like `--full`, an error with `--delta`); a `--chunk`, `--commit` or
-`--base` review is not second-guessed. `review.delta_default = false` is the behaviour before this knob:
-every review a full round. Knobs, changeable at every layer:
+`--base` review is not second-guessed. `review.delta_default = false` (the default) makes
+every re-review a full round with the previous findings. Knobs, changeable at every layer:
 
 | knob | default | meaning |
 |---|---|---|
 | `review.max_rounds` | `2` | full rounds per gate per item; `0` = unlimited |
 | `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
-| `review.delta_default` | `true` | a review of a gate with a recorded review is a delta; `false` = always a full round |
+| `review.delta_default` | `false` | `true` = a review of a gate with a recorded review is a delta; `false` = a full re-review with the previous findings |
 
 ```sh
 ddflow config review.max_rounds 3                 # this project (committed .ddflow/config.toml)
 ddflow config review.max_rounds 0 --local         # this machine only (.ddflow/local/config.toml)
-ddflow config review.delta_default false          # every review a full round again (add --local for this machine)
+ddflow config review.delta_default true           # automatic deltas again (add --local for this machine)
 ddflow review T1 --gate critic --full             # one full round, whatever the default
                                                   # (`--set KEY VALUE` is the same)
 DDFLOW_REVIEW_MAX_ROUNDS=0 ddflow review ...      # one run
@@ -4638,7 +4649,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=30cc606b5e44 -->
+<!-- ddflow:begin README/knobs sha=d993148cb81a -->
 <details><summary>All 189 knobs across 27 sections</summary>
 
 | Knob | Default | Values |
@@ -4789,7 +4800,7 @@ long default is left to `ddflow config --explain`.
 | `loops.on_detect` | `"warn"` | `warn` \| `block` |
 | `review.max_rounds` | `2` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
-| `review.delta_default` | `true` |  |
+| `review.delta_default` | `false` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
