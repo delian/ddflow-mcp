@@ -1,0 +1,3020 @@
+{
+ "cli": {
+  "ddflow": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo",
+    "--version"
+   ],
+   "positionals": []
+  },
+  "ddflow abandon": {
+   "flags": [
+    "--agent",
+    "--force",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow adopt": {
+   "flags": [
+    "--agent",
+    "--agents",
+    "--docs",
+    "--image",
+    "--json",
+    "--launch",
+    "--refresh-docs",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow approve": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--note",
+    "--reason",
+    "--reject",
+    "--repo"
+   ],
+   "positionals": [
+    "id",
+    "gate"
+   ]
+  },
+  "ddflow block": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow board": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--phase",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow brief": {
+   "flags": [
+    "--agent",
+    "--check-recovery",
+    "--item",
+    "--json",
+    "--phase",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow bug": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow bug fixed": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--lesson",
+    "--lesson-rule",
+    "--lesson-title",
+    "--regression-test",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow bug found": {
+   "flags": [
+    "--agent",
+    "--check",
+    "--duplicate-of",
+    "--extends",
+    "--id",
+    "--item",
+    "--json",
+    "--new",
+    "--related",
+    "--repo",
+    "--summary"
+   ],
+   "positionals": []
+  },
+  "ddflow bug invalid": {
+   "flags": [
+    "--agent",
+    "--evidence",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow cadence": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--note",
+    "--ran",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow claim": {
+   "flags": [
+    "--agent",
+    "--force",
+    "--globs",
+    "--json",
+    "--no-worktree",
+    "--note",
+    "--repo",
+    "--resources"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow cleanup": {
+   "flags": [
+    "--agent",
+    "--apply",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow companions": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow companions add": {
+   "flags": [
+    "--agent",
+    "--agents",
+    "--dry-run",
+    "--force",
+    "--id",
+    "--json",
+    "--no-probe",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow companions list": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--no-probe",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow complete": {
+   "flags": [
+    "--agent",
+    "--force",
+    "--json",
+    "--model",
+    "--repo",
+    "--sha"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow config": {
+   "flags": [
+    "--agent",
+    "--append-toml",
+    "--explain",
+    "--filter",
+    "--json",
+    "--local",
+    "--repo",
+    "--set"
+   ],
+   "positionals": [
+    "value"
+   ]
+  },
+  "ddflow decision": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow decision add": {
+   "flags": [
+    "--agent",
+    "--alternatives",
+    "--by",
+    "--check",
+    "--consequences",
+    "--context",
+    "--decision",
+    "--duplicate-of",
+    "--extends",
+    "--globs",
+    "--id",
+    "--item",
+    "--json",
+    "--new",
+    "--related",
+    "--repo",
+    "--sources",
+    "--status",
+    "--supersedes",
+    "--tags",
+    "--title"
+   ],
+   "positionals": []
+  },
+  "ddflow decision applicable": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow decision list": {
+   "flags": [
+    "--agent",
+    "--all",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow decision search": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--limit",
+    "--repo"
+   ],
+   "positionals": [
+    "query"
+   ]
+  },
+  "ddflow decision show": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow decision supersede": {
+   "flags": [
+    "--agent",
+    "--by",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow doctor": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow external": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow external sync": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow flow": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow flow choose": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "knob",
+    "value"
+   ]
+  },
+  "ddflow flow show": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow gate": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow gate record": {
+   "flags": [
+    "--agent",
+    "--command",
+    "--evidence",
+    "--exit-code",
+    "--json",
+    "--model",
+    "--outcome",
+    "--output-file",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id",
+    "gate"
+   ]
+  },
+  "ddflow gate run": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id",
+    "gate"
+   ]
+  },
+  "ddflow gate skip": {
+   "flags": [
+    "--agent",
+    "--command",
+    "--evidence",
+    "--exit-code",
+    "--json",
+    "--model",
+    "--outcome",
+    "--output-file",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id",
+    "gate"
+   ]
+  },
+  "ddflow gate status": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow gate verify": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id",
+    "gate"
+   ]
+  },
+  "ddflow heartbeat": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow help": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "topic"
+   ]
+  },
+  "ddflow history": {
+   "flags": [
+    "--agent",
+    "--item",
+    "--json",
+    "--kind",
+    "--limit",
+    "--repo",
+    "--since"
+   ],
+   "positionals": []
+  },
+  "ddflow hooks": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow hooks check-commit": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow hooks check-msg": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "msg_file"
+   ]
+  },
+  "ddflow hooks install": {
+   "flags": [
+    "--agent",
+    "--claude",
+    "--force",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow hooks session-start": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow hooks status": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow hooks uninstall": {
+   "flags": [
+    "--agent",
+    "--claude",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow import": {
+   "flags": [
+    "--agent",
+    "--apply",
+    "--include-done",
+    "--json",
+    "--max-tasks",
+    "--repo",
+    "--verify"
+   ],
+   "positionals": []
+  },
+  "ddflow init": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow job": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow job add": {
+   "flags": [
+    "--agent",
+    "--command",
+    "--json",
+    "--log",
+    "--pid",
+    "--repo"
+   ],
+   "positionals": [
+    "item"
+   ]
+  },
+  "ddflow job end": {
+   "flags": [
+    "--agent",
+    "--exit-code",
+    "--force",
+    "--json",
+    "--note",
+    "--repo"
+   ],
+   "positionals": [
+    "job"
+   ]
+  },
+  "ddflow job list": {
+   "flags": [
+    "--agent",
+    "--all",
+    "--item",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow job run": {
+   "flags": [
+    "--agent",
+    "--cwd",
+    "--json",
+    "--log",
+    "--repo"
+   ],
+   "positionals": [
+    "item",
+    "command"
+   ]
+  },
+  "ddflow lesson": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow lesson add": {
+   "flags": [
+    "--agent",
+    "--check",
+    "--duplicate-of",
+    "--extends",
+    "--globs",
+    "--how",
+    "--id",
+    "--json",
+    "--new",
+    "--pattern",
+    "--related",
+    "--repo",
+    "--rule",
+    "--seen-in",
+    "--summary",
+    "--supersedes",
+    "--tags",
+    "--title",
+    "--why"
+   ],
+   "positionals": []
+  },
+  "ddflow lesson search": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--limit",
+    "--repo"
+   ],
+   "positionals": [
+    "query"
+   ]
+  },
+  "ddflow lesson verify": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow loops": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow mcp": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow memory": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow memory add": {
+   "flags": [
+    "--agent",
+    "--check",
+    "--duplicate-of",
+    "--extends",
+    "--id",
+    "--json",
+    "--new",
+    "--related",
+    "--repo",
+    "--tags"
+   ],
+   "positionals": [
+    "text"
+   ]
+  },
+  "ddflow memory forget": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow memory list": {
+   "flags": [
+    "--agent",
+    "--all",
+    "--json",
+    "--limit",
+    "--query",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow merge": {
+   "flags": [
+    "--agent",
+    "--allow-dirty",
+    "--allow-empty",
+    "--branch",
+    "--json",
+    "--keep",
+    "--message",
+    "--model",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow next": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--kind",
+    "--phase",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow phase": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow phase add": {
+   "flags": [
+    "--agent",
+    "--body",
+    "--check",
+    "--duplicate-of",
+    "--extends",
+    "--globs",
+    "--json",
+    "--line",
+    "--needs",
+    "--new",
+    "--priority",
+    "--readd",
+    "--related",
+    "--repo",
+    "--tags",
+    "--title"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow pins": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--min-needle",
+    "--repo",
+    "--tests",
+    "--top"
+   ],
+   "positionals": [
+    "document"
+   ]
+  },
+  "ddflow pr": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow pr status": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow pr sync": {
+   "flags": [
+    "--agent",
+    "--item",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow precommit": {
+   "flags": [
+    "--agent",
+    "--ddflow-cmd",
+    "--json",
+    "--repo",
+    "--write"
+   ],
+   "positionals": []
+  },
+  "ddflow progress": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow promote": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow promote add": {
+   "flags": [
+    "--agent",
+    "--force",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "env"
+   ]
+  },
+  "ddflow promote status": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow prompts": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow prompts eject": {
+   "flags": [
+    "--agent",
+    "--force",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "name"
+   ]
+  },
+  "ddflow prompts list": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow prompts show": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "name"
+   ]
+  },
+  "ddflow rebuild": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow recall": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--limit",
+    "--max-chars",
+    "--repo",
+    "--sources"
+   ],
+   "positionals": [
+    "query"
+   ]
+  },
+  "ddflow recover": {
+   "flags": [
+    "--agent",
+    "--apply",
+    "--item",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow release": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--note",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow remove": {
+   "flags": [
+    "--agent",
+    "--force",
+    "--json",
+    "--reason",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow render": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--out",
+    "--repo",
+    "--show"
+   ],
+   "positionals": []
+  },
+  "ddflow replay": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--out",
+    "--repo",
+    "--verify"
+   ],
+   "positionals": []
+  },
+  "ddflow research": {
+   "flags": [
+    "--agent",
+    "--budget",
+    "--check",
+    "--claim",
+    "--duplicate-of",
+    "--extends",
+    "--falsifier",
+    "--id",
+    "--item",
+    "--json",
+    "--mechanism",
+    "--new",
+    "--probe",
+    "--probe-output",
+    "--question",
+    "--related",
+    "--repo",
+    "--sources",
+    "--verdict"
+   ],
+   "positionals": [
+    "verb"
+   ]
+  },
+  "ddflow resolve": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--keep",
+    "--refile-as",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow review": {
+   "flags": [
+    "--agent",
+    "--base",
+    "--branch",
+    "--chunk",
+    "--commit",
+    "--confirmed",
+    "--context",
+    "--finding",
+    "--gate",
+    "--intent",
+    "--json",
+    "--probe",
+    "--refuted",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow reviewers": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow reviewers add": {
+   "flags": [
+    "--agent",
+    "--base-url",
+    "--gates",
+    "--json",
+    "--model",
+    "--name",
+    "--no-launch",
+    "--preset",
+    "--repo",
+    "--shared"
+   ],
+   "positionals": []
+  },
+  "ddflow reviewers approve": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--note",
+    "--repo"
+   ],
+   "positionals": [
+    "name"
+   ]
+  },
+  "ddflow reviewers detect": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo",
+    "--shared",
+    "--write"
+   ],
+   "positionals": []
+  },
+  "ddflow reviewers list": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow reviewers presets": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow reviewers test": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "name"
+   ]
+  },
+  "ddflow session": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow session end": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo",
+    "--summary"
+   ],
+   "positionals": [
+    "session"
+   ]
+  },
+  "ddflow session note": {
+   "flags": [
+    "--agent",
+    "--item",
+    "--json",
+    "--repo",
+    "--text"
+   ],
+   "positionals": [
+    "session"
+   ]
+  },
+  "ddflow session prompt": {
+   "flags": [
+    "--agent",
+    "--item",
+    "--json",
+    "--repo",
+    "--text"
+   ],
+   "positionals": [
+    "session"
+   ]
+  },
+  "ddflow session start": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--model",
+    "--repo",
+    "--tool"
+   ],
+   "positionals": []
+  },
+  "ddflow show": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow similar": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--kind",
+    "--repo"
+   ],
+   "positionals": [
+    "text"
+   ]
+  },
+  "ddflow split": {
+   "flags": [
+    "--agent",
+    "--globs",
+    "--into",
+    "--json",
+    "--needs",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow status": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow task": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow task add": {
+   "flags": [
+    "--agent",
+    "--body",
+    "--check",
+    "--duplicate-of",
+    "--extends",
+    "--globs",
+    "--json",
+    "--line",
+    "--lines",
+    "--needs",
+    "--new",
+    "--parent",
+    "--phase",
+    "--priority",
+    "--readd",
+    "--related",
+    "--repo",
+    "--tags",
+    "--title"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow tests": {
+   "flags": [
+    "--agent",
+    "--base",
+    "--item",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow unblock": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--note",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow update": {
+   "flags": [
+    "--agent",
+    "--body",
+    "--globs",
+    "--json",
+    "--line",
+    "--needs",
+    "--priority",
+    "--repo",
+    "--resources",
+    "--tags",
+    "--title",
+    "--worktree"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow version": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow version cut": {
+   "flags": [
+    "--agent",
+    "--bump",
+    "--dry-run",
+    "--json",
+    "--line",
+    "--push",
+    "--repo",
+    "--version"
+   ],
+   "positionals": []
+  },
+  "ddflow version show": {
+   "flags": [
+    "--agent",
+    "--bump",
+    "--json",
+    "--line",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow wait": {
+   "flags": [
+    "--agent",
+    "--globs",
+    "--item",
+    "--json",
+    "--kind",
+    "--phase",
+    "--poll",
+    "--repo",
+    "--timeout"
+   ],
+   "positionals": []
+  },
+  "ddflow workflow": {
+   "flags": [
+    "--agent",
+    "--json",
+    "--repo"
+   ],
+   "positionals": []
+  },
+  "ddflow workflow drop": {
+   "flags": [
+    "--agent",
+    "--dry-run",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow workflow gate": {
+   "flags": [
+    "--after",
+    "--agent",
+    "--applies-to",
+    "--command",
+    "--cwd",
+    "--dry-run",
+    "--into",
+    "--json",
+    "--prompt",
+    "--repo",
+    "--required",
+    "--reviewer",
+    "--timeout",
+    "--title"
+   ],
+   "positionals": [
+    "id"
+   ]
+  },
+  "ddflow workflow pipeline": {
+   "flags": [
+    "--agent",
+    "--dry-run",
+    "--json",
+    "--repo"
+   ],
+   "positionals": [
+    "which",
+    "gates"
+   ]
+  }
+ },
+ "event_kinds": [
+  "bug.fixed",
+  "bug.found",
+  "bug.invalid",
+  "cadence.ran",
+  "decision.recorded",
+  "decision.superseded",
+  "external.observed",
+  "flow.chosen",
+  "gate.failed",
+  "gate.out_of_order",
+  "gate.partial",
+  "gate.passed",
+  "gate.skipped",
+  "gate.started",
+  "gate.unavailable",
+  "item.abandoned",
+  "item.blocked",
+  "item.completed",
+  "item.resolved",
+  "item.started",
+  "item.unblocked",
+  "job.ended",
+  "job.started",
+  "lease.acquired",
+  "lease.expired",
+  "lease.released",
+  "lease.renewed",
+  "lesson.recorded",
+  "link.recorded",
+  "memory.forgotten",
+  "memory.recorded",
+  "phase.added",
+  "phase.removed",
+  "phase.updated",
+  "port.applied",
+  "pr.changes_requested",
+  "pr.closed",
+  "pr.merged",
+  "pr.opened",
+  "pr.synced",
+  "record.extended",
+  "release.closed",
+  "release.opened",
+  "release.tagged",
+  "research.recorded",
+  "review.triaged",
+  "reviewer.approved",
+  "reviewer.configured",
+  "session.ended",
+  "session.note",
+  "session.prompt",
+  "session.started",
+  "task.added",
+  "task.removed",
+  "task.updated",
+  "worktree.adopted",
+  "worktree.created",
+  "worktree.merged",
+  "worktree.removed"
+ ],
+ "knobs": {
+  "agent.families": {
+   "claude": "anthropic",
+   "codex": "openai",
+   "command": "cohere",
+   "deepseek": "deepseek",
+   "ernie": "baidu",
+   "gemini": "google",
+   "gemma": "google",
+   "glm": "zhipu",
+   "gpt": "openai",
+   "granite": "ibm",
+   "grok": "xai",
+   "kimi": "moonshot",
+   "llama": "meta",
+   "minimax": "minimax",
+   "mistral": "mistral",
+   "mixtral": "mistral",
+   "nemotron": "nvidia",
+   "o1": "openai",
+   "o3": "openai",
+   "phi": "microsoft",
+   "qwen": "alibaba",
+   "yi-": "01ai"
+  },
+  "agent.id": "",
+  "agent.reviewer_family_must_differ": true,
+  "agent.routers": {
+   "hydrafusion": []
+  },
+  "cadence.architecture_review_every_phases": 2,
+  "cadence.dedupe_sweep_every_tasks": 4,
+  "cadence.every_days": [],
+  "cadence.integration_tests_every_tasks": 5,
+  "cadence.lessons_pass_every_phases": 4,
+  "cadence.max_missed": 1,
+  "cadence.mutation_tests_every_phases": 3,
+  "companions.probe_cache_ttl_s": 300,
+  "dedupe.ask_threshold": 0.55,
+  "dedupe.kinds": [
+   "bug",
+   "task",
+   "phase",
+   "lesson",
+   "decision",
+   "research",
+   "memory"
+  ],
+  "dedupe.max_candidates": 3,
+  "dedupe.min_words": 8,
+  "dedupe.on_match": "ask",
+  "dedupe.show_floor": 0.35,
+  "enforce.behind": "warn",
+  "enforce.commit_without_lease": "warn",
+  "enforce.doc_exclude": [
+   "**/CHANGELOG*",
+   "**/HISTORY*",
+   "**/NEWS*",
+   ".ddflow/**",
+   "docs/ddflow/**"
+  ],
+  "enforce.doc_globs": [
+   "**/*.md",
+   "**/*.rst",
+   "**/*.adoc"
+  ],
+  "enforce.forbidden_trailers": [],
+  "enforce.generated_views": "block",
+  "enforce.install_hooks_on_setup": true,
+  "enforce.item_trailer_keys": [
+   "Item"
+  ],
+  "enforce.max_behind": 50,
+  "enforce.readme_code_globs": [
+   "ddflow/**"
+  ],
+  "enforce.readme_files": [
+   "README.md"
+  ],
+  "enforce.readme_with_code": "warn",
+  "enforce.require_item_trailer": false,
+  "enforce.stale_docs": "warn",
+  "enforce.stale_rules": "block",
+  "enforce.trailer_waivers": {},
+  "flow.auto_promote": [],
+  "flow.bugfix_prefix": "bugfix/",
+  "flow.bugfix_tags": [
+   "bug",
+   "bugfix",
+   "fix"
+  ],
+  "flow.current_line": "current",
+  "flow.develop_branch": "develop",
+  "flow.environments": [],
+  "flow.feature_prefix": "feature/",
+  "flow.forge": "auto",
+  "flow.hotfix_prefix": "hotfix/",
+  "flow.hotfix_tags": [
+   "hotfix"
+  ],
+  "flow.initial_version": "0.1.0",
+  "flow.integration": "merge",
+  "flow.lines": {},
+  "flow.model": "trunk",
+  "flow.on_changes_requested": "reopen",
+  "flow.port_strategy": "forward-merge",
+  "flow.pr_draft": false,
+  "flow.pr_labels": [],
+  "flow.pr_merge": "on_approval",
+  "flow.pr_reviewers": [],
+  "flow.production_branch": "",
+  "flow.release_prefix": "release/",
+  "flow.remote": "origin",
+  "flow.stack": true,
+  "flow.sync_on_next": true,
+  "flow.tag_prefix": "v",
+  "gates.allow_skip_with_reason": true,
+  "gates.enforce_order": "warn",
+  "gates.evidence_required": [
+   "unit_tests",
+   "rubber_duck",
+   "critic",
+   "standards",
+   "docs"
+  ],
+  "gates.phase_pipeline": [
+   "research",
+   "tasks",
+   "unit_tests",
+   "bug_hunt",
+   "dedupe",
+   "live_test",
+   "corrections",
+   "docs",
+   "merge"
+  ],
+  "gates.promotion_pipeline": [
+   "unit_tests",
+   "merge"
+  ],
+  "gates.rate_max_fail": 0.9,
+  "gates.rate_min_runs": 5,
+  "gates.require_outcome": true,
+  "gates.required": [
+   "implement",
+   "unit_tests",
+   "merge"
+  ],
+  "gates.task_pipeline": [
+   "research",
+   "rules",
+   "implement",
+   "rubber_duck",
+   "critic",
+   "standards",
+   "unit_tests",
+   "bug_hunt",
+   "dedupe",
+   "merge"
+  ],
+  "gates.unavailable_is_failure": false,
+  "importer.archive_globs": [],
+  "importer.decision_globs": [],
+  "importer.journal_globs": [],
+  "importer.lesson_globs": [],
+  "importer.lesson_summary_globs": [],
+  "importer.max_tasks": 200,
+  "importer.memory_globs": [],
+  "importer.preview_rows": 8,
+  "importer.research_globs": [],
+  "importer.todo_globs": [],
+  "lease.acquire_timeout_s": 30,
+  "lease.append_only_globs": [],
+  "lease.grace_s": 120,
+  "lease.heartbeat_s": 300,
+  "lease.reclaim_policy": "report",
+  "lease.shared_globs": [],
+  "lease.ttl_s": 1800,
+  "lease.waiter_reservation_s": 300,
+  "lessons.auto_capture_on_bug": true,
+  "lessons.cadence_growth_pct": 20.0,
+  "lessons.cadence_min_entries": 25,
+  "lessons.max_results": 5,
+  "lessons.reflect_after_items": 3,
+  "lessons.require_regression_test": true,
+  "lessons.search_backend": "fts5",
+  "lessons.snippet_chars": 320,
+  "log.max_cached_events": 100000,
+  "log.reuse_parsed": true,
+  "loops.max_claims_per_item": 3,
+  "loops.max_duplicate_items": 2,
+  "loops.max_gate_flaps": 4,
+  "loops.max_reopens": 2,
+  "loops.max_repeated_failures": 3,
+  "loops.no_progress_window": 60,
+  "loops.on_detect": "warn",
+  "memory.brief_items": 12,
+  "memory.max_chars": 280,
+  "prompts.gate_instruction": "",
+  "prompts.mcp_instructions": "",
+  "prompts.review_system": "",
+  "prompts.review_user": "",
+  "prompts.session_brief_header": "",
+  "reinstruct.enabled": true,
+  "reinstruct.every_calls": 12,
+  "reinstruct.every_seconds": 240,
+  "reinstruct.max_items": 3,
+  "schedule.bugs_first": true,
+  "schedule.cycle_policy": "error",
+  "schedule.empty_phase": "note",
+  "schedule.max_parallel_tasks": 4,
+  "schedule.ready_policy": "deps_and_lease",
+  "schedule.repos": [],
+  "schedule.resources": [],
+  "schedule.unknown_dep_policy": "block",
+  "session.brief_lesson_count": 4,
+  "session.brief_max_tokens": 1200,
+  "session.log_prompts": true,
+  "session.redact_extra": [],
+  "session.redact_patterns": [
+   "(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\s*[:=]\\s*\\S+",
+   "(?i)\\b(bearer|basic|token)\\s+[A-Za-z0-9._~+/=-]{12,}",
+   "(?i)\\b(gh[pousr]_[A-Za-z0-9]{16,})\\b",
+   "(?i)\\b(sk-[A-Za-z0-9_-]{16,})\\b",
+   "(?i)\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\b",
+   "\\bAKIA[0-9A-Z]{16}\\b",
+   "(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+   "(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----"
+  ],
+  "session.replay_verify_diffs": true,
+  "worktree.adopt_existing": true,
+  "worktree.base_ref": "",
+  "worktree.branch_prefix": "ddflow/",
+  "worktree.enabled": true,
+  "worktree.local_files": [],
+  "worktree.max_parallel": 4,
+  "worktree.merge_strategy": "no-ff",
+  "worktree.remove_on_merge": true,
+  "worktree.root": "../.ddflow-worktrees",
+  "worktree.sync_before_start": true
+ },
+ "tools": {
+  "ddflow_abandon": {
+   "force": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_block": {
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_board": {
+   "phase": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_brief": {
+   "check_recovery": [
+    "boolean",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ],
+   "phase": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_bug_fixed": {
+   "id": [
+    "string",
+    true
+   ],
+   "lesson": [
+    "string",
+    false
+   ],
+   "lesson_rule": [
+    "string",
+    false
+   ],
+   "lesson_title": [
+    "string",
+    false
+   ],
+   "regression_test": [
+    "string",
+    false
+   ],
+   "regression_tests": [
+    "array",
+    false
+   ]
+  },
+  "ddflow_bug_found": {
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "summary": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_bug_invalid": {
+   "evidence": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_cadence": {
+   "note": [
+    "string",
+    false
+   ],
+   "ran": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_claim": {
+   "force": [
+    "boolean",
+    false
+   ],
+   "globs": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "no_worktree": [
+    "boolean",
+    false
+   ],
+   "note": [
+    "string",
+    false
+   ],
+   "resources": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_cleanup": {
+   "apply": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_companions": {
+   "no_probe": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_companions_add": {
+   "agents": [
+    "string",
+    false
+   ],
+   "dry_run": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_complete": {
+   "force": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "model": [
+    "string",
+    false
+   ],
+   "sha": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_configure": {
+   "filter": [
+    "string",
+    false
+   ],
+   "local": [
+    "boolean",
+    false
+   ],
+   "set": [
+    "string",
+    false
+   ],
+   "toml": [
+    "string",
+    false
+   ],
+   "value": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_decision_add": {
+   "alternatives": [
+    "string",
+    false
+   ],
+   "by": [
+    "string",
+    false
+   ],
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "consequences": [
+    "string",
+    false
+   ],
+   "context": [
+    "string",
+    false
+   ],
+   "decision": [
+    "string",
+    true
+   ],
+   "globs": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "sources": [
+    "string",
+    false
+   ],
+   "status": [
+    "string",
+    false
+   ],
+   "supersedes": [
+    "string",
+    false
+   ],
+   "tags": [
+    "string",
+    false
+   ],
+   "title": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_decision_applicable": {
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_decision_list": {
+   "all": [
+    "boolean",
+    false
+   ],
+   "limit": [
+    "integer",
+    false
+   ]
+  },
+  "ddflow_decision_show": {
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_decision_supersede": {
+   "by": [
+    "string",
+    true
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_doctor": {},
+  "ddflow_external_sync": {},
+  "ddflow_flow_choose": {
+   "knob": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    false
+   ],
+   "value": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_flow_show": {},
+  "ddflow_gate_record": {
+   "command": [
+    "string",
+    false
+   ],
+   "evidence": [
+    "string",
+    false
+   ],
+   "exit_code": [
+    "string",
+    false
+   ],
+   "gate": [
+    "string",
+    true
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "model": [
+    "string",
+    false
+   ],
+   "outcome": [
+    "string",
+    true
+   ],
+   "output_file": [
+    "string",
+    false
+   ],
+   "reason": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_gate_run": {
+   "gate": [
+    "string",
+    true
+   ],
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_gate_skip": {
+   "gate": [
+    "string",
+    true
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_gate_status": {
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_gate_verify": {
+   "gate": [
+    "string",
+    true
+   ],
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_heartbeat": {
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_help": {
+   "topic": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_history": {
+   "item": [
+    "string",
+    false
+   ],
+   "kind": [
+    "string",
+    false
+   ],
+   "limit": [
+    "integer",
+    false
+   ],
+   "since": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_hooks": {
+   "action": [
+    "string",
+    false
+   ],
+   "claude": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_identify": {
+   "agent": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_import": {
+   "apply": [
+    "boolean",
+    false
+   ],
+   "include_done": [
+    "boolean",
+    false
+   ],
+   "max_tasks": [
+    "integer",
+    false
+   ]
+  },
+  "ddflow_import_verify": {},
+  "ddflow_job_add": {
+   "command": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    true
+   ],
+   "log": [
+    "string",
+    false
+   ],
+   "pid": [
+    "integer",
+    true
+   ]
+  },
+  "ddflow_job_end": {
+   "exit_code": [
+    "integer",
+    false
+   ],
+   "force": [
+    "boolean",
+    false
+   ],
+   "job": [
+    "string",
+    true
+   ],
+   "note": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_job_list": {
+   "all": [
+    "boolean",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_job_run": {
+   "command": [
+    "string",
+    true
+   ],
+   "cwd": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    true
+   ],
+   "log": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_lesson_add": {
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "globs": [
+    "string",
+    false
+   ],
+   "how": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    false
+   ],
+   "pattern": [
+    "string",
+    false
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "rule": [
+    "string",
+    false
+   ],
+   "seen_in": [
+    "string",
+    false
+   ],
+   "summary": [
+    "string",
+    false
+   ],
+   "supersedes": [
+    "string",
+    false
+   ],
+   "tags": [
+    "string",
+    false
+   ],
+   "title": [
+    "string",
+    true
+   ],
+   "why": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_lesson_search": {
+   "limit": [
+    "integer",
+    false
+   ],
+   "query": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_lesson_verify": {},
+  "ddflow_loops": {},
+  "ddflow_memory_add": {
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    false
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "tags": [
+    "string",
+    false
+   ],
+   "text": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_memory_forget": {
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_memory_list": {
+   "all": [
+    "boolean",
+    false
+   ],
+   "limit": [
+    "integer",
+    false
+   ],
+   "query": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_merge": {
+   "allow_dirty": [
+    "boolean",
+    false
+   ],
+   "allow_empty": [
+    "boolean",
+    false
+   ],
+   "branch": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "keep": [
+    "boolean",
+    false
+   ],
+   "message": [
+    "string",
+    false
+   ],
+   "model": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_next": {
+   "kind": [
+    "string",
+    false
+   ],
+   "phase": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_phase_add": {
+   "body": [
+    "string",
+    false
+   ],
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "globs": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "line": [
+    "string",
+    false
+   ],
+   "needs": [
+    "string",
+    false
+   ],
+   "priority": [
+    "integer",
+    false
+   ],
+   "readd": [
+    "boolean",
+    false
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "tags": [
+    "string",
+    false
+   ],
+   "title": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_pins": {
+   "document": [
+    "string",
+    true
+   ],
+   "min_needle": [
+    "integer",
+    false
+   ],
+   "tests": [
+    "string",
+    false
+   ],
+   "top": [
+    "integer",
+    false
+   ]
+  },
+  "ddflow_pr_status": {},
+  "ddflow_pr_sync": {
+   "item": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_precommit": {
+   "ddflow_cmd": [
+    "string",
+    false
+   ],
+   "write": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_progress": {
+   "id": [
+    "string",
+    false
+   ],
+   "limit": [
+    "integer",
+    false
+   ]
+  },
+  "ddflow_promote_add": {
+   "env": [
+    "string",
+    true
+   ],
+   "force": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_promote_status": {},
+  "ddflow_prompts": {
+   "action": [
+    "string",
+    false
+   ],
+   "name": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_rebuild": {},
+  "ddflow_recall": {
+   "limit": [
+    "integer",
+    false
+   ],
+   "max_chars": [
+    "integer",
+    false
+   ],
+   "query": [
+    "string",
+    true
+   ],
+   "sources": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_recover": {
+   "apply": [
+    "boolean",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_release": {
+   "id": [
+    "string",
+    true
+   ],
+   "note": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_remove": {
+   "force": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "reason": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_render": {
+   "out": [
+    "string",
+    false
+   ],
+   "show": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_replay": {
+   "out": [
+    "string",
+    false
+   ],
+   "verify": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_research_add": {
+   "budget": [
+    "string",
+    false
+   ],
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "claim": [
+    "string",
+    false
+   ],
+   "falsifier": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ],
+   "mechanism": [
+    "string",
+    false
+   ],
+   "probe": [
+    "string",
+    false
+   ],
+   "probe_output": [
+    "string",
+    false
+   ],
+   "question": [
+    "string",
+    true
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "sources": [
+    "string",
+    false
+   ],
+   "verdict": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_resolve": {
+   "id": [
+    "string",
+    true
+   ],
+   "keep": [
+    "string",
+    true
+   ],
+   "refile_as": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_review": {
+   "base": [
+    "string",
+    false
+   ],
+   "branch": [
+    "string",
+    false
+   ],
+   "chunk": [
+    "array",
+    false
+   ],
+   "commit": [
+    "string",
+    false
+   ],
+   "context": [
+    "string",
+    false
+   ],
+   "gate": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "intent": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_review_triage": {
+   "finding": [
+    "integer",
+    true
+   ],
+   "gate": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "probe": [
+    "string",
+    true
+   ],
+   "verdict": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_reviewers_detect": {
+   "shared": [
+    "boolean",
+    false
+   ],
+   "write": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_reviewers_list": {},
+  "ddflow_session_end": {
+   "session": [
+    "string",
+    true
+   ],
+   "summary": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_session_note": {
+   "item": [
+    "string",
+    false
+   ],
+   "session": [
+    "string",
+    true
+   ],
+   "text": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_session_prompt": {
+   "item": [
+    "string",
+    false
+   ],
+   "session": [
+    "string",
+    true
+   ],
+   "text": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_session_start": {
+   "model": [
+    "string",
+    false
+   ],
+   "tool": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_setup": {
+   "agents": [
+    "string",
+    false
+   ],
+   "refresh_docs": [
+    "boolean",
+    false
+   ]
+  },
+  "ddflow_show": {
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_similar": {
+   "kind": [
+    "string",
+    false
+   ],
+   "text": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_split": {
+   "globs": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "into": [
+    "string",
+    true
+   ],
+   "needs": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_status": {},
+  "ddflow_task_add": {
+   "body": [
+    "string",
+    false
+   ],
+   "check_only": [
+    "boolean",
+    false
+   ],
+   "globs": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "line": [
+    "string",
+    false
+   ],
+   "lines": [
+    "string",
+    false
+   ],
+   "needs": [
+    "string",
+    false
+   ],
+   "parent": [
+    "string",
+    false
+   ],
+   "phase": [
+    "string",
+    false
+   ],
+   "priority": [
+    "integer",
+    false
+   ],
+   "readd": [
+    "boolean",
+    false
+   ],
+   "relation": [
+    "string",
+    false
+   ],
+   "tags": [
+    "string",
+    false
+   ],
+   "title": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_tests": {
+   "base": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_unblock": {
+   "id": [
+    "string",
+    true
+   ],
+   "note": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_update": {
+   "body": [
+    "string",
+    false
+   ],
+   "globs": [
+    "string",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "line": [
+    "string",
+    false
+   ],
+   "needs": [
+    "string",
+    false
+   ],
+   "priority": [
+    "integer",
+    false
+   ],
+   "resources": [
+    "string",
+    false
+   ],
+   "tags": [
+    "string",
+    false
+   ],
+   "title": [
+    "string",
+    false
+   ],
+   "worktree": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_version_cut": {
+   "bump": [
+    "string",
+    false
+   ],
+   "dry_run": [
+    "boolean",
+    false
+   ],
+   "line": [
+    "string",
+    false
+   ],
+   "push": [
+    "boolean",
+    false
+   ],
+   "version": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_version_show": {
+   "bump": [
+    "string",
+    false
+   ],
+   "line": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_wait": {
+   "globs": [
+    "string",
+    false
+   ],
+   "item": [
+    "string",
+    false
+   ],
+   "kind": [
+    "string",
+    false
+   ],
+   "phase": [
+    "string",
+    false
+   ],
+   "poll": [
+    "number",
+    false
+   ],
+   "timeout": [
+    "number",
+    false
+   ]
+  },
+  "ddflow_workflow": {},
+  "ddflow_workflow_drop": {
+   "dry_run": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ]
+  },
+  "ddflow_workflow_gate": {
+   "after": [
+    "string",
+    false
+   ],
+   "applies_to": [
+    "string",
+    false
+   ],
+   "command": [
+    "string",
+    false
+   ],
+   "cwd": [
+    "string",
+    false
+   ],
+   "dry_run": [
+    "boolean",
+    false
+   ],
+   "id": [
+    "string",
+    true
+   ],
+   "into": [
+    "string",
+    false
+   ],
+   "prompt": [
+    "string",
+    false
+   ],
+   "required": [
+    "boolean",
+    false
+   ],
+   "reviewer": [
+    "string",
+    false
+   ],
+   "timeout": [
+    "integer",
+    false
+   ],
+   "title": [
+    "string",
+    false
+   ]
+  },
+  "ddflow_workflow_pipeline": {
+   "dry_run": [
+    "boolean",
+    false
+   ],
+   "gates": [
+    "string",
+    true
+   ],
+   "which": [
+    "string",
+    true
+   ]
+  }
+ },
+ "version": "0.1.10"
+}
