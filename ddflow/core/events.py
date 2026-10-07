@@ -17,9 +17,9 @@ import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
+from . import clock
 from .digest import content_digest
 
 SCHEMA_VERSION = 1
@@ -233,7 +233,7 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
 
 
 def utcnow() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return clock.now_iso()
 
 
 def canonical(obj: Any) -> str:

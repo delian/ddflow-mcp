@@ -17,9 +17,10 @@ entry in the log (never "now": the same log must give the same bytes).
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
+from ...core import clock
 from . import registry
 from .frame import one_line
 from .kind_changelog import _fixed_bugs
@@ -84,7 +85,7 @@ def _window(q: Query, f: registry.Filters) -> str:
         return ""
     newest = max(days)
     try:
-        return (date.fromisoformat(newest) - timedelta(days=DEFAULT_WINDOW_DAYS)).isoformat()
+        return (clock.parse_date(newest) - timedelta(days=DEFAULT_WINDOW_DAYS)).isoformat()
     except ValueError:
         return ""
 
