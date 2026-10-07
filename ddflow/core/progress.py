@@ -32,11 +32,22 @@ from __future__ import annotations
 import itertools
 import time
 from collections import Counter, defaultdict
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..config import Config
-from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, State
+from ..core.model import (
+    ABANDONED,
+    BLOCKED,
+    DONE,
+    GATE_OUTCOMES,
+    OPEN,
+    REVIEW,
+    RUNNING,
+    Item,
+    State,
+)
 from . import clock
 from .events import Event
 from .graph import closure
@@ -596,3 +607,172 @@ def _no_progress(events: list[Event], lc, sev: str) -> list[LoopFinding]:
             ),
         )
     ]
+
+
+# -- Tallies: how far along a phase or the queue is, counted once -----------------------
+#
+# Phase done/total used to be computed five ways (B-uni-tallies): `list phase` kept
+# abandoned tasks in the total (B01281f654e), the progress line counted direct children
+# only and missed every sub-task (Bb24939611d), and the board, the roadmap and the views
+# each re-derived it. ONE rule now, pinned by tests/test_tallies.py:
+#
+# - a phase's tasks are every live (not removed) task nested ANY depth below it, sub-tasks
+#   and bug-fix (`fixes`) tasks included: a phase cannot close while any of them is open;
+# - an abandoned task is SETTLED, not outstanding: it is out of the total and counted on
+#   its own, so a phase whose remaining work is all done reads n/n, not n/n+1.
+#
+# The queue-wide "tasks" figure of the progress line leaves `fixes` tasks out because it
+# shows them as "bugs fixed"; that is a separate number with its own label, not a phase
+# tally.
+
+#: Task states in the order a per-state count lists them.
+STATE_ORDER: tuple[str, ...] = (DONE, RUNNING, REVIEW, OPEN, BLOCKED, ABANDONED)
+
+
+@dataclass(frozen=True)
+class Tally:
+    """``done`` of ``live`` tasks finished; ``abandoned`` settled outside the total."""
+
+    done: int = 0
+    live: int = 0
+    abandoned: int = 0
+
+    @property
+    def complete(self) -> bool:
+        """Every live task is done, and there is at least one."""
+        return self.live > 0 and self.done == self.live
+
+
+def tally(tasks: Iterable[Item]) -> Tally:
+    """The tally of these tasks, under the one rule above."""
+    done = live = abandoned = 0
+    for t in tasks:
+        if t.state == ABANDONED:
+            abandoned += 1
+            continue
+        live += 1
+        done += t.state == DONE
+    return Tally(done, live, abandoned)
+
+
+def phase_tally(st: State, phase: str) -> Tally:
+    """How far along ``phase`` is: its live tasks at every depth."""
+    return tally(st.tasks(phase))
+
+
+def phase_of(st: State, item_id: str) -> str:
+    """The phase ``item_id`` belongs to: itself when it is one, else its nearest phase
+    ancestor (a sub-task's PARENT is a task, not its phase: B45b55be6a4); "" for none."""
+    it = st.items.get(item_id)
+    if it is None:
+        return ""
+    if it.kind == "phase":
+        return it.id
+    return next((a.id for a in st.ancestors(item_id) if a.kind == "phase"), "")
+
+
+def state_counts(tasks: Iterable[Item]) -> dict[str, int]:
+    """How many of ``tasks`` are in each state, every state of ``STATE_ORDER`` present
+    (zero included) and in that order; a state outside it follows, by name."""
+    seen = Counter(t.state for t in tasks)
+    out = {s: seen.pop(s, 0) for s in STATE_ORDER}
+    out.update(sorted(seen.items()))
+    return out
+
+
+# -- Board rows: the board's structure, built once for the markdown and the JSON ---------
+
+
+def depth(st: State, item: Item, root: str) -> int:
+    """How far below ``root`` this item sits. Bounded, because a parent chain is
+    operator-authored and a cycle in it must not hang the renderer."""
+
+    def parent(i: str) -> list[str]:
+        up = (item if i == item.id else st.items[i]).parent
+        return [up] if up and up != root and up in st.items else []
+
+    above = [n for n in closure(item.id, parent) if n != item.id]
+    # A chain that ends in an item that is its own parent counts that last step once.
+    last = st.items[above[-1]] if above else item
+    return min(len(above) + (last.parent == last.id != root), 6)
+
+
+def nested(st: State, phase: str, tasks: list | None = None) -> list:
+    """Tasks under a phase, each sub-task immediately after its parent. ``tasks``
+    overrides the set (the unphased ones, whose root is the empty id)."""
+    if tasks is None:
+        tasks = st.tasks(phase)
+    by_parent: dict[str, list] = {}
+    for t in tasks:
+        by_parent.setdefault(t.parent, []).append(t)
+    out: list = []
+
+    def walk(parent: str, seen: set) -> None:
+        for t in sorted(by_parent.get(parent, []), key=lambda x: (x.priority, x.id)):
+            if t.id in seen:
+                continue
+            seen.add(t.id)
+            out.append(t)
+            walk(t.id, seen)
+
+    walk(phase, set())
+    # Anything whose parent chain does not reach the phase (an orphan, or a cycle)
+    # still belongs on the board: silently dropping it is how work disappears.
+    listed = {t.id for t in out}
+    out.extend(t for t in tasks if t.id not in listed)
+    return out
+
+
+def unphased(st: State) -> list:
+    """Live tasks that sit under no phase, a sub-task after its parent (Bc896ea5d16: the
+    board listed only phases' tasks, so a task added with no phase never appeared)."""
+    under: set[str] = set()
+    for ph in st.phases():
+        under |= set(st.descendants(ph.id))
+    return nested(st, "", [t for t in st.tasks() if t.id not in under])
+
+
+@dataclass(frozen=True)
+class BoardSection:
+    """One section of the board: a phase (``phase`` None for the unphased tasks), its
+    tally, and its task rows in board order."""
+
+    phase: Item | None
+    tally: Tally
+    rows: list[dict[str, Any]]
+
+
+def board_rows(
+    st: State, pipeline: Callable[[Item], list[str]], phase: str = ""
+) -> list[BoardSection]:
+    """The board's sections, in board order: each phase (only ``phase`` when one is
+    named) by (priority, id), then the unphased tasks when no phase is named and there
+    are any. ``pipeline(item)`` is the item's configured gate pipeline (core does not
+    read the config: the caller hands it ``services.gates.pipeline_for``)."""
+
+    def rows(tasks: list, root: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": t.id,
+                "title": t.title,
+                "state": t.state,
+                "parent": t.parent,
+                "depth": depth(st, t, root),
+                "needs": list(t.needs),
+                "globs": list(t.globs),
+                "owner": t.lease.holder if t.lease else "",
+                "gates": {g: t.gate_outcome(g) for g in pipeline(t)},
+            }
+            for t in tasks
+        ]
+
+    out = [
+        BoardSection(ph, tally(tasks), rows(tasks, ph.id))
+        for ph in sorted(st.phases(), key=lambda p: (p.priority, p.id))
+        if not phase or ph.id == phase
+        for tasks in [nested(st, ph.id)]
+    ]
+    loose = [] if phase else unphased(st)
+    if loose:
+        out.append(BoardSection(None, tally(loose), rows(loose, "")))
+    return out
