@@ -257,7 +257,7 @@ def replay(manifest: Manifest | None = None, upto: str = "") -> tuple[dict[str, 
     """The knob defaults and event kinds the manifest says a release has: the base with
     every change up to and including ``upto`` (default: all of them) applied."""
     if upto and upto != UNRELEASED and not version_key(upto):
-        raise ValueError(f"replay upto {upto!r}: not a release version")
+        raise ManifestError(f"replay upto {upto!r}: not a release version")
     m = manifest or load()
     knobs, kinds = dict(m.base_knobs), set(m.base_event_kinds)
     limit = release_key(upto) if upto else None

@@ -276,15 +276,24 @@ def assign_unreleased(
     return out
 
 
-def _has(sha: str, fragment: str) -> bool:
-    """Whether the release commit ``sha`` already holds the unreleased fragment file."""
-    path = f"{MANIFEST.parent.relative_to(ROOT)}/{UM.FRAGMENTS}/{fragment}"
+def holds(sha: str, path: str) -> bool:
+    """Whether commit ``sha`` holds the file ``path`` (repository-relative). A git that
+    cannot answer -- an unknown commit, a missing object in a shallow clone -- stops the
+    backfill: "could not tell" must never read as "not there"."""
     r = subprocess.run(
-        ["git", "-C", str(ROOT), "cat-file", "-e", f"{sha}:{path}"],
+        ["git", "-C", str(ROOT), "ls-tree", "--name-only", sha, "--", path],
         check=False,
         capture_output=True,
+        text=True,
     )
-    return r.returncode == 0
+    if r.returncode != 0:
+        raise SystemExit(f"git cannot list {path} in {sha}: {r.stderr.strip()}")
+    return r.stdout.strip() == path
+
+
+def _has(sha: str, fragment: str) -> bool:
+    """Whether the release commit ``sha`` already holds the unreleased fragment file."""
+    return holds(sha, f"{MANIFEST.parent.relative_to(ROOT)}/{UM.FRAGMENTS}/{fragment}")
 
 
 def render(base: tuple[str, dict], releases: list[tuple[str, str, list[dict]]]) -> str:
