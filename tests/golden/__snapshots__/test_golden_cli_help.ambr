@@ -1,0 +1,2512 @@
+# serializer version: 1
+# name: test_help[ddflow abandon]
+  '''
+  usage: ddflow abandon [-h] --reason REASON [--force] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON
+    --force
+  
+  '''
+# ---
+# name: test_help[ddflow adopt]
+  '''
+  usage: ddflow adopt [-h] [--agents AGENTS] [--docs DOCS] [--launch {auto,uvx,docker,python}] [--image IMAGE] [--refresh-docs]
+  
+  options:
+    -h, --help            show this help message and exit
+    --agents AGENTS       comma-separated: claude,gemini,codex,copilot,vscode,kilo,cursor,kimi,openc
+                          ode,glm,qwen,antigravity,devin,qodo,tabnine,aider,cline,windsurf,replit,op
+                          enhands,goose,cody (default: all)
+    --docs DOCS           where to write the drivers
+    --launch {auto,uvx,docker,python}
+                          how agents spawn the MCP server: 'auto' prefers uvx for an install from a
+                          package index and this installation otherwise; 'docker' needs no Python
+                          toolchain at all
+    --image IMAGE         container image used by --launch docker
+    --refresh-docs        rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the
+                          agents' native rules from this ddflow's templates; leaves MCP launches,
+                          hooks and command files alone (what `doctor` points to when drivers lag)
+  
+  '''
+# ---
+# name: test_help[ddflow approve]
+  '''
+  usage: ddflow approve [-h] [--note NOTE] [--reject] [--reason REASON] id gate
+  
+  positional arguments:
+    id
+    gate
+  
+  options:
+    -h, --help       show this help message and exit
+    --note NOTE      what you looked at, for the record
+    --reject         refuse it; --reason required
+    --reason REASON  why it was rejected — a 'no' nobody can act on is a stall
+  
+  '''
+# ---
+# name: test_help[ddflow bisect]
+  '''
+  usage: ddflow bisect [-h] --cmd CMD [--candidates CANDIDATES] [--glob GLOB] [--timeout TIMEOUT] [--repeat REPEAT] [--max-runs MAX_RUNS] victim
+  
+  positional arguments:
+    victim                the test that fails only after others ran (a test id)
+  
+  options:
+    -h, --help            show this help message and exit
+    --cmd CMD             a command that runs a list of tests and exits non-zero on failure, with
+                          {tests} where the list goes, e.g. 'pytest -q {tests}'
+    --candidates CANDIDATES
+                          comma-separated files, in run order
+    --glob GLOB           where candidates come from (default tests/**/test_*.py)
+    --timeout TIMEOUT     seconds per run (default 600)
+    --repeat REPEAT       runs per probe; any failure counts
+    --max-runs MAX_RUNS   stop after this many runs
+  
+  '''
+# ---
+# name: test_help[ddflow block]
+  '''
+  usage: ddflow block [-h] --reason REASON [--reopen] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON
+    --reopen         block an item that is already DONE or ABANDONED (refused without)
+  
+  '''
+# ---
+# name: test_help[ddflow board]
+  '''
+  usage: ddflow board [-h] [--phase PHASE]
+  
+  options:
+    -h, --help     show this help message and exit
+    --phase PHASE
+  
+  '''
+# ---
+# name: test_help[ddflow brief]
+  '''
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery]
+  
+  options:
+    -h, --help        show this help message and exit
+    --item ITEM
+    --phase PHASE
+    --check-recovery
+  
+  '''
+# ---
+# name: test_help[ddflow bug file-tasks]
+  '''
+  usage: ddflow bug file-tasks [-h] [--dry-run]
+  
+  options:
+    -h, --help  show this help message and exit
+    --dry-run   list what would be filed
+  
+  '''
+# ---
+# name: test_help[ddflow bug fixed]
+  '''
+  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --regression-test REGRESSION_TEST
+                          the test that now guards this bug; repeat it, or separate with ',' or ';',
+                          for several
+    --skip-regression-verify
+                          do not run the named test on the pre-fix tree; requires --verify-reason
+                          (recorded)
+    --verify-reason VERIFY_REASON
+                          why the pre-fix regression check is skipped (recorded)
+    --lesson LESSON
+    --lesson-title LESSON_TITLE
+    --lesson-rule LESSON_RULE
+    --changelog CHANGELOG
+                          'Fixed: text' (any category), or skip / internal
+  
+  '''
+# ---
+# name: test_help[ddflow bug found]
+  '''
+  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  
+  options:
+    -h, --help           show this help message and exit
+    --id ID
+    --summary SUMMARY
+    --item ITEM
+    --title TITLE        a short headline for the bug
+    --severity SEVERITY  low | medium | high | critical (optional)
+    --scope SCOPE        project (default), or ddflow for a bug in ddflow itself
+    --globs GLOBS        the fix task's files (comma-separated); default: the item's own globs
+    --no-task            file no fix task: the bug is fixed in the commit that found it
+    --new                answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
+                         unclaimed, else filed as a new record linked to it
+    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
+    --related ID         answer it: a different record that is related to ID; linked both ways
+    --check              dry run: print the existing records this would be refused as a duplicate of
+                         and write nothing (exit 0 with candidates, 2 with none)
+  
+  '''
+# ---
+# name: test_help[ddflow bug invalid]
+  '''
+  usage: ddflow bug invalid [-h] --reason REASON [--evidence EVIDENCE] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help           show this help message and exit
+    --reason REASON      why the finding is false
+    --evidence EVIDENCE  the probe command or test node id that showed it
+  
+  '''
+# ---
+# name: test_help[ddflow bug list]
+  '''
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--since SINCE] [--limit LIMIT] [--all] [--item ITEM]
+  
+  options:
+    -h, --help     show this help message and exit
+    --state STATE  only rows in this state
+    --phase PHASE  only rows under this phase id
+    --since SINCE  only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT  most rows to show (default 50)
+    --all          include fixed and invalid bugs
+    --item ITEM    only bugs filed in or against this queue item id
+  
+  '''
+# ---
+# name: test_help[ddflow bug reopen]
+  '''
+  usage: ddflow bug reopen [-h] --reason REASON id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON  why the closure was wrong
+  
+  '''
+# ---
+# name: test_help[ddflow bug]
+  '''
+  usage: ddflow bug [-h] {found,file-tasks,fixed,invalid,reopen,list} ...
+  
+  positional arguments:
+    {found,file-tasks,fixed,invalid,reopen,list}
+      file-tasks          file a fix task for every open bug that has none (one-shot, after an
+                          upgrade)
+      invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
+      reopen              reopen a bug closed by mistake (fixed or invalid), saying why
+      list                list bugs: the open ones unless --all or --state
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow cadence]
+  '''
+  usage: ddflow cadence [-h] [--ran RAN] [--note NOTE]
+  
+  options:
+    -h, --help   show this help message and exit
+    --ran RAN
+    --note NOTE
+  
+  '''
+# ---
+# name: test_help[ddflow ci]
+  '''
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
+  
+  positional arguments:
+    {run,status,record}   run: check the merge result; status (default): what would run, and whether
+                          it can
+  
+  options:
+    -h, --help            show this help message and exit
+    --ref REF             run: the commit or item id (default: HEAD here)
+    --base BASE           run: merge this branch in first (default [ci].base)
+    --command COMMAND     run: use this instead of [ci].command
+    --stage STAGE         record: gate | merge | pre-push | schedule
+    --result {passed,failed}
+                          record: how it went
+    --report REPORT       record: file with the pre-commit output, parsed for the failing checks
+    --sha SHA             record: the commit that was checked
+  
+  '''
+# ---
+# name: test_help[ddflow claim]
+  '''
+  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --globs GLOBS         what this claim writes (recorded on the item too); path globs, comma-
+                          separated (a.py,src/**) or a JSON array; repeat the flag to add more --
+                          every value is kept
+    --note NOTE
+    --force
+    --no-worktree
+    --resources RESOURCES
+                          the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)
+  
+  '''
+# ---
+# name: test_help[ddflow cleanup]
+  '''
+  usage: ddflow cleanup [-h] [--apply]
+  
+  options:
+    -h, --help  show this help message and exit
+    --apply
+  
+  '''
+# ---
+# name: test_help[ddflow companions add]
+  '''
+  usage: ddflow companions add [-h] [--id ID] [--agents AGENTS] [--dry-run] [--force]
+  
+  options:
+    -h, --help       show this help message and exit
+    --id ID          comma-separated; default: every installed one
+    --agents AGENTS  comma-separated (default: claude)
+    --dry-run        show the exact config entry that would be written, and write nothing
+    --force          register one that is not installed
+  
+  '''
+# ---
+# name: test_help[ddflow companions list]
+  '''
+  usage: ddflow companions list [-h] [--no-probe] [--verify] [--id ID]
+  
+  options:
+    -h, --help  show this help message and exit
+    --no-probe  skip the detection probes
+    --verify    launch each MCP companion and require an answer to `initialize` (spawns processes;
+                opt-in; exit 1 = one is not an MCP server, 2 = could not tell)
+    --id ID     with --verify: comma-separated ids to launch (even if not installed)
+  
+  '''
+# ---
+# name: test_help[ddflow companions]
+  '''
+  usage: ddflow companions [-h] [--verify] [--id ID] {list,add} ...
+  
+  positional arguments:
+    {list,add}
+      list      what is known, installed and registered
+      add       register installed companions in an agent's MCP config
+  
+  options:
+    -h, --help  show this help message and exit
+    --verify    launch each MCP companion and require an answer to `initialize` (spawns processes;
+                opt-in; exit 1 = one is not an MCP server, 2 = could not tell)
+    --id ID     with --verify: comma-separated ids to launch (even if not installed)
+  
+  '''
+# ---
+# name: test_help[ddflow complete]
+  '''
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --sha SHA
+    --model MODEL         the AUTHOR's model, for independence check
+    --force
+    --changelog CHANGELOG
+                          'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or skip /
+                          internal to keep it out of the changelog; optional
+    --regression-test REGRESSION_TEST
+                          for a fix task: the test that now guards the bug(s) it fixes; closes them
+                          (as `bug fixed` would) and completes. Repeat for several.
+  
+  '''
+# ---
+# name: test_help[ddflow config]
+  '''
+  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [value ...]
+  
+  positional arguments:
+    value                 the value, when --set is used; or `KEY VALUE` with no --set (ddflow config
+                          review.max_rounds 0 --local)
+  
+  options:
+    -h, --help            show this help message and exit
+    --explain
+    --filter FILTER
+    --set SET             edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'
+    --append-toml APPEND_TOML
+                          append this TOML to .ddflow/config.toml (validated first)
+    --local               write --set/--append-toml to the git-ignored .ddflow/local/config.toml:
+                          this machine's endpoints, hosts, key variables and sizing, never committed
+  
+  '''
+# ---
+# name: test_help[ddflow decision add]
+  '''
+  usage: ddflow decision add [-h] [--id ID] --title TITLE --decision DECISION [--context CONTEXT] [--consequences CONSEQUENCES] [--alternatives ALTERNATIVES] [--globs GLOBS] [--tags TAGS] [--sources SOURCES] [--item ITEM] [--by BY] [--status {proposed,accepted,superseded}] [--supersedes SUPERSEDES] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  
+  options:
+    -h, --help            show this help message and exit
+    --id ID
+    --title TITLE
+    --decision DECISION   what was DECIDED (not what was discussed)
+    --context CONTEXT     the forces: why a decision was needed
+    --consequences CONSEQUENCES
+                          what it costs, incl. what it makes harder
+    --alternatives ALTERNATIVES
+                          what was rejected, and why
+    --globs GLOBS         the code this governs; without it the decision can only be found by search
+    --tags TAGS
+    --sources SOURCES     where this came from: an ADR path, a URL, a commit sha (comma-separated)
+    --item ITEM
+    --by BY               operator | agent | a name
+    --status {proposed,accepted,superseded}
+    --supersedes SUPERSEDES
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
+  
+  '''
+# ---
+# name: test_help[ddflow decision applicable]
+  '''
+  usage: ddflow decision applicable [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow decision list]
+  '''
+  usage: ddflow decision list [-h] [--all] [--since SINCE] [--limit LIMIT]
+  
+  options:
+    -h, --help     show this help message and exit
+    --all
+    --since SINCE  only decisions recorded at or after this ISO date
+    --limit LIMIT  the newest N (0 = all)
+  
+  '''
+# ---
+# name: test_help[ddflow decision search]
+  '''
+  usage: ddflow decision search [-h] [--limit LIMIT] query
+  
+  positional arguments:
+    query
+  
+  options:
+    -h, --help     show this help message and exit
+    --limit LIMIT
+  
+  '''
+# ---
+# name: test_help[ddflow decision show]
+  '''
+  usage: ddflow decision show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow decision supersede]
+  '''
+  usage: ddflow decision supersede [-h] --by BY [--reason REASON] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --by BY          the decision that replaces it
+    --reason REASON
+  
+  '''
+# ---
+# name: test_help[ddflow decision]
+  '''
+  usage: ddflow decision [-h] {add,list,show,search,applicable,supersede} ...
+  
+  positional arguments:
+    {add,list,show,search,applicable,supersede}
+      applicable          decisions governing an item's declared files
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow doctor]
+  '''
+  usage: ddflow doctor [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow dupes]
+  '''
+  usage: ddflow dupes [-h] [--kind KIND] [--open-only] [--floor FLOOR] [--limit LIMIT]
+  
+  options:
+    -h, --help     show this help message and exit
+    --kind KIND    comma-separated subset of [dedupe].kinds:
+                   bug,task,phase,lesson,decision,research,memory (default: all of them)
+    --open-only    only pairs where both records are still live (the dedupe_sweep pass)
+    --floor FLOOR  minimum score to report (default: [dedupe].show_floor)
+    --limit LIMIT  at most N pairs (0 = all)
+  
+  '''
+# ---
+# name: test_help[ddflow export]
+  '''
+  usage: ddflow export [-h] [--path PATH] [--mode MODE] [--local] [--lock] [--all] [--since SINCE] [--version VERSION] [--phase PHASE] [--item ITEM] [--status STATUS] [--tag TAG] [--session SESSION] [--limit LIMIT] [--max-bytes MAX_BYTES] [--template TEMPLATE] [--diff] [--check] [--update] [--out OUT] [--force] [--yes] [doc] [target]
+  
+  positional arguments:
+    doc                   the document kind; omit to list the kinds. Or a verb: enable <doc>,
+                          disable <doc>, ack, eject <doc>, validate [<doc>]
+    target                the document, after a verb
+  
+  options:
+    -h, --help            show this help message and exit
+    --path PATH           enable: the target file (repo-relative)
+    --mode MODE           enable: whole, region or append
+    --local               enable/disable: this machine only
+    --lock                disable: the operator's veto; agents cannot enable it
+    --all                 act on the selected documents
+    --since SINCE         entries at or after this date (YYYY-MM-DD or a timestamp prefix)
+    --version VERSION     one release (the changelog kind: X or vX, or unreleased)
+    --phase PHASE         one phase
+    --item ITEM           one item (the bugs document filters it as a phase)
+    --status STATUS       one status, e.g. open or fixed
+    --tag TAG             one tag
+    --session SESSION     one session id
+    --limit LIMIT         at most N entries
+    --max-bytes MAX_BYTES
+                          size cap for printing (default [export].max_bytes)
+    --template TEMPLATE   render once with this template file; writes nothing
+    --diff                show what a write would change
+    --check               exit 1 if the target is not what a write would produce
+    --update              write the configured target (asks on a terminal)
+    --out OUT             write to this repo-relative path instead
+    --force               overwrite a hand-edited or unmarked target
+    --yes                 with --update: do not ask on a terminal
+  
+  '''
+# ---
+# name: test_help[ddflow external sync]
+  '''
+  usage: ddflow external sync [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow external]
+  '''
+  usage: ddflow external [-h] {sync} ...
+  
+  positional arguments:
+    {sync}
+      sync      observe the sibling-repo items `needs` names; record what changed
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow flow choose]
+  '''
+  usage: ddflow flow choose [-h] [--reason REASON] knob value
+  
+  positional arguments:
+    knob
+    value
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON  why — the next agent reads this
+  
+  '''
+# ---
+# name: test_help[ddflow flow show]
+  '''
+  usage: ddflow flow show [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow flow]
+  '''
+  usage: ddflow flow [-h] {show,choose} ...
+  
+  positional arguments:
+    {show,choose}
+      show         every choice: value, options, and who decided
+      choose       record a workflow choice (the config file still wins over it)
+  
+  options:
+    -h, --help     show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow gate record]
+  '''
+  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] id gate
+  
+  positional arguments:
+    id
+    gate
+  
+  options:
+    -h, --help            show this help message and exit
+    --outcome {passed,failed,unavailable,partial,skipped}
+                          failed, unavailable, partial and skipped each require --reason
+    --reason REASON       why the gate did not pass; REQUIRED for outcomes failed, unavailable,
+                          partial and skipped (--evidence is what you observed, not a substitute)
+    --evidence EVIDENCE   what you observed: output, a summary
+    --command COMMAND
+    --exit-code EXIT_CODE
+    --model MODEL         the REVIEWER's model, for family independence (the author's is `complete
+                          --model`); an author-family name on a reviewer gate is refused
+    --reviewer-model REVIEWER_MODEL
+                          like --model, stating that this model IS the reviewer, so an author-family
+                          name is recorded rather than refused
+    --reviewed-sha REVIEWED_SHA
+                          the commit the review tool ran on (roborev review <sha>); refused when it
+                          is not the item's branch head or a commit of its branch
+    --output-file OUTPUT_FILE
+  
+  '''
+# ---
+# name: test_help[ddflow gate run]
+  '''
+  usage: ddflow gate run [-h] id gate
+  
+  positional arguments:
+    id
+    gate
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow gate skip]
+  '''
+  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] id gate
+  
+  positional arguments:
+    id
+    gate
+  
+  options:
+    -h, --help            show this help message and exit
+    --outcome {passed,failed,unavailable,partial,skipped}
+                          failed, unavailable, partial and skipped each require --reason
+    --reason REASON       why the gate did not pass; REQUIRED for outcomes failed, unavailable,
+                          partial and skipped (--evidence is what you observed, not a substitute)
+    --evidence EVIDENCE   what you observed: output, a summary
+    --command COMMAND
+    --exit-code EXIT_CODE
+    --model MODEL         the REVIEWER's model, for family independence (the author's is `complete
+                          --model`); an author-family name on a reviewer gate is refused
+    --output-file OUTPUT_FILE
+  
+  '''
+# ---
+# name: test_help[ddflow gate status]
+  '''
+  usage: ddflow gate status [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow gate verify]
+  '''
+  usage: ddflow gate verify [-h] id gate
+  
+  positional arguments:
+    id
+    gate
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow gate]
+  '''
+  usage: ddflow gate [-h] {status,run,verify,record,skip} ...
+  
+  positional arguments:
+    {status,run,verify,record,skip}
+      verify              break what this gate guards and require it to notice (exit 1 = it cannot)
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow heartbeat]
+  '''
+  usage: ddflow heartbeat [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow help]
+  '''
+  usage: ddflow help [-h] [topic]
+  
+  positional arguments:
+    topic       one of: cli, config, customise, export, gates, import, mcp, memory, parallel,
+                recovery, verify, workflow. Omit for the overview.
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow history]
+  '''
+  usage: ddflow history [-h] [--item ITEM] [--kind KIND] [--since SINCE] [--limit LIMIT] [--agent LOG_AGENT] [--tail TAIL]
+  
+  options:
+    -h, --help         show this help message and exit
+    --item ITEM        restrict to one item
+    --kind KIND        comma-separated event kinds or families: 'gate', 'lease.acquired',
+                       'decision,bug'
+    --since SINCE      ISO timestamp lower bound
+    --limit LIMIT
+    --agent LOG_AGENT  only this agent's shard
+    --tail TAIL        the last N events, oldest first
+  
+  '''
+# ---
+# name: test_help[ddflow hooks check-commit]
+  '''
+  usage: ddflow hooks check-commit [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow hooks check-msg]
+  '''
+  usage: ddflow hooks check-msg [-h] msg_file
+  
+  positional arguments:
+    msg_file    the message file git passes the hook
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow hooks install]
+  '''
+  usage: ddflow hooks install [-h] [--force] [--claude] [--gemini]
+  
+  options:
+    -h, --help  show this help message and exit
+    --force     replace an existing pre-commit hook ddflow does not manage
+    --claude    the Claude Code SessionStart hook in .claude/settings.json instead of the git hook;
+                other hooks there are left exactly as they are
+    --gemini    the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json
+  
+  '''
+# ---
+# name: test_help[ddflow hooks pre-compact]
+  '''
+  usage: ddflow hooks pre-compact [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow hooks prompt]
+  '''
+  usage: ddflow hooks prompt [-h] [--gemini]
+  
+  options:
+    -h, --help  show this help message and exit
+    --gemini    answer with the JSON Gemini CLI wants
+  
+  '''
+# ---
+# name: test_help[ddflow hooks session-start]
+  '''
+  usage: ddflow hooks session-start [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow hooks status]
+  '''
+  usage: ddflow hooks status [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow hooks uninstall]
+  '''
+  usage: ddflow hooks uninstall [-h] [--claude] [--gemini]
+  
+  options:
+    -h, --help  show this help message and exit
+    --claude    the Claude Code SessionStart hook in .claude/settings.json instead of the git hook;
+                other hooks there are left exactly as they are
+    --gemini    the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json
+  
+  '''
+# ---
+# name: test_help[ddflow hooks]
+  '''
+  usage: ddflow hooks [-h] {install,uninstall,status,check-commit,check-msg,session-start,pre-compact,prompt} ...
+  
+  positional arguments:
+    {install,uninstall,status,check-commit,check-msg,session-start,pre-compact,prompt}
+      check-commit        (invoked by the hook)
+      check-msg           (invoked by the commit-msg hook)
+      session-start       (invoked by the Claude Code SessionStart hook) print the brief; always
+                          exit 0
+      pre-compact         (invoked by the Claude Code PreCompact hook) record what the session was
+                          doing before compaction; always exit 0
+      prompt              (invoked by the UserPromptSubmit / BeforeAgent hook) record the prompt on
+                          stdin; always exit 0
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow import]
+  '''
+  usage: ddflow import [-h] [--apply] [--verify] [--include-done] [--max-tasks MAX_TASKS]
+  
+  options:
+    -h, --help            show this help message and exit
+    --apply               write them; default is a dry run
+    --verify              report what was already imported and whether it is still true: source
+                          drift, vanished source files, and the globs and decisions the import left
+                          for a human (exit 1 = findings, 2 = nothing imported)
+    --include-done        also import already-ticked items, as completed. Off by default: a finished
+                          history is not a queue.
+    --max-tasks MAX_TASKS
+                          refuse to propose more tasks than this. 0 (the default) uses [importer]
+                          max_tasks from the config, which ships at 200. A bigger number is usually
+                          a whole history rather than a queue.
+  
+  '''
+# ---
+# name: test_help[ddflow init]
+  '''
+  usage: ddflow init [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow job add]
+  '''
+  usage: ddflow job add [-h] --pid PID [--command COMMAND] [--log LOG] item
+  
+  positional arguments:
+    item
+  
+  options:
+    -h, --help         show this help message and exit
+    --pid PID
+    --command COMMAND
+    --log LOG
+  
+  '''
+# ---
+# name: test_help[ddflow job end]
+  '''
+  usage: ddflow job end [-h] [--exit-code EXIT_CODE] [--note NOTE] [--force] job
+  
+  positional arguments:
+    job
+  
+  options:
+    -h, --help            show this help message and exit
+    --exit-code EXIT_CODE
+                          default: the one its log recorded
+    --note NOTE
+    --force               end a job on another host you have checked there
+  
+  '''
+# ---
+# name: test_help[ddflow job list]
+  '''
+  usage: ddflow job list [-h] [--item ITEM] [--all]
+  
+  options:
+    -h, --help   show this help message and exit
+    --item ITEM
+    --all        include ended jobs
+  
+  '''
+# ---
+# name: test_help[ddflow job run]
+  '''
+  usage: ddflow job run [-h] [--log LOG] [--cwd CWD] item command
+  
+  positional arguments:
+    item
+    command     shell command (quote it)
+  
+  options:
+    -h, --help  show this help message and exit
+    --log LOG   output file (default .ddflow/local/jobs/)
+    --cwd CWD   default: the item's worktree, else the repo
+  
+  '''
+# ---
+# name: test_help[ddflow job]
+  '''
+  usage: ddflow job [-h] {run,add,list,end} ...
+  
+  positional arguments:
+    {run,add,list,end}
+      run               launch a command detached for an item and record it
+      add               register a process started some other way
+      list              jobs with their live status (exit 2 = none)
+      end               record how a job ended (refused while it runs)
+  
+  options:
+    -h, --help          show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow lesson add]
+  '''
+  usage: ddflow lesson add [-h] [--id ID] --title TITLE [--rule RULE] [--why WHY] [--how HOW] [--summary SUMMARY] [--tags TAGS] [--seen-in SEEN_IN] [--supersedes SUPERSEDES] [--pattern PATTERN] [--globs GLOBS] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  
+  options:
+    -h, --help            show this help message and exit
+    --id ID
+    --title TITLE
+    --rule RULE
+    --why WHY
+    --how HOW
+    --summary SUMMARY     the lesson in one paragraph; what docs/ddflow/LESSONS-SUMMARY.md is made
+                          of
+    --tags TAGS
+    --seen-in SEEN_IN
+    --supersedes SUPERSEDES
+    --pattern PATTERN     regex this lesson forbids. Scans NOW and stores WHICH sites match, so
+                          `lesson verify` can name what reappeared — a count could only say it got
+                          worse
+    --globs GLOBS         comma-separated globs to scan (default: all tracked files)
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
+  
+  '''
+# ---
+# name: test_help[ddflow lesson list]
+  '''
+  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--all]
+  
+  options:
+    -h, --help     show this help message and exit
+    --state STATE  only rows in this state
+    --tag TAG      only rows carrying this tag
+    --owner OWNER  only rows leased by this agent (not --agent, which is who YOU are)
+    --since SINCE  only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT  most rows to show (default 50)
+    --all          include superseded lessons
+  
+  '''
+# ---
+# name: test_help[ddflow lesson search]
+  '''
+  usage: ddflow lesson search [-h] [--limit LIMIT] query
+  
+  positional arguments:
+    query
+  
+  options:
+    -h, --help     show this help message and exit
+    --limit LIMIT  default: [lessons].max_results
+  
+  '''
+# ---
+# name: test_help[ddflow lesson verify]
+  '''
+  usage: ddflow lesson verify [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow lesson]
+  '''
+  usage: ddflow lesson [-h] {add,verify,search,list} ...
+  
+  positional arguments:
+    {add,verify,search,list}
+      verify              re-scan every lesson's pattern and name the sites that reappeared
+      list                list lessons, newest first: the live ones unless --all or --state
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow link]
+  '''
+  usage: ddflow link [-h] (--extends ID | --duplicate-of ID | --related ID | --distinct ID) [--reason REASON] subject
+  
+  positional arguments:
+    subject            the record being related (the duplicate, for a merge)
+  
+  options:
+    -h, --help         show this help message and exit
+    --extends ID       subject adds to ID
+    --duplicate-of ID  subject is the same thing as ID
+    --related ID       subject is related to ID
+    --distinct ID      subject is NOT a duplicate of ID: dismiss the pair for good
+    --reason REASON    why, recorded with the link
+  
+  '''
+# ---
+# name: test_help[ddflow loops]
+  '''
+  usage: ddflow loops [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow mcp]
+  '''
+  usage: ddflow mcp [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow memory add]
+  '''
+  usage: ddflow memory add [-h] [--tags TAGS] [--id ID] [--new | --extends ID | --duplicate-of ID | --related ID | --check] text
+  
+  positional arguments:
+    text
+  
+  options:
+    -h, --help         show this help message and exit
+    --tags TAGS
+    --id ID            re-record (correct) an existing memory
+    --new              answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID       answer it: this adds to record ID -- appended to ID while it is open and
+                       unclaimed, else filed as a new record linked to it
+    --duplicate-of ID  answer it: this is the same thing as record ID (handled like --extends)
+    --related ID       answer it: a different record that is related to ID; linked both ways
+    --check            dry run: print the existing records this would be refused as a duplicate of
+                       and write nothing (exit 0 with candidates, 2 with none)
+  
+  '''
+# ---
+# name: test_help[ddflow memory forget]
+  '''
+  usage: ddflow memory forget [-h] --reason REASON id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON
+  
+  '''
+# ---
+# name: test_help[ddflow memory list]
+  '''
+  usage: ddflow memory list [-h] [--query QUERY] [--limit LIMIT] [--all]
+  
+  options:
+    -h, --help     show this help message and exit
+    --query QUERY  rank by relevance instead of recency
+    --limit LIMIT
+    --all          include forgotten memories
+  
+  '''
+# ---
+# name: test_help[ddflow memory]
+  '''
+  usage: ddflow memory [-h] {add,list,forget} ...
+  
+  positional arguments:
+    {add,list,forget}
+      add              remember one fact (refused over [memory] max_chars)
+      list             live memories, newest first (exit 2 = none)
+      forget           stop believing a memory; kept, with the reason
+  
+  options:
+    -h, --help         show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow merge]
+  '''
+  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help         show this help message and exit
+    --message MESSAGE
+    --keep
+    --allow-dirty
+    --allow-empty      land a branch with no commits ahead of its target (refused by default: it
+                       would record the item merged with nothing landed)
+    --branch BRANCH    for an item claimed without a worktree: the branch to land (default: the one
+                       checked out in the worktree you are standing in)
+    --model MODEL      the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and
+                       the reviewer-independence check needs it then
+  
+  '''
+# ---
+# name: test_help[ddflow next]
+  '''
+  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}]
+  
+  options:
+    -h, --help           show this help message and exit
+    --phase PHASE        limit to this phase; exit 1 if it names no phase or item
+    --kind {task,phase}
+  
+  '''
+# ---
+# name: test_help[ddflow onboard]
+  '''
+  usage: ddflow onboard [-h] [--apply] [--accept NAME] [{status,preflight,legacy,memory,test-gate,verify}]
+  
+  positional arguments:
+    {status,preflight,legacy,memory,test-gate,verify}
+                          which stage (default status: the standing drift report)
+  
+  options:
+    -h, --help            show this help message and exit
+    --apply               act on the stage's proposal (preflight/legacy/memory)
+    --accept NAME         approve one named item (repeatable); without it, apply acts on everything
+                          the report marked safe
+  
+  '''
+# ---
+# name: test_help[ddflow phase add]
+  '''
+  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help           show this help message and exit
+    --title TITLE
+    --needs NEEDS
+    --globs GLOBS        path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
+                         to add more -- every value is kept
+    --tags TAGS
+    --body BODY
+    --priority PRIORITY
+    --line LINE          release line (default: the current one)
+    --readd              file a REMOVED item's id again. An id still in the queue is always refused:
+                         change it with `ddflow update`
+    --new                answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
+                         unclaimed, else filed as a new record linked to it
+    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
+    --related ID         answer it: a different record that is related to ID; linked both ways
+    --check              dry run: print the existing records this would be refused as a duplicate of
+                         and write nothing (exit 0 with candidates, 2 with none)
+  
+  '''
+# ---
+# name: test_help[ddflow phase list]
+  '''
+  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT]
+  
+  options:
+    -h, --help     show this help message and exit
+    --state STATE  only rows in this state
+    --tag TAG      only rows carrying this tag
+    --owner OWNER  only rows leased by this agent (not --agent, which is who YOU are)
+    --since SINCE  only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT  most rows to show (default 50)
+  
+  '''
+# ---
+# name: test_help[ddflow phase]
+  '''
+  usage: ddflow phase [-h] {add,list} ...
+  
+  positional arguments:
+    {add,list}
+      list      list phases with done/total progress
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow pins]
+  '''
+  usage: ddflow pins [-h] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document
+  
+  positional arguments:
+    document              the instruction file, e.g. AGENTS.md
+  
+  options:
+    -h, --help            show this help message and exit
+    --tests TESTS         comma-separated test dirs (default: tests,test)
+    --min-needle MIN_NEEDLE
+                          shortest literal that counts as a pin (default 12)
+    --top TOP             how many free stretches to show
+  
+  '''
+# ---
+# name: test_help[ddflow pr status]
+  '''
+  usage: ddflow pr status [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow pr sync]
+  '''
+  usage: ddflow pr sync [-h] [--item ITEM]
+  
+  options:
+    -h, --help   show this help message and exit
+    --item ITEM  only this item
+  
+  '''
+# ---
+# name: test_help[ddflow pr threads]
+  '''
+  usage: ddflow pr threads [-h] [--thread THREAD] [--reply REPLY] [--resolve] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --thread THREAD  the thread's id (as listed)
+    --reply REPLY    post this reply on --thread
+    --resolve        mark --thread resolved
+  
+  '''
+# ---
+# name: test_help[ddflow pr]
+  '''
+  usage: ddflow pr [-h] {sync,status,threads} ...
+  
+  positional arguments:
+    {sync,status,threads}
+      sync                ask the forge about every request in review: complete merged ones, reopen
+                          ones with requested changes, merge approved ones
+      status              every item's request, from the log (no forge call)
+      threads             an item's review threads from the forge; with --thread, reply and/or
+                          resolve one
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow precommit]
+  '''
+  usage: ddflow precommit [-h] [--ddflow-cmd DDFLOW_CMD] [--write]
+  
+  options:
+    -h, --help            show this help message and exit
+    --ddflow-cmd DDFLOW_CMD
+                          how the proposed local hooks reach ddflow (default: `ddflow` on PATH)
+    --write               create .pre-commit-config.yaml; an existing one is never replaced (exit 3)
+  
+  '''
+# ---
+# name: test_help[ddflow progress]
+  '''
+  usage: ddflow progress [-h] [id]
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow promote add]
+  '''
+  usage: ddflow promote add [-h] [--force] env
+  
+  positional arguments:
+    env
+  
+  options:
+    -h, --help  show this help message and exit
+    --force     file it even with nothing to carry
+  
+  '''
+# ---
+# name: test_help[ddflow promote deployed]
+  '''
+  usage: ddflow promote deployed [-h] [--sha SHA] env
+  
+  positional arguments:
+    env
+  
+  options:
+    -h, --help  show this help message and exit
+    --sha SHA   the deployed commit (default: ENV's branch head)
+  
+  '''
+# ---
+# name: test_help[ddflow promote status]
+  '''
+  usage: ddflow promote status [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow promote]
+  '''
+  usage: ddflow promote [-h] {add,deployed,status} ...
+  
+  positional arguments:
+    {add,deployed,status}
+      add                 file a promotion to ENV from the branch just upstream of it
+      deployed            record the sha a deploy put live in ENV (call it from the deploy hook)
+      status              each environment: head, commits behind upstream, open promotion
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow prompts eject]
+  '''
+  usage: ddflow prompts eject [-h] [--force] [name]
+  
+  positional arguments:
+    name
+  
+  options:
+    -h, --help  show this help message and exit
+    --force
+  
+  '''
+# ---
+# name: test_help[ddflow prompts get]
+  '''
+  usage: ddflow prompts get [-h] [--arg KEY=VALUE] name
+  
+  positional arguments:
+    name
+  
+  options:
+    -h, --help       show this help message and exit
+    --arg KEY=VALUE  one of its arguments (a macro's params are required); repeat for more
+  
+  '''
+# ---
+# name: test_help[ddflow prompts list]
+  '''
+  usage: ddflow prompts list [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow prompts show]
+  '''
+  usage: ddflow prompts show [-h] name
+  
+  positional arguments:
+    name
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow prompts]
+  '''
+  usage: ddflow prompts [-h] {list,show,get,eject} ...
+  
+  positional arguments:
+    {list,show,get,eject}
+      get                 a workflow command or macro rendered, exactly as MCP prompts/get gives it
+      eject               copy the shipped templates into .ddflow/prompts/
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow rebuild]
+  '''
+  usage: ddflow rebuild [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow recall]
+  '''
+  usage: ddflow recall [-h] [--limit LIMIT] [--sources SOURCES] [--max-chars MAX_CHARS] query
+  
+  positional arguments:
+    query
+  
+  options:
+    -h, --help            show this help message and exit
+    --limit LIMIT         hits per source
+    --sources SOURCES     comma-separated subset:
+                          decisions,lessons,memories,research,bugs,items,prompts
+    --max-chars MAX_CHARS
+  
+  '''
+# ---
+# name: test_help[ddflow recover]
+  '''
+  usage: ddflow recover [-h] [--item ITEM] [--apply]
+  
+  options:
+    -h, --help   show this help message and exit
+    --item ITEM
+    --apply
+  
+  '''
+# ---
+# name: test_help[ddflow release]
+  '''
+  usage: ddflow release [-h] [--note NOTE] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help   show this help message and exit
+    --note NOTE
+  
+  '''
+# ---
+# name: test_help[ddflow remove]
+  '''
+  usage: ddflow remove [-h] [--reason REASON] [--force] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON
+    --force
+  
+  '''
+# ---
+# name: test_help[ddflow render]
+  '''
+  usage: ddflow render [-h] [--out OUT] [--show SHOW]
+  
+  options:
+    -h, --help   show this help message and exit
+    --out OUT
+    --show SHOW  print ONE view to stdout instead of writing files: lessons, lessons-summary,
+                 research, board
+  
+  '''
+# ---
+# name: test_help[ddflow replay]
+  '''
+  usage: ddflow replay [-h] [--out OUT] [--verify]
+  
+  options:
+    -h, --help  show this help message and exit
+    --out OUT
+    --verify
+  
+  '''
+# ---
+# name: test_help[ddflow research]
+  '''
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [{add,list}]
+  
+  positional arguments:
+    {add,list}            optional: `research add` = `research`; `research list` lists the notes
+  
+  options:
+    -h, --help            show this help message and exit
+    --id ID
+    --question QUESTION
+    --claim CLAIM
+    --mechanism MECHANISM
+    --falsifier FALSIFIER
+    --probe PROBE
+    --probe-output PROBE_OUTPUT
+    --verdict VERDICT
+    --sources SOURCES
+    --budget BUDGET
+    --item ITEM
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
+    --state STATE         only rows in this state
+    --phase PHASE         only rows under this phase id
+    --tag TAG             only rows carrying this tag
+    --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT         most rows to show (default 50)
+  
+  '''
+# ---
+# name: test_help[ddflow resolve]
+  '''
+  usage: ddflow resolve [-h] --keep KEEP [--refile-as REFILE_AS] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --keep KEEP           the definition's event id (or a 6+ character prefix), or the agent / lease
+                          holder, to keep — `ddflow show <id>` lists them
+    --refile-as REFILE_AS
+                          re-add each definition NOT kept under these new ids (comma-separated, in
+                          `show` order) in the same transaction
+  
+  '''
+# ---
+# name: test_help[ddflow review]
+  '''
+  usage: ddflow review [-h] [--gate GATE] [--intent INTENT] [--context CONTEXT] [--base BASE] [--commit COMMIT] [--branch BRANCH] [--chunk CHUNK] [--delta] [--full] [--force] [--reason REASON] [--finding FINDING] [--refuted] [--confirmed] [--probe PROBE] [id ...]
+  
+  positional arguments:
+    id                 the item; or `triage <item>`
+  
+  options:
+    -h, --help         show this help message and exit
+    --gate GATE        gate to review (default critic); rubber_duck,critic reviews both -- one
+                       combined review under [review].combined_under_lines changed lines
+    --intent INTENT    what the change is meant to do (defaults to the item's title/body)
+    --context CONTEXT
+    --base BASE
+    --commit COMMIT    review this one landed commit (vs its first parent) instead of the item's
+                       branch
+    --branch BRANCH    review this branch against base -- for an item claimed without a worktree
+                       (default: the branch checked out in the worktree you are standing in)
+    --chunk CHUNK      re-review only chunk N (as the recorded review numbered it; repeatable, or
+                       '2,5') and merge it into that record -- same diff, chunk size and reviewer
+    --delta            recheck ONLY what changed since the head the gate's last review covered, for
+                       a diff too large to send twice: not a full round, but counted against
+                       [review].max_rounds. A plain re-review is a full round with the previous
+                       findings; [review].delta_default = true makes it a delta instead
+    --full             review the item's WHOLE diff even when [review].delta_default would make it a
+                       delta: a full round, counted against [review].max_rounds
+    --force            run a full round past [review].max_rounds; needs --reason, recorded in the
+                       evidence
+    --reason REASON    why --force
+    --finding FINDING  triage: the finding's number (#N)
+    --refuted          triage: --probe shows the finding is false
+    --confirmed        triage: --probe is the fix/test that answers it
+    --probe PROBE      triage: the evidence for the verdict
+  
+  two commands share this parser:
+    ddflow review <id> --gate G [--chunk N | --delta]   run the reviewer(s) (slow, shared);
+                    a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage
+    ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...
+                                              record what became of one finding
+  --finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the
+  `triage` verb: without it they are refused, never run as a review.
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers add]
+  '''
+  usage: ddflow reviewers add [-h] [--preset PRESET] [--name NAME] [--model MODEL] [--base-url BASE_URL] [--gates GATES] [--shared] [--no-launch]
+  
+  options:
+    -h, --help           show this help message and exit
+    --preset PRESET      see `ddflow reviewers presets`
+    --name NAME
+    --model MODEL
+    --base-url BASE_URL
+    --gates GATES
+    --shared             write to the committed .ddflow/config.toml instead of the git-ignored
+                         .ddflow/local/reviewers.toml -- only for a reviewer every clone should use
+    --no-launch          do not auto-start a local server for this reviewer
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers approve]
+  '''
+  usage: ddflow reviewers approve [-h] [--note NOTE] [name]
+  
+  positional arguments:
+    name
+  
+  options:
+    -h, --help   show this help message and exit
+    --note NOTE
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers detect]
+  '''
+  usage: ddflow reviewers detect [-h] [--write] [--shared]
+  
+  options:
+    -h, --help  show this help message and exit
+    --write     append the discovered reviewers to the git-ignored .ddflow/local/reviewers.toml
+    --shared    with --write: commit them to .ddflow/config.toml instead, for every clone
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers list]
+  '''
+  usage: ddflow reviewers list [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers presets]
+  '''
+  usage: ddflow reviewers presets [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers test]
+  '''
+  usage: ddflow reviewers test [-h] [name]
+  
+  positional arguments:
+    name
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow reviewers]
+  '''
+  usage: ddflow reviewers [-h] {detect,list,presets,add,approve,test} ...
+  
+  positional arguments:
+    {detect,list,presets,add,approve,test}
+      detect              probe well-known local endpoints
+      presets             ready-made provider settings
+      add                 add a reviewer from a preset
+      approve             a PERSON vouches for a tool-written reviewer entry (refused under an agent
+                          identity); with no name, list the entries waiting (anyone may)
+      test                send a tiny known-buggy diff and check the reply
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow rule add]
+  '''
+  usage: ddflow rule add [-h] --id ID --title TITLE [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--priority PRIORITY] [--globs GLOBS] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  
+  options:
+    -h, --help           show this help message and exit
+    --id ID
+    --title TITLE
+    --content CONTENT
+    --tags TAGS
+    --scope SCOPE
+    --priority PRIORITY
+    --globs GLOBS
+    --new                a different rule, file it
+    --extends ID
+    --duplicate-of ID
+    --related ID
+    --check              dry run: list duplicates only
+  
+  '''
+# ---
+# name: test_help[ddflow rule edit]
+  '''
+  usage: ddflow rule edit [-h] [--title TITLE] [--content CONTENT] [--tags TAGS] [--scope SCOPE] [--globs GLOBS] [--priority PRIORITY] [--new | --related ID] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help           show this help message and exit
+    --title TITLE
+    --content CONTENT
+    --tags TAGS
+    --scope SCOPE
+    --globs GLOBS
+    --priority PRIORITY
+    --new                answer the duplicate check: different
+    --related ID         answer it: related to ID
+  
+  '''
+# ---
+# name: test_help[ddflow rule list]
+  '''
+  usage: ddflow rule list [-h] [--tag TAG] [--scope SCOPE]
+  
+  options:
+    -h, --help     show this help message and exit
+    --tag TAG
+    --scope SCOPE
+  
+  '''
+# ---
+# name: test_help[ddflow rule remove]
+  '''
+  usage: ddflow rule remove [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow rule search]
+  '''
+  usage: ddflow rule search [-h] [--limit LIMIT] [--exact] [--regex] [--tag TAG] [--scope SCOPE] query
+  
+  positional arguments:
+    query
+  
+  options:
+    -h, --help     show this help message and exit
+    --limit LIMIT
+    --exact
+    --regex
+    --tag TAG
+    --scope SCOPE
+  
+  '''
+# ---
+# name: test_help[ddflow rule show]
+  '''
+  usage: ddflow rule show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow rule]
+  '''
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove} ...
+  
+  positional arguments:
+    {add,edit,list,search,show,remove}
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow search]
+  '''
+  usage: ddflow search [-h] [--exact | --regex] [--kind KIND] [--state STATE] [--phase PHASE] [--owner OWNER] [--since SINCE] [--limit LIMIT] query
+  
+  positional arguments:
+    query          the text to look for
+  
+  options:
+    -h, --help     show this help message and exit
+    --exact        case-insensitive substring, not ranked
+    --regex        a regular expression (unsafe ones are refused)
+    --kind KIND    comma-separated sources to search (default all): task, phase, bug, research,
+                   decision, lesson, session, prompt, log
+    --state STATE  only hits in this state
+    --phase PHASE  only hits under this phase id
+    --owner OWNER  only hits by this agent (lease holder, session or event agent); not --agent,
+                   which is who YOU are
+    --since SINCE  only hits dated at or after this ISO date
+    --limit LIMIT  most hits to show
+  
+  '''
+# ---
+# name: test_help[ddflow session adopt-orphans]
+  '''
+  usage: ddflow session adopt-orphans [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow session end]
+  '''
+  usage: ddflow session end [-h] [--summary SUMMARY] session
+  
+  positional arguments:
+    session
+  
+  options:
+    -h, --help         show this help message and exit
+    --summary SUMMARY
+  
+  '''
+# ---
+# name: test_help[ddflow session list]
+  '''
+  usage: ddflow session list [-h] [--state STATE] [--owner OWNER] [--since SINCE] [--limit LIMIT]
+  
+  options:
+    -h, --help     show this help message and exit
+    --state STATE  open or ended
+    --owner OWNER  only sessions of this agent (not --agent, which is who YOU are)
+    --since SINCE  ISO date or timestamp: last activity at or after
+    --limit LIMIT
+  
+  '''
+# ---
+# name: test_help[ddflow session note]
+  '''
+  usage: ddflow session note [-h] [--text TEXT] [--item ITEM] [session]
+  
+  positional arguments:
+    session      the SESSION id (from `session start`), not the text; omitted: the latest open
+                 session, else an implicit new one
+  
+  options:
+    -h, --help   show this help message and exit
+    --text TEXT  the note text; without it, read from piped stdin
+    --item ITEM
+  
+  '''
+# ---
+# name: test_help[ddflow session prompt]
+  '''
+  usage: ddflow session prompt [-h] [--text TEXT] [--item ITEM] [session]
+  
+  positional arguments:
+    session      the SESSION id (from `session start`), not the text; omitted: the latest open
+                 session, else an implicit new one
+  
+  options:
+    -h, --help   show this help message and exit
+    --text TEXT  the prompt text; without it, read from piped stdin
+    --item ITEM
+  
+  '''
+# ---
+# name: test_help[ddflow session show]
+  '''
+  usage: ddflow session show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow session start]
+  '''
+  usage: ddflow session start [-h] [--model MODEL] [--tool TOOL]
+  
+  options:
+    -h, --help     show this help message and exit
+    --model MODEL
+    --tool TOOL
+  
+  '''
+# ---
+# name: test_help[ddflow session]
+  '''
+  usage: ddflow session [-h] {start,prompt,note,adopt-orphans,end,list,show} ...
+  
+  positional arguments:
+    {start,prompt,note,adopt-orphans,end,list,show}
+      adopt-orphans       attach prompts/notes recorded with no session id to a session
+      list                sessions, newest first: agent, span, items, prompts, state
+      show                one session: every prompt and note in order, redacted
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow show]
+  '''
+  usage: ddflow show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow similar]
+  '''
+  usage: ddflow similar [-h] [--kind KIND] text
+  
+  positional arguments:
+    text         the title or summary of the record you are about to file
+  
+  options:
+    -h, --help   show this help message and exit
+    --kind KIND  comma-separated subset of [dedupe].kinds:
+                 bug,task,phase,lesson,decision,research,memory (default: all of them)
+  
+  '''
+# ---
+# name: test_help[ddflow split]
+  '''
+  usage: ddflow split [-h] [--into INTO] [--globs GLOBS] [--needs NEEDS] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help     show this help message and exit
+    --into INTO    repeatable: 'sub-id=title', or just 'sub-id'
+    --globs GLOBS  globs for the children (default: inherit the parent's); path globs, comma-
+                   separated (a.py,src/**) or a JSON array; repeat the flag to add more -- every
+                   value is kept
+    --needs NEEDS  dependencies for the FIRST child
+  
+  '''
+# ---
+# name: test_help[ddflow status]
+  '''
+  usage: ddflow status [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow task add]
+  '''
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help           show this help message and exit
+    --title TITLE
+    --needs NEEDS
+    --globs GLOBS        path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
+                         to add more -- every value is kept
+    --tags TAGS
+    --body BODY
+    --priority PRIORITY
+    --line LINE          release line (default: the current one)
+    --readd              file a REMOVED item's id again. An id still in the queue is always refused:
+                         change it with `ddflow update`
+    --new                answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
+                         unclaimed, else filed as a new record linked to it
+    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
+    --related ID         answer it: a different record that is related to ID; linked both ways
+    --check              dry run: print the existing records this would be refused as a duplicate of
+                         and write nothing (exit 0 with candidates, 2 with none)
+    --phase PHASE        owning phase
+    --parent PARENT      owning phase OR task — a task parent makes this a SUB-TASK, which carries
+                         its own globs and dependencies like any other task
+    --lines LINES        a FIX for several release lines, e.g. 1,2,3: written where
+                         [flow].port_strategy says, with a port task <id>@<line> generated for each
+                         other line
+    --port-of PORT_OF    a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its own
+                         ports carry what this one lands
+  
+  '''
+# ---
+# name: test_help[ddflow task list]
+  '''
+  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT]
+  
+  options:
+    -h, --help     show this help message and exit
+    --state STATE  only rows in this state
+    --phase PHASE  only rows under this phase id
+    --tag TAG      only rows carrying this tag
+    --owner OWNER  only rows leased by this agent (not --agent, which is who YOU are)
+    --since SINCE  only rows last changed at or after this ISO date or timestamp
+    --limit LIMIT  most rows to show (default 50)
+  
+  '''
+# ---
+# name: test_help[ddflow task]
+  '''
+  usage: ddflow task [-h] {add,list} ...
+  
+  positional arguments:
+    {add,list}
+      list      list tasks (and sub-tasks), newest change first
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow tests]
+  '''
+  usage: ddflow tests [-h] [--item ITEM] [--base BASE]
+  
+  options:
+    -h, --help   show this help message and exit
+    --item ITEM  an item id: use its worktree and base
+    --base BASE  compare against this ref (default: the base)
+  
+  '''
+# ---
+# name: test_help[ddflow unblock]
+  '''
+  usage: ddflow unblock [-h] [--note NOTE] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help   show this help message and exit
+    --note NOTE  why it is work again
+  
+  '''
+# ---
+# name: test_help[ddflow update]
+  '''
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--worktree WORKTREE] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --title TITLE
+    --body BODY
+    --needs NEEDS
+    --tags TAGS
+    --line LINE
+    --resources RESOURCES
+    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these; path
+                          globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to
+                          add more -- every value is kept
+    --priority PRIORITY
+    --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
+                          the branch checked out there -- the way out of a binding to the wrong tree
+  
+  '''
+# ---
+# name: test_help[ddflow verify]
+  '''
+  usage: ddflow verify [-h] [--all] [--phase PHASE] [--limit LIMIT] [--file-bugs] [--reopen] [--reason REASON] [--force] [--pack] [--judge] [id]
+  
+  positional arguments:
+    id               one done task; omit with --all/--phase
+  
+  options:
+    -h, --help       show this help message and exit
+    --all            every done task, worst first
+    --phase PHASE    every done task under this phase
+    --limit LIMIT    how many of the worst to list (20)
+    --file-bugs      file a bug for each completion that does not hold
+    --reopen         send a task whose completion fails back to the queue
+    --reason REASON  with --reopen: why (default: the failed claims)
+    --force          with --reopen: even when the completion holds
+    --pack           print the evidence pack for an independent verifier
+    --judge          have the configured cross-family reviewer judge it (gate: verify)
+  
+  '''
+# ---
+# name: test_help[ddflow version cut]
+  '''
+  usage: ddflow version cut [-h] [--bump {,major,minor,patch}] [--version SET_VERSION] [--push] [--dry-run] [--line LINE] [--changelog] [--force]
+  
+  options:
+    -h, --help            show this help message and exit
+    --bump {,major,minor,patch}
+    --version SET_VERSION
+                          exact MAJOR.MINOR.PATCH
+    --push                publish the tag (and branches) to the remote
+    --dry-run
+    --line LINE           a maintenance line (default: the current one)
+    --changelog           also write the version's section into CHANGELOG.md, committed with the cut
+                          (in a release request under gitflow + pr); never written without this flag
+    --force               with --changelog: replace a hand-edited changelog
+  
+  '''
+# ---
+# name: test_help[ddflow version show]
+  '''
+  usage: ddflow version show [-h] [--bump {,major,minor,patch}] [--line LINE]
+  
+  options:
+    -h, --help            show this help message and exit
+    --bump {,major,minor,patch}
+    --line LINE           a maintenance line (default: the current one)
+  
+  '''
+# ---
+# name: test_help[ddflow version]
+  '''
+  usage: ddflow version [-h] {show,cut} ...
+  
+  positional arguments:
+    {show,cut}
+      show      current version, next version, why, release notes
+      cut       tag the next version (gitflow: via a release branch, or a release request)
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow wait]
+  '''
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--timeout TIMEOUT] [--poll POLL]
+  
+  options:
+    -h, --help           show this help message and exit
+    --item ITEM          the item to wait for (default: anything ready)
+    --phase PHASE        with no --item: anything ready in this phase
+    --kind {task,phase}
+    --globs GLOBS        with --item: the globs you will claim with, so READY means that claim will
+                         succeed; path globs, comma-separated (a.py,src/**) or a JSON array; repeat
+                         the flag to add more -- every value is kept
+    --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
+    --poll POLL          seconds between log checks
+  
+  '''
+# ---
+# name: test_help[ddflow workflow drop]
+  '''
+  usage: ddflow workflow drop [-h] [--dry-run] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+    --dry-run   show it; write nothing
+  
+  '''
+# ---
+# name: test_help[ddflow workflow gate]
+  '''
+  usage: ddflow workflow gate [-h] [--command COMMAND] [--prompt PROMPT] [--title TITLE] [--cwd {,worktree,repo}] [--reviewer {,different_family,same_family_ok}] [--timeout TIMEOUT] [--applies-to {,task,phase,both}] [--into {,task,phase,both}] [--after AFTER] [--required] [--dry-run] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --command COMMAND     what to run; makes it a command gate
+    --prompt PROMPT       what to ask an agent; makes it an agent gate
+    --title TITLE
+    --cwd {,worktree,repo}
+    --reviewer {,different_family,same_family_ok}
+                          require a reviewer, and whether it must be a different model family
+    --timeout TIMEOUT     seconds before it is unavailable
+    --applies-to {,task,phase,both}
+    --into {,task,phase,both}
+                          add to a pipeline
+    --after AFTER         place it after this gate (default: last)
+    --required            an item cannot complete without it
+    --dry-run             show it; write nothing
+  
+  '''
+# ---
+# name: test_help[ddflow workflow pipeline]
+  '''
+  usage: ddflow workflow pipeline [-h] [--dry-run] {task,phase} gates
+  
+  positional arguments:
+    {task,phase}
+    gates         comma-separated gate ids, in order
+  
+  options:
+    -h, --help    show this help message and exit
+    --dry-run     show it; write nothing
+  
+  '''
+# ---
+# name: test_help[ddflow workflow state]
+  '''
+  usage: ddflow workflow state [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow workflow]
+  '''
+  usage: ddflow workflow [-h] {state,pipeline,gate,drop} ...
+  
+  positional arguments:
+    {state,pipeline,gate,drop}
+      state               one-page overview: workflow, rules, queue, bugs, diagram
+      pipeline            set the gates a task or phase passes through
+      gate                define or change one gate
+      drop                take a gate out of the pipelines (its definition stays)
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow]
+  '''
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search} ...
+  
+  A portable work-queue kernel for AI coding agents. The event log is the source of truth;
+  everything else is derived.
+  
+  positional arguments:
+    {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search}
+      init                create .ddflow/ in this repository
+      phase               add a phase
+      task                add a task
+      split               split an item into sub-tasks in place, keeping its id and history
+      resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
+                          record
+      update              change an item's fields
+      next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
+      claim               lease an item + create its worktree (exit 3 = refused)
+      heartbeat           renew a lease
+      release             give up a lease
+      wait                sleep until an item (or anything) can be claimed; exit 2 = deadline, or
+                          waiting cannot help
+      approve             a PERSON clears (or rejects) a human-approval gate — no MCP equivalent
+      gate                run / record / inspect a gate
+      complete            finish an item (exit 3 = gates not satisfied)
+      abandon             stop work on an item without completing it
+      remove              take an item out of the queue (recorded, not erased)
+      unblock             release a blocked item back into the queue (exit 2 = not blocked)
+      merge               merge an item's branch from the primary checkout
+      pr                  pull/merge requests: what reviewers did ([flow].integration = pr)
+      version             version tags: the next version, and cutting it
+      promote             environment branches: move work one step downstream ([flow].environments)
+      flow                how this project works: branching model, release lines, and every workflow
+                          choice with who made it
+      brief               budgeted session-start pack
+      external            dependencies on items in sibling repositories
+      job                 long-running processes an item waits on: run, add, list, end
+      memory              operational facts about this machine/repo, shown at session start
+      recall              'have we been here before?' — search decisions, lessons, research, bugs,
+                          tasks and past prompts at once
+      similar             'is this already filed?' -- the existing bugs, tasks, lessons and other
+                          records most like a text, before you add it (read-only; exit 2 when none)
+      dupes               'is anything filed twice?' -- the near-duplicate PAIRS already in the log,
+                          skipping pairs already linked or dismissed (read-only; exit 2 when none)
+      link                settle a near-duplicate pair: say how one record relates to another
+      decision            architectural decisions: record and consult
+      rule                project rules: add, edit, list, search, show, remove
+      verify              re-derive the claims behind a done task, or sweep them all (exit 1 = one
+                          fails)
+      ci                  the CI parity gate: run the pre-push checks on the merge result
+      onboard             run an onboarding stage: one report, propose by default
+                          (status|preflight|legacy|memory|test-gate|verify)
+      status              one answer to 'what is the state of this project?'
+      replay              reconstruct the decision history from the log
+      recover             find crashed agents' work (exit 2 = nothing)
+      progress            work actually done, aggregated from the log
+      loops               circular references and runtime loops (exit 2 = none)
+      cleanup             classify ddflow worktrees/branches; --apply lands the safe ones
+      doctor              integrity + health check
+      rebuild             re-derive the index from the log
+      render              regenerate the human-readable views
+      config              print every knob, its value and its source
+      export              documents generated from the log: list, print, enable, disable, --diff,
+                          --check, --update
+      bisect              find which earlier test file makes a test fail only in full-suite order
+                          (exit 0 = found, 2 = nothing to report)
+      cadence             which periodic passes are due (exit 2 = none)
+      pins                which text of an instruction file a test pins, before you compress it
+      tests               the tests your change reaches, and a parallel command to run them (exit 2
+                          = none)
+      precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
+                          nothing without --write)
+      reviewers           find, list and test cross-family reviewers
+      review              run the configured reviewer(s) over an item's diff
+      adopt               install ddflow into this project for one or more agents
+      history             one timeline of everything that happened (exit 2 = nothing)
+      workflow            the rules this project runs by, and how to change them (exit 1 =
+                          incoherent)
+      help                what ddflow is, what it can do, and the workflow (try: ddflow help
+                          workflow)
+      import              propose the existing project's work, lessons and decisions (exit 2 =
+                          nothing)
+      companions          companion MCP servers that serve the gates (exit 2 = a default one is
+                          missing)
+      prompts             inspect and override the prompt templates
+      hooks               install/inspect the enforcement git hook and the Claude Code session hook
+      mcp                 run the MCP stdio server over this repository
+      search              search tasks, phases, bugs, research, decisions, lessons, sessions,
+                          prompts and the log (exit 2 = no match)
+  
+  options:
+    -h, --help            show this help message and exit
+    --repo REPO           repository root (default: cwd, resolved to the primary checkout)
+    --agent AGENT         agent identity (default: host-pid). Shards the log.
+    --json                machine-readable output
+    --allow-older-version
+                          let THIS session write although this ddflow is older than the one that
+                          last worked on the log (the skew guard); needs --reason, is recorded, and
+                          only the operator's insistence justifies it
+    --reason SKEW_REASON  with --allow-older-version: why (a command's own --reason is used if it
+                          has one)
+    --version             print the version and exit
+  
+  '''
+# ---
+# name: test_the_command_tree
+  list([
+    'ddflow',
+    'ddflow abandon',
+    'ddflow adopt',
+    'ddflow approve',
+    'ddflow bisect',
+    'ddflow block',
+    'ddflow board',
+    'ddflow brief',
+    'ddflow bug',
+    'ddflow bug file-tasks',
+    'ddflow bug fixed',
+    'ddflow bug found',
+    'ddflow bug invalid',
+    'ddflow bug list',
+    'ddflow bug reopen',
+    'ddflow cadence',
+    'ddflow ci',
+    'ddflow claim',
+    'ddflow cleanup',
+    'ddflow companions',
+    'ddflow companions add',
+    'ddflow companions list',
+    'ddflow complete',
+    'ddflow config',
+    'ddflow decision',
+    'ddflow decision add',
+    'ddflow decision applicable',
+    'ddflow decision list',
+    'ddflow decision search',
+    'ddflow decision show',
+    'ddflow decision supersede',
+    'ddflow doctor',
+    'ddflow dupes',
+    'ddflow export',
+    'ddflow external',
+    'ddflow external sync',
+    'ddflow flow',
+    'ddflow flow choose',
+    'ddflow flow show',
+    'ddflow gate',
+    'ddflow gate record',
+    'ddflow gate run',
+    'ddflow gate skip',
+    'ddflow gate status',
+    'ddflow gate verify',
+    'ddflow heartbeat',
+    'ddflow help',
+    'ddflow history',
+    'ddflow hooks',
+    'ddflow hooks check-commit',
+    'ddflow hooks check-msg',
+    'ddflow hooks install',
+    'ddflow hooks pre-compact',
+    'ddflow hooks prompt',
+    'ddflow hooks session-start',
+    'ddflow hooks status',
+    'ddflow hooks uninstall',
+    'ddflow import',
+    'ddflow init',
+    'ddflow job',
+    'ddflow job add',
+    'ddflow job end',
+    'ddflow job list',
+    'ddflow job run',
+    'ddflow lesson',
+    'ddflow lesson add',
+    'ddflow lesson list',
+    'ddflow lesson search',
+    'ddflow lesson verify',
+    'ddflow link',
+    'ddflow loops',
+    'ddflow mcp',
+    'ddflow memory',
+    'ddflow memory add',
+    'ddflow memory forget',
+    'ddflow memory list',
+    'ddflow merge',
+    'ddflow next',
+    'ddflow onboard',
+    'ddflow phase',
+    'ddflow phase add',
+    'ddflow phase list',
+    'ddflow pins',
+    'ddflow pr',
+    'ddflow pr status',
+    'ddflow pr sync',
+    'ddflow pr threads',
+    'ddflow precommit',
+    'ddflow progress',
+    'ddflow promote',
+    'ddflow promote add',
+    'ddflow promote deployed',
+    'ddflow promote status',
+    'ddflow prompts',
+    'ddflow prompts eject',
+    'ddflow prompts get',
+    'ddflow prompts list',
+    'ddflow prompts show',
+    'ddflow rebuild',
+    'ddflow recall',
+    'ddflow recover',
+    'ddflow release',
+    'ddflow remove',
+    'ddflow render',
+    'ddflow replay',
+    'ddflow research',
+    'ddflow resolve',
+    'ddflow review',
+    'ddflow reviewers',
+    'ddflow reviewers add',
+    'ddflow reviewers approve',
+    'ddflow reviewers detect',
+    'ddflow reviewers list',
+    'ddflow reviewers presets',
+    'ddflow reviewers test',
+    'ddflow rule',
+    'ddflow rule add',
+    'ddflow rule edit',
+    'ddflow rule list',
+    'ddflow rule remove',
+    'ddflow rule search',
+    'ddflow rule show',
+    'ddflow search',
+    'ddflow session',
+    'ddflow session adopt-orphans',
+    'ddflow session end',
+    'ddflow session list',
+    'ddflow session note',
+    'ddflow session prompt',
+    'ddflow session show',
+    'ddflow session start',
+    'ddflow show',
+    'ddflow similar',
+    'ddflow split',
+    'ddflow status',
+    'ddflow task',
+    'ddflow task add',
+    'ddflow task list',
+    'ddflow tests',
+    'ddflow unblock',
+    'ddflow update',
+    'ddflow verify',
+    'ddflow version',
+    'ddflow version cut',
+    'ddflow version show',
+    'ddflow wait',
+    'ddflow workflow',
+    'ddflow workflow drop',
+    'ddflow workflow gate',
+    'ddflow workflow pipeline',
+    'ddflow workflow state',
+  ])
+# ---

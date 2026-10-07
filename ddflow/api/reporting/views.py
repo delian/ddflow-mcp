@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...core import outcome as O
+from ...core import progress as PR
 from .._base import _load
 
 
@@ -41,45 +42,29 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
     if unknown:  # as `next` refuses it, not an empty board (Bc2acd426f4)
         return O.failed("board", unknown, phase=phase, text="")
 
-    def rows(tasks: list, root: str) -> list[dict]:
-        return [
-            {
-                "id": t.id,
-                "title": t.title,
-                "state": t.state,
-                "parent": t.parent,
-                "depth": render_md._depth(st, t, root),
-                "needs": list(t.needs),
-                "globs": list(t.globs),
-                "owner": t.lease.holder if t.lease else "",
-                "gates": {g: t.gate_outcome(g) for g in pipeline_for(t, cfg)},
-            }
-            for t in tasks
-        ]
-
-    phases = []
-    for ph in sorted(st.phases(), key=lambda p: (p.priority, p.id)):
-        if phase and ph.id != phase:
-            continue
-        phases.append(
-            {
-                "id": ph.id,
-                "title": ph.title,
-                "state": ph.state,
-                "needs": list(ph.needs),
-                "holder": ph.lease.holder if ph.lease else "",
-                "tasks": rows(render_md._nested(st, ph.id), ph.id),
-            }
-        )
-    # Tasks under no phase (Bc896ea5d16): their own section, never silently dropped. Not
-    # shown when the board is narrowed to one phase.
-    loose = [] if phase else render_md.unphased(st)
+    # The same rows the markdown is rendered from (core.progress.board_rows), so the two
+    # cannot disagree. Tasks under no phase (Bc896ea5d16) are their own section, never
+    # silently dropped, and not shown when the board is narrowed to one phase.
+    sections = PR.board_rows(st, lambda t: pipeline_for(t, cfg), phase)
+    phases = [
+        {
+            "id": sec.phase.id,
+            "title": sec.phase.title,
+            "state": sec.phase.state,
+            "needs": list(sec.phase.needs),
+            "holder": sec.phase.lease.holder if sec.phase.lease else "",
+            "tasks": sec.rows,
+        }
+        for sec in sections
+        if sec.phase is not None
+    ]
+    loose = [r for sec in sections if sec.phase is None for r in sec.rows]
     return O.ok(
         "board",
         text=render_md.board(st, cfg, phase=phase),
         phase=phase,
         phases=phases,
-        unphased=rows(loose, ""),
+        unphased=loose,
         critical_path=critical_path(st, phase),
     )
 
