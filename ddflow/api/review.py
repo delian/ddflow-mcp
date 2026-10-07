@@ -480,10 +480,11 @@ def reviewers_detect(
     rows, blocks = [], []
     for url, label, models in found:
         for m in models:
-            # The project's map, as the review itself will resolve it -- and NOT written
-            # into the block: a written `family` wins over `[agent].families` for good,
-            # and here it would only be the shipped guess (B98650136a8).
-            fam = family_for(m, cfg.agent.families)
+            # Shown as the loaded reviewer will resolve it (`load_reviewers` then
+            # `Reviewer.resolved_family`: the project's map, else the shipped one) -- and
+            # NOT written into the block: a written `family` wins over `[agent].families`
+            # for good, and here it would only be a guess (B98650136a8).
+            fam = family_for(m, cfg.agent.families) or R.family_of(m)
             rows.append({"url": url, "label": label, "model": m, "family": fam})
             # tomlcfg.value, not "{m}": a model name is whatever the endpoint reported,
             # and a quote in it broke the block (Bb11e7a8186).
