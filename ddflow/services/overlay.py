@@ -30,6 +30,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import jinja2
+
 from ..core.digest import content_digest
 from ..infra import tomlcfg
 
@@ -103,8 +105,6 @@ def digest(text: str) -> str:
 
 def check_jinja(text: str) -> None:
     """Raise `SyntaxProblem` when ``text`` is not a valid Jinja2 template."""
-    import jinja2
-
     try:
         jinja2.Environment().parse(text)
     except jinja2.TemplateSyntaxError as exc:

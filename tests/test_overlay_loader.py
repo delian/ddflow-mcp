@@ -99,9 +99,6 @@ def test_validate_names_file_and_line_for_toml(tmp_path):
     p = tmp_path / "s.toml"
     (problem,) = toml.validate(O.Asset("s", "a = 1\nb = = 2\n", O.PROJECT, p))
     assert problem.line == 2
-    marked = (
-        toml.ejected_text.__func__
-    )  # the marker is a TOML comment, so a marked copy still parses
     (tmp_path / "x.toml").write_text("k = 1\n")
     # the marker is a TOML comment, so a marked copy parses and its lines stay put
     assert toml.validate(O.Asset("x", toml.ejected_text("x"), O.PROJECT, p)) == []
