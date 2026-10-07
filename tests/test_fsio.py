@@ -287,9 +287,25 @@ def _both(tmp_path: Path, setup, text: str = "new\n"):
 
 @pytest.mark.parametrize(
     "case",
-    ["new", "existing", "symlink", "relative-symlink", "dangling", "loop", "no-parent"],
+    [
+        "new",
+        "existing",
+        "symlink",
+        "relative-symlink",
+        "dangling",
+        "loop",
+        "no-parent",
+        "parent-is-a-file",
+        "loop-in-the-parent",
+        "hard-link",
+        "read-only-file",
+        "read-only-directory",
+        "new-in-read-only-directory",
+    ],
 )
 def test_replace_text_leaves_what_write_text_leaves(tmp_path, case):
+    locked: list[Path] = []
+
     def setup(d: Path) -> Path:
         if case == "existing":
             (d / "f.md").write_text("old\n")
@@ -311,9 +327,32 @@ def test_replace_text_leaves_what_write_text_leaves(tmp_path, case):
             return d / "a"
         elif case == "no-parent":
             return d / "missing" / "f.md"
+        elif case == "parent-is-a-file":
+            (d / "file").write_text("x")
+            return d / "file" / "f.md"
+        elif case == "loop-in-the-parent":
+            os.symlink("loop", d / "loop")
+            return d / "loop" / "f.md"
+        elif case == "hard-link":
+            (d / "f.md").write_text("old\n")
+            os.link(d / "f.md", d / "other-name.md")
+        elif case == "read-only-file":
+            (d / "f.md").write_text("old\n")
+            (d / "f.md").chmod(0o444)
+        elif case in ("read-only-directory", "new-in-read-only-directory"):
+            (d / "ro").mkdir()
+            if case == "read-only-directory":
+                (d / "ro" / "f.md").write_text("old\n")
+            (d / "ro").chmod(0o555)
+            locked.append(d / "ro")
+            return d / "ro" / "f.md"
         return d / "f.md"
 
-    old, new = _both(tmp_path, setup)
+    try:
+        old, new = _both(tmp_path, setup)
+    finally:
+        for d in locked:
+            d.chmod(0o755)
     assert new == old
 
 
