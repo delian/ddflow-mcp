@@ -25,6 +25,7 @@ from ..core import clock
 from ..core import progress as PR
 from ..core import provenance as PV
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
+from ..core.redact import Redactor
 from ..core.schedule import Plan, critical_path
 from ..core.tier import tier_of
 
@@ -320,13 +321,7 @@ def _redact(text: str, cfg: Config | None) -> str:
     # hostname="" and home="": a committed view must be byte-identical on every machine
     # (roborev on 9b6db6bc); the rendering host's own name and $HOME are not inputs. The
     # private addresses, LAN hosts and absolute home paths a record cites are still gone.
-    from ..services.export.safe import names_for
-    from ..services.redact_report import redact_report
-
-    effective = cfg or Config()
-    return redact_report(
-        text, hostname="", home="", names=names_for(effective), repo_root="", cfg=effective
-    ).text
+    return Redactor("view", cfg or Config()).text(text).text
 
 
 def research_md(state: State, cfg: Config | None = None) -> str:

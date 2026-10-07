@@ -26,15 +26,9 @@ from typing import Any
 
 from ...config import Config
 from ...core import provenance
-from ..redact_report import Redacted, redact_report
+from ...core.redact import Redacted, Redactor, names_for  # noqa: F401 -- names_for re-exported
 
 _MAX_AUTHORS = 5
-
-
-def names_for(cfg: Config) -> list[str]:
-    """Project names to redact as words: ``[upstream].redact_extra`` if that section exists."""
-    up = getattr(cfg, "upstream", None)
-    return [str(n) for n in (getattr(up, "redact_extra", None) or [])]
 
 
 def redact_text(text: str, cfg: Config) -> Redacted:
@@ -43,7 +37,7 @@ def redact_text(text: str, cfg: Config) -> Redacted:
     ``repo_root`` is passed empty on purpose: the repository's directory name is the
     project's own and stays; absolute home paths still go.
     """
-    return redact_report(text, names=names_for(cfg), repo_root="", cfg=cfg)
+    return Redactor("export", cfg).text(text)
 
 
 def redaction_attrs(counts: Mapping[str, int] | None) -> dict[str, str]:

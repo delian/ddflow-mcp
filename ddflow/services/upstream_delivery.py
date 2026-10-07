@@ -28,10 +28,10 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 from urllib.parse import quote
 
+from ..core.redact import Redactor
 from ..infra import fsio
 from ..infra import upstream_gh as gh
 from .bugreport import Bundle
-from .redact_report import redact_report
 
 #: A prefilled URL longer than this is not offered; the file is.
 URL_MAX = 8000
@@ -145,7 +145,7 @@ def prepare(root: Path, bundle: Bundle, repo: str) -> Outcome:
 
 
 def _safe(exc: Exception) -> str:
-    return redact_report(str(exc)).text
+    return Redactor("upstream").text(str(exc)).text
 
 
 def _refusal(consent: ConsentLike | None, digest: str, now: float) -> str:

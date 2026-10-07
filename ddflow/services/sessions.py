@@ -41,57 +41,18 @@ from ..config import Config
 from ..core import clock
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
+from ..core.redact import Redactor
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
 
 def redact(text: str, cfg: Config) -> tuple[str, int]:
-    """Scrub secrets. Returns (clean_text, n_redactions).
+    """Redact for the committed log (the `log` profile). Returns (clean_text, n_redactions).
 
     **An invalid pattern raises rather than being skipped.** This is a security control
-    writing to a COMMITTED log, and its failure mode is silence: a pattern that does not
-    compile simply stops matching, so secrets flow into git while the config still lists
-    the rule that was supposed to stop them. The commonest way to get one is setting the
-    list from an environment variable, where comma-splitting tears any regex containing
-    a quantifier like `{16,}` into two invalid halves — so the error names that remedy.
+    writing to a COMMITTED log, and its failure mode is silence: see `core.redact`.
     """
-    n = 0
-    out = text
-    for pat in [*cfg.session.redact_patterns, *cfg.session.redact_extra]:
-        try:
-            compiled = re.compile(pat)
-        except re.error as exc:
-            raise ValueError(
-                f"redaction pattern {pat!r} does not compile: {exc}.\n"
-                f"If you set [session].redact_patterns from an environment variable, a "
-                f"regex containing a comma (e.g. the quantifier '{{16,}}') is split on "
-                f"it. Pass the list as JSON instead:\n"
-                f"""  DDFLOW_SESSION_REDACT_PATTERNS='["pattern one", "pattern two"]'"""
-            ) from exc
-        out, k = compiled.subn(lambda m: _mask(m.group(0)), out)
-        n += k
-    return out, n
-
-
-#: A `Bearer <token>` match splits into exactly two parts: the scheme and the secret.
-_SCHEME_AND_VALUE = 2
-
-
-def _mask(s: str) -> str:
-    """Replace the secret, keeping enough context that the line still reads.
-
-    `api_key: abc` becomes `api_key: [REDACTED]` and `Bearer abc` becomes
-    `Bearer [REDACTED]`, so a reader (or a replay) can still see WHAT was supplied
-    without the value. A whole-match blanking would make the surrounding prompt
-    ungrammatical and harder to follow months later.
-    """
-    for sep in (":", "="):
-        if sep in s:
-            head, _, _ = s.partition(sep)
-            return f"{head}{sep} [REDACTED]"
-    parts = s.split(None, 1)
-    if len(parts) == _SCHEME_AND_VALUE:
-        return f"{parts[0]} [REDACTED]"
-    return "[REDACTED]"
+    red = Redactor("log", cfg).text(text)
+    return red.text, red.total
 
 
 def new_session_id(cfg: Config | None = None, events: Iterable = ()) -> str:
