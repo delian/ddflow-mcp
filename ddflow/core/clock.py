@@ -1,4 +1,4 @@
-"""Time: the one place ddflow writes and reads timestamps (B-uni-clock).
+"""Time: the one place ddflow parses a timestamp, and writes the log's (B-uni-clock).
 
 Before this, four parsers and two writers disagreed on precision, on `Z` versus
 `+00:00`, and on what a time with no zone means. They still disagree on that last point
@@ -26,8 +26,13 @@ from typing import Literal
 
 Naive = Literal["utc", "local", "refuse"]
 
-#: What `parse_ts` refuses with: a time that is not one, or one of the wrong type.
+#: What `parse_ts` refuses with: a time that is not one, or one of the wrong type. A
+#: TUPLE, for an ``except`` clause: unparseable text is always a ValueError.
 UNPARSEABLE = (ValueError, TypeError, OverflowError, OSError)
+
+
+class NoTimezone(ValueError):
+    """A zone-less time where the caller asked for ``naive="refuse"``."""
 
 
 def now_iso(*, timespec: Literal["microseconds", "seconds"] = "microseconds") -> str:
@@ -50,7 +55,7 @@ def parse_ts(text: str, *, naive: Naive = "utc", strip: bool = False) -> datetim
     t = datetime.fromisoformat((text.strip() if strip else text).replace("Z", "+00:00"))
     if t.tzinfo is None:
         if naive == "refuse":
-            raise ValueError(f"{text!r} has no timezone")
+            raise NoTimezone(f"{text!r} has no timezone")
         if naive == "utc":
             return t.replace(tzinfo=UTC)
     return t

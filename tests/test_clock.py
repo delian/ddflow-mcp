@@ -191,8 +191,10 @@ def test_a_naive_time_means_what_the_caller_says():
     naive = "2026-10-07T01:02:03"
     assert clock.parse_ts(naive).tzinfo is UTC
     assert clock.parse_ts(naive, naive="local").tzinfo is None
-    with pytest.raises(ValueError, match="no timezone"):
+    with pytest.raises(clock.NoTimezone, match="no timezone"):
         clock.parse_ts(naive, naive="refuse")
+    with pytest.raises(quota.QuotaError, match="has no timezone: add Z or an offset"):
+        quota._parse_time(naive)
     assert clock.epoch(naive, naive="local") - clock.epoch(naive) == -5.5 * 3600
 
 
