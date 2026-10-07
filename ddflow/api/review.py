@@ -686,8 +686,9 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
 
 
 def _wants_delta(repo, cfg, log, it, a, say) -> bool:
-    """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (on
-    in every project) so does a plain review of a gate that already has a recorded one.
+    """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (off
+    unless a project turns it on, decision D-gate-economy 3) so does a plain review of a
+    gate that already has a recorded one.
 
     `--full`, `--force` (a forced FULL round), `--chunk`, `--commit` and `--base` are left
     as they are asked for. A delta is only sound from a head the branch still contains: one
@@ -726,6 +727,60 @@ def _wants_delta(repo, cfg, log, it, a, say) -> bool:
             f"changed since {head[:10]} is reviewed (`--full` forces a full round)."
         )
     return True
+
+
+#: How much of one previous finding a re-review quotes: enough to recognise it, not the
+#: whole essay a reviewer may have written.
+_PREVIOUS_DETAIL = 500
+_PREVIOUS_PROBE = 300
+
+
+def _with_previous_findings(
+    context: str, log, it, item: str, gate: str, say, *, kind: str, rerun: dict
+) -> str:
+    """``context`` plus the gate's previous findings and the author's triage of each, for a
+    full re-review (decision D-gate-economy 3).
+
+    The reviewer sees the item's whole diff AND what was said about it last time: each
+    finding with `confirmed` (the author says it is fixed: check the fix), `refuted` (the
+    author's probe shows it false: check the probe) or `untriaged`. Without them a
+    re-review either re-reports what was settled or, as a delta of only the follow-up
+    commit, reports the fix as absent. Nothing to add for a first review, a delta (it
+    merges into the record instead) or a `--chunk` re-run (``rerun``).
+    """
+    if kind != "full" or rerun or it is None:
+        return context
+    found = _last_review(log, item, gate).get("chunk_findings")
+    if not found:
+        return context
+    mine = it.triage.get(gate, {})
+    lines = [
+        "## Previous findings on this change, and the author's triage",
+        "",
+        "An earlier review of this item reported the findings below. For each: if the "
+        "diff now answers it (a `confirmed` one should be fixed; a `refuted` one should stay "
+        "refuted by its probe), do not report it again; report it only if it still holds, "
+        "saying why the fix or the probe does not answer it. Then look for NEW issues in "
+        "the whole diff -- these are not the only places to look.",
+        "",
+    ]
+    for n, f in enumerate(found, 1):
+        t = mine.get(str(f.get("digest") or ""), {})
+        verdict = t.get("verdict") or "untriaged"
+        detail = " ".join(str(f.get("detail") or f.get("title") or "").split())
+        probe = " ".join(str(t.get("probe") or "").split())
+        lines.append(
+            f"{n}. [{f.get('severity', '')}] {f.get('location') or f.get('title', '')}: "
+            f"{detail[:_PREVIOUS_DETAIL]}" + (" ..." if len(detail) > _PREVIOUS_DETAIL else "")
+        )
+        lines.append(
+            f"   triage: {verdict}" + (f" -- probe: {probe[:_PREVIOUS_PROBE]}" if probe else "")
+        )
+    say(
+        f"re-review: the whole diff of {item}, with {len(found)} previous {gate} finding(s) "
+        "and their triage (D-gate-economy)"
+    )
+    return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)
 
 
 def _last_review(log, item: str, gate: str) -> dict:
@@ -975,9 +1030,11 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     it nor triage is ever refused.
     `force` with a `reason` runs a full round past the cap, recorded in the evidence.
 
-    With `[review].delta_default` (on unless a project turns it off) a plain review of a
-    gate that already has a recorded review is a `delta` too; `full` forces a full round.
-    A delta's findings are merged into the gate's record (`_merge_delta`).
+    A plain review of a gate that already has a recorded review is a FULL re-review whose
+    prompt carries the previous findings and their triage (`_with_previous_findings`,
+    decision D-gate-economy 3); with `[review].delta_default` (off unless a project turns
+    it on) it is a `delta` instead, and `full` forces a full round. A delta's findings are
+    merged into the gate's record (`_merge_delta`).
 
     `chunks` re-reviews only those chunks (numbered as the recorded review printed
     them) and merges the result into that record -- see `_rerun_scope`.
@@ -1097,6 +1154,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         )
 
     revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
+    context = _with_previous_findings(context, log, it, item, gate, say, kind=kind, rerun=prior)
 
     keeps: dict[str, _ReplyFile] = {}
     overrides = P.overrides_from(cfg)
