@@ -11,26 +11,28 @@ from ._common import _api
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_prompts": {
         "description": (
-            "Inspect the prompt templates this project uses, and where each comes from "
-            "(shipped default, project override, or an explicit config path). Use "
-            "`eject` to copy the shipped ones into .ddflow/prompts/ so the project can "
-            "edit them as plain text — reviewer instructions and workflow commands are "
-            "operator-tunable behaviour, not code."
+            "Inspect the prompt templates this project uses and where each comes from "
+            "(shipped, project override, or config path). `get` renders a workflow command "
+            "or macro as prompts/get does; `eject` copies the shipped ones into "
+            ".ddflow/prompts/ to edit as plain text."
         ),
         "properties": {
-            "action": ("string", "list (default), show, or eject.", False),
-            "name": ("string", "Template name, for show/eject.", False),
+            "action": ("string", "list (default), show, get, or eject.", False),
+            "name": ("string", "Template name.", False),
+            "arg": ("array", "get: KEY=VALUE.", False),
         },
         "api": lambda repo, a, agent: _api().prompts(
             repo,
             action=a.get("action", "list") or "list",
             name=a.get("name", "") or "",
             agent=agent,
+            # One KEY=VALUE sent as a bare string is one argument, not one per character.
+            arg=[a["arg"]] if isinstance(a.get("arg"), str) else list(a.get("arg") or []),
         ),
-        # Prose for SOME arguments, like `render`: `show` returns the template TEXT and
+        # Prose for SOME arguments, like `render`: `show`/`get` return the prompt TEXT and
         # `eject` the files it wrote, while `list` is a table callers parse.
-        "payload": lambda a: "text" if a.get("action") in ("show", "eject") else "rows",
-        "text": lambda a: a.get("action") in ("show", "eject"),
+        "payload": lambda a: "text" if a.get("action") in ("show", "get", "eject") else "rows",
+        "text": lambda a: a.get("action") in ("show", "get", "eject"),
         "kind": "prompts",
     },
     "ddflow_hooks": {

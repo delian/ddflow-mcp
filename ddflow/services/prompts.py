@@ -543,6 +543,67 @@ def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) 
     return out
 
 
+def suite_gates(repo: Path) -> list[str]:
+    """Every configured gate that looks like a test suite, beyond `unit_tests`.
+
+    Read from the project's own config so the `all-tests` command names the suites
+    that actually exist here, rather than a generic list the reader has to translate.
+    """
+    try:
+        from ..config import Config
+        from .gates import load_gates
+
+        cfg = Config.load(repo)
+        gates = load_gates(repo, cfg)
+    except Exception:
+        return []
+    return sorted(
+        g.id
+        for g in gates.values()
+        if g.id != "unit_tests" and g.is_command_gate and _looks_like_a_suite(g.id)
+    )
+
+
+def _looks_like_a_suite(gate_id: str) -> bool:
+    """`ui` only as a whole word: as a substring it matched `build` and `require`
+    (B-suite-gates-ui, found reviewing B5a2a2933c9)."""
+    words = re.split(r"[^a-z0-9]+", gate_id.lower())
+    return "ui" in words or any(w in gate_id for w in ("test", "e2e", "smoke", "integration"))
+
+
+def render_command(name: str, repo: Path, args: dict[str, Any] | None = None) -> str:
+    """A workflow command or `[[macro]]` as an agent receives it: the ONE rendering MCP
+    `prompts/get`, the `ddflow_prompts` tool's `get` and `ddflow prompts get` share (B5a2a2933c9).
+
+    A shipped command binds every declared argument, empty when absent: the renderer is
+    strict about undefined names, and a command that raises because the operator omitted
+    an optional argument is a command nobody uses twice. A macro's declared params are
+    REQUIRED and its tool preamble goes on top (`macros.render`): an operator who declares
+    a parameter is saying the mode does not make sense without it.
+
+    Raises `TemplateError` for an unknown name, a macro config that could not be read
+    (with the reason, as MCP says it) and a macro that refuses (a missing parameter).
+    """
+    args = dict(args or {})
+    if name in COMMANDS:
+        declared = dict.fromkeys(COMMANDS[name][2], "")
+        return render(
+            resolve_command(name, repo), **{**declared, **args, "test_gates": suite_gates(repo)}
+        )
+    from . import macros as M
+
+    macro = _macro_report(repo)[0].get(name)
+    if macro is None:
+        raise TemplateError(
+            f"unknown prompt {name!r}. Known: {', '.join(sorted(all_commands(repo)))}"
+            + not_loaded_note(repo)
+        )
+    try:
+        return M.render(macro, repo, {k: str(v) for k, v in args.items()})
+    except M.MacroError as exc:
+        raise TemplateError(str(exc)) from exc
+
+
 def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] | None = None):
     """A template or a command, whichever this name is.
 
