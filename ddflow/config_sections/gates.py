@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ._docs import _doc
+from ._docs import _doc, declare, knob
 
 
+@declare("gates")
 @dataclass
 class GatesConfig:
     """The per-task and per-phase quality pipelines."""
@@ -62,6 +63,19 @@ class GatesConfig:
             "standards",
             "docs",
         ]
+    )
+    unit_tests_scope: str = knob(
+        "selected",
+        doc="What the unit_tests gate of a BUG FIX or SMALL task runs (decision D-gate-economy 1): 'selected' (default) runs only the tests its change reaches -- `ddflow tests --item <id>`, plus the regression tests of the bugs it fixes -- and lists in the evidence which ran and why; 'full' runs the whole suite as every other item does. Selected only where the item's pipeline has a `ci` gate, which runs the whole suite on the merge result before the merge (a fix spent about 2.1 full-suite runs of 12 minutes each before this). A phase, a promotion, a larger task, and a selection that cannot be made (git cannot say what changed, no test reaches the change, the command does not run pytest) run the whole suite, and the evidence says why. Change it for the project (`ddflow config gates.unit_tests_scope full`), for this machine (add --local), per run (DDFLOW_GATES_UNIT_TESTS_SCOPE), or over MCP with `ddflow_configure`.",
+        choices=("selected", "full"),
+        strictest=(
+            "full",
+            "runs the whole suite at the gate, so nothing a selection misses can pass it",
+        ),
+    )
+    unit_tests_small_lines: int = knob(
+        150,
+        doc='A task with fewer changed lines than this (added plus removed since its base, `.ddflow/` excluded; default 150) is SMALL, and its unit_tests gate runs only the selected tests under `gates.unit_tests_scope = "selected"`. A bug-fix task is selected whatever its size. 0 = no task is small (bug fixes still are).',
     )
 
 
