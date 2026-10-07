@@ -64,8 +64,12 @@ def test_a_cut_version_takes_over_the_unreleased_entries():
     }
     kept = {"0.2.0": {"by_key": {}, "manual": []}, UM.UNRELEASED: mine}
     moved = script.assign_unreleased(kept, ["0.2.0", "0.2.1"])
-    assert moved["0.2.1"] is mine and UM.UNRELEASED not in moved
+    assert moved["0.2.1"] == mine and UM.UNRELEASED not in moved
     assert script.assign_unreleased(kept, ["0.2.0"]) == kept  # nothing cut: they stay
+    # two cuts since the last backfill: both may use the fields, only the oldest the manual
+    two = script.assign_unreleased(kept, ["0.2.0", "0.2.1", "0.2.2"])
+    assert two["0.2.1"]["by_key"] is two["0.2.2"]["by_key"] is mine["by_key"]
+    assert (two["0.2.1"]["manual"], two["0.2.2"]["manual"]) == (mine["manual"], [])
     a = {"knobs": {"x.y": 1}, "event_kinds": [], "docs": {}}
     b = {"knobs": {"x.y": 2}, "event_kinds": [], "docs": {"x.y": "Doc."}}
     (e,) = script.diff("0.2.1", a, b, mine["by_key"])
@@ -175,6 +179,8 @@ def test_a_manifest_that_breaks_the_schema_is_refused(body, why):
 def test_a_release_that_is_not_a_table_is_refused():
     with pytest.raises(UM.ManifestError, match="not a table"):
         UM.parse('release = ["0.1.1"]\n' + BASE)
+    with pytest.raises(UM.ManifestError, match=r"\[base.knobs\] is a table"):
+        UM.parse('schema_version = 1\n[base]\nversion = "0.1.0"\nknobs = "x"\n')
 
 
 def test_the_manifest_ships_inside_the_package():
