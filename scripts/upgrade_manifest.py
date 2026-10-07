@@ -29,8 +29,6 @@ import tempfile
 from io import BytesIO
 from pathlib import Path
 
-import tomlkit
-
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "ddflow" / "templates" / "upgrade" / "changes.toml"
 sys.path.insert(0, str(ROOT))
@@ -235,11 +233,39 @@ def fragment_name(e: dict) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", f"{e['kind']}.{e['key']}") + ".toml"
 
 
-def _table(e: dict) -> tomlkit.items.Table:
-    t = tomlkit.table()
-    for f, val in e.items():
-        t[f] = val
-    return t
+def _q(text: str) -> str:
+    """A TOML basic string: JSON's escapes are TOML's."""
+    return json.dumps(text)
+
+
+def _entry(header: str, e: dict) -> list[str]:
+    return ["", header, *(f"{f} = {_q(v)}" for f, v in e.items())]
+
+
+def assign_unreleased(kept: dict[str, dict], versions: list[str]) -> dict[str, dict]:
+    """When a version has been cut since the last backfill, the entries written for
+    `unreleased` (fragments) belong to it: their hand-written why, effect, impact and
+    enable, and their refresh, repair and feature entries, move to the newest release
+    that the manifest does not list yet."""
+    out = dict(kept)
+    if UM.UNRELEASED in out and versions and versions[-1] not in out:
+        out[versions[-1]] = out.pop(UM.UNRELEASED)
+    return out
+
+
+def render(base: tuple[str, dict], releases: list[tuple[str, str, list[dict]]]) -> str:
+    """The manifest file: the header, the base snapshot and every release's entries."""
+    version, snap = base
+    lines = [f"#{line}" for line in HEADER]
+    lines += ["schema_version = 1", "", "[base]", f"version = {_q(version)}", "event_kinds = ["]
+    lines += [f"    {_q(k)}," for k in snap["event_kinds"]]
+    lines += ["]", "", "[base.knobs]"]
+    lines += [f"{_q(k)} = {_q(_enc(v))}" for k, v in sorted(snap["knobs"].items())]
+    for v, d, entries in releases:
+        lines += ["", "[[release]]", f"version = {_q(v)}", f"date = {_q(d)}"]
+        for e in entries:
+            lines += _entry("[[release.change]]", e)
+    return "\n".join(lines) + "\n"
 
 
 def backfill(base: str) -> tuple[str, dict[str, str]]:
@@ -248,46 +274,18 @@ def backfill(base: str) -> tuple[str, dict[str, str]]:
     if not rels:
         raise SystemExit(f"no release at or after {base}")
     snaps = [(v, d, snapshot_commit(sha)) for v, sha, d in rels]
-    kept = _kept()
+    kept = assign_unreleased(_kept(), [v for v, _d, _s in snaps])
     empty: dict = {"by_key": {}, "manual": []}
-    doc = tomlkit.document()
-    for line in HEADER:
-        doc.add(tomlkit.comment(line))
-    doc["schema_version"] = 1
-    b = tomlkit.table()
-    b["version"] = snaps[0][0]
-    b["event_kinds"] = tomlkit.array(snaps[0][2]["event_kinds"]).multiline(True)
-    knobs = tomlkit.table()
-    for k, v in sorted(snaps[0][2]["knobs"].items()):
-        knobs[k] = _enc(v)
-    b["knobs"] = knobs
-    doc["base"] = b
-    out = tomlkit.aot()
+    history = []
     for (_pv, _pd, prev), (v, d, cur) in itertools.pairwise(snaps):
         mine = kept.get(v, empty)
-        rel = tomlkit.table()
-        rel["version"] = v
-        rel["date"] = d
-        entries = diff(v, prev, cur, mine["by_key"]) + mine["manual"]
-        if entries:
-            aot = tomlkit.aot()
-            for e in entries:
-                aot.append(_table(e))
-            rel["change"] = aot
-        out.append(rel)
-    doc["release"] = out
+        history.append((v, d, diff(v, prev, cur, mine["by_key"]) + mine["manual"]))
     mine = kept.get(UM.UNRELEASED, empty)
     frags: dict[str, str] = {}
     for e in diff(UM.UNRELEASED, snaps[-1][2], snapshot(ROOT), mine["by_key"]) + mine["manual"]:
-        f = tomlkit.document()
-        f.add(
-            tomlkit.comment(" One unreleased change; cutting a version folds it into that release.")
-        )
-        aot = tomlkit.aot()
-        aot.append(_table(e))
-        f["change"] = aot
-        frags[fragment_name(e)] = tomlkit.dumps(f)
-    return tomlkit.dumps(doc), frags
+        body = ["# One unreleased change; cutting a version folds it into that release."]
+        frags[fragment_name(e)] = "\n".join(body + _entry("[[change]]", e)) + "\n"
+    return render((snaps[0][0], snaps[0][2]), history), frags
 
 
 def main() -> int:

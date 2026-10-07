@@ -35,6 +35,43 @@ def test_replaying_the_manifest_gives_this_releases_knobs_and_event_kinds():
     )
 
 
+def test_every_knob_entry_says_why_and_every_changed_default_its_effect():
+    blank = [
+        f"{c.version} {c.kind} {c.key}: " + ("effect" if c.why else "why")
+        for c in UM.load().changes()
+        if c.kind.startswith("knob_") and (not c.why or (c.kind == "knob_changed" and not c.effect))
+    ]
+    assert not blank, (
+        f"upgrade manifest entries a project cannot act on: {blank}. Write the `why` (one "
+        f"line) and, for a changed default, the `effect` a project that never set the knob "
+        f"will see, in ddflow/templates/upgrade/."
+    )
+
+
+def test_a_cut_version_takes_over_the_unreleased_entries():
+    """The fragments' hand-written fields and manual entries move to the version cut
+    since the last backfill, instead of being regenerated blank (roborev)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "um_script", UM.MANIFEST.parents[3] / "scripts" / "upgrade_manifest.py"
+    )
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    mine = {
+        "by_key": {("knob_changed", "x.y"): {"effect": "e", "impact": "breaking"}},
+        "manual": [{"kind": "feature", "key": "f"}],
+    }
+    kept = {"0.2.0": {"by_key": {}, "manual": []}, UM.UNRELEASED: mine}
+    moved = script.assign_unreleased(kept, ["0.2.0", "0.2.1"])
+    assert moved["0.2.1"] is mine and UM.UNRELEASED not in moved
+    assert script.assign_unreleased(kept, ["0.2.0"]) == kept  # nothing cut: they stay
+    a = {"knobs": {"x.y": 1}, "event_kinds": [], "docs": {}}
+    b = {"knobs": {"x.y": 2}, "event_kinds": [], "docs": {"x.y": "Doc."}}
+    (e,) = script.diff("0.2.1", a, b, mine["by_key"])
+    assert (e["effect"], e["impact"]) == ("e", "breaking")
+
+
 def test_changes_since_the_base_name_every_knob_that_differs_from_it():
     m = UM.load()
     here = UM.knob_defaults()
