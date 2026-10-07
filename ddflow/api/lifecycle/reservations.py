@@ -177,7 +177,9 @@ def _claim_blocker(
     return None
 
 
-_fmt_since = clock.fmt_time  # the UTC time of day, `01:02:03Z`
+def _fmt_since(t: float) -> str:
+    """The UTC time of day, `01:02:03Z` (core.clock, looked up at call time)."""
+    return clock.fmt_time(t)
 
 
 def _reserved_msg(item: str, w, cfg) -> str:
