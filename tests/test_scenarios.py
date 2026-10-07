@@ -178,17 +178,36 @@ def test_crash_recovery_doctor_is_read_inside_the_new_holders_lease(tmp_path):
     assert sc.delayed, "the slow step was never injected: the scenario changed shape"
 
 
+#: What one live-window check costs the machine beyond its injected delay -- the `show`
+#: that reads the bound plus the real `claim` -- at load average 120-220 on the 192-thread
+#: box CI runs on: 3.6-4.8 s (Bb070dd642d). The loaded test adds it to its injection.
+CI_LATENCY_S = 4.8
+#: The lease the loaded test runs under: long enough that one injected check plus
+#: `CI_LATENCY_S` still leaves as much room again for the machine's real cost.
+LOADED_TTL_S = 24
+
+
 @pytest.mark.slow
 @pytest.mark.scenarios
 @pytest.mark.timeout(1800)
-def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(tmp_path):
+def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(
+    tmp_path, monkeypatch
+):
     """B11e64b1e8c, sustained load: every `claim` and every `recover` is slow enough that
     the two together outlive the lease but each alone does not. Observing both in one
-    window failed every attempt; each check gets its own window."""
+    window failed every attempt; each check gets its own window.
+
+    The injection has to leave room for what the machine itself costs. Under the 8 s
+    lease it left 3.5 s, and at load 120-220 the `show` and the real `claim` took
+    3.6-4.8 s, so every attempt outlived the lease (Bb070dd642d). This test therefore
+    runs under a longer lease AND adds that measured cost on top of its injection, so
+    the margin is exercised on an idle machine, not only discovered under CI load."""
     import scenario_crash_recovery as S
     from harness import Scenario
 
-    slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease; one leaves 3.5 s
+    monkeypatch.setattr(S, "TTL_S", LOADED_TTL_S)
+    slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease
+    assert 2 * slow > S.TTL_S, "the two checks together must still outlive the lease"
 
     class Loaded(Scenario):
         slowed: frozenset = frozenset()
@@ -197,7 +216,7 @@ def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(tm
             # The two live-window checks: `recover`, and the claim whose answer is read.
             if argv[:1] == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
                 self.slowed = self.slowed | {argv[0]}
-                time.sleep(slow)
+                time.sleep(slow + CI_LATENCY_S)
             return super().ddflow(*argv, **kw)
 
     sc = Loaded("crash-recovery-loaded", tmp_path / "loaded")
