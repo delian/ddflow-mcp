@@ -1,9 +1,9 @@
 """Pins the repo-relative labels legacy.scan and export templates print (B-relpath-labels).
 
 Both now go through fsio.repo_rel(as_given=True, strict=False); every path production
-code builds prints what the old lexical derivation printed, also when the repository is
-reached through a symlink -- except that labels are POSIX text everywhere: on Windows the
-old legacy.scan label (str(path)) used native separators, now "/" like every repo_rel report.
+code builds prints exactly what the old lexical derivation printed, also when the
+repository is reached through a symlink. legacy.scan's label stays native text (a Path,
+str()-ed), templates.rel's stays POSIX text, as each was before.
 """
 
 from __future__ import annotations
@@ -17,9 +17,13 @@ from ddflow.services import legacy as L
 from ddflow.services.export import templates as T
 
 
-def _old_label(repo: Path, path: Path) -> str:
-    """The derivation legacy.scan and templates.rel used before B-relpath-labels
-    (inside the repo as POSIX text; see the module docstring)."""
+def _old_legacy_label(repo: Path, path: Path) -> str:
+    """legacy.scan's derivation before B-relpath-labels (native separators)."""
+    return str(path.relative_to(repo) if path.is_relative_to(repo) else path)
+
+
+def _old_template_label(repo: Path, path: Path) -> str:
+    """templates.rel before B-relpath-labels (POSIX separators)."""
     return path.relative_to(repo).as_posix() if path.is_relative_to(repo) else str(path)
 
 
@@ -44,7 +48,7 @@ def test_legacy_labels_rulebooks_and_commands_as_before(repo: Path):
     labels = sorted({p.path for p in proposals})
     assert labels == [".claude/commands/done.md", "CLAUDE.md", "docs/HANDOFF.md"]
     for label in labels:
-        assert label == _old_label(repo, repo / label)
+        assert label == _old_legacy_label(repo, repo / label)
 
 
 def test_legacy_labels_a_named_file_outside_the_repo_by_its_path(tmp_path: Path):
@@ -53,13 +57,13 @@ def test_legacy_labels_a_named_file_outside_the_repo_by_its_path(tmp_path: Path)
     outside = tmp_path / "handoff.md"
     outside.write_text("Remember to update lessons.md each time.\n")
     [proposal] = L.scan(repo, [], extra=[str(outside)])
-    assert proposal.path == str(outside) == _old_label(repo, outside)
+    assert proposal.path == str(outside) == _old_legacy_label(repo, outside)
 
 
 @pytest.mark.parametrize("kind", ["bugs", "worklog"])
 def test_template_rel_matches_the_old_label(repo: Path, kind: str):
     for p in (repo / ".ddflow", T.project_path(repo, kind)):
-        assert T.rel(repo, p) == _old_label(repo, p)
+        assert T.rel(repo, p) == _old_template_label(repo, p)
     assert T.rel(repo, T.project_path(repo, kind)) == f".ddflow/templates/export/{kind}.md.j2"
 
 
