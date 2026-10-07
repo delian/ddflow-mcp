@@ -424,9 +424,9 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     The selection (D-gate-economy 1) is for a BUG FIX (the task fixes a bug) or a SMALL
     task (fewer changed lines than `[gates].unit_tests_small_lines`), and only once the
     whole suite has PASSED on this very tree: the item's `ci` gate is recorded `passed`
-    with the source this tree holds now (ci runs the whole suite on the branch merged
-    with the base). A ci that was skipped, could not run, failed, or ran on other source
-    proves nothing about this tree, so the gate runs the whole suite (roborev on
+    on the clean commit this tree holds now (ci runs the whole suite on the committed HEAD
+    merged with the base). A ci recorded over uncommitted edits, skipped, unavailable,
+    failed, run on another commit, or with no tree measured proves nothing about this tree, so the gate runs the whole suite (roborev on
     7da06042: a selection resting on a ci that never passed let a fix merge with the whole
     suite never run). Everything else -- a phase, a promotion, a larger task, a project
     with `[gates].unit_tests_scope = "full"` -- runs the whole suite, and so does a
@@ -468,6 +468,11 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
             "gate runs it (run ci first, and a bug fix or small task then runs the selection)"
         )
     ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    if not ran:
+        return (
+            "the ci gate's pass carries no measured tree, so which tree it passed on cannot "
+            "be told: this gate runs the whole suite"
+        )
     if not ran.endswith("+clean"):
         return (
             "the ci gate passed on a tree with uncommitted changes, and ci tests only the "

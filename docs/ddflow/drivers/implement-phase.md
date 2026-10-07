@@ -197,12 +197,12 @@ ddflow tests --item <ID>                         # [ddflow_tests] after EACH cha
   runs them in parallel. Do not reason about which tests matter — that is guessing, and
   the derivation is cheaper than being wrong. A regression test you are writing is in the
   set as soon as its file exists.
-- **At the gate**, run `ci` first -- it runs the **whole** suite on the branch merged with
-  the base -- then `ddflow gate run <ID> unit_tests`; never record unit_tests from a run of
-  your own. Once ci has passed on the committed tree as it is (commit before ci: it tests
-  HEAD), a bug fix or a small task runs only
-  the selection there (decision D-gate-economy 1; the evidence lists the tests and why);
-  anything else, or an edit after ci, runs the whole suite. A targeted run says your
+- **At the gate**, commit first (`git add <explicit paths> && git commit`: ci tests the
+  committed HEAD), run `ci` -- it runs the **whole** suite on the branch merged with the
+  base -- then `ddflow gate run <ID> unit_tests`; never record unit_tests from a run of
+  your own. Once ci has passed on the clean commit the tree holds, a bug fix or a small
+  task runs only the selection there (decision D-gate-economy 1; the evidence lists the
+  tests and why); anything else, or an edit after ci, runs the whole suite. A targeted run says your
   change is fine and nothing about what was already broken; the full run is where
   standing breakage surfaces.
 - **Always in parallel.** Run pytest with `-n auto` (pytest-xdist) or the project's
