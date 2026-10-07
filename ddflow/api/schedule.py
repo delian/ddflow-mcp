@@ -17,10 +17,10 @@ lock; the last writer's definition stands.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core import outcome as O
 from ..core.model import SCHEDULE_FIELDS, Schedule, fold
 from ..services import schedule as SV
@@ -251,7 +251,7 @@ def trigger_evaluate(
             raise _Unreadable(str(exc)) from exc
         defs = SV.definitions(repo, cfg, st)
         trigs, errors = TR.load(repo, defs.jobs)
-        at = given or datetime.now(UTC)
+        at = given or clock.now_utc()
         cap = cfg.triggers.max_fires_per_hour  # D-trigger-cap-knob
         return at, st, defs, trigs, errors, TR.evaluate(st, events, trigs, at, max_per_hour=cap)
 

@@ -37,13 +37,77 @@ class NoTimezone(ValueError):
     """A zone-less time where the caller asked for ``naive="refuse"``."""
 
 
-def now_iso(*, timespec: Literal["microseconds", "seconds"] = "microseconds") -> str:
+Timespec = Literal["microseconds", "seconds"]
+
+
+def now_utc() -> datetime:
+    """The current time, timezone-aware, in UTC."""
+    return datetime.now(UTC)
+
+
+def _iso(when: datetime, timespec: Timespec) -> str:
+    if timespec == "seconds":
+        return when.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return when.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def now_iso(*, timespec: Timespec = "microseconds") -> str:
     """The current UTC time as the log writes it: ``2026-10-07T01:02:03.456789Z``, or to
     the second (``...T01:02:03Z``) where a record keeps that precision (quota samples)."""
-    now = datetime.now(UTC)
-    if timespec == "seconds":
-        return now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return _iso(now_utc(), timespec)
+
+
+def iso_at(t: float, *, timespec: Timespec = "microseconds") -> str:
+    """Epoch seconds ``t`` in the log's own form (`now_iso`'s), so a time held as a number
+    (a lease's renewal) compares and sorts with the log's timestamps."""
+    return _iso(datetime.fromtimestamp(t, UTC), timespec)
+
+
+def compact_at(t: float | None = None) -> str:
+    """Epoch seconds ``t`` (default: now) as a compact UTC stamp to the microsecond,
+    ``20261007T010203456789Z``: sortable, and safe in a file name."""
+    return datetime.fromtimestamp(time.time() if t is None else t, UTC).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+# -- Display: how a stored timestamp or a duration is SHOWN ------------------------------
+#
+# Pure text, never a parse: a stored timestamp is shown as written (its own zone, its own
+# precision), only shortened. Each helper replaces the slicing that was repeated at its
+# call sites (B-uni-clock.2-format); tests/test_clock_format.py pins them against it.
+
+
+def fmt_minute(ts: str) -> str:
+    """A stored timestamp to the minute, for a person: ``2026-10-07 01:02``; "" stays ""."""
+    return ts[:16].replace("T", " ")
+
+
+def fmt_date(ts: str) -> str:
+    """The ``YYYY-MM-DD`` part of a stored timestamp; "" stays ""."""
+    return ts[:10]
+
+
+def fmt_time(t: float) -> str:
+    """Epoch seconds as the UTC time of day, ``01:02:03Z``."""
+    return datetime.fromtimestamp(t, UTC).strftime("%H:%M:%SZ")
+
+
+#: The units `fmt_age` shows: seconds per unit, and the suffix written after the number.
+AGE_UNITS: dict[str, tuple[int, str]] = {
+    "m": (60, "m"),
+    "min": (60, " min"),
+    "h": (3600, "h"),
+    "days": (86400, " days"),
+}
+
+
+def fmt_age(seconds: float, unit: str = "m", *, places: int = 0) -> str:
+    """A duration in ``unit`` (a key of `AGE_UNITS`): whole units are FLOORED (``12m`` for
+    12 min 59 s: a wait is never shown longer than it was), ``places`` > 0 rounds to that
+    many decimals (``12.3m``, ``1.5 days``)."""
+    per, suffix = AGE_UNITS[unit]
+    if places:
+        return f"{seconds / per:.{places}f}{suffix}"
+    return f"{int(seconds // per)}{suffix}"
 
 
 def parse_ts(text: str, *, naive: Naive = "utc", strip: bool = False) -> datetime:
