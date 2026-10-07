@@ -40,7 +40,6 @@ from pathlib import Path
 from ..config import Config
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
-from ..core.progress import epoch
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
 
@@ -137,6 +136,8 @@ def _age_s(ts: str, now: float | None = None) -> float:
     """Seconds from `ts` to `now` (default: the current time); infinite when `ts` is not a
     timestamp. Parsed by the one event-time reader, so `...:00Z` without microseconds is as
     young as `...:00.000000Z` (Bbf85f6576f)."""
+    from ..core.progress import epoch  # where the datetime import was: no new site
+
     then = epoch(ts)
     if then <= 0:
         return float("inf")
