@@ -542,9 +542,10 @@ def _warn_unknown(
 #: Every ENUM knob and the values it may hold (bug Beea0744a7b). Each entry gets its check
 #: in `_KNOB_CHECKS` from here, so a knob whose choices lived only in a comment
 #: (`# block | warn | off`) can no longer take a typo that quietly behaves as some other
-#: value. A new enum knob is declared here, not in a comment;
-#: `tests/test_config_enum_knobs.py` finds any comment or knob doc listing `a | b` that
-#: this table does not cover.
+#: value. A new enum knob is declared on its field with `knob(choices=, strictest=)` in
+#: `config_sections/`, not in a comment (the tables below are built from those
+#: declarations); `tests/test_config_enum_knobs.py` finds any comment or knob doc listing
+#: `a | b` that they do not cover.
 _DC, _DS, _DO, _DK = declared_tables()  # the knobs declared on their fields (_docs.knob)
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     **_DC,
@@ -620,11 +621,10 @@ def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
-_VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
-    **_DK,
-}
+_VALUE_CHECKS: dict[str, Callable[[Any], str]] = {**_DK}
 
-#: Every check: one derived from each KNOB_CHOICES entry, and the hand-written ones above.
+#: Every check: one derived from each KNOB_CHOICES entry, and the ones declared with
+#: `knob(check=)` (`_VALUE_CHECKS` above).
 #: The two never share a key (`tests/test_config_enum_knobs.py` asserts it), so neither can
 #: silently shadow the other.
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
