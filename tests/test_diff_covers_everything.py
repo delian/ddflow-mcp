@@ -115,3 +115,34 @@ def test_a_non_utf8_name_under_quotepath_false_is_found(repo):
     (repo / raw).write_text("two\n")
     ok, missing = W.diff_covers_everything(repo, W.capture_diff(repo))
     assert ok, missing
+
+
+def test_a_path_is_not_found_as_the_head_of_another(repo):
+    _commit(repo, "foo")
+    _commit(repo, "foo2")
+    (repo / "foo").write_text("two\n")
+    (repo / "foo2").write_text("two\n")
+    blocks = W.capture_diff(repo).split("diff --git ")
+    only_foo2 = "diff --git ".join(b for b in blocks if not b.startswith("a/foo "))
+    ok, missing = W.diff_covers_everything(repo, only_foo2)
+    assert not ok and missing == ["foo"], missing
+
+
+def test_a_path_named_inside_another_files_hunk_is_not_coverage(repo):
+    _commit(repo, "foo.py")
+    _commit(repo, "other.txt")
+    (repo / "foo.py").write_text("two\n")
+    (repo / "other.txt").write_text(" a/foo.py b/foo.py\n")
+    blocks = W.capture_diff(repo).split("diff --git ")
+    only_other = "diff --git ".join(b for b in blocks if not b.startswith("a/foo.py "))
+    ok, missing = W.diff_covers_everything(repo, only_other)
+    assert not ok and missing == ["foo.py"], missing
+
+
+@pytest.mark.parametrize("setting", ["diff.noprefix", "diff.mnemonicPrefix"])
+def test_a_users_diff_prefix_config_does_not_hide_every_path(repo, setting):
+    _git(repo, "config", setting, "true")
+    _commit(repo, "foo.py")
+    (repo / "foo.py").write_text("two\n")
+    ok, missing = W.diff_covers_everything(repo, W.capture_diff(repo))
+    assert ok, missing

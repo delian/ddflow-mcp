@@ -709,11 +709,16 @@ def capture_diff(
     return "\n".join(part for part in (committed, working) if part.strip())
 
 
+#: The prefixes `diff_covers_everything` matches: pinned, so a user's `diff.noprefix` or
+#: `diff.mnemonicPrefix` cannot make every path look absent.
+_DIFF_PREFIXES = ("--src-prefix=a/", "--dst-prefix=b/")
+
+
 def _diff_text(tree: Path, *args: str) -> str:
     """`git diff <args>` as text a reviewer can read, whatever the bytes: a file's
     non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
     raised -- `git()` decodes strictly, and one such file aborted the whole review."""
-    return git(tree, "diff", *args, errors="replace").out
+    return git(tree, "diff", *_DIFF_PREFIXES, *args, errors="replace").out
 
 
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
@@ -735,11 +740,12 @@ def diff_covers_everything(
     changed = _status_paths(tree, ignore_untracked)
     if changed is None:  # git could not say: never read as "nothing changed"
         return False, ["(git status failed: the diff cannot be checked)"]
+    headers = [ln for ln in diff.splitlines() if ln.startswith("diff --git ")]
     missing = [
         p
         for p in changed
         if not any(
-            _in_diff_header(diff, spelled)
+            _in_diff_header(headers, spelled)
             for spelled in (p, _c_quoted(p), _c_quoted(p, raw_high=True))
         )
     ]
@@ -750,10 +756,14 @@ def diff_covers_everything(
 _PRINTABLE_ASCII = (0x20, 0x7F)
 
 
-def _in_diff_header(diff: str, path: str) -> bool:
-    """Is ``path`` a whole path in a `diff --git` header (` a/<path>`, ` "b/<path>`, ...)?
-    Anchored, so a path is never found as the tail of another (`foo` in `sub/foo`)."""
-    return any(f"{lead}{side}/{path}" in diff for lead in (" ", ' "') for side in "ab")
+def _in_diff_header(headers: list[str], path: str) -> bool:
+    """Is ``path`` one side of a `diff --git a/<old> b/<new>` header line? The whole
+    token, both ends anchored: never the tail of another path (`foo` in `sub/foo`), its
+    head (`foo` in `foo2`), or text inside a hunk. `capture_diff` pins the `a/` and `b/`
+    prefixes, whatever `diff.noprefix` or `diff.mnemonicPrefix` say."""
+    olds = (f"diff --git a/{path} ", f'diff --git "a/{path}" ')
+    news = (f" b/{path}", f' "b/{path}"')
+    return any(h.startswith(olds) or h.endswith(news) for h in headers)
 
 
 _C_ESCAPES = {7: "a", 8: "b", 9: "t", 10: "n", 11: "v", 12: "f", 13: "r", 34: '"', 92: "\\"}
