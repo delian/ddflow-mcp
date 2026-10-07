@@ -145,3 +145,21 @@ def test_the_stat_only_mark_reads_no_tail_and_still_sees_growth(repo, monkeypatc
     log.append("session.started", "s1", {})
     assert log.mark(clock=False) != before
     assert log.mark(clock=False).lamport == 0
+
+
+def test_an_unreadable_shard_raises_rather_than_reading_as_unchanged(repo):
+    """Only a VANISHED shard is dropped from the mark; one that cannot be read is an
+    error (`ddflow` exits 2, could not run), never a mark that compares equal."""
+    import os
+
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root reads anything")
+    log = EventLog(repo, "agent-a")
+    log.append("session.started", "s1", {})
+    log.shard.chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            log.mark()
+        assert log.mark(clock=False).count == 1  # a stat needs no read permission
+    finally:
+        log.shard.chmod(0o644)

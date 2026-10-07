@@ -839,11 +839,16 @@ class EventLog:
             high = 0
             try:
                 size = p.stat().st_size
-                tail = _last_line(p) if clock else ""
             except OSError:
-                # Vanished between the glob and the stat or the tail read: absent from
-                # the mark, so the comparison differs and the caller takes the safe path.
+                # Vanished between the glob and the stat: absent from the mark, so the
+                # comparison differs and the caller takes the safe path.
                 continue
+            try:
+                tail = _last_line(p) if clock else ""
+            except FileNotFoundError:
+                continue  # vanished between the stat and the tail read: the same
+            # Any other OSError (a shard that cannot be READ) propagates: the callers
+            # that ask for the clock turn it into "could not run", never into "unchanged".
             if tail:
                 try:
                     high = int(json.loads(tail).get("lamport", 0))
