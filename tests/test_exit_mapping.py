@@ -104,13 +104,27 @@ def test_a_declared_exit_wins_over_the_bad_arguments_reading(repo, monkeypatch):
 
 
 def test_a_class_named_in_the_table_is_declared_on_mcp_too(repo, monkeypatch):
-    """`_EXIT_BY_NAME` is a declaration like `exit_code`: a ValueError subclass named there
+    """`_EXIT_BY_NAME` is a declaration like `exit_code`: a TypeError subclass named there
     keeps its exit over MCP instead of reading as bad arguments."""
 
-    class Named(ValueError):
+    class NamedType(TypeError):
         pass
 
-    monkeypatch.setitem(O._EXIT_BY_NAME, f"{Named.__module__}.{Named.__qualname__}", O.REFUSED)
-    assert O.declared_exit(Named("x")) == O.REFUSED
-    reply = _call_raising(repo, monkeypatch, Named("named refusal"))
-    assert "bad arguments" not in _text(reply) and reply["result"]["_meta"]["exit"] == O.REFUSED
+    key = f"{NamedType.__module__}.{NamedType.__qualname__}"
+    monkeypatch.setitem(O._EXIT_BY_NAME, key, O.FAIL)
+    assert O.declared_exit(NamedType("x")) == O.FAIL
+    reply = _call_raising(repo, monkeypatch, NamedType("typed wrong"))
+    assert "bad arguments" not in _text(reply) and "NamedType: typed wrong" in _text(reply)
+    assert reply["result"]["_meta"]["exit"] == O.FAIL
+
+
+def test_an_undeclared_subclass_is_still_bad_arguments_on_mcp(repo, monkeypatch):
+    """As before the fix: a decoding error escaping a tool (a ValueError subclass) is a
+    malformed call, not a bug."""
+    import json
+
+    try:
+        json.loads("{")
+    except json.JSONDecodeError as exc:
+        reply = _call_raising(repo, monkeypatch, exc)
+    assert "bad arguments:" in _text(reply)

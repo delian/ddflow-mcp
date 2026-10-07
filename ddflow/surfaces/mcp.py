@@ -725,8 +725,8 @@ class Server:
                     code = exit_for(exc)
                     if code == REFUSED:
                         return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
-                    if declared_exit(exc) is None and (
-                        isinstance(exc, TypeError) or type(exc) in (KeyError, ValueError)
+                    if declared_exit(exc) is None and isinstance(
+                        exc, (KeyError, TypeError, ValueError)
                     ):
                         return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                     if code is None:
