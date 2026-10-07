@@ -51,6 +51,7 @@ def test_a_failed_merge_writes_no_agent_outcome_on_a_human_merge_gate(repo) -> N
     _git(repo, "commit", "-qam", "conflicting change on main")
     code, out, err = run_cli(repo, "merge", "T1")
     assert code != 0, out + err
+    assert "ddflow approve" not in out + err  # nothing landed: no approval to ask for
     assert _merge_outcomes(repo) == []
     st = fold(EventLog(repo).read_all(), strict=False)
     assert not st.items["T1"].gate_outcome("merge")

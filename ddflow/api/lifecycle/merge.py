@@ -203,8 +203,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
 def _record_merge_gate(repo: Path, log, cfg, item: str, outcome: str, **kw: Any) -> bool:
     """Record the merge gate's outcome -- through the human-gate guard, with the gate
     definitions (B279a0ebfc1). A project whose `merge` gate is a HUMAN checkpoint gets no
-    outcome from this command: the person records it (`ddflow approve`). Returns whether
-    it is such a gate, so the caller can say so."""
+    outcome from this command, passed OR failed: an agent's `failed` on a human gate reads
+    as the person's rejection. `merge_failure_rate` then has no data for such a project
+    (None) instead of the biased rate it had when only failures were recorded (the landed
+    path raised). Returns whether it is such a gate, so the caller can say so."""
     from ...services import gates as G
 
     gates = G.load_gates(repo, cfg)
