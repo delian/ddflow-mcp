@@ -40,6 +40,7 @@ from pathlib import Path
 from ..config import Config
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
+from ..core.progress import epoch
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
 
@@ -133,14 +134,13 @@ HOOK_START_MAX_S = 30
 
 
 def _age_s(ts: str, now: float | None = None) -> float:
-    """Seconds from `ts` to `now` (default: the current time)."""
-    from datetime import UTC, datetime
-
-    try:
-        then = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
-    except ValueError:
+    """Seconds from `ts` to `now` (default: the current time); infinite when `ts` is not a
+    timestamp. Parsed by the one event-time reader, so `...:00Z` without microseconds is as
+    young as `...:00.000000Z` (Bbf85f6576f)."""
+    then = epoch(ts)
+    if then <= 0:
         return float("inf")
-    return (time.time() if now is None else now) - then.timestamp()
+    return (time.time() if now is None else now) - then
 
 
 def process_started_at() -> float:
