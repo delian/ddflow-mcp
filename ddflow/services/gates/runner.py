@@ -162,14 +162,17 @@ def run_command_gate(
         # and the log's parse cache and lock bookkeeping are process-global and unlocked:
         # roborev 827); on timeout its whole process group dies (Bed0f5b6d99).
         ticking = on_tick is not None and tick_s > 0
-        p = P.run_shell(
-            gdef.command,
-            timeout_s=gdef.timeout_s,
-            cwd=str(cwd),
-            env=full_env,
-            on_tick=on_tick if ticking else None,
-            tick_s=tick_s if ticking else 0,
-        )
+        try:
+            p = P.run_shell(
+                gdef.command,
+                timeout_s=gdef.timeout_s,
+                cwd=str(cwd),
+                env=full_env,
+                on_tick=on_tick if ticking else None,
+                tick_s=tick_s if ticking else 0,
+            )
+        except (OSError, ValueError) as exc:  # the keep-alive tick failed; the command is killed
+            return "unavailable", {"reason": f"could not execute: {exc}", "command": gdef.command}
     if p.timed_out:
         return "unavailable", {
             "reason": f"timed out after {gdef.timeout_s}s",
