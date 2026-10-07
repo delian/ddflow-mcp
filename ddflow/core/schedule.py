@@ -32,6 +32,7 @@ from ..config import Config
 from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
 from . import flowcontrol as FC
 from .flow import FEATURE, branch_kind, line_key, stack_base, unknown_line
+from .graph import closure, find_cycles, longest_chains
 
 
 @dataclass
@@ -337,55 +338,6 @@ def conflicts(
     mine = [a for a in mine if not is_shared(a, shared)]
     theirs = [b for b in theirs if not is_shared(b, shared)]
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
-
-
-def find_cycles(
-    items: dict[str, Item], edges: Callable[[Item], list[str]] | None = None
-) -> list[list[str]]:
-    """Every dependency cycle, each reported once, starting at its smallest id.
-
-    Iterative DFS. Recursion depth here is the length of the dependency chain, which is
-    operator-authored and therefore unbounded by anything the code controls; a plan with
-    a thousand-deep chain would raise RecursionError inside the health check that exists
-    to diagnose bad plans.
-
-    `edges` says which graph to walk, and a caller must pass the one it will walk
-    itself. `critical_path` traverses INHERITED dependencies while this defaulted to
-    direct `needs`, so a cycle existing only in the inherited graph passed the guard and
-    the memoised longest-path returned a confidently wrong number -- the exact outcome
-    the guard exists to refuse.
-    """
-    edge = edges or (lambda it: list(it.needs))
-    WHITE, GREY, BLACK = 0, 1, 2
-    colour: dict[str, int] = {}
-    found: list[list[str]] = []
-
-    for root in sorted(items):
-        if colour.get(root, WHITE) != WHITE:
-            continue
-        stack: list[tuple[str, list[str]]] = [(root, edge(items[root]))]
-        path: list[str] = [root]
-        colour[root] = GREY
-        while stack:
-            _node, pending = stack[-1]
-            if not pending:
-                stack.pop()
-                colour[path.pop()] = BLACK
-                continue
-            dep = pending.pop()
-            if dep not in items:
-                continue
-            c = colour.get(dep, WHITE)
-            if c == GREY:
-                cyc = path[path.index(dep) :]
-                lo = cyc.index(min(cyc))
-                found.append(cyc[lo:] + cyc[:lo] + [cyc[lo]])
-            elif c == WHITE:
-                colour[dep] = GREY
-                path.append(dep)
-                stack.append((dep, edge(items[dep])))
-    uniq = {tuple(c): c for c in found}
-    return sorted(uniq.values())
 
 
 def is_external(dep: str) -> bool:
@@ -1035,43 +987,23 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         # the phase's work too (B13ed484062) -- and everything those wait on, wherever
         # it lives: a phase that needs another cannot start before that one's chain is
         # done, so that chain is part of this phase's floor.
-        inside, todo = set(), [phase]
-        while todo:
-            n = todo.pop()
-            if n in inside or n not in live:
-                continue
-            inside.add(n)
-            todo += before(live[n])
+        inside: set[str] = set()
+        if phase in live:
+            inside = {phase, *closure(phase, lambda n: [d for d in before(live[n]) if d in live])}
         live = {k: v for k, v in live.items() if k in inside}
     items = live
 
-    # On a cyclic graph the memo is unsound: a result computed under one `seen` set is
-    # keyed on the node alone, so a truncated sub-path can be cached and returned where
-    # it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
+    # The longest chain is only defined on an acyclic graph: on a cyclic one a chain
+    # computed for one node is reused where it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
     # than return a confidently wrong number.
     if find_cycles(items, edges=before):
         return []
-    memo: dict[str, list[str]] = {}
-
-    def longest(n: str, seen: frozenset[str]) -> list[str]:
-        if n in seen:
-            return []
-        if n in memo:
-            return memo[n]
-        it = items.get(n)
-        best: list[str] = []
-        if it:
-            # INHERITED dependencies, like readiness uses. The path used to walk
-            # `it.needs` alone, so a phase-level dependency did not lengthen the
-            # reported floor at all — and the number exists precisely to stop someone
-            # adding a fifth agent to a phase whose runtime is set by a chain.
-            for dep in before(it):
-                if dep in items and items[dep].state != DONE:
-                    cand = longest(dep, seen | {n})
-                    if len(cand) > len(best):
-                        best = cand
-        memo[n] = [*best, n]
-        return memo[n]
+    # INHERITED dependencies, like readiness uses. The path used to walk `it.needs`
+    # alone, so a phase-level dependency did not lengthen the reported floor at all --
+    # and the number exists precisely to stop someone adding a fifth agent to a phase
+    # whose runtime is set by a chain.
+    open_ids = [i for i, it in items.items() if it.state != DONE]
+    longest = longest_chains(open_ids, lambda n: before(items[n]))
 
     def trimmed(chain: list[str]) -> list[str]:
         """A phase at the END only closes the chain it holds -- no work of its own, and
@@ -1082,5 +1014,5 @@ def critical_path(state: State, phase: str = "") -> list[str]:
             chain = chain[:-1]
         return chain
 
-    chains = [trimmed(longest(i, frozenset())) for i, it in items.items() if it.state != DONE]
+    chains = [trimmed(longest[i]) for i in open_ids]
     return max(chains, key=len) if chains else []

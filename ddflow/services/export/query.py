@@ -21,6 +21,7 @@ from typing import Any, TypeVar
 
 from ...core import clock
 from ...core.events import Event
+from ...core.graph import closure
 from ...core.model import Bug, Item, State, fold
 
 T = TypeVar("T")
@@ -95,18 +96,11 @@ class Query:
 
     def tasks_under(self, parent: str) -> list[Item]:
         """Tasks nested any depth below ``parent``, ``item_key`` order, each once."""
-        out: list[Item] = []
-        stack = [parent]
-        seen = {parent}
-        while stack:
-            for c in self.children.get(stack.pop(), ()):
-                if c.id in seen:
-                    continue
-                seen.add(c.id)
-                if c.kind == "task":
-                    out.append(c)
-                stack.append(c.id)
-        return sorted(out, key=item_key)
+        below = closure(parent, lambda n: [c.id for c in self.children.get(n, ())])
+        items = self.state.items
+        return sorted(
+            (items[i] for i in below if i != parent and items[i].kind == "task"), key=item_key
+        )
 
     def tasks(self, state: str = "") -> list[Item]:
         """Every live task (optionally in one ``state``), ``item_key`` order."""
