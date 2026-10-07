@@ -165,13 +165,11 @@ def _launch_of(entry: object) -> tuple[str, list[str]] | None:
 def _load_toml(text: str) -> dict | None:
     """Parsed TOML, or None when it does not parse. ONE guard for the readers.
 
-    `_servers_in`, `_toml_without`, `_toml_stale_entry` and `_toml_present` each wrapped
-    `tomllib.loads` by hand; a fifth that forgot the guard would let an unparseable config
-    read as an empty one -- the module's own recurring failure. (`_register_toml` called it
-    unguarded, safe only because `_toml_stale_entry` had already parsed the same text; it
-    goes through here now too.) What `None` then MEANS stays at each call site, because it
-    differs: a reader treats it as unreadable, `_toml_present` as a refusal that names the
-    file.
+    `companions._servers_in`, `_toml_without`, `_register_toml`'s stale-entry check and
+    `_toml_present` each wrapped `tomllib.loads` by hand; one that forgot the guard would
+    let an unparseable config read as an empty one -- the recurring failure here. What
+    `None` then MEANS stays at each call site, because it differs: a reader treats it as
+    unreadable, `_toml_present` as a refusal that names the file.
     """
     try:
         return tomllib.loads(text)
@@ -202,8 +200,8 @@ def _serves(entry: object) -> bool:
 def _declared(servers: dict, cid: str) -> bool:
     """Is ``cid`` declared AND does its entry serve something (`_serves`)?
 
-    The reader (`_registered_name`), the writer (`_toml_present`) and the stale-entry test
-    (`_toml_stale_entry`) must agree on what "already registered" means; written once, so
+    The reader (`companions._registered_name`), the writer (`_toml_present`) and the
+    stale-entry check in `_register_toml` must agree on what "already registered" means; written once, so
     one of them cannot quietly count a `{}` placeholder the others refuse (B768503a43a).
     """
     return cid in servers and _serves(servers[cid])
