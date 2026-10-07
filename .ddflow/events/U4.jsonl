@@ -1527,3 +1527,10 @@
 {"agent":"U4","data":{"at":1791376522.4475682,"holder":"U4"},"id":"e4011340f68fdca272f132a83","kind":"lease.renewed","lamport":31991,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:35:22.549114Z"}
 {"agent":"U4","data":{"at":1791376643.1436088,"holder":"U4"},"id":"eddb6f77e4af3e551d19a0fd1","kind":"lease.renewed","lamport":32002,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:37:23.223929Z"}
 {"agent":"U4","data":{"at":1791376646.2349913,"holder":"U4"},"id":"e27108ac2e518c08bef856b31","kind":"lease.renewed","lamport":32003,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:37:26.343278Z"}
+{"agent":"U4","data":{"at":1791376770.901699,"holder":"U4"},"id":"e760ecc1c1337402fb42f2498","kind":"lease.renewed","lamport":32018,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:39:30.986480Z"}
+{"agent":"U4","data":{"at":1791376894.412075,"holder":"U4"},"id":"e0b5019e124e501b0c491797c","kind":"lease.renewed","lamport":32033,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:41:34.494838Z"}
+{"agent":"U4","data":{"at":1791376943.6487055,"holder":"U4"},"id":"ed24b4a2732501d4c29bf3102","kind":"lease.renewed","lamport":32047,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:42:23.720205Z"}
+{"agent":"U4","data":{"at":1791377017.448575,"holder":"U4"},"id":"ee5354837723c2e347c546145","kind":"lease.renewed","lamport":32063,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:43:37.541073Z"}
+{"agent":"U4","data":{"at":1791377140.2470174,"holder":"U4"},"id":"eacd7fe9bcb0c7c82f1a42657","kind":"lease.renewed","lamport":32069,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:45:40.302486Z"}
+{"agent":"U4","data":{"at":1791377244.4161556,"holder":"U4"},"id":"e2e878c6a533a2130894b1672","kind":"lease.renewed","lamport":32079,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:47:24.489373Z"}
+{"agent":"U4","data":{"at":1791377262.3411548,"holder":"U4"},"id":"e0dccdd6cb27869276037cecf","kind":"lease.renewed","lamport":32081,"schema":1,"subject":"B-uni-hooks.1-table","ts":"2026-10-07T12:47:42.411967Z"}
