@@ -9,9 +9,12 @@ name came back C-quoted and `git add -N` never added it: the reviewer did not se
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -56,3 +59,22 @@ def test_a_non_ascii_untracked_file_reaches_the_review_diff(repo):
 def test_a_tree_git_cannot_read_is_not_complete(tmp_path):
     ok, missing = W.diff_covers_everything(tmp_path / "not-a-repo", "")
     assert not ok and missing, missing
+
+
+@pytest.mark.parametrize("name", ['a"b.txt', "a\\b.txt", "tab\there.txt"])
+def test_a_name_git_quotes_in_the_diff_is_still_found(repo, name):
+    _commit(repo, name)
+    (repo / name).write_text("two\n")
+    diff = W.capture_diff(repo)
+    ok, missing = W.diff_covers_everything(repo, diff)
+    assert ok, (missing, diff)
+
+
+def test_a_non_utf8_name_does_not_break_the_review_diff(repo):
+    _commit(repo, "a.py")
+    raw = os.fsdecode(b"caf\xe9.txt")  # Latin-1 bytes: not UTF-8
+    (repo / raw).write_text("new file\n")
+    diff = W.capture_diff(repo)
+    assert "new file" in diff, diff
+    ok, missing = W.diff_covers_everything(repo, diff)
+    assert ok, missing
