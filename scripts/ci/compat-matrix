@@ -254,7 +254,8 @@ def scenario(ddflow: Path, proj: Path, env: dict[str, str]) -> None:
     out = dd("claim", "T1")
     tree = Path(re.search(r"worktree:\s+(\S+)", out).group(1))
     (tree / "src" / "parser.py").write_text(
-        "def parse(text):\n    return [line.rstrip('\\n').split(',') for line in text.splitlines()]\n"
+        # ruff-formatted: the repository's format check covers the committed fixture too
+        'def parse(text):\n    return [line.split(",") for line in text.splitlines()]\n'
     )
     sh(["git", "add", "-A"], cwd=tree, env=env)
     sh(["git", "commit", "--quiet", "-m", "T1: parser"], cwd=tree, env=env)
