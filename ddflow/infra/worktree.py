@@ -30,80 +30,13 @@ from typing import Any
 from ..config import Config
 from ..core.flow import safe_name as _core_safe_name
 from ..infra import fsio
-from ..infra import proc as P
+from ..infra import git as G
 
-
-class GitError(RuntimeError):
-    pass
-
-
-@dataclass
-class GitResult:
-    code: int
-    out: str
-    err: str
-    #: False when a precondition refused the merge before git tried to merge the branch
-    #: (the target is missing, checked out elsewhere, or another merge is in progress): the
-    #: item's own branch was not judged, so it is not a failed merge of that branch.
-    attempted: bool = True
-
-    @property
-    def ok(self) -> bool:
-        return self.code == 0
-
-    def text(self) -> str:
-        return (self.out or self.err).strip()
-
-
-def git(
-    repo: Path | str,
-    *args: str,
-    timeout: int = 300,
-    check: bool = False,
-    env: dict[str, str] | None = None,
-    errors: str = "strict",
-) -> GitResult:
-    p = P.run(
-        ["git", "-C", str(repo), *args],
-        capture_output=True,
-        text=True,
-        errors=errors,
-        timeout=timeout,
-        env={**os.environ, **env} if env else None,
-    )
-    res = GitResult(p.returncode, p.stdout.strip(), p.stderr.strip())
-    if check and not res.ok:
-        raise GitError(f"git {' '.join(args)} failed ({res.code}): {res.err or res.out}")
-    return res
-
-
-def git_paths(repo: Path | str, *args: str, timeout: int = 60) -> list[str] | None:
-    """File paths git lists, EXACTLY as the filesystem names them; None if git failed.
-
-    The way a path listing SHOULD be read -- not yet the only one: several older listings
-    (`dirty`, the gate tree fingerprint, and others named in docs/HANDOFF.md §2) still
-    read without `-z` and are not migrated. A caller must treat None as "could not
-    tell", never as "no paths". Adds `-z` and reads BYTES:
-    - without `-z`, git C-quotes any non-ASCII name (`"caf\\303\\251.txt"`), so a
-      path built from it names no file and matches no glob;
-    - with `-z` but in text mode, the raw bytes are decoded strictly as UTF-8, so ONE
-      non-UTF-8 name anywhere raised out of the caller -- every commit (the hook), and
-      every `ddflow lesson add` (the inventory scan), failed; text mode also rewrote a
-      `\\r` in a name to `\\n`.
-    `os.fsdecode` (surrogateescape) round-trips any name. Both bugs were found by roborev
-    (on 40950c9 and 4f54455), the second introduced by the fix for the first, and then
-    found again in a third caller (on e8543f9) -- hence one helper rather than three.
-
-    `args` are git's arguments up to (not including) `-z`; pass any pathspec after a
-    `"--"` in ``args`` as usual -- `-z` is inserted before it.
-    """
-    argv = list(args)
-    at = argv.index("--") if "--" in argv else len(argv)
-    argv.insert(at, "-z")
-    p = P.run(["git", "-C", str(repo), *argv], capture_output=True, timeout=timeout)
-    if p.returncode != 0:
-        return None
-    return [os.fsdecode(x) for x in p.stdout.split(b"\0") if x]
+#: The one git runner lives in `infra.git`; these names stay importable from here.
+git = G.run
+git_paths = G.git_paths
+GitError = G.GitError
+GitResult = G.GitResult
 
 
 def _ignore_inside(repo: Path, wt_root: Path) -> None:
@@ -980,11 +913,4 @@ def apply_3way(tree: Path, patch: str) -> GitResult:
     Three-way, so a hunk that does not apply cleanly becomes a conflict in the file --
     something an agent can resolve -- rather than a rejected patch it has to redo by hand.
     """
-    p = P.run(
-        ["git", "-C", str(tree), "apply", "--3way", "--index", "-"],
-        input=patch,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    return GitResult(p.returncode, p.stdout.strip(), p.stderr.strip())
+    return git(tree, "apply", "--3way", "--index", "-", input=patch)
