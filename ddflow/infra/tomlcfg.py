@@ -199,7 +199,8 @@ def value(v: object) -> str:
     return basic_string(str(v))
 
 
-_LITERAL = re.compile(r"(true|false|-?\d+(\.\d+)?|\[.*\]|\{.*\})")
+#: No leading zeros: TOML has no `01234` (a zero-padded id is text, so it is quoted).
+_LITERAL = re.compile(r"(true|false|-?(0|[1-9]\d*)(\.\d+)?|\[.*\]|\{.*\})")
 
 
 def literal(text: str) -> str:
@@ -226,7 +227,7 @@ def upsert(text: str, dotted: str, literal_text: str) -> str:
     import tomlkit  # deferred: 38 ms, and most commands never edit a config
 
     section, _, key = dotted.rpartition(".")
-    parts = [p.strip() for p in section.split(".")]
+    parts = [p.strip() for p in section.split(".")] if section else []  # no dot: top level
     try:
         doc = tomlkit.parse(text)
         value = tomlkit.parse(f"v = {literal_text}")["v"]
