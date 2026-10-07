@@ -261,6 +261,11 @@ def cmd_complete(a, c: Ctx) -> int:
     blockers = out.data["blockers"]
     if out.data.get("export_refresh"):
         print(f"  {out.data['export_refresh']['summary']}", file=sys.stderr)
+    for up in out.data.get("umbrellas_completed", []):
+        print(f"{up} completed with its sub-tasks", file=sys.stderr)
+    for up, why in (out.data.get("umbrella_refused") or {}).items():
+        first = (why.splitlines() or [""])[0]
+        print(f"WARNING: {up} stays open -- its sub-tasks are done, but: {first}", file=sys.stderr)
     c.out(
         f"{a.id} completed"
         + (f" as {a.sha}" if a.sha else "")
@@ -277,7 +282,16 @@ def cmd_complete(a, c: Ctx) -> int:
                 "note",
                 "woke",
                 "bugs_closed",
-                *(k for k in ("export_refresh", "progress") if k in out.data),
+                *(
+                    k
+                    for k in (
+                        "export_refresh",
+                        "progress",
+                        "umbrellas_completed",
+                        "umbrella_refused",
+                    )
+                    if k in out.data
+                ),
             )
         ),
     )
