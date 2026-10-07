@@ -71,6 +71,10 @@ say "tests"
 # -n auto, as publish.yml runs it: serial took ~49 min here, parallel about one.
 uv run pytest tests/ -q --timeout=420 -n auto \
   || die "the suite is red; a release is not the time to find out"
+say "compatibility matrix"
+# every released ddflow against this one's data, and this one's surface against theirs
+uv run pytest tests/compat -m slow -q --timeout=1800 \
+  || die "the compatibility matrix is red (see tests/compat)"
 
 # ---------------------------------------------------------------- 3. the wheel
 say "wheel"

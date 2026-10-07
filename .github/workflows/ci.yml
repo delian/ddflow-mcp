@@ -100,6 +100,24 @@ jobs:
           queries: security-and-quality
       - uses: github/codeql-action/analyze@v4
 
+  compat:
+    # The compatibility matrix (D-compat): every released ddflow read against today's data
+    # and today's surface compared with theirs. It builds a wheel per release from its
+    # commit, so the whole history is checked out; slow, hence its own job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Configure git
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ddflow ci"
+          git config --global init.defaultBranch main
+      - name: Compatibility matrix
+        run: uv run pytest tests/compat -m slow -q --timeout=1800
+
   scenarios:
     # Separate job, not a step: a scenario failure and a unit failure want different
     # reading, and putting them in one job means the ten-minute one gates the two-minute

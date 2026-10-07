@@ -17,6 +17,7 @@ import sys
 # form reads `ddflow.api.review` out of sys.modules and cannot be shadowed.
 import ddflow.api.review as A
 
+from ...infra.tomlcfg import value as _toml_value  # the one TOML value writer
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 
 
@@ -132,19 +133,6 @@ def _reviewers_presets(_a, _c: Ctx) -> int:
         print(f"  {name:<12} {spec['kind']:<9} {where}")
     print("\nAdd one with:  ddflow reviewers add --preset <name> [--model M]")
     return OK
-
-
-def _toml_value(v) -> str:
-    """A TOML literal for a preset value: `tomlcfg.value`, the shared serialiser.
-
-    `json.dumps` is TOML for strings, numbers and lists of them, but NOT for a dict:
-    `launch = {"command": ...}` is JSON, the file stopped parsing, and every later
-    command reading reviewers failed (bug B-reviewers-add-launch-json); and it wrote an
-    emoji as a surrogate pair TOML refuses (Bb11e7a8186).
-    """
-    from ...infra.tomlcfg import value
-
-    return value(v)
 
 
 def _reviewers_add(a, c: Ctx) -> int:

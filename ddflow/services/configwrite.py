@@ -22,10 +22,11 @@ Two of the rules are load-bearing and neither is obvious:
   refused, and a reviewer whose identity a tool wrote is recorded so its reviews count
   only after a person approves it (`services/reviewer_trust.py`).
 
-The in-place TOML edit is deliberate rather than a round-trip through a parser: the file
-is written by hand and carries comments explaining every knob, and `tomllib` cannot
-write, so a serialising round-trip would silently delete the documentation that makes
-the file editable at all.
+The edit goes through tomlkit (`tomlcfg.upsert`), not through `tomllib` and a serialiser:
+the file is written by hand and carries comments explaining every knob, `tomllib` cannot
+write, and a plain dump of its data would silently delete the documentation that makes the
+file editable at all. tomlkit parses the text with its comments, blank lines and key order,
+changes the one value, and writes the rest back as it found it.
 """
 
 from __future__ import annotations
@@ -150,164 +151,15 @@ def _range_refusal(problems: set[tuple[str, str]]) -> str:
 
 
 def _toml_literal(value: str) -> str:
-    """A TOML literal for `value`, quoting it unless it already is one."""
-    if re.fullmatch(r"(true|false|-?\d+(\.\d+)?|\[.*\]|\{.*\})", value.strip()):
-        return value
-    return TC.basic_string(value)  # quote + escape as a TOML basic string (Bb11e7a8186)
-
-
-def _is_header(line: str, header: str) -> bool:
-    """Is this line the `[section]` header, allowing a trailing comment?
-
-    `[gates]  # how work is checked` did not match an exact compare, so the upsert
-    appended a SECOND `[gates]` -- and TOML forbids declaring a table twice, which means
-    every later edit failed with a parse error pointing at a line the operator did not
-    write. Commenting your own config should not disable the tool that edits it.
-    """
-    return line.split("#", 1)[0].strip() == header
-
-
-#: TOML's two multi-line string delimiters. Built rather than written so this module's
-#: own source does not have to escape them.
-_TRIPLES = ('"' * 3, "'" * 3)
-
-
-def _toml_lines(text: str) -> list[tuple[str, bool]]:
-    """Every line paired with "is this line INSIDE a multi-line string?".
-
-    The one thing a TOML line editor has to know. A hand-written agent prompt is a
-    triple-quoted value, and a line inside one reading `command = <what you ran>`
-    matched the key scan -- so `--command` was written INTO the prompt, the real key
-    was never set, and `ddflow workflow` reported the result coherent. Exit 0: a
-    silently dropped knob, and every future task handed a tampered instruction. A `[`
-    in the same prose ended the section scan and inserted the new key mid-sentence.
-
-    Counts delimiters rather than parsing. The alternative is a TOML round-trip, and
-    the one thing worse than a line editor here is a writer that silently discards the
-    comments this file carries most of its reasoning in.
-    """
-    out: list[tuple[str, bool]] = []
-    delim = ""
-    for raw in text.splitlines():
-        inside = bool(delim)
-        rest = raw
-        while rest:
-            if delim:
-                hit = rest.find(delim)
-                if hit < 0:
-                    break
-                rest = rest[hit + 3 :]
-                delim = ""
-                continue
-            starts = [(rest.find(d), d) for d in _TRIPLES if d in rest]
-            if not starts:
-                break
-            at, d = min(starts)
-            if "#" in rest[:at]:
-                break  # the opener is inside a comment
-            delim = d
-            rest = rest[at + 3 :]
-        out.append((raw, inside))
-    return out
-
-
-def _outside_quotes(raw: str) -> str:
-    """`raw` with quoted strings and the trailing comment removed.
-
-    The bracket counter above must not see a `[` that is part of a VALUE. It used to:
-    `body.count("[")` on `command = "sed \'s/\\[//g\'"` started the depth at 1, no
-    later line ever brought it back to 0 (a `[section]` header contributes +1 then -1),
-    and `_value_span` returned `len(lines)` — so replacing that key replaced everything
-    from it to END OF FILE. Sibling keys and whole later sections were deleted, the
-    result was still valid TOML, `Config.check` passed, the workflow diff was empty,
-    and the write succeeded with exit 0.
-
-    Probed: a `[gate.lint]` with `command = "sed \'s/\\[//g\'"` plus `timeout_s` and
-    `title`. Re-setting `command` left `['command']` and dropped the other two, silently.
-
-    Gate commands are arbitrary operator shell strings, so `sed \'s/\\[//g\'`,
-    `cut -d\'[\' -f1` and `grep -F \'[\'` are all ordinary things to find in one. A
-    comment marker inside a quoted string is the same hazard in the other direction,
-    which is why the `#` split happens HERE rather than before the quote scan.
-    """
-    out, quote, esc = [], "", False
-    for ch in raw:
-        if quote:
-            if esc:
-                esc = False
-            elif ch == "\\" and quote != "'":
-                esc = True  # literal (single-quoted) TOML strings have no escapes
-            elif ch == quote:
-                quote = ""
-            continue
-        if ch in "\"'":
-            quote = ch
-            continue
-        if ch == "#":
-            break  # a comment, now that we know we are not inside a string
-        out.append(ch)
-    return "".join(out)
-
-
-def _value_span(lines: list[tuple[str, bool]], start: int) -> int:
-    """The index one past the end of the value beginning at `lines[start]`.
-
-    A value spans lines two ways: a bracketed array written one entry per line, which
-    is how a person writes a ten-gate pipeline, and a multi-line string. Replacing only
-    the first line left the rest orphaned -- `task_pipeline = ["x"]` followed by a
-    stray `]` -- which TOML rejects, so every later edit was refused with a parse error
-    blaming the operator for the editor's mistake.
-    """
-    depth = 0
-    for i in range(start, len(lines)):
-        raw, inside = lines[i]
-        body = "" if inside else _outside_quotes(raw)
-        depth += body.count("[") + body.count("{") - body.count("]") - body.count("}")
-        open_string = i + 1 < len(lines) and lines[i + 1][1]
-        if depth <= 0 and not open_string:
-            return i + 1
-    return len(lines)
+    """A TOML literal for `value`, quoting it unless it already is one (`tomlcfg.literal`)."""
+    return TC.literal(value)
 
 
 def _toml_upsert(text: str, dotted: str, literal: str) -> str:
-    """Set one `<section>.<key>` in TOML text, in place, preserving comments.
-
-    Pure, and takes TEXT rather than a path, so several edits compose into one write.
-    Applying them one file-write at a time would leave the config half-updated when the
-    third of four is rejected -- and a half-applied workflow change is the state nobody
-    can reason about.
-    """
-    section, _, key = dotted.rpartition(".")
-    lines = _toml_lines(text)
-    header = f"[{section}]"
-    try:
-        start = next(
-            i for i, (ln, inside) in enumerate(lines) if not inside and _is_header(ln, header)
-        )
-    except StopIteration:
-        body = "\n".join(ln for ln, _ in lines).rstrip()
-        return (f"{body}\n\n" if body else "") + f"{header}\n{key} = {literal}\n"
-    end = next(
-        (
-            i
-            for i in range(start + 1, len(lines))
-            if not lines[i][1] and lines[i][0].lstrip().startswith("[")
-        ),
-        len(lines),
-    )
-    i = start + 1
-    while i < end:
-        raw, inside = lines[i]
-        stripped = raw.lstrip()
-        if inside or stripped.startswith(("#", ";")) or "=" not in stripped:
-            i += 1
-            continue
-        if stripped.split("=")[0].strip() == key:
-            lines[i : _value_span(lines, i)] = [(f"{key} = {literal}", False)]
-            return "\n".join(ln for ln, _ in lines).rstrip() + "\n"
-        i = max(i + 1, _value_span(lines, i))
-    lines.insert(end, (f"{key} = {literal}", False))
-    return "\n".join(ln for ln, _ in lines).rstrip() + "\n"
+    """Set one `<section>.<key>` in TOML text, in place, preserving comments
+    (`tomlcfg.upsert`, tomlkit). Pure, and takes TEXT rather than a path, so several edits
+    compose into one write."""
+    return TC.upsert(text, dotted, literal)
 
 
 def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str]:
@@ -585,6 +437,19 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
         return set()
 
 
+def _apply_edits(text: str, pairs: list[tuple[str, str]]) -> tuple[str, str]:
+    """``text`` with every ``(dotted, value)`` set in turn, and what stopped it, if
+    anything: (new text, "") or (text so far, the refusal)."""
+    for dotted, value in pairs:
+        if "." not in dotted:
+            return text, f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command"
+        try:
+            text = _toml_upsert(text, dotted, _toml_literal(value))
+        except (tomllib.TOMLDecodeError, ValueError) as exc:
+            return text, f"that edit would break the config: {exc}"
+    return text, ""
+
+
 def _write_config(
     repo: Path,
     pairs: list[tuple[str, str]],
@@ -663,10 +528,9 @@ def _write_config(
         text_before = text
         before = _workflow_problems(repo, text, local=local) if check_workflow else set()
         human_before = _guarded_human_gates(repo, text, local=local)
-        for dotted, value in pairs:
-            if "." not in dotted:
-                return f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command", text
-            text = _toml_upsert(text, dotted, _toml_literal(value))
+        text, failure = _apply_edits(text, pairs)
+        if failure:
+            return failure, text
         try:
             result = tomllib.loads(text)
             Config.check(result)
