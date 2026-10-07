@@ -65,7 +65,8 @@ def test_the_wheel_declares_both_entry_points(wheel):
 #:
 #: This was `assert not requires` — zero dependencies, the property that makes ddflow
 #: installable in sandboxes with no reachable package index. That is still the design,
-#: and Jinja2 is the one deliberate exception: prompts ARE Jinja templates, and for as
+#: and Jinja2 is the first deliberate exception (tomlkit the second, D-unify 1: config
+#: write-back that keeps the operator's comments and layout): prompts ARE Jinja templates, and for as
 #: long as it was undeclared the package shipped a second, untested renderer that every
 #: user ran and no developer did. 0.1.1's MCP handshake was broken for every unadopted
 #: repository as a result (docs/BACKLOG.md B150-B154).
@@ -73,7 +74,7 @@ def test_the_wheel_declares_both_entry_points(wheel):
 #: Kept as a ratchet rather than deleted, because the original point stands: a
 #: dependency must be a decision somebody made, not something that crept in with an
 #: import. Adding a name here should feel like this comment.
-ALLOWED_RUNTIME_DEPS = {"jinja2"}
+ALLOWED_RUNTIME_DEPS = {"jinja2", "tomlkit"}
 
 
 def test_the_package_declares_only_the_dependencies_we_chose(wheel):
@@ -119,13 +120,17 @@ def test_the_declared_dependency_is_actually_installed_by_the_wheel(wheel, tmp_p
         [str(venv / "bin" / "pip"), "-q", "install", str(wheel)], check=True, timeout=600
     )
     got = subprocess.run(
-        [str(venv / "bin" / "python"), "-c", "import jinja2; print(jinja2.__version__)"],
+        [
+            str(venv / "bin" / "python"),
+            "-c",
+            "import jinja2, tomlkit; print(jinja2.__version__, tomlkit.__version__)",
+        ],
         capture_output=True,
         text=True,
         timeout=120,
     )
     assert got.returncode == 0, (
-        f"installing the wheel did not bring Jinja2 with it: {got.stderr.strip()}"
+        f"installing the wheel did not bring Jinja2 and tomlkit with it: {got.stderr.strip()}"
     )
 
 
