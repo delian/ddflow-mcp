@@ -341,9 +341,7 @@ PROFILES: Mapping[str, Profile] = {
         Profile("upstream", None, None, None),
     )
 }
-#: The argv profile is structural (an allowlist), not a text pass.
-ARGV = "argv"
-PROFILE_NAMES = (*PROFILES, ARGV)
+#: `argv` is structural (an allowlist, `redact_argv`), not a text profile: no Redactor.
 
 _PROGRAMS = frozenset({"ddflow", "ddflow-mcp", "python", "python3", "uv", "uvx"})
 _WORD = re.compile(r"[a-z][a-z0-9_-]{0,23}")
