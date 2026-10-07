@@ -3,7 +3,7 @@
 #
 # Lower the baseline in the same change that removes sites; the failure message
 # prints the exact value. Never raise it.
-baseline = 6
+baseline = 5
 
 # Unreferenced on purpose: the work that wires each in is planned (B-uni-dead-code).
 # An entry leaves this table in the change that gives it a caller -- a test holds
