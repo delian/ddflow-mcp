@@ -25,7 +25,7 @@ from pathlib import Path, PurePosixPath
 from ..config import Config
 from ..core.model import fold
 from ..infra import worktree as W
-from ..infra.log import EventLog
+from ..infra.log import EventLog, effective_agent_id
 from . import cleanup as C
 from .jobs import alive
 
@@ -368,7 +368,7 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     log = (
         EventLog(
             repo,
-            cfg.agent.id or "",
+            effective_agent_id(repo, cfg),  # DDFLOW_AGENT too, as every other write
             log_cfg=cfg.log,
             lock_timeout_s=cfg.lease.acquire_timeout_s,
         )
