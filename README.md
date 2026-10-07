@@ -1240,7 +1240,8 @@ recorded outcome. `review triage` records what became of each finding as its own
 (`review.triaged`): *refuted*, with the run that shows it false, or *confirmed*, with the
 fix or test that answers it. The gate's outcome is not changed — a review that reported
 findings stays `failed`, and that does not block completion; the log now shows what became
-of each finding. Triage appears in `gate status` and `show`, and a re-review carries it over
+of each finding (once the round budget is spent, the triage that settles the LAST finding
+records the gate passed on refutation, flagged: see below). Triage appears in `gate status` and `show`, and a re-review carries it over
 only for a finding whose text is identical (decision D-review-triage). Over MCP it is
 `ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`. The `triage` verb is
 required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` are refused
@@ -1260,7 +1261,15 @@ ddflow review triage T1 --gate critic --finding 2 --refuted --probe "..."   # se
 ddflow review T1 --gate critic --force --reason "..."   # one more round; the reason is recorded
 ```
 
-then record the gate on that triage, or ask the operator.
+**Passed on refutation** (decisions D-gate-economy 2, D-unify 5). Once the budget is spent,
+the `review triage` that gives the gate's LAST finding a verdict records the gate `passed`
+itself: the review's own evidence and reviewer, plus `passed_on_refutation` (how many
+findings were refuted and confirmed, and the rounds used). The pass is flagged, never
+silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, so the
+operator can spot-check it. A finding still without a verdict holds the gate where it is,
+and the triage output says so: settle it, or ask the operator for one more round
+(`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
+never passed this way; a re-review settles it.
 
 A *full* round is any review that can cover the item's whole diff. What is not one is
 judged by what it covers, not by the flag: `--delta`, a `--commit <sha>` or `--base <ref>`
