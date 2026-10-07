@@ -985,6 +985,12 @@ def upgrade(repo: Path, *, plan: bool = True, agent: str = "") -> O.Outcome:
     way a diff exits: the plan is the finding, and an agent checking "is there work"
     needs no parsing. The body is the same plan on the CLI's `--json` and over MCP.
     """
+    if not plan:
+        return O.refused(
+            "upgrade",
+            "this ddflow only plans an upgrade: applying one is not available yet "
+            "(call with plan=true, the default)",
+        )
     log, cfg, st = _load(repo, agent)
     data = UP.build(repo, log, cfg, st)
     data["text"] = UP.render(data)

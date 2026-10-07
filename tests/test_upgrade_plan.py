@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from conftest import run_cli
 
+from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog, running_version
 from ddflow.services import enforce as E
@@ -207,3 +208,68 @@ def test_the_project_version_is_the_last_upgrade_else_the_oldest_stamp(repo: Pat
     assert UP.project_version(st, True, "9.9.9") == "0.1.9"
     assert UP.project_version(fold([], strict=False), False, "9.9.9") == "9.9.9"
     assert UP.project_version(fold([], strict=False), True, "9.9.9") == ""
+
+
+def _change(kind: str, v: str, key: str = "s.k", **kw) -> UM.Change:
+    return UM.Change(version=v, kind=kind, key=key, **kw)
+
+
+def test_a_removed_knob_the_config_still_carries_is_the_operators(repo: Path) -> None:
+    """A removed knob is unknown to the schema and so has no source; the config carrying it
+    is what says someone wrote it, and removing it needs their confirmation."""
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text("[log]\nzzz_old = 1\n\n[gone_section]\nk = 1\n")
+    cfg = Config.load(repo)
+    assert "log.zzz_old" in cfg.unknown_knobs and "[gone_section]" in cfg.unknown_knobs
+
+    got = UP.config_items(
+        [_change("knob_removed", "0.2.0", "log.zzz_old", old=1, has_old=True)], cfg
+    )
+
+    assert [(i["change"], i["action"]) for i in got] == [("knob_removed", UP.OPERATOR)]
+    assert got[0]["set_by"] == "config"
+    # a knob of a section the schema dropped entirely is carried by `[section]`
+    sec = UP.config_items(
+        [_change("knob_removed", "0.2.0", "gone_section.k", old=1, has_old=True)], cfg
+    )
+    assert [i["action"] for i in sec] == [UP.OPERATOR]
+    # a project that never carried it is told nothing
+    assert (
+        UP.config_items([_change("knob_removed", "0.2.0", "zzz.gone", old=1, has_old=True)], cfg)
+        == []
+    )
+
+
+def test_a_knob_removed_then_added_back_is_a_changed_default_not_a_new_knob() -> None:
+    seq = [
+        _change("knob_removed", "0.2.0", old=1, has_old=True),
+        _change("knob_added", "0.3.0", new=2, has_new=True),
+    ]
+
+    kind, _c, old, new = UP._net(seq)["s.k"]
+
+    assert (kind, old, new) == ("knob_changed", 1, 2)
+    assert UP._net([*seq, _change("knob_added", "0.4.0", new=1, has_new=True)]) == {}
+
+
+def test_a_hook_that_could_not_be_checked_is_said_not_dropped(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import claudehooks as CH
+
+    monkeypatch.setattr(CH, "state_spec", lambda repo, h: (None, "settings.json is not JSON"))
+
+    got = UP.hook_items(old)
+
+    unknown = [i for i in got if i["id"].startswith("hooks:unknown:")]
+    assert unknown and "not JSON" in unknown[0]["summary"] and unknown[0]["action"] == UP.NOTE
+    assert not any(i["id"].startswith("hooks:missing:") for i in got)
+
+
+def test_apply_is_refused_rather_than_ignored(repo: Path) -> None:
+    from ddflow.api import setup as A
+
+    out = A.upgrade(repo, plan=False)
+
+    assert out.exit == 3 and "plan" in out.reason
+    assert A.upgrade(repo).exit == 0
