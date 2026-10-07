@@ -211,6 +211,8 @@ def parse(text: str, fragments: list[tuple[str, str]] | None = None) -> Manifest
     base = data.get("base")
     if not isinstance(base, dict) or not base.get("version"):
         raise ManifestError("the manifest has no [base] with a version")
+    if not isinstance(base["version"], str) or not version_key(base["version"]):
+        raise ManifestError(f"[base] version {base['version']!r} is not a release")
     raw_knobs = base.get("knobs", {})
     if not isinstance(raw_knobs, dict):
         raise ManifestError("[base.knobs] is a table of JSON-encoded defaults")
@@ -254,6 +256,8 @@ def changes_since(version: str, manifest: Manifest | None = None) -> list[Change
 def replay(manifest: Manifest | None = None, upto: str = "") -> tuple[dict[str, Any], set[str]]:
     """The knob defaults and event kinds the manifest says a release has: the base with
     every change up to and including ``upto`` (default: all of them) applied."""
+    if upto and upto != UNRELEASED and not version_key(upto):
+        raise ValueError(f"replay upto {upto!r}: not a release version")
     m = manifest or load()
     knobs, kinds = dict(m.base_knobs), set(m.base_event_kinds)
     limit = release_key(upto) if upto else None

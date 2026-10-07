@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -159,7 +160,9 @@ HEADER = (
 
 def _why(doc: str) -> str:
     """A knob doc's first sentence, as the one-line why."""
-    first = re.split(r"(?<=[.!?])\s+(?=[A-Z`(])", doc.strip(), maxsplit=1)[0]
+    # "e.g." and "i.e." end no sentence: hide their dots from the split
+    safe = doc.strip().replace("e.g.", "e\0g\0").replace("i.e.", "i\0e\0")
+    first = re.split(r"(?<=[.!?])\s+(?=[A-Z`(])", safe, maxsplit=1)[0].replace("\0", ".")
     if len(first) <= WHY_CHARS:
         return first
     return first[: WHY_CHARS - 3].rstrip(" .") + "..."
@@ -243,20 +246,45 @@ def _entry(header: str, e: dict) -> list[str]:
     return ["", header, *(f"{f} = {_q(v)}" for f, v in e.items())]
 
 
-def assign_unreleased(kept: dict[str, dict], versions: list[str]) -> dict[str, dict]:
-    """When versions have been cut since the last backfill, the entries written for
-    `unreleased` (fragments) belong to them. A fragment's hand-written fields serve every
-    release the manifest does not list yet -- only the release whose diff has that
-    (kind, key) uses them -- and its refresh, repair and feature entries go to the OLDEST
-    such release, the first one cut after they were written."""
-    out = dict(kept)
+def assign_unreleased(
+    kept: dict[str, dict], versions: list[str], shipped: Callable[[str, str], bool]
+) -> dict[str, dict]:
+    """Give each entry written for `unreleased` (a fragment) to the release that shipped
+    it: the OLDEST release the manifest does not list yet whose commit already holds the
+    fragment file (``shipped(version, fragment file name)``). An entry no such release
+    holds stays unreleased. Its hand-written why/effect/impact/enable and its refresh,
+    repair and feature entries so land in the right release, never regenerated blank."""
+    out = {v: {"by_key": dict(b["by_key"]), "manual": list(b["manual"])} for v, b in kept.items()}
     unlisted = [v for v in versions[1:] if v not in out]
-    if UM.UNRELEASED not in out or not unlisted:
+    loose = out.pop(UM.UNRELEASED, None)
+    if loose is None:
         return out
-    loose = out.pop(UM.UNRELEASED)
-    for i, v in enumerate(unlisted):
-        out[v] = {"by_key": loose["by_key"], "manual": loose["manual"] if i == 0 else []}
+    stay: dict = {"by_key": {}, "manual": []}
+
+    def home(e: dict) -> dict:
+        name = fragment_name(e)
+        for v in unlisted:
+            if shipped(v, name):
+                return out.setdefault(v, {"by_key": {}, "manual": []})
+        return stay
+
+    for k, e in loose["by_key"].items():
+        home(e)["by_key"][k] = e
+    for e in loose["manual"]:
+        home(e)["manual"].append(e)
+    out[UM.UNRELEASED] = stay
     return out
+
+
+def _has(sha: str, fragment: str) -> bool:
+    """Whether the release commit ``sha`` already holds the unreleased fragment file."""
+    path = f"{MANIFEST.parent.relative_to(ROOT)}/{UM.FRAGMENTS}/{fragment}"
+    r = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{sha}:{path}"],
+        check=False,
+        capture_output=True,
+    )
+    return r.returncode == 0
 
 
 def render(base: tuple[str, dict], releases: list[tuple[str, str, list[dict]]]) -> str:
@@ -280,7 +308,10 @@ def backfill(base: str) -> tuple[str, dict[str, str]]:
     if not rels:
         raise SystemExit(f"no release at or after {base}")
     snaps = [(v, d, snapshot_commit(sha)) for v, sha, d in rels]
-    kept = assign_unreleased(_kept(), [v for v, _d, _s in snaps])
+    commit = {v: sha for v, sha, _d in rels}
+    kept = assign_unreleased(
+        _kept(), [v for v, _d, _s in snaps], lambda v, name: _has(commit[v], name)
+    )
     empty: dict = {"by_key": {}, "manual": []}
     history = []
     for (_pv, _pd, prev), (v, d, cur) in itertools.pairwise(snaps):
