@@ -365,7 +365,9 @@ class Waiver:
 
     change: str
     reason: str
-    version: str = ""
+    #: The JSON-encoded new default it was granted for ("" when the change has none): a
+    #: later change of the same knob is a different change and needs its own waiver.
+    new: str = ""
 
 
 @dataclass
@@ -386,6 +388,11 @@ def _first_sentence(doc: str) -> str:
     return first if len(first) <= _WHY_CHARS else first[: _WHY_CHARS - 3].rstrip(" .") + "..."
 
 
+def _new_key(u: Unmanifested) -> str:
+    """What a waiver's `new` holds for ``u``: its new default, JSON-encoded; "" without one."""
+    return json.dumps(u.new, sort_keys=True) if u.has_new else ""
+
+
 def load_waivers(path: Path | str | None = None) -> list[Waiver]:
     """The recorded waivers; none when the file does not exist."""
     p = Path(path or WAIVERS)
@@ -396,7 +403,7 @@ def load_waivers(path: Path | str | None = None) -> list[Waiver]:
     for i, w in enumerate(_tables(rows, "waivers")):
         if not isinstance(w, dict) or not w.get("change") or not w.get("reason"):
             raise ManifestError(f"waiver #{i + 1}: a waiver names its change and its reason")
-        out.append(Waiver(str(w["change"]), str(w["reason"]), str(w.get("version", ""))))
+        out.append(Waiver(str(w["change"]), str(w["reason"]), str(w.get("new", ""))))
     return out
 
 
@@ -435,14 +442,14 @@ def lint(
     ]
     found += [Unmanifested("event_kind_added", k) for k in sorted(have_e - said_e)]
     found += [Unmanifested("event_kind_removed", k) for k in sorted(said_e - have_e)]
-    by_change = {w.change: w for w in (load_waivers() if waivers is None else waivers)}
+    by_change = {(w.change, w.new): w for w in (load_waivers() if waivers is None else waivers)}
     out = LintResult()
     for u in found:
-        (
-            out.waived.append((u, by_change[u.id]))
-            if u.id in by_change
-            else out.unmanifested.append(u)
-        )
+        w = by_change.get((u.id, _new_key(u)))
+        if w:
+            out.waived.append((u, w))
+        else:
+            out.unmanifested.append(u)
     return out
 
 
@@ -462,15 +469,16 @@ def waive(
             f"{change!r} is not one unmanifested change to waive (unmanifested now: {names})"
         )
     target = Path(path or WAIVERS)
-    w = Waiver(hits[0].id, " ".join(reason.split()))
+    w = Waiver(hits[0].id, " ".join(reason.split()), _new_key(hits[0]))
     head = (
         ""
         if target.exists()
         else "# Changes the operator let a release ship with no manifest entry.\n"
     )
+    extra = f"new = {json.dumps(w.new)}\n" if w.new else ""
     with target.open("a", encoding="utf-8") as fh:
         fh.write(
-            f"{head}\n[[waiver]]\nchange = {json.dumps(w.change)}\nreason = {json.dumps(w.reason)}\n"
+            f"{head}\n[[waiver]]\nchange = {json.dumps(w.change)}\nreason = {json.dumps(w.reason)}\n{extra}"
         )
     return w
 
