@@ -57,11 +57,23 @@ def preflight(
             failed=failed,
             remaining=remaining,
         )
+    if refused:
+        # An approval naming nothing, or a tree someone holds, is not done: exit 3 with
+        # the rows, never 0 (B32be97b560). What was removed is still reported.
+        return O.refused(
+            "onboard.preflight",
+            "; ".join(f"{r['name']}: {r.get('detail', '')}" for r in refused),
+            **data,
+            removed=removed,
+            refused=refused,
+            failed=[],
+            remaining=remaining,
+        )
     return O.ok(
         "onboard.preflight",
         **data,
         removed=removed,
-        refused=refused,
+        refused=[],
         failed=[],
         remaining=remaining,
     )
