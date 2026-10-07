@@ -71,7 +71,7 @@ def test_mcp_reports_a_lease_refusal_as_a_refusal_not_an_internal_error(repo, mo
 
 def test_mcp_reports_a_git_failure_as_a_failure_not_an_internal_error(repo, monkeypatch):
     reply = _call_raising(repo, monkeypatch, GitError("merge conflict"))
-    assert "result" in reply and "merge conflict" in _text(reply), reply
+    assert "GitError: merge conflict" in _text(reply) and "bad arguments" not in _text(reply)
     assert reply["result"]["_meta"]["exit"] == O.FAIL and reply["result"]["isError"], reply
 
 

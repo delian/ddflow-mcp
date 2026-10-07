@@ -725,12 +725,13 @@ class Server:
                     code = exit_for(exc)
                     if code == REFUSED:
                         return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
-                    if getattr(type(exc), "exit_code", None) is not None:
-                        failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
-                        return _ok(mid, _text(str(exc), error=failed, meta={"exit": code}))
-                    if code is not None or isinstance(exc, TypeError):
+                    if isinstance(exc, TypeError) or type(exc) in (KeyError, ValueError):
                         return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-                    raise
+                    if code is None:
+                        raise
+                    failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
+                    body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
+                    return _ok(mid, _text(body, error=failed, meta={"exit": code}))
                 # `text` may be a bool or a predicate on the arguments: `render`
                 # returns a document with `--show` and a file list without it, and which
                 # it is cannot be known until the call.
