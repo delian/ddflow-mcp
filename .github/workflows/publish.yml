@@ -218,7 +218,9 @@ jobs:
         # against theirs (D-compat). The wheels are built from the release commits, which
         # needs the history.
         run: |
-          git fetch --unshallow --tags || true
+          # the matrix builds each release from its commit: it needs the whole history
+          git fetch --tags --force
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --unshallow; fi
           uv run pytest tests/compat -m slow -q --timeout=1800
 
   pypi:
