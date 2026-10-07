@@ -196,8 +196,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Record your triage of ONE finding of an item's recorded `ddflow review`: it is "
             "refuted (probe = the run that shows it false) or confirmed (probe = the fix or "
             "test that answers it). The finding number is the #N the review printed. The "
-            "gate stays failed -- a review that reported findings is not re-recorded as "
-            "passed; the log shows each finding's fate instead (decision D-review-triage)."
+            "gate stays failed (D-review-triage) until, after the round cap, the triage of "
+            "its last finding records it passed on refutation, flagged."
         ),
         "properties": {
             "id": ("string", "The item whose review it is.", True),
