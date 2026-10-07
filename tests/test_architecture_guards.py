@@ -62,6 +62,7 @@ HOMES: dict[str, frozenset[str]] = {
     "os_replace": frozenset({"ddflow.infra.fsio"}),
     "fcntl": frozenset({"ddflow.infra.fsio"}),
     "hashlib": frozenset({"ddflow.core.digest"}),
+    "tomlkit": frozenset({"ddflow.infra.tomlcfg"}),
     "time_parse": frozenset({"ddflow.core.clock"}),
 }
 
@@ -110,7 +111,7 @@ _PROCESS_CALLS = frozenset(
 _TIME_PARSERS = frozenset({"fromisoformat", "strptime"})
 
 #: Modules whose every use is counted under their own name.
-_MODULE_USES = ("tempfile", "fcntl", "hashlib")
+_MODULE_USES = ("tempfile", "fcntl", "hashlib", "tomlkit")
 
 
 def _modules() -> list[Path]:
