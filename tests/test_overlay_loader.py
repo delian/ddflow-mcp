@@ -159,3 +159,21 @@ def test_a_marked_copy_keeps_the_files_line_numbers(loader, tmp_path):
     text = loader.ejected_text("alpha").replace("hello", "{% if x %}hello")
     (problem,) = loader.validate(O.Asset("alpha", text, O.PROJECT, p))
     assert problem.line == 2  # line 1 is the marker
+
+
+def test_eject_does_not_write_through_a_symlinked_intermediate_directory(tmp_path):
+    nested = O.OverlayLoader(
+        "export template",
+        shipped_dir=tmp_path / "pkg",
+        project_subdir="templates/export",
+        suffix=".md.j2",
+    )
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "a.md.j2").write_text("x\n")
+    repo = tmp_path / "repo"
+    (repo / ".ddflow").mkdir(parents=True)
+    (repo / "elsewhere").mkdir()
+    (repo / ".ddflow" / "templates").symlink_to(repo / "elsewhere")
+    with pytest.raises(O.OverlayError, match="symlink"):
+        nested.eject(repo, "a")
+    assert not list((repo / "elsewhere").rglob("*"))

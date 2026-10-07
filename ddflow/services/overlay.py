@@ -15,7 +15,7 @@ text, ``# ddflow-shipped: 3f2a9c1b04de`` for a TOML one). With it ddflow can tel
 copy (its body still hashes to the recorded digest: refreshed freely) from an EDITED one
 (never overwritten without ``force``), and a copy older than the shipped default from a
 current one (``drift``). A ddflow upgrade never rewrites a copy. ``validate`` parses a text
-with the kind's parser and names every problem as ``file:line``.
+with the kind's parser and names the first problem as ``file:line``.
 
 Pure of any one kind: the callers (`services.prompts`, `services.export.templates`, ...) move
 onto this one slice at a time, each byte-identical, and then the planned loaders are built on
@@ -228,7 +228,8 @@ class OverlayLoader:
         repo = Path(repo)
         dst = self.project_path(repo, name)
         base = repo / ".ddflow"
-        for p in (base, self.project_dir(repo), dst):
+        # every component from .ddflow down: a nested project_subdir has intermediate directories
+        for p in (base, *(base / q for q in _prefixes(dst.relative_to(base)))):
             if p.is_symlink():
                 raise OverlayError(
                     f"{p} is a symlink; ddflow does not write through it", refused=True
@@ -279,6 +280,12 @@ class OverlayLoader:
         except SyntaxProblem as exc:
             return [Problem(path, exc.line, str(exc))]
         return []
+
+
+def _prefixes(rel: Path) -> list[Path]:
+    """``a/b/c`` -> ``a``, ``a/b``, ``a/b/c``."""
+    parts = rel.parts
+    return [Path(*parts[: i + 1]) for i in range(len(parts))]
 
 
 def _read(p: Path) -> str:
