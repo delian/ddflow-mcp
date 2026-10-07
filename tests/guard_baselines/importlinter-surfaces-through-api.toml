@@ -8,9 +8,7 @@
 # any import fails too. When a refactor moves an import, edit its entry in the same
 # change; never add one to make a new import pass.
 ignore_imports = [
-    "ddflow.surfaces.cli -> ddflow.infra.worktree",
     "ddflow.surfaces.cli -> ddflow.services.gates",
-    "ddflow.surfaces.cli -> ddflow.services.leases",
     "ddflow.surfaces.commands.ci -> ddflow.infra.worktree",
     "ddflow.surfaces.commands.config -> ddflow.services.configwrite",
     "ddflow.surfaces.commands.flow -> ddflow.services.choices",
