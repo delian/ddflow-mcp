@@ -51,7 +51,7 @@ def register(s: argparse._SubParsersAction) -> None:
     dr.add_argument(
         "--upgrade",
         action="store_true",
-        help="the upgrade plan instead (an alias of `ddflow upgrade --plan`)",
+        help="the upgrade plan instead (the same as `ddflow upgrade`)",
     )
     dr.set_defaults(fn=cmd_doctor)
     s.add_parser("rebuild", help="re-derive the index from the log").set_defaults(fn=cmd_rebuild)
