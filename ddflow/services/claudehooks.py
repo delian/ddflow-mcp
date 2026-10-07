@@ -23,6 +23,7 @@ Two properties, both load-bearing:
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -44,9 +45,112 @@ PROMPT_MARKER = "hooks prompt"
 PROMPT_EVENT = "UserPromptSubmit"
 GEMINI_PROMPT_EVENT = "BeforeAgent"
 GEMINI_SETTINGS = ".gemini/settings.json"
+CLAUDE_SETTINGS = ".claude/settings.json"
 
 
-def settings_path(repo: Path, rel: str = ".claude/settings.json") -> Path:
+@dataclass(frozen=True)
+class HookSpec:
+    """One harness hook ddflow owns: where it lives and what it runs.
+
+    `hooks install/uninstall/status`, `adopt` and `launchers` all read `HOOKS`, so they
+    cannot disagree about which hooks are ddflow's, which file holds each, or which
+    `--claude`/`--gemini` flag refreshes it.
+    """
+
+    agent: str  #: the harness, as `hooks install --<agent>` names it
+    name: str  #: the `ddflow hooks <name>` subcommand it runs
+    event: str  #: the harness event it fires on
+    file: str  #: the repo-relative settings file that holds it
+    matcher: str | None  #: the group's matcher; None for an event that takes none
+    purpose: str  #: what the install message says it buys
+    extra: str = ""  #: arguments appended to the subcommand
+    fail_open: bool = True  #: `|| true`: never fail the harness turn it observes
+
+    @property
+    def marker(self) -> str:
+        """What identifies OUR hook among the operator's: the subcommand it runs."""
+        return f"hooks {self.name}"
+
+    @property
+    def flag(self) -> str:
+        """The `ddflow hooks install` flag that writes (and refreshes) it."""
+        return f"--{self.agent}"
+
+
+#: Every harness hook ddflow installs. Git hooks are not here: they are files, not
+#: settings entries, and `enforce._hooks()` is their one table.
+HOOKS: tuple[HookSpec, ...] = (
+    HookSpec(
+        "claude",
+        "session-start",
+        "SessionStart",
+        CLAUDE_SETTINGS,
+        MATCHER,
+        "every session starts with the ddflow brief",
+        fail_open=False,
+    ),
+    HookSpec(
+        "claude",
+        "pre-compact",
+        PRECOMPACT_EVENT,
+        CLAUDE_SETTINGS,
+        None,
+        # Not "every operator prompt is recorded", which it said until Ba0febd9946.
+        "the session's state is recorded before every compaction",
+    ),
+    HookSpec(
+        "claude", "prompt", PROMPT_EVENT, CLAUDE_SETTINGS, None, "every operator prompt is recorded"
+    ),
+    HookSpec(
+        "gemini",
+        "prompt",
+        GEMINI_PROMPT_EVENT,
+        GEMINI_SETTINGS,
+        None,
+        "every operator prompt is recorded",
+        extra="--gemini",
+    ),
+)
+
+
+def spec(agent: str, name: str) -> HookSpec:
+    """The table row for `agent`'s `name` hook; KeyError when ddflow has none."""
+    for h in HOOKS:
+        if h.agent == agent and h.name == name:
+            return h
+    raise KeyError(f"no {agent} {name} hook")
+
+
+def command(h: HookSpec) -> str:
+    """The shell line `h` runs, through `enforce.command_line`'s launcher fallback."""
+    from .enforce import command_line
+
+    line = command_line(h.marker, extra=h.extra, refresh=f"ddflow hooks install {h.flag}")
+    return line + " || true" if h.fail_open else line
+
+
+def install_spec(repo: Path, h: HookSpec) -> str:
+    """Add (or refresh) `h` in its settings file."""
+    return install(
+        repo,
+        command(h),
+        event=h.event,
+        marker=h.marker,
+        matcher=h.matcher,
+        rel=h.file,
+        purpose=h.purpose,
+    )
+
+
+def uninstall_spec(repo: Path, h: HookSpec) -> str:
+    return uninstall(repo, event=h.event, marker=h.marker, rel=h.file)
+
+
+def state_spec(repo: Path, h: HookSpec) -> tuple[bool | None, str]:
+    return state(repo, event=h.event, marker=h.marker, rel=h.file)
+
+
+def settings_path(repo: Path, rel: str = CLAUDE_SETTINGS) -> Path:
     """The PROJECT settings file: committed, so every clone and worktree gets the hook."""
     return Path(repo) / rel
 
@@ -111,7 +215,7 @@ def state(
     *,
     event: str = "SessionStart",
     marker: str = MARKER,
-    rel: str = ".claude/settings.json",
+    rel: str = CLAUDE_SETTINGS,
 ) -> tuple[bool | None, str]:
     """(installed?, why). None means the settings file could not be read -- which is
     NOT the same as "not installed", and reporting it as that told an operator to
@@ -135,9 +239,13 @@ def install(
     event: str = "SessionStart",
     marker: str = MARKER,
     matcher: str | None = MATCHER,
-    rel: str = ".claude/settings.json",
+    rel: str = CLAUDE_SETTINGS,
+    purpose: str = "",
 ) -> str:
-    """Add (or refresh) our hook for `event`, leaving every other hook exactly as it was."""
+    """Add (or refresh) our hook for `event`, leaving every other hook exactly as it was.
+
+    `purpose` is what the message says the hook buys; `install_spec` passes the table's.
+    """
     path = settings_path(repo, rel)
     data = _read(path)
     hooks = data.setdefault("hooks", {})
@@ -157,9 +265,9 @@ def install(
                 return f"updated the ddflow {event} hook in {path}"
     groups.append({"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]})
     _write(path, data)
-    if event == "SessionStart":
-        return f"added a SessionStart hook to {path}: every session starts with the ddflow brief"
-    return f"added a {event} hook to {path}: every operator prompt is recorded"
+    if not purpose:
+        purpose = next((h.purpose for h in HOOKS if h.event == event and h.marker == marker), "")
+    return f"added a {event} hook to {path}" + (f": {purpose}" if purpose else "")
 
 
 def uninstall(
@@ -167,7 +275,7 @@ def uninstall(
     *,
     event: str = "SessionStart",
     marker: str = MARKER,
-    rel: str = ".claude/settings.json",
+    rel: str = CLAUDE_SETTINGS,
 ) -> str:
     """Remove OUR hook only; drop a group only if ours was all it held."""
     path = settings_path(repo, rel)
