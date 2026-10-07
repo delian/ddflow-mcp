@@ -252,3 +252,141 @@ def test_digest_matches_hashlib_and_cuts_to_length():
     assert digest("abc", length=12) == hashlib.sha256(b"abc").hexdigest()[:12]
     assert digest("é") == hashlib.sha256("é".encode()).hexdigest()
     assert digest("\udcff", errors="surrogateescape") == hashlib.sha256(b"\xff").hexdigest()
+
+
+# -- replace_text: write_text's observable behaviour, atomically (B-uni-fsio-writers) --
+
+
+def _both(tmp_path: Path, setup, text: str = "new\n"):
+    """Run `setup` in two fresh directories, write `text` through `name` with
+    Path.write_text in one and fsio.replace_text in the other, and return both outcomes
+    (the exception type, or None) with each directory's resulting files."""
+    out = []
+    for kind in ("write_text", "replace_text"):
+        d = tmp_path / kind
+        d.mkdir()
+        name = setup(d)
+        try:
+            if kind == "write_text":
+                name.write_text(text, "utf-8")
+            else:
+                fsio.replace_text(name, text)
+            err = None
+        except OSError as e:
+            err = (type(e), e.errno)
+        files = {
+            p.relative_to(d).as_posix(): (
+                ("link", os.readlink(p)) if p.is_symlink() else ("file", p.read_text("utf-8"))
+            )
+            for p in sorted(d.rglob("*"))
+            if p.is_symlink() or p.is_file()
+        }
+        out.append((err, files))
+    return out
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "new",
+        "existing",
+        "symlink",
+        "relative-symlink",
+        "dangling",
+        "loop",
+        "no-parent",
+        "parent-is-a-file",
+        "loop-in-the-parent",
+        "hard-link",
+        "read-only-file",
+        "read-only-directory",
+        "new-in-read-only-directory",
+    ],
+)
+def test_replace_text_leaves_what_write_text_leaves(tmp_path, case):
+    locked: list[Path] = []
+
+    def setup(d: Path) -> Path:
+        if case == "existing":
+            (d / "f.md").write_text("old\n")
+        elif case == "symlink":
+            (d / "AGENTS.md").write_text("old\n")
+            os.symlink("AGENTS.md", d / "CLAUDE.md")
+            return d / "CLAUDE.md"
+        elif case == "relative-symlink":
+            (d / "sub").mkdir()
+            (d / "AGENTS.md").write_text("old\n")
+            os.symlink("../AGENTS.md", d / "sub" / "CLAUDE.md")
+            return d / "sub" / "CLAUDE.md"
+        elif case == "dangling":
+            os.symlink("target.md", d / "CLAUDE.md")
+            return d / "CLAUDE.md"
+        elif case == "loop":
+            os.symlink("b", d / "a")
+            os.symlink("a", d / "b")
+            return d / "a"
+        elif case == "no-parent":
+            return d / "missing" / "f.md"
+        elif case == "parent-is-a-file":
+            (d / "file").write_text("x")
+            return d / "file" / "f.md"
+        elif case == "loop-in-the-parent":
+            os.symlink("loop", d / "loop")
+            return d / "loop" / "f.md"
+        elif case == "hard-link":
+            (d / "f.md").write_text("old\n")
+            os.link(d / "f.md", d / "other-name.md")
+        elif case == "read-only-file":
+            (d / "f.md").write_text("old\n")
+            (d / "f.md").chmod(0o444)
+        elif case in ("read-only-directory", "new-in-read-only-directory"):
+            (d / "ro").mkdir()
+            if case == "read-only-directory":
+                (d / "ro" / "f.md").write_text("old\n")
+            (d / "ro").chmod(0o555)
+            locked.append(d / "ro")
+            return d / "ro" / "f.md"
+        return d / "f.md"
+
+    try:
+        old, new = _both(tmp_path, setup)
+    finally:
+        for d in locked:
+            d.chmod(0o755)
+    assert new == old
+
+
+def test_replace_text_keeps_an_existing_mode_and_gives_a_new_file_write_texts(tmp_path):
+    kept = tmp_path / "kept"
+    kept.write_text("old")
+    kept.chmod(0o600)
+    fsio.replace_text(kept, "new")
+    assert _mode(kept) == 0o600
+    (tmp_path / "a").write_text("x")
+    fsio.replace_text(tmp_path / "b", "x")
+    assert _mode(tmp_path / "b") == _mode(tmp_path / "a")
+
+
+def test_replace_text_through_a_link_keeps_the_targets_mode(tmp_path):
+    target = tmp_path / "hook-impl"
+    target.write_text("#!/bin/sh\n")
+    target.chmod(0o755)
+    os.symlink(target, tmp_path / "pre-commit")
+    fsio.replace_text(tmp_path / "pre-commit", "#!/bin/sh\nexit 0\n")
+    assert (tmp_path / "pre-commit").is_symlink()
+    assert _mode(target) == 0o755
+    assert target.read_text() == "#!/bin/sh\nexit 0\n"
+    assert _leftovers(tmp_path) == []
+
+
+def test_replace_text_in_place_still_fsyncs(tmp_path, monkeypatch):
+    (tmp_path / "f.md").write_text("old\n")
+    os.link(tmp_path / "f.md", tmp_path / "g.md")
+    synced: list[int] = []
+    real = os.fsync
+    monkeypatch.setattr(fsio.os, "fsync", lambda fd: (synced.append(fd), real(fd))[1])
+    fsio.replace_text(tmp_path / "f.md", "new\n")
+    assert (tmp_path / "g.md").read_text() == "new\n"
+    assert len(synced) == 1
+    fsio.replace_text(tmp_path / "f.md", "newer\n", fsync=False)
+    assert len(synced) == 1
