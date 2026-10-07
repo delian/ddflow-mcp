@@ -28,4 +28,3 @@ baseline = 6
 # The upgrade manifest (B-upgrade.2-changes.1-manifest): the upgrade plan reads what changed
 # since a project's version; the release lint compares the running knobs with the replay.
 "ddflow/services/upgrade_manifest.py:changes_since" = "B-upgrade.3-plan"
-"ddflow/services/upgrade_manifest.py:knob_defaults" = "B-upgrade.2-changes.2-lint"
