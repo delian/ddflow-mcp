@@ -803,9 +803,10 @@ class EventLog:
             return []
         return sorted(self.dir.glob("*.jsonl"))
 
-    def mark(self) -> LogMark:
-        """A cheap fingerprint of how much log there IS: per shard, its size and the clock
-        on its last line. `os.stat` and one tail read per shard, never a parse.
+    def mark(self, *, clock: bool = True) -> LogMark:
+        """A cheap fingerprint of how much log there IS: per shard, its size and (with
+        `clock`) the clock on its last line. `os.stat`, plus one tail read per shard when
+        the clock is asked for; never a parse.
 
         One mark answers "has anything changed?" for every caller that asks it: a
         decision folded outside the append lock and re-proved under it
@@ -813,6 +814,12 @@ class EventLog:
         It replaces `extent()` (sizes only) and `head()` (three totals), which each missed
         a change the other saw: totals cannot see one shard shrink while another grows by
         the same amount, and sizes ignore the clock.
+
+        `clock=False` is `extent()`'s price -- a `stat` per shard, the clock recorded as 0
+        -- for the paths that run under the append lock or poll: shards are append-only,
+        so a size says they changed, and a tail read per shard there is ~36x dearer on
+        NFS (B4). Only the index needs the clock (`Store.stale`). Compare marks taken
+        with the same `clock`.
 
         **Take it BEFORE the read, never after.** After is unsafe in a way that looks
         fine: a write landing between the read and the mark is recorded in it, so the
@@ -829,14 +836,14 @@ class EventLog:
         """
         out: list[tuple[str, int, int]] = []
         for p in self.shards():
+            high = 0
             try:
                 size = p.stat().st_size
+                tail = _last_line(p) if clock else ""
             except OSError:
-                # Vanished between the glob and the stat: absent from the mark, so the
-                # comparison differs and the caller takes the safe path.
+                # Vanished between the glob and the stat or the tail read: absent from
+                # the mark, so the comparison differs and the caller takes the safe path.
                 continue
-            high = 0
-            tail = _last_line(p)
             if tail:
                 try:
                     high = int(json.loads(tail).get("lamport", 0))
@@ -854,14 +861,15 @@ class EventLog:
         decision is made from reflects every event at the moment of the append". Holding
         the lock across the read is one way to get it; proving, under the lock, that the
         log did not change is another, and it holds the lock for a handful of `stat` calls
-        instead of a read of every shard (~36x dearer on NFS). When the mark HAS changed
+        (`mark(clock=False)`) instead of a read of every shard (~36x dearer on NFS). When
+        the mark HAS changed
         `decide()` runs again inside the lock, which is the old behaviour exactly -- so
         `decide` must be safe to call twice, and must take any clock it uses afresh.
         """
-        before = self.mark()
+        before = self.mark(clock=False)
         decided = decide()
         with self.transaction():
-            if self.mark() != before:
+            if self.mark(clock=False) != before:
                 decided = decide()
             yield decided
 

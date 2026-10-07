@@ -11,8 +11,8 @@ knew it was holding anyone up.
 Two halves, deliberately asymmetric:
 
 * **The waiter watches the log.** Every release, completion and abandonment is an event,
-  so "has anything changed?" is `EventLog.mark()` -- a `stat` and a tail read per shard,
-  no parse -- and the state is re-folded only when it has. A lease that simply EXPIRES appends
+  so "has anything changed?" is `EventLog.mark(clock=False)` -- a `stat` per shard,
+  no reads -- and the state is re-folded only when it has. A lease that simply EXPIRES appends
   nothing, so the state is also re-checked every `RECHECK_S` regardless.
 * **The holder is told, not interrupted.** Waiters register in `.ddflow/local/waits/`,
   which is gitignored: a wait is a fact about a running process on this machine, not a
