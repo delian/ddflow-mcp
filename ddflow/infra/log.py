@@ -862,9 +862,9 @@ class EventLog:
         the lock across the read is one way to get it; proving, under the lock, that the
         log did not change is another, and it holds the lock for a handful of `stat` calls
         (`mark(clock=False)`) instead of a read of every shard (~36x dearer on NFS). When
-        the mark HAS changed
-        `decide()` runs again inside the lock, which is the old behaviour exactly -- so
-        `decide` must be safe to call twice, and must take any clock it uses afresh.
+        the mark HAS changed `decide()` runs again inside the lock, which is the old
+        behaviour exactly -- so `decide` must be safe to call twice, and must take any
+        clock it uses afresh.
         """
         before = self.mark(clock=False)
         decided = decide()
