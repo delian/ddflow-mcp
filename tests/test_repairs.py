@@ -38,7 +38,9 @@ def _raw(repo: Path, kind: str, subject: str, data: dict, *, agent: str = OLD) -
     """Append one event line exactly as an old ddflow wrote it: no stamp of this version."""
     _clock["n"] += 1
     n = _clock["n"]
-    ev = Event(kind, subject, data, agent=agent, lamport=n, ts=f"2026-09-20T10:{n // 60:02d}:{n % 60:02d}Z")
+    ev = Event(
+        kind, subject, data, agent=agent, lamport=n, ts=f"2026-09-20T10:{n // 60:02d}:{n % 60:02d}Z"
+    )
     shard = repo / ".ddflow" / "events" / f"{agent}.jsonl"
     shard.parent.mkdir(parents=True, exist_ok=True)
     with shard.open("a", encoding="utf-8") as fh:
@@ -83,7 +85,9 @@ def _torn(repo: Path) -> None:
 
 
 def _mismatched(repo: Path) -> None:
-    ev = Event("session.note", "s-old", {"text": "said"}, agent=OLD, lamport=99, ts="2026-09-20T11:00:00Z")
+    ev = Event(
+        "session.note", "s-old", {"text": "said"}, agent=OLD, lamport=99, ts="2026-09-20T11:00:00Z"
+    )
     # Edited after it was written: the data changed, the id did not.
     edited = replace(ev, data={"text": "said something else"}, id=ev.compute_id())
     _line(repo, edited.to_json() + "\n")
@@ -207,7 +211,10 @@ def test_a_detector_that_cannot_run_is_unavailable_not_clean(tmp_path):
     _raw(proj, "session.started", "s2", {}, agent="other")
     (p,) = R.pending(_ctx(proj), ["unknown-author-shards"])
     assert p.unavailable == "not a git repository" and not p.findings
-    assert any(n.startswith("unavailable: data repair unknown-author-shards") for n in R.doctor_notes(_ctx(proj)))
+    assert any(
+        n.startswith("unavailable: data repair unknown-author-shards")
+        for n in R.doctor_notes(_ctx(proj))
+    )
 
 
 def test_repair_applied_folds_and_reads_in_history(old):
@@ -227,7 +234,12 @@ def test_unknown_repair_id_is_refused(old):
 
 def _damaged_bug(repo: Path, bug: str) -> None:
     _raw(repo, "bug.found", bug, {"summary": "lost data", "item": "T1", "fix_task": f"fix-{bug}"})
-    _raw(repo, "task.added", f"fix-{bug}", {"title": "fix", "parent": "P1", "tags": ["data-damage"], "fixes": [bug]})
+    _raw(
+        repo,
+        "task.added",
+        f"fix-{bug}",
+        {"title": "fix", "parent": "P1", "tags": ["data-damage"], "fixes": [bug]},
+    )
     _raw(repo, "bug.fixed", bug, {"regression_test": "tests/x.py::t"})
 
 
@@ -275,7 +287,12 @@ def test_doctor_reports_a_pending_repair_once_and_forgets_a_reviewed_author(old)
     assert [n for n in notes if n.startswith("data repair forced-completions")]
     assert [n for n in notes if "no committed history" in n and "stranger" in n]
     assert not [n for n in notes if "unknown-author-shards" in n], "doctor words it once"
-    R.apply(old, EventLog(old, "repairer"), Config.load(old), ["forced-completions", "unknown-author-shards"])
+    R.apply(
+        old,
+        EventLog(old, "repairer"),
+        Config.load(old),
+        ["forced-completions", "unknown-author-shards"],
+    )
     _problems, notes = _doctor(old)
     assert not [n for n in notes if "forced-completions" in n or "no committed history" in n]
 

@@ -120,8 +120,11 @@ TORN = Repair(
 
 def _mismatched_detect(ctx: Context) -> list[Finding]:
     return [
-        Finding(e.id, f"{e.id} ({e.kind} {e.subject} by {e.agent}): content does not match "
-                f"its address (edited after it was written?)")
+        Finding(
+            e.id,
+            f"{e.id} ({e.kind} {e.subject} by {e.agent}): content does not match "
+            f"its address (edited after it was written?)",
+        )
         for e in ctx.events
         if e.id and e.id != e.compute_id()
     ]

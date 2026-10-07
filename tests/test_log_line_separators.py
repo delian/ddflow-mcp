@@ -14,7 +14,7 @@ import pytest
 
 from ddflow.infra.log import EventLog
 
-SEPARATORS = [" ", " ", "\x85", "\x1c", "\x1d", "\x1e", "\x0b", "\x0c", "\r"]
+SEPARATORS = ["\u2028", "\u2029", "\x85", "\x1c", "\x1d", "\x1e", "\x0b", "\x0c", "\r"]
 
 
 @pytest.mark.parametrize("sep", SEPARATORS, ids=[f"U+{ord(s):04X}" for s in SEPARATORS])
