@@ -725,7 +725,10 @@ class Server:
                     code = exit_for(exc)
                     if code == REFUSED:
                         return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
-                    if isinstance(exc, TypeError) or type(exc) in (KeyError, ValueError):
+                    undeclared = getattr(type(exc), "exit_code", None) is None
+                    if undeclared and (
+                        isinstance(exc, TypeError) or type(exc) in (KeyError, ValueError)
+                    ):
                         return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                     if code is None:
                         raise
