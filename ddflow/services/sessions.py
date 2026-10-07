@@ -35,6 +35,7 @@ import textwrap
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Config
@@ -133,14 +134,18 @@ HOOK_START_MAX_S = 30
 
 
 def _age_s(ts: str, now: float | None = None) -> float:
-    """Seconds from `ts` to `now` (default: the current time)."""
-    from datetime import UTC, datetime
-
+    """Seconds from `ts` to `now` (default: the current time); infinite when `ts` is not a
+    timestamp. Any ISO 8601 shape, so `...:00Z` without microseconds is as young as
+    `...:00.000000Z` (Bbf85f6576f)."""
+    # Not `progress.epoch`: its 0.0 failure value is also the epoch instant, and it reads
+    # a time with no zone as host-local. Here a zone-less time is UTC, as the log writes
+    # it -- deliberately different, until the shared clock (B-uni-clock) settles both.
     try:
-        then = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
-    except ValueError:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        then = (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
+    except (ValueError, TypeError, AttributeError, OverflowError, OSError):
         return float("inf")
-    return (time.time() if now is None else now) - then.timestamp()
+    return (time.time() if now is None else now) - then
 
 
 def process_started_at() -> float:
