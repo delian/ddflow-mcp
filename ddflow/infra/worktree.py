@@ -735,7 +735,11 @@ def diff_covers_everything(
     changed = _status_paths(tree, ignore_untracked)
     if changed is None:  # git could not say: never read as "nothing changed"
         return False, ["(git status failed: the diff cannot be checked)"]
-    missing = [p for p in changed if p not in diff and _c_quoted(p) not in diff]
+    missing = [
+        p
+        for p in changed
+        if p not in diff and _c_quoted(p) not in diff and _c_quoted(p, raw_high=True) not in diff
+    ]
     return (not missing), missing
 
 
@@ -744,21 +748,24 @@ _PRINTABLE_ASCII = (0x20, 0x7F)
 _C_ESCAPES = {7: "a", 8: "b", 9: "t", 10: "n", 11: "v", 12: "f", 13: "r", 34: '"', 92: "\\"}
 
 
-def _c_quoted(path: str) -> str:
+def _c_quoted(path: str, *, raw_high: bool = False) -> str:
     """``path`` as git spells it inside a quoted diff header (`quote_c_style`, with the
     default `core.quotepath`): `"` and `\\` escaped, control and non-ASCII bytes as
     `\\ooo` octal -- without the surrounding quotes. The status side is read raw with
     `-z`, the diff side is not, so a name like `a"b` or `café` is matched in its quoted
-    form (B7ab10b58f2)."""
-    out = []
+    form (B7ab10b58f2). ``raw_high``: as git spells it under `core.quotepath=false`,
+    which leaves bytes >= 0x80 as they are (`café\\"b`)."""
+    out: list[bytes] = []
     for b in os.fsencode(path):
         if b in _C_ESCAPES:
-            out.append("\\" + _C_ESCAPES[b])
+            out.append(("\\" + _C_ESCAPES[b]).encode())
+        elif raw_high and b >= _PRINTABLE_ASCII[1] + 1:
+            out.append(bytes([b]))
         elif not _PRINTABLE_ASCII[0] <= b < _PRINTABLE_ASCII[1]:
-            out.append(f"\\{b:03o}")
+            out.append(f"\\{b:03o}".encode())
         else:
-            out.append(chr(b))
-    return "".join(out)
+            out.append(bytes([b]))
+    return os.fsdecode(b"".join(out))
 
 
 def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
