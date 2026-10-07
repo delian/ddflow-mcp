@@ -174,6 +174,7 @@ def _lint_outcome(op: str, repo: Path, cfg, *, waive: str = "", reason: str = ""
             unmanifested=[],
             waived=[],
             warning=f"manifest lint could not run: {exc}",
+            unavailable=str(exc),  # not a clean result: the check did not execute
         )
     data: dict[str, Any] = {
         "policy": policy,
