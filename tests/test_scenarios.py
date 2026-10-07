@@ -182,8 +182,9 @@ def test_crash_recovery_doctor_is_read_inside_the_new_holders_lease(tmp_path):
 #: that reads the bound plus the real `claim` -- at load average 120-220 on the 192-thread
 #: box CI runs on: 3.6-4.8 s (Bb070dd642d). The loaded test adds it to its injection.
 CI_LATENCY_S = 4.8
-#: The lease the loaded test runs under: long enough that one injected check plus
-#: `CI_LATENCY_S` still leaves as much room again for the machine's real cost.
+#: The lease the loaded test runs under: one injected check (TTL/2 + 0.5) plus
+#: `CI_LATENCY_S` leaves 24 - 17.3 = 6.7 s, at least `CI_LATENCY_S` again for the
+#: machine's real cost; the test asserts that room.
 LOADED_TTL_S = 24
 
 
@@ -207,7 +208,8 @@ def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(
 
     monkeypatch.setattr(S, "TTL_S", LOADED_TTL_S)
     slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease
-    assert 2 * slow > S.TTL_S, "the two checks together must still outlive the lease"
+    room = S.TTL_S - (slow + CI_LATENCY_S)  # what one loaded check leaves the machine
+    assert room >= CI_LATENCY_S, f"one check leaves {room:.1f}s, less than CI's own cost"
 
     class Loaded(Scenario):
         slowed: frozenset = frozenset()
