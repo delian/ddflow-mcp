@@ -110,6 +110,10 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
 SEEN_KIND = "ddflow.seen"
 SKEW_OVERRIDDEN_KIND = "skew.overridden"
 UPGRADE_APPLIED_KIND = "upgrade.applied"
+#: A versioned data repair was applied (`services.repairs`, B-upgrade.5-repairs): the repair's
+#: id and the keys of the findings it settled, so the same findings are never offered again.
+#: Like the stamp kinds, an older ddflow skips it with a note.
+REPAIR_APPLIED_KIND = "repair.applied"
 #: The key a session-scoped skew override adds to the `data` of every event written under it:
 #: the version of the (older) ddflow that wrote it. Shown by history, replay and doctor.
 OLDER_MARK = "older_ddflow"

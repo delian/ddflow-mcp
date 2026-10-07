@@ -1389,6 +1389,22 @@
           is refused); `config --set`, `ddflow_configure` and the environment refuse
           it, and so does loading ddflow's own source tree, where the file and the
           code are one commit.
+      release.manifest_lint = 'block'   [default]
+          What a release does when the code changes a config knob (added, default
+          changed, removed) or an event kind that the shipped upgrade manifest
+          (`ddflow/templates/upgrade/`) does not announce. `block` (default): the
+          release stops -- `ddflow version lint`, `ddflow version cut`,
+          scripts/release.sh and the publish workflow exit 3 -- and the message lists
+          the unmanifested changes and the operator's options: have an agent write the
+          manifest entries pre-filled from the diff, waive named changes with `ddflow
+          version lint --waive <change> --reason ...` (recorded, and shown in the next
+          upgrade plan), or change this policy. `warn`: print the same and carry on.
+          `off`: no check. Choosing to waive or to lower the policy is the operator's
+          decision, not an agent's. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'block', the strictest (an
+          unannounced change stops the release); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
       mcp.tools = 'all'   [default]
           Which tools `tools/list` advertises: `core` (the ~30 tools of the daily
           loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons,

@@ -18,40 +18,35 @@ after an upgrade updates the block and leaves your own prose alone.
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from ..infra import paths
-from ..infra.fsio import Unreadable, read_json, replace_text
+from ..infra.fsio import replace_text
 from . import install_info as _INSTALL
+from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
+    SHAPE_COPILOT,
+    SHAPE_MCP_DOT_SERVERS,
+    SHAPE_MCP_SERVERS,
+    SHAPE_NONE,
+    SHAPE_OPENCODE,
+    SHAPE_SERVERS,
+    SHAPE_TOML,
+    UnplaceableConfig,
+    get_server,
+    get_servers,
+    place_server,
+    server_entry_for,
+)
+from .mcpconfig import register as _register_server
 
 #: Where an operator reads the manual step for an agent with no project config.
 _DOCS_HINT = "docs/ddflow/drivers/deltas/"
 
 BEGIN = "<!-- DDFLOW:BEGIN (managed — edits inside this block are overwritten) -->"
 END = "<!-- DDFLOW:END -->"
-
-#: How a server entry nests inside an agent's config file. A VOCABULARY rather than a
-#: chain of `if key == ...`: the writer used to special-case Copilot inline, which worked
-#: for exactly two shapes and could not express a third. Each value is checked against
-#: that agent's own documentation — see `docs/RESEARCH.md` R15.
-SHAPE_MCP_SERVERS = "mcpServers"  #: {"mcpServers": {"ddflow": {command, args}}} -- common
-SHAPE_SERVERS = "servers"  #: {"servers": {"ddflow": {type: "stdio", command, args}}} -- VS Code
-SHAPE_COPILOT = "copilot"  #: {"mcpServers": {"ddflow": {type: "local", ..., tools}}} -- Copilot CLI
-SHAPE_MCP_DOT_SERVERS = "mcp.servers"  #: {"mcp": {"servers": {...}}} -- ZCode (GLM)
-SHAPE_OPENCODE = "opencode"  #: {"mcp": {"ddflow": {type: "local", command: [...]}}}
-SHAPE_TOML = "toml.mcp_servers"  #: [mcp_servers.ddflow] in TOML -- Codex
-#: No project-level MCP config file EXISTS for this agent: it is configured in an IDE
-#: panel, a web UI, or a user-level file outside the repository. The delta doc and
-#: `AGENTS.md` still apply, and those are the parts that make the workflow portable — so
-#: the agent is SUPPORTED, and the honest record is that one step is manual. Inventing a
-#: plausible path would be worse than admitting it: ddflow would write a file the agent
-#: never reads and the operator would believe it was wired up.
-SHAPE_NONE = "none"
 
 
 @dataclass(frozen=True)
@@ -1161,8 +1156,6 @@ def _register_mcp(
             f"own settings (see {_DOCS_HINT})"
         )
     rel = target.config
-    path = repo / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
     # `uvx` fetches and runs the published package in an ephemeral environment, so a
     # project adopting ddflow needs no clone, no virtualenv, no PYTHONPATH and no
     # install step an operator can forget. When ddflow is running from a source
@@ -1170,135 +1163,15 @@ def _register_mcp(
     # otherwise developing ddflow would silently configure the project against the
     # PUBLISHED version instead of the one under test.
     entry = _launch_entry(launch, image)
-
-    if target.shape == SHAPE_TOML:
-        try:
-            text = path.read_text("utf-8") if path.exists() else ""
-        except (UnicodeDecodeError, OSError) as exc:  # B26e804cd45, the TOML half
-            return Refused(f"SKIPPED {rel}: it could not be read ({exc}); add the server by hand")
-        if "[mcp_servers.ddflow]" in text:
-            return f"{rel} already registers ddflow"
-        # tomlcfg.value, not '"{a}"': a quote or backslash in a path wrote an agent
-        # config no TOML parser reads, taking every server in it down (Bb11e7a8186).
-        from ..infra.tomlcfg import value as toml_value
-
-        block = (
-            f"\n[mcp_servers.ddflow]\ncommand = {toml_value(entry['command'])}\n"
-            f"args = {toml_value(list(entry.get('args', [])))}\n"
-        )
-        # The env too: a source-checkout or `--launch python` entry carries PYTHONPATH,
-        # and without it the server cannot import ddflow (roborev on 5282d8d8).
-        if entry.get("env"):
-            block += f"env = {toml_value(dict(entry['env']))}\n"
-        replace_text(path, text.rstrip() + "\n" + block if text.strip() else block.lstrip())
-        return f"registered ddflow in {rel}"
-
-    data: dict = {}
-    if path.exists():
-        read = read_json(path)
-        if isinstance(read, Unreadable) and read.kind == "invalid":
-            return Refused(f"SKIPPED {rel}: it is not valid JSON; add the server by hand")
-        if isinstance(read, Unreadable) and read.kind == "unreadable":
-            return Refused(
-                f"SKIPPED {rel}: it could not be read ({read.detail}); add the server by hand"
-            )
-        # Not an object: place_server refuses it in its own words, as it always has.
-        data = read.value if isinstance(read, Unreadable) else read
-    try:
-        place_server(data, target.shape, "ddflow", entry)
-    except UnplaceableConfig as exc:
-        return Refused(f"SKIPPED {rel}: {exc}; add the server by hand")
-    replace_text(path, json.dumps(data, indent=2) + "\n")
-    return f"registered ddflow in {rel}"
-
-
-def server_entry_for(shape: str, entry: dict) -> dict:
-    """``entry`` rewritten the way THIS agent's config must store it.
-
-    Only opencode (and Kilo, its fork) differs, and it differs in a way that fails silently: `command` is one
-    ARRAY including the arguments, the transport is named rather than inferred, and
-    `enabled` is explicit. Handing it the common `{"command": str, "args": [...]}` form
-    produces valid JSON that starts nothing.
-    """
-    if shape == SHAPE_OPENCODE:
-        out: dict = {
-            "type": "local",
-            "command": [entry["command"], *entry.get("args", [])],
-            "enabled": True,
-        }
-        if entry.get("env"):
-            out["environment"] = entry["env"]
-        return out
-    if shape == SHAPE_SERVERS:
-        # VS Code names the transport in the entry; its own documented example carries
-        # `"type": "stdio"`, so that is what is written rather than relying on it being
-        # inferred from the presence of `command`.
-        return {"type": "stdio", **entry}
-    if shape == SHAPE_COPILOT:
-        # Copilot CLI calls a stdio server "local", and `tools` is its allowlist -- absent,
-        # a server's tools are not offered. `["*"]` means "all of ddflow's tools", which is
-        # the only useful setting for a queue the agent is supposed to drive.
-        return {"type": "local", **entry, "tools": ["*"]}
-    return dict(entry)
-
-
-def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
-    """The dict inside ``data`` that maps server NAME -> entry, for this shape.
-
-    One place that knows where servers live in each file. There used to be three -- a
-    ternary in the adopter, `_json_field` in the companions writer and a
-    `SERVERS_FIELD_AGENTS` set beside it -- so adding an agent meant editing three
-    things that no test tied together, and only one of them could express nesting.
-    """
-    if shape == SHAPE_OPENCODE:
-        path: tuple[str, ...] = ("mcp",)
-    elif shape == SHAPE_MCP_DOT_SERVERS:
-        path = ("mcp", "servers")
-    elif shape in (SHAPE_MCP_SERVERS, SHAPE_COPILOT):
-        path = ("mcpServers",)
-    elif shape == SHAPE_SERVERS:
-        path = ("servers",)
-    else:
-        raise ValueError(f"unknown MCP config shape {shape!r}")
-    node = data
-    for part in path:
-        if create:
-            node = node.setdefault(part, {}) if isinstance(node, dict) else None
-            if not isinstance(node, dict):
-                return None
-        else:
-            node = (node.get(part) if isinstance(node, dict) else None) or {}
-            if not isinstance(node, dict):
-                return None
-    return node
-
-
-class UnplaceableConfig(ValueError):
-    """The operator's file is valid JSON but holds something other than an object where
-    servers live -- `{"mcp": null}`, `{"mcp": ["x"]}`, a top-level list. Replacing it
-    would destroy their data; guessing a merge would be worse. The caller says SKIPPED."""
-
-
-def place_server(data: dict, shape: str, name: str, entry: dict) -> None:
-    """Put one server into ``data`` where ``shape`` says it belongs.
-
-    Mutates in place and preserves every sibling: these files hold the operator's other
-    servers, and a tool that stomps them is a tool nobody runs twice. Raises
-    `UnplaceableConfig` rather than crash (it used to be an `assert`, and a TypeError for
-    a list) when the file holds a non-object where servers go.
-    """
-    container = _server_container(data, shape, create=True)
-    if container is None:
-        raise UnplaceableConfig(f"not a JSON object where {shape!r} servers belong")
-    container[name] = server_entry_for(shape, entry)
-
-
-def get_server(data: dict, shape: str, name: str) -> Any:
-    """What ``data`` currently stores for ``name``, or None. The read half of `place_server`."""
-    container = _server_container(data, shape, create=False)
-    return (container or {}).get(name)
-
-
-def get_servers(data: dict, shape: str) -> dict:
-    """Every server ``data`` stores, by name: the container `get_server` reads, whole."""
-    return dict(_server_container(data, shape, create=False) or {})
+    # The writer `companions add` uses too: parsed, a stale entry refreshed, a file it
+    # cannot read refused (Ba4cc85bdbc: TOML was a substring test).
+    status, msg = _register_server(
+        repo / rel,
+        target.shape,
+        "ddflow",
+        entry,
+        rel=rel,
+        manual="the server",
+        ours="ddflow's launch",
+    )
+    return Refused(msg) if status == "refused" else msg

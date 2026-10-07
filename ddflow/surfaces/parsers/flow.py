@@ -40,6 +40,19 @@ def register(s: argparse._SubParsersAction) -> None:
     vsh.add_argument("--bump", default="", choices=["", "major", "minor", "patch"])
     vsh.add_argument("--line", default="", help="a maintenance line (default: the current one)")
     vsh.set_defaults(fn=cmd_version)
+    vln = ver_s.add_parser(
+        "lint",
+        help="is every knob and event-kind change in this tree announced in the upgrade manifest?",
+    )
+    vln.add_argument(
+        "--waive",
+        default="",
+        metavar="CHANGE",
+        help="let one unmanifested change (<kind>:<key>) ship, recorded with --reason: the "
+        "operator's decision",
+    )
+    vln.add_argument("--reason", default="", help="why --waive")
+    vln.set_defaults(fn=cmd_version)
     vct = ver_s.add_parser(
         "cut", help="tag the next version (gitflow: via a release branch, or a release request)"
     )
