@@ -13,6 +13,7 @@ caller still yields it, byte for byte.
 
 from __future__ import annotations
 
+import inspect
 import re
 
 import pytest
@@ -160,10 +161,15 @@ def test_words_is_not_tokens() -> None:
 def test_no_second_word_splitter_is_left_behind() -> None:
     """The callers that used to spell their own splitter now call `textsim.words`: no
     regular expression over word characters is left in them, whichever way it is spelled."""
-    spelling = re.compile(r"re\.(split|findall|sub|finditer)\(\s*r?[\"'][^\"']*(\\[wW]|\[\^?\\w)")
+    spelling = re.compile(
+        r"re\.(split|findall|sub|finditer|compile)\(\s*r?[\"'][^\"']*(\\[wW]|\[\^?\\w)"
+    )
     for path in ("ddflow/infra/store.py", "ddflow/services/rules.py"):
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
         hits = [n for n, line in enumerate(lines, 1) if spelling.search(line)]
         assert not hits, (path, hits)
     assert MIN_TERM_CHARS is textsim.MIN_WORD_CHARS
+    # and they delegate: the functions themselves name `textsim.words`
+    for fn in (_fts_query, _like_terms, _tokenize):
+        assert "textsim.words(" in inspect.getsource(fn), fn.__name__
