@@ -52,8 +52,43 @@ def _later(delay: float, fn) -> tuple[threading.Thread, dict]:
     return t, box
 
 
+def _once_registered(proj: Path, fn) -> tuple[threading.Thread, dict]:
+    """Run ``fn`` on a thread once the waiter's registration exists -- not after a fixed
+    delay, which a loaded machine outran: the holder acted before anyone waited, and
+    told nobody (Be76ca62819, the class of B5b15b15047)."""
+
+    def run():
+        deadline = time.monotonic() + 15
+        while not WT.live_waiters(proj) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        return fn()
+
+    return _later(0, run)
+
+
+def _slow_registration(monkeypatch) -> None:
+    """A waiter that registers a second late: what a loaded machine does to a fixed delay."""
+    register = WT.register
+
+    def slow_register(*args, **kw):
+        time.sleep(1.0)
+        return register(*args, **kw)
+
+    monkeypatch.setattr(WT, "register", slow_register)
+
+
 def test_a_conflicted_waiter_wakes_when_the_holder_releases(proj):
-    t, box = _later(0.4, lambda: A.release(proj, "T1", agent=HOLDER))
+    _assert_a_release_wakes_the_waiter(proj)
+
+
+def test_a_late_registering_waiter_still_wakes_on_the_release(proj, monkeypatch):
+    """Be76ca62819: under load the release beat the registration and woke nobody."""
+    _slow_registration(monkeypatch)
+    _assert_a_release_wakes_the_waiter(proj)
+
+
+def _assert_a_release_wakes_the_waiter(proj: Path) -> None:
+    t, box = _once_registered(proj, lambda: A.release(proj, "T1", agent=HOLDER))
     started = time.monotonic()
     out = A.wait(proj, item="T2", timeout_s=20, poll_s=0.05, agent=WAITER)
     t.join(5)
@@ -112,7 +147,17 @@ def test_the_holder_is_told_even_when_the_waiter_registers_late(proj, monkeypatc
 
 
 def test_a_dependency_waiter_wakes_when_the_dependency_completes(proj):
-    t, box = _later(0.4, lambda: A.complete(proj, "T1", force=True, agent=HOLDER))
+    _assert_a_completion_wakes_the_waiter(proj)
+
+
+def test_a_late_registering_waiter_still_wakes_on_the_completion(proj, monkeypatch):
+    """Be76ca62819, for a dependency: the completion beat the registration."""
+    _slow_registration(monkeypatch)
+    _assert_a_completion_wakes_the_waiter(proj)
+
+
+def _assert_a_completion_wakes_the_waiter(proj: Path) -> None:
+    t, box = _once_registered(proj, lambda: A.complete(proj, "T1", force=True, agent=HOLDER))
     out = A.wait(proj, item="T3", timeout_s=20, poll_s=0.05, agent=WAITER)
     t.join(5)
     assert out.exit == O.OK, out.reason
