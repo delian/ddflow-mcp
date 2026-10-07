@@ -24,6 +24,7 @@ from ...core.schedule import stale_package_globs  # noqa: F401
 from ...core.tier import unknown_tier_notes  # noqa: F401
 from ...infra import worktree as W  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
+from ...services import repairs as RP  # noqa: F401
 from ...views.markdown import may_hold_work  # noqa: F401
 from .._base import _load  # noqa: F401
 from .health import (  # noqa: F401

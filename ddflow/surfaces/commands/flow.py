@@ -97,6 +97,23 @@ def _pr_threads(a, c: Ctx) -> int:
     return OK
 
 
+def _version_lint(a, c: Ctx) -> int:
+    out = A.version_lint(c.repo, waive=a.waive, reason=a.reason, agent=c.requested_agent)
+    if c.json:
+        return _emit_json(out)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    d = out.data
+    if d["warning"]:
+        print(d["warning"], file=sys.stderr)
+    print(
+        f"release manifest lint ({d['policy']}): "
+        f"{len(d['unmanifested'])} unmanifested, {len(d['waived'])} waived"
+    )
+    return OK
+
+
 def cmd_version(a, c: Ctx) -> int:
     if a.version_cmd == "show":
         out = A.version_show(c.repo, bump=a.bump or "", line=a.line or "", agent=c.requested_agent)
@@ -115,6 +132,8 @@ def cmd_version(a, c: Ctx) -> int:
         print()
         print(d["notes"])
         return OK
+    if a.version_cmd == "lint":
+        return _version_lint(a, c)
     out = A.version_cut(
         c.repo,
         bump=a.bump or "",

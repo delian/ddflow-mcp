@@ -59,6 +59,13 @@ if bad:
 PY
 echo "  $VERSION — ddflow/__init__.py, server.json and every OCI tag agree"
 
+# ---------------------------------------------------------------- 1b. the upgrade manifest
+say "upgrade manifest"
+# A knob or event kind changed with no manifest entry reaches a project's operator
+# unannounced. [release].manifest_lint decides: block (default) fails here, with the
+# options (D-upgrade-manifest-lint); warn prints; off is silent.
+uv run ddflow version lint || die "the release changes knobs or event kinds the upgrade manifest does not announce (see above)"
+
 # ---------------------------------------------------------------- 2. the suite
 say "tests"
 # -n auto, as publish.yml runs it: serial took ~49 min here, parallel about one.

@@ -184,6 +184,12 @@ jobs:
         with:
           ref: ${{ needs.gate.outputs.sha }}
       - uses: astral-sh/setup-uv@v10.2.0
+      - name: Refuse a release the upgrade manifest does not announce
+        # A knob or event kind changed with no entry in ddflow/templates/upgrade/ would
+        # reach a project's operator unannounced. `[release].manifest_lint` (default block)
+        # decides; the failure prints the options (D-upgrade-manifest-lint). Run before the
+        # suite, so it costs seconds, not twelve minutes.
+        run: uv run ddflow version lint
       - name: Refuse a release the MCP registry would reject
         # The registry verifies ownership of every package server.json lists: the PyPI
         # README must carry `mcp-name: <server name>`, each image the

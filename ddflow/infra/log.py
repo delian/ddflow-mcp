@@ -371,7 +371,9 @@ def _parse_lines(chunk: bytes) -> tuple[list[Event], int]:
     """`(events, unparseable-line-count)` for a run of whole lines."""
     out: list[Event] = []
     skipped = 0
-    for raw in chunk.decode("utf-8", errors="replace").splitlines():
+    # "\n" alone ends a line: `splitlines()` also breaks on U+2028, U+2029 and U+0085, which
+    # `canonical` writes raw inside a string, and cut such an event in two (B5035a55092).
+    for raw in chunk.decode("utf-8", errors="replace").split("\n"):
         line = raw.strip()
         if not line:
             continue

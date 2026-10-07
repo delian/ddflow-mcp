@@ -707,7 +707,11 @@ MCP launch, hooks or command files -- and refuses a project that was never adopt
 
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
 them and leaves your own prose alone. It writes the MCP registration into each agent's
-own config location, **merged** with whatever servers are already there. From a source
+own config location, **merged** with whatever servers are already there, through the same
+writer `companions add` uses: an entry that already holds this launch is left untouched, a
+stale `ddflow` entry is refreshed (in `.codex/config.toml` too, where a header that is only
+text -- a comment, say -- no longer counts as a registration), and a config it cannot parse
+is refused with "add the server by hand". From a source
 checkout it points the config at that checkout instead of the published package, so
 developing ddflow does not silently configure your project against the released
 version.
@@ -861,7 +865,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 192 knobs.
+cadences, and the rest of the 193 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2089,7 +2093,8 @@ decision **accepted** — what changes is that none of it is shown anonymously:
 - `ddflow doctor` notes event shards whose agent id has no committed history on the default
   branch (`.ddflow/events/<id>.jsonl` absent from its tree), naming them so a stranger's
   first records are looked at; your own shard is never listed, and when git cannot say the
-  note reads `unavailable`, never clean.
+  note reads `unavailable`, never clean. A shard the operator reviewed (data repair
+  `unknown-author-shards`) is not named again.
 
 ### Similar — "is this already filed?"
 
@@ -3679,7 +3684,7 @@ below is the current, version-based form of that refusal.
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
 checkout running an older ddflow than its teammates, is a fact instead of a guess
-(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Three event kinds, all skipped
+(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Four event kinds, all skipped
 with a note by a ddflow that predates them:
 
 | kind | written | carries |
@@ -3687,6 +3692,7 @@ with a note by a ddflow that predates them:
 | `ddflow.seen` | once per (agent, version), on that agent's first write after a version change | `version`, install kind (`installed` or `source-tree`) |
 | `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version, session, the reason |
 | `upgrade.applied` | when an upgrade is applied (the apply step is a later task) | from, to, categories, backup |
+| `repair.applied` | when a versioned data repair is applied (below) | repair id, since, version, the settled findings' keys and details |
 
 The fold keeps the **highest** version stamped (`State.ddflow_versions`; `ddflow status
 --json` shows it in its ddflow_version field, and `ddflow doctor` names it when there is
@@ -3717,6 +3723,34 @@ guard can refuse; releases before it cannot.
 `[upgrade].skew` is the policy: `refuse` (default), `warn` (write, say so on stderr) or
 `off`. Set it with `ddflow config` or `ddflow_configure`.
 
+### Versioned data repairs
+
+Some bugs leave damage in the log that outlives the fix: events an older ddflow wrote
+before the fix still carry it. A **data repair** finds that damage in a log and mends it by
+appending corrective events. It never edits or deletes a line, so history is never
+rewritten (decision D-upgrade-model, `ddflow/services/repairs/`). Each repair has an id,
+`since` (the first release that no longer causes the damage), a detector, the corrective
+step and a test fixture: a crafted old log carrying that damage. The test checks that the
+detector finds it, the repair mends it, a second run finds nothing, and every original line
+is byte-identical. Applying a repair appends `repair.applied` (the repair id, `since`, the
+version applying it, the keys and descriptions of the findings it settled), so the same
+findings are never offered again. `ddflow history --kind repair` shows it.
+
+| repair | finds | applying it |
+|---|---|---|
+| `orphan-prompts` | prompts and notes recorded with no session id | appends a copy under the nearest session, as `ddflow session adopt-orphans` does |
+| `forced-completions` | items completed with `--force` over unmet conditions, still done | reports and annotates them (the record names each item and what was overridden); the completion stands and `ddflow verify <id>` re-checks it |
+| `unreadable-lines` | shard lines that are not events (a torn append, non-object JSON) | quarantine note: records each line's shard, number and digest |
+| `mismatched-ids` | events whose content does not match their id | quarantine note: records each event id |
+| `unknown-author-shards` | shards by an agent id with no committed history on the default branch | records that the operator reviewed the author. Runs only when named: it is the operator's decision |
+| `old-export-renders` | selected whole-file generated documents rendered by an older ddflow that regenerating would change | regenerates them, as `ddflow export <doc> --update` does. A hand-edited file is never touched |
+
+`ddflow doctor` reports what is pending. A torn line or an edited event is a PROBLEM until
+a repair has quarantined it, and a NOTE after that. A reviewed unknown author is no longer
+named. Doctor only reports: it never applies a repair. A bug fix task tagged
+`data-damage` must ship a repair that names the bug, or a `FOLD_ONLY` entry saying why
+reading the log is already enough. A test on this project's own log enforces this.
+
 ### The upgrade manifest: what changed since your version
 
 Every release ships `ddflow/templates/upgrade/changes.toml` in the wheel: a machine-readable
@@ -3739,6 +3773,22 @@ not yet released is a fragment file of its own under `templates/upgrade/unreleas
 branches adding knobs never edit the same file; cutting a version folds the fragments into
 its release. The history it backfilled from 0.1.3 to 0.2.0: 63 new knobs, 7 changed
 defaults (among them `dedupe.on_match`, `warn` in 0.1.9 and `ask` again in 0.1.10).
+
+**The release lint** (decision D-upgrade-manifest-lint). `ddflow version lint` compares the
+code's knob defaults and event kinds with that replay; `ddflow version cut`,
+`scripts/release.sh` and the publish workflow run it. With `[release].manifest_lint = "block"`
+(the default) a change with no entry stops the release, exit 3, and the message is never a
+bare failure: it lists each unmanifested change (`knob_added:section.knob`, ...) and the
+operator's options. (1) Have an agent write the entries and whatever upgrade repair or note
+a safe upgrade needs: the message pre-fills one fragment per change from the diff, then
+re-run the lint. (2) Waive a named change for this release with `ddflow version lint
+--waive <change> --reason "..."`, recorded in `templates/upgrade/waivers.toml` and shown in
+the next upgrade plan. (3) Change the policy: `ddflow config --set release.manifest_lint warn|off`.
+`warn` prints the same and carries on; `off` is silent. An agent may prepare entries and
+propose; waiving or lowering the policy is the operator's decision. Over MCP,
+`ddflow_version_cut` (also with `dry_run`) runs the lint and `ddflow_configure` sets the
+policy. In a project that does not ship ddflow's own manifest the
+lint does nothing.
 
 In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
 a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
@@ -4315,7 +4365,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 192): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 193): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4590,6 +4640,7 @@ ddflow pr status               every item's request, from the log (no forge call
 ddflow pr threads <id> [--thread T [--reply TEXT] [--resolve]]  review threads, live from the forge; reply and resolve one (2 = forge unreachable)
 ddflow version show            current and next version, why, release notes (2 = nothing new)
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
+ddflow version lint [--waive CHANGE --reason WHY]  is every knob / event-kind change announced in the upgrade manifest? (3 = not, under `[release].manifest_lint = block`)
 ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
 ddflow task add <id> --port-of FIX  a follow-up to FIX: takes the lines FIX reached
@@ -4670,7 +4721,7 @@ declared once and persists — see
 
 ## Configuration
 
-192 knobs across 27 sections, every one documented in place and listed, with its default
+193 knobs across 28 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -4714,8 +4765,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ba8d15c2e471 -->
-<details><summary>All 192 knobs across 27 sections</summary>
+<!-- ddflow:begin README/knobs sha=911611452353 -->
+<details><summary>All 193 knobs across 28 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -4873,6 +4924,7 @@ long default is left to `ddflow config --explain`.
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
+| `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |

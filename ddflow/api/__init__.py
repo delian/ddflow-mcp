@@ -69,6 +69,7 @@ from .flow import (
     promote_deployed,
     promote_status,
     version_cut,
+    version_lint,
     version_show,
 )
 from .gates import Evidence as GateEvidence
@@ -320,6 +321,7 @@ __all__ = [
     "verify_sweep",
     "verify_tool",
     "version_cut",
+    "version_lint",
     "version_show",
     "view_list",
     "view_read",

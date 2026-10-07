@@ -15,7 +15,6 @@ its docstring, which is the discoverability contract this module exists to keep.
 from __future__ import annotations
 
 import dataclasses
-import functools
 import json
 import os
 import sys
@@ -62,7 +61,7 @@ from .config_sections.export import (  # noqa: F401
     ExportConfig,
     _export_table_problem,
 )
-from .config_sections.flow import (
+from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow imports them here
     FLOW_CLAIMS,
     FLOW_FORGES,
     FLOW_INTEGRATIONS,
@@ -98,7 +97,7 @@ from .config_sections.log import (
 from .config_sections.loops import (
     LoopsConfig,
 )
-from .config_sections.mcp import (
+from .config_sections.mcp import (  # noqa: F401 -- re-exported, as before the move
     MCP_TOOL_TIERS,
     McpConfig,
 )
@@ -110,6 +109,10 @@ from .config_sections.prompts import (
 )
 from .config_sections.reinstruct import (
     ReinstructConfig,
+)
+from .config_sections.release import (
+    RELEASE_LINT_POLICIES,  # noqa: F401
+    ReleaseConfig,
 )
 from .config_sections.review import (
     ReviewConfig,
@@ -206,6 +209,7 @@ class Config:
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
+    release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
@@ -546,15 +550,6 @@ _DC, _DS, _DO, _DK = declared_tables()  # the knobs declared on their fields (_d
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     **_DC,
     "worktree.merge_strategy": ("no-ff", "ff-only", "squash"),
-    "flow.model": FLOW_MODELS,
-    "flow.integration": FLOW_INTEGRATIONS,
-    "flow.forge": FLOW_FORGES,
-    "flow.claims": FLOW_CLAIMS,
-    "flow.pr_merge": FLOW_PR_MERGE,
-    "flow.on_changes_requested": FLOW_ON_CHANGES,
-    "flow.port_strategy": FLOW_PORT_STRATEGIES,
-    "gates.enforce_order": ("warn", "block", "off"),
-    "lessons.search_backend": ("fts5", "like"),
     "session.progress_after_complete": PROGRESS_MODES,
     "schedule.ready_policy": ("deps_and_lease", "deps_only"),
     "schedule.cycle_policy": ("error", "warn"),
@@ -563,7 +558,6 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "schedule.parallel": ("auto", "fixed"),
     "review.on_exceed": ("refuse", "warn"),
     "upgrade.skew": UPGRADE_SKEW_POLICIES,
-    "mcp.tools": MCP_TOOL_TIERS,
 }
 
 #: The value each enum knob takes when a config FILE gives it one this code does not know
@@ -580,20 +574,6 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
 KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     **_DS,
     "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
-    "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
-    # D-fallback-no-remote: a typo never makes ddflow push, open a pull request or write
-    # remote refs; outward behaviour happens only when someone sets it correctly.
-    "flow.integration": ("merge", "a typo never pushes or opens a pull request; lands locally"),
-    "flow.forge": ("auto", "no safety dimension; reads the forge from the remote URL"),
-    "flow.claims": (
-        "local",
-        "a typo never writes claim refs to the remote; claims stay in this clone",
-    ),
-    "flow.pr_merge": ("human", "ddflow never merges; a person does"),
-    "flow.on_changes_requested": ("block", "the item is parked for a person"),
-    "flow.port_strategy": ("forward-merge", "no safety dimension; the least bookkeeping"),
-    "gates.enforce_order": ("block", "a gate recorded out of order is refused"),
-    "lessons.search_backend": ("like", "no safety dimension; works on every SQLite build"),
     "session.progress_after_complete": ("on", "no safety dimension; reports the most"),
     "schedule.ready_policy": ("deps_and_lease", "an item another agent leased is not offered"),
     "schedule.cycle_policy": ("error", "a dependency cycle refuses scheduling"),
@@ -605,7 +585,6 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     ),
     "review.on_exceed": ("refuse", "a round past the budget is refused"),
     "upgrade.skew": ("refuse", "an older ddflow's write is refused"),
-    "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
 }
 
 #: Each enum knob's values that make ddflow act OUTSIDE this clone: a push, a pull
@@ -617,15 +596,6 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
 KNOB_OUTWARD: dict[str, frozenset[str]] = {
     **_DO,
     "worktree.merge_strategy": frozenset(),
-    "flow.model": frozenset(),
-    "flow.integration": frozenset({"pr"}),  # pushes the branch, opens a pull request
-    "flow.forge": frozenset(),
-    "flow.claims": frozenset({"remote"}),  # writes refs/ddflow/claims/<id> on the remote
-    "flow.pr_merge": frozenset({"on_approval", "auto"}),  # a merge on the forge
-    "flow.on_changes_requested": frozenset(),
-    "flow.port_strategy": frozenset(),
-    "gates.enforce_order": frozenset(),
-    "lessons.search_backend": frozenset(),
     "session.progress_after_complete": frozenset(),
     "schedule.ready_policy": frozenset(),
     "schedule.cycle_policy": frozenset(),
@@ -634,7 +604,6 @@ KNOB_OUTWARD: dict[str, frozenset[str]] = {
     "schedule.parallel": frozenset(),
     "review.on_exceed": frozenset(),
     "upgrade.skew": frozenset(),
-    "mcp.tools": frozenset(),
 }
 
 #: Numeric knobs whose bad FILE value takes the strictest value (D-trigger-cap-knob): as
@@ -692,10 +661,6 @@ def _int_at_least(n: int) -> Callable[[Any], str]:
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
 _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
     **_DK,
-    # [ids] templates and the one fixed id (the bugs phase): ids are file names, branch
-    # names and glob tokens (D-id-schemes-final). Tolerated in a file (the default stays,
-    # doctor names it), refused by the write paths.
-    **{f"ids.{k}": functools.partial(id_template_problem, k) for k in ID_KINDS},
     "schedule.max_parallel_tasks": _int_at_least(1),
     "schedule.max_parallel_min": _int_at_least(1),
     "schedule.max_parallel_max": _int_at_least(1),

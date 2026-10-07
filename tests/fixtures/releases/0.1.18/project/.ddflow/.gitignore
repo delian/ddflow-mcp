@@ -1,0 +1,21 @@
+# The index and local state are DERIVED from events/ and are rebuildable.
+# They are machine-local on purpose: a committed index resurrects dead agents'
+# leases on every clone, and a committed cache is a merge conflict with no
+# meaningful resolution.
+index.db
+index.db-*
+index.rebuilding*
+events.lock
+# What belongs to THIS machine -- your reviewer endpoints, API-key variable names,
+# test-worker counts -- goes in local/config.toml, local/gates.toml or
+# local/reviewers.toml, read last so it wins. reviewers.toml beside config.toml is
+# ignored as well: a LAN endpoint committed here reaches every clone.
+local/
+/reviewers.toml
+# The lock `config --set` / `workflow gate` take for a read-modify-write of a
+# config file. Without this line `git add .ddflow`, as `init` instructs, committed it.
+.*.lock
+# Every agent's task worktrees (decision D-worktree-home) and per-run logs: git
+# worktrees and scratch, never committed.
+/worktrees/
+/runs/

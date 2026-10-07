@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "repair.applied"
+why = "Records that a versioned data repair was applied (its id, since, the applying version and the findings it settled), so the same findings are not offered again."
+impact = "additive"

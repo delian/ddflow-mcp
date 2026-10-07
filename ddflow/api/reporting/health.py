@@ -13,6 +13,7 @@ from ...core.plain import plain
 from ...core.schedule import stale_package_globs
 from ...core.tier import unknown_tier_notes
 from ...infra import worktree as W
+from ...services import repairs as RP
 from ...views.markdown import may_hold_work
 from .._base import _load
 
@@ -148,34 +149,26 @@ def _primary_mid_merge(repo: Path, problems: list[str], notes: list[str]) -> Non
 _SHARDS_SHOWN = 8
 
 
-def _unknown_author_notes(repo: Path, log) -> list[str]:
+def _unknown_author_notes(repo: Path, log, ctx: RP.Context | None = None) -> list[str]:
     """ONE note naming event shards whose agent id has no committed history.
 
     A pull request can add `.ddflow/events/<anybody>.jsonl`: the log is merged by union
     with content-addressed ids and no signatures, so a new author's first records arrive
     with the standing of everyone else's (`core/provenance.py` marks what they say; this
     says that a stranger said it). "Seen before" is the base branch's committed tree --
-    this agent's own shard is never new to itself. Git unable to say is `unavailable`,
-    never silence: a repository where the check could not run must not read as clean.
+    this agent's own shard is never new to itself -- and a shard the operator reviewed
+    (data repair `unknown-author-shards`) is not named again. Git unable to say is
+    `unavailable`, never silence: a repository where the check could not run must not
+    read as clean.
     """
-    from ...infra import worktree as W
-
-    unavailable = (
-        "unavailable: event-shard authorship was not checked (%s) -- git could not say "
-        "which agent ids are new, so none are reported as known"
-    )
-    shards = {p.name for p in log.shards()} - {log.shard.name}
-    if not shards:
-        return []
-    if not W.git(repo, "rev-parse", "--is-inside-work-tree").ok:
-        return [unavailable % "not a git repository"]
-    base = W.default_branch(repo)
-    if not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
-        return [unavailable % f"no commit on {base!r}"]
-    known = W.git_paths(repo, "ls-tree", "-r", "--name-only", base, "--", ".ddflow/events")
-    if known is None:
-        return [unavailable % f"could not list {base!r}"]
-    new = sorted(shards - {k.rsplit("/", 1)[-1] for k in known})
+    ctx = ctx or RP.context(repo, log, Config.load(repo))
+    try:
+        new, base = RP.unknown_authors(ctx)
+    except RP.Unavailable as exc:
+        return [
+            f"unavailable: event-shard authorship was not checked ({exc}) -- git could not "
+            "say which agent ids are new, so none are reported as known"
+        ]
     if not new:
         return []
     names = ", ".join(n.removesuffix(".jsonl") for n in new[:_SHARDS_SHOWN])
@@ -203,8 +196,7 @@ def _driver_drift_notes(repo: Path) -> list[str]:
 def _orphan_notes(events: list) -> list[str]:
     from ...services import sessions as SS
 
-    adopted = {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
-    lost = sum(1 for o in SS.orphans(events) if o.id not in adopted)
+    lost = len(SS.unadopted_orphans(events))
     if lost <= 0:
         return []
     return [
@@ -267,13 +259,14 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ...views import human
 
     log, cfg, st = _load(repo, agent)
-    # `verify()` already reads the whole log, and the warm parse cache makes a second read
-    # a digest rather than a re-parse (see infra/log.py), so this costs a few ms and saves
+    # One read of the whole log serves the data repairs and every pass below (the warm
+    # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
-    events = log.read_all()
+    repair_ctx = RP.context(repo, log, cfg)
+    events = repair_ctx.events
     store = Store(repo, cfg)
-    problems: list[str] = list(log.verify())
-    notes: list[str] = []
+    # The log's integrity, less what a data repair has quarantined (services.repairs).
+    problems, notes = RP.integrity(repair_ctx)
     # A NOTE, not a problem: the log is append-only, so a shard that once had two
     # writers says so forever, and a doctor that can never pass again is one nobody
     # reads. The clock already reads past it (B190); the shared identity is the fix.
@@ -406,7 +399,8 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
 
     _launcher_findings(repo, problems, notes)
     notes += _driver_drift_notes(repo)
-    notes += _unknown_author_notes(repo, log)
+    notes += _unknown_author_notes(repo, log, repair_ctx)
+    notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
     for f in PR.detect(log.read_all(), st, cfg):
         (problems if f.severity == "block" else notes).append(f.render())

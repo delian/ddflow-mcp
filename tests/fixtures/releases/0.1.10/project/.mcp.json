@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ddflow": {
+      "command": "uvx",
+      "args": [
+        "ddflow-mcp"
+      ]
+    }
+  }
+}

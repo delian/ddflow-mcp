@@ -128,6 +128,24 @@ def _h_upgrade_applied(st: State, ev: Event) -> None:
     )
 
 
+def _h_repair_applied(st: State, ev: Event) -> None:
+    d = ev.data
+    rid = d.get("repair") or ev.subject
+    if not isinstance(rid, str) or not rid:
+        return
+    keys = d.get("findings")
+    st.repairs_applied.setdefault(rid, []).append(
+        {
+            "findings": [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else [],
+            "since": str(d.get("since", "")),
+            "version": str(d.get("version", "")),
+            "events": d.get("events", 0) if isinstance(d.get("events"), int) else 0,
+            "agent": ev.agent,
+            "at": ev.ts,
+        }
+    )
+
+
 def _h_session_ended(st: State, ev: Event) -> None:
     sess = _session(st, ev)
     sess.ended_at = ev.ts
