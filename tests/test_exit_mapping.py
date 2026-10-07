@@ -101,3 +101,16 @@ def test_a_declared_exit_wins_over_the_bad_arguments_reading(repo, monkeypatch):
     reply = _call_raising(repo, monkeypatch, ArgTypeError("typed wrong"))
     assert "bad arguments" not in _text(reply) and "ArgTypeError: typed wrong" in _text(reply)
     assert reply["result"]["_meta"]["exit"] == O.FAIL
+
+
+def test_a_class_named_in_the_table_is_declared_on_mcp_too(repo, monkeypatch):
+    """`_EXIT_BY_NAME` is a declaration like `exit_code`: a ValueError subclass named there
+    keeps its exit over MCP instead of reading as bad arguments."""
+
+    class Named(ValueError):
+        pass
+
+    monkeypatch.setitem(O._EXIT_BY_NAME, f"{Named.__module__}.{Named.__qualname__}", O.REFUSED)
+    assert O.declared_exit(Named("x")) == O.REFUSED
+    reply = _call_raising(repo, monkeypatch, Named("named refusal"))
+    assert "bad arguments" not in _text(reply) and reply["result"]["_meta"]["exit"] == O.REFUSED

@@ -49,6 +49,19 @@ INTERRUPTED = 130
 _EXIT_BY_NAME = {"ddflow.infra.worktree.GitError": FAIL}
 
 
+def declared_exit(exc: BaseException) -> int | None:
+    """The exit `exc`'s class declares -- its `exit_code`, or its entry in `_EXIT_BY_NAME`
+    -- else None. The one answer to "does this class say its own exit?", for `exit_for`
+    and for MCP's bad-arguments reading, which a declared exit overrides."""
+    code = getattr(type(exc), "exit_code", None)
+    if isinstance(code, int):
+        return code
+    for cls in type(exc).__mro__:
+        if (named := _EXIT_BY_NAME.get(f"{cls.__module__}.{cls.__qualname__}")) is not None:
+            return named
+    return None
+
+
 def exit_for(exc: BaseException) -> int | None:
     """The exit an exception raised by a command maps to -- ONE table for the CLI and MCP
     (B5f3a650c40), which disagreed: MCP called every Key/Type/ValueError "bad arguments",
@@ -61,12 +74,8 @@ def exit_for(exc: BaseException) -> int | None:
     argparse has typed the CLI's; a subclass keeps its own exit."""
     if isinstance(exc, KeyboardInterrupt):
         return INTERRUPTED
-    declared = getattr(type(exc), "exit_code", None)
-    if isinstance(declared, int):
+    if (declared := declared_exit(exc)) is not None:
         return declared
-    for cls in type(exc).__mro__:
-        if (named := _EXIT_BY_NAME.get(f"{cls.__module__}.{cls.__qualname__}")) is not None:
-            return named
     if isinstance(exc, (ValueError, KeyError)):
         return FAIL
     return None
