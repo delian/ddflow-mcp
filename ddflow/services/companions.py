@@ -49,7 +49,7 @@ from pathlib import Path
 from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
-from ..infra.fsio import atomic_write, replace_text
+from ..infra.fsio import Unreadable, atomic_write, read_json, replace_text
 from ..infra.tomlcfg import value as toml_value
 from .adopt import (
     AGENT_TARGETS,
@@ -756,7 +756,7 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     """(servers by name, raw text) of one agent config; None when unreadable."""
     try:
         text = path.read_text("utf-8")
-    except OSError:
+    except (UnicodeDecodeError, OSError):  # not UTF-8 is unreadable too (B8bd68c2e6c)
         return None
     if shape == SHAPE_TOML:
         data = _load_toml(text)
@@ -1074,7 +1074,10 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
 
 def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[str, str]:
     """The TOML (codex) half of `register`."""
-    text = path.read_text("utf-8") if path.exists() else ""
+    try:
+        text = path.read_text("utf-8") if path.exists() else ""
+    except (UnicodeDecodeError, OSError) as exc:  # B26e804cd45, the TOML half
+        return "refused", f"SKIPPED {rel}: it could not be read ({exc}); add {c.id} by hand"
     block = f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
     if c.env:
         block += f"env = {_toml(dict(c.env))}\n"
@@ -1155,12 +1158,17 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
 
     data: dict = {}
     if path.exists():
-        try:
-            data = json.loads(path.read_text("utf-8") or "{}")
-        except json.JSONDecodeError:
-            # Checked BEFORE the dry run reports, so a preview never promises a write
-            # that the real call would decline.
+        # Checked BEFORE the dry run reports, so a preview never promises a write that
+        # the real call would decline.
+        read = read_json(path)
+        if isinstance(read, Unreadable) and read.kind == "invalid":
             return "refused", f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
+        if isinstance(read, Unreadable) and read.kind == "unreadable":
+            return "refused", (
+                f"SKIPPED {rel}: it could not be read ({read.detail}); add {c.id} by hand"
+            )
+        # Not an object: the placement below refuses it in its own words, as it always has.
+        data = read.value if isinstance(read, Unreadable) else read
     want = server_entry_for(target.shape, c.entry())
     if get_server(data, target.shape, c.id) == want:
         # IDENTICAL, not merely present. The previous version returned early whenever the

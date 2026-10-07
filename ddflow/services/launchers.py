@@ -15,13 +15,14 @@ Nothing here writes anything; it reads the recorded paths back out of the lines
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from ..infra.fsio import Unreadable, read_json
 
 #: Written by `command_line`: the probe that decides whether the recorded launcher runs.
 _PROBE = re.compile(r'\[ -([xf]) "([^"]+)" \]')
@@ -116,9 +117,8 @@ def check_settings(repo: Path) -> list[Dangling]:
     out: list[Dangling] = []
     for rel in (".claude/settings.json", GEMINI_SETTINGS):
         path = Path(repo) / rel
-        try:
-            data = json.loads(path.read_text("utf-8"))
-        except (OSError, ValueError):
+        data = read_json(path)
+        if isinstance(data, Unreadable):
             continue
         for cmd in _commands(data):
             if any(m in cmd for m in ours):
@@ -150,10 +150,12 @@ def check_mcp(repo: Path) -> list[Dangling]:
         if not rel or rel in seen:
             continue
         seen.add(rel)
+        data = read_json(Path(repo) / rel)
+        if isinstance(data, Unreadable):
+            continue
         try:
-            data = json.loads((Path(repo) / rel).read_text("utf-8"))
             entry = get_server(data, target.shape, "ddflow")
-        except (OSError, ValueError, AttributeError):
+        except (ValueError, AttributeError):
             continue
         cmd, env = _entry_parts(entry)
         if not cmd:
