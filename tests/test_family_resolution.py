@@ -51,3 +51,14 @@ def test_a_preset_reviewer_leaves_the_family_to_the_projects_map(repo) -> None:
     )
     assert code == 0, out + err
     assert _families(repo)["house"] == "house-qwen"
+
+
+def test_detect_shows_the_family_the_loaded_reviewer_resolves(repo, monkeypatch) -> None:
+    """roborev on 8ff9048a: a project map that does not name a model falls back to the
+    shipped one when the reviewer loads; detect must show that same answer."""
+    _project(repo)
+    claude = "claude-sonnet-5"
+    monkeypatch.setattr(R, "detect", lambda *a, **k: [("http://127.0.0.1:9/v1", "x", [claude])])
+    out = AR.reviewers_detect(repo, write=True)
+    [row] = out.data["found"]
+    assert row["family"] == _families(repo)[claude] == R.family_of(claude) != ""
