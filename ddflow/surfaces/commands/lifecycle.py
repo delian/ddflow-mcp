@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from ...api import lifecycle as A
+from ...core import clock
 from ...core.tier import tier_of
 from ...views.markdown import new_reports_line
 from ..context import FAIL, MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
@@ -171,7 +172,7 @@ def _waiting(rows: list, head: str) -> str:
     lines = [head]
     for w in rows:
         what = w["item"] or (f"anything in {w['phase']}" if w["phase"] else "anything ready")
-        lines.append(f"  {w['agent']} — for {what}, {w['waiting_s'] // 60}m so far")
+        lines.append(f"  {w['agent']} — for {what}, {clock.fmt_age(w['waiting_s'])} so far")
     return "\n" + "\n".join(lines)
 
 
