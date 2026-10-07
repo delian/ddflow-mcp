@@ -358,3 +358,80 @@ def test_adopt_repairs_the_native_rule_too(repo):
 
     _adopted_for(repo, "cursor")
     assert _state(repo, ".cursor/rules/ddflow.mdc") == CURRENT
+
+
+# -- D-compat: an argument a release accepted keeps working (Bf84a50bce3) ---------------------
+
+
+def _mcp(repo: Path, name: str, args: dict) -> dict:
+    from ddflow.surfaces.mcp import Server
+
+    return Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        }
+    )["result"]
+
+
+def _tools_list(repo: Path) -> dict:
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    return {t["name"]: t for t in reply["result"]["tools"]}
+
+
+def test_arguments_0_1_15_accepted_are_still_accepted_as_deprecated_no_ops(repo: Path) -> None:
+    """`ddflow_rule_list` took `json` and `limit`, `ddflow_rule_remove` took `reason`; 0.1.18
+    rejected them as unknown arguments. D-compat keeps an old caller working: accepted, hidden
+    from tools/list, ignored, and said once to be deprecated."""
+    run_cli(repo, "init")
+    assert run_cli(repo, "rule", "add", "--id", "r-one", "--title", "One", "--content", "x")[0] == 0
+
+    plain = _mcp(repo, "ddflow_rule_list", {})
+    # limit 0 would empty a list that honoured it: the answer must stay the plain one
+    old = _mcp(repo, "ddflow_rule_list", {"json": True, "limit": 0})
+
+    assert not old["isError"], old
+    assert old["content"][0] == plain["content"][0], "the answer is the same without them"
+    note = [c["text"] for c in old["content"][1:] if "deprecated" in c["text"]]
+    assert len(note) == 1 and "json" in note[0] and "limit" in note[0]
+    assert not any("deprecated" in c["text"] for c in plain["content"])
+
+    gone = _mcp(repo, "ddflow_rule_remove", {"id": "r-one", "reason": "obsolete"})
+    assert not gone["isError"], gone
+    assert any("reason" in c["text"] and "deprecated" in c["text"] for c in gone["content"][1:])
+
+
+def test_a_deprecated_argument_is_not_advertised_and_an_unknown_one_is_still_refused(
+    repo: Path,
+) -> None:
+    run_cli(repo, "init")
+    tools = _tools_list(repo)
+
+    assert set(tools["ddflow_rule_list"]["inputSchema"]["properties"]) == {
+        "tag",
+        "scope",
+        "as_agent",
+    }
+    assert "reason" not in tools["ddflow_rule_remove"]["inputSchema"]["properties"]
+    refused = _mcp(repo, "ddflow_rule_list", {"nonsense": 1})
+    assert refused["isError"] and "unknown argument" in refused["content"][0]["text"]
+
+
+def test_a_deprecated_argument_is_always_a_declared_property_and_never_in_an_error(
+    repo: Path,
+) -> None:
+    """The unknown-argument check reads `properties`; a deprecated name missing from it would
+    be refused before the deprecation is honoured, silently shipping Bf84a50bce3 again. And
+    the error that lists the known arguments must not teach the retired ones."""
+    from ddflow.surfaces.mcp import TOOLS
+
+    for name, spec in TOOLS.items():
+        assert set(spec.get("deprecated") or {}) <= set(spec["properties"]), name
+    run_cli(repo, "init")
+    refused = _mcp(repo, "ddflow_rule_list", {"nonsense": 1})
+    known = refused["content"][0]["text"].split("Known:")[1]
+    assert "json" not in known and "limit" not in known

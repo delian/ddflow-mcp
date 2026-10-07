@@ -38,7 +38,9 @@ SURFACES = Path(__file__).resolve().parent / "surfaces"
 VERSIONS = sorted((p.stem for p in SURFACES.glob("*.json")), key=version_key)
 
 #: (from release, to release, difference) -> the bug that tracks it. Nothing else may differ
-#: non-additively. Remove an entry when its bug is fixed.
+#: non-additively. Remove an entry when its bug is fixed -- except a difference between two
+#: RELEASED snapshots, which can never change: it stays, naming the bug whose fix (an alias in
+#: the current code, D-compat) restores the old behaviour for the release after it.
 DECLARED: dict[tuple[str, str, str], str] = {
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_list.json"): "Bf84a50bce3",
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_list.limit"): "Bf84a50bce3",
