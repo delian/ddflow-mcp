@@ -81,4 +81,15 @@ def test_hash_comment_grammar_and_broken_markers():
 
 
 def test_a_marker_quoted_in_prose_is_not_a_region():
-    assert not M.owns("see `<!-- ddflow:begin doc/main -->` in prose\n")
+    quoted = "see `<!-- ddflow:begin doc/main -->x<!-- ddflow:end doc/main -->` in prose\n"
+    assert not M.owns(quoted)
+
+
+def test_a_non_ascii_digit_in_fmt_is_an_unstamped_header_not_a_crash():
+    t = "<!-- ddflow:begin doc/main ddflow=0.1.5 fmt=\u00b2 sha=abc -->\nx\n<!-- ddflow:end doc/main -->\n"
+    assert M.stamp(t) is None and M.state(t) == "older"
+
+
+def test_unknown_attributes_are_not_carried_across_a_format_level():
+    t = _text(version="0.1.5", fmt=1, extra=(("future", "yes"),))
+    assert "future" not in M.splice(t, "two\n", version="0.2.0", fmt=2)

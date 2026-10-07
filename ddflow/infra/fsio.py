@@ -498,7 +498,9 @@ class Managed:
             return None
         line = text[at[0] : at[1]].strip().removeprefix(self.open).removesuffix(self.close)
         attrs = dict(_ATTR.findall(line))
-        if not {"ddflow", "fmt", "sha"} <= attrs.keys() or not attrs["fmt"].isdigit():
+        if not {"ddflow", "fmt", "sha"} <= attrs.keys() or not (
+            attrs["fmt"].isascii() and attrs["fmt"].isdigit()
+        ):
             return None
         known = {"ddflow", "fmt", "sha"}
         extra = tuple((k, v) for k, v in _ATTR.findall(line) if k not in known)
@@ -564,7 +566,8 @@ class Managed:
         s = self.stamp(text)
         if state == "newer" and s is not None:
             raise NewerContent(f"the {self.name} region", s.version, s.fmt)
-        keep = s.extra if s is not None else ()
+        level = FORMAT_LEVEL if fmt is None else fmt
+        keep = s.extra if s is not None and s.fmt == level else ()
         return self._region().splice(
             text, self.render(body, version=version, fmt=fmt, extra=keep), gap=gap
         )
