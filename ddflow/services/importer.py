@@ -900,7 +900,7 @@ def scan_todos(
         # of what the operator intends, not of the text. Held, not dropped: still
         # searchable, still resolvable as a dependency, and `ddflow unblock <phase>`
         # releases a whole section.
-        archived = any(glob_match(rel, g) for g in archive)
+        archived = any(glob_match(rel, g, bare_any_depth=True) for g in archive)
         heading = ""
         heading_line = 0
         phase_ident = ""
