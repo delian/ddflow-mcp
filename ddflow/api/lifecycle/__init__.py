@@ -80,10 +80,13 @@ from .claim import (  # noqa: F401
 )
 from .complete import (  # noqa: F401
     _abandon_refused,
+    _complete_umbrellas_above,
     _session_model,
+    _umbrella_children,
     abandon,
     block,
     complete,
+    fold,
     remove,
     unblock,
 )
