@@ -156,6 +156,11 @@ def test_a_null_default_round_trips():
         ('[[release]]\nversion = "0.0.9"\n', "oldest first"),
         ('[[release]]\nversion = "0.1.1"\n[[release]]\nversion = "0.1.1"\n', "twice"),
         ('[[release]]\nversion = "soon"\n', "not a release"),
+        ('[release]\nversion = "0.1.1"\n', "array of tables"),
+        (
+            '[[release]]\nversion = "0.1.1"\n[release.change]\nkind = "feature"\nkey = "x"\n',
+            "array of tables",
+        ),
         (
             '[[release]]\nversion = "0.1.1"\n[[release.change]]\nkind = "knob_added"\nkey = "x"\nnew = "ask"\n',
             "not JSON",
@@ -165,6 +170,11 @@ def test_a_null_default_round_trips():
 def test_a_manifest_that_breaks_the_schema_is_refused(body, why):
     with pytest.raises(UM.ManifestError, match=why):
         UM.parse(BASE + body)
+
+
+def test_a_release_that_is_not_a_table_is_refused():
+    with pytest.raises(UM.ManifestError, match="not a table"):
+        UM.parse('release = ["0.1.1"]\n' + BASE)
 
 
 def test_the_manifest_ships_inside_the_package():

@@ -165,7 +165,12 @@ def _toml(text: str, what: str) -> dict[str, Any]:
 def _releases(data: dict[str, Any]) -> list[tuple[str, str, list[Change]]]:
     out: list[tuple[str, str, list[Change]]] = []
     seen: set[str] = set()
-    for i, rel in enumerate(data.get("release") or []):
+    rels = data.get("release") or []
+    if not isinstance(rels, list):
+        raise ManifestError("`release` is an array of tables: write [[release]], not [release]")
+    for i, rel in enumerate(rels):
+        if not isinstance(rel, dict):
+            raise ManifestError(f"release #{i + 1} is not a table")
         version = str(rel.get("version", ""))
         if not version or (version != UNRELEASED and not version_key(version)):
             raise ManifestError(f"release #{i + 1}: version {version!r} is not a release")
@@ -174,17 +179,26 @@ def _releases(data: dict[str, Any]) -> list[tuple[str, str, list[Change]]]:
         seen.add(version)
         cs = [
             _change(version, c, f"release {version} change #{j + 1}")
-            for j, c in enumerate(rel.get("change") or [])
+            for j, c in enumerate(_tables(rel.get("change"), f"release {version}"))
         ]
         out.append((version, str(rel.get("date", "")), cs))
     return out
+
+
+def _tables(raw: Any, where: str) -> list[Any]:
+    """An array of `[[change]]` tables (each checked by `_change`)."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ManifestError(f"{where}: `change` is an array of tables: write [[...change]]")
+    return raw
 
 
 def _fragments(fragments: list[tuple[str, str]]) -> list[Change]:
     return [
         _change(UNRELEASED, c, f"unreleased fragment {name} change #{j + 1}")
         for name, body in sorted(fragments)
-        for j, c in enumerate(_toml(body, f"fragment {name}").get("change") or [])
+        for j, c in enumerate(_tables(_toml(body, f"fragment {name}").get("change"), name))
     ]
 
 
