@@ -686,8 +686,9 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
 
 
 def _wants_delta(repo, cfg, log, it, a, say) -> bool:
-    """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (on
-    in every project) so does a plain review of a gate that already has a recorded one.
+    """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (off
+    unless a project turns it on, decision D-gate-economy 3) so does a plain review of a
+    gate that already has a recorded one.
 
     `--full`, `--force` (a forced FULL round), `--chunk`, `--commit` and `--base` are left
     as they are asked for. A delta is only sound from a head the branch still contains: one

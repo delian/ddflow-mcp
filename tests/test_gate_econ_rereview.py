@@ -127,3 +127,14 @@ def test_an_explicit_delta_is_still_only_the_new_commits(repo, tmp_path):
     assert "delta review of 1 commit since" in out.data["text"], out.data["text"]
     assert "ok = 1" in prompt and "x = 1  # FINDME" not in prompt
     assert "Previous findings" not in prompt  # a delta merges into the record instead
+
+
+def test_the_cli_help_and_the_tool_schema_say_a_plain_re_review_is_full(repo):
+    """They described the old default (a delta) after it flipped (roborev on 4d583a8)."""
+    from ddflow.surfaces.tools import TOOLS
+
+    _code, out, _err = run_cli(repo, "review", "--help")
+    flat = " ".join(out.split())
+    assert "A plain re-review is a full round with the previous findings" in flat, flat
+    assert "this is the default once" not in flat
+    assert "else a delta" not in TOOLS["ddflow_review"]["properties"]["full"][1]
