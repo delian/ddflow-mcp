@@ -455,12 +455,10 @@ def precommit(
     one that exists: which checks gate somebody's commits is theirs to decide, and a
     config they already have is exactly that decision.
     """
-    import contextlib
-    import os
     import shlex
     import shutil
-    import tempfile
 
+    from ..infra import fsio
     from ..services import enforce as E
     from ..services import precommit as PC
 
@@ -521,29 +519,17 @@ def precommit(
                 "to see the proposal, and merge by hand what you want",
                 **data,
             )
-        # Written aside and LINKED into place: the link is atomic and refuses a file made
-        # meanwhile, and a write failing partway never leaves a truncated config that
-        # pre-commit would run and a later --write would refuse to replace.
-        # mkstemp: a name no earlier run (killed, same pid) can have left behind.
+        # fsio's exclusive write: written aside under a unique name and LINKED into
+        # place, so the link is atomic and refuses a file made meanwhile, and a write
+        # failing partway never leaves a truncated config that pre-commit would run and a
+        # later --write would refuse to replace. 0644: a config is read by everyone.
         try:
-            fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-        except OSError as e:
-            return O.failed("precommit", f"could not write {path}: {e}")
-        tmp = Path(tmp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(prop.text)
-            os.chmod(tmp, 0o644)  # mkstemp makes it 0600; a config is read by everyone
-            os.link(tmp, path)
+            fsio.atomic_write(path, prop.text, mode=0o644, exclusive=True)
         except FileExistsError:
             data["exists"] = True
             return O.refused("precommit", f"{path} appeared meanwhile; not replaced", **data)
         except OSError as e:
             return O.failed("precommit", f"could not write {path}: {e}")
-        finally:
-            # Best effort: the answer is decided, and a leftover temp name is unique.
-            with contextlib.suppress(OSError):
-                tmp.unlink()
         data["written"] = data["exists"] = True
         data["activate"] = _activation(path, True, prop.hook_types)
     return O.ok("precommit", **data)
