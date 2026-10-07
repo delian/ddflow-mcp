@@ -528,10 +528,13 @@ def _check_msg(repo: Path, cfg, msg_file: str) -> O.Outcome:
     # HEAD. A stale or planted MERGE_HEAD pointing at HEAD exempted every ordinary
     # commit from the trailer rule (rubber-duck).
     head = G.run(".", "rev-parse", "-q", "--verify", "MERGE_HEAD", timeout=G.PROBE_TIMEOUT)
-    merging = head.ok and (
-        G.run(".", "merge-base", "--is-ancestor", head.out, "HEAD", timeout=G.PROBE_TIMEOUT).code
-        != 0
-    )
+    merging = False
+    if head.ok:
+        # A probe git could not answer is not "not an ancestor": it would exempt the commit.
+        ancestor = G.run(
+            ".", "merge-base", "--is-ancestor", head.out, "HEAD", timeout=G.PROBE_TIMEOUT
+        )
+        merging = not ancestor.unavailable and ancestor.code != 0
     code, msg = E.check_item_trailer(
         text,
         list(cfg.enforce.item_trailer_keys) or ["Item"],
