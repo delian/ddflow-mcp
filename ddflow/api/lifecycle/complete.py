@@ -9,7 +9,7 @@ from typing import Any
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import ABANDONED, DONE, REVIEW, State
+from ...core.model import ABANDONED, DONE, REVIEW, State, fold
 from ...services import leases as L
 from .._base import _load
 from ._common import _require
@@ -62,6 +62,7 @@ def complete(
     it = _require(st, item, "item.completed")
     if isinstance(it, O.Outcome):
         return it
+    umbrella = _umbrella_children(st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()]
@@ -84,6 +85,11 @@ def complete(
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
+    if umbrella:
+        # Its work is its sub-tasks', each of which ran its own pipeline: the umbrella
+        # has no diff for implement, unit_tests or merge to judge (B651a63e574). An open
+        # bug it was filed to fix still holds it, as for any item.
+        v.blockers = [b for b in v.blockers if b.startswith(CM.OPEN_BUG_BLOCKER)]
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
@@ -144,6 +150,8 @@ def complete(
             "kind": it.kind,
             "forced": forced,
             "overridden": v.blockers if force else [],
+            # Optional, like `changelog`: the sub-tasks a settled umbrella completed with.
+            **({"umbrella": umbrella} if umbrella else {}),
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
@@ -151,7 +159,6 @@ def complete(
     )
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
-    from ...core.model import fold
     from ...services import progress_line as PL
 
     # The item is complete and released by now: a report that cannot be built must
@@ -168,8 +175,45 @@ def complete(
         rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
         if rr.outcomes:
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
+    # A split task "completes when its children do" (B651a63e574): the last sub-task's
+    # completion completes its umbrella, and that one's, up the chain.
+    extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _umbrella_children(st: State, it) -> list[str]:
+    """The done sub-tasks of a SETTLED umbrella, or [] when ``it`` is not one: a task split
+    into sub-tasks, every one settled and at least one done.
+
+    Its work is its sub-tasks', each of which ran its own pipeline (B651a63e574). All of
+    them abandoned is not the work finished, and a phase keeps its own close."""
+    if it.kind != "task" or it.state in (DONE, ABANDONED):
+        return []
+    below = sorted(st.descendants(it.id))
+    if not below or st.open_descendants(it.id):
+        return []
+    return [i for i in below if st.items[i].state == DONE]
+
+
+def _complete_umbrellas_above(repo: Path, log, cfg, item: str, agent: str) -> dict[str, Any]:
+    """Complete the task umbrella just above ``item`` if this completion settled it --
+    through `complete` itself, so it is recorded like any completion and climbs on from
+    there. ``{"umbrellas_completed": [...]}``, plus ``umbrella_refused`` with the reason
+    when that umbrella's own completion was refused (an open bug it was filed to fix):
+    the caller's success must not hide an umbrella left open."""
+    st = fold(log.read_all(), strict=False)
+    parents = st.ancestors(item)
+    if not parents or not _umbrella_children(st, parents[0]):
+        return {"umbrellas_completed": [], "umbrella_refused": {}}
+    up = parents[0].id
+    done = complete(repo, up, agent=agent)
+    if done.exit != O.OK:
+        return {"umbrellas_completed": [], "umbrella_refused": {up: done.reason}}
+    return {
+        "umbrellas_completed": [up, *done.data.get("umbrellas_completed", [])],
+        "umbrella_refused": dict(done.data.get("umbrella_refused") or {}),
+    }
 
 
 def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
