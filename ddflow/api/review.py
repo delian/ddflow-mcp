@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -1029,7 +1028,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
 
     `gate` may name several gates, comma-separated (`rubber_duck,critic`): under
     `[review].combined_under_lines` changed lines that is ONE review recorded for each,
-    otherwise one review per gate, run at once (`_review_gates`, decision D-gate-economy 2).
+    otherwise one review per gate (`_review_gates`, decision D-gate-economy 2).
     One gate is `_review_gate`, whose docstring has the rest.
     """
     args = dict(locals())
@@ -1039,42 +1038,57 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     return _review_gate(**{**args, "gate": asked[0] if asked else gate})
 
 
-def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
-    """Several gates in one call: combined when the change is small, else in parallel.
+#: What each review gate asks of a reviewer, for a combined review's intent. A gate with
+#: no entry here is never combined: its lens is whatever its own prompt says.
+_LENSES = {
+    "rubber_duck": "refute the change: find the input that makes it wrong",
+    "critic": "criticise it: a wrong design, a missing or vacuous test, a promise the "
+    "code does not keep",
+}
 
-    Combined: one reviewer request whose intent names every gate's lens, recorded for each
-    gate with the same evidence and a shared `review_id` (so each gate's findings can be
-    triaged on its own). Not for `--chunk` or `--delta`, which re-run part of ONE gate's
-    record, nor when a gate other than the first is out of rounds -- then each gate runs,
-    and is refused, on its own. The change is measured as the changed lines of the diff
-    the review would send.
+
+def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
+    """Several gates in one call: combined when the change is small, else one by one.
+
+    Combined: ONE full review whose intent names every gate's lens, recorded for each gate
+    with the same findings and a shared `review_id` (each gate's findings are triaged on
+    that gate). Only for a plain review of known lenses (`_LENSES`) with every gate in
+    budget: `--chunk`, `--delta`, `--commit` and `--base` work on one gate's record, and a
+    gate out of rounds must be refused on its own -- so those run gate by gate. The change
+    is measured as the changed lines of the diff a full review would send.
     """
     repo, item = args["repo"], args["item"]
     log, cfg, st = _load(repo, args["agent"])
     under = int(cfg.review.combined_under_lines or 0)
-    lines = 0 if (args["chunks"] or args["delta"] or under <= 0) else _changed_lines(cfg, st, args)
-    if 0 < lines < under and not _any_out_of_rounds(log, cfg, item, asked[1:], args):
+    plain = not (args["chunks"] or args["delta"] or args["commit"] or args["base"])
+    known = all(g in _LENSES for g in asked)
+    lines = _changed_lines(cfg, st, args) if plain and known and under > 0 else 0
+    if 0 < lines < under and not _any_out_of_rounds(log, cfg, item, asked, args):
         return _review_combined(asked, args, lines, under, log, cfg)
-    return _review_parallel(asked, args)
+    return _review_each(asked, args)
 
 
 def _changed_lines(cfg, st, args: dict[str, Any]) -> int:
-    """Added plus removed lines of the diff a full review of ``args`` would send."""
-    if args["commit"]:
-        diff, _how = commit_diff(args["repo"], args["commit"])
-    else:
-        diff, _how = diff_for(
-            args["repo"], cfg, st, args["item"], args["base"],
-            branch=args["branch"], called_from=args["called_from"],
-        )  # fmt: skip
-    return sum(
-        1
-        for ln in diff.splitlines()
-        if ln[:1] in "+-" and not ln.startswith(("+++", "---")) and ln.strip()
-    )
+    """Added plus removed lines of the diff a full review of ``args`` would send: lines
+    inside a hunk only, so a content line that itself starts with `++` or `--` counts and a
+    file header never does."""
+    diff, _how = diff_for(
+        args["repo"], cfg, st, args["item"], args["base"],
+        branch=args["branch"], called_from=args["called_from"],
+    )  # fmt: skip
+    n, in_hunk = 0, False
+    for ln in diff.splitlines():
+        if ln.startswith("diff --git "):
+            in_hunk = False
+        elif ln.startswith("@@"):
+            in_hunk = True
+        elif in_hunk and ln[:1] in ("+", "-"):
+            n += 1
+    return n
 
 
 def _any_out_of_rounds(log, cfg, item: str, gates: list[str], args: dict[str, Any]) -> bool:
+    """Would a full round of any of ``gates`` be refused? Then none is combined."""
     if not item:
         return False
     quiet = lambda _line: None  # noqa: E731 -- the gate's own run says it, if it comes to that
@@ -1095,64 +1109,71 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
     _l, _c, st = _load(args["repo"], args["agent"])
     item = args["item"]
     rid = secrets.token_hex(6)
-    lenses = " and ".join(asked)
+    names = " and ".join(asked)
     intent = (args["intent"] or _item_intent(st.items.get(item))).strip()
     intent += (
         f"\n\nCombined review (decision D-gate-economy 2): this ONE review is recorded for the "
-        f"{lenses} gates, so apply each one's lens: refute the change -- find the input that "
-        "makes it wrong (rubber_duck) -- and criticise it: a wrong design, a missing or "
-        "vacuous test, a promise the code does not keep (critic)."
+        f"{names} gates, so apply each one's lens -- "
+        + "; ".join(f"{g}: {_LENSES[g]}" for g in asked)
+        + "."
     )
     say(
         f"combined review {rid}: {lines} changed line(s), under [review].combined_under_lines "
-        f"= {under}, so one review stands for {lenses}"
+        f"= {under}, so one review stands for {names}"
     )
+    # A FULL round whatever `delta_default` says: the other gates copy its record, and a
+    # delta's record is merged with the first gate's own earlier findings.
     out = _review_gate(
         **{
             **args,
             "gate": asked[0],
             "intent": intent,
+            "full": True,
             "extra_evidence": {"review_id": rid, "combined_gates": asked},
         }
     )
     _l, _c, st = _load(args["repo"], args["agent"])
     rec = st.items[item].gates.get(asked[0]) if item in st.items else None
+    gates = GD.load_gates(args["repo"], cfg)
     if rec is not None and (rec.evidence or {}).get("review_id") == rid:
-        gates = GD.load_gates(args["repo"], cfg)
         for g in asked[1:]:
             ev = {**rec.evidence, **_rounds_for(log, item, g, rec.evidence)}
             GD.record(
-                log,
-                cfg,
-                item,
-                g,
-                rec.outcome,
-                by=rec.by,
-                reason=rec.reason,
-                evidence=ev,
-                gates=gates,
-            )
+                log, cfg, item, g, rec.outcome,
+                by=rec.by, reason=rec.reason, evidence=ev, gates=gates,
+            )  # fmt: skip
             say(f"recorded {item}.{g} = {rec.outcome} (the same combined review {rid})")
+    elif item and out.data.get("outcome") == "unavailable":
+        # No review happened (no reviewer, an empty diff): each gate says so, not only the
+        # first -- a gate that was asked for and shows nothing reads as never run.
+        for g in asked[1:]:
+            GD.record(log, cfg, item, g, "unavailable", reason=out.reason, gates=gates)
+            say(f"recorded {item}.{g} = unavailable (the combined review {rid} could not run)")
     data = {**out.data, "gates": asked, "review_id": rid}
     data["text"] = "\n".join([say_out[0], data.get("text", ""), *say_out[1:]]).strip()
     return O.Outcome(kind=out.kind, data=data, exit=out.exit, reason=out.reason)
 
 
 def _rounds_for(log, item: str, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
-    """The round counts of ``gate``'s own record: the combined review is one more round of
-    each gate it stands for, not of the first one only."""
+    """The round counts of ``gate``'s own record: the combined review is one more full
+    round of each gate it stands for, and leaves each gate's delta count as it was."""
     counted = ev.get("review_kind") == "full"
     done = _full_rounds(log, item, gate)
-    out: dict[str, Any] = {"rounds": done + (1 if counted else 0)}
+    out: dict[str, Any] = {
+        "rounds": done + (1 if counted else 0),
+        "delta_rounds": _delta_rounds(log, item, gate),
+    }
     if counted:
         out["round"] = done + 1
     return out
 
 
-def _review_parallel(asked: list[str], args: dict[str, Any]) -> O.Outcome:
-    """One review per gate, run at once: the reviews are minutes each and independent."""
-    with ThreadPoolExecutor(max_workers=len(asked)) as pool:
-        outs = list(pool.map(lambda g: _review_gate(**{**args, "gate": g}), asked))
+def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
+    """One review per gate, one after the other: the event log's read caches and its
+    transaction guard are per process and unlocked, so two reviews in threads could fold
+    an event twice or append outside the lock (why MCP offloads to a PROCESS). Each review
+    already sends its chunks at once."""
+    outs = [_review_gate(**{**args, "gate": g}) for g in asked]
     worst = max(outs, key=lambda o: (o.exit != O.OK, o.exit))
     text = "\n\n".join(
         f"== {g}\n{o.data.get('text', o.reason)}" for g, o in zip(asked, outs, strict=True)

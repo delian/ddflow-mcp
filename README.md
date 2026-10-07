@@ -1298,9 +1298,10 @@ review T1 --gate rubber_duck,critic` on a change with fewer than
 request whose intent names both lenses -- refute the change, and criticise its design and
 tests -- and records the outcome for each gate with the same evidence and a shared
 `review_id` (each gate's findings are triaged on that gate); the output starts `combined
-review <id>: N changed line(s) ...`. A larger change runs one review per gate, at once.
-`--chunk` and `--delta` work on one gate's record, so with several gates they run per gate;
-so does a pair where a gate past the first is out of rounds.
+review <id>: N changed line(s) ...`; it is a full round of each gate. A larger change runs
+one review per gate, one after the other. `--chunk`, `--delta`, `--commit` and `--base` work
+on one gate's record, so with several gates they run per gate; so does a pair where either
+gate is out of rounds.
 
 **Delta re-reviews, on request.** `--delta` (MCP `delta=true`), or `review.delta_default =
 true` for every plain re-review, is for a diff too large to send twice. Once a gate has a
