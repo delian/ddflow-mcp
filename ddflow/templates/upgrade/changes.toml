@@ -1,0 +1,905 @@
+#  The ddflow upgrade manifest (B-upgrade.2-changes): what changed in each release.
+#  Read by ddflow.services.upgrade_manifest; rebuilt by `scripts/upgrade_manifest.py
+#  backfill`, which keeps every hand-written why/effect/impact/enable and every refresh,
+#  repair and feature entry. Defaults are JSON-encoded strings. Changes not yet released
+#  are one fragment file each under unreleased/.
+schema_version = 1
+
+[base]
+version = "0.1.3"
+event_kinds = [
+    'bug.fixed',
+    'bug.found',
+    'bug.invalid',
+    'cadence.ran',
+    'decision.recorded',
+    'decision.superseded',
+    'external.observed',
+    'flow.chosen',
+    'gate.failed',
+    'gate.out_of_order',
+    'gate.partial',
+    'gate.passed',
+    'gate.skipped',
+    'gate.started',
+    'gate.unavailable',
+    'item.abandoned',
+    'item.blocked',
+    'item.completed',
+    'item.resolved',
+    'item.started',
+    'item.unblocked',
+    'job.ended',
+    'job.started',
+    'lease.acquired',
+    'lease.expired',
+    'lease.released',
+    'lease.renewed',
+    'lesson.recorded',
+    'memory.forgotten',
+    'memory.recorded',
+    'phase.added',
+    'phase.removed',
+    'phase.updated',
+    'port.applied',
+    'pr.changes_requested',
+    'pr.closed',
+    'pr.merged',
+    'pr.opened',
+    'pr.synced',
+    'release.closed',
+    'release.opened',
+    'release.tagged',
+    'research.recorded',
+    'session.ended',
+    'session.note',
+    'session.prompt',
+    'session.started',
+    'task.added',
+    'task.removed',
+    'task.updated',
+    'worktree.adopted',
+    'worktree.created',
+    'worktree.merged',
+    'worktree.removed',
+]
+
+[base.knobs]
+"agent.families" = "{\"claude\": \"anthropic\", \"codex\": \"openai\", \"command\": \"cohere\", \"deepseek\": \"deepseek\", \"ernie\": \"baidu\", \"gemini\": \"google\", \"gemma\": \"google\", \"glm\": \"zhipu\", \"gpt\": \"openai\", \"granite\": \"ibm\", \"grok\": \"xai\", \"kimi\": \"moonshot\", \"llama\": \"meta\", \"minimax\": \"minimax\", \"mistral\": \"mistral\", \"mixtral\": \"mistral\", \"nemotron\": \"nvidia\", \"o1\": \"openai\", \"o3\": \"openai\", \"phi\": \"microsoft\", \"qwen\": \"alibaba\", \"yi-\": \"01ai\"}"
+"agent.id" = "\"\""
+"agent.reviewer_family_must_differ" = "true"
+"cadence.architecture_review_every_phases" = "2"
+"cadence.dedupe_sweep_every_tasks" = "4"
+"cadence.every_days" = "[]"
+"cadence.integration_tests_every_tasks" = "5"
+"cadence.lessons_pass_every_phases" = "4"
+"cadence.max_missed" = "1"
+"cadence.mutation_tests_every_phases" = "3"
+"companions.probe_cache_ttl_s" = "300"
+"enforce.behind" = "\"warn\""
+"enforce.commit_without_lease" = "\"warn\""
+"enforce.doc_exclude" = "[\"**/CHANGELOG*\", \"**/HISTORY*\", \"**/NEWS*\", \".ddflow/**\", \"docs/ddflow/**\"]"
+"enforce.doc_globs" = "[\"**/*.md\", \"**/*.rst\", \"**/*.adoc\"]"
+"enforce.forbidden_trailers" = "[]"
+"enforce.generated_views" = "\"block\""
+"enforce.install_hooks_on_setup" = "true"
+"enforce.item_trailer_keys" = "[\"Item\"]"
+"enforce.max_behind" = "50"
+"enforce.require_item_trailer" = "false"
+"enforce.stale_docs" = "\"warn\""
+"enforce.stale_rules" = "\"block\""
+"enforce.trailer_waivers" = "{}"
+"flow.auto_promote" = "[]"
+"flow.bugfix_prefix" = "\"bugfix/\""
+"flow.bugfix_tags" = "[\"bug\", \"bugfix\", \"fix\"]"
+"flow.current_line" = "\"current\""
+"flow.develop_branch" = "\"develop\""
+"flow.environments" = "[]"
+"flow.feature_prefix" = "\"feature/\""
+"flow.forge" = "\"auto\""
+"flow.hotfix_prefix" = "\"hotfix/\""
+"flow.hotfix_tags" = "[\"hotfix\"]"
+"flow.initial_version" = "\"0.1.0\""
+"flow.integration" = "\"merge\""
+"flow.lines" = "{}"
+"flow.model" = "\"trunk\""
+"flow.on_changes_requested" = "\"reopen\""
+"flow.port_strategy" = "\"forward-merge\""
+"flow.pr_draft" = "false"
+"flow.pr_labels" = "[]"
+"flow.pr_merge" = "\"on_approval\""
+"flow.pr_reviewers" = "[]"
+"flow.production_branch" = "\"\""
+"flow.release_prefix" = "\"release/\""
+"flow.remote" = "\"origin\""
+"flow.stack" = "true"
+"flow.sync_on_next" = "true"
+"flow.tag_prefix" = "\"v\""
+"gates.allow_skip_with_reason" = "true"
+"gates.enforce_order" = "\"warn\""
+"gates.evidence_required" = "[\"unit_tests\", \"rubber_duck\", \"critic\", \"standards\", \"docs\"]"
+"gates.phase_pipeline" = "[\"research\", \"tasks\", \"unit_tests\", \"bug_hunt\", \"dedupe\", \"live_test\", \"corrections\", \"docs\", \"merge\"]"
+"gates.promotion_pipeline" = "[\"unit_tests\", \"merge\"]"
+"gates.rate_max_fail" = "0.9"
+"gates.rate_min_runs" = "5"
+"gates.require_outcome" = "true"
+"gates.required" = "[\"implement\", \"unit_tests\", \"merge\"]"
+"gates.task_pipeline" = "[\"research\", \"rules\", \"implement\", \"rubber_duck\", \"critic\", \"standards\", \"unit_tests\", \"bug_hunt\", \"dedupe\", \"merge\"]"
+"gates.unavailable_is_failure" = "false"
+"importer.archive_globs" = "[]"
+"importer.decision_globs" = "[]"
+"importer.journal_globs" = "[]"
+"importer.lesson_globs" = "[]"
+"importer.lesson_summary_globs" = "[]"
+"importer.max_tasks" = "200"
+"importer.memory_globs" = "[]"
+"importer.preview_rows" = "8"
+"importer.research_globs" = "[]"
+"importer.todo_globs" = "[]"
+"lease.acquire_timeout_s" = "30"
+"lease.grace_s" = "120"
+"lease.heartbeat_s" = "300"
+"lease.reclaim_policy" = "\"report\""
+"lease.ttl_s" = "1800"
+"lessons.auto_capture_on_bug" = "true"
+"lessons.cadence_growth_pct" = "20.0"
+"lessons.cadence_min_entries" = "25"
+"lessons.max_results" = "5"
+"lessons.reflect_after_items" = "3"
+"lessons.require_regression_test" = "true"
+"lessons.search_backend" = "\"fts5\""
+"lessons.snippet_chars" = "320"
+"log.max_cached_events" = "100000"
+"log.reuse_parsed" = "true"
+"loops.max_claims_per_item" = "3"
+"loops.max_duplicate_items" = "2"
+"loops.max_gate_flaps" = "4"
+"loops.max_reopens" = "2"
+"loops.no_progress_window" = "60"
+"loops.on_detect" = "\"warn\""
+"memory.brief_items" = "12"
+"memory.max_chars" = "280"
+"prompts.gate_instruction" = "\"\""
+"prompts.mcp_instructions" = "\"\""
+"prompts.review_system" = "\"\""
+"prompts.review_user" = "\"\""
+"prompts.session_brief_header" = "\"\""
+"reinstruct.enabled" = "true"
+"reinstruct.every_calls" = "12"
+"reinstruct.every_seconds" = "240"
+"reinstruct.max_items" = "3"
+"schedule.bugs_first" = "true"
+"schedule.cycle_policy" = "\"error\""
+"schedule.empty_phase" = "\"note\""
+"schedule.max_parallel_tasks" = "4"
+"schedule.ready_policy" = "\"deps_and_lease\""
+"schedule.repos" = "[]"
+"schedule.resources" = "[]"
+"schedule.unknown_dep_policy" = "\"block\""
+"session.brief_lesson_count" = "4"
+"session.brief_max_tokens" = "1200"
+"session.log_prompts" = "true"
+"session.redact_extra" = "[]"
+"session.redact_patterns" = "[\"(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\\\s*[:=]\\\\s*\\\\S+\", \"(?i)\\\\b(bearer|basic|token)\\\\s+[A-Za-z0-9._~+/=-]{12,}\", \"(?i)\\\\b(gh[pousr]_[A-Za-z0-9]{16,})\\\\b\", \"(?i)\\\\b(sk-[A-Za-z0-9_-]{16,})\\\\b\", \"(?i)\\\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\\\b\", \"\\\\bAKIA[0-9A-Z]{16}\\\\b\", \"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----\", \"(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----\"]"
+"session.replay_verify_diffs" = "true"
+"worktree.adopt_existing" = "true"
+"worktree.base_ref" = "\"\""
+"worktree.branch_prefix" = "\"ddflow/\""
+"worktree.enabled" = "true"
+"worktree.local_files" = "[]"
+"worktree.max_parallel" = "4"
+"worktree.merge_strategy" = "\"no-ff\""
+"worktree.remove_on_merge" = "true"
+"worktree.root" = "\"../.ddflow-worktrees\""
+"worktree.sync_before_start" = "true"
+
+[[release]]
+version = "0.1.4"
+date = "2026-10-01"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.routers"
+new = "{\"hydrafusion\": []}"
+why = "Model-name substring to the SET of families a router author draws on -- a model that routes each task across providers, such as Copilot's HydraFusion."
+impact = "additive"
+
+[[release]]
+version = "0.1.5"
+date = "2026-10-01"
+
+[[release]]
+version = "0.1.6"
+date = "2026-10-01"
+
+[[release]]
+version = "0.1.7"
+date = "2026-10-01"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.append_only_globs"
+new = "[]"
+why = "Files every item APPENDS to -- a changelog, a research log: [\"docs/CHANGELOG.md\"]."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.shared_globs"
+new = "[]"
+why = "Files EVERY item edits that ddflow must not merge for you -- generated files (a regenerated config, a lockfile): [\"configs/default.toml\"]."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "reviewer.approved"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "reviewer.configured"
+impact = "additive"
+
+[[release]]
+version = "0.1.8"
+date = "2026-10-02"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.ask_threshold"
+new = "0.55"
+why = "Cosine similarity (0-1) at which an add must be answered before it proceeds (under on_match = 'ask'). 0.55 from the research: on ddflow's labelled records about half of real duplicates score above it and over three quarters of what does..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.kinds"
+new = "[\"bug\", \"task\", \"phase\", \"lesson\", \"decision\", \"research\", \"memory\"]"
+why = "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.max_candidates"
+new = "3"
+why = "Most similar records shown for one add (records whose id the new text names are shown as well)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.min_words"
+new = "8"
+why = "Distinct content words a record needs before a score alone makes an add ask."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.on_match"
+new = "\"ask\""
+why = "What an add does when it looks like an existing record. 'ask' (default): it is refused until answered new / extends X / duplicate of X / related X -- a prompt on a terminal, exit 3 with the ready commands for a script, a re-call with rel..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.show_floor"
+new = "0.35"
+why = "Cosine similarity (0-1) at which an existing record is listed beside an add, without asking. 0.35 from the research: below it, related records are rare and listing them is noise."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.readme_code_globs"
+new = "[\"ddflow/**\"]"
+why = "Paths whose change is user-visible and so should reach the README (readme_with_code), in git's glob pathspec syntax."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.readme_files"
+new = "[\"README.md\"]"
+why = "The files that count as updating the README for readme_with_code, as paths from the repository root (`docs/README.md` is not `README.md`)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.readme_with_code"
+new = "\"warn\""
+why = "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --o..."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "link.recorded"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "record.extended"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "review.triaged"
+impact = "additive"
+
+[[release]]
+version = "0.1.9"
+date = "2026-10-02"
+
+[[release.change]]
+kind = "knob_changed"
+key = "dedupe.on_match"
+old = "\"ask\""
+new = "\"warn\""
+why = "What an add does when it looks like an existing record. 'ask': it is refused until answered new / extends X / duplicate of X / related X -- a prompt on a terminal, exit 3 with the ready commands for a script, a re-call with relation=......"
+effect = "an add that reads like an existing record is filed with a warning instead of being refused"
+
+[[release]]
+version = "0.1.10"
+date = "2026-10-02"
+
+[[release.change]]
+kind = "knob_changed"
+key = "dedupe.on_match"
+old = "\"warn\""
+new = "\"ask\""
+why = "What an add does when it looks like an existing record. 'ask' (default): it is refused until answered new / extends X / duplicate of X / related X -- --new / --extends ID / --duplicate-of ID / --related ID on the CLI (a prompt on a termi..."
+effect = "an add that reads like an existing record is refused (exit 3) until answered with --new, --extends, --duplicate-of or --related"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.waiter_reservation_s"
+new = "300"
+why = "Claims on a contended file are served first come, first served."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "loops.max_repeated_failures"
+new = "3"
+why = "How many CONSECUTIVE failed runs of one gate with the SAME output digest on one item are reported as `repeated_failure` (default 3; 0 turns the detector off)."
+impact = "additive"
+
+[[release]]
+version = "0.1.11"
+date = "2026-10-03"
+
+[[release.change]]
+kind = "knob_added"
+key = "export.documents"
+new = "[]"
+why = "The documents `ddflow export --all` writes and keeps (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "export.max_bytes"
+new = "60000"
+why = "Size cap for a document printed to stdout or returned over MCP, in bytes; a cut document ends in an explicit [truncated: N more] footer. 0 = no cap."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "export.redact"
+new = "true"
+why = "Strip private addresses and credentials from exported documents (they are public-repo files at the repo root)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "export.refresh"
+new = "\"off\""
+why = "When selected documents regenerate by themselves: off | merge | phase_close | docs_gate."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "export.tables"
+new = "{}"
+why = "The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session,..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.tools"
+new = "\"all\""
+why = "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (d..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.delta_default"
+new = "true"
+why = "Whether `ddflow review <id> --gate G` on a gate that already has a recorded review rechecks ONLY the commits since the head that review covered (default true) instead of the whole diff again."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.max_rounds"
+new = "2"
+why = "How many FULL cross-family review rounds one gate (rubber_duck, critic) may have on one item (default 2; 0 = unlimited)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.on_exceed"
+new = "\"refuse\""
+why = "What a full round beyond [review].max_rounds does: 'refuse' (default; exit 3, naming --delta, `review triage`, --force --reason and how to change the cap) or 'warn' (run it and say the budget is spent)."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "bug.reported_upstream"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "export.acknowledged"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "export.disabled"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "export.enabled"
+impact = "additive"
+
+[[release]]
+version = "0.1.12"
+date = "2026-10-04"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.file_task"
+new = "true"
+why = "Whether `bug found` files the bug's fix task in the queue (default true): `fix-<bug id>`, tagged as a bug fix, under the phase of the item the bug names (or `[bugs] phase`), carrying that item's globs unless `--globs` says otherwise, and..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.phase"
+new = "\"bugs\""
+why = "The standing phase (default `bugs`) a fix task is filed under when the bug names no item, or names one whose phase is already finished."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "flow.claims"
+new = "\"local\""
+why = "'local' (default): a claim is an event in this clone's log, so two offline clones can both claim one item (detected afterwards as 'contested'). 'remote': a claim also creates refs/ddflow/claims/<id> on `remote` by compare-and-swap, so on..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "flow.version_files"
+new = "{}"
+why = "Files `version cut` bumps, as path -> regex with exactly ONE capture group, the version text (e.g."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rules.max_rules"
+new = "200"
+why = "Maximum number of rules a project may define."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rules.max_size_bytes"
+new = "50000"
+why = "Maximum size in bytes for a single rule's content."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rules.scopes_allowed"
+new = "[\"project\", \"phase\", \"task\"]"
+why = "Which scopes a rule may declare."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rules.tags_allowed"
+new = "[]"
+why = "Whitelist of allowed tag values for rules."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.skew"
+new = "\"refuse\""
+why = "What happens when a ddflow OLDER than the one that last worked on this project's log (the highest `ddflow.seen` stamp) is asked to WRITE."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "backmerge.recorded"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ddflow.seen"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "deploy.recorded"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "item.reopened"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "skew.overridden"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "upgrade.applied"
+impact = "additive"
+
+[[release]]
+version = "0.1.13"
+date = "2026-10-04"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.base"
+new = "\"\""
+why = "The branch merged into the task's branch before the checks run, so an interaction with what the base has become is tested (a parallel merge's effect)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.command"
+new = "\"\""
+why = "The command the `ci` gate and `ddflow ci run` execute in a scratch worktree of the branch merged with the base."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.on_merge"
+new = "\"fast\""
+why = "Health check of the base right after a merge lands: off | fast (default: the project's pre-commit set without the test hooks, `SKIP=tests,scenarios`; an explicit [ci].command runs as written) | full (the whole command)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.timeout_s"
+new = "3600"
+why = "Seconds the CI command may run before the gate records UNAVAILABLE."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.environment_commits"
+new = "\"block\""
+why = "What the pre-commit hook does with a commit made directly on a branch listed in [flow].environments (GitLab flow's upstream-first): 'block' (default) refuses it and names the remedy (work on a branch, then `ddflow promote status`), 'warn..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.progress_after_complete"
+new = "\"on\""
+why = "After every completion, a few lines on where the work stands: tasks, bugs (fixed, open, high) and phases done of total with percentages, the item's phase, and the next ready items. on (default) | phase (only the phase line and next) | off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "worktree.root"
+old = "\"../.ddflow-worktrees\""
+new = "\".ddflow/worktrees\""
+why = "Where worktrees are created, relative to the repo root."
+effect = "new worktrees are made under .ddflow/worktrees inside the repository instead of ../.ddflow-worktrees; existing ones stay where they are"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "bug.reopened"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ci.result"
+impact = "additive"
+
+[[release]]
+version = "0.1.14"
+date = "2026-10-05"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.commit_events"
+new = "true"
+why = "After complete and release, commit the event shards (`.ddflow/events/*.jsonl`, nothing else) in the primary checkout, so a clone or a pull always gets the whole log."
+impact = "additive"
+
+[[release]]
+version = "0.1.15"
+date = "2026-10-05"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.compaction_digest_chars"
+new = "2000"
+why = "Before Claude Code compacts the context, the PreCompact hook (`ddflow hooks install --claude`) records the last turns of the transcript -- the operator's words and the agent's answers, no tool traffic, secrets redacted -- as a session no..."
+impact = "additive"
+
+[[release]]
+version = "0.1.16"
+date = "2026-10-05"
+
+[[release]]
+version = "0.1.17"
+date = "2026-10-06"
+
+[[release.change]]
+kind = "knob_changed"
+key = "dedupe.kinds"
+old = "[\"bug\", \"task\", \"phase\", \"lesson\", \"decision\", \"research\", \"memory\"]"
+new = "[\"bug\", \"task\", \"phase\", \"lesson\", \"decision\", \"research\", \"memory\", \"rule\"]"
+why = "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it."
+effect = "rules are checked for near-duplicates too"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.bug"
+new = "\"{prefix}{hash}\""
+why = "Bug ids."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.ci_bug"
+new = "\"Bci-{slug}-{digest}\""
+why = "Bugs filed for a failing CI check."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.decision"
+new = "\"{prefix}{hash}\""
+why = "Decision ids minted for an unnamed decision."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.fix_task"
+new = "\"fix-{parent}\""
+why = "A bug's own fix task."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.fix_task_followup"
+new = "\"fix-{parent}-{seq}\""
+why = "The next fix task when a bug's fix task was abandoned."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.imported_phase"
+new = "\"{user-text}\""
+why = "Phases created by `ddflow import`."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.imported_task"
+new = "\"{phase}.{slug}\""
+why = "Tasks created by `ddflow import` that declare no id."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.job"
+new = "\"{prefix}{hash}\""
+why = "Long-running job ids."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.lesson"
+new = "\"{prefix}{hash}\""
+why = "Lesson ids."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.memory"
+new = "\"{prefix}{hash}\""
+why = "Memory ids."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.promotion"
+new = "\"promote-{env}-{seq}\""
+why = "Promotion items."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.research"
+new = "\"{prefix}{hash}\""
+why = "Research note ids."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.session"
+new = "\"s{time}-{pid}\""
+why = "Session ids."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ids.split_child"
+new = "\"{parent}.{seq}\""
+why = "Sub-items made by `ddflow split` when none is named."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.adapt_cooldown_s"
+new = "300"
+why = "Minimum seconds between two decreases of the adaptive limit (default 300), so one bad stretch lowers it once rather than to the floor."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.adapt_up_after_s"
+new = "600"
+why = "Seconds of all-healthy samples, with the limit actually binding (in flight reached it), before auto raises the limit by one (default 600)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.max_parallel_max"
+new = "8"
+why = "The ceiling of the adaptive limit (default 8, at least 1): auto never exceeds it, whatever the signals say."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.max_parallel_min"
+new = "2"
+why = "The floor of the adaptive limit (default 2, at least 1): however bad the signals, auto never offers fewer slots than this."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.parallel"
+new = "\"auto\""
+why = "'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts between `max_parallel_min` and `max_parallel_max`, starting at `max_parallel_tasks` -- raised by one after `adapt_up_after_s` of healthy samples while the limit wa..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.signal_interval_s"
+new = "60"
+why = "Seconds between two samples of the signals auto steers by (default 60, at least 1)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.signals"
+new = "{\"enabled\": [\"load_per_core\", \"memory_pressure\", \"disk_pressure\", \"reviewer_latency_ratio\", \"gate_failure_rate\", \"merge_failure_rate\", \"loop_findings\", \"independent_ready\"], \"load_per_core\": {\"high\": 0.75, \"low\": 0.15}}"
+why = "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, merge_failure_rate, loop_findings, independent_ready), and per sign..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "triggers.max_fires_per_hour"
+new = "10"
+why = "How many times triggers may fire, counted across EVERY trigger, in any rolling hour (default 10)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "worktree.max_parallel"
+old = "4"
+new = "0"
+why = "Ceiling on simultaneously active task worktrees."
+effect = "the worktree cap follows the schedule's parallelism limit instead of a fixed 4"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "schedule.defined"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "schedule.removed"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "schedule.updated"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "trigger.evaluated"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "trigger.fired"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "trigger.suppressed"
+impact = "additive"
+
+[[release]]
+version = "0.1.18"
+date = "2026-10-06"
+
+[[release]]
+version = "0.2.0"
+date = "2026-10-07"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.combined_under_lines"
+new = "150"
+why = "`ddflow review <id> --gate rubber_duck,critic` on a change with fewer changed lines than this (default 150; 0 = never) sends ONE review request whose prompt carries both gates' lenses and records its outcome for each gate, with a shared..."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "review.delta_default"
+old = "true"
+new = "false"
+why = "Whether `ddflow review <id> --gate G` on a gate that already has a recorded review rechecks ONLY the commits since the head that review covered, instead of the whole diff."
+effect = "a plain re-review sends the item's whole diff with the previous findings and their triage; --delta asks for only the commits since the last review"
+
+[[release.change]]
+kind = "knob_changed"
+key = "schedule.signals"
+old = "{\"enabled\": [\"load_per_core\", \"memory_pressure\", \"disk_pressure\", \"reviewer_latency_ratio\", \"gate_failure_rate\", \"merge_failure_rate\", \"loop_findings\", \"independent_ready\"], \"load_per_core\": {\"high\": 0.75, \"low\": 0.15}}"
+new = "{\"disk_pressure\": {\"critical\": 0.97, \"high\": 0.9, \"low\": 0.85}, \"enabled\": [\"load_per_core\", \"memory_pressure\", \"disk_pressure\", \"reviewer_latency_ratio\", \"gate_failure_rate\", \"gate_failure_ratio\", \"merge_failure_rate\", \"loop_findings\", \"independent_ready\"], \"gate_failure_ratio\": {\"high\": 2.0, \"low\": 1.5}, \"load_per_core\": {\"high\": 0.75, \"low\": 0.15}, \"memory_pressure\": {\"critical\": 0.95, \"high\": 0.85, \"low\": 0.75}, \"reviewer_latency_ratio\": {\"high\": 2.0, \"low\": 1.5}}"
+why = "The `[schedule.signals]` table: `enabled`, the signals auto reads (default all: load_per_core, memory_pressure, disk_pressure, reviewer_latency_ratio, gate_failure_rate, gate_failure_ratio, merge_failure_rate, loop_findings, independent_..."
+effect = "adds the gate_failure_ratio signal and explicit thresholds for disk, memory and reviewer latency to adaptive flow control"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "approval.granted"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "approval.used"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "def.merged"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "def.recorded"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "def.retired"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "def.superseded"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "def.updated"
+impact = "additive"
