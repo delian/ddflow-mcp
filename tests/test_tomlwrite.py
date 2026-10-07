@@ -9,7 +9,9 @@ every value the shared writer produces round-trips through tomllib.
 
 from __future__ import annotations
 
+import re
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -132,8 +134,13 @@ def test_literal_keeps_what_is_already_a_value_and_quotes_the_rest(typed, writte
     assert TC.literal(typed) == written
 
 
-def test_tomlkit_is_used_in_one_module() -> None:
-    """The adapter rule (D-unify 2): tests/test_architecture_guards.py counts it too."""
-    import ddflow.infra.tomlcfg as home
-
-    assert "tomlkit" in open(home.__file__, encoding="utf-8").read()
+def test_tomlkit_is_imported_in_one_module() -> None:
+    """The adapter rule (D-unify 2): only `infra/tomlcfg.py` imports it. (The architecture
+    guard counts uses of the module; this names the importers.)"""
+    root = Path(TC.__file__).resolve().parents[1]
+    importers = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*.py")
+        if re.search(r"^\s*(import|from) tomlkit\b", path.read_text("utf-8"), re.M)
+    }
+    assert importers == {"infra/tomlcfg.py"}

@@ -22,10 +22,11 @@ Two of the rules are load-bearing and neither is obvious:
   refused, and a reviewer whose identity a tool wrote is recorded so its reviews count
   only after a person approves it (`services/reviewer_trust.py`).
 
-The in-place TOML edit is deliberate rather than a round-trip through a parser: the file
-is written by hand and carries comments explaining every knob, and `tomllib` cannot
-write, so a serialising round-trip would silently delete the documentation that makes
-the file editable at all.
+The edit goes through tomlkit (`tomlcfg.upsert`), not through `tomllib` and a serialiser:
+the file is written by hand and carries comments explaining every knob, `tomllib` cannot
+write, and a plain dump of its data would silently delete the documentation that makes the
+file editable at all. tomlkit parses the text with its comments, blank lines and key order,
+changes the one value, and writes the rest back as it found it.
 """
 
 from __future__ import annotations
