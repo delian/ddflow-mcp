@@ -31,12 +31,10 @@ def _orphans_detect(ctx: Context) -> list[Finding]:
     ]
 
 
-def _orphans_repair(ctx: Context, found: list[Finding]) -> list[Corrective]:
-    keys = {f.key for f in found}
-    planned = SS.plan_adoptions(ctx.events, ctx.cfg)
-    kept = [c for c in planned if "adopted_from" not in c[2] or c[2]["adopted_from"] in keys]
-    # The implicit session opened for the first orphan stays only when an orphan follows it.
-    return kept if any("adopted_from" in c[2] for c in kept) else []
+def _orphans_repair(ctx: Context, _found: list[Finding]) -> list[Corrective]:
+    # The findings are every unadopted orphan of `ctx.events` (a settled one has its copy,
+    # so it is adopted), which is exactly what `plan_adoptions` adopts.
+    return SS.plan_adoptions(ctx.events, ctx.cfg)
 
 
 ORPHANS = Repair(
