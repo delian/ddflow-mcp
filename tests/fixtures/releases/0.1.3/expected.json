@@ -1,0 +1,520 @@
+{
+ "bugs": {
+  "B6b26e0800b": {
+   "evidence": "",
+   "fixed_at": "",
+   "found_at": "2026-10-07T13:58:56.834363Z",
+   "id": "B6b26e0800b",
+   "invalid_at": "",
+   "invalid_reason": "",
+   "item": "T1",
+   "lesson": "",
+   "regression_test": "",
+   "summary": "parse('') returns [] where [['']] was meant"
+  }
+ },
+ "decisions": {
+  "D-1": {
+   "alternatives": "",
+   "at": "2026-10-07T13:58:47.359400Z",
+   "consequences": "",
+   "context": "One input format, a dozen lines long",
+   "decided_by": "operator",
+   "decision": "No parser dependency: the input is line-based",
+   "globs": [
+    "src/**"
+   ],
+   "id": "D-1",
+   "item": "",
+   "sources": [],
+   "status": "accepted",
+   "superseded_by": "",
+   "supersedes": [],
+   "tags": [],
+   "title": "Parse with the standard library"
+  }
+ },
+ "event_count": 39,
+ "items": {
+  "P1": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:58:46.151439Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [],
+   "id": "P1",
+   "kind": "phase",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Parse the input",
+   "worktree": ""
+  },
+  "T1": {
+   "adopted": false,
+   "base": "main",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "ddflow/T1",
+   "completed_at": "2026-10-07T13:58:56.395883Z",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:58:46.382870Z",
+   "displaced": [],
+   "gates": {
+    "bug_hunt": {
+     "at": "2026-10-07T13:58:54.268309Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "bug_hunt",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "critic": {
+     "at": "2026-10-07T13:58:53.287943Z",
+     "by": "gpt-fixture",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "model": "gpt-fixture",
+      "note": "no findings",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "critic",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "dedupe": {
+     "at": "2026-10-07T13:58:54.691346Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "dedupe",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "implement": {
+     "at": "2026-10-07T13:58:52.594118Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "implement",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "merge": {
+     "at": "2026-10-07T13:58:55.678340Z",
+     "by": "fx-alice",
+     "evidence": {
+      "branch": "ddflow/T1",
+      "sha": "1321d2cd7b130b1e8966e60982e142a80ab30702"
+     },
+     "gate": "merge",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "research": {
+     "at": "2026-10-07T13:58:51.655106Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "research",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "rubber_duck": {
+     "at": "2026-10-07T13:58:52.925704Z",
+     "by": "gpt-fixture",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "model": "gpt-fixture",
+      "note": "no findings",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "rubber_duck",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "rules": {
+     "at": "2026-10-07T13:58:52.128980Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "rules",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "standards": {
+     "at": "2026-10-07T13:58:53.576303Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "standards",
+     "outcome": "unavailable",
+     "reason": "the fixture project has no tooling"
+    },
+    "unit_tests": {
+     "at": "2026-10-07T13:58:53.959620Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "tree_sha": "1321d2cd7b13+95e0c70caf8cc336"
+     },
+     "gate": "unit_tests",
+     "outcome": "passed",
+     "reason": ""
+    }
+   },
+   "globs": [
+    "src/parser.py"
+   ],
+   "id": "T1",
+   "kind": "task",
+   "landed_after": "ec478c02a53a4c8d11165c8d538312d669fb613c",
+   "landed_before": "de2d6b9ef8714dfa9ec47ddd2ffe8ac8b5c30b87",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "1321d2cd7b130b1e8966e60982e142a80ab30702",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "done",
+   "tags": [
+    "core"
+   ],
+   "title": "Write the parser",
+   "worktree": ""
+  },
+  "T2": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "Split into: T2.a, T2.b.",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:58:46.657941Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [
+    "T1"
+   ],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Wire the parser into the app",
+   "worktree": ""
+  },
+  "T2.a": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:58:57.951292Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2.a",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "T2",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Call the parser",
+   "worktree": ""
+  },
+  "T2.b": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:58:57.952119Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2.b",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "T2",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Report parse errors",
+   "worktree": ""
+  },
+  "T3": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:58:46.915787Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "docs/**"
+   ],
+   "id": "T3",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "running",
+   "tags": [],
+   "title": "Document the input format",
+   "worktree": ""
+  }
+ },
+ "jobs": {},
+ "lessons": {
+  "L-1": {
+   "at": "2026-10-07T13:58:47.768914Z",
+   "globs": [],
+   "how": "line.rstrip('\\n').split(',')",
+   "id": "L-1",
+   "pattern": "",
+   "rule": "Strip each line before splitting it",
+   "seen_in": [],
+   "sites": [],
+   "summary": "",
+   "superseded_by": "",
+   "tags": [],
+   "title": "Strip the newline before splitting",
+   "why": "A trailing newline became part of the last field"
+  }
+ },
+ "memories": {
+  "M7be001be19": {
+   "at": "2026-10-07T13:58:48.262355Z",
+   "by": "fx-alice",
+   "forgotten": "",
+   "id": "M7be001be19",
+   "origin_at": "",
+   "source": "",
+   "tags": [],
+   "text": "Tests run with: python -m pytest -q"
+  }
+ },
+ "research": {
+  "Rb8738610e5": {
+   "at": "2026-10-07T13:58:48.048274Z",
+   "budget": "",
+   "claim": "''.split(',') returns ['']",
+   "falsifier": "it returns []",
+   "id": "Rb8738610e5",
+   "item": "T1",
+   "mechanism": "",
+   "probe": "python -c \"print(''.split(','))\"",
+   "probe_output": "['']",
+   "question": "Does str.split handle an empty line?",
+   "sources": [],
+   "tags": [],
+   "verdict": "CONFIRMED"
+  }
+ },
+ "sessions": {
+  "s20261007T135848-1528917": {
+   "agent": "fx-alice",
+   "ended_at": "2026-10-07T13:58:58.187842Z",
+   "id": "s20261007T135848-1528917",
+   "model": "fixture-model",
+   "notes": [],
+   "prompts": [
+    {
+     "at": "2026-10-07T13:58:48.801995Z",
+     "item": "",
+     "seq": 0,
+     "text": "Implement phase P1"
+    }
+   ],
+   "started_at": "2026-10-07T13:58:48.540073Z"
+  }
+ },
+ "version": "0.1.3"
+}

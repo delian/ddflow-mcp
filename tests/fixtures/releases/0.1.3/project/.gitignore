@@ -1,0 +1,3 @@
+
+# ddflow task worktrees (git worktrees; never commit them)
+.ddflow-worktrees/

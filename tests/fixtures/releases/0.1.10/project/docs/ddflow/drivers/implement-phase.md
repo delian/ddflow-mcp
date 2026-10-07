@@ -1,0 +1,290 @@
+# Driver: `implement phase <NAME>`
+
+**This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
+CLI, Codex, Copilot, Kilo, Cursor, or a human — follows *this* document. Per-agent files
+in `deltas/` contain ONLY the handful of things that genuinely differ (how to loop, how
+to ask a question, how to spawn a subagent, how to reference a file). They are deltas,
+never copies.
+
+> Why deltas and not per-agent copies: a copied driver drifts. On the project this was
+> extracted from, a reworded per-agent duplicate silently accumulated three instructions
+> that were false at the time of writing, while missing four gates the canonical file
+> had gained. A delta removes the surface that can drift instead of policing it.
+
+Every command below is `ddflow ...`. If your harness exposes ddflow over MCP, the
+equivalent tool is named in brackets — they are the same implementation.
+
+**To run this unattended**, use the `implement` workflow command (the MCP prompt
+`implement`; `ddflow prompts show implement` in a shell). It drives this driver one item
+per iteration and adds what an unsupervised run needs: the only four cases in which the
+loop may stop, keeping it running across turns, when to ask the operator, and the
+termination checklist. Your delta says how your harness loops it.
+
+---
+
+## 0. Open the session (once)
+
+```sh
+ddflow doctor                                    # [ddflow_doctor]
+ddflow recover                                   # [ddflow_recover]
+SESSION=$(ddflow --json session start --model "<your model id>" --tool "<your harness>" | jq -r .session)
+ddflow session prompt "$SESSION" --text "<the operator's message, verbatim>"
+ddflow brief --phase <NAME>                      # [ddflow_brief]
+```
+
+`ddflow brief` replaces reading the project's rule files and lesson corpus. It returns
+the rules pointer, the ready set, and the lessons *ranked against this phase's text*,
+inside a token budget. Read it instead of the corpora, not in addition to them.
+
+**If `recover` reports anything, deal with it before starting new work.** A crashed
+agent's worktree frequently contains finished work that exists nowhere else. Inspect the
+named tree, salvage what is real, then `ddflow release <id>`. Never delete first.
+
+---
+
+## 1. Phase-level research (once per phase)
+
+Before any task starts, answer the phase's open questions and record them:
+
+```sh
+ddflow research --question "<what you needed to know>" \
+  --claim "<the falsifiable claim>" \
+  --falsifier "<the single observation that would kill it>" \
+  --probe "<the command you ran>" --probe-output "<what it printed>" \
+  --verdict CONFIRMED|REFUTED|THEORETICAL --sources "<urls you actually opened>"
+```
+
+Rules that make this worth doing:
+
+- **Probe before you claim.** Run the cheapest test that could refute the claim. Tier 0
+  is "does this symbol/file/flag even exist" and is the highest-yield rung.
+- `CONFIRMED` and `REFUTED` **require** a probe; ddflow refuses them without one.
+  `THEORETICAL` must say why no probe was possible.
+- **A rejection is as valuable as an adoption.** "We evaluated X and rejected it, here
+  is the measurement" stops the next session re-researching it.
+- A pass with zero CONFIRMED/REFUTED labels is a literature summary. Label it one.
+
+---
+
+## 2. The task loop — repeat until the phase is empty
+
+### 2a. Pick work
+
+```sh
+ddflow next --phase <NAME>                       # [ddflow_next]
+```
+
+- **exit 0** — one or more items are ready. Items in the ready set are *independent*:
+  fan them out to parallel subagents if your harness supports it.
+- **exit 2** — nothing is actionable. This is a **result, not an error**. Read the
+  blocked list: it says whether each item waits on a dependency, on another agent's
+  lease, or on a file conflict. Do not invent work.
+- **exit 1** — failure: `--phase` names no phase or item. A typo, not an empty queue.
+
+Never take an item that `next` did not offer.
+
+### 2b. Claim it
+
+```sh
+ddflow claim <ID> --globs "<paths this task will write>"   # [ddflow_claim]
+```
+
+- **exit 0** — you hold the lease and a git worktree was created. `cd` into it. Work
+  ONLY there.
+- **exit 3** — refused, and the message names the holder (or, "reserved for <agent>",
+  the waiter who is next in line for those files) and lists what you could take instead.
+  Re-order, or `ddflow wait --item <ID>` for your place in line (first come, first
+  served; a hot file no longer starves its longest waiter). Never `--force` past another
+  live agent.
+
+**Keep the claim short.** Claim when you are ready to edit, not when you start reading;
+run the gates promptly; and do not sit on file globs while only a slow review or roborev
+is pending -- record that gate `partial`, merge, and read the result later. `heartbeat`,
+`release` and `brief` name who waits on you: that is your cue to finish. Releasing globs
+before the merge is deliberately not a command: the next agent would edit files whose
+unmerged changes then conflict at merge.
+
+Renew during long work: `ddflow heartbeat <ID>` (interval: `lease.heartbeat_s`).
+
+`claim` prints the globs it recorded -- check them. `--globs` takes a comma list, a
+JSON array, or several flags; the claim's globs become the item's.
+
+If your task needs to write outside its declared globs, run
+`ddflow update <ID> --globs "<every glob, old and new>"` **first**, so the conflict
+detector can see it. It REPLACES the list (and moves your lease to it), and prints
+anything it dropped.
+
+### 2c. Run the task pipeline
+
+```sh
+ddflow gate status <ID>                          # [ddflow_gate_status]
+```
+
+It prints the pipeline, the next gate, and that gate's instruction. The default order is
+the ten steps below; `.ddflow/gates.toml` changes it per project.
+
+| # | Gate | Who runs it | How to record |
+|---|---|---|---|
+| 1 | `research` | you | `ddflow research ...` then `gate record` |
+| 2 | `rules` | you | `ddflow brief --item <ID>` |
+| 3 | `implement` | you | `gate record <ID> implement --outcome passed` |
+| 4 | `rubber_duck` | a **different-family** model | `gate record ... --model <reviewer model>` |
+| 5 | `critic` | a **different-family** critic | same |
+| 6 | `standards` | tooling | `ddflow gate run <ID> standards` |
+| 7 | `unit_tests` | tooling | `ddflow gate run <ID> unit_tests` |
+| 8 | `bug_hunt` | you | `gate record` + a probe per finding |
+| 9 | `dedupe` | you | `gate record` |
+| 10 | `merge` | ddflow | `ddflow merge <ID>` |
+
+Four rules bind across all of them:
+
+1. **UNAVAILABLE is never a pass.** If a reviewer, endpoint or tool could not run, record
+   `--outcome unavailable --reason "<why>"`. Recording it as passed is how an entire
+   review silently disappears from a project's history.
+2. **Evidence or it did not happen.** Gates in `gates.evidence_required` refuse a bare
+   pass. Attach the command, its exit code and its output.
+3. **At least one reviewer must be a different pretraining family than you.** Same-family
+   agreement is not independent evidence — it measures shared priors. `ddflow complete`
+   refuses without it. Pass `--model` on every review so ddflow can tell.
+4. **A bug may only change source if a runnable probe demonstrates it**, and that probe
+   ships as the regression test in the same commit. Then **revert the fix and watch the
+   probe fail** — a probe that passes both ways proves nothing. No probe → record it as
+   a `THEORETICAL` finding and change nothing.
+
+Reviewers must be told to **refute, not review**: "find the input that makes this wrong;
+if you are uncertain, report nothing." And a majority of reviewers may **kill** a
+finding; it may never **promote** one.
+
+Launch independent reviewers **concurrently**, and **wait for every one to report** before
+merging: a reviewer that has not reported yet is not a reviewer that found nothing. **No
+reviewer sees another's verdict** — each gets the diff, the intent and your research
+notes, nothing else. A reviewer shown a prior verdict stops being an independent sample
+and becomes a vote on someone else's hypothesis.
+
+**Tests: the relevant ones while you work, all of them at the gate, always in parallel.**
+
+```sh
+ddflow tests --item <ID>                         # [ddflow_tests] after EACH change
+```
+
+- **While you work**, run what `ddflow tests` prints after each change: the tests your
+  diff reaches, derived from the import graph and the changed files, and one command that
+  runs them in parallel. Do not reason about which tests matter — that is guessing, and
+  the derivation is cheaper than being wrong. A regression test you are writing is in the
+  set as soon as its file exists.
+- **At the gate**, `unit_tests` runs the **whole** suite. A targeted run says your change
+  is fine and nothing about what was already broken; the full run is where standing
+  breakage surfaces. Never record `unit_tests` from a selection.
+- **Always in parallel.** Run pytest with `-n auto` (pytest-xdist) or the project's
+  configured worker count; a serial run of a large suite is the slowest step in this
+  loop. If `ddflow workflow` says the test command runs on ONE core, fix the command
+  before the next gate, or record why serial is deliberate (`-p no:xdist`).
+
+### 2d. Close the task
+
+```sh
+cd <worktree> && git add <explicit paths> && git commit -m "<ID>: <what changed>"
+ddflow merge <ID>                                # [ddflow_merge]
+ddflow complete <ID> --model "<your model>" --sha "<sha>"
+ddflow release <ID>
+```
+
+**Update the README in the same task.** A task that changes what a user or agent sees
+(a command, flag, MCP tool, config knob, event kind, gate behaviour, default, refusal
+message or documented workflow) edits the README section that describes it, before the
+reviewer gates so they see it. If your diff changes code under `[enforce].readme_code_globs`
+(default `ddflow/**`) and not `README.md`, `complete`, `ddflow gate status` and `ddflow
+brief` all say `README not updated`: name the section you changed, or, for a change with
+no visible effect (a refactor, a fix the README never described), record why with
+`ddflow gate skip <id> docs --reason "..."`. Test-only and docs-only changes and event-log
+commits are never reported. `[enforce].readme_with_code` is `warn` by default; `block`
+makes `complete` refuse and `off` silences it.
+
+`complete` exits 3 and lists **every** unmet condition at once. Fix them; reach for
+`--force` only with a reason you are willing to see in an audit (it is recorded).
+
+Never `git add -A` — a parallel agent's unrelated file staged into your commit is very
+hard to notice and very hard to undo.
+
+### 2e. Capture what you learned
+
+Before you file anything -- a bug, task, lesson, decision, research or memory -- run
+`ddflow similar "<the text>"` and look at what is already there. Every add runs the same
+check, and one that reads like an existing record is **refused** (exit 3, `refused:
+possible duplicate`) with the candidates and the commands that answer it: `--new` (a
+different record), `--extends ID` / `--duplicate-of ID` (the same thing) or `--related ID`
+(linked both ways). Prefer extending an **open, unclaimed** record -- the text is appended
+to it and no new id is made; a record somebody has claimed, or that is closed, gets a new
+record linked to it instead. `--check` shows the candidates without writing anything.
+
+Any bug, any operator correction, any surprise:
+
+```sh
+ddflow lesson add --title "<the rule, as one line>" --rule "..." --why "..." --how "..."
+ddflow bug fixed <BUG> --regression-test "<test that now guards this>"
+```
+
+`bug fixed` refuses without a regression test. That refusal is the mechanism that stops
+the same bug shipping twice.
+
+### 2f. Check the cadences
+
+```sh
+ddflow cadence                                   # [ddflow_cadence]
+```
+
+Exit 2 means none due. When one is due, run it and record it with `--ran <name>`.
+These are the passes a per-task gate structurally cannot do: integration tests,
+architecture review, mutation testing, a duplication sweep across files, lessons
+compression.
+
+---
+
+## 3. Phase-level close
+
+When `ddflow next --phase <NAME>` reports no remaining tasks:
+
+```sh
+ddflow gate run <NAME> unit_tests                # the WHOLE suite, in parallel, not a slice
+ddflow gate record <NAME> bug_hunt   --outcome passed --evidence "..."
+ddflow gate record <NAME> dedupe     --outcome passed --evidence "..."
+ddflow gate record <NAME> live_test  --outcome passed --evidence "<real run output>"
+ddflow gate record <NAME> corrections --outcome passed --evidence "..."
+ddflow gate record <NAME> docs       --outcome passed --evidence "<docs updated, or: no user-visible change, because ...>"
+ddflow complete <NAME> --model "<your model>"
+ddflow render                                    # regenerate the human-readable board
+```
+
+`live_test` is the one most often skipped and the one most worth keeping: **a green unit
+suite and a working feature are different claims.** Run the real thing on a small input
+and paste what it printed.
+
+---
+
+## 4. Close the session
+
+```sh
+ddflow session end "$SESSION" --summary "<what shipped>"
+ddflow render && ddflow doctor
+git add .ddflow/events docs/ddflow && git commit -m "ddflow: session log"
+```
+
+**Commit the event log.** It is the source of truth and the only artefact from which the
+project can be reconstructed. The index (`.ddflow/index.db`) is gitignored and
+disposable on purpose.
+
+---
+
+## Standing rules
+
+- **Claim before you edit.** An unclaimed edit can be destroyed by a parallel agent.
+- **One task, one worktree.** Never work in the primary checkout; never switch its
+  branch — that swaps files under any live session.
+- **Exit codes are the contract:** `0` healthy · `1` real failure · `2` could not run /
+  nothing to do · `3` coordination refused. Never treat 2 as 0.
+- **Prefer `ddflow brief` over reading the rule and lesson files.** That is what it is
+  for, and what keeps a session's opening cost roughly constant as the project grows.
+- **Before compressing or rewording an instruction file**, run `ddflow pins <file>`
+  [ddflow_pins]. A sentence that reads like rationale is often a rule a test asserts; it
+  names the suites to re-run afterwards and the text no test holds.
+- If something goes sideways, **stop and re-plan**. Do not keep pushing.
