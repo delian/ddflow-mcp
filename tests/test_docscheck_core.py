@@ -158,11 +158,25 @@ def test_a_directory_that_is_not_a_repository_cannot_answer(tmp_path):
         D.check_docs(tmp_path)
 
 
+def _cost(fn):
+    """(CPU seconds ``fn`` spent, its result). CPU, not wall: the budget guards the
+    checker's own cost, and at CI load (average ~180 on 192 threads) a wall clock also
+    counts the time the process waited for a core (B4d5ffa0b90)."""
+    start = time.process_time()
+    result = fn()
+    return time.process_time() - start, result
+
+
+def test_the_budget_does_not_count_time_spent_waiting_for_a_core():
+    """A descheduled process is modelled by a sleep: wall time passes, no CPU does."""
+    spent, _ = _cost(lambda: time.sleep(2.5))
+    assert spent < 2.0, f"the runtime budget charged {spent:.1f}s of waiting to the checker"
+
+
 def test_runtime_on_this_repositorys_readme():
     root = Path(__file__).resolve().parents[1]
-    start = time.perf_counter()
-    report = D.check_docs(root, docs=["README.md"])
-    assert time.perf_counter() - start < 2.0
+    spent, report = _cost(lambda: D.check_docs(root, docs=["README.md"]))
+    assert spent < 2.0, f"check_docs(README.md) cost {spent:.2f}s of CPU"
     assert report.checked["identifiers"] > 50
 
 
