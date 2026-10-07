@@ -27,6 +27,7 @@ with `--agent <bare id>` (`as_agent` over MCP), the workaround B205 was filed wi
 
 from __future__ import annotations
 
+import contextlib
 import time
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from ..config import Config
 from ..core.model import Lease, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id, clone_suffix_since
+from . import leases as L
 
 
 def _pre_upgrade(cfg: Config, st: State, bare: str, since: float) -> list[str]:
@@ -108,4 +110,12 @@ def rehome_pre_upgrade_leases(log: EventLog, cfg: Config, st: State, layer: str)
                     "resources": list(lease.resources),
                 },
             )
+    # Outside the lock, as `leases.release` does: the remote claim ref moves with the
+    # lease, or it kept naming the bare id and the new holder could not renew it
+    # (Bd45d1ad60e). Best effort: a ref not moved lapses at its expiry.
+    if cfg.flow.claims == "remote":
+        for item_id in moved:
+            L._remote_drop(log, item_id, bare)
+            with contextlib.suppress(L.LeaseError):
+                L._remote_take(log, cfg, item_id, me, time.time())
     return moved
