@@ -72,10 +72,11 @@ def scenarios(draw):
 
 def _deps_met(state, item_id: str) -> bool:
     """The oracle: every need of the item, and every need of an ancestor that does not
-    point into the item's own subtree (an umbrella's need on its own child is met by
-    running it -- `inherited_deps`), names a live item that is DONE (the default
-    `unknown_dep_policy = "block"`; no external or stacked needs are generated)."""
-    own_subtree = state.descendants(item_id) | {item_id}
+    point into the item's own subtree or at one of its ancestors (an umbrella's need on
+    its own child is met by running it -- `inherited_deps`, B43447abfc8), names a live
+    item that is DONE (the default `unknown_dep_policy = "block"`; no external or
+    stacked needs are generated)."""
+    own_subtree = state.descendants(item_id) | {item_id} | {a.id for a in state.ancestors(item_id)}
     seen: set[str] = set()
     cur = state.items.get(item_id)
     while cur is not None and cur.id not in seen:
