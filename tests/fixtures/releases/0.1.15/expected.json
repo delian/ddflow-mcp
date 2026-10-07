@@ -1,12 +1,12 @@
 {
  "bugs": {
-  "B2f2148b33b": {
+  "Bc06bd1fad9": {
    "changelog": {},
    "evidence": "",
-   "fix_task": "fix-B2f2148b33b",
+   "fix_task": "fix-Bc06bd1fad9",
    "fixed_at": "",
-   "found_at": "2026-10-07T13:05:00.068614Z",
-   "id": "B2f2148b33b",
+   "found_at": "2026-10-07T13:47:01.719018Z",
+   "id": "Bc06bd1fad9",
    "invalid_at": "",
    "invalid_reason": "",
    "item": "T1",
@@ -29,7 +29,7 @@
  "decisions": {
   "D-1": {
    "alternatives": "",
-   "at": "2026-10-07T13:04:49.069377Z",
+   "at": "2026-10-07T13:46:50.612467Z",
    "by": "fx-alice",
    "consequences": "",
    "context": "One input format, a dozen lines long",
@@ -60,7 +60,7 @@
    "completed_at": "",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:04:47.585714Z",
+   "created_at": "2026-10-07T13:46:49.010323Z",
    "displaced": [],
    "fixes": [],
    "gates": {},
@@ -100,15 +100,15 @@
    "body": "",
    "branch": "ddflow/T1",
    "changelog": {},
-   "completed_at": "2026-10-07T13:04:58.612096Z",
+   "completed_at": "2026-10-07T13:47:00.351020Z",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:04:47.982588Z",
+   "created_at": "2026-10-07T13:46:49.410374Z",
    "displaced": [],
    "fixes": [],
    "gates": {
     "bug_hunt": {
-     "at": "2026-10-07T13:04:56.782342Z",
+     "at": "2026-10-07T13:46:58.483846Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -118,15 +118,15 @@
        "untracked": 0
       },
       "note": "fixture",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "bug_hunt",
      "outcome": "passed",
      "reason": ""
     },
     "critic": {
-     "at": "2026-10-07T13:04:55.416686Z",
+     "at": "2026-10-07T13:46:57.054916Z",
      "by": "gpt-fixture",
      "evidence": {
       "diff_stat": {
@@ -137,15 +137,15 @@
       },
       "model": "gpt-fixture",
       "note": "no findings",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "critic",
      "outcome": "passed",
      "reason": ""
     },
     "dedupe": {
-     "at": "2026-10-07T13:04:57.218049Z",
+     "at": "2026-10-07T13:46:58.961349Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -155,15 +155,15 @@
        "untracked": 0
       },
       "note": "fixture",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "dedupe",
      "outcome": "passed",
      "reason": ""
     },
     "implement": {
-     "at": "2026-10-07T13:04:54.460916Z",
+     "at": "2026-10-07T13:46:56.087724Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -173,27 +173,27 @@
        "untracked": 0
       },
       "note": "fixture",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "implement",
      "outcome": "passed",
      "reason": ""
     },
     "merge": {
-     "at": "2026-10-07T13:04:58.133661Z",
+     "at": "2026-10-07T13:46:59.871080Z",
      "by": "fx-alice",
      "evidence": {
       "branch": "ddflow/T1",
-      "branch_head": "2fefe0d63e349bb7f8e5990972efaacdb56dd84b",
-      "sha": "fa3e8636bd8d407819e4a408195f39f3ad6f45e3"
+      "branch_head": "1cd837358643aac36b9c214d630598843a014f26",
+      "sha": "d1e19b5568649d1656da122013517e2d683432c1"
      },
      "gate": "merge",
      "outcome": "passed",
      "reason": ""
     },
     "research": {
-     "at": "2026-10-07T13:04:53.537476Z",
+     "at": "2026-10-07T13:46:55.160277Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -203,15 +203,15 @@
        "untracked": 0
       },
       "note": "fixture",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "research",
      "outcome": "passed",
      "reason": ""
     },
     "rubber_duck": {
-     "at": "2026-10-07T13:04:54.897503Z",
+     "at": "2026-10-07T13:46:56.578300Z",
      "by": "gpt-fixture",
      "evidence": {
       "diff_stat": {
@@ -222,15 +222,15 @@
       },
       "model": "gpt-fixture",
       "note": "no findings",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "rubber_duck",
      "outcome": "passed",
      "reason": ""
     },
     "rules": {
-     "at": "2026-10-07T13:04:54.018126Z",
+     "at": "2026-10-07T13:46:55.612297Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -240,15 +240,15 @@
        "untracked": 0
       },
       "note": "fixture",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "rules",
      "outcome": "passed",
      "reason": ""
     },
     "standards": {
-     "at": "2026-10-07T13:04:55.892375Z",
+     "at": "2026-10-07T13:46:57.530405Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -257,15 +257,15 @@
        "insertions": 0,
        "untracked": 0
       },
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "standards",
      "outcome": "unavailable",
      "reason": "the fixture project has no tooling"
     },
     "unit_tests": {
-     "at": "2026-10-07T13:04:56.337076Z",
+     "at": "2026-10-07T13:46:58.009203Z",
      "by": "fx-alice",
      "evidence": {
       "diff_stat": {
@@ -275,8 +275,8 @@
        "untracked": 0
       },
       "note": "fixture",
-      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
-      "tree_sha": "2fefe0d63e34+clean"
+      "source_tree": "st:ab173d11ba21e5a094ce0a7d1273e701",
+      "tree_sha": "1cd837358643+clean"
      },
      "gate": "unit_tests",
      "outcome": "passed",
@@ -288,12 +288,12 @@
    ],
    "id": "T1",
    "kind": "task",
-   "landed_after": "fa3e8636bd8d407819e4a408195f39f3ad6f45e3",
-   "landed_before": "dab740b48ec30f3a3ee819765239123e62dcb1b5",
+   "landed_after": "d1e19b5568649d1656da122013517e2d683432c1",
+   "landed_before": "7d84e14a27cd77a27d03b4b1b24bf137d1933768",
    "lease": null,
    "lease_contest": [],
    "line": "",
-   "merged_sha": "fa3e8636bd8d407819e4a408195f39f3ad6f45e3",
+   "merged_sha": "d1e19b5568649d1656da122013517e2d683432c1",
    "needs": [],
    "parent": "P1",
    "port": {},
@@ -326,7 +326,7 @@
    "completed_at": "",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:04:48.327446Z",
+   "created_at": "2026-10-07T13:46:49.841652Z",
    "displaced": [],
    "fixes": [],
    "gates": {},
@@ -373,7 +373,7 @@
    "completed_at": "",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:05:02.599386Z",
+   "created_at": "2026-10-07T13:47:04.373358Z",
    "displaced": [],
    "fixes": [],
    "gates": {},
@@ -418,7 +418,7 @@
    "completed_at": "",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:05:02.600167Z",
+   "created_at": "2026-10-07T13:47:04.374896Z",
    "displaced": [],
    "fixes": [],
    "gates": {},
@@ -463,7 +463,7 @@
    "completed_at": "",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:04:48.694810Z",
+   "created_at": "2026-10-07T13:46:50.252597Z",
    "displaced": [],
    "fixes": [],
    "gates": {},
@@ -498,26 +498,26 @@
    "triage": {},
    "worktree": ""
   },
-  "fix-B2f2148b33b": {
+  "fix-Bc06bd1fad9": {
    "adopted": false,
    "base": "",
    "blocked_reason": "",
-   "body": "Fixes bug B2f2148b33b: parse('') returns [] where [['']] was meant Found on T1.\n\nWrite the regression test first and watch it FAIL on the unfixed code; then `ddflow complete fix-B2f2148b33b --regression-test <test>` closes the bug with the task (or `ddflow bug fixed B2f2148b33b --regression-test <test>` first).",
+   "body": "Fixes bug Bc06bd1fad9: parse('') returns [] where [['']] was meant Found on T1.\n\nWrite the regression test first and watch it FAIL on the unfixed code; then `ddflow complete fix-Bc06bd1fad9 --regression-test <test>` closes the bug with the task (or `ddflow bug fixed Bc06bd1fad9 --regression-test <test>` first).",
    "branch": "",
    "changelog": {},
    "completed_at": "",
    "completion_evidence": "",
    "contested": [],
-   "created_at": "2026-10-07T13:05:00.069313Z",
+   "created_at": "2026-10-07T13:47:01.719983Z",
    "displaced": [],
    "fixes": [
-    "B2f2148b33b"
+    "Bc06bd1fad9"
    ],
    "gates": {},
    "globs": [
     "src/parser.py"
    ],
-   "id": "fix-B2f2148b33b",
+   "id": "fix-Bc06bd1fad9",
    "kind": "task",
    "landed_after": "",
    "landed_before": "",
@@ -543,7 +543,7 @@
    "tags": [
     "bugfix"
    ],
-   "title": "Fix bug B2f2148b33b: parse('') returns [] where [['']] was meant",
+   "title": "Fix bug Bc06bd1fad9: parse('') returns [] where [['']] was meant",
    "triage": {},
    "worktree": ""
   }
@@ -551,7 +551,7 @@
  "jobs": {},
  "lessons": {
   "L-1": {
-   "at": "2026-10-07T13:04:49.486791Z",
+   "at": "2026-10-07T13:46:51.057859Z",
    "by": "fx-alice",
    "globs": [],
    "how": "line.rstrip('\\n').split(',')",
@@ -568,11 +568,11 @@
   }
  },
  "memories": {
-  "M97b6d40554": {
-   "at": "2026-10-07T13:04:50.338529Z",
+  "M38b450bc78": {
+   "at": "2026-10-07T13:46:51.953861Z",
    "by": "fx-alice",
    "forgotten": "",
-   "id": "M97b6d40554",
+   "id": "M38b450bc78",
    "origin_at": "",
    "source": "",
    "tags": [],
@@ -580,12 +580,12 @@
   }
  },
  "research": {
-  "Re8647b2fec": {
-   "at": "2026-10-07T13:04:49.860556Z",
+  "Ra005499e09": {
+   "at": "2026-10-07T13:46:51.505803Z",
    "budget": "",
    "claim": "''.split(',') returns ['']",
    "falsifier": "it returns []",
-   "id": "Re8647b2fec",
+   "id": "Ra005499e09",
    "item": "T1",
    "mechanism": "",
    "probe": "python -c \"print(''.split(','))\"",
@@ -597,21 +597,21 @@
   }
  },
  "sessions": {
-  "s20261007T130450-1218694": {
+  "s20261007T134652-259082": {
    "agent": "fx-alice",
-   "ended_at": "2026-10-07T13:05:02.914937Z",
-   "id": "s20261007T130450-1218694",
+   "ended_at": "2026-10-07T13:47:04.764300Z",
+   "id": "s20261007T134652-259082",
    "model": "fixture-model",
    "notes": [],
    "prompts": [
     {
-     "at": "2026-10-07T13:04:51.142228Z",
+     "at": "2026-10-07T13:46:52.745620Z",
      "item": "",
      "seq": 0,
      "text": "Implement phase P1"
     }
    ],
-   "started_at": "2026-10-07T13:04:50.756119Z",
+   "started_at": "2026-10-07T13:46:52.379326Z",
    "summary": "P1 half done"
   }
  },
