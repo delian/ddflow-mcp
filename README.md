@@ -217,7 +217,7 @@ the same implementation, so neither drifts from the other.
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
-| **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts show <name>` | `prompts/list` · `prompts/get` |
+| **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
 | **ask the tool to explain itself** | `ddflow help [topic]` | `ddflow_help` |
 
@@ -757,9 +757,17 @@ Every prompt is an external template, resolved config → project → shipped:
 
 ```sh
 ddflow prompts list              # where each template currently comes from
+ddflow prompts show <name>       # its source, as eject would write it
+ddflow prompts get <name> --arg KEY=VALUE   # a workflow command or macro, rendered
 ddflow prompts eject             # copy the shipped ones into .ddflow/prompts/
 $EDITOR .ddflow/prompts/review_system.md
 ```
+
+`prompts get` renders through the same code as MCP `prompts/get` (and the `ddflow_prompts`
+tool's `get`): every declared argument bound, a macro's parameters required and its `tools`
+preamble on top. `show` prints the text as written, `{% if %}` tags and all; a machinery
+template (`mcp_instructions`, the review prompts) takes no caller arguments, so `get`
+refuses it and names `show`.
 
 **Adding a mode of your own: `[[macro]]`.** Overriding a shipped workflow needs no code,
 and neither does adding one. A macro is a named, parameterised prompt — "enter debugger

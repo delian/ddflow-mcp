@@ -232,13 +232,14 @@ def cmd_prompts(a, c: Ctx) -> int:
         name=getattr(a, "name", "") or "",
         force=bool(getattr(a, "force", False)),
         agent=c.requested_agent,
+        arg=getattr(a, "arg", None),
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
     action = out.data["action"]
     problems = out.data.get("problems") or []
-    if action == "show":
+    if action in ("show", "get"):
         for p in problems:
             print(f"note: {p}", file=sys.stderr)
         print(out.data["text"])
@@ -282,7 +283,9 @@ def cmd_prompts(a, c: Ctx) -> int:
     print(
         "Edit any of them with `ddflow prompts eject <name>`, which copies the "
         "shipped default into .ddflow/prompts/ where it takes precedence.\n"
-        "Read one with `ddflow prompts show <name>`."
+        "Read one with `ddflow prompts show <name>`; run a workflow command or macro, "
+        "rendered as MCP prompts/get gives it, with `ddflow prompts get <name> "
+        "[--arg KEY=VALUE]`."
     )
     return OK
 

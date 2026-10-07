@@ -896,27 +896,8 @@ class Server:
                     + P.not_loaded_note(self.repo),
                 )
             try:
-                if name in P.COMMANDS:
-                    tmpl = P.resolve_command(name, self.repo)
-                    # Every declared argument is bound, empty when absent: the renderer is
-                    # strict about undefined names, and a command that raises because the
-                    # operator omitted an optional argument is a command nobody uses twice.
-                    declared = dict.fromkeys(P.COMMANDS[name][2], "")
-                    text = P.render(
-                        tmpl, **{**declared, **args, "test_gates": _test_gates(self.repo)}
-                    )
-                else:
-                    # A MACRO. Its declared params are REQUIRED, unlike a shipped
-                    # command's optional `scope`: an operator who declares a parameter is
-                    # saying the mode does not make sense without it, and a prompt rendered
-                    # with a hole in it reads as a complete instruction.
-                    from ..services import macros as M
-
-                    text = M.render(
-                        M.load_macros(self.repo)[name],
-                        self.repo,
-                        {k: str(v) for k, v in args.items()},
-                    )
+                # The one rendering `ddflow prompts get` and the `ddflow_prompts` tool share.
+                text = P.render_command(name, self.repo, args)
             except (P.TemplateError, _macro_error()) as exc:
                 return _err(mid, -32602, str(exc))
             return _ok(
@@ -998,29 +979,6 @@ def _macro_error() -> type[Exception]:
     from ..services.macros import MacroError
 
     return MacroError
-
-
-def _test_gates(repo: Path) -> list[str]:
-    """Every configured gate that looks like a test suite, beyond `unit_tests`.
-
-    Read from the project's own config so the `all-tests` command names the suites
-    that actually exist here, rather than a generic list the reader has to translate.
-    """
-    try:
-        from ..config import Config
-        from ..services.gates import load_gates
-
-        cfg = Config.load(repo)
-        gates = load_gates(repo, cfg)
-    except Exception:
-        return []
-    return sorted(
-        g.id
-        for g in gates.values()
-        if g.id != "unit_tests"
-        and g.is_command_gate
-        and any(w in g.id for w in ("test", "e2e", "smoke", "integration", "ui"))
-    )
 
 
 #: Keys a tool's payload carries only when the operation produced them.

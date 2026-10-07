@@ -160,6 +160,18 @@ def register(s: argparse._SubParsersAction) -> None:
     prs = pr_s.add_parser("show")
     prs.add_argument("name")
     prs.set_defaults(fn=cmd_prompts)
+    prg = pr_s.add_parser(
+        "get", help="a workflow command or macro rendered, exactly as MCP prompts/get gives it"
+    )
+    prg.add_argument("name")
+    prg.add_argument(
+        "--arg",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="one of its arguments (a macro's params are required); repeat for more",
+    )
+    prg.set_defaults(fn=cmd_prompts)
     pre = pr_s.add_parser("eject", help="copy the shipped templates into .ddflow/prompts/")
     pre.add_argument("name", nargs="?", default="")
     pre.add_argument("--force", action="store_true")

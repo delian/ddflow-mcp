@@ -108,6 +108,7 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
     ("prompts", "list"): "covered by ddflow_prompts, whose action argument selects it",
     ("prompts", "show"): "covered by ddflow_prompts, whose action argument selects it",
     ("prompts", "eject"): "covered by ddflow_prompts, whose action argument selects it",
+    ("prompts", "get"): "covered by ddflow_prompts, whose action argument selects it",
     ("companions", "list"): "covered by ddflow_companions",
     ("companions", "add"): "covered by ddflow_companions_add",
     ("config",): "covered by ddflow_configure, which reads and writes the same knobs",

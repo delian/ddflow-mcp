@@ -997,6 +997,39 @@ def hooks(
     return _hooks_status(repo, cfg)
 
 
+def _prompts_get(P, repo: Path, name: str, pairs: list[str], problems: list[str]) -> O.Outcome:
+    """`prompts get`: a workflow command or macro rendered as MCP `prompts/get` gives it.
+    ``P`` is `services.prompts`, passed in by `prompts`, which already imported it."""
+
+    def failed(why: str) -> O.Outcome:
+        return O.failed("prompts", why, rows=[], action="get", text="", written=[], skipped=[])
+
+    args: dict[str, str] = {}
+    for pair in map(str, pairs):  # a schema-violating MCP client may send a number
+        key, eq, value = pair.partition("=")
+        if not eq or not key.strip():
+            return failed(f"argument {pair!r}: expected KEY=VALUE")
+        args[key.strip()] = value
+    if name in P.TEMPLATE_NAMES and name not in P.all_commands(repo):
+        return failed(
+            f"{name!r} is a template, not a workflow command: it takes no arguments from a "
+            f"caller. `ddflow prompts show {name}` prints it."
+        )
+    try:
+        text = P.render_command(name, repo, args)
+    except P.TemplateError as exc:
+        return failed(str(exc))
+    return O.ok(
+        "prompts",
+        rows=[],
+        action="get",
+        text=text,
+        written=[],
+        skipped=[],
+        problems=[p for p in problems if f"macro {name!r}" in p],
+    )
+
+
 def prompts(
     repo: Path,
     *,
@@ -1004,8 +1037,15 @@ def prompts(
     name: str = "",
     force: bool = False,
     agent: str = "",
+    arg: list[str] | None = None,
 ) -> O.Outcome:
-    """The prompt library: list it, read one, or eject a copy to edit."""
+    """The prompt library: list it, read one, render one, or eject a copy to edit.
+
+    `show` prints a prompt's SOURCE, as `eject` would write it. `get` renders a workflow
+    command or `[[macro]]` with ``arg`` (``KEY=VALUE`` strings) exactly as MCP
+    `prompts/get` serves it -- arguments bound, a macro's parameters required, its tool
+    preamble on top -- through the same `prompts.render_command` (B5a2a2933c9).
+    """
     from ..services import prompts as P
 
     _log, cfg, _st = _load(repo, agent)
@@ -1052,6 +1092,8 @@ def prompts(
             return O.failed(
                 "prompts", str(exc), rows=[], action=action, text="", written=[], skipped=[]
             )
+    if action == "get":
+        return _prompts_get(P, repo, name, list(arg or []), problems)
     if action == "eject":
         # With no name, everything -- BOTH registries, plus any `[[macro]]`. Writing only
         # the templates would mean the documented way to edit a workflow command does not
@@ -1091,7 +1133,7 @@ def prompts(
         )
     return O.failed(
         "prompts",
-        f"unknown action {action!r}; known: list, show, eject",
+        f"unknown action {action!r}; known: list, show, get, eject",
         rows=[],
         action=action,
         text="",
