@@ -94,3 +94,24 @@ def test_a_mixed_name_under_quotepath_false_is_found(repo):
     (repo / 'café"b.txt').write_text("two\n")
     ok, missing = W.diff_covers_everything(repo, W.capture_diff(repo))
     assert ok, missing
+
+
+def test_a_path_is_not_found_as_the_tail_of_another(repo):
+    (repo / "sub").mkdir()
+    _commit(repo, "foo.py")
+    _commit(repo, "sub/foo.py")
+    (repo / "foo.py").write_text("two\n")
+    (repo / "sub" / "foo.py").write_text("two\n")
+    blocks = W.capture_diff(repo).split("diff --git ")
+    only_sub = "diff --git ".join(b for b in blocks if not b.startswith("a/foo.py"))
+    ok, missing = W.diff_covers_everything(repo, only_sub)
+    assert not ok and missing == ["foo.py"], missing
+
+
+def test_a_non_utf8_name_under_quotepath_false_is_found(repo):
+    _git(repo, "config", "core.quotepath", "false")
+    raw = os.fsdecode(b"caf\xe9.txt")
+    _commit(repo, raw)
+    (repo / raw).write_text("two\n")
+    ok, missing = W.diff_covers_everything(repo, W.capture_diff(repo))
+    assert ok, missing
