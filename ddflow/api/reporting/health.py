@@ -77,7 +77,9 @@ def _stale_glob_notes(repo: Path, st) -> list[str]:
     live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
     if not any(g.endswith(".py") for i in live for g in i.globs):
         return []
-    tracked = W.git_paths(repo, "ls-files") or []
+    tracked = W.git_paths(repo, "ls-files")
+    if tracked is None:  # "could not tell" is said, never read as "nothing stale"
+        return ["stale task globs not checked: git could not list the tracked files"]
     notes = []
     for it in live:
         stale = stale_package_globs(it.globs, tracked)
