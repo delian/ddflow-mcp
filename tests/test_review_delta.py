@@ -37,11 +37,13 @@ def _git(repo: Path, *args: str) -> str:
 def _delta_on(review_toml: str) -> str:
     """``review_toml`` with `delta_default = true` unless it says otherwise: the delta is
     what these tests are about, and it is no longer the shipped default."""
-    if "delta_default" in review_toml:
-        return review_toml
     # Unlimited rounds unless the test sets them: since D-gate-economy 2 deltas count
     # against review.max_rounds, and these tests are about the delta, not the cap.
-    extra = "delta_default = true\n" + ("" if "max_rounds" in review_toml else "max_rounds = 0\n")
+    extra = ("" if "delta_default" in review_toml else "delta_default = true\n") + (
+        "" if "max_rounds" in review_toml else "max_rounds = 0\n"
+    )
+    if not extra:
+        return review_toml
     if "[review]\n" in review_toml:
         return review_toml.replace("[review]\n", "[review]\n" + extra, 1)
     return "[review]\n" + extra + review_toml
