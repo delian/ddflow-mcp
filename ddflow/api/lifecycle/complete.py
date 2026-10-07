@@ -63,7 +63,10 @@ def complete(
     if isinstance(it, O.Outcome):
         return it
     if _settled_umbrella(st, it):
-        return _complete_umbrella(repo, log, cfg, st, it)
+        out = _complete_umbrella(repo, log, cfg, st, it)
+        out.data["umbrellas_completed"] = _complete_umbrellas_above(repo, log, cfg, item, agent)
+        out.data.update(_commit_events(log, cfg, f"complete {item}"))
+        return out
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()]
@@ -153,7 +156,6 @@ def complete(
     )
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
-    from ...core.model import fold
     from ...services import progress_line as PL
 
     # The item is complete and released by now: a report that cannot be built must
