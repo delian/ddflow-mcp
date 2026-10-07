@@ -195,7 +195,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         back_merged=back_merged,
         pr="",
         branch=wt.branch,
-        **_scope_fields(outside),
+        **_scope_fields(outside if borrowed else NOT_LISTED),
         **({"export_refresh": refreshed} if refreshed else {}),
     )
 
@@ -413,10 +413,17 @@ def _branch_to_land(
     return branch
 
 
-def _scope_fields(outside: list[str] | None) -> dict[str, Any]:
+#: An item landing its OWN worktree: its paths are not listed (its globs are its lease).
+NOT_LISTED = "not listed"
+
+
+def _scope_fields(outside: list[str] | str | None) -> dict[str, Any]:
     """`outside_globs` as recorded and returned: a list always, and `outside_globs_unknown`
-    beside it, true when git could not list the landing's paths -- so an empty list is never
-    read as a clean scope that nobody checked (B4e42502034)."""
+    beside it -- true when git could not list the landing's paths, false when it did, null
+    when nothing was listed (an item's own worktree) -- so an empty list is never read as a
+    clean scope that nobody checked (B4e42502034)."""
+    if outside == NOT_LISTED:
+        return {"outside_globs": [], "outside_globs_unknown": None}
     if outside is None:
         return {"outside_globs": [], "outside_globs_unknown": True}
     return {"outside_globs": outside, "outside_globs_unknown": False}

@@ -2772,7 +2772,7 @@ and paths the merge lands outside the item's globs are listed (`outside_globs`),
 borrowed branch can carry another item's commits too. The listing is exact for renamed
 files (both paths) and non-ASCII names; when git cannot list the landing at all,
 `outside_globs_unknown` is true and the CLI says so, rather than an empty list passing for a
-clean scope.
+clean scope (it is null for an item landing its own worktree, whose paths are not listed).
 
 ```console
 $ ddflow merge B-fix --branch agent-work
