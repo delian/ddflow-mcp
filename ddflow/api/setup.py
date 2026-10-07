@@ -732,12 +732,10 @@ def _hook_remedy(armed, check: str) -> str:
     return "Run `ddflow hooks install`"
 
 
-def _state_line(repo: Path, h, missing: str, known: tuple | None = None) -> str:
-    """One table hook's status: installed, UNKNOWN (with why), or `missing`. `known` is
-    a `state_spec` result the caller already has."""
-    from ..services import claudehooks as CH
-
-    on, why = known or CH.state_spec(repo, h)
+def _state_line(known: tuple[bool | None, str], missing: str) -> str:
+    """One hook's status from its `claudehooks.state_spec` result: installed, UNKNOWN
+    (with why), or `missing`."""
+    on, why = known
     if on is None:
         return f"UNKNOWN -- {why}"
     return "installed" if on else missing
@@ -748,7 +746,7 @@ def _prompt_hook_line(repo: Path) -> str:
 
     names = {"claude": "Claude Code", "gemini": "Gemini CLI"}
     return "; ".join(
-        f"{names[h.agent]}: {_state_line(repo, h, 'not installed')}"
+        f"{names[h.agent]}: {_state_line(CH.state_spec(repo, h), 'not installed')}"
         for h in CH.HOOKS
         if h.name == "prompt"
     )
@@ -758,8 +756,7 @@ def _precompact_line(repo: Path) -> str:
     from ..services import claudehooks as CH
 
     return _state_line(
-        repo,
-        CH.spec("claude", "pre-compact"),
+        CH.state_spec(repo, CH.spec("claude", "pre-compact")),
         "not installed (`ddflow hooks install --claude`)",
     )
 
@@ -855,14 +852,10 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             f"\n\nNOTE: the policy is 'block' but {missing}, so nothing enforces "
             f"it. {_hook_remedy(commit_hook, 'check-commit')}."
         )
-    start_hook = CH.spec("claude", "session-start")
-    known = CH.state_spec(repo, start_hook)
+    known = CH.state_spec(repo, CH.spec("claude", "session-start"))
     session = known[0]
     session_line = _state_line(
-        repo,
-        start_hook,
-        "not installed (`ddflow hooks install --claude` puts the brief in every session)",
-        known,
+        known, "not installed (`ddflow hooks install --claude` puts the brief in every session)"
     )
     msg_armed = E.armed(repo, "commit-msg")
     msg_hook = bool(msg_armed.via)
