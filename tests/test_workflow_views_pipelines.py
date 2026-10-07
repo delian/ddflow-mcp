@@ -63,3 +63,25 @@ def test_without_environments_no_promotion_runs_so_none_is_shown(repo):
     assert out.data["workflow"]["promotion_pipeline"] == []
     assert SIGNOFF not in out.data["workflow_diagram"]
     assert SIGNOFF not in api.companions_list(repo, no_probe=True).data["gate_coverage"]
+
+
+def test_coverage_judges_every_pipeline_that_runs_once_each(repo):
+    """Read off `gates.pipelines`, as `ddflow workflow` does: the phase pipeline's gates
+    are judged too, and a gate named by two pipelines appears once."""
+    from ddflow.config import Config
+    from ddflow.services import companions as CO
+
+    _with_promotion(repo)
+    cfg = Config.load(repo)
+    got = CO.coverage_gates(cfg)
+    assert len(got) == len(set(got))
+    for gid in [*cfg.gates.task_pipeline, *cfg.gates.phase_pipeline, SIGNOFF]:
+        assert gid in got, (gid, got)
+
+
+def test_the_diagram_never_merges_two_steps_into_one_node():
+    from ddflow.api.workflow_state import _diagram
+
+    text = _diagram(["promote_test", "review"], ["test", "Promoted"])
+    targets = [ln.split("-->")[1].strip().split("[")[0] for ln in text.splitlines()[1:]]
+    assert len(targets) == len(set(targets)), text
