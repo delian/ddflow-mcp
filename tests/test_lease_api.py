@@ -176,3 +176,18 @@ def test_dedupe_calls_a_live_claim_held(repo):
     where = DD.record_state(st, "T1", "task", now=time.time(), grace_s=cfg.lease.grace_s)[1]
     assert where == "claimed by gone"
     assert not DD.extendable(st, "T1", "task", grace_s=cfg.lease.grace_s)
+
+
+def test_a_duplicate_pointing_at_a_claim_names_its_holder_only_while_it_is_live(repo):
+    """The notify path: an add that points at a claimed record tells its holder only when
+    the claim is live; a lapsed one is extended instead."""
+    from ddflow.api import _dedupe as DD
+
+    rec = DD.Record(kind="task", event_kind="task.added", rid="T2", title="t", body="")
+    ans = DD.Answer("extends", "T1")
+    for at, holder, extension in ((time.time(), "gone", False), (time.time() - 864000, "", True)):
+        st, cfg = _lapsed_unrecorded(repo, at=at)
+        out = DD._point(st, rec, ans, {"score": 1.0}, DD.Checked(), cfg.lease.grace_s)
+        assert bool(out.extension) is extension
+        if not extension:
+            assert out.notify["holder"] == holder
