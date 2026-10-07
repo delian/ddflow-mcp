@@ -92,6 +92,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "tag": ("string", "Filter by this tag.", False),
             "scope": ("string", "Filter by this scope.", False),
+            "json": ("boolean", "", False),
+            "limit": ("integer", "", False),
+        },
+        "deprecated": {
+            "json": "the result is always JSON",
+            "limit": "the list is not truncated",
         },
         "api": lambda repo, a, agent: _api().rule_list(
             repo,
@@ -196,7 +202,9 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Rule id to remove.", True),
+            "reason": ("string", "", False),
         },
+        "deprecated": {"reason": "a removal takes no reason and leaves no record"},
         "api": lambda repo, a, agent: _api().rule_remove(
             repo,
             a["id"],

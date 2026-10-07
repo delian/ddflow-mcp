@@ -126,7 +126,10 @@ def _properties(spec: dict[str, Any]) -> dict[str, tuple[str, str, bool]]:
 
 
 def _schema(spec: dict[str, Any]) -> dict[str, Any]:
-    all_props = _properties(spec)
+    # A deprecated argument is still ACCEPTED (D-compat: an argument a release took keeps
+    # working until 1.0) but is not advertised: a new caller should not learn it.
+    old = spec.get("deprecated") or {}
+    all_props = {n: p for n, p in _properties(spec).items() if n not in old}
     props = {
         name: {
             "type": t,
@@ -654,6 +657,11 @@ class Server:
                         error=True,
                     ),
                 )
+            # An argument kept only for callers of an older release: dropped here, so no api
+            # lambda sees it, and said once in the reply (`deprecation_note`).
+            retired = {n: why for n, why in (spec.get("deprecated") or {}).items() if n in args}
+            if retired:
+                args = {k: v for k, v in args.items() if k not in retired}
             # The per-call identity, stripped BEFORE the tool sees its arguments so no
             # api lambda has to know it exists. Validated with the same rule as a
             # declaration: it becomes a log shard filename either way.
@@ -759,6 +767,8 @@ class Server:
                 # `jtool`-style consumers are untouched.
                 if name == "ddflow_help" and (tiered := tier_note(self.tier)):
                     out["content"].append({"type": "text", "text": tiered})
+                if retired:
+                    out["content"].append({"type": "text", "text": deprecation_note(name, retired)})
                 note = _obligation_footer(self)
                 if note:
                     out["content"].append({"type": "text", "text": note})
@@ -1299,6 +1309,16 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
             "Call `ddflow_brief` for the state of the queue, and `ddflow_prompts` to "
             "inspect the template configuration."
         )
+
+
+def deprecation_note(tool: str, retired: dict[str, str]) -> str:
+    """The one line a call answers with when it passed arguments a release retired: they
+    were ignored, and why, so the caller can stop sending them."""
+    named = "; ".join(f"`{n}` ({why})" for n, why in sorted(retired.items()))
+    return (
+        f"note: {tool} argument(s) {named} are deprecated and ignored (kept so callers of an "
+        f"older ddflow keep working until 1.0); stop sending them."
+    )
 
 
 def _text(body: str, *, error: bool = False, meta: dict | None = None) -> dict[str, Any]:
