@@ -1,2 +1,2 @@
 def parse(text):
-    return [line.rstrip('\n').split(',') for line in text.splitlines()]
+    return [line.split(",") for line in text.splitlines()]
