@@ -17,6 +17,7 @@ POSIX only, as the rest of the package (`fcntl`).
 from __future__ import annotations
 
 import contextlib
+import errno
 import fcntl
 import os
 import re
@@ -109,6 +110,26 @@ def atomic_write(
         # delete another's file in flight.
         tmp.unlink(missing_ok=True)
         raise
+
+
+def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
+    """`Path(path).write_text(text, "utf-8")` that no reader ever sees half-written.
+
+    The drop-in for a writer moving off `write_text` with nothing else changing: a
+    symlink is written THROUGH (its target gets the new text and the link stays, where
+    `atomic_write` alone would put a regular file in the link's place -- `CLAUDE.md ->
+    AGENTS.md` is a common layout), a link loop raises as `write_text` does, and a missing
+    parent directory raises `FileNotFoundError` instead of being created. The mode rules
+    are `atomic_write`'s: an existing file keeps its own, a new one gets 0666 less the
+    umask, as `write_text` gives it.
+    """
+    named = Path(path)
+    target = Path(os.path.realpath(named)) if named.is_symlink() else named
+    if target.is_symlink():  # realpath gave up: a loop
+        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(named))
+    if not target.parent.is_dir():
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(named))
+    atomic_write(target, text, fsync=fsync)
 
 
 def _link_exclusive(

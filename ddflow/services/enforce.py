@@ -44,6 +44,7 @@ from ..core.model import Lease, fold
 from ..core.schedule import globs_overlap, is_shared, path_in_glob, shared_globs
 from ..infra import proc as P
 from ..infra import worktree as W
+from ..infra.fsio import replace_text
 from ..infra.log import EventLog
 from .install_info import running_from_source
 
@@ -207,7 +208,7 @@ def _install_one(
     if hook.exists():
         existing = hook.read_text("utf-8", errors="replace")
         if HOOK_MARKER in existing:
-            hook.write_text(text, "utf-8")
+            replace_text(hook, text)
             _chmod_x(hook)
             return f"updated the ddflow {name} hook at {hook}"
         if PRECOMMIT_HEADER in existing and not force:
@@ -222,7 +223,7 @@ def _install_one(
                 f"    {invocation.replace('exec ', '').replace('; exit 0', '')} || exit 1\n"
                 f"or re-run with --force to replace it."
             )
-    hook.write_text(text, "utf-8")
+    replace_text(hook, text)
     _chmod_x(hook)
     return f"installed the ddflow {name} hook at {hook}"
 

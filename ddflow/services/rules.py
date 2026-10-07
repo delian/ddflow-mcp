@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..infra.fsio import replace_text
 from ..infra.tomlcfg import basic_string
 
 _FRONTMATTER_PARTS = 2  # frontmatter + content, split on the first blank line
@@ -325,7 +326,7 @@ class RulesStorage:
             raise ValueError(f"Rule {rule.id} already exists at {rule_path}")
 
         # Write the rule to disk
-        rule_path.write_text(rule.to_toml())
+        replace_text(rule_path, rule.to_toml())
 
         # Return the rule and event fields
         return rule, {
@@ -372,7 +373,7 @@ class RulesStorage:
         if not rule_path.exists():
             raise FileNotFoundError(f"Rule {rule_id} not found at {rule_path}")
 
-        toml_text = rule_path.read_text()
+        toml_text = rule_path.read_text("utf-8")
         return Rule.from_toml(toml_text)
 
     def list(self, tag: str | None = None, scope: str | None = None) -> list[Rule]:
@@ -430,7 +431,7 @@ class RulesStorage:
 
         # Write back to disk
         rule_path = self._rule_path(rule_id)
-        rule_path.write_text(rule.to_toml())
+        replace_text(rule_path, rule.to_toml())
 
         # Return the updated rule and event fields (only changed fields)
         event_fields = {"rule_id": rule_id}
