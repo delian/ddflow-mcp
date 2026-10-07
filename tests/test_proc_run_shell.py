@@ -66,7 +66,11 @@ def test_an_error_in_the_tick_callback_is_not_a_command_that_could_not_start(tmp
 
     with pytest.raises(OSError, match="lease renewal"):
         P.run_shell(
-            f"sleep 30 & echo $! > {pidfile}; wait", cwd=tmp_path, timeout_s=10, on_tick=tick, tick_s=0.2
+            f"sleep 30 & echo $! > {pidfile}; wait",
+            cwd=tmp_path,
+            timeout_s=10,
+            on_tick=tick,
+            tick_s=0.2,
         )
     pid = int(pidfile.read_text())
     import time
@@ -79,3 +83,22 @@ def test_an_error_in_the_tick_callback_is_not_a_command_that_could_not_start(tmp
             return
         time.sleep(0.05)
     pytest.fail("the command outlived the failed tick")
+
+
+def test_a_timeout_raised_by_the_tick_callback_is_not_the_commands_timeout(tmp_path):
+    def tick():
+        raise P.TimeoutExpired("lease renewal", 1)
+
+    with pytest.raises(P.TimeoutExpired, match="lease renewal"):
+        P.run_shell("sleep 30", cwd=tmp_path, timeout_s=10, on_tick=tick, tick_s=0.2)
+
+
+def test_a_gate_whose_keep_alive_tick_fails_is_unavailable_not_a_crash(tmp_path):
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    def tick():
+        raise OSError("lease renewal failed")
+
+    gdef = GateDef(id="unit_tests", command="sleep 30", timeout_s=10)
+    outcome, ev = run_command_gate(gdef, tmp_path, on_tick=tick, tick_s=0.2)
+    assert outcome == "unavailable" and "lease renewal failed" in ev["reason"]

@@ -155,7 +155,9 @@ def run_shell(
     ``merge_stderr`` stderr is folded into ``out`` in the order written. This never raises
     for the command's own trouble: a timeout is ``timed_out``, a command that could not be
     started is ``could_not_run`` with the reason in ``err``. (A bad ``on_tick``/``tick_s``
-    pair is the caller's bug and still raises ValueError.)
+    pair is the caller's bug and still raises ValueError, and an exception raised BY
+    ``on_tick`` is not the command's trouble: the group is killed and that exception
+    reaches the caller as it was, never as ``could_not_run`` or ``timed_out``.)
     """
     if on_tick is not None and tick_s <= 0:
         raise ValueError("run_shell: on_tick needs tick_s > 0, or it would never be called")
@@ -187,17 +189,17 @@ def run_shell(
             tick_s=tick_s,
             **kwargs,
         )
-    except subprocess.TimeoutExpired as exc:
-        return ShellResult(
-            None,
-            _text(exc.output),
-            _text(exc.stderr),
-            timed_out=True,
-            elapsed_s=round(time.monotonic() - start, 3),
-        )
-    except (OSError, ValueError) as exc:
+    except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
         if from_tick:
-            raise  # the group is already killed; the callback's error reaches its caller
+            raise from_tick[0] from None  # the callback's error, as it was; not the command's
+        if isinstance(exc, subprocess.TimeoutExpired):
+            return ShellResult(
+                None,
+                _text(exc.output),
+                _text(exc.stderr),
+                timed_out=True,
+                elapsed_s=round(time.monotonic() - start, 3),
+            )
         return ShellResult(None, err=str(exc), could_not_run=True)
     return ShellResult(
         p.returncode,
