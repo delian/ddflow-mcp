@@ -241,3 +241,18 @@ def test_only_regression_tests_pytest_runs_are_listed_as_selected(repo):
     assert code == OK, ev
     listed = {t["path"] for t in ev["selected_tests"]}
     assert "scripts/check.sh" not in listed and "tests/test_f.py" in listed, ev
+
+
+def test_a_ci_pass_with_no_measured_tree_does_not_select(repo):
+    """roborev on e1cbc816: an unmeasured ci pass said 'uncommitted changes'; it cannot
+    tell which tree it passed on, and says so."""
+    from ddflow.api._base import _load
+    from ddflow.services import testselect as TS
+
+    _project(repo)
+    wt = _fix(repo)
+    _ci(repo, "fix-B1")
+    _log, cfg, st = _load(repo, "")
+    st.items["fix-B1"].gates["ci"].evidence.pop("tree_sha", None)
+    scope = TS.unit_tests_scope(cfg, st, st.items["fix-B1"], "pytest -q tests", wt)
+    assert scope.scope == "full" and "no measured tree" in scope.why, scope

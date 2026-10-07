@@ -166,7 +166,7 @@ def test_the_agent_is_told_to_run_relevant_tests_in_parallel_and_all_at_the_gate
     ).read_text()
     assert "ddflow tests --item <ID>" in driver
     assert "never record unit_tests from a run of\n  your own" in driver
-    assert "it runs the **whole** suite on the branch merged with\n  the base" in driver
+    assert "it runs the **whole** suite on the branch merged with the\n  base" in driver
     prompt = G.DEFAULT_GATES["unit_tests"].prompt
     assert "WHOLE suite" in prompt and "-n auto" in prompt and "ddflow tests" in prompt
     assert "ci runs the WHOLE suite on the merge result and passes" in prompt
