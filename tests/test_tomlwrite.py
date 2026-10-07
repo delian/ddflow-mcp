@@ -127,7 +127,7 @@ def test_value_is_the_one_value_writer(value, literal) -> None:
 
 @pytest.mark.parametrize(
     ("typed", "written"),
-    [("true", "true"), ("12", "12"), ("1.5", "1.5"), ("[1, 2]", "[1, 2]"), ("plain", '"plain"'),
+    [("true", "true"), ("12", "12"), ("1.5", "1.5"), ("[1, 2]", "[1, 2]"), ("plain", '"plain"'), ("01234", '"01234"'), ("0", "0"), ("-0.5", "-0.5"), ("007", '"007"'),
      ("a b", '"a b"'), ("--flag", '"--flag"')],
 )  # fmt: skip
 def test_literal_keeps_what_is_already_a_value_and_quotes_the_rest(typed, written) -> None:
@@ -144,3 +144,15 @@ def test_tomlkit_is_imported_in_one_module() -> None:
         if re.search(r"^\s*(import|from) tomlkit\b", path.read_text("utf-8"), re.M)
     }
     assert importers == {"infra/tomlcfg.py"}
+
+
+def test_a_zero_padded_number_is_written_as_text_not_refused() -> None:
+    """Bug B68008666ed: `--set id 01234` was passed through bare, which is not TOML."""
+    out = TC.upsert("[a]\nx = 1\n", "a.id", TC.literal("01234"))
+    assert tomllib.loads(out)["a"]["id"] == "01234"
+
+
+def test_a_key_without_a_section_is_a_top_level_key() -> None:
+    out = TC.upsert("# c\n[a]\nx = 1\n", "name", '"v"')
+    assert tomllib.loads(out)["name"] == "v" and "# c" in out
+    assert tomllib.loads(TC.upsert("", "k", "1")) == {"k": 1}
