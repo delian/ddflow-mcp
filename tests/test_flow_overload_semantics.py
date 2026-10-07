@@ -31,9 +31,9 @@ def test_failed_review_gates_are_not_counted_as_gate_failures():
     assert s.gate_failure_ratio is not None and s.gate_failure_ratio <= 1.0, s
 
 
-def test_limited_by_never_names_a_signal_that_is_null_now():
-    """A decrease on reviewer_latency_ratio, then hours of that ratio being null while
-    gate_failure_ratio sits in its neutral band: the reason names what holds it now."""
+def _after_a_decrease(rlr: float | None, gfr: float, in_flight: int = 4) -> FC.Decision:
+    """A decrease on reviewer_latency_ratio, then two hours of it reading ``rlr`` while
+    gate_failure_ratio reads ``gfr``, with ``in_flight`` agents running throughout."""
     samples = [
         FC.Sample(at=i * 60.0, signals={**HEALTHY_HOST, "reviewer_latency_ratio": 2.5})
         for i in range(4)
@@ -41,12 +41,26 @@ def test_limited_by_never_names_a_signal_that_is_null_now():
     samples += [
         FC.Sample(
             at=(4 + i) * 60.0,
-            signals={**HEALTHY_HOST, "reviewer_latency_ratio": None, "gate_failure_ratio": 1.6},
+            signals={**HEALTHY_HOST, "reviewer_latency_ratio": rlr, "gate_failure_ratio": gfr},
         )
         for i in range(120)
     ]
-    now = samples[-1].at
-    d = FC.fold_limit(samples, FC.Params(), [(0.0, 4)], now)
+    d = FC.fold_limit(samples, FC.Params(), [(0.0, in_flight)], samples[-1].at)
     assert d.limit < FC.Params().start, "fixture: the early samples should lower the limit"
-    assert d.limited_by != "reviewer_latency_ratio", d
-    assert d.limited_by == "gate_failure_ratio", d
+    return d
+
+
+def test_limited_by_never_names_a_signal_that_is_null_now():
+    """gate_failure_ratio over its low mark (1.5) holds growth: it is what is named."""
+    assert _after_a_decrease(None, 1.6).limited_by == "gate_failure_ratio"
+
+
+def test_with_every_signal_healthy_the_growth_or_demand_is_named():
+    """The incident's own values: the ratio at 1.2-1.4, under its low mark, and the
+    latency ratio null -- nothing holds the limit but demand (one agent running)."""
+    assert _after_a_decrease(None, 1.3, in_flight=1).limited_by == "demand (1 in flight)"
+
+
+def test_a_decrease_signal_that_recovered_is_not_named():
+    """Not null but healthy again (under its low mark): it holds nothing either."""
+    assert _after_a_decrease(1.0, 1.6).limited_by == "gate_failure_ratio"
