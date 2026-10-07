@@ -186,7 +186,7 @@ into the gate's record and earlier triage stays), for a diff too large to send t
 `ddflow config review.delta_default true [--local]` makes every plain re-review a delta
 (`--full` then still asks for a full round).
 
-**Tests: the relevant ones while you work, all of them at the gate, always in parallel.**
+**Tests: the relevant ones while you work, all of them once before the merge, always in parallel.**
 
 ```sh
 ddflow tests --item <ID>                         # [ddflow_tests] after EACH change
@@ -197,9 +197,12 @@ ddflow tests --item <ID>                         # [ddflow_tests] after EACH cha
   runs them in parallel. Do not reason about which tests matter — that is guessing, and
   the derivation is cheaper than being wrong. A regression test you are writing is in the
   set as soon as its file exists.
-- **At the gate**, `unit_tests` runs the **whole** suite. A targeted run says your change
-  is fine and nothing about what was already broken; the full run is where standing
-  breakage surfaces. Never record `unit_tests` from a selection.
+- **At the gate**, run `ddflow gate run <ID> unit_tests`; never record it from a run of
+  your own. For a bug fix or a small task whose pipeline has a `ci` gate it runs the
+  selection (decision D-gate-economy 1; its evidence lists the tests and why), and `ci`
+  runs the **whole** suite on the merge result; for anything else `unit_tests` runs the
+  whole suite. A targeted run says your change is fine and nothing about what was already
+  broken; the full run is where standing breakage surfaces, so run `ci` before merging.
 - **Always in parallel.** Run pytest with `-n auto` (pytest-xdist) or the project's
   configured worker count; a serial run of a large suite is the slowest step in this
   loop. If `ddflow workflow` says the test command runs on ONE core, fix the command
