@@ -32,8 +32,9 @@ def test_run_stamp_is_utc_second_then_a_token():
 
 def test_run_stamps_made_in_one_second_differ_and_sort_by_time():
     at = 1_790_000_000.0
-    same = {clock.run_stamp(at) for _ in range(5000)}
-    assert len(same) == 5000
+    # a fresh token per call: 200 draws from 32 bits collide about once in 200,000 runs
+    same = {clock.run_stamp(at) for _ in range(200)}
+    assert len(same) == 200
     assert clock.run_stamp(at) < clock.run_stamp(at + 1) < clock.run_stamp(at + 86_400)
 
 
