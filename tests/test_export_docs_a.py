@@ -116,7 +116,10 @@ def test_roadmap_lanes_follow_state_and_dependencies():
 
 def test_roadmap_phase_dependency_met_moves_phase_to_next():
     g = road_log()
-    g.done("T4", _ts(3))  # P2 complete: P3's inherited dependency is met
+    g.done("T4", _ts(3))
+    # P2 closed: P3's inherited dependency is met. Its tasks alone do not do it -- the
+    # scheduler waits for the phase itself (`schedule.dep_status`, B58010c24b3).
+    g.add("item.completed", "P2", {"kind": "phase"}, _ts(3))
     body = _body("roadmap", g.query())
     nxt = body.split("## Next", 1)[1].split("## Later", 1)[0]
     assert "### P3" in nxt and "`T5` inherits the phase dependency\n" in nxt
