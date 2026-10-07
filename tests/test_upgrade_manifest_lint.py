@@ -156,6 +156,9 @@ def test_a_lint_that_cannot_run_stops_the_cut_only_under_block(tree, monkeypatch
     UM.MANIFEST.write_text("not [valid toml", "utf-8")
     assert api.version_lint(tree).exit == REFUSED
     assert api.version_cut(tree, bump="patch", dry_run=True).exit == REFUSED
+    assert run_cli(tree, "config", "release.manifest_lint", "warn", "--local")[0] == OK
+    cut = api.version_cut(tree, bump="patch", dry_run=True)
+    assert cut.data["unavailable"] and "could not run" in cut.data["warning"]
     for policy in ("warn", "off"):
         assert run_cli(tree, "config", "release.manifest_lint", policy, "--local")[0] == OK
         out = api.version_lint(tree)

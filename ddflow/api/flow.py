@@ -225,6 +225,7 @@ def version_cut(
     if blocked is not None and blocked.exit != 0:
         return blocked
     lint_warning = blocked.data["warning"] if blocked is not None else ""
+    lint_unavailable = blocked.data.get("unavailable", "") if blocked is not None else ""
     c = FS.cut(
         repo,
         cfg,
@@ -248,6 +249,7 @@ def version_cut(
         "changelog": c.changelog,
         "version_files": c.version_files,
         "notes": c.plan.notes if c.plan else "",
+        "unavailable": lint_unavailable,
         "warning": "\n".join(w for w in (c.reason if c.ok else "", lint_warning) if w),
     }
     if c.refused:
