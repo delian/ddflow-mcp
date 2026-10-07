@@ -63,6 +63,13 @@ FOLD_ONLY: dict[str, str] = {
 }
 
 
+#: A `repair.applied` event names at most this many findings, each detail cut to
+#: DETAIL_CHARS: a repair with more findings writes several events, so no one line grows
+#: past what the log reads back cheaply (`infra.log` reads a tail of at most 64 KiB).
+RECORD_FINDINGS = 100
+DETAIL_CHARS = 240
+
+
 def by_id(rid: str) -> Repair:
     for r in REGISTRY:
         if r.id == rid:
@@ -137,11 +144,21 @@ def apply(
             "since": r.since,
             "version": running_version(),
             "findings": [f.key for f in p.findings],
-            "details": [f.detail for f in p.findings],
             "events": len(corrective),
-            "summary": f"{r.title}: {len(p.findings)} finding(s) settled",
         }
-        log.append(REPAIR_APPLIED_KIND, r.id, record)
+        for at in range(0, len(p.findings), RECORD_FINDINGS):
+            part = p.findings[at : at + RECORD_FINDINGS]
+            log.append(
+                REPAIR_APPLIED_KIND,
+                r.id,
+                {
+                    **record,
+                    "findings": [f.key for f in part],
+                    "details": [f.detail[:DETAIL_CHARS] for f in part],
+                    "events": len(corrective) if at == 0 else 0,
+                    "summary": f"{r.title}: {len(part)} finding(s) settled",
+                },
+            )
         applied.append(record)
     return applied
 

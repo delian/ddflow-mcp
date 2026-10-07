@@ -278,3 +278,20 @@ def test_doctor_reports_a_pending_repair_once_and_forgets_a_reviewed_author(old)
     R.apply(old, EventLog(old, "repairer"), Config.load(old), ["forced-completions", "unknown-author-shards"])
     _problems, notes = _doctor(old)
     assert not [n for n in notes if "forced-completions" in n or "no committed history" in n]
+
+
+def test_a_forced_completion_redone_cleanly_is_not_reported(old):
+    _forced(old)
+    _raw(old, "item.completed", "T1", {"forced": False, "overridden": []})
+    assert R.pending(_ctx(old), ["forced-completions"]) == []
+
+
+def test_many_findings_are_recorded_in_bounded_events(old):
+    for n in range(R.RECORD_FINDINGS + 30):
+        _raw(old, "session.note", "", {"text": f"lost {n}"})
+    log = EventLog(old, "repairer")
+    (rec,) = R.apply(old, log, Config.load(old), ["orphan-prompts"])
+    assert len(rec["findings"]) == R.RECORD_FINDINGS + 30
+    records = [e for e in log.read_all() if e.kind == "repair.applied"]
+    assert [len(e.data["findings"]) for e in records] == [R.RECORD_FINDINGS, 30]
+    assert R.pending(_ctx(old), ["orphan-prompts"]) == []
