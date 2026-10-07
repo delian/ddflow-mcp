@@ -391,7 +391,8 @@ def test_arguments_0_1_15_accepted_are_still_accepted_as_deprecated_no_ops(repo:
     assert run_cli(repo, "rule", "add", "--id", "r-one", "--title", "One", "--content", "x")[0] == 0
 
     plain = _mcp(repo, "ddflow_rule_list", {})
-    old = _mcp(repo, "ddflow_rule_list", {"json": True, "limit": 5})
+    # limit 0 would empty a list that honoured it: the answer must stay the plain one
+    old = _mcp(repo, "ddflow_rule_list", {"json": True, "limit": 0})
 
     assert not old["isError"], old
     assert old["content"][0] == plain["content"][0], "the answer is the same without them"
