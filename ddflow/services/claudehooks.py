@@ -150,7 +150,7 @@ def state_spec(repo: Path, h: HookSpec) -> tuple[bool | None, str]:
     return state(repo, event=h.event, marker=h.marker, rel=h.file)
 
 
-def settings_path(repo: Path, rel: str = ".claude/settings.json") -> Path:
+def settings_path(repo: Path, rel: str = CLAUDE_SETTINGS) -> Path:
     """The PROJECT settings file: committed, so every clone and worktree gets the hook."""
     return Path(repo) / rel
 
@@ -215,7 +215,7 @@ def state(
     *,
     event: str = "SessionStart",
     marker: str = MARKER,
-    rel: str = ".claude/settings.json",
+    rel: str = CLAUDE_SETTINGS,
 ) -> tuple[bool | None, str]:
     """(installed?, why). None means the settings file could not be read -- which is
     NOT the same as "not installed", and reporting it as that told an operator to
@@ -239,7 +239,7 @@ def install(
     event: str = "SessionStart",
     marker: str = MARKER,
     matcher: str | None = MATCHER,
-    rel: str = ".claude/settings.json",
+    rel: str = CLAUDE_SETTINGS,
     purpose: str = "",
 ) -> str:
     """Add (or refresh) our hook for `event`, leaving every other hook exactly as it was.
@@ -275,7 +275,7 @@ def uninstall(
     *,
     event: str = "SessionStart",
     marker: str = MARKER,
-    rel: str = ".claude/settings.json",
+    rel: str = CLAUDE_SETTINGS,
 ) -> str:
     """Remove OUR hook only; drop a group only if ours was all it held."""
     path = settings_path(repo, rel)
