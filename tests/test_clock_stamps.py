@@ -30,11 +30,14 @@ def test_run_stamp_is_utc_second_then_a_token():
     assert STAMP.match(clock.run_stamp())
 
 
-def test_run_stamps_made_in_one_second_differ_and_sort_by_time():
+def test_run_stamps_made_in_one_second_differ_and_sort_by_time(monkeypatch):
     at = 1_790_000_000.0
-    # a fresh token per call: 200 draws from 32 bits collide about once in 200,000 runs
-    same = {clock.run_stamp(at) for _ in range(200)}
-    assert len(same) == 200
+    # a fresh token per call, drawn from `secrets` (made deterministic here, so the test
+    # proves the draw and never depends on 32 bits not colliding)
+    tokens = iter(f"{n:08x}" for n in range(1000))
+    monkeypatch.setattr(clock.secrets, "token_hex", lambda _n: next(tokens))
+    same = [clock.run_stamp(at) for _ in range(200)]
+    assert len(set(same)) == 200
     assert clock.run_stamp(at) < clock.run_stamp(at + 1) < clock.run_stamp(at + 86_400)
 
 
