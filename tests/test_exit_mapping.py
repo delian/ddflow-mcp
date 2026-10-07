@@ -13,6 +13,7 @@ import pytest
 
 from ddflow.core import outcome as O
 from ddflow.core.events import SkewRefused
+from ddflow.infra.worktree import GitError
 from ddflow.services.leases import LeaseError
 from ddflow.services.reviewer_trust import ReviewerRefused
 
@@ -23,6 +24,7 @@ from ddflow.services.reviewer_trust import ReviewerRefused
         (ReviewerRefused("a person runs this"), O.REFUSED),
         (LeaseError("held by U9"), O.REFUSED),
         (SkewRefused("newer log"), O.REFUSED),
+        (GitError("git failed"), O.FAIL),
         (ValueError("bad"), O.FAIL),
         (KeyError("k"), O.FAIL),
         (KeyboardInterrupt(), 130),
@@ -65,6 +67,26 @@ def test_mcp_reports_a_lease_refusal_as_a_refusal_not_an_internal_error(repo, mo
     reply = _call_raising(repo, monkeypatch, LeaseError("held by U9"))
     assert "result" in reply and "held by U9" in _text(reply), reply
     assert reply["result"]["_meta"]["exit"] == O.REFUSED, reply
+
+
+def test_mcp_reports_a_git_failure_as_a_failure_not_an_internal_error(repo, monkeypatch):
+    reply = _call_raising(repo, monkeypatch, GitError("merge conflict"))
+    assert "result" in reply and "merge conflict" in _text(reply), reply
+    assert reply["result"]["_meta"]["exit"] == O.FAIL and reply["result"]["isError"], reply
+
+
+def test_the_cli_exits_from_the_same_table(monkeypatch, capsys):
+    from ddflow.surfaces import cli
+
+    for exc, code in ((GitError("git failed"), O.FAIL), (LeaseError("held"), O.REFUSED)):
+
+        def boom(*_a, _exc=exc, **_k):
+            raise _exc
+
+        monkeypatch.setattr(cli, "Ctx", boom)
+        assert cli.main(["status"]) == code
+    err = capsys.readouterr().err
+    assert "GitError: git failed" in err and "held" in err
 
 
 def test_a_plain_value_error_is_still_bad_arguments_on_mcp(repo, monkeypatch):
