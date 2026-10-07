@@ -3717,12 +3717,12 @@ backfill` (it snapshots every release commit and the working tree), commit
 `ddflow/templates/upgrade/`, and write the `why` (and `effect`) it could not know. A change
 not yet released is a fragment file of its own under `templates/upgrade/unreleased/`, so two
 branches adding knobs never edit the same file; cutting a version folds the fragments into
-its release. The history it backfilled: 0.1.3 to 0.2.0 added 63 knobs and changed 7
+its release. The history it backfilled from 0.1.3 to 0.2.0: 63 new knobs, 7 changed
 defaults (among them `dedupe.on_match`, `warn` in 0.1.9 and `ask` again in 0.1.10).
 
 In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
 a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
-The upgrade plan (`ddflow upgrade`, B-upgrade.3-plan) reads it to tell a project what its
+The upgrade plan (B-upgrade.3-plan, still to come) reads it to tell a project what its
 upgrade will change.
 
 Two such kinds describe how records relate (decision D-no-duplicates). Add events
