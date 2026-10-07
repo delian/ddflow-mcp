@@ -44,6 +44,8 @@ IDENTITY = ("name", "kind", "base_url", "model", "family", "command")
 class ReviewerRefused(ValueError):
     """A tool tried to write a command reviewer without a person behind it."""
 
+    exit_code = 3  # REFUSED, not bad arguments (`core.outcome.exit_for`, B5f3a650c40)
+
 
 def digest(rev: Any) -> str:
     """A stable fingerprint of a reviewer's identity fields."""
