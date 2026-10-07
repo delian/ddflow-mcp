@@ -33,11 +33,11 @@ import itertools
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
 from ..config import Config
 from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, State
+from . import clock
 from .events import Event
 
 #: Gates whose failure is a reviewer's verdict on the work, not a failure of the work
@@ -75,16 +75,9 @@ def _epoch(ts: str) -> float:
     reported elapsed-to-NOW for work that finished days ago, which silently inflated
     every duration in the report -- the numbers looked precise and were wrong.
     """
-    if not ts:
-        return 0.0
-    try:
-        return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
-    except ValueError:
-        pass
-    try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return 0.0
+    # A zone-less time is the host's clock here, as it always was (B-uni-clock keeps
+    # each caller's reading; the log itself never writes one).
+    return clock.epoch(ts, naive="local", default=0.0)
 
 
 @dataclass

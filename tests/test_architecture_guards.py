@@ -62,6 +62,7 @@ HOMES: dict[str, frozenset[str]] = {
     "os_replace": frozenset({"ddflow.infra.fsio"}),
     "fcntl": frozenset({"ddflow.infra.fsio"}),
     "hashlib": frozenset({"ddflow.core.digest"}),
+    "time_parse": frozenset({"ddflow.core.clock"}),
 }
 
 #: Every counter test_ratchet holds; each has its baseline in BASELINES/<counter>.toml.
@@ -104,6 +105,9 @@ _PROCESS_CALLS = frozenset(
     }
 )
 
+
+#: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
+_TIME_PARSERS = frozenset({"fromisoformat", "strptime"})
 
 #: Modules whose every use is counted under their own name.
 _MODULE_USES = ("tempfile", "fcntl", "hashlib")
@@ -208,6 +212,10 @@ class _Sites(ast.NodeVisitor):
             self.sites["os_replace"].append(node.lineno)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
+        # `datetime.fromisoformat`, `date.fromisoformat`, `datetime.strptime`: a timestamp
+        # parsed outside `core.clock` (B-uni-clock), by any receiver.
+        if isinstance(node.func, ast.Attribute) and node.func.attr in _TIME_PARSERS:
+            self.sites["time_parse"].append(node.lineno)
         self.generic_visit(node)
 
     def _sequence(self, node: ast.List | ast.Tuple) -> None:
@@ -534,6 +542,13 @@ def _iter_counter_cases() -> Iterator[tuple[str, str, int]]:
     yield ("import fcntl\nfcntl.flock(f, fcntl.LOCK_EX)\n", "fcntl", 2)
     yield ("import tempfile\ntempfile.mkdtemp()\ntempfile.mkstemp()\n", "tempfile", 2)
     yield ("def f():\n    import os\n    from . import x\nimport sys\n", "deferred_imports", 2)
+    yield (
+        "from datetime import date, datetime\n"
+        "datetime.fromisoformat(a)\ndate.fromisoformat(b)\ndatetime.strptime(c, f)\n"
+        "clock.parse_ts(a)\n",
+        "time_parse",
+        3,
+    )
 
 
 @pytest.mark.parametrize("source,kind,expected", list(_iter_counter_cases()))

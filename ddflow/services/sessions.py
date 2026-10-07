@@ -35,10 +35,10 @@ import textwrap
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Config
+from ..core import clock
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
@@ -138,14 +138,8 @@ def _age_s(ts: str, now: float | None = None) -> float:
     timestamp. Any ISO 8601 shape, so `...:00Z` without microseconds is as young as
     `...:00.000000Z` (Bbf85f6576f)."""
     # Not `progress.epoch`: its 0.0 failure value is also the epoch instant, and it reads
-    # a time with no zone as host-local. Here a zone-less time is UTC, as the log writes
-    # it -- deliberately different, until the shared clock (B-uni-clock) settles both.
-    try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        then = (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
-    except (ValueError, TypeError, AttributeError, OverflowError, OSError):
-        return float("inf")
-    return (time.time() if now is None else now) - then
+    # a time with no zone as host-local. Here a zone-less time is UTC, as the log writes it.
+    return clock.age_s(ts, now, naive="utc")
 
 
 def process_started_at() -> float:

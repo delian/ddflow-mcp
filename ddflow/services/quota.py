@@ -32,10 +32,10 @@ import os
 import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core.digest import content_digest
 from ..infra.tomlcfg import atomic_write, locked
 
@@ -110,12 +110,12 @@ def account_tag(account_id: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return clock.now_iso(timespec="seconds")
 
 
 def _parse_time(text: str) -> str:
     try:
-        t = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        t = clock.parse_ts(text, naive="local")
     except ValueError as exc:
         raise QuotaError(f"anchor {text!r} is not an ISO-8601 time") from exc
     if t.tzinfo is None:

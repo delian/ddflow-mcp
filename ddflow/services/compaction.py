@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import clock
 from ..infra.log import EventLog
 from . import sessions as S
 
@@ -100,7 +101,6 @@ def record(
 def latest(log: EventLog, harness_id: str, *, within_s: float = RECENT_S) -> str:
     """The text of this harness session's most recent compaction note, if it is recent."""
     import time
-    from datetime import datetime
 
     sid = S.harness_session_id(harness_id)
     if not sid:
@@ -111,8 +111,8 @@ def latest(log: EventLog, harness_id: str, *, within_s: float = RECENT_S) -> str
         if not str(ev.data.get("source", "")).startswith(SOURCE):
             continue
         try:
-            at = datetime.fromisoformat(ev.ts.replace("Z", "+00:00")).timestamp()
-        except ValueError:
+            at = clock.parse_ts(ev.ts, naive="local").timestamp()
+        except clock.UNPARSEABLE:
             return ""
         return str(ev.data.get("text", "")) if time.time() - at <= within_s else ""
     return ""
