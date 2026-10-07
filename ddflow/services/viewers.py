@@ -15,10 +15,10 @@ goes through the same redaction the export documents use. `owner` is an agent id
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
 from ..config import Config
+from ..core import clock
 from ..core import progress as PR
 from ..core.model import Bug, Item, Lesson, ResearchNote, Session, State
 from .export.query import ExportError, _cutoff
@@ -83,9 +83,7 @@ def _tags(tags: list[str], cfg: Config) -> list[str]:
 def _item_row(st: State, it: Item, cfg: Config) -> dict[str, Any]:
     updated = it.completed_at or it.created_at
     if it.lease is not None:
-        renewed = datetime.fromtimestamp(it.lease.renewed_at, tz=UTC).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
+        renewed = clock.iso_at(it.lease.renewed_at)
         updated = max(updated, renewed)
     return {
         "id": it.id,

@@ -154,6 +154,8 @@ EXEMPT: dict[str, str] = {
     ),
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
+    "repair.applied": "a versioned data repair's own record of the findings it settled "
+    "(services.repairs): no authored text",
 }
 
 #: Functions that append a CHECKED kind without calling `check_add` themselves, and why.

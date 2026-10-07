@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, fields
 from typing import Any
 
-from ._docs import _doc
+from ._docs import declare, knob
 
 #: The tokens a template may use. `{seq}`, `{hash}`, or `{time}` with `{pid}` make an id
 #: unique; `{digest}` makes a template STABLE (the same content maps to the same id).
@@ -44,24 +44,113 @@ ID_NAMED_KINDS = frozenset({"imported_phase", "imported_task"})
 ID_PER_PARENT_KINDS = frozenset({"fix_task"})
 
 
+_RULES = (
+    " Tokens: {prefix} (the kind's letter), {seq} (next free number), {date}, {time}, "
+    "{pid}, {slug}, {hash} (salted, ten hex digits), {parent}, {phase}, {env}, "
+    "{user-text}, {digest} (stable content digest). A template needs {seq}, {hash} or "
+    "{time} with {pid}; one holding {digest} is stable and may hold only content "
+    "tokens. Characters outside tokens: ASCII letters, digits, '.', '_', '-'. Applies "
+    "to records created afterwards; a recorded id is never renamed. An invalid template "
+    "in a file is warned about, reported by `doctor`, and the default stays in effect; "
+    "`config --set` refuses it (exit 3)."
+)
+_KIND_DOCS = {
+    "bug": "Bug ids. Default {prefix}{hash}: B and ten hex digits, as ever (B9c56de9d58).",
+    "lesson": "Lesson ids. Default {prefix}{hash}: L and ten hex digits.",
+    "research": "Research note ids. Default {prefix}{hash}: R and ten hex digits.",
+    "decision": "Decision ids minted for an unnamed decision. Default {prefix}{hash}: D and ten hex digits.",
+    "memory": "Memory ids. Default {prefix}{hash}: M and ten hex digits.",
+    "job": "Long-running job ids. Default {prefix}{hash}: J and ten hex digits.",
+    "session": "Session ids. Default s{time}-{pid}: s, the UTC time to the second, the process id.",
+    "fix_task": "A bug's own fix task. Default fix-{parent}: fix- and the bug id.",
+    "fix_task_followup": "The next fix task when a bug's fix task was abandoned. Default fix-{parent}-{seq}: fix-<bug>-2, -3, ...",
+    "promotion": "Promotion items. Default promote-{env}-{seq}: promote-staging-1, ...",
+    "ci_bug": "Bugs filed for a failing CI check. Default Bci-{slug}-{digest}, a STABLE template: the same failing check maps to the same bug while it is open.",
+    "split_child": "Sub-items made by `ddflow split` when none is named. Default {parent}.{seq}: P.T.1, P.T.2, ...",
+    "imported_phase": "Phases created by `ddflow import`. Default {user-text}: the id the source file declares, else a slug of its heading.",
+    "imported_task": "Tasks created by `ddflow import` that declare no id. Default {phase}.{slug}: the phase id and a slug of the task's text.",
+}
+
+
+@declare("ids")
 @dataclass
 class IdsConfig:
-    """`[ids]`: the template each record kind's id is minted from."""
+    """`[ids]`: the template each record kind's id is minted from.
 
-    bug: str = "{prefix}{hash}"
-    lesson: str = "{prefix}{hash}"
-    research: str = "{prefix}{hash}"
-    decision: str = "{prefix}{hash}"
-    memory: str = "{prefix}{hash}"
-    job: str = "{prefix}{hash}"
-    session: str = "s{time}-{pid}"
-    fix_task: str = "fix-{parent}"
-    fix_task_followup: str = "fix-{parent}-{seq}"
-    promotion: str = "promote-{env}-{seq}"
-    ci_bug: str = "Bci-{slug}-{digest}"
-    split_child: str = "{parent}.{seq}"
-    imported_phase: str = "{user-text}"
-    imported_task: str = "{phase}.{slug}"
+    Each template is checked by `id_template_problem`: ids are file names, branch names
+    and glob tokens (D-id-schemes-final). Tolerated in a file (the default stays, doctor
+    names it), refused by the write paths."""
+
+    bug: str = knob(
+        "{prefix}{hash}",
+        doc=_KIND_DOCS["bug"] + _RULES,
+        check=lambda v: id_template_problem("bug", v),
+    )
+    lesson: str = knob(
+        "{prefix}{hash}",
+        doc=_KIND_DOCS["lesson"] + _RULES,
+        check=lambda v: id_template_problem("lesson", v),
+    )
+    research: str = knob(
+        "{prefix}{hash}",
+        doc=_KIND_DOCS["research"] + _RULES,
+        check=lambda v: id_template_problem("research", v),
+    )
+    decision: str = knob(
+        "{prefix}{hash}",
+        doc=_KIND_DOCS["decision"] + _RULES,
+        check=lambda v: id_template_problem("decision", v),
+    )
+    memory: str = knob(
+        "{prefix}{hash}",
+        doc=_KIND_DOCS["memory"] + _RULES,
+        check=lambda v: id_template_problem("memory", v),
+    )
+    job: str = knob(
+        "{prefix}{hash}",
+        doc=_KIND_DOCS["job"] + _RULES,
+        check=lambda v: id_template_problem("job", v),
+    )
+    session: str = knob(
+        "s{time}-{pid}",
+        doc=_KIND_DOCS["session"] + _RULES,
+        check=lambda v: id_template_problem("session", v),
+    )
+    fix_task: str = knob(
+        "fix-{parent}",
+        doc=_KIND_DOCS["fix_task"] + _RULES,
+        check=lambda v: id_template_problem("fix_task", v),
+    )
+    fix_task_followup: str = knob(
+        "fix-{parent}-{seq}",
+        doc=_KIND_DOCS["fix_task_followup"] + _RULES,
+        check=lambda v: id_template_problem("fix_task_followup", v),
+    )
+    promotion: str = knob(
+        "promote-{env}-{seq}",
+        doc=_KIND_DOCS["promotion"] + _RULES,
+        check=lambda v: id_template_problem("promotion", v),
+    )
+    ci_bug: str = knob(
+        "Bci-{slug}-{digest}",
+        doc=_KIND_DOCS["ci_bug"] + _RULES,
+        check=lambda v: id_template_problem("ci_bug", v),
+    )
+    split_child: str = knob(
+        "{parent}.{seq}",
+        doc=_KIND_DOCS["split_child"] + _RULES,
+        check=lambda v: id_template_problem("split_child", v),
+    )
+    imported_phase: str = knob(
+        "{user-text}",
+        doc=_KIND_DOCS["imported_phase"] + _RULES,
+        check=lambda v: id_template_problem("imported_phase", v),
+    )
+    imported_task: str = knob(
+        "{phase}.{slug}",
+        doc=_KIND_DOCS["imported_task"] + _RULES,
+        check=lambda v: id_template_problem("imported_task", v),
+    )
 
 
 #: Every kind, in declaration order.
@@ -128,34 +217,3 @@ def id_template_problem(kind: str, template: Any) -> str:
             "{digest}, to be a stable template"
         )
     return ""
-
-
-_RULES = (
-    " Tokens: {prefix} (the kind's letter), {seq} (next free number), {date}, {time}, "
-    "{pid}, {slug}, {hash} (salted, ten hex digits), {parent}, {phase}, {env}, "
-    "{user-text}, {digest} (stable content digest). A template needs {seq}, {hash} or "
-    "{time} with {pid}; one holding {digest} is stable and may hold only content "
-    "tokens. Characters outside tokens: ASCII letters, digits, '.', '_', '-'. Applies "
-    "to records created afterwards; a recorded id is never renamed. An invalid template "
-    "in a file is warned about, reported by `doctor`, and the default stays in effect; "
-    "`config --set` refuses it (exit 3)."
-)
-_KIND_DOCS = {
-    "bug": "Bug ids. Default {prefix}{hash}: B and ten hex digits, as ever (B9c56de9d58).",
-    "lesson": "Lesson ids. Default {prefix}{hash}: L and ten hex digits.",
-    "research": "Research note ids. Default {prefix}{hash}: R and ten hex digits.",
-    "decision": "Decision ids minted for an unnamed decision. Default {prefix}{hash}: D and ten hex digits.",
-    "memory": "Memory ids. Default {prefix}{hash}: M and ten hex digits.",
-    "job": "Long-running job ids. Default {prefix}{hash}: J and ten hex digits.",
-    "session": "Session ids. Default s{time}-{pid}: s, the UTC time to the second, the process id.",
-    "fix_task": "A bug's own fix task. Default fix-{parent}: fix- and the bug id.",
-    "fix_task_followup": "The next fix task when a bug's fix task was abandoned. Default fix-{parent}-{seq}: fix-<bug>-2, -3, ...",
-    "promotion": "Promotion items. Default promote-{env}-{seq}: promote-staging-1, ...",
-    "ci_bug": "Bugs filed for a failing CI check. Default Bci-{slug}-{digest}, a STABLE template: the same failing check maps to the same bug while it is open.",
-    "split_child": "Sub-items made by `ddflow split` when none is named. Default {parent}.{seq}: P.T.1, P.T.2, ...",
-    "imported_phase": "Phases created by `ddflow import`. Default {user-text}: the id the source file declares, else a slug of its heading.",
-    "imported_task": "Tasks created by `ddflow import` that declare no id. Default {phase}.{slug}: the phase id and a slug of the task's text.",
-}
-for _kind in ID_KINDS:
-    _doc("ids", _kind, _KIND_DOCS[_kind] + _RULES)
-del _kind
