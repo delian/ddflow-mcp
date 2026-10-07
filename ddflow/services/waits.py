@@ -31,12 +31,12 @@ import contextlib
 import json
 import math
 import os
-import secrets
 import socket
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..core import clock
 from ..core.digest import content_digest
 from ..infra import fsio
 from ..infra.tomlcfg import atomic_write
@@ -150,7 +150,7 @@ def register(repo: Path, w: Waiter) -> Waiter:
     w.since = w.since or time.time()
     if not w.path:
         safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in w.agent)
-        w.path = str(d / f"{safe}-{w.pid}-{secrets.token_hex(3)}.json")
+        w.path = str(d / f"{safe}-{w.pid}-{clock.run_stamp()}.json")
     _write(w)
     return w
 

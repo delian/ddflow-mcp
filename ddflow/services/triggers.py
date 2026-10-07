@@ -34,6 +34,7 @@ from typing import Any
 
 from ..core import clock
 from ..core.digest import content_digest
+from ..core.ids import free
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
 
@@ -441,10 +442,7 @@ def item_for(trig: Trigger, job, d: Decision, taken: set[str], st: State) -> dic
     `tags`, under `action.phase` if given."""
     # Every item this trigger ever filed, not the capped fire tail (roborev: O(N) scans).
     n = sum(1 for m in st.trigger_items.values() if m.get("trigger") == trig.id) + 1
-    iid = f"T-{trig.id}-{n}"
-    while iid in taken:
-        n += 1
-        iid = f"T-{trig.id}-{n}"
+    iid = free(f"T-{trig.id}-{n}", taken, numbered=lambda k: f"T-{trig.id}-{k}", start=n + 1)
     what = job.title or job.id
     body = "\n".join(
         [

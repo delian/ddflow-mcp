@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.ids import free
 from ..core.model import ABANDONED, DONE, OPEN
 from ..core.schedule import is_external
 from ..infra import proc as P
@@ -843,11 +844,9 @@ def _unique(preferred: str, fallback: str, taken: set[str]) -> str:
             taken.add(candidate)
             return candidate
     base = fallback or preferred or "item"
-    n = 2
-    while f"{base}-{n}" in taken:
-        n += 1
-    taken.add(f"{base}-{n}")
-    return f"{base}-{n}"
+    got = free(f"{base}-2", taken, numbered=lambda k: f"{base}-{k}", start=3)
+    taken.add(got)
+    return got
 
 
 def _box_disposition(
