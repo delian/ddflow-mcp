@@ -8,6 +8,9 @@ project unannounced (the dedupe warn -> ask flip in 0.1.10 did).
 
 from __future__ import annotations
 
+import importlib.util
+import re
+
 import pytest
 
 from ddflow.core.events import version_key
@@ -36,9 +39,16 @@ def test_replaying_the_manifest_gives_this_releases_knobs_and_event_kinds():
 
 
 def test_every_knob_entry_says_why_and_every_changed_default_its_effect():
+    changes = UM.load().changes()
+    cut = [
+        f"{c.version} {c.key}: {c.why}"
+        for c in changes
+        if re.search(r"\b(e\.g|i\.e)\.$", c.why) or c.why.count("(") != c.why.count(")")
+    ]
+    assert not cut, f"a why cut mid-sentence: {cut}"
     blank = [
         f"{c.version} {c.kind} {c.key}: " + ("effect" if c.why else "why")
-        for c in UM.load().changes()
+        for c in changes
         if c.kind.startswith("knob_") and (not c.why or (c.kind == "knob_changed" and not c.effect))
     ]
     assert not blank, (
@@ -48,32 +58,42 @@ def test_every_knob_entry_says_why_and_every_changed_default_its_effect():
     )
 
 
-def test_a_cut_version_takes_over_the_unreleased_entries():
-    """The fragments' hand-written fields and manual entries move to the version cut
-    since the last backfill, instead of being regenerated blank (roborev)."""
-    import importlib.util
-
+def _script():
     spec = importlib.util.spec_from_file_location(
         "um_script", UM.MANIFEST.parents[3] / "scripts" / "upgrade_manifest.py"
     )
     script = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(script)
+    return script
+
+
+def test_a_cut_version_takes_over_the_unreleased_entries():
+    """Each fragment goes to the release whose commit first holds its file, with its
+    hand-written fields; one no release holds stays unreleased (roborev, critic)."""
+    script = _script()
+    flip = {"kind": "knob_changed", "key": "x.y", "effect": "e", "impact": "breaking"}
+    feature = {"kind": "feature", "key": "f"}
+    later = {"kind": "knob_added", "key": "z", "why": "hand-written"}
     mine = {
-        "by_key": {("knob_changed", "x.y"): {"effect": "e", "impact": "breaking"}},
-        "manual": [{"kind": "feature", "key": "f"}],
+        "by_key": {("knob_changed", "x.y"): flip, ("knob_added", "z"): later},
+        "manual": [feature],
     }
     kept = {"0.2.0": {"by_key": {}, "manual": []}, UM.UNRELEASED: mine}
-    moved = script.assign_unreleased(kept, ["0.2.0", "0.2.1"])
-    assert moved["0.2.1"] == mine and UM.UNRELEASED not in moved
-    assert script.assign_unreleased(kept, ["0.2.0"]) == kept  # nothing cut: they stay
-    # two cuts since the last backfill: both may use the fields, only the oldest the manual
-    two = script.assign_unreleased(kept, ["0.2.0", "0.2.1", "0.2.2"])
-    assert two["0.2.1"]["by_key"] is two["0.2.2"]["by_key"] is mine["by_key"]
-    assert (two["0.2.1"]["manual"], two["0.2.2"]["manual"]) == (mine["manual"], [])
+    holds = {("0.2.2", "knob_changed.x.y.toml"), ("0.2.2", "feature.f.toml")}
+    two = script.assign_unreleased(kept, ["0.2.0", "0.2.1", "0.2.2"], lambda v, n: (v, n) in holds)
+    assert two["0.2.2"] == {"by_key": {("knob_changed", "x.y"): flip}, "manual": [feature]}
+    assert "0.2.1" not in two
+    assert two[UM.UNRELEASED] == {"by_key": {("knob_added", "z"): later}, "manual": []}
+    assert script.assign_unreleased(kept, ["0.2.0"], lambda v, n: True)[UM.UNRELEASED] == mine
     a = {"knobs": {"x.y": 1}, "event_kinds": [], "docs": {}}
     b = {"knobs": {"x.y": 2}, "event_kinds": [], "docs": {"x.y": "Doc."}}
-    (e,) = script.diff("0.2.1", a, b, mine["by_key"])
+    (e,) = script.diff("0.2.2", a, b, two["0.2.2"]["by_key"])
     assert (e["effect"], e["impact"]) == ("e", "breaking")
+
+
+def test_the_why_is_the_docs_first_sentence_even_with_an_abbreviation():
+    doc = "Files bumped, as a regex (e.g. `0.1.2`). The rest."
+    assert _script()._why(doc) == "Files bumped, as a regex (e.g. `0.1.2`)."
 
 
 def test_changes_since_the_base_name_every_knob_that_differs_from_it():
@@ -182,6 +202,10 @@ def test_a_release_that_is_not_a_table_is_refused():
     for bad in ('"x"', '""', "[]", "0", "false"):
         with pytest.raises(UM.ManifestError, match=r"\[base.knobs\] is a table"):
             UM.parse(f'schema_version = 1\n[base]\nversion = "0.1.0"\nknobs = {bad}\n')
+    with pytest.raises(UM.ManifestError, match="not a release"):
+        UM.parse('schema_version = 1\n[base]\nversion = "main"\n[[release]]\nversion = "0.2.0"\n')
+    with pytest.raises(ValueError, match="not a release"):
+        UM.replay(UM.load(), upto="main")
     for bad in ('""', "0", "[1]"):
         with pytest.raises(UM.ManifestError, match="event_kinds"):
             UM.parse(f'schema_version = 1\n[base]\nversion = "0.1.0"\nevent_kinds = {bad}\n')

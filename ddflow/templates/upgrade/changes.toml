@@ -476,7 +476,7 @@ impact = "additive"
 kind = "knob_added"
 key = "flow.version_files"
 new = "{}"
-why = "Files `version cut` bumps, as path -> regex with exactly ONE capture group, the version text (e.g."
+why = "Files `version cut` bumps, as path -> regex with exactly ONE capture group, the version text (e.g. `[flow.version_files]` `'pyproject.toml' = '^version = \"([^\"]*)\"$'`)."
 impact = "additive"
 
 [[release.change]]
