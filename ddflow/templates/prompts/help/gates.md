@@ -38,10 +38,10 @@ independent evidence. `ddflow reviewers detect` finds one; `ddflow review <id> -
 critic` runs it and records the result. An unavailable reviewer is recorded as
 unavailable — never as a pass.
 
-A gate gets `[review].max_rounds` (default 2) FULL review rounds per item; a third is
-refused. After that, `ddflow review <id> --gate G --delta` rechecks only what changed since
-the reviewed head and `ddflow review triage` settles each remaining finding (both are
-always allowed). Change the cap with `ddflow config review.max_rounds N` (0 =
+A gate gets `[review].max_rounds` (default 2) review rounds per item, full and delta
+alike; a third is refused. After that, `ddflow review triage` settles each remaining
+finding (always allowed): refute it with the run that shows it false, or confirm it with
+the test that now passes; then record the gate on that triage, or ask the operator. Change the cap with `ddflow config review.max_rounds N` (0 =
 unlimited; add `--local` for this machine) or `review.on_exceed = "warn"`.
 
 Once a gate has a recorded review, `ddflow review <id> --gate G` is a full re-review: the
