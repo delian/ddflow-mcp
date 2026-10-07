@@ -172,7 +172,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_tests": {
         "description": (
-            "AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly or one step removed, tests named after it, a changed conftest's or data file's), each with why, and a command running them IN PARALLEL. Run it; do not reason about which matter. Never a pass: unit_tests runs the WHOLE suite. `item`: diff that item's worktree. Exit 2: no test reaches the change."
+            "AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly or one step removed, tests named after it, a changed conftest's or data file's), each with why, and a command running them IN PARALLEL. Run it; do not reason about which matter. Never a pass: the WHOLE suite still runs before merge. `item`: diff that item's worktree. Exit 2: no test reaches the change."
         ),
         "properties": {
             "item": ("string", "The item whose worktree and base to use.", False),
