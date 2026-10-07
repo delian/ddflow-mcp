@@ -90,3 +90,11 @@ def test_onboard_apply_never_removes_a_tree_an_item_adopted(repo):
     assert run_cli(repo, "release", "T1", agent="worker")[0] == OK
     out = ON.apply(repo, [str(tree)])
     assert tree.exists(), f"onboard removed an adopted tree: {out}"
+
+
+def test_the_removal_is_written_as_the_agent_ddflow_agent_names(repo, monkeypatch):
+    tree = _released_tree(repo)
+    monkeypatch.setenv("DDFLOW_AGENT", "sweeper-7")
+    ON.apply(repo, [str(tree)])
+    removed = [e for e in EventLog(repo).read_all() if e.kind == "worktree.removed"]
+    assert removed and removed[-1].agent == "sweeper-7", removed
