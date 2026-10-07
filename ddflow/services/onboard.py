@@ -16,13 +16,17 @@ or leave.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from ..config import Config
+from ..core.model import fold
 from ..infra import worktree as W
+from ..infra.log import EventLog, effective_agent_id
+from . import cleanup as C
 from .jobs import alive
 
 #: How a `git worktree lock --reason ...` names the process that owns it. The reason is
@@ -325,7 +329,15 @@ def _branch_exists(repo: Path, name: str) -> bool:
     return W.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").ok
 
 
-def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
+def _held(repo: Path, cfg: Config, log: EventLog | None, path: Path, branch: str) -> str:
+    """Why the tree must be left alone (a live lease, or adopted by an item), or ""."""
+    if log is None:
+        return ""
+    root = W.repo_root(repo)
+    return C._protected(root, cfg, fold(log.read_all(), strict=False)).why(str(path), branch)[1]
+
+
+def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -> dict[str, str]:
     """Remove one approved worktree and its branch, reporting git's own answer.
 
     `W.remove` deletes the branch itself but ignores that delete's result; a branch
@@ -351,8 +363,26 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     # holds nothing beyond caches. `W.remove`'s check counts an untracked `__pycache__`
     # or `.venv` as work and would refuse the very trees the report called removable
     # (critic on f0d27314); nothing else reaches here, because dirty/unique/locked items
-    # never carry action "remove".
-    r = W.remove(repo, cfg, worktree, force=True)
+    # never carry action "remove". In an adopted project, under the log lock with the
+    # leases re-read -- what `cleanup` does -- and recorded (B5e83fb22cb).
+    log = (
+        EventLog(
+            repo,
+            effective_agent_id(repo, cfg, agent),  # --agent, DDFLOW_AGENT, [agent].id
+            log_cfg=cfg.log,
+            lock_timeout_s=cfg.lease.acquire_timeout_s,
+        )
+        if (repo / ".ddflow" / "events").is_dir()
+        else None
+    )
+    with log.transaction() if log else contextlib.nullcontext():
+        held = _held(repo, cfg, log, path, item.branch)
+        if held:
+            # Refused, not failed: coordination said no, and the tree was left as it is.
+            return {"name": item.name, "kind": "worktree", "outcome": "refused", "detail": held}
+        r = W.remove(repo, cfg, worktree, force=True)
+        if r.ok and log:
+            C.record_removed(log, W.repo_root(repo), str(path))
     if not r.ok:
         return {
             "name": item.name,
@@ -390,7 +420,9 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     }
 
 
-def apply(repo: Path, names: Iterable[str] | None = None) -> list[dict[str, str]]:
+def apply(
+    repo: Path, names: Iterable[str] | None = None, *, agent: str = ""
+) -> list[dict[str, str]]:
     """Remove the approved merged-and-clean items; every outcome is a record.
 
     `names` is the operator's approval: None means everything the report marked
@@ -420,7 +452,7 @@ def apply(repo: Path, names: Iterable[str] | None = None) -> list[dict[str, str]
         if wanted is not None and item.name not in wanted:
             continue
         if item.kind == "worktree":
-            out.append(_remove_worktree(repo, cfg, item))
+            out.append(_remove_worktree(repo, cfg, item, agent))
         elif item.kind == "branch":
             r = W.git(repo, "branch", "-d", item.name)
             if r.ok:
