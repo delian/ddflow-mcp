@@ -375,12 +375,11 @@ def test_both_search_backends_agree_on_the_shortest_usable_term(repo):
     """
     from ddflow.infra import store as S
 
-    src = Path(S.__file__).read_text("utf-8")
-    comparisons = [ln.strip() for ln in src.splitlines() if "MIN_TERM_CHARS" in ln and "len(" in ln]
-    assert len(comparisons) >= 2, comparisons
-    assert all(">= MIN_TERM_CHARS" in ln for ln in comparisons), (
-        f"the two term filters must use the same comparison: {comparisons}"
-    )
+    # both backends take their terms from textsim.words with the same minimum, so a
+    # two-character term is usable in both and a one-character term in neither
+    assert S._like_terms("a db") == ["db"]
+    assert S._fts_query("a db") == '"db"'
+    assert S._like_terms("x") == [] and S._fts_query("x") == ""
 
 
 # -- 10. fold survives an event that would make an item its own ancestor --------------

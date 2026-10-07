@@ -110,6 +110,27 @@ def _run(run: str) -> tuple[str, ...]:
     return tuple(stem(p) for p in parts if len(p) >= _MIN_WORD and p not in STOP)
 
 
+#: Shortest word `words` keeps by default: one character matches almost everything and
+#: ranks nothing.
+MIN_WORD_CHARS = 2
+_WORD = re.compile(r"\w+")
+_WORD_HYPHEN = re.compile(r"[\w-]+")
+
+
+def words(
+    text: str, *, min_len: int = MIN_WORD_CHARS, hyphens: bool = False, fold: bool = False
+) -> list[str]:
+    """The plain words of ``text``, in order: maximal runs of word characters, at least
+    ``min_len`` long. No stemming and no stop words -- these are the words a person typed,
+    for matching them literally (an FTS5 or LIKE query, a Jaccard overlap), where ``tokens``
+    is the normalised form for weighing similarity. ``hyphens`` keeps ``-`` inside a word
+    (``foo-bar`` is one), ``fold`` lowercases first. The one place text is split into words:
+    the other callers differ only in these three settings."""
+    if fold:
+        text = text.lower()
+    return [w for w in (_WORD_HYPHEN if hyphens else _WORD).findall(text) if len(w) >= min_len]
+
+
 def tokens(title: str, body: str = "") -> list[str]:
     """The content words of a record, in order, repeats kept (they are its term counts)."""
     text = f"{title}. {body}"
