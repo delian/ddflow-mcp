@@ -2335,6 +2335,13 @@ bug X", or names X in a fix list ("fixes bugs A, B and X"), is a fix, a mention 
 invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON (a task under no phase is listed in an **Unphased** section of the board, and under `unphased` in the JSON);
 `--agent`, `--repo` and `--json` are accepted after the subcommand as well as before it.
 
+**A phase's done/total is the same number everywhere** — the board, `phase list` (and
+`ddflow_read kind=phase`), the progress line after `complete`, the ROADMAP and STATUS
+exports. A phase counts every live task nested any depth below it, sub-tasks and bug-fix
+tasks included; an abandoned task is settled, so it is out of the total and shown as
+"N abandoned" where there is room. The progress line after completing a sub-task names
+the sub-task's phase, not its parent task.
+
 `next --phase`, `brief --phase` and `board --phase` refuse an id that is not an item
 and `next` names the phases that start with it; `board --phase` given a task id refuses,
 naming that task's phase. `ddflow status` over MCP is **bounded**: the counts are exact, but each
