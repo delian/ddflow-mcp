@@ -38,3 +38,15 @@ def test_a_timestamp_before_1970_has_a_real_age():
 
 def test_the_epoch_instant_itself_has_a_real_age():
     assert S._age_s("1970-01-01T00:00:00Z", now=THEN) == pytest.approx(THEN)
+
+
+def test_a_timestamp_without_a_zone_is_utc_not_host_local(monkeypatch):
+    import time as _time
+
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    _time.tzset()
+    try:
+        assert S._age_s("2026-09-21T14:13:20", now=THEN + 90) == pytest.approx(90)
+    finally:
+        monkeypatch.delenv("TZ")
+        _time.tzset()
