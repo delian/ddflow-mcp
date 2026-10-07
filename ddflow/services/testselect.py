@@ -2,10 +2,13 @@
 
 "Choosing which tests to run by reasoning about the change is guessing — derive it."
 This is the fast-feedback half: while an agent works, it runs the tests its diff can
-reach, in parallel, after each change. The other half stays where it was: the
-`unit_tests` gate runs the WHOLE suite, because a targeted sweep hides standing breakage
-(on the source project a full run found 12 pre-existing failures that every targeted
-run had missed). A selection is advice, never a pass.
+reach, in parallel, after each change. The other half is the WHOLE suite, because a
+targeted sweep hides standing breakage (on the source project a full run found 12
+pre-existing failures that every targeted run had missed). Where that whole run happens
+is `unit_tests_scope`'s answer (D-gate-economy 1): once the item's ci gate has PASSED the
+whole suite on the clean commit its tree holds now, the unit_tests gate of a bug fix or a small
+task runs the selection; in every other case -- no passing ci on this tree, a larger
+task, a selection that cannot be made -- the unit_tests gate runs the whole suite itself.
 
 A test is selected when, relative to the item's base:
 
@@ -20,7 +23,7 @@ A test is selected when, relative to the item's base:
   a directory holding tests: a test reads one by its path, never by an import
   (`_data_readers` says how it is matched).
 
-What it misses, stated so nobody mistakes it for the suite -- the gate runs all of these:
+What it misses, stated so nobody mistakes it for the suite -- the whole run catches these:
 
 * a test that only drives the program in a SUBPROCESS (`python -m pkg ...`) imports
   nothing it exercises;
@@ -366,3 +369,167 @@ def _without_test_locations(args: list[str], root: Path) -> list[str]:
         if t.startswith("-") or value_of_flag or not location:
             out.append(t)
     return out
+
+
+# -- the unit_tests gate's scope (D-gate-economy 1) ------------------------------------
+
+
+@dataclass
+class Scope:
+    """What the unit_tests gate runs for one item, and why: the whole suite, or only the
+    tests the change reaches. ``command`` is the command to run ("" = the gate's own)."""
+
+    scope: str  #: "selected" | "full"
+    why: str
+    command: str = ""
+    tests: list[Selected] = field(default_factory=list)
+    changed_lines: int | None = None
+
+    def evidence(self) -> dict[str, object]:
+        ev: dict[str, object] = {"scope": self.scope, "scope_why": self.why}
+        if self.changed_lines is not None:
+            ev["changed_lines"] = self.changed_lines
+        if self.scope == "selected":
+            ev["selected_tests"] = [{"path": t.path, "reason": t.reason} for t in self.tests]
+        return ev
+
+
+def changed_lines(tree: Path, base: str) -> int | None:
+    """Added plus removed lines since ``base``'s merge-base: committed, uncommitted and
+    untracked, ddflow's own `.ddflow/` bookkeeping excluded. None when git cannot say."""
+    mb = W.git(tree, "merge-base", base, "HEAD")
+    if mb.code != 0:
+        return None
+    num = W.git(tree, "diff", "--numstat", "--no-renames", mb.out, "--", ".", ":(exclude).ddflow")
+    if num.code != 0:
+        return None
+    n = 0
+    for row in num.out.splitlines():
+        added, removed = [*row.split("\t", 2), "", ""][:2]
+        n += int(added) if added.isdigit() else 0
+        n += int(removed) if removed.isdigit() else 0
+    for p in W.git_paths(tree, "ls-files", "--others", "--exclude-standard") or ():
+        if p.startswith(".ddflow/"):
+            continue
+        try:
+            n += len((tree / p).read_bytes().splitlines())
+        except OSError:
+            continue
+    return n
+
+
+def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
+    """Whether the unit_tests gate runs the selection or the whole suite for item ``it``.
+
+    The selection (D-gate-economy 1) is for a BUG FIX (the task fixes a bug) or a SMALL
+    task (fewer changed lines than `[gates].unit_tests_small_lines`), and only once the
+    whole suite has PASSED on this very tree: the item's `ci` gate is recorded `passed`
+    on the clean commit this tree holds now (ci runs the whole suite on the committed HEAD
+    merged with the base). A ci recorded over uncommitted edits, skipped, unavailable,
+    failed, run on another commit, or with no tree measured proves nothing about this tree, so the gate runs the whole suite (roborev on
+    7da06042: a selection resting on a ci that never passed let a fix merge with the whole
+    suite never run). Everything else -- a phase, a promotion, a larger task, a project
+    with `[gates].unit_tests_scope = "full"` -- runs the whole suite, and so does a
+    selection that cannot be made: no base, git cannot say what changed, no test reaches
+    the change (running nothing would pass vacuously), or the command does not run
+    pytest. Each answer says why. The base is the item's, else the configured base ref,
+    else the default branch."""
+    if cfg.gates.unit_tests_scope != "selected":
+        return Scope("full", f'[gates].unit_tests_scope = "{cfg.gates.unit_tests_scope}"')
+    if it.kind == "phase" or it.promote_to:
+        what = "phase" if it.kind == "phase" else "promotion"
+        return Scope("full", f"a {what} runs the whole suite")
+    if why := _ci_not_passed_here(cfg, it, tree):
+        return Scope("full", why)
+    try:
+        base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
+    except W.GitError:
+        return Scope("full", "no base to compare the change with")
+    lines = changed_lines(tree, base)
+    kind = _selectable(cfg, it, lines)
+    if kind.startswith("not "):
+        return Scope("full", kind, changed_lines=lines)
+    return _selected(st, it, command, tree, base, kind, lines)
+
+
+def _ci_not_passed_here(cfg, it, tree: Path) -> str:
+    """ "" when the item's ci gate PASSED on exactly the commit ``tree`` holds now, clean;
+    else why not. `ddflow ci run` tests the committed HEAD merged with the base, never
+    uncommitted edits, so a pass counts only when the tree was clean when ci ran and is
+    the same clean commit now (roborev on 5ddf11f7: comparing the dirty source let a pass
+    on an older commit vouch for edits it never ran)."""
+    ci = it.gates.get("ci")
+    if ci is None or ci.outcome != "passed":
+        state = "has no outcome" if ci is None else f"is {ci.outcome}"
+        if "ci" not in G.pipeline_for(it, cfg):
+            return "no ci gate in this item's pipeline runs the whole suite, so this gate runs it"
+        return (
+            f"the ci gate {state}: the whole suite has not passed on this tree, so this "
+            "gate runs it (run ci first, and a bug fix or small task then runs the selection)"
+        )
+    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    if not ran:
+        return (
+            "the ci gate's pass carries no measured tree, so which tree it passed on cannot "
+            "be told: this gate runs the whole suite"
+        )
+    if not ran.endswith("+clean"):
+        return (
+            "the ci gate passed on a tree with uncommitted changes, and ci tests only the "
+            "committed HEAD: this gate runs the whole suite (commit, then re-run ci)"
+        )
+    if ran != G.normal_fingerprint(G.tree_fingerprint(tree)):
+        return "the tree changed since the ci gate passed (another commit, or uncommitted edits): this gate runs the whole suite"
+    return ""
+
+
+def _selectable(cfg, it, lines: int | None) -> str:
+    """Why ``it`` may run the selection ("a bug fix (...)", "a small task (...)"), or,
+    starting "not ", why it may not."""
+    small = cfg.gates.unit_tests_small_lines
+    if it.fixes:
+        return f"a bug fix ({', '.join(it.fixes)})"
+    if lines is not None and small > 0 and lines < small:
+        return f"a small task ({lines} changed lines < [gates].unit_tests_small_lines = {small})"
+    size = "its size is unknown" if lines is None else f"{lines} changed lines"
+    return f"not a bug fix, and {size} (small is under {small})"
+
+
+def _selected(st, it, command: str, tree: Path, base: str, kind: str, lines: int | None) -> Scope:
+    """The selection for a selectable item, or the whole suite when none can be made."""
+    sel = select(tree, base)
+    if sel is None:
+        return Scope(
+            "full", f"{kind}, but git could not say what changed since {base}", changed_lines=lines
+        )
+    picked = {s.path for s in sel.tests}
+    # Only what pytest runs: a `scripts/check.sh` regression check is run by no command
+    # built here, and listing it would claim a test that never ran.
+    regression = sorted(
+        {
+            t
+            for b in it.fixes
+            if (bug := st.bugs.get(b)) is not None
+            for t in bug.regression_tests
+            if t.endswith(".py") or "::" in t
+        }
+        - picked
+    )
+    tests = [
+        *sel.tests,
+        *(Selected(t, "a regression test of the bug it fixes") for t in regression),
+    ]
+    if not tests:
+        return Scope("full", f"{kind}, but no test reaches its change", changed_lines=lines)
+    cmd = run_command(command, [t.path for t in tests], tree)
+    if not cmd:
+        return Scope(
+            "full", f"{kind}, but the unit_tests command does not run pytest", changed_lines=lines
+        )
+    return Scope(
+        "selected",
+        f"{kind}: {len(tests)} test(s) its change reaches; the ci gate passed the whole suite on this tree",
+        command=cmd,
+        tests=tests,
+        changed_lines=lines,
+    )
