@@ -215,14 +215,14 @@ DEFAULT_GATES: dict[str, GateDef] = {
         timeout_s=3600,
         description=(
             "The project's tests must pass, run in parallel: the WHOLE suite, or, for a bug "
-            "fix or small task whose pipeline has a ci gate, the tests its change reaches."
+            "fix or small task whose ci gate passed on its tree, the tests its change reaches."
         ),
         prompt=(
             "Run it with `ddflow gate run <ID> unit_tests`, never from a run of your own. It "
             "runs the WHOLE suite -- a targeted run hides standing breakage -- except for a "
-            "bug fix or small task whose pipeline has a ci gate: then the selection "
-            "(D-gate-economy 1; the evidence lists it and why) and ci runs the WHOLE suite on "
-            "the merge result. Run it in parallel -- pytest with `-n auto` (pytest-xdist) or a fixed worker "
+            "bug fix or small task once ci runs the WHOLE suite on the merge result and passes "
+            "on this tree: then the selection (D-gate-economy 1; the evidence lists it and "
+            "why). Run it in parallel -- pytest with `-n auto` (pytest-xdist) or a fixed worker "
             "count; `ddflow workflow` says when the command uses ONE core. While you work, "
             "`ddflow tests --item <ID>` lists the tests your change reaches and a parallel "
             "command for them: fast feedback, not this gate. Set `[gate.unit_tests].command` "
