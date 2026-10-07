@@ -49,7 +49,7 @@ from pathlib import Path
 from ..config import _is_code_tree
 from ..infra import paths
 from ..infra import proc as P
-from ..infra.fsio import atomic_write
+from ..infra.fsio import atomic_write, replace_text
 from ..infra.tomlcfg import value as toml_value
 from .adopt import (
     AGENT_TARGETS,
@@ -1106,7 +1106,7 @@ def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[s
         # would bury one added stanza in the operator's entire config.
         return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(new_text, "utf-8")
+    replace_text(path, new_text)
     return "written", f"{'refreshed' if replaced else 'registered'} {c.id} in {rel}"
 
 
@@ -1183,7 +1183,7 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         # the one way that matters.
         return "written", f"WOULD add to {rel}:\n{json.dumps(data, indent=2)}"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
+    replace_text(path, json.dumps(data, indent=2) + "\n")
     return "written", f"registered {c.id} in {rel}"
 
 

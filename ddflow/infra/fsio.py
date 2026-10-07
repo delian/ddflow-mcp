@@ -17,6 +17,7 @@ POSIX only, as the rest of the package (`fcntl`).
 from __future__ import annotations
 
 import contextlib
+import errno
 import fcntl
 import os
 import re
@@ -109,6 +110,61 @@ def atomic_write(
         # delete another's file in flight.
         tmp.unlink(missing_ok=True)
         raise
+
+
+def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
+    """`Path(path).write_text(text, "utf-8")` that no reader ever sees half-written.
+
+    The drop-in for a writer moving off `write_text` with nothing else changing: a
+    symlink is written THROUGH (its target gets the new text and the link stays, where
+    `atomic_write` alone would put a regular file in the link's place -- `CLAUDE.md ->
+    AGENTS.md` is a common layout); a missing parent, a parent that is a file, or a link
+    loop raises what `write_text` raises, and nothing is created. A new file gets 0666
+    less the umask and an existing one keeps its mode, as with `write_text`.
+
+    Where only an in-place write keeps `write_text`'s result, the file is written in
+    place, as `write_text` did, and so NOT atomically: a file with other hard links (they
+    share the inode, and a rename would leave them stale), one owned by another user (a
+    rename would take it over), one the caller may not write (`write_text` refuses it,
+    a rename would not), and, when the rename itself is refused (EACCES, EPERM, EBUSY), a
+    writable file in a directory the caller may not write or a bind-mounted single file.
+    `fsync` still applies there: the written descriptor is flushed to disk.
+    """
+    named = Path(path)
+    target = Path(os.path.realpath(named)) if named.is_symlink() else named
+    if target.is_symlink():  # realpath gave up: a loop
+        raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(named))
+    try:
+        parent = os.stat(target.parent)
+    except OSError as e:  # ENOENT, ENOTDIR, ELOOP: what opening `named` would say
+        raise type(e)(e.errno, e.strerror, str(named)) from None
+    if not stat.S_ISDIR(parent.st_mode):
+        raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), str(named))
+    try:
+        st: os.stat_result | None = os.stat(target)
+    except FileNotFoundError:
+        st = None
+    if st is not None and (
+        st.st_nlink > 1 or st.st_uid != os.geteuid() or not os.access(target, os.W_OK)
+    ):
+        _write_in_place(target, text, fsync=fsync)
+        return
+    try:
+        atomic_write(target, text, fsync=fsync)
+    except OSError as e:
+        if st is None or e.errno not in (errno.EACCES, errno.EPERM, errno.EBUSY):
+            raise
+        _write_in_place(target, text, fsync=fsync)
+
+
+def _write_in_place(path: Path, text: str, *, fsync: bool) -> None:
+    """What `path.write_text(text, "utf-8")` does (truncate, write: same inode, owner,
+    links), plus the flush to disk `fsync` asks for."""
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+        if fsync:
+            fh.flush()
+            os.fsync(fh.fileno())
 
 
 def _link_exclusive(

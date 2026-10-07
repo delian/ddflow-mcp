@@ -3,4 +3,4 @@
 #
 # Lower the baseline in the same change that removes sites; the failure message
 # prints the exact value. Never raise it.
-baseline = 31
+baseline = 10

@@ -73,7 +73,12 @@ def register(s: argparse._SubParsersAction) -> None:
     )
     # `*`, not `?`: `ddflow review triage <id> ...` is a verb followed by the item.
     rw.add_argument("id", nargs="*", default=[], help="the item; or `triage <item>`")
-    rw.add_argument("--gate", default=None, help="gate to review (default critic)")
+    rw.add_argument(
+        "--gate",
+        default=None,
+        help="gate to review (default critic); rubber_duck,critic reviews both -- one "
+        "combined review under [review].combined_under_lines changed lines",
+    )
     rw.add_argument(
         "--intent",
         default="",

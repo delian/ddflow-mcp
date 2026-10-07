@@ -1627,7 +1627,8 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     from ddflow.api import review as A
     from ddflow.services import review as R
 
-    src = inspect.getsource(A.review)
+    # `review` dispatches one gate or several; the one-gate run holds the table.
+    src = inspect.getsource(A._review_gate)
     table = src[src.index("outcome = {") : src.index("}[best.status]")]
     for status in ("PARTIAL", "UNAVAILABLE", "ERROR"):
         arm = table[table.index(f"R.{status}:") : table.index("\n", table.index(f"R.{status}:"))]
