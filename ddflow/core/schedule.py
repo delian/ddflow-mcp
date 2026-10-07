@@ -223,8 +223,8 @@ def path_in_glob(path: str, glob: str) -> bool:
 
 
 def stale_package_globs(globs: Iterable[str], tracked: Iterable[str]) -> list[tuple[str, str]]:
-    """(glob, correction) for each `x.py` glob that covers no tracked file while a package
-    `x/` exists: the module was split into a package, and a lease on the old name covers
+    """(glob, correction) for each literal `x.py` glob that is not a tracked file while a
+    package `x/` is: the module was split into a package, and a lease on the old name covers
     none of its files, so the conflict detector cannot see two tasks editing them
     (B56dc2baaf6). A glob matching nothing with no such package is a file the task will
     create, and is left alone."""
@@ -234,7 +234,7 @@ def stale_package_globs(globs: Iterable[str], tracked: Iterable[str]) -> list[tu
         if not g.endswith(".py") or any(c in g for c in "*?[") or g in files:
             continue
         pkg = g[: -len(".py")] + "/"
-        if any(f.startswith(pkg) for f in files) and not any(path_in_glob(f, g) for f in files):
+        if any(f.startswith(pkg) for f in files):
             out.append((g, pkg))
     return out
 

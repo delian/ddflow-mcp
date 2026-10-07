@@ -51,3 +51,18 @@ def test_doctor_names_an_open_tasks_stale_package_glob(repo):
     assert code == 0, err
     _code, out, err = run_cli(repo, "doctor")
     assert "T1" in out + err and "pkg/mod.py" in out + err and "pkg/mod/" in out + err, out + err
+
+
+def test_doctor_says_so_when_git_cannot_list_the_files(repo, monkeypatch):
+    """A check that could not run is said, not passed (roborev on a4b18666)."""
+    from ddflow.api.reporting import health as H
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    log = EventLog(repo, "a")
+    log.append("phase.added", "P1", {})
+    log.append("task.added", "T1", {"parent": "P1", "globs": ["pkg/mod.py"]})
+    monkeypatch.setattr(H.W, "git_paths", lambda *a, **k: None)
+    assert H._stale_glob_notes(repo, fold(log.read_all())) == [
+        "stale task globs not checked: git could not list the tracked files"
+    ]
