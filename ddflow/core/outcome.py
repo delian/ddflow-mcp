@@ -69,9 +69,9 @@ def exit_for(exc: BaseException) -> int | None:
     and a `LeaseError` as an internal error. A class declares its own exit with
     `exit_code` (every refusal: `REFUSED`), or is named in `_EXIT_BY_NAME` (`GitError`:
     `FAIL`); a ValueError or KeyError is an error in what was asked (`FAIL`); None means
-    a bug, which each surface lets surface as one. One surface-specific reading stays with MCP: a bare
-    Key/Type/ValueError there is a malformed call (JSON arguments are untyped), where
-    argparse has typed the CLI's; a subclass keeps its own exit."""
+    a bug, which each surface lets surface as one. One surface-specific reading stays with MCP: a Key/Type/
+    ValueError whose class declares no exit is a malformed call there (JSON arguments are
+    untyped), where argparse has typed the CLI's; a declared one keeps its own exit."""
     if isinstance(exc, KeyboardInterrupt):
         return INTERRUPTED
     if (declared := declared_exit(exc)) is not None:
