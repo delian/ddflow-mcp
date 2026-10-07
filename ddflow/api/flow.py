@@ -157,7 +157,12 @@ def _lint_outcome(op: str, repo: Path, cfg, *, waive: str = "", reason: str = ""
     policy = cfg.release.manifest_lint
     if policy == "off" and not waive:
         return None
-    if not UM.MANIFEST.resolve().is_relative_to(repo.resolve()):
+    # The source tree's own manifest, not an installed copy: a ddflow in the project's
+    # .venv sits under `repo` too, and a project's releases are not ddflow's.
+    if (
+        UM.MANIFEST.resolve()
+        != (repo / "ddflow" / "templates" / "upgrade" / "changes.toml").resolve()
+    ):
         return None
     try:
         res = UM.lint()
