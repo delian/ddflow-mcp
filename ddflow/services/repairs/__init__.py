@@ -44,10 +44,10 @@ __all__ = [
     "context",
     "doctor_notes",
     "integrity",
-    "unknown_authors",
     "pending",
     "settled",
     "uncovered",
+    "unknown_authors",
 ]
 
 REGISTRY: tuple[Repair, ...] = SEEDS
@@ -183,7 +183,9 @@ def doctor_notes(ctx: Context, *, skip: Iterable[str] = ()) -> list[str]:
     notes = []
     for p in pending(ctx, [r.id for r in REGISTRY if r.id not in set(skip)]):
         if p.unavailable:
-            notes.append(f"unavailable: data repair {p.repair.id} could not check ({p.unavailable})")
+            notes.append(
+                f"unavailable: data repair {p.repair.id} could not check ({p.unavailable})"
+            )
             continue
         who = "" if p.repair.consent == AGENT else " (the operator decides)"
         notes.append(
