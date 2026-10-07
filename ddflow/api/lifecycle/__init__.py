@@ -106,6 +106,7 @@ from .merge import (  # noqa: F401
     _stands_in,
     _what_to_land,
     merge,
+    record_item_removed,
 )
 from .ready import (  # noqa: F401
     _PREFIX_SHOWN,
