@@ -156,3 +156,8 @@ def test_a_key_without_a_section_is_a_top_level_key() -> None:
     out = TC.upsert("# c\n[a]\nx = 1\n", "name", '"v"')
     assert tomllib.loads(out)["name"] == "v" and "# c" in out
     assert tomllib.loads(TC.upsert("", "k", "1")) == {"k": 1}
+
+
+def test_a_top_level_key_lands_before_the_first_table() -> None:
+    out = TC.upsert("[review]\nenabled = false\n", "name", '"x"')
+    assert tomllib.loads(out) == {"name": "x", "review": {"enabled": False}}
