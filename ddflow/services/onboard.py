@@ -337,7 +337,7 @@ def _held(repo: Path, cfg: Config, log: EventLog | None, path: Path, branch: str
     return C._protected(root, cfg, fold(log.read_all(), strict=False)).why(str(path), branch)[1]
 
 
-def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
+def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -> dict[str, str]:
     """Remove one approved worktree and its branch, reporting git's own answer.
 
     `W.remove` deletes the branch itself but ignores that delete's result; a branch
@@ -368,7 +368,7 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     log = (
         EventLog(
             repo,
-            effective_agent_id(repo, cfg),  # DDFLOW_AGENT too, as every other write
+            effective_agent_id(repo, cfg, agent),  # --agent, DDFLOW_AGENT, [agent].id
             log_cfg=cfg.log,
             lock_timeout_s=cfg.lease.acquire_timeout_s,
         )
@@ -420,7 +420,9 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     }
 
 
-def apply(repo: Path, names: Iterable[str] | None = None) -> list[dict[str, str]]:
+def apply(
+    repo: Path, names: Iterable[str] | None = None, *, agent: str = ""
+) -> list[dict[str, str]]:
     """Remove the approved merged-and-clean items; every outcome is a record.
 
     `names` is the operator's approval: None means everything the report marked
@@ -450,7 +452,7 @@ def apply(repo: Path, names: Iterable[str] | None = None) -> list[dict[str, str]
         if wanted is not None and item.name not in wanted:
             continue
         if item.kind == "worktree":
-            out.append(_remove_worktree(repo, cfg, item))
+            out.append(_remove_worktree(repo, cfg, item, agent))
         elif item.kind == "branch":
             r = W.git(repo, "branch", "-d", item.name)
             if r.ok:

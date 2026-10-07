@@ -24,7 +24,9 @@ from ._base import _load
 STAGES = ("status", "preflight", "legacy", "memory", "test-gate", "verify")
 
 
-def preflight(repo: Path, *, apply: bool = False, only: Sequence[str] = ()) -> O.Outcome:
+def preflight(
+    repo: Path, *, apply: bool = False, only: Sequence[str] = (), agent: str = ""
+) -> O.Outcome:
     """Report leftover worktrees, branches and stashes; `apply` removes the merged ones.
 
     The report IS the product when `apply` is false: an unmerged branch is not ours to
@@ -40,7 +42,7 @@ def preflight(repo: Path, *, apply: bool = False, only: Sequence[str] = ()) -> O
         return O.nothing("onboard.preflight", str(data["text"]), **data)
     if not apply:
         return O.ok("onboard.preflight", **data)
-    results = ON.apply(repo, list(only) if only else None)
+    results = ON.apply(repo, list(only) if only else None, agent=agent)
     removed = [r for r in results if r["outcome"] == "removed"]
     refused = [r for r in results if r["outcome"] == "refused"]
     failed = [r for r in results if r["outcome"] == "failed"]
@@ -212,7 +214,7 @@ def onboard(
     if stage == "status":
         return status(repo)
     if stage == "preflight":
-        return preflight(repo, apply=apply, only=accept)
+        return preflight(repo, apply=apply, only=accept, agent=agent)
     if stage == "legacy":
         return legacy(repo, apply=apply, accept=accept)
     if stage == "memory":

@@ -98,3 +98,11 @@ def test_the_removal_is_written_as_the_agent_ddflow_agent_names(repo, monkeypatc
     ON.apply(repo, [str(tree)])
     removed = [e for e in EventLog(repo).read_all() if e.kind == "worktree.removed"]
     assert removed and removed[-1].agent == "sweeper-7", removed
+
+
+def test_the_removal_is_written_as_the_declared_agent(repo):
+    """`--agent` (or `ddflow_identify`) reaches the removal, as it reaches every write."""
+    tree = _released_tree(repo)
+    api.onboard_run(repo, stage="preflight", apply=True, accept=[str(tree)], agent="declared-3")
+    removed = [e for e in EventLog(repo).read_all() if e.kind == "worktree.removed"]
+    assert removed and removed[-1].agent == "declared-3", removed
