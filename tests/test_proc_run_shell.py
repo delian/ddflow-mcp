@@ -45,3 +45,14 @@ def test_the_environment_is_the_callers(tmp_path):
 def test_git_timeouts_come_from_the_one_table():
     assert G.GIT_TIMEOUT == P.TIMEOUTS["git"] and G.LISTING_TIMEOUT == P.TIMEOUTS["git_listing"]
     assert all(v > 0 for v in P.TIMEOUTS.values())
+
+
+def test_every_entry_of_the_timeout_table_has_a_reader():
+    """An entry nothing reads is a number that changes nothing when edited."""
+    from pathlib import Path
+
+    src = "\n".join(p.read_text() for p in Path(P.__file__).parents[1].rglob("*.py"))
+    dead = [
+        k for k in P.TIMEOUTS if f'TIMEOUTS["{k}"]' not in src.replace("P.TIMEOUTS", "TIMEOUTS")
+    ]
+    assert not dead, f"TIMEOUTS entries nothing reads: {dead}"

@@ -159,7 +159,7 @@ def detect_runner(repo: Path) -> Runner | None:
     return None
 
 
-def baseline(repo: Path, command: str, *, timeout: int = 900) -> Baseline:
+def baseline(repo: Path, command: str, *, timeout: int = P.TIMEOUTS["suite_baseline"]) -> Baseline:
     """Run `command` in a DETACHED worktree of the default branch and measure it.
 
     Never in the checkout being changed: a tree with this session's edits measures this
@@ -267,7 +267,7 @@ def live_test(repo: Path) -> Proposal | None:
     return None
 
 
-def propose(repo: Path, *, timeout: int = 900) -> Report:
+def propose(repo: Path, *, timeout: int = P.TIMEOUTS["suite_baseline"]) -> Report:
     """Detect, measure and propose -- everything the operator is asked to confirm."""
     runner = detect_runner(repo)
     if runner is None:
