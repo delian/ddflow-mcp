@@ -281,6 +281,11 @@ class Item:
     #: against the entry. Unbounded: see `_displace`.
     displaced: list[dict[str, Any]] = field(default_factory=list)
 
+    @property
+    def terminal(self) -> bool:
+        """Finished with: done or abandoned. The one test for "nothing more to do here"."""
+        return self.state in (DONE, ABANDONED)
+
     def gate_outcome(self, gate: str) -> str:
         rec = self.gates.get(gate)
         return rec.outcome if rec else ""
@@ -929,12 +934,18 @@ class State:
 
         return [self.items[n] for n in closure(item_id, parent) if n != item_id]
 
+    def live_items(self) -> list[Item]:
+        """Every item that has not been removed, in definition order."""
+        return [i for i in self.items.values() if not i.removed]
+
+    def live_by_id(self) -> dict[str, Item]:
+        """`live_items` keyed by id: what the graph walks (`find_cycles`) take."""
+        return {i.id: i for i in self.live_items()}
+
     def open_descendants(self, item_id: str) -> list[Item]:
         """Descendants that are neither done nor abandoned — what blocks completion."""
         return [
-            self.items[i]
-            for i in sorted(self.descendants(item_id))
-            if self.items[i].state not in (DONE, ABANDONED)
+            self.items[i] for i in sorted(self.descendants(item_id)) if not self.items[i].terminal
         ]
 
     def active_leases(self, now: float, grace_s: int = 0) -> dict[str, Lease]:

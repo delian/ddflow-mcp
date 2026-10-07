@@ -21,7 +21,7 @@ def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
     p = plan(st, cfg, agent=cfg.agent.id or log.agent_id)
     now = time.time()
     leases = st.active_leases(now, cfg.lease.grace_s)
-    live_items = [i for i in st.items.values() if not i.removed]
+    live_items = st.live_items()
 
     tasks: dict[str, int] = {}
     for i in live_items:

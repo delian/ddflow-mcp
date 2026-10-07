@@ -48,12 +48,11 @@ def _sweep_records(st) -> list[dict[str, str]]:
 def _is_open(st, rec: dict) -> bool:
     """Whether a swept record is still live: an OPEN item, an unresolved bug, an active
     lesson or decision, a live memory, any research. What `dupes --open-only` keeps."""
-    from ...core.model import ABANDONED, DONE
 
     kind, rid = rec["kind"], rec["id"]
     if kind in ("task", "phase"):
         it = st.items.get(rid)
-        return bool(it and not it.removed and it.state not in (DONE, ABANDONED))
+        return bool(it and not it.removed and not it.terminal)
     if kind == "bug":
         b = st.bugs.get(rid)
         return bool(b and b.open)
