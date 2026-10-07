@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"/tmp/ddflow-compat/0.1.18/venv/bin/ddflow\" ]; then \"/tmp/ddflow-compat/0.1.18/venv/bin/ddflow\" hooks prompt; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks prompt; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true"
+          }
+        ]
+      }
+    ]
+  }
+}
