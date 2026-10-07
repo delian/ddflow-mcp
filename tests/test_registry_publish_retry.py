@@ -129,7 +129,7 @@ def _run(
         **ENV,
         # Generous by default: on a loaded host even these fake calls can take over a
         # second, and a 1 s bound cut them off as hangs and retried them (B6797d49e48).
-        # Only the hang case asks for a short one.
+        # Only the hang case asks for a shorter one.
         "MCP_CALL_TIMEOUT": str(call_timeout),
     }
     # GitHub runs `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`.
@@ -236,7 +236,8 @@ def test_duplicate_is_success_only_once_the_registry_confirms_it(tmp_path):
 
 def test_a_call_that_hangs_is_cut_off_and_retried(tmp_path):
     # mcp-publisher's HTTP client has no timeout; a starved request can be held open.
-    proc, r = _run(tmp_path, "hang ok", call_timeout=3)
+    # The bound covers the `ok` after the hang too: 10 s, so load cannot cut THAT off.
+    proc, r = _run(tmp_path, "hang ok", call_timeout=10)
     assert proc.returncode == 0, r["out"]
     assert r["publishes"] == 2
 
