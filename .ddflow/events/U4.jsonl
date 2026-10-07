@@ -2116,3 +2116,6 @@
 {"agent":"U4","data":{"at":1791413639.9719002,"holder":"U4"},"id":"e100141802ab8549a8d9d0b07","kind":"lease.renewed","lamport":35607,"schema":1,"subject":"B-uni-lease-live-dedupe","ts":"2026-10-07T22:54:00.095220Z"}
 {"agent":"U4","data":{"at":1791413763.3065155,"holder":"U4"},"id":"ef1216daff365b5e300f94764","kind":"lease.renewed","lamport":35625,"schema":1,"subject":"B-uni-lease-live-dedupe","ts":"2026-10-07T22:56:03.382544Z"}
 {"agent":"U4","data":{"at":1791413885.838322,"holder":"U4"},"id":"eb8d6db0c620aac0a883e0170","kind":"lease.renewed","lamport":35641,"schema":1,"subject":"B-uni-lease-live-dedupe","ts":"2026-10-07T22:58:05.915084Z"}
+{"agent":"U4","data":{"at":1791414008.7708263,"holder":"U4"},"id":"e49d25b517f551aef69adbea6","kind":"lease.renewed","lamport":35664,"schema":1,"subject":"B-uni-lease-live-dedupe","ts":"2026-10-07T23:00:08.846026Z"}
+{"agent":"U4","data":{"at":1791414131.2549646,"holder":"U4"},"id":"e1de75b0a6769b808764ab75c","kind":"lease.renewed","lamport":35673,"schema":1,"subject":"B-uni-lease-live-dedupe","ts":"2026-10-07T23:02:11.325118Z"}
+{"agent":"U4","data":{"at":1791414254.0549204,"holder":"U4"},"id":"e31093fa510d26ad8c7d1d66d","kind":"lease.renewed","lamport":35690,"schema":1,"subject":"B-uni-lease-live-dedupe","ts":"2026-10-07T23:04:14.183073Z"}
