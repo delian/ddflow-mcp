@@ -285,7 +285,9 @@ def fold_limit(
     paused_by = _critical(ring[-1], params)
     if st.limit >= ceiling:
         limited_by = CEILING
-    elif st.dec_signal:
+    elif st.dec_signal and ring[-1].signals.get(st.dec_signal) is not None:
+        # The decrease's signal, while it still reads; once it is null it holds nothing,
+        # and naming it hid what really did (B767745dee6).
         limited_by = st.dec_signal
     else:
         # growth or demand only when the latest sample SHOWS health: a blind one says so
