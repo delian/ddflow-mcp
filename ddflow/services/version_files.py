@@ -74,7 +74,7 @@ def prepare(repo: Path, cfg: Config, *, version: str, ref: str) -> Prepared:
                 f"[flow.version_files] {path!r} does not exist on {ref}: "
                 f"{shown.err or 'git show failed'}"
             )
-        text = shown.out_bytes.decode("utf-8")
+        text = (shown.out_bytes or b"").decode("utf-8")
         rx = re.compile(pattern, re.MULTILINE)
         hits = list(rx.finditer(text))
         found = len(hits)

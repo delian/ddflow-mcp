@@ -101,3 +101,17 @@ def test_z_listing_round_trips_odd_names(tmp_path):
     # pathspec after "--" keeps working: -z goes before it
     assert G.git_paths(repo, "ls-files", "--others", "--", "a b.txt") == ["a b.txt"]
     assert G.git_paths(repo, "bogus-subcommand") is None
+
+
+def test_text_output_that_is_not_utf8_does_not_raise(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "f").write_bytes(b"caf\xe9\n")
+    G.run(repo, "add", "f", check=True)
+    G.run(repo, "commit", "-qm", "m", check=True)
+    r = G.run(repo, "show", "HEAD:f")
+    assert r.ok and r.out == "caf�"
+
+
+def test_paths_of_a_text_call_is_none_not_empty(tmp_path):
+    repo = _repo(tmp_path)
+    assert G.run(repo, "ls-files").paths() is None
