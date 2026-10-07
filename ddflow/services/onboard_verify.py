@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import os
 import select
-import signal
 import subprocess
 import sys
 import tempfile
@@ -28,7 +27,7 @@ from . import legacy as L
 from . import onboard_tests as T
 
 #: How long the registered server may take to answer initialize + tools/list.
-_HANDSHAKE_TIMEOUT = 30
+_HANDSHAKE_TIMEOUT = P.TIMEOUTS["probe"]
 #: The trailer the commit-msg probe tries to sneak past the hook.
 _TRAILER = "Co-Authored-By: onboard-verify <verify@example.invalid>"
 #: A message the probe expects the hook to read.
@@ -137,10 +136,7 @@ def _line(proc: subprocess.Popen, timeout: float) -> str | None:
 
 
 def _stop(proc: subprocess.Popen) -> None:
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError, OSError):
-        proc.kill()
+    P.kill_group(proc)
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:

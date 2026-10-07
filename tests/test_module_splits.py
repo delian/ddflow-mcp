@@ -34,7 +34,7 @@ DEFINED = {
         _PY_MANIFESTS _RUN_FIELDS _SHELL_BUILTINS _SHELL_META _SUMMARY_LINE _VERDICT
         _XDIST_CHOSEN _XDIST_NAME _account_for_drift _blob_id _declared_family _git_z _hash_into
         _index_entries _looks_like_not_found _manifest_texts _missing_executable _ours
-        _read_text _run_spec _run_ticking _unapproved_reviewer _untracked_digest
+        _read_text _run_spec _unapproved_reviewer _untracked_digest
         _untracked_paths _what_differs _working_entry approve classify_exit commit_source_tree
         commit_tree_entries content_id declares_xdist diff_stat differing_paths digest family_of
         gate_config_drift inert_requirements load_gates normal_fingerprint parallel_test_advice

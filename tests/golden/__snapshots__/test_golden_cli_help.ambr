@@ -479,10 +479,11 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h]
+  usage: ddflow doctor [-h] [--upgrade]
   
   options:
     -h, --help  show this help message and exit
+    --upgrade   the upgrade plan instead (the same as `ddflow upgrade`)
   
   '''
 # ---
@@ -2092,6 +2093,16 @@
   
   '''
 # ---
+# name: test_help[ddflow upgrade]
+  '''
+  usage: ddflow upgrade [-h] [--plan]
+  
+  options:
+    -h, --help  show this help message and exit
+    --plan      print the plan (the default, and the only mode so far; nothing is written)
+  
+  '''
+# ---
 # name: test_help[ddflow verify]
   '''
   usage: ddflow verify [-h] [--all] [--phase PHASE] [--limit LIMIT] [--file-bugs] [--reopen] [--reason REASON] [--force] [--pack] [--judge] [id]
@@ -2266,13 +2277,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search}
+    {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search}
       init                create .ddflow/ in this repository
       phase               add a phase
       task                add a task
@@ -2326,6 +2337,8 @@
       rebuild             re-derive the index from the log
       render              regenerate the human-readable views
       config              print every knob, its value and its source
+      upgrade             what upgrading this project to the running ddflow would change (the plan;
+                          writes nothing; exit 0 up to date, 1 pending)
       export              documents generated from the log: list, print, enable, disable, --diff,
                           --check, --update
       bisect              find which earlier test file makes a test fail only in full-suite order
@@ -2512,6 +2525,7 @@
     'ddflow tests',
     'ddflow unblock',
     'ddflow update',
+    'ddflow upgrade',
     'ddflow verify',
     'ddflow version',
     'ddflow version cut',

@@ -9,7 +9,7 @@ import argparse
 from ..commands.bisect import add_bisect_parser
 from ..commands.export import add_export_parser
 from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit, cmd_tests
-from ..commands.setup import cmd_config
+from ..commands.setup import cmd_config, cmd_upgrade
 
 
 def register(s: argparse._SubParsersAction) -> None:
@@ -41,6 +41,19 @@ def register(s: argparse._SubParsersAction) -> None:
         "this machine's endpoints, hosts, key variables and sizing, never committed",
     )
     cf.set_defaults(fn=cmd_config)
+
+    up = s.add_parser(
+        "upgrade",
+        help="what upgrading this project to the running ddflow would change "
+        "(the plan; writes nothing; exit 0 up to date, 1 pending)",
+    )
+    up.add_argument(
+        "--plan",
+        action="store_true",
+        default=True,
+        help="print the plan (the default, and the only mode so far; nothing is written)",
+    )
+    up.set_defaults(fn=cmd_upgrade)
 
     add_export_parser(s)
     add_bisect_parser(s)
