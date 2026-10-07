@@ -15,7 +15,7 @@ whatever ``edges`` returns, the other functions ignore edges leaving the node se
 from __future__ import annotations
 
 from collections.abc import Callable, Hashable, Iterable, Mapping
-from graphlib import TopologicalSorter
+from graphlib import CycleError, TopologicalSorter
 from typing import Any, TypeVar
 
 N = TypeVar("N", bound=Hashable)
@@ -108,8 +108,8 @@ def topological_order(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) ->
 def longest_chains(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> dict[N, list[N]]:
     """For every node, the longest chain of ``before`` edges ending at it (itself last).
 
-    The graph must be acyclic (``find_cycles`` first); edges leaving ``nodes`` are
-    ignored. Ties go to the first strictly longer candidate in ``before``'s order, so
+    The graph must be acyclic (``find_cycles`` first): a cycle raises
+    ``graphlib.CycleError`` rather than loop. Edges leaving ``nodes`` are ignored. Ties go to the first strictly longer candidate in ``before``'s order, so
     the answer is deterministic for a deterministic ``before``. Iterative post-order:
     a chain is as deep as the plan, not as the interpreter's stack.
     """
@@ -120,15 +120,20 @@ def longest_chains(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> di
         if root in memo:
             continue
         stack: list[tuple[N, list[N], int]] = [(root, [p for p in before(root) if p in members], 0)]
+        open_: set[N] = {root}
         while stack:
             n, preds, i = stack[-1]
             if i < len(preds):
                 stack[-1] = (n, preds, i + 1)
                 p = preds[i]
+                if p in open_:
+                    raise CycleError("longest_chains needs an acyclic graph", p)
                 if p not in memo:
+                    open_.add(p)
                     stack.append((p, [q for q in before(p) if q in members], 0))
                 continue
             stack.pop()
+            open_.discard(n)
             best: list[N] = []
             for p in preds:
                 if len(memo[p]) > len(best):
