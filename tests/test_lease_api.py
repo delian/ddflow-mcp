@@ -123,7 +123,7 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
     # A recorded expiry is read as the CAUSE of a refusal in services/leases.py, and folded
     # in core/; anywhere else it is a liveness test that ignores the clock.
     for path in root.rglob("*.py"):
-        if "core" in path.relative_to(root).parts or path.name == "leases.py":
+        if "core" in path.relative_to(root).parts or path == root / "services" / "leases.py":
             continue
         for n, line in enumerate(path.read_text().splitlines(), 1):
             if ".expired_at" in line:
@@ -166,6 +166,7 @@ def test_dedupe_does_not_call_a_lapsed_unrecorded_claim_held(repo):
     now, grace = time.time(), cfg.lease.grace_s
     where = DD.record_state(st, "T1", "task", now=now, grace_s=grace)[1]
     assert not where.startswith("claimed by"), where
+    assert DD.extendable(st, "T1", "task", now=now, grace_s=grace)
 
 
 def test_dedupe_calls_a_live_claim_held(repo):
@@ -174,3 +175,4 @@ def test_dedupe_calls_a_live_claim_held(repo):
     st, cfg = _lapsed_unrecorded(repo, at=time.time())
     where = DD.record_state(st, "T1", "task", now=time.time(), grace_s=cfg.lease.grace_s)[1]
     assert where == "claimed by gone"
+    assert not DD.extendable(st, "T1", "task", grace_s=cfg.lease.grace_s)
