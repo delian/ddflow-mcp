@@ -650,7 +650,8 @@ _DIFF_PREFIXES = ("--src-prefix=a/", "--dst-prefix=b/")
 def _diff_text(tree: Path, *args: str) -> str:
     """`git diff <args>` as text a reviewer can read, whatever the bytes: a file's
     non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
-    raised -- `git()` decodes strictly, and one such file aborted the whole review."""
+    raised (`git()` replaces by default; stated here because a strict decode once aborted the
+    whole review)."""
     return git(tree, "diff", *_DIFF_PREFIXES, *args, errors="replace").out
 
 
