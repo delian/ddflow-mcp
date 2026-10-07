@@ -7,6 +7,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from ...core import clock
 from ...core import outcome as O
 from ...services import leases as L
 from .._base import _load
@@ -17,7 +18,7 @@ from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
 def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
     """The brief's section on who the agent holds up, "" when nobody waits."""
     lines = [
-        f"- {w['agent']} has waited {w['waiting_s'] // 60}m for the files {iid} holds"
+        f"- {w['agent']} has waited {clock.fmt_age(w['waiting_s'])} for the files {iid} holds"
         + (f" (for {w['item']})" if w["item"] else "")
         for iid in held_ids
         for w in _waiters(repo, iid)

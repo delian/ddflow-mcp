@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.unit_tests_small_lines"
+new = "150"
+why = "A task with fewer changed lines than this (added plus removed since its base, `.ddflow/` excluded; default 150) is SMALL, and its unit_tests gate runs only the selected tests under `gates.unit_tests_scope = \"selected\"`."
+impact = "additive"

@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
+from ..core import clock
 from ..core.flow import env_chain
 from ..core.model import Lease, fold
 from ..core.schedule import globs_overlap, is_shared, path_in_glob, shared_globs
@@ -1025,12 +1026,13 @@ def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
     sent to take the abandoned work over. Both readings are offered rather than telling
     a newcomer to resurrect a claim its holder abandoned.
     """
-    idle = int((now - lease.renewed_at) // 60)
-    ago = max(0, int((now - lease.renewed_at - lease.ttl_s) // 60))
+    idle = clock.fmt_age(now - lease.renewed_at, "min")
+    ago = clock.fmt_age(max(0, now - lease.renewed_at - lease.ttl_s), "min")
+    ttl = clock.fmt_age(lease.ttl_s, "min")
     whose = "Your lease" if lease.holder == me else "The lease"
     lines = [
-        f"{whose} on {item_id} (held by {lease.holder}) LAPSED {ago} min ago: no",
-        f"heartbeat for {idle} min, past its {lease.ttl_s // 60} min TTL, and nobody has taken",
+        f"{whose} on {item_id} (held by {lease.holder}) LAPSED {ago} ago: no",
+        f"heartbeat for {idle}, past its {ttl} TTL, and nobody has taken",
         "it over.",
     ]
     if lease.holder == me:
