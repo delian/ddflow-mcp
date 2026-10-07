@@ -155,7 +155,7 @@ def test_the_mark_changes_on_every_kind_of_append(repo):
     # exercises GROWTH rather than creation — the two cases are checked separately below.
     log.append("item.blocked", "T1", {"reason": "create this agent's shard"})
     before = log.mark()
-    assert before, "no shards at all, so the comparison below is vacuous"
+    assert before.shards, "no shards at all, so the comparison below is vacuous"
 
     log.append("item.blocked", "T1", {"reason": "same shard grows"})
     grown = log.mark()
