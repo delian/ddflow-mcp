@@ -5,9 +5,10 @@ This is the fast-feedback half: while an agent works, it runs the tests its diff
 reach, in parallel, after each change. The other half is the WHOLE suite, because a
 targeted sweep hides standing breakage (on the source project a full run found 12
 pre-existing failures that every targeted run had missed). Where that whole run happens
-is `unit_tests_scope`'s answer (D-gate-economy 1): for a bug fix or a small task whose
-pipeline has a `ci` gate, the unit_tests gate runs the selection and the ci gate runs the
-whole suite once, on the merge result; for anything else the unit_tests gate runs it.
+is `unit_tests_scope`'s answer (D-gate-economy 1): once the item's ci gate has PASSED the
+whole suite on the source its tree holds now, the unit_tests gate of a bug fix or a small
+task runs the selection; in every other case -- no passing ci on this tree, a larger
+task, a selection that cannot be made -- the unit_tests gate runs the whole suite itself.
 
 A test is selected when, relative to the item's base:
 

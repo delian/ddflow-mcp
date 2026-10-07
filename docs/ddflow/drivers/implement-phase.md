@@ -186,7 +186,7 @@ into the gate's record and earlier triage stays), for a diff too large to send t
 `ddflow config review.delta_default true [--local]` makes every plain re-review a delta
 (`--full` then still asks for a full round).
 
-**Tests: the relevant ones while you work, all of them once before the merge, always in parallel.**
+**Tests: the relevant ones while you work, all of them before the merge, always in parallel.**
 
 ```sh
 ddflow tests --item <ID>                         # [ddflow_tests] after EACH change
