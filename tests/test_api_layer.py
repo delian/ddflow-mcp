@@ -357,6 +357,8 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     # differ between the two calls. Naming a cli companion launches nothing: both surfaces
     # report the same `skipped` list and exit 2.
     "ddflow_companions_verify": (["companions", "--verify", "--id", "optmem"], {"id": "optmem"}),
+    # The plan only reads, so both surfaces see the same project.
+    "ddflow_upgrade": (["upgrade"], {}),
     "ddflow_hooks": (["hooks", "status"], {}),
     "ddflow_help": (["help"], {}),
     "ddflow_prompts": (["prompts", "list"], {}),
