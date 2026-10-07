@@ -118,6 +118,7 @@ def releases() -> list[tuple[str, str, str]]:
 
 def snapshot(tree: Path) -> dict:
     """Knobs, their docs and the event kinds of the `ddflow` package under ``tree``."""
+    tree = tree.resolve()  # PYTHONPATH is read from inside cwd: a relative one points elsewhere
     r = subprocess.run(
         [sys.executable, "-c", SNAPSHOT],
         cwd=tree,
@@ -243,13 +244,18 @@ def _entry(header: str, e: dict) -> list[str]:
 
 
 def assign_unreleased(kept: dict[str, dict], versions: list[str]) -> dict[str, dict]:
-    """When a version has been cut since the last backfill, the entries written for
-    `unreleased` (fragments) belong to it: their hand-written why, effect, impact and
-    enable, and their refresh, repair and feature entries, move to the newest release
-    that the manifest does not list yet."""
+    """When versions have been cut since the last backfill, the entries written for
+    `unreleased` (fragments) belong to them. A fragment's hand-written fields serve every
+    release the manifest does not list yet -- only the release whose diff has that
+    (kind, key) uses them -- and its refresh, repair and feature entries go to the OLDEST
+    such release, the first one cut after they were written."""
     out = dict(kept)
-    if UM.UNRELEASED in out and versions and versions[-1] not in out:
-        out[versions[-1]] = out.pop(UM.UNRELEASED)
+    unlisted = [v for v in versions[1:] if v not in out]
+    if UM.UNRELEASED not in out or not unlisted:
+        return out
+    loose = out.pop(UM.UNRELEASED)
+    for i, v in enumerate(unlisted):
+        out[v] = {"by_key": loose["by_key"], "manual": loose["manual"] if i == 0 else []}
     return out
 
 

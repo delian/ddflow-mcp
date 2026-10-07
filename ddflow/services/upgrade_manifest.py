@@ -211,7 +211,10 @@ def parse(text: str, fragments: list[tuple[str, str]] | None = None) -> Manifest
     base = data.get("base")
     if not isinstance(base, dict) or not base.get("version"):
         raise ManifestError("the manifest has no [base] with a version")
-    knobs = {k: _decode(v, f"base.knobs.{k}") for k, v in (base.get("knobs") or {}).items()}
+    raw_knobs = base.get("knobs") or {}
+    if not isinstance(raw_knobs, dict):
+        raise ManifestError("[base.knobs] is a table of JSON-encoded defaults")
+    knobs = {k: _decode(v, f"base.knobs.{k}") for k, v in raw_knobs.items()}
     out = Manifest(str(base["version"]), knobs, sorted(base.get("event_kinds") or []))
     out.releases = _releases(data)
     loose = _fragments(fragments or [])
