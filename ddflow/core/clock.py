@@ -91,11 +91,12 @@ def parse_date(text: str) -> date:
 
 
 def run_stamp(at: float | None = None, *, token_hex: int = 8) -> str:
-    """A name for one run, file or lock holder: its UTC second, then a random token --
-    ``20261007T010203Z-1a2b3c4d``. The time makes names sort in the order they were
-    made, on every machine (a local-time stamp sorted by each host's zone); the token
-    keeps two made in the same second apart, which a time alone (seconds, or the
-    nanoseconds two quick launches still shared) did not. ``at`` is epoch seconds
-    (default: now); ``token_hex`` the token's length in hex digits."""
+    """A name for one run, file or lock holder: its UTC second, then a fresh random token
+    on every call -- ``20261007T010203Z-1a2b3c4d``. The time prefix sorts names made in
+    different seconds chronologically on every machine (a local-time stamp sorted by
+    each host's zone); within one second their order is arbitrary. The token keeps two
+    made in the same second apart, which a time alone (seconds, or the nanoseconds two
+    quick launches still shared) did not. ``at`` is epoch seconds (default: now);
+    ``token_hex`` the token's length in hex digits."""
     when = datetime.fromtimestamp(time.time() if at is None else at, UTC)
     return f"{when.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(-(-token_hex // 2))[:token_hex]}"
