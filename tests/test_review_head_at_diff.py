@@ -111,8 +111,9 @@ def test_a_commit_made_while_a_full_review_runs_shows_up_in_the_next_delta(repo,
     assert _ev(repo)["reviewed_head"] == late
 
 
-def test_a_commit_made_while_a_delta_round_runs_is_not_skipped(repo, tmp_path):
+def test_a_commit_made_while_a_delta_round_runs_is_not_skipped(repo, tmp_path, monkeypatch):
     """B99e47e0390's case: the same skip, one round later -- a DELTA round's record."""
+    monkeypatch.setenv("DDFLOW_REVIEW_MAX_ROUNDS", "0")  # deltas count against the cap now
     arm = _setup(repo, tmp_path)
     assert _review(repo).exit == OK
     (repo / "fix.py").write_text("ok = 1\n")

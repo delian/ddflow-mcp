@@ -677,7 +677,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     if kind in ("full", "delta") and item:
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
-        used = done + _delta_rounds(log, item, gate)
+        used = _rounds_used(log, item, gate)
         why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say)
     if why:
         return kind, done, forced, diff, how, why, None
@@ -818,7 +818,8 @@ def _last_head(log, item: str, gate: str) -> str:
 
 
 def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
-    """full | delta | chunk: only a `full` round counts against `[review].max_rounds`.
+    """full | delta | chunk: what the round is. A full and a delta round both count
+    against `[review].max_rounds`; only a full one is numbered (`round`).
 
     Judged by what a review COVERS, not by the flag that asked for it: `--delta` always
     is one; a `--commit` or `--base` review is one only when that ref can only be
@@ -848,7 +849,8 @@ def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
 
 
 def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
-    """(why this full round is refused, "") or ("", the reason it was forced past the cap)."""
+    """(why this round is refused, "") or ("", the reason it was forced past the cap).
+    ``done`` is every round used so far, full and delta (`_rounds_used`)."""
     cap = cfg.review.max_rounds
     if cap <= 0 or done < cap:
         return "", ""
@@ -1227,10 +1229,10 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
 
-    A FULL round -- anything that can cover the item's whole diff -- is counted against
-    `[review].max_rounds`; `delta` reviews only what changed since the head the gate's
-    last review covered (as does a `commit`/`base` at or after that head), and neither
-    it nor triage is ever refused.
+    A FULL round -- anything that can cover the item's whole diff -- and a `delta` (only
+    what changed since the head the gate's last review covered, as is a `commit`/`base`
+    at or after that head) both count against `[review].max_rounds` (decision
+    D-gate-economy 2); a `--chunk` re-run and triage never do.
     `force` with a `reason` runs a full round past the cap, recorded in the evidence.
 
     A plain review of a gate that already has a recorded review is a FULL re-review whose
