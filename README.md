@@ -2835,6 +2835,11 @@ Exit codes are the contract, and agents branch on them:
 "Nothing is ready" and "everything is fine" are different facts. An agent that cannot
 tell them apart invents work.
 
+Over MCP the code is the result's `_meta.exit`, from the same table the CLI exits with
+(`core.outcome.exit_for`): a refusal raised anywhere -- a lease held by someone else, a
+reviewer only a person may add, a log written by a newer ddflow -- is `3` with its
+remedy, not "bad arguments" or an internal error.
+
 **The critical path is reported**, because it, not the task count, sets the wall-clock
 floor — adding a fifth agent to a phase whose runtime is a four-deep chain buys nothing.
 It walks nested sub-tasks: an umbrella's open sub-tasks count as steps before it, and a
