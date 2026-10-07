@@ -9,7 +9,9 @@ that says so.
 
 Three shapes of output, one function:
 
-- text (the default): ``out`` and ``err`` stripped, decoded with ``errors``;
+- text (the default): ``out`` and ``err`` stripped, decoded with ``errors`` ("replace": a
+  commit subject or a blob that is not UTF-8 must not raise out of a runner that promises
+  not to; a caller that needs the exact bytes asks for ``binary``);
 - ``binary=True``: ``out_bytes`` holds stdout untouched (a file's own trailing newline is
   its content; a diff piped to ``patch-id`` must not be re-encoded);
 - ``z=True``: ``-z`` is inserted before a ``--`` pathspec and ``paths()`` reads the NUL
@@ -50,8 +52,9 @@ class GitResult:
     #: (the target is missing, checked out elsewhere, or another merge is in progress): the
     #: item's own branch was not judged, so it is not a failed merge of that branch.
     attempted: bool = True
-    #: Raw stdout, set by ``binary=True`` / ``z=True`` (``out`` is then its lossy decoding).
-    out_bytes: bytes = b""
+    #: Raw stdout, set by ``binary=True`` / ``z=True`` (``out`` is then its lossy decoding);
+    #: None when the call did not ask for it, so `paths()` cannot read a text call as empty.
+    out_bytes: bytes | None = None
     #: git did not run to an exit status: not installed, or killed at its timeout.
     unavailable: bool = False
     timed_out: bool = False
@@ -66,7 +69,7 @@ class GitResult:
     def paths(self) -> list[str] | None:
         """The NUL separated names in ``out_bytes`` as the filesystem spells them; None when
         git failed -- "could not tell", never "no paths"."""
-        if not self.ok:
+        if not self.ok or self.out_bytes is None:
             return None
         return [os.fsdecode(x) for x in self.out_bytes.split(b"\0") if x]
 
@@ -88,7 +91,7 @@ def run(
     input: bytes | str | None = None,
     check: bool = False,
     env: dict[str, str] | None = None,
-    errors: str = "strict",
+    errors: str = "replace",
 ) -> GitResult:
     """``git -C repo *args`` as a `GitResult`; see the module docstring.
 
@@ -116,7 +119,7 @@ def run(
             UNAVAILABLE,
             "",
             f"git {' '.join(args)} timed out after {timeout}s",
-            out_bytes=exc.stdout if isinstance(exc.stdout, bytes) else b"",
+            out_bytes=exc.stdout if raw and isinstance(exc.stdout, bytes) else None,
             unavailable=True,
             timed_out=True,
         )
@@ -128,7 +131,7 @@ def run(
             p.returncode,
             _decode(out, "replace" if raw else errors).strip(),
             _decode(p.stderr, "replace" if raw else errors).strip(),
-            out_bytes=out if raw else b"",
+            out_bytes=out if raw else None,
         )
     if check and not res.ok:
         raise GitError(f"git {' '.join(args)} failed ({res.code}): {res.err or res.out}")
