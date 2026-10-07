@@ -10,6 +10,7 @@ render through the same `prompts.render_command` as `prompts/get`.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -170,3 +171,20 @@ def test_only_a_whole_word_ui_makes_a_gate_a_suite():
     assert P._looks_like_a_suite("integration")
     assert not P._looks_like_a_suite("build")
     assert not P._looks_like_a_suite("require_review")
+
+
+def test_a_non_string_tool_argument_is_refused_not_a_crash(repo):
+    run_cli(repo, "init")
+    got = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_prompts",
+                "arguments": {"action": "get", "name": "implement", "arg": [1]},
+            },
+        }
+    )
+    assert "error" not in got or got["error"]["code"] != -32603, got
+    assert "KEY=VALUE" in json.dumps(got), got

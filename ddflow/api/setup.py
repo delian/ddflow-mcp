@@ -1005,7 +1005,7 @@ def _prompts_get(P, repo: Path, name: str, pairs: list[str], problems: list[str]
         return O.failed("prompts", why, rows=[], action="get", text="", written=[], skipped=[])
 
     args: dict[str, str] = {}
-    for pair in pairs:
+    for pair in map(str, pairs):  # a schema-violating MCP client may send a number
         key, eq, value = pair.partition("=")
         if not eq or not key.strip():
             return failed(f"argument {pair!r}: expected KEY=VALUE")
