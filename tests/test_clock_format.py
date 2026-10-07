@@ -2,7 +2,8 @@
 
 Each helper replaces an expression that was repeated at its call sites; the tables pin the
 helper to that expression over every shape a stored timestamp takes, so the move changed
-no output. A guard keeps the expressions from growing back elsewhere.
+no output. A guard keeps the two unambiguous ones -- the minute slice and `datetime.now(` --
+from growing back elsewhere; a bare `[:10]` also cuts shas and lists, so it is not banned.
 """
 
 from __future__ import annotations
@@ -116,3 +117,18 @@ def test_the_replaced_expressions_live_only_in_core_clock():
         if rx.search(line)
     ]
     assert not found, "use core.clock (fmt_minute / now_utc / now_iso):\n" + "\n".join(found)
+
+
+def test_the_now_writers_follow_core_clock_at_call_time(monkeypatch):
+    """A clock swapped on core.clock reaches the writers that moved there (critic, roborev:
+    an alias bound at import would keep the original function)."""
+    from ddflow.api.lifecycle import reservations
+    from ddflow.services import rules
+
+    fixed = datetime(2020, 1, 2, 3, 4, 5, tzinfo=UTC)
+    monkeypatch.setattr(clock, "now_utc", lambda: fixed)
+    monkeypatch.setattr(clock, "fmt_time", lambda t: "frozen")
+    assert rules._now() == fixed
+    rule = rules.Rule(id="r", title="t", content="c")
+    assert rule.created == rule.updated == fixed
+    assert reservations._fmt_since(T) == "frozen"
