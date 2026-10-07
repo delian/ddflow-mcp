@@ -2,7 +2,8 @@
 
 Both now go through fsio.repo_rel(as_given=True, strict=False); every path production
 code builds must print exactly what the old lexical derivation printed, also when the
-repository is reached through a symlink.
+repository is reached through a symlink. Labels are POSIX text: on Windows legacy.scan's
+label used native separators before and now uses "/", like every other repo_rel report.
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ from ddflow.services.export import templates as T
 
 
 def _old_label(repo: Path, path: Path) -> str:
-    """The derivation legacy.scan and templates.rel used before B-relpath-labels."""
-    return str(path.relative_to(repo) if path.is_relative_to(repo) else path)
+    """The derivation legacy.scan and templates.rel used before B-relpath-labels
+    (inside the repo as POSIX text; see the module docstring)."""
+    return path.relative_to(repo).as_posix() if path.is_relative_to(repo) else str(path)
 
 
 @pytest.fixture(params=["direct", "via-symlink"])
@@ -57,7 +59,7 @@ def test_legacy_labels_a_named_file_outside_the_repo_by_its_path(tmp_path: Path)
 @pytest.mark.parametrize("kind", ["bugs", "worklog"])
 def test_template_rel_matches_the_old_label(repo: Path, kind: str):
     for p in (repo / ".ddflow", T.project_path(repo, kind)):
-        assert T.rel(repo, p) == _old_label(repo, p).replace(os.sep, "/")
+        assert T.rel(repo, p) == _old_label(repo, p)
     assert T.rel(repo, T.project_path(repo, kind)) == f".ddflow/templates/export/{kind}.md.j2"
 
 
@@ -65,3 +67,27 @@ def test_template_rel_outside_the_repo_is_the_path_as_given(tmp_path: Path):
     repo = tmp_path / "repo"
     other = tmp_path / "elsewhere" / "x.md.j2"
     assert T.rel(repo, other) == str(other)
+
+
+def test_a_symlinked_rulebook_is_labelled_by_its_own_name(tmp_path: Path):
+    """as_given=True: a CLAUDE.md that links to AGENTS.md (or out of the repo) prints as
+    CLAUDE.md, the name the operator sees, never as its target."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "AGENTS.md").write_text("- tick the checkbox\n")
+    os.symlink(repo / "AGENTS.md", repo / "CLAUDE.md")
+    outside = tmp_path / "local-target.md"
+    outside.write_text("- tick the checkbox\n")
+    os.symlink(outside, repo / "CLAUDE.local.md")
+    labels = sorted(p.path for p in L.scan(repo, []))
+    assert labels == ["AGENTS.md", "CLAUDE.local.md", "CLAUDE.md"]
+
+
+def test_a_symlinked_template_is_labelled_by_its_own_name(tmp_path: Path):
+    repo = tmp_path / "repo"
+    dst = T.project_path(repo, "bugs")
+    dst.parent.mkdir(parents=True)
+    target = tmp_path / "elsewhere.md.j2"
+    target.write_text("x")
+    os.symlink(target, dst)
+    assert T.rel(repo, dst) == ".ddflow/templates/export/bugs.md.j2"
