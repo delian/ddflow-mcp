@@ -82,6 +82,11 @@ def test_coverage_judges_every_pipeline_that_runs_once_each(repo):
 def test_the_diagram_never_merges_two_steps_into_one_node():
     from ddflow.api.workflow_state import _diagram
 
-    text = _diagram(["promote_test", "review"], ["test", "Promoted"])
-    targets = [ln.split("-->")[1].strip().split("[")[0] for ln in text.splitlines()[1:]]
-    assert len(targets) == len(set(targets)), text
+    for task, promotion in (
+        (["promote_test", "review"], ["test"]),  # a promotion step's id already taken
+        (["a.b", "a-b"], []),  # two task gates that sanitise alike
+        (["Complete"], []),  # a gate named like the terminal
+    ):
+        text = _diagram(task, promotion)
+        targets = [ln.split("-->")[1].strip().split("[")[0] for ln in text.splitlines()[1:]]
+        assert len(targets) == len(set(targets)), text
