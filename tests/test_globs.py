@@ -122,7 +122,6 @@ def test_lesson_globs_match_by_name_at_any_depth(tmp_path):
 
 def test_importer_archive_globs_use_the_same_reading():
     assert importer.glob_match("docs/todo.md", "docs/todo.md")
-    assert importer.glob_match("lessons/old/a.md", "*.md", bare_any_depth=True)
     assert importer.glob_match("docs/old/a.md", "docs/**/a.md")
     assert not importer.glob_match("docs/old/a.md", "docs/*.md")
 
@@ -131,3 +130,21 @@ def test_a_doc_glob_with_a_class_matches_as_git_reads_it():
     """B0cf7a6ddea: docsync escaped `[`, so `docs/[ab].md` named no doc."""
     assert docsync.is_doc("docs/a.md", ["docs/[ab].md"])
     assert not docsync.is_doc("docs/c.md", ["docs/[ab].md"])
+
+
+def test_a_bare_name_archive_glob_holds_a_nested_plan_file(repo):
+    """B0cf7a6ddea: `archive_globs = ["todo.md"]` held docs/todo.md under fnmatch's reading of
+    the name at any depth; the first unified reading anchored it and imported the work open."""
+    from conftest import run_cli
+
+    from ddflow.core.model import BLOCKED, fold
+    from ddflow.infra.log import EventLog
+
+    (repo / "docs").mkdir()
+    (repo / "docs" / "todo.md").write_text("## Legacy\n\n- [ ] **159.A.1** - one\n")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[importer]\narchive_globs = ["todo.md"]\n')
+    code, _out, err = run_cli(repo, "import", "--apply")
+    assert code == 0, err
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["159.A.1"].state == BLOCKED
