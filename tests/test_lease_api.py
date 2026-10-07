@@ -120,6 +120,14 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
         for n, line in enumerate(text.splitlines(), 1):
             if re.search(r"\.expired\(", line) and "def expired" not in line:
                 bad.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
+    # A recorded expiry is read as the CAUSE of a refusal in services/leases.py, and folded
+    # in core/; anywhere else it is a liveness test that ignores the clock.
+    for path in root.rglob("*.py"):
+        if "core" in path.relative_to(root).parts or path.name == "leases.py":
+            continue
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            if ".expired_at" in line:
+                bad.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
     assert not bad, "use Lease.live(now, grace):\n" + "\n".join(bad)
     raw = []
     for path in root.rglob("*.py"):
@@ -136,3 +144,33 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
             ):
                 raw.append(f"{path.relative_to(root)}:{node.lineno}")
     assert not raw, f"append a lease.released/acquired through services.leases: {raw}"
+
+
+def _lapsed_unrecorded(repo, at: float):
+    """T1 claimed by 'gone' at ``at`` with the shipped TTL and no recorded expiry."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    log = EventLog(repo)
+    log.append(
+        "lease.acquired", "T1", {"holder": "gone", "at": at, "ttl_s": 1800, "globs": ["a.py"]}
+    )
+    return fold(log.read_all(), strict=False), Config.load(repo)
+
+
+def test_dedupe_does_not_call_a_lapsed_unrecorded_claim_held(repo):
+    """A claim whose TTL and grace ran out is dead whether or not recovery recorded it:
+    `record_state` must not say "claimed by", and the record must be extendable."""
+    from ddflow.api import _dedupe as DD
+
+    st, cfg = _lapsed_unrecorded(repo, at=time.time() - 10 * 86400)
+    now, grace = time.time(), cfg.lease.grace_s
+    where = DD.record_state(st, "T1", "task", now=now, grace_s=grace)[1]
+    assert not where.startswith("claimed by"), where
+
+
+def test_dedupe_calls_a_live_claim_held(repo):
+    from ddflow.api import _dedupe as DD
+
+    st, cfg = _lapsed_unrecorded(repo, at=time.time())
+    where = DD.record_state(st, "T1", "task", now=time.time(), grace_s=cfg.lease.grace_s)[1]
+    assert where == "claimed by gone"
