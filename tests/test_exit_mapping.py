@@ -92,3 +92,12 @@ def test_the_cli_exits_from_the_same_table(monkeypatch, capsys):
 def test_a_plain_value_error_is_still_bad_arguments_on_mcp(repo, monkeypatch):
     reply = _call_raising(repo, monkeypatch, ValueError("no such thing"))
     assert "bad arguments: no such thing" in _text(reply)
+
+
+def test_a_declared_exit_wins_over_the_bad_arguments_reading(repo, monkeypatch):
+    class ArgTypeError(TypeError):
+        exit_code = O.FAIL
+
+    reply = _call_raising(repo, monkeypatch, ArgTypeError("typed wrong"))
+    assert "bad arguments" not in _text(reply) and "ArgTypeError: typed wrong" in _text(reply)
+    assert reply["result"]["_meta"]["exit"] == O.FAIL
