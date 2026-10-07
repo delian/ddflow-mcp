@@ -1,0 +1,232 @@
+"""One home for walking a directed graph: reachability, cycles, order, longest chain.
+
+Every graph ddflow walks -- the parent tree, `needs`, inherited dependencies, job
+`needs` -- is operator-authored. So it can be deep (no recursion here: depth is the
+length of a chain nobody bounded) and it can be wrong (every walk is cycle-guarded,
+because the code that walks it is also the code that diagnoses bad plans).
+
+A graph is given as a node set plus an ``edges(node) -> iterable of nodes`` function,
+so a caller keeps its own notion of what an edge is (a child, a dependency, an
+inherited dependency) and of which nodes are live; nothing here knows what an item is.
+An edge to a node the caller did not list is the caller's business: ``closure`` follows
+whatever ``edges`` returns, the other functions ignore edges leaving the node set.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Hashable, Iterable, Mapping
+from graphlib import CycleError, TopologicalSorter
+from typing import Any, TypeVar
+
+N = TypeVar("N", bound=Hashable)
+T = TypeVar("T")
+
+
+def closure(start: N, edges: Callable[[N], Iterable[N]]) -> list[N]:
+    """Every node reachable from ``start`` by one or more edges, in discovery order.
+
+    ``start`` itself is in the result only when a cycle leads back to it. Depth-first,
+    iterative, each node once: on a chain (one edge per node) the order is nearest
+    first, which is what a parent chain wants.
+    """
+    seen: set[N] = set()
+    out: list[N] = []
+    stack = [start]
+    while stack:
+        for nxt in edges(stack.pop()):
+            if nxt in seen:
+                continue
+            seen.add(nxt)
+            out.append(nxt)
+            stack.append(nxt)
+    return out
+
+
+def find_cycles(
+    items: Mapping[str, T], edges: Callable[[T], list[str]] | None = None
+) -> list[list[str]]:
+    """Dependency cycles, each reported once, starting at its smallest id: the cycle of
+    every DFS back edge, plus, for any item on a cycle that none of those passes
+    through, its shortest cycle -- so EVERY item on a cycle is in at least one reported
+    cycle (Bfdaf61894b: a cycle closing through an already-finished node was dropped,
+    and an item only on such a cycle was never named). Not every simple cycle: those
+    can be exponentially many, and naming each item on one is what a health check needs.
+
+    Iterative DFS. Recursion depth here is the length of the dependency chain, which is
+    operator-authored and therefore unbounded by anything the code controls; a plan with
+    a thousand-deep chain would raise RecursionError inside the health check that exists
+    to diagnose bad plans.
+
+    `edges` says which graph to walk, and a caller must pass the one it will walk
+    itself. `critical_path` traverses INHERITED dependencies while this defaulted to
+    direct `needs`, so a cycle existing only in the inherited graph passed the guard and
+    the memoised longest-path returned a confidently wrong number -- the exact outcome
+    the guard exists to refuse.
+    """
+    edge: Callable[[Any], list[str]] = edges or (lambda it: list(it.needs))
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour: dict[str, int] = {}
+    found: list[list[str]] = []
+
+    for root in sorted(items):
+        if colour.get(root, WHITE) != WHITE:
+            continue
+        stack: list[tuple[str, list[str]]] = [(root, edge(items[root]))]
+        path: list[str] = [root]
+        colour[root] = GREY
+        while stack:
+            _node, pending = stack[-1]
+            if not pending:
+                stack.pop()
+                colour[path.pop()] = BLACK
+                continue
+            dep = pending.pop()
+            if dep not in items:
+                continue
+            c = colour.get(dep, WHITE)
+            if c == GREY:
+                cyc = path[path.index(dep) :]
+                lo = cyc.index(min(cyc))
+                found.append(cyc[lo:] + cyc[:lo] + [cyc[lo]])
+            elif c == WHITE:
+                colour[dep] = GREY
+                path.append(dep)
+                stack.append((dep, edge(items[dep])))
+    found += _missed_cycles(items, edge, {n for cyc in found for n in cyc})
+    uniq = {tuple(c): c for c in found}
+    return sorted(uniq.values())
+
+
+def _missed_cycles(
+    items: Mapping[str, T], edge: Callable[[T], list[str]], named: set[str]
+) -> list[list[str]]:
+    """A shortest cycle for each item on a cycle that none of the ``named`` items'
+    cycles passes through, rotated to start at its smallest id."""
+    found: list[list[str]] = []
+    # Every cycle holds a back edge, so an unnamed item on one shares a strongly
+    # connected component with a named item: it is reachable from one and reaches one.
+    # Only those candidates are searched, so an acyclic plan (nothing named) costs no
+    # more than the DFS in find_cycles.
+    candidates: set[str] = set()
+    if named:
+        out = {n: [d for d in edge(items[n]) if d in items] for n in items}
+        into: dict[str, list[str]] = {}
+        for n, ds in out.items():
+            for d in ds:
+                into.setdefault(d, []).append(n)
+        roots = sorted(named)
+        # one walk from all named items at once: "" is no item id (ids are never empty)
+        down = set(closure("", lambda x: out[x] if x else roots))
+        up = set(closure("", lambda x: into.get(x, []) if x else roots))
+        candidates = (down & up) - named
+    for n in sorted(candidates):
+        if n not in named and (cyc := _shortest_cycle(n, items, edge)):
+            lo = cyc.index(min(cyc))
+            found.append(cyc[lo:] + cyc[:lo] + [cyc[lo]])
+            named.update(cyc)
+    return found
+
+
+def _shortest_cycle(
+    start: str, items: Mapping[str, T], edge: Callable[[T], list[str]]
+) -> list[str]:
+    """The shortest path of ``edge`` steps from ``start`` back to it, without the
+    closing repeat; ``[]`` when ``start`` is on no cycle. Breadth-first, iterative."""
+    came: dict[str, str] = {}
+    frontier = [start]
+    while frontier:
+        nxt: list[str] = []
+        for n in frontier:
+            for d in edge(items[n]):
+                if d not in items or d in came:
+                    continue
+                came[d] = n
+                if d == start:
+                    path = [n]
+                    while path[-1] != start:
+                        path.append(came[path[-1]])
+                    return path[::-1]
+                nxt.append(d)
+        frontier = nxt
+    return []
+
+
+def topological_order(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> list[N]:
+    """``nodes`` ordered so that everything in ``before(n)`` comes ahead of ``n``.
+
+    stdlib ``graphlib``; edges leaving ``nodes`` are ignored. A cycle raises
+    ``graphlib.CycleError`` -- ask ``find_cycles`` first where a cycle is possible.
+    """
+    node_list = list(nodes)
+    members = set(node_list)
+    ts: TopologicalSorter[N] = TopologicalSorter()
+    for n in node_list:
+        ts.add(n, *(p for p in before(n) if p in members))
+    return list(ts.static_order())
+
+
+def longest_chains(nodes: Iterable[N], before: Callable[[N], Iterable[N]]) -> dict[N, list[N]]:
+    """For every node, the longest chain of ``before`` edges ending at it (itself last).
+
+    The graph must be acyclic (``find_cycles`` first): a cycle raises
+    ``graphlib.CycleError`` rather than loop. Edges leaving ``nodes`` are ignored. Ties go to the first strictly longer candidate in ``before``'s order, so
+    the answer is deterministic for a deterministic ``before``. Iterative post-order:
+    a chain is as deep as the plan, not as the interpreter's stack.
+    """
+    node_list = list(nodes)
+    members = set(node_list)
+    memo: dict[N, list[N]] = {}
+    for root in node_list:
+        if root in memo:
+            continue
+        stack: list[tuple[N, list[N], int]] = [(root, [p for p in before(root) if p in members], 0)]
+        open_: set[N] = {root}
+        while stack:
+            n, preds, i = stack[-1]
+            if i < len(preds):
+                stack[-1] = (n, preds, i + 1)
+                p = preds[i]
+                if p in open_:
+                    path = [f[0] for f in stack]
+                    # graphlib's shape: each node an immediate predecessor of the next,
+                    # first repeated last. The stack runs dependent -> predecessor, so
+                    # the cycle is the stack from p onwards, reversed.
+                    cyc = [p, *reversed(path[path.index(p) + 1 :]), p]
+                    raise CycleError("longest_chains needs an acyclic graph", cyc)
+                if p not in memo:
+                    open_.add(p)
+                    stack.append((p, [q for q in before(p) if q in members], 0))
+                continue
+            stack.pop()
+            open_.discard(n)
+            best: list[N] = []
+            for p in preds:
+                if len(memo[p]) > len(best):
+                    best = memo[p]
+            memo[n] = [*best, n]
+    return memo
+
+
+def transitive_reduction(nodes: Iterable[N], edges: Callable[[N], Iterable[N]]) -> dict[N, list[N]]:
+    """The fewest edges with the same reachability: ``u -> v`` is dropped when ``v`` is
+    reachable from ``u`` some other way. Acyclic graphs only; edges leaving ``nodes``
+    are ignored. Each node's kept edges stay in ``edges``' order, without repeats."""
+    node_list = list(nodes)
+    members = set(node_list)
+    succ = {n: list(dict.fromkeys(m for m in edges(n) if m in members)) for n in node_list}
+    reach: dict[N, set[N]] = {}
+    # topological_order puts ``before`` first; with succ as ``before``, successors come
+    # first, so iterating it in order computes every successor's reach before its own.
+    for n in topological_order(node_list, lambda x: succ[x]):
+        r: set[N] = set()
+        for m in succ[n]:
+            r.add(m)
+            r |= reach[m]
+        reach[n] = r
+    out: dict[N, list[N]] = {}
+    for n in node_list:
+        indirect: set[N] = set()
+        for m in succ[n]:
+            indirect |= reach[m]
+        out[n] = [m for m in succ[n] if m not in indirect]
+    return out
