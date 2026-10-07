@@ -35,6 +35,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
+from ..core import globs
 from ..infra import proc as P
 
 #: An identifier-shaped token. The lookbehind refuses a backslash so the `\n` of
@@ -84,31 +85,13 @@ class Removed:
 
 def glob_regex(glob: str) -> re.Pattern[str]:
     """``glob`` with git's `:(glob)` pathspec meaning, so a path this module calls a doc is
-    exactly a path `git grep` searched as one: `*` stops at `/`, `**/` is any number of
-    directories (including none), a trailing `/**` is everything below. `fnmatch` would
-    let `*` cross `/`, and `PurePath.full_match` needs Python 3.13."""
-    out, i = [], 0
-    while i < len(glob):
-        if glob.startswith("**/", i):
-            out.append("(?:.*/)?")
-            i += 3
-        elif glob.startswith("/**", i) and i + 3 == len(glob):
-            out.append("/.*")
-            i += 3
-        elif glob[i] == "*":
-            out.append("[^/]*")
-            i += 1
-        elif glob[i] == "?":
-            out.append("[^/]")
-            i += 1
-        else:
-            out.append(re.escape(glob[i]))
-            i += 1
-    return re.compile("".join(out))
+    exactly a path `git grep` searched as one (`core.globs`): `*` stops at `/`, `**/` is
+    any number of directories (including none), a trailing `/**` is everything below."""
+    return globs.regex(glob)
 
 
 def is_doc(path: str, doc_globs: list[str]) -> bool:
-    return any(glob_regex(g).fullmatch(path) for g in doc_globs)
+    return any(globs.match(path, g) for g in doc_globs)
 
 
 def _unquote(raw: str) -> str:
