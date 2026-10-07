@@ -21,6 +21,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Config
+from ..core import clock
 from ..core import progress as PR
 from ..core import provenance as PV
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
@@ -246,7 +247,7 @@ def sessions_md(state: State, cfg: Config | None = None) -> str:
         return "\n".join(out)
     for s in rows:
         first = s.prompts[0].get("text", "") if s.prompts else ""
-        when = (s.ended_at or s.started_at or "")[:16].replace("T", " ")
+        when = clock.fmt_minute(s.ended_at or s.started_at or "")
         word = "ended" if s.ended_at else "open"
         title = _cell(first, cfg)[:120] or _cell(s.model, cfg)
         out.append(f"- **{s.id}** [{word}] {when} `{s.agent}` {title}")
@@ -578,7 +579,7 @@ def _brief_current(
     if it.reopened:
         last = it.reopened[-1]
         out += [
-            f"- **REOPENED by verification** ({last['at'][:10]}, {len(it.reopened)}x): "
+            f"- **REOPENED by verification** ({clock.fmt_date(last['at'])}, {len(it.reopened)}x): "
             f"{last['reason']}",
             *[
                 f"  - [{c.get('status', '?')}] {c.get('id', '?')}: {c.get('detail', '')}"
@@ -792,7 +793,7 @@ def _brief_memories(out: list[str], memories: list) -> None:
         return
     out += ["", "## Operational memory", "", "_Facts about this machine and repository._", ""]
     for m in memories:
-        when = (m.origin_at or m.at)[:10]
+        when = clock.fmt_date(m.origin_at or m.at)
         fenced = PV.fence("memory", m.id, m.text, PV.memory_origin(m))
         out.append(f"- {fenced}  `[{m.id}{' ' + when if when else ''}]`")
 

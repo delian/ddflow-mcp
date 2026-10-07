@@ -5,9 +5,9 @@ Part of `ddflow.api.lifecycle`, which re-exports every name defined here."""
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 
+from ...core import clock
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...services import leases as L
 
@@ -178,7 +178,8 @@ def _claim_blocker(
 
 
 def _fmt_since(t: float) -> str:
-    return datetime.fromtimestamp(t, tz=UTC).strftime("%H:%M:%SZ")
+    """The UTC time of day, `01:02:03Z` (core.clock, looked up at call time)."""
+    return clock.fmt_time(t)
 
 
 def _reserved_msg(item: str, w, cfg) -> str:

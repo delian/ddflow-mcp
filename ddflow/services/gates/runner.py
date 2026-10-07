@@ -11,7 +11,6 @@ import tempfile
 import time
 import tomllib
 from collections.abc import Callable, Iterable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +63,11 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
         )
         where = runs / item_id
         where.mkdir(exist_ok=True)
-        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        # Imported here, not at the top: every top-level name of a gates module is
+        # re-exported by the package (tests/test_module_splits.py).
+        from ...core.clock import compact_at
+
+        stamp = compact_at()
         path = where / f"{gate}-{stamp}-{os.getpid()}.log"
         path.write_text(out, "utf-8", errors="replace")
         # THIS gate's logs only -- `unit-*.log` would also match gate `unit-fast`'s --
