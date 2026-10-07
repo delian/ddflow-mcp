@@ -79,30 +79,28 @@ def _since(baseline: str, running: str, manifest: UM.Manifest) -> list[UM.Change
 
 
 def _net(changes: list[UM.Change]) -> dict[str, tuple[str, UM.Change, Any, Any]]:
-    """Per knob, what the releases since ``baseline`` add up to: `(kind, last change, old,
-    new)`, oldest first. Added then changed is an addition with the last default; a knob
-    changed back to what it was is no change."""
-    out: dict[str, tuple[str, UM.Change, Any, Any]] = {}
+    """Per knob, what the releases since the baseline add up to: `(kind, last change, old,
+    new)`. The FIRST change says whether the knob existed at the baseline (a change or a
+    removal: it did, holding that `old`; an addition: it did not) and the LAST where it
+    ended (removed, or holding that `new`). So added then changed is an addition with the
+    last default, added then removed never reached the project, removed then added back is
+    a changed default, and a knob changed back to what it was is no change."""
+    chain: dict[str, list[UM.Change]] = {}
     for c in changes:
-        if not c.kind.startswith("knob_"):
-            continue
-        prev = out.get(c.key)
-        if c.kind == "knob_removed":
-            if prev is not None and prev[0] == "knob_added":
-                del out[c.key]  # added and removed inside the window: it never reached the project
-            else:
-                out[c.key] = ("knob_removed", c, c.old, None)
-        elif prev is not None and prev[0] == "knob_removed":
-            # It existed before the baseline (its removal is the first thing that
-            # happened to it), so coming back is a changed default, not a new knob.
-            out[c.key] = ("knob_changed", c, prev[2], c.new)
-        elif prev is None:
-            out[c.key] = (c.kind, c, c.old, c.new)
-        elif prev[0] == "knob_added":
-            out[c.key] = ("knob_added", c, None, c.new)
-        else:
-            out[c.key] = ("knob_changed", c, prev[2], c.new)
-    return {k: v for k, v in out.items() if not (v[0] == "knob_changed" and v[2] == v[3])}
+        if c.kind.startswith("knob_"):
+            chain.setdefault(c.key, []).append(c)
+    out: dict[str, tuple[str, UM.Change, Any, Any]] = {}
+    for key, cs in chain.items():
+        first, last = cs[0], cs[-1]
+        existed = first.kind != "knob_added"
+        if last.kind == "knob_removed":
+            if existed:
+                out[key] = ("knob_removed", last, first.old, None)
+        elif not existed:
+            out[key] = ("knob_added", last, None, last.new)
+        elif first.old != last.new:
+            out[key] = ("knob_changed", last, first.old, last.new)
+    return out
 
 
 def _short(value: Any, limit: int = 60) -> str:
