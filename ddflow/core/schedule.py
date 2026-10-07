@@ -431,6 +431,15 @@ def _is_umbrella(state: State, it: Item) -> bool:
     return bool(state.open_descendants(it.id))
 
 
+def _is_settled_umbrella(state: State, it: Item) -> bool:
+    """A task whose sub-tasks are all settled, at least one done: its work is finished,
+    so it is never ready work (`complete` records it; see api.lifecycle.complete)."""
+    if it.kind != "task":
+        return False
+    below = state.descendants(it.id)
+    return bool(below) and any(state.items[i].state == DONE for i in below)
+
+
 def plan_blocker(
     state: State,
     cfg: Config,
@@ -482,6 +491,15 @@ def plan_blocker(
             f"has {len(kids)} unfinished sub-task(s): "
             f"{', '.join(k.id for k in kids[:6])}. Work those; this closes when they do.",
             [k.id for k in kids],
+        )
+    if _is_settled_umbrella(state, it):
+        # Settled before its last sub-task's completion closed it (B797aff72d8): there is
+        # nothing to claim, only the completion to record.
+        return Blocked(
+            it.id,
+            "umbrella",
+            f"its sub-tasks are all done: `ddflow complete {it.id}` completes it with them.",
+            [],
         )
     if it.id in in_cycle and cfg.schedule.cycle_policy == "error":
         cyc = next(c for c in cycles if it.id in c)
