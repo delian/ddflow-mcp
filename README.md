@@ -10,8 +10,9 @@ dependent ones wait. Every task passes a quality pipeline whose gates cannot be 
 assertion. If an agent crashes, its work is found rather than lost. If everything except
 the log is destroyed, the project's decision history rebuilds from the log alone.
 
-**One dependency beyond `python3` and `git`** (Jinja2, for the prompt templates; see
-[Extending it by writing text, not code](#extending-it-by-writing-text-not-code)). Works with Claude Code, Gemini CLI,
+**Two dependencies beyond `python3` and `git`** (Jinja2, for the prompt templates, see
+[Extending it by writing text, not code](#extending-it-by-writing-text-not-code); and
+tomlkit, which edits `.ddflow/config.toml` without losing its comments). Works with Claude Code, Gemini CLI,
 Codex, Copilot, Cursor, Kimi, opencode, Aider, a CI job, a Makefile, or a human at a
 terminal — over a CLI
 and an MCP server that are the same implementation.
@@ -672,8 +673,8 @@ The design decisions, with the probes that settled each, are in
 
 `uvx` fetches and runs the published package in an ephemeral environment on first use —
 no clone, no virtualenv, no `PYTHONPATH`, no install step for an operator to forget, and
-no vendored copy to drift from upstream. ddflow needs **one runtime dependency**
-beyond `python3` and `git` (Jinja2), which is what lets it install inside
+no vendored copy to drift from upstream. ddflow needs **two runtime dependencies**
+beyond `python3` and `git` (Jinja2 and tomlkit, both pure Python), which is what lets it install inside
 sandboxes, CI images and other tools' ephemeral containers.
 
 Then, from the agent, with no shell at all:
@@ -840,7 +841,9 @@ skip. A broken override **says so in the instruction block itself** instead of f
 back to the default: this is the one surface where nobody would ever notice their edit
 was not live.
 
-Templates render with **Jinja2**, which is ddflow's one runtime dependency, and with a
+Templates render with **Jinja2**, one of ddflow's two runtime dependencies (the other, **tomlkit**,
+writes `ddflow config --set` and the other config edits in place, keeping comments, blank lines and
+key order; every TOML value ddflow writes goes through the one writer in `infra/tomlcfg.py`), and with a
 strict standard-library renderer when it is absent — a stripped deployment with no
 reachable package index still starts. The shipped templates use the subset both engines
 agree on, and `tests/test_template_engines.py` walks the template REGISTRY, rendering
@@ -1041,7 +1044,7 @@ for different reasons so you can tell at a glance which:
 
 | Job | Checks |
 |---|---|
-| **quality** | `ruff check` + `format --check`; the wheel **installs into a clean venv, runs, and carries its templates**; `gitleaks` over full history; `bandit` over the package; a dependency audit that also asserts every runtime dependency is on an explicit allowlist (today: Jinja2) |
+| **quality** | `ruff check` + `format --check`; the wheel **installs into a clean venv, runs, and carries its templates**; `gitleaks` over full history; `bandit` over the package; a dependency audit that also asserts every runtime dependency is on an explicit allowlist (today: Jinja2, tomlkit) |
 | **tests** | The suite on Python 3.11 and 3.13 — the floor and the current release, because a version-specific break is a break for somebody |
 | **codeql** | GitHub's `security-and-quality` queries, landing in the Security tab rather than a log |
 | **scenarios** | The slow end-to-end runs, and the concurrency/load suite, each as its own step with `if: always()` |
