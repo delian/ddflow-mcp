@@ -26,6 +26,11 @@ from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
+#: The claim's lease TTL. A renewal KEEPS it, so it is also the window the heartbeat has
+#: between reviving the lease and catching its globs up: 1 s lapsed again under load and
+#: the catch-up was skipped (B6797d49e48's ci run, bug Bc643deb593).
+TTL_S = 6
+
 
 def _setup(repo: Path, monkeypatch) -> None:
     run_cli(repo, "init")
@@ -34,11 +39,11 @@ def _setup(repo: Path, monkeypatch) -> None:
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "ddflow"], check=True)
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "i/*")
-    monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
+    monkeypatch.setenv("DDFLOW_LEASE_TTL_S", str(TTL_S))
     code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="alpha")
     assert code == OK, out + err
     monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
-    time.sleep(2.5)  # past its TTL; grace is 0
+    time.sleep(TTL_S + 1.5)  # past its TTL; grace is 0
 
 
 def _lease_globs(repo: Path) -> list[str]:
@@ -72,4 +77,25 @@ def test_globs_cleared_while_it_had_lapsed_are_cleared_on_the_lease_too(repo, mo
     _setup(repo, monkeypatch)
     assert run_cli(repo, "update", "T1", "--globs", "", agent="alpha")[0] == OK
     assert run_cli(repo, "heartbeat", "T1", agent="alpha")[0] == OK
+    assert _lease_globs(repo) == []
+
+
+def test_a_slow_catch_up_still_finds_the_revived_lease_live(repo, monkeypatch):
+    """Load between the renewal and the catch-up must not let the revived lease lapse
+    again first (Bc643deb593): two seconds of it, in process."""
+    import importlib
+
+    # The module, not the function the package re-exports under the same name.
+    HB = importlib.import_module("ddflow.api.lifecycle.heartbeat")
+
+    _setup(repo, monkeypatch)
+    assert run_cli(repo, "update", "T1", "--globs", "", agent="alpha")[0] == OK
+    slow = HB._catch_up_globs
+
+    def loaded(*a, **kw):
+        time.sleep(2)
+        return slow(*a, **kw)
+
+    monkeypatch.setattr(HB, "_catch_up_globs", loaded)
+    assert HB.heartbeat(repo, "T1", agent="alpha").exit == OK
     assert _lease_globs(repo) == []
