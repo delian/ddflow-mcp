@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..config import Config
+from ..core import progress as PR
 from ..core.model import Bug, Item, Lesson, ResearchNote, Session, State
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
@@ -72,11 +73,7 @@ def _one_line(text: str, cfg: Config) -> str:
 def _phase_of(st: State, it: Item | None) -> str:
     """The phase enclosing `it`, however deeply nested: itself for a phase, the nearest
     phase ancestor for a task or sub-task, "" for none."""
-    if it is None:
-        return ""
-    if it.kind == "phase":
-        return it.id
-    return next((a.id for a in st.ancestors(it.id) if a.kind == "phase"), "")
+    return PR.phase_of(st, it.id) if it is not None else ""
 
 
 def _tags(tags: list[str], cfg: Config) -> list[str]:

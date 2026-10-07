@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...config import Config
+from ...core import progress
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, State
 from ...core.schedule import dep_status, inherited_deps
 from . import registry
@@ -64,9 +65,10 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
     for p in q.phases():
         if f.phase and p.id != f.phase:
             continue
-        tasks = [t for t in q.tasks_under(p.id) if t.state != ABANDONED]
-        n_done = sum(1 for t in tasks if t.state == DONE)
-        if p.state == DONE and n_done == len(tasks):
+        under = q.tasks_under(p.id)
+        n = progress.tally(under)  # the one phase rule: every depth, abandoned out
+        tasks = [t for t in under if t.state != ABANDONED]
+        if p.state == DONE and n.done == n.live:
             done += 1
             continue
         rows = [_task_row(q, t, cfg) for t in tasks if t.state != DONE]
@@ -85,8 +87,8 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
             {
                 "id": p.id,
                 "title": one_line(p.title, 100),
-                "done": n_done,
-                "total": len(tasks),
+                "done": n.done,
+                "total": n.live,
                 "tasks": rows,
                 "waits_on": own_waits,
             }
