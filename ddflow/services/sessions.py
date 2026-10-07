@@ -35,7 +35,7 @@ import textwrap
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Config
@@ -137,9 +137,13 @@ def _age_s(ts: str, now: float | None = None) -> float:
     """Seconds from `ts` to `now` (default: the current time); infinite when `ts` is not a
     timestamp. Parsed as ISO 8601 (as `progress.epoch` falls back to), so `...:00Z` without
     microseconds is as young as `...:00.000000Z` (Bbf85f6576f)."""
-    try:  # no numeric sentinel: 1970-01-01T00:00:00Z is a timestamp too
-        then = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-    except (ValueError, TypeError, AttributeError):
+    # `progress.epoch`'s own fallback parse, kept here because epoch's 0.0 failure value
+    # is also the epoch instant; a time with no zone is UTC, as the log writes it, never
+    # the host's local time.
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        then = (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
+    except (ValueError, TypeError, AttributeError, OverflowError, OSError):
         return float("inf")
     return (time.time() if now is None else now) - then
 
