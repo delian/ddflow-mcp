@@ -1,11 +1,10 @@
 """The config writer must not delete what it was not asked to change.
 
-`_value_span` finds where a value ends, so `_toml_upsert` can replace a multi-line array
-or string without orphaning its tail. It counted `[` and `{` without regard for quoting,
-so an unbalanced opener inside a STRING VALUE started the depth at 1 and nothing ever
-brought it back to 0 — a later `[section]` header contributes +1 then -1, i.e. net zero.
-`_value_span` therefore returned `len(lines)`, and re-editing that key replaced
-everything from it to END OF FILE.
+`_toml_upsert` (tomlkit, since B-uni-fsio-toml) must replace a multi-line array or string
+without orphaning its tail. The line editor it replaced counted `[` and `{` without regard
+for quoting, so an unbalanced opener inside a STRING VALUE started the depth at 1 and
+nothing ever brought it back to 0. Its span of the value ran to the end of the file, and
+re-editing that key replaced everything from it to END OF FILE.
 
 Every downstream guard passed: the truncated text is valid TOML, so `Config.check` is
 happy; the workflow diff is empty unless a deleted gate happened to be named by a
@@ -28,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.services.configwrite import _outside_quotes, _value_span
+from ddflow.services.configwrite import _toml_upsert
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -60,7 +59,7 @@ def test_an_unbalanced_bracket_in_a_value_does_not_truncate_the_file(repo):
 
 
 def test_a_real_bracketed_array_is_still_replaced_whole(repo):
-    """The behaviour `_value_span` exists for, asserted so the fix cannot trade one bug
+    """The behaviour the value-span logic existed for, asserted so the fix cannot trade one bug
     for the other: a bracketed value must be replaced ENTIRELY, not have its tail
     orphaned as a stray `]` that TOML then rejects.
 
@@ -80,20 +79,47 @@ def test_a_real_bracketed_array_is_still_replaced_whole(repo):
     assert _cfg(repo)["gates"]
 
 
-def test_outside_quotes_ignores_brackets_in_strings_and_keeps_real_ones():
-    assert "[" not in _outside_quotes('command = "sed [x]"')
-    assert "[" not in _outside_quotes("cmd = 'a[b'")  # literal string, no escapes
-    assert "[" in _outside_quotes("task_pipeline = [")  # a REAL opener survives
-    assert "[" not in _outside_quotes("x = 1  # [note]")  # comment
+BRACKETED = (
+    "[gate.lint]\n"
+    "command = \"sed 's/\\\\[//g' # [x]\"  # keep this note\n"
+    "timeout_s = 900\n"
+    "steps = [\n"
+    '  "a",  # first\n'
+    '  "b[",\n'
+    "]\n"
+    'title = "Lint"\n'
+)
 
 
-def test_a_comment_marker_inside_a_string_is_not_treated_as_a_comment():
-    """The hazard in the other direction. Splitting on `#` before scanning quotes would
-    truncate a value containing one, so the scan has to decide both at once."""
-    assert _outside_quotes('c = "a#b["').count("[") == 0
-    assert _outside_quotes("x = [  # trailing note").count("[") == 1
+def test_a_bracket_or_comment_marker_inside_a_string_is_only_text():
+    """Neither the `[` nor the `#` in the value changes where the edit lands, and every
+    sibling key, array element and comment is still there."""
+    out = _toml_upsert(BRACKETED, "gate.lint.timeout_s", "5")
+    data = tomllib.loads(out)["gate"]["lint"]
+    assert data["timeout_s"] == 5
+    assert data["command"] == "sed 's/\\[//g' # [x]"
+    assert data["steps"] == ["a", "b["] and data["title"] == "Lint"
+    assert "# keep this note" in out and "# first" in out
 
 
-def test_the_span_of_a_value_with_a_quoted_bracket_is_one_line():
-    lines = [('command = "sed [x]"', False), ("timeout_s = 900", False), ('title = "L"', False)]
-    assert _value_span(lines, 0) == 1, "the span ran past the key it was asked about"
+def test_a_multi_line_array_is_replaced_whole_and_comments_elsewhere_survive():
+    out = _toml_upsert(BRACKETED, "gate.lint.steps", '["z"]')
+    assert tomllib.loads(out)["gate"]["lint"]["steps"] == ["z"]
+    assert "# keep this note" in out and "b[" not in out
+
+
+def test_a_header_with_a_trailing_comment_is_the_same_section():
+    out = _toml_upsert("[gates]  # how work is checked\nx = 1\n", "gates.y", "2")
+    assert out.count("[gates]") == 1 and tomllib.loads(out)["gates"] == {"x": 1, "y": 2}
+
+
+def test_a_new_section_is_appended_after_a_blank_line():
+    assert _toml_upsert("a = 1\n", "s.k", '"v"') == 'a = 1\n\n[s]\nk = "v"\n'
+    assert _toml_upsert("", "s.k", "true") == "[s]\nk = true\n"
+
+
+def test_text_that_is_not_toml_is_reported_as_toml_does():
+    import pytest
+
+    with pytest.raises(tomllib.TOMLDecodeError):
+        _toml_upsert("[a\nx = 1\n", "a.y", "1")
