@@ -330,8 +330,9 @@ class Profile:
 PROFILES: Mapping[str, Profile] = {
     p.name: p
     for p in (
-        # The committed event log: deterministic, and secrets keep their context.
-        Profile("log", "", "", "", secrets="mask"),
+        # The committed event log: the machine's own hostname and $HOME go as well, and
+        # secrets keep their context.
+        Profile("log", None, None, "", secrets="mask"),
         # A committed view: byte-identical on every machine (roborev on 9b6db6bc).
         Profile("view", "", "", ""),
         # An exported document: the rendering machine's hostname and $HOME also go.
