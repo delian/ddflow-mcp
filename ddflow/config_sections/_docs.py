@@ -15,12 +15,12 @@ A knob is declared ONCE, on its dataclass field (B-uni-knobs, D-unify 4):
 
 `declare` copies each field's doc into `KNOB_DOCS` and its choices, strictest fallback,
 outward values and value check into `DECLARED`, from which `ddflow.config` builds
-`KNOB_CHOICES`, `KNOB_STRICTEST`, `KNOB_OUTWARD` and the load/`config --set` checks. The
-older form -- a bare field, a separate `_doc(...)` call and an entry in each of those
-tables in config.py -- still works while the sections move over; a ratchet
-(tests/test_config_knobs_declared.py) counts what is left of it and only lets it shrink.
-A knob declared twice is an error: at import for its doc, and in that test for a table
-entry left behind in config.py (where it would silently shadow the declared value).
+`KNOB_CHOICES`, `KNOB_STRICTEST`, `KNOB_OUTWARD` and the load/`config --set` checks. Every
+section is declared this way; the older form (a bare field, a separate `_doc(...)` call and
+an entry in each of those tables in config.py) is gone, and a ratchet
+(tests/test_config_knobs_declared.py, baselines 0) fails if a table entry comes back. A knob
+declared twice is an error: at import for its doc, and in that test for a table entry left
+behind in config.py (where it would silently shadow the declared value).
 """
 
 from __future__ import annotations
@@ -105,12 +105,13 @@ def declare(section: str) -> Callable[[type], type]:
     return register
 
 
-def _doc(section: str, knob: str, text: str) -> None:
-    """The older declaration: a doc beside a bare field. Being retired (see above)."""
-    key = f"{section}.{knob}"
-    if key in DECLARED:
-        raise ValueError(f"knob {key} is declared twice")
-    KNOB_DOCS[key] = text
+def int_at_least(n: int) -> Callable[[Any], str]:
+    """The `check=` of an integer knob that must be at least ``n``."""
+    return lambda v: (
+        ""
+        if isinstance(v, int) and not isinstance(v, bool) and v >= n
+        else f"must be an integer >= {n}"
+    )
 
 
 def declared_tables() -> tuple[
