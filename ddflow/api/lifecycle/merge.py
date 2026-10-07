@@ -151,7 +151,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             "landed_before": landed_before,
             "landed_after": landed_after,
             # Landed from a branch the item does not own (claimed --no-worktree).
-            **({"borrowed": True, **_scope_fields(outside)} if borrowed else {}),
+            **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
@@ -413,7 +413,7 @@ def _branch_to_land(
     return branch
 
 
-def _scope_fields(outside: list[str] | None, *, listed: bool = True) -> dict[str, Any]:
+def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
     """`outside_globs` as recorded and returned: a list always, and `outside_globs_unknown`
     beside it -- true when git could not list the landing's paths, false when it did, null
     when nothing was listed (``listed=False``: an item landing its own worktree, whose globs
