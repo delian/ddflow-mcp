@@ -122,6 +122,7 @@ def test_lesson_globs_match_by_name_at_any_depth(tmp_path):
 
 def test_importer_archive_globs_use_the_same_reading():
     assert importer.glob_match("docs/todo.md", "docs/todo.md")
+    assert importer.glob_match("lessons/old/a.md", "*.md", bare_any_depth=True)
     assert importer.glob_match("docs/old/a.md", "docs/**/a.md")
     assert not importer.glob_match("docs/old/a.md", "docs/*.md")
 
