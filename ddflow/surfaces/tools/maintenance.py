@@ -63,6 +63,22 @@ TOOLS: dict[str, dict[str, Any]] = {
         # -- and is `null` when the settings file could not be read.
         "payload": ("installed", "policy", "session_hook", "trailer_hook"),
     },
+    "ddflow_upgrade": {
+        "description": (
+            "What upgrading this project to the running ddflow would change, by category: data repairs, config (new knobs, changed defaults; an operator-set value needs their confirmation), instructions (drifted driver docs and rules, hand-edited flagged), hooks, MCP launch, opt-in features. Writes nothing. Exit 0 up to date; 1 the plan has items."
+        ),
+        "properties": {
+            "plan": (
+                "boolean",
+                "Dry run (the default). false is refused: no apply mode yet.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().upgrade(
+            repo, plan=a.get("plan", True) is not False, agent=agent
+        ),
+        "payload": ("running", "project_version", "up_to_date", "total", "categories"),
+    },
     "ddflow_doctor": {
         "description": (
             "Integrity and health check: log corruption, dependency cycles, "

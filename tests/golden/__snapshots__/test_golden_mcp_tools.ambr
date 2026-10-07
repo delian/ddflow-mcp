@@ -3291,6 +3291,26 @@
        }
       }
     ''',
+    'ddflow_upgrade': '''
+      {
+       "name": "ddflow_upgrade",
+       "description": "What upgrading this project to the running ddflow would change, by category: data repairs, config (new knobs, changed defaults; an operator-set value needs their confirmation), instructions (drifted driver docs and rules, hand-edited flagged), hooks, MCP launch, opt-in features. Writes nothing. Exit 0 up to date; 1 the plan has items.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "plan": {
+          "type": "boolean",
+          "description": "Dry run (the default). false is refused: no apply mode yet."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_verify': '''
       {
        "name": "ddflow_verify",
@@ -3713,6 +3733,7 @@
     'ddflow_tests',
     'ddflow_unblock',
     'ddflow_update',
+    'ddflow_upgrade',
     'ddflow_verify',
     'ddflow_version_cut',
     'ddflow_version_show',
