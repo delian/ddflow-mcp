@@ -1,0 +1,5 @@
+{"agent":"fx-bob","data":{"install":"installed","version":"0.2.0"},"id":"ed890708e3d2998b6cd5d125b","kind":"ddflow.seen","lamport":34,"schema":1,"subject":"ddflow","ts":"2026-10-07T13:05:03.175817Z"}
+{"agent":"fx-bob","data":{"at":1791378303.173777,"branch":"","globs":["docs/**"],"holder":"fx-bob","kind":"task","note":"","resources":[],"ttl_s":1800,"worktree":""},"id":"ec85b030ca5d63fdece18eeda","kind":"lease.acquired","lamport":35,"schema":1,"subject":"T3","ts":"2026-10-07T13:05:03.179430Z"}
+{"agent":"fx-bob","data":{},"id":"ef2d49218a13906ea18b08bc0","kind":"item.started","lamport":36,"schema":1,"subject":"T3","ts":"2026-10-07T13:05:03.181392Z"}
+{"agent":"fx-bob","data":{"at":1791378303.6657627,"holder":"fx-bob"},"id":"ea7aa0aab76dca7ef4781f62a","kind":"lease.renewed","lamport":37,"schema":1,"subject":"T3","ts":"2026-10-07T13:05:03.666250Z"}
+{"agent":"fx-bob","data":{"by":"fx-bob","event":"ec85b030ca5d63fdece18eeda","holder":"fx-bob","note":"out of time"},"id":"ee6d0335cb2fe70d4f3fd6e66","kind":"lease.released","lamport":38,"schema":1,"subject":"T3","ts":"2026-10-07T13:05:04.134839Z"}

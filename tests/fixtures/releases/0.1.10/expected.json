@@ -1,0 +1,537 @@
+{
+ "bugs": {
+  "B73cceded0f": {
+   "evidence": "",
+   "fixed_at": "",
+   "found_at": "2026-10-07T13:04:56.010380Z",
+   "id": "B73cceded0f",
+   "invalid_at": "",
+   "invalid_reason": "",
+   "item": "T1",
+   "lesson": "",
+   "regression_test": "",
+   "regression_tests": [],
+   "summary": "parse('') returns [] where [['']] was meant"
+  }
+ },
+ "decisions": {
+  "D-1": {
+   "alternatives": "",
+   "at": "2026-10-07T13:04:48.220530Z",
+   "consequences": "",
+   "context": "One input format, a dozen lines long",
+   "decided_by": "operator",
+   "decision": "No parser dependency: the input is line-based",
+   "globs": [
+    "src/**"
+   ],
+   "id": "D-1",
+   "item": "",
+   "sources": [],
+   "status": "accepted",
+   "superseded_by": "",
+   "supersedes": [],
+   "tags": [],
+   "title": "Parse with the standard library"
+  }
+ },
+ "event_count": 39,
+ "items": {
+  "P1": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:47.181564Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [],
+   "id": "P1",
+   "kind": "phase",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Parse the input",
+   "triage": {},
+   "worktree": ""
+  },
+  "T1": {
+   "adopted": false,
+   "base": "main",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "ddflow/T1",
+   "completed_at": "2026-10-07T13:04:55.705449Z",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:47.398050Z",
+   "displaced": [],
+   "gates": {
+    "bug_hunt": {
+     "at": "2026-10-07T13:04:54.134913Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "bug_hunt",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "critic": {
+     "at": "2026-10-07T13:04:53.092786Z",
+     "by": "gpt-fixture",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "model": "gpt-fixture",
+      "note": "no findings",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "critic",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "dedupe": {
+     "at": "2026-10-07T13:04:54.490448Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "dedupe",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "implement": {
+     "at": "2026-10-07T13:04:52.475633Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "implement",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "merge": {
+     "at": "2026-10-07T13:04:55.364485Z",
+     "by": "fx-alice",
+     "evidence": {
+      "branch": "ddflow/T1",
+      "branch_head": "4375a980d3034b1d2f6027a03e8a9634bb3e35a3",
+      "sha": "c4cd601a0eaf51843ca9ae88632cf71ad626340d"
+     },
+     "gate": "merge",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "research": {
+     "at": "2026-10-07T13:04:51.835540Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "research",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "rubber_duck": {
+     "at": "2026-10-07T13:04:52.769668Z",
+     "by": "gpt-fixture",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "model": "gpt-fixture",
+      "note": "no findings",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "rubber_duck",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "rules": {
+     "at": "2026-10-07T13:04:52.187891Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "rules",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "standards": {
+     "at": "2026-10-07T13:04:53.442022Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "standards",
+     "outcome": "unavailable",
+     "reason": "the fixture project has no tooling"
+    },
+    "unit_tests": {
+     "at": "2026-10-07T13:04:53.789170Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:8db94ea59f21fcb85c3420e98bee5352",
+      "tree_sha": "4375a980d303+clean"
+     },
+     "gate": "unit_tests",
+     "outcome": "passed",
+     "reason": ""
+    }
+   },
+   "globs": [
+    "src/parser.py"
+   ],
+   "id": "T1",
+   "kind": "task",
+   "landed_after": "c4cd601a0eaf51843ca9ae88632cf71ad626340d",
+   "landed_before": "a9a212e32c6162e8ad54fea73e7f3bed30b61085",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "c4cd601a0eaf51843ca9ae88632cf71ad626340d",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "done",
+   "tags": [
+    "core"
+   ],
+   "title": "Write the parser",
+   "triage": {},
+   "worktree": ""
+  },
+  "T2": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "Split into: T2.a, T2.b.",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:47.622795Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [
+    "T1"
+   ],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Wire the parser into the app",
+   "triage": {},
+   "worktree": ""
+  },
+  "T2.a": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:57.036354Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2.a",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "T2",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Call the parser",
+   "triage": {},
+   "worktree": ""
+  },
+  "T2.b": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:57.037569Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2.b",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "T2",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Report parse errors",
+   "triage": {},
+   "worktree": ""
+  },
+  "T3": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:47.915148Z",
+   "displaced": [],
+   "gates": {},
+   "globs": [
+    "docs/**"
+   ],
+   "id": "T3",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "resources": [],
+   "source": "",
+   "state": "running",
+   "tags": [],
+   "title": "Document the input format",
+   "triage": {},
+   "worktree": ""
+  }
+ },
+ "jobs": {},
+ "lessons": {
+  "L-1": {
+   "at": "2026-10-07T13:04:48.513889Z",
+   "globs": [],
+   "how": "line.rstrip('\\n').split(',')",
+   "id": "L-1",
+   "pattern": "",
+   "rule": "Strip each line before splitting it",
+   "seen_in": [],
+   "sites": [],
+   "summary": "",
+   "superseded_by": "",
+   "tags": [],
+   "title": "Strip the newline before splitting",
+   "why": "A trailing newline became part of the last field"
+  }
+ },
+ "memories": {
+  "M6e71f07229": {
+   "at": "2026-10-07T13:04:49.034315Z",
+   "by": "fx-alice",
+   "forgotten": "",
+   "id": "M6e71f07229",
+   "origin_at": "",
+   "source": "",
+   "tags": [],
+   "text": "Tests run with: python -m pytest -q"
+  }
+ },
+ "research": {
+  "R010643aa85": {
+   "at": "2026-10-07T13:04:48.795710Z",
+   "budget": "",
+   "claim": "''.split(',') returns ['']",
+   "falsifier": "it returns []",
+   "id": "R010643aa85",
+   "item": "T1",
+   "mechanism": "",
+   "probe": "python -c \"print(''.split(','))\"",
+   "probe_output": "['']",
+   "question": "Does str.split handle an empty line?",
+   "sources": [],
+   "tags": [],
+   "verdict": "CONFIRMED"
+  }
+ },
+ "sessions": {
+  "s20261007T130449-1217570": {
+   "agent": "fx-alice",
+   "ended_at": "2026-10-07T13:04:57.244577Z",
+   "id": "s20261007T130449-1217570",
+   "model": "fixture-model",
+   "notes": [],
+   "prompts": [
+    {
+     "at": "2026-10-07T13:04:49.534971Z",
+     "item": "",
+     "seq": 0,
+     "text": "Implement phase P1"
+    }
+   ],
+   "started_at": "2026-10-07T13:04:49.269861Z"
+  }
+ },
+ "version": "0.1.10"
+}

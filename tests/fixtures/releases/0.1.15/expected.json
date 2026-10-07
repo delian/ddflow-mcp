@@ -1,0 +1,619 @@
+{
+ "bugs": {
+  "B2f2148b33b": {
+   "changelog": {},
+   "evidence": "",
+   "fix_task": "fix-B2f2148b33b",
+   "fixed_at": "",
+   "found_at": "2026-10-07T13:05:00.068614Z",
+   "id": "B2f2148b33b",
+   "invalid_at": "",
+   "invalid_reason": "",
+   "item": "T1",
+   "lesson": "",
+   "regression_test": "",
+   "regression_tests": [],
+   "reopen_reason": "",
+   "reopened_at": "",
+   "scope": "project",
+   "severity": "",
+   "summary": "parse('') returns [] where [['']] was meant",
+   "title": "",
+   "upstream_delivery": "",
+   "upstream_digest": "",
+   "upstream_number": "",
+   "upstream_sent_at": "",
+   "upstream_url": ""
+  }
+ },
+ "decisions": {
+  "D-1": {
+   "alternatives": "",
+   "at": "2026-10-07T13:04:49.069377Z",
+   "by": "fx-alice",
+   "consequences": "",
+   "context": "One input format, a dozen lines long",
+   "decided_by": "operator",
+   "decision": "No parser dependency: the input is line-based",
+   "globs": [
+    "src/**"
+   ],
+   "id": "D-1",
+   "item": "",
+   "sources": [],
+   "status": "accepted",
+   "superseded_by": "",
+   "supersedes": [],
+   "tags": [],
+   "title": "Parse with the standard library"
+  }
+ },
+ "event_count": 42,
+ "items": {
+  "P1": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "changelog": {},
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:47.585714Z",
+   "displaced": [],
+   "fixes": [],
+   "gates": {},
+   "globs": [],
+   "id": "P1",
+   "kind": "phase",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Parse the input",
+   "triage": {},
+   "worktree": ""
+  },
+  "T1": {
+   "adopted": false,
+   "base": "main",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "ddflow/T1",
+   "changelog": {},
+   "completed_at": "2026-10-07T13:04:58.612096Z",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:47.982588Z",
+   "displaced": [],
+   "fixes": [],
+   "gates": {
+    "bug_hunt": {
+     "at": "2026-10-07T13:04:56.782342Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "bug_hunt",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "critic": {
+     "at": "2026-10-07T13:04:55.416686Z",
+     "by": "gpt-fixture",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "model": "gpt-fixture",
+      "note": "no findings",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "critic",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "dedupe": {
+     "at": "2026-10-07T13:04:57.218049Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "dedupe",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "implement": {
+     "at": "2026-10-07T13:04:54.460916Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "implement",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "merge": {
+     "at": "2026-10-07T13:04:58.133661Z",
+     "by": "fx-alice",
+     "evidence": {
+      "branch": "ddflow/T1",
+      "branch_head": "2fefe0d63e349bb7f8e5990972efaacdb56dd84b",
+      "sha": "fa3e8636bd8d407819e4a408195f39f3ad6f45e3"
+     },
+     "gate": "merge",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "research": {
+     "at": "2026-10-07T13:04:53.537476Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "research",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "rubber_duck": {
+     "at": "2026-10-07T13:04:54.897503Z",
+     "by": "gpt-fixture",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "model": "gpt-fixture",
+      "note": "no findings",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "rubber_duck",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "rules": {
+     "at": "2026-10-07T13:04:54.018126Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "rules",
+     "outcome": "passed",
+     "reason": ""
+    },
+    "standards": {
+     "at": "2026-10-07T13:04:55.892375Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "standards",
+     "outcome": "unavailable",
+     "reason": "the fixture project has no tooling"
+    },
+    "unit_tests": {
+     "at": "2026-10-07T13:04:56.337076Z",
+     "by": "fx-alice",
+     "evidence": {
+      "diff_stat": {
+       "deletions": 0,
+       "files": 0,
+       "insertions": 0,
+       "untracked": 0
+      },
+      "note": "fixture",
+      "source_tree": "st:f53d779cd78d0afbd4410d8333afcd5c",
+      "tree_sha": "2fefe0d63e34+clean"
+     },
+     "gate": "unit_tests",
+     "outcome": "passed",
+     "reason": ""
+    }
+   },
+   "globs": [
+    "src/parser.py"
+   ],
+   "id": "T1",
+   "kind": "task",
+   "landed_after": "fa3e8636bd8d407819e4a408195f39f3ad6f45e3",
+   "landed_before": "dab740b48ec30f3a3ee819765239123e62dcb1b5",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "fa3e8636bd8d407819e4a408195f39f3ad6f45e3",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "done",
+   "tags": [
+    "core"
+   ],
+   "title": "Write the parser",
+   "triage": {},
+   "worktree": ""
+  },
+  "T2": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "Split into: T2.a, T2.b.",
+   "branch": "",
+   "changelog": {},
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:48.327446Z",
+   "displaced": [],
+   "fixes": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [
+    "T1"
+   ],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Wire the parser into the app",
+   "triage": {},
+   "worktree": ""
+  },
+  "T2.a": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "changelog": {},
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:05:02.599386Z",
+   "displaced": [],
+   "fixes": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2.a",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "T2",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Call the parser",
+   "triage": {},
+   "worktree": ""
+  },
+  "T2.b": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "changelog": {},
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:05:02.600167Z",
+   "displaced": [],
+   "fixes": [],
+   "gates": {},
+   "globs": [
+    "src/app.py"
+   ],
+   "id": "T2.b",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "T2",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Report parse errors",
+   "triage": {},
+   "worktree": ""
+  },
+  "T3": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "",
+   "branch": "",
+   "changelog": {},
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:04:48.694810Z",
+   "displaced": [],
+   "fixes": [],
+   "gates": {},
+   "globs": [
+    "docs/**"
+   ],
+   "id": "T3",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [],
+   "title": "Document the input format",
+   "triage": {},
+   "worktree": ""
+  },
+  "fix-B2f2148b33b": {
+   "adopted": false,
+   "base": "",
+   "blocked_reason": "",
+   "body": "Fixes bug B2f2148b33b: parse('') returns [] where [['']] was meant Found on T1.\n\nWrite the regression test first and watch it FAIL on the unfixed code; then `ddflow complete fix-B2f2148b33b --regression-test <test>` closes the bug with the task (or `ddflow bug fixed B2f2148b33b --regression-test <test>` first).",
+   "branch": "",
+   "changelog": {},
+   "completed_at": "",
+   "completion_evidence": "",
+   "contested": [],
+   "created_at": "2026-10-07T13:05:00.069313Z",
+   "displaced": [],
+   "fixes": [
+    "B2f2148b33b"
+   ],
+   "gates": {},
+   "globs": [
+    "src/parser.py"
+   ],
+   "id": "fix-B2f2148b33b",
+   "kind": "task",
+   "landed_after": "",
+   "landed_before": "",
+   "lease": null,
+   "lease_contest": [],
+   "line": "",
+   "merged_sha": "",
+   "needs": [],
+   "parent": "P1",
+   "port": {},
+   "port_from": "",
+   "port_of": "",
+   "port_strategy": "",
+   "pr": null,
+   "priority": 100,
+   "promote_from": "",
+   "promote_to": "",
+   "removed": false,
+   "reopened": [],
+   "resources": [],
+   "source": "",
+   "state": "open",
+   "tags": [
+    "bugfix"
+   ],
+   "title": "Fix bug B2f2148b33b: parse('') returns [] where [['']] was meant",
+   "triage": {},
+   "worktree": ""
+  }
+ },
+ "jobs": {},
+ "lessons": {
+  "L-1": {
+   "at": "2026-10-07T13:04:49.486791Z",
+   "by": "fx-alice",
+   "globs": [],
+   "how": "line.rstrip('\\n').split(',')",
+   "id": "L-1",
+   "pattern": "",
+   "rule": "Strip each line before splitting it",
+   "seen_in": [],
+   "sites": [],
+   "summary": "",
+   "superseded_by": "",
+   "tags": [],
+   "title": "Strip the newline before splitting",
+   "why": "A trailing newline became part of the last field"
+  }
+ },
+ "memories": {
+  "M97b6d40554": {
+   "at": "2026-10-07T13:04:50.338529Z",
+   "by": "fx-alice",
+   "forgotten": "",
+   "id": "M97b6d40554",
+   "origin_at": "",
+   "source": "",
+   "tags": [],
+   "text": "Tests run with: python -m pytest -q"
+  }
+ },
+ "research": {
+  "Re8647b2fec": {
+   "at": "2026-10-07T13:04:49.860556Z",
+   "budget": "",
+   "claim": "''.split(',') returns ['']",
+   "falsifier": "it returns []",
+   "id": "Re8647b2fec",
+   "item": "T1",
+   "mechanism": "",
+   "probe": "python -c \"print(''.split(','))\"",
+   "probe_output": "['']",
+   "question": "Does str.split handle an empty line?",
+   "sources": [],
+   "tags": [],
+   "verdict": "CONFIRMED"
+  }
+ },
+ "sessions": {
+  "s20261007T130450-1218694": {
+   "agent": "fx-alice",
+   "ended_at": "2026-10-07T13:05:02.914937Z",
+   "id": "s20261007T130450-1218694",
+   "model": "fixture-model",
+   "notes": [],
+   "prompts": [
+    {
+     "at": "2026-10-07T13:04:51.142228Z",
+     "item": "",
+     "seq": 0,
+     "text": "Implement phase P1"
+    }
+   ],
+   "started_at": "2026-10-07T13:04:50.756119Z",
+   "summary": "P1 half done"
+  }
+ },
+ "version": "0.1.15"
+}
