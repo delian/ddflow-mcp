@@ -24,6 +24,7 @@ from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
+from ..services import review as RV
 from ._base import _load
 
 
@@ -1052,8 +1053,8 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
 
     Combined: ONE full review whose intent names every gate's lens, recorded for each gate
     with the same findings and a shared `review_id` (each gate's findings are triaged on
-    that gate). Only for a plain review of known lenses (`_LENSES`) with every gate in
-    budget: `--chunk`, `--delta`, `--commit` and `--base` work on one gate's record, and a
+    that gate). Only for a plain review of known lenses (`_LENSES`), served by the same
+    reviewers, with every gate in budget: `--chunk`, `--delta`, `--commit` and `--base` work on one gate's record, and a
     gate out of rounds must be refused on its own -- so those run gate by gate. The change
     is measured as the changed lines of the diff a full review would send.
     """
@@ -1061,11 +1062,20 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     log, cfg, st = _load(repo, args["agent"])
     under = int(cfg.review.combined_under_lines or 0)
     plain = not (args["chunks"] or args["delta"] or args["commit"] or args["base"])
-    known = all(g in _LENSES for g in asked)
-    lines = _changed_lines(cfg, st, args) if plain and known and under > 0 else 0
+    alike = all(g in _LENSES for g in asked) and _same_reviewers(repo, asked)
+    lines = _changed_lines(cfg, st, args) if plain and alike and under > 0 else 0
     if 0 < lines < under and not _any_out_of_rounds(log, cfg, item, asked, args):
         return _review_combined(asked, args, lines, under, log, cfg)
     return _review_each(asked, args)
+
+
+def _same_reviewers(repo: Path, gates: list[str]) -> bool:
+    """Is every gate served by the same reviewers? A combined review runs the FIRST gate's,
+    so a gate with a reviewer of its own must not be recorded from another gate's (or as
+    unavailable because the first gate has none)."""
+    revs = RV.load_reviewers(repo)
+    names = [sorted(r.name for r in RV.reviewers_for(revs, g)) for g in gates]
+    return all(n == names[0] for n in names)
 
 
 def _changed_lines(cfg, st, args: dict[str, Any]) -> int:
