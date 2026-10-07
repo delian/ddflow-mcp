@@ -181,9 +181,14 @@ def verify_regression_test(
     base: str,
     tests: list[str],
     gates: dict[str, GateDef] | None = None,
+    after: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Run the named test on the PRE-FIX source (it must FAIL) and on the fixed tree (it
     must PASS). Returns (status, evidence).
+
+    ``after``, a commit: the fixed tree is a scratch checkout of it and ``tree`` is
+    unused -- for a fix that already landed, checked against ``base`` = the target as it
+    was just before the landing (B0d5253d31f).
 
     The rule a bug cannot escape -- "not closed without a regression test that fails
     against the unfixed code" -- was prose: `bug fixed` only checked the flag was
@@ -198,8 +203,16 @@ def verify_regression_test(
     environment that cannot test.
     """
     from ...infra import worktree as W
+    from .. import ci as CI  # local: imported lazily, so gates has no module-level cycle
     from .. import testselect as TS
 
+    if after:
+        with CI.merge_tree(repo, after, "") as (landed, why):
+            if landed is None:
+                return REGRESSION_COULD_NOT_RUN, {"reason": why}
+            return verify_regression_test(
+                repo, cfg, tree=landed, base=base, tests=tests, gates=gates
+            )
     defn = (gates or load_gates(repo, cfg)).get("unit_tests")
     command = TS.run_command(defn.command if defn else "", tests, tree)
     if not command:
@@ -231,8 +244,6 @@ def verify_regression_test(
         base_sha = W.rev(repo, base)
     except W.GitError as exc:
         return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": f"no base ref {base!r}: {exc}"}
-
-    from .. import ci as CI  # local: imported lazily, so gates has no module-level cycle
 
     paths = sorted({e.split("::", 1)[0] for e in tests})
     with CI.merge_tree(repo, base_sha, "") as (ptree, why):

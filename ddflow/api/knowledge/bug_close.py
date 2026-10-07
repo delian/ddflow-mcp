@@ -313,6 +313,14 @@ def _verify_regression(
 
     rec = st.bugs.get(bug_id)
     fx = st.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
+    if fx is not None and fx.landed_before and fx.landed_after:
+        # Merged already: the landing's own before and after, never the base by NAME,
+        # which now holds the fix -- the driver merges first and completes after
+        # (B0d5253d31f). `tree` is unused: the fixed tree is a checkout of `after`.
+        status, ev = G.verify_regression_test(
+            repo, cfg, tree=repo, base=fx.landed_before, tests=module_tests, after=fx.landed_after
+        )
+        return _regression_status(status, ev, G)
     tree = W.load_path(repo, fx.worktree) if fx is not None and fx.worktree else None
     if tree is None:
         return "could-not-run", {
@@ -328,6 +336,12 @@ def _verify_regression(
     if not base:
         return "could-not-run", {"reason": "no base ref to build the pre-fix tree from"}
     status, ev = G.verify_regression_test(repo, cfg, tree=tree, base=base, tests=module_tests)
+    return _regression_status(status, ev, G)
+
+
+def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, dict[str, Any]]:
+    """`verify_regression_test`'s status as the bug record names it (``G``: the gates
+    package, passed in so it is imported once, lazily, by the caller)."""
     # Explicitly, ONE success status: an unrecognized status must never fall through to
     # "verified" -- a bug whose test was never shown to fail-first would be recorded as
     # verified, the vacuous pass this whole feature exists to prevent (rubber_duck #1).

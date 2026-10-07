@@ -42,6 +42,7 @@ from .bug_close import (  # noqa: F401
     _capture_lesson,
     _drop_fix_task,
     _drop_fix_task_unchecked,
+    _regression_status,
     _verify_regression,
     bug_fixed,
     bug_invalid,
