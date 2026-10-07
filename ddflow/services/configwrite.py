@@ -38,6 +38,7 @@ from ..config import Config, InvalidValue, parallel_range_problems
 from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import reviewer_trust as RT
+from .review import Reviewer
 
 #: The git-ignored machine-local layer (decision D-no-own-services-local-dir). Read
 #: LAST by `Config.load` and `tomlcfg.config_paths`, so what is written here wins.
@@ -823,6 +824,12 @@ def append_block(
             raise ValueError(
                 f"refusing to write {path}: the result is not valid TOML: {exc}"
             ) from exc
+        # The SCHEMA too, strictly, whichever layer it goes to: read back, an unknown
+        # field is skipped with a warning in the local layer and fails every load in a
+        # committed file of ddflow's own tree -- either way not what was meant
+        # (B96fd182086). This writer knows every field it may write.
+        for n, raw in enumerate(tomllib.loads(block).get("reviewer") or [], 1):
+            TC._check(raw, set(Reviewer.__dataclass_fields__), f"[[reviewer]] #{n} of {path}")
         # Raises RT.ReviewerRefused (a ValueError) for an agent's command reviewer.
         _write_reviewed(repo, path, merged, person=person, agent=agent)
     return path
