@@ -17,7 +17,8 @@ Windows (all ending at ``now``):
   fewer than 3 in flight at once (one agent's rubber_duck and critic are two), and under
   5 recent or 20 baseline samples.
 * ``gate_failure_rate``: ``gate.failed / (passed + failed)`` over the last 60 minutes.
-  None under 10 outcomes.
+  None under 10 outcomes. Review gates (rubber_duck, critic) are left out: a failed review
+  is a reviewer that found issues, not a host or queue short of capacity (B767745dee6).
 * ``gate_failure_ratio``: that rate divided by the project's own rate over the 7 days
   before the window, so its marks mean "N times the usual" (D-unify 8: shrink at 2x).
   None under 10 recent or 20 baseline outcomes. A clean baseline counts as one failure; a
@@ -154,13 +155,17 @@ def reviewer_latency_ratio(events: Sequence[Event], now: float) -> float | None:
 def _failure_rate(
     events: Sequence[Event], now: float, window: float, gate: str | None
 ) -> tuple[int, int]:
-    """(passed, failed) outcomes, of ``gate`` or of every gate, in ``(now - window, now]``."""
+    """(passed, failed) outcomes, of ``gate`` or of every gate but the review gates (whose
+    failure is a finding, not saturation), in ``(now - window, now]``."""
     passed = failed = 0
     for ev in events:
         out = _outcome(ev)
         if out not in ("passed", "failed"):
             continue
-        if gate is not None and _gate(ev) != gate:
+        g = _gate(ev)
+        if gate is not None and g != gate:
+            continue
+        if gate is None and g in PR.REVIEW_GATES:
             continue
         at = PR.epoch(ev.ts)
         if at <= 0 or at > now or at <= now - window:
