@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra import paths
-from ..infra.fsio import replace_text
+from ..infra.fsio import Unreadable, read_json, replace_text
 from . import install_info as _INSTALL
 
 #: Where an operator reads the manual step for an agent with no project config.
@@ -1204,10 +1204,15 @@ def _register_mcp(
 
     data: dict = {}
     if path.exists():
-        try:
-            data = json.loads(path.read_text("utf-8") or "{}")
-        except json.JSONDecodeError:
+        read = read_json(path)
+        if isinstance(read, Unreadable) and read.kind == "invalid":
             return Refused(f"SKIPPED {rel}: it is not valid JSON; add the server by hand")
+        if isinstance(read, Unreadable) and read.kind == "unreadable":
+            return Refused(
+                f"SKIPPED {rel}: it could not be read ({read.detail}); add the server by hand"
+            )
+        # Not an object: place_server refuses it in its own words, as it always has.
+        data = read.value if isinstance(read, Unreadable) else read
     try:
         place_server(data, target.shape, "ddflow", entry)
     except UnplaceableConfig as exc:

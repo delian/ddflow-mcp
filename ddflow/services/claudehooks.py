@@ -26,6 +26,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..infra.fsio import Unreadable, read_json
+
 #: What identifies OUR hook among the operator's: the subcommand it runs. Matched as a
 #: substring of the command, because the interpreter path in front of it varies.
 MARKER = "hooks session-start"
@@ -56,17 +58,16 @@ class SettingsError(ValueError):
 def _read(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    try:
-        data = json.loads(path.read_text("utf-8") or "{}")
-    except json.JSONDecodeError as exc:
-        raise SettingsError(f"{path} is not valid JSON ({exc}); not touching it") from exc
-    except (UnicodeDecodeError, OSError) as exc:
+    data = read_json(path)
+    if not isinstance(data, Unreadable):
+        return data
+    if data.kind == "invalid":
+        raise SettingsError(f"{path} is not valid JSON ({data.detail}); not touching it")
+    if data.kind == "unreadable":
         # Not a JSONDecodeError, so it escaped every handler and crashed `hooks status`
         # on a file ddflow never wrote (roborev 826).
-        raise SettingsError(f"{path} could not be read ({exc}); not touching it") from exc
-    if not isinstance(data, dict):
-        raise SettingsError(f"{path} is not a JSON object; not touching it")
-    return data
+        raise SettingsError(f"{path} could not be read ({data.detail}); not touching it")
+    raise SettingsError(f"{path} is not a JSON object; not touching it")
 
 
 def _hooks_of(group: Any, path: Path) -> list[Any]:

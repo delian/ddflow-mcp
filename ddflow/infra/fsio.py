@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import fcntl
+import json
 import os
 import re
 import secrets
@@ -27,6 +28,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal
 
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
@@ -301,6 +303,41 @@ def repo_rel(
         return Path(path).resolve().relative_to(root).as_posix()
     except ValueError:
         return None if strict else str(path)
+
+
+@dataclass(frozen=True, slots=True)
+class Unreadable:
+    """Why `read_json` could not give a JSON object; each caller words its own refusal.
+
+    `kind`: "invalid" (not JSON), "unreadable" (an OSError, or bytes that are not UTF-8)
+    or "not-object" (valid JSON, but not an object: `value` holds it). `detail` is the
+    error's own text ("" for not-object)."""
+
+    path: Path
+    kind: Literal["invalid", "unreadable", "not-object"]
+    detail: str = ""
+    value: Any = None
+
+
+def read_json(path: Path | str) -> dict[str, Any] | Unreadable:
+    """A JSON config file another tool also writes (an MCP server list, harness settings)
+    as a dict: a missing or empty file is `{}`, anything else that is not a JSON object is
+    an `Unreadable` saying why -- never an exception, so no reader can let a
+    `UnicodeDecodeError` or a list escape as a traceback where its neighbours refuse."""
+    path = Path(path)
+    try:
+        text = path.read_text("utf-8")
+    except FileNotFoundError:
+        return {}
+    except (UnicodeDecodeError, OSError) as exc:
+        return Unreadable(path, "unreadable", str(exc))
+    try:
+        data = json.loads(text or "{}")
+    except json.JSONDecodeError as exc:
+        return Unreadable(path, "invalid", str(exc))
+    if not isinstance(data, dict):
+        return Unreadable(path, "not-object", value=data)
+    return data
 
 
 class RegionError(ValueError):
