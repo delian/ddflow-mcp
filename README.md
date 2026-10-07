@@ -2623,7 +2623,10 @@ by the config writer, because two MCP calls — flip the flag, then record — u
 clear the gate with no shell involved. Declare human gates in `.ddflow/gates.toml`,
 which no tool writes.)
 
-Opt-in: the shipped pipeline has no human gate, and a test keeps it that way.
+Opt-in: the shipped pipeline has no human gate, and a test keeps it that way. When the
+`merge` gate itself is declared human, `ddflow merge` still lands the branch but records
+no outcome for that gate (`merge_gate_human` is true in its result, and the CLI names the
+`ddflow approve <id> merge` to ask for).
 
 ---
 
