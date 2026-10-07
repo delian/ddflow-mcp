@@ -102,7 +102,16 @@ class Lease:
     started: bool = False
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
+        """Past its TTL plus grace, by the clock alone. Ask `live` to decide anything: a
+        recorded expiry (`expired_at`) ends a lease at once, whatever the clock says."""
         return (now - self.renewed_at) > (self.ttl_s + grace_s)
+
+    def live(self, now: float, grace_s: int = 0) -> bool:
+        """The one answer to "does this lease still hold its item": no recorded expiry
+        AND inside its TTL plus grace. A recorded expiry zeroes the TTL but keeps the
+        lease, and the clock alone calls it live until the grace passes (B-uni-lease-api).
+        """
+        return not self.expired_at and not self.expired(now, grace_s)
 
     def remaining_s(self, now: float) -> float:
         return (self.renewed_at + self.ttl_s) - now
@@ -930,14 +939,12 @@ class State:
 
     def active_leases(self, now: float, grace_s: int = 0) -> dict[str, Lease]:
         return {
-            i.id: i.lease
-            for i in self.items.values()
-            if i.lease and not i.lease.expired(now, grace_s)
+            i.id: i.lease for i in self.items.values() if i.lease and i.lease.live(now, grace_s)
         }
 
     def expired_leases(self, now: float, grace_s: int = 0) -> dict[str, Lease]:
         return {
-            i.id: i.lease for i in self.items.values() if i.lease and i.lease.expired(now, grace_s)
+            i.id: i.lease for i in self.items.values() if i.lease and not i.lease.live(now, grace_s)
         }
 
 

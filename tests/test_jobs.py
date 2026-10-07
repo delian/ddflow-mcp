@@ -119,7 +119,7 @@ def test_registering_a_process_requires_it_to_be_running(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T", "--globs", "a.py")
     run_cli(repo, "claim", "T", "--no-worktree")
-    p = subprocess.Popen(["sleep", "5"])
+    p = subprocess.Popen(["sleep", "300"])
     try:
         code, _o, err = run_cli(
             repo, "job", "add", "T", "--pid", str(p.pid), "--command", "torchrun"

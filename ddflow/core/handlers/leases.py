@@ -269,7 +269,7 @@ def _h_lease_gone(st: State, ev: Event) -> None:
     2. **Expiry keeps the lease object, marked expired.** Deleting it loses the
        worktree pointer, so `State.expired_leases()` could never report an expiry and a
        cleanup pass sees an item with no lease at all. Keeping it with `ttl_s = 0` makes
-       `expired()` true, so it leaves `active_leases` and appears in `expired_leases`
+       `live()` false (the recorded expiry counts, not the clock), so it leaves `active_leases` and appears in `expired_leases`
        with its worktree intact — which is what recovery needs to protect the tree.
     """
     it = st.items.get(ev.subject)
