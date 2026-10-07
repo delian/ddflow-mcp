@@ -39,13 +39,14 @@ from .config_sections.bugs import (
 from .config_sections.cadence import (
     CadenceConfig,
 )
-from .config_sections.ci import (
+from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
+    CI_ON_MERGE_MODES,
     CiConfig,
 )
 from .config_sections.companions import (
     CompanionsConfig,
 )
-from .config_sections.dedupe import (
+from .config_sections.dedupe import (  # noqa: F401 -- re-exported, as before the move
     DEDUPE_KINDS,
     DEDUPE_ON_MATCH,
     DedupeConfig,
@@ -534,41 +535,13 @@ def _warn_unknown(
     )
 
 
-def _waivers_problem(v: Any) -> str:
-    """`[enforce].trailer_waivers`: key -> a non-empty list of non-empty words. An empty
-    list would refuse every use of its key while reading like a waiver."""
-    shape = 'must be a table of trailer key -> list of words, e.g. { "Phase-ships" = ["none"] }'
-    if not isinstance(v, dict):
-        return shape
-    for key, words in v.items():
-        if not key or ":" in key or any(c.isspace() for c in key):
-            # `"Phase-ships "` or `"Phase ships"` could never match a trailer git
-            # parses (its token holds no whitespace): an inert waiver.
-            return f"{key!r}: a trailer key must be non-empty, with no whitespace and no ':'"
-        if not isinstance(words, list):
-            return f"{key!r}: {shape}"
-        if not words:
-            return f"{key!r} has no words, which would refuse every use of the key; list them"
-        if not all(isinstance(w, str) and w.strip() == w and w for w in words):
-            return f"{key!r}: every word must be a non-empty string with no surrounding spaces"
-    return ""
-
-
-def _unit_interval(v: Any) -> str:
-    """A similarity score bound: a number in [0, 1]. An int is fine (TOML `1`)."""
-    ok = isinstance(v, int | float) and not isinstance(v, bool) and 0.0 <= v <= 1.0
-    return "" if ok else "must be a number between 0 and 1"
-
-
 #: Every ENUM knob and the values it may hold (bug Beea0744a7b). Each entry gets its check
 #: in `_KNOB_CHECKS` from here, so a knob whose choices lived only in a comment
 #: (`# block | warn | off`) can no longer take a typo that quietly behaves as some other
 #: value. A new enum knob is declared here, not in a comment;
 #: `tests/test_config_enum_knobs.py` finds any comment or knob doc listing `a | b` that
 #: this table does not cover.
-_BLOCK_WARN_OFF = ("block", "warn", "off")
 PROGRESS_MODES = ("on", "phase", "off")
-CI_ON_MERGE_MODES = ("off", "fast", "full")
 _DC, _DS, _DO, _DK = declared_tables()  # the knobs declared on their fields (_docs.knob)
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     **_DC,
@@ -588,19 +561,9 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "schedule.unknown_dep_policy": ("block", "warn"),
     "schedule.empty_phase": ("note", "problem", "off"),
     "schedule.parallel": ("auto", "fixed"),
-    "dedupe.on_match": DEDUPE_ON_MATCH,
-    "enforce.commit_without_lease": _BLOCK_WARN_OFF,
-    "enforce.generated_views": _BLOCK_WARN_OFF,
-    "enforce.stale_docs": _BLOCK_WARN_OFF,
-    "enforce.environment_commits": _BLOCK_WARN_OFF,
-    "enforce.stale_rules": _BLOCK_WARN_OFF,
-    "enforce.readme_with_code": _BLOCK_WARN_OFF,
-    "enforce.behind": _BLOCK_WARN_OFF,
     "review.on_exceed": ("refuse", "warn"),
     "upgrade.skew": UPGRADE_SKEW_POLICIES,
     "mcp.tools": MCP_TOOL_TIERS,
-    "ci.on_merge": CI_ON_MERGE_MODES,
-    "export.refresh": EXPORT_REFRESH_MODES,
 }
 
 #: The value each enum knob takes when a config FILE gives it one this code does not know
@@ -640,19 +603,9 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
         "fixed",
         "no safety dimension; changes least -- max_parallel_tasks is the number, nothing adapts",
     ),
-    "dedupe.on_match": ("ask", "a likely duplicate is refused until answered"),
-    "enforce.commit_without_lease": ("block", "the hook refuses"),
-    "enforce.generated_views": ("block", "the hook refuses"),
-    "enforce.stale_docs": ("block", "the hook refuses"),
-    "enforce.environment_commits": ("block", "the hook refuses"),
-    "enforce.stale_rules": ("block", "the hook refuses"),
-    "enforce.readme_with_code": ("block", "complete refuses"),
-    "enforce.behind": ("block", "the hook refuses"),
     "review.on_exceed": ("refuse", "a round past the budget is refused"),
     "upgrade.skew": ("refuse", "an older ddflow's write is refused"),
     "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
-    "ci.on_merge": ("full", "the whole CI command runs after a merge"),
-    "export.refresh": ("off", "no safety dimension; ddflow writes no document by itself"),
 }
 
 #: Each enum knob's values that make ddflow act OUTSIDE this clone: a push, a pull
@@ -679,19 +632,9 @@ KNOB_OUTWARD: dict[str, frozenset[str]] = {
     "schedule.unknown_dep_policy": frozenset(),
     "schedule.empty_phase": frozenset(),
     "schedule.parallel": frozenset(),
-    "dedupe.on_match": frozenset(),
-    "enforce.commit_without_lease": frozenset(),
-    "enforce.generated_views": frozenset(),
-    "enforce.stale_docs": frozenset(),
-    "enforce.environment_commits": frozenset(),
-    "enforce.stale_rules": frozenset(),
-    "enforce.readme_with_code": frozenset(),
-    "enforce.behind": frozenset(),
     "review.on_exceed": frozenset(),
     "upgrade.skew": frozenset(),
     "mcp.tools": frozenset(),
-    "ci.on_merge": frozenset(),
-    "export.refresh": frozenset(),
 }
 
 #: Numeric knobs whose bad FILE value takes the strictest value (D-trigger-cap-knob): as
@@ -735,17 +678,6 @@ def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
     return lambda v: "" if v in allowed else f"must be one of {', '.join(allowed)}"
 
 
-def _export_tables_problem(v: Any) -> str:
-    """`[export].tables` as one map: each value is a valid `[export.<doc>]` table (the
-    same value rules the sub-table form gets; a key a newer release adds is tolerated)."""
-    if not isinstance(v, dict):
-        return "must be a table of [export.<doc>] tables"
-    for doc, t in v.items():  # unknown keys are tolerated, as in a file's [export.<doc>]
-        if why := _export_table_problem(str(doc), t):
-            return why
-    return ""
-
-
 def _int_at_least(n: int) -> Callable[[Any], str]:
     return lambda v: (
         ""
@@ -760,34 +692,10 @@ def _int_at_least(n: int) -> Callable[[Any], str]:
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
 _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
     **_DK,
-    "export.tables": _export_tables_problem,
-    "export.max_bytes": lambda v: (
-        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else "must be an integer >= 0"
-    ),
-    "export.documents": lambda v: (
-        "" if isinstance(v, list) and all(isinstance(x, str) for x in v) else "must be a list of document names"
-    ),
-    # TOML arrives typed and `_coerce` passes it through untouched, so a string where a
-    # list belongs (`hydrafusion = "openai"`) would iterate as letters: a set of nonsense
-    # families that matches no reviewer, and so clears every one.
-    "agent.routers": lambda v: (
-        ""
-        if isinstance(v, dict)
-        and all(
-            isinstance(m, list) and all(isinstance(x, str) for x in m) for m in v.values()
-        )
-        else 'must be a table of lists of family names, e.g. { hydrafusion = ["openai"] }'
-    ),
-    "enforce.max_behind": lambda v: (
-        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 1
-        else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
-    ),
-    "enforce.trailer_waivers": _waivers_problem,
     # [ids] templates and the one fixed id (the bugs phase): ids are file names, branch
     # names and glob tokens (D-id-schemes-final). Tolerated in a file (the default stays,
     # doctor names it), refused by the write paths.
     **{f"ids.{k}": functools.partial(id_template_problem, k) for k in ID_KINDS},
-    "bugs.phase": id_problem,
     "schedule.max_parallel_tasks": _int_at_least(1),
     "schedule.max_parallel_min": _int_at_least(1),
     "schedule.max_parallel_max": _int_at_least(1),
@@ -799,22 +707,7 @@ _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0
         else "must be an integer >= 0 (0 = follow the schedule limit)"
     ),
-    "dedupe.show_floor": _unit_interval,
-    "dedupe.ask_threshold": _unit_interval,
-    "dedupe.max_candidates": lambda v: (
-        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 1
-        else "must be an integer >= 1; to stop the check set [dedupe].on_match = \"off\""
-    ),
-    "dedupe.min_words": lambda v: (
-        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-        else "must be an integer >= 0"
-    ),
     "triggers.max_fires_per_hour": max_fires_problem,
-    "dedupe.kinds": lambda v: (
-        "" if isinstance(v, list) and v and all(k in DEDUPE_KINDS for k in v)
-        else f"must be a non-empty list drawn from {', '.join(DEDUPE_KINDS)}; "
-        'to stop the check set [dedupe].on_match = "off"'
-    ),
 }  # fmt: skip
 
 #: Every check: one derived from each KNOB_CHOICES entry, and the hand-written ones above.

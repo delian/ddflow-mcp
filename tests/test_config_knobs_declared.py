@@ -23,10 +23,10 @@ CONFIG_PY = ROOT / "ddflow" / "config.py"
 #: The older declarations still standing. Lower these in the change that moves a section
 #: onto `knob()`; the failure message prints the number to write. Never raise one.
 LEGACY_BASELINE = {
-    "_doc() calls": 153,
-    "KNOB_CHOICES entries": 29,
-    "KNOB_STRICTEST entries": 29,
-    "KNOB_OUTWARD entries": 29,
+    "_doc() calls": 107,
+    "KNOB_CHOICES entries": 19,
+    "KNOB_STRICTEST entries": 19,
+    "KNOB_OUTWARD entries": 19,
 }
 
 _TABLES = ("KNOB_CHOICES", "KNOB_STRICTEST", "KNOB_OUTWARD")
