@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .model import ABANDONED, DONE
-
 TIERS = ("fast", "balanced", "deep")
 PREFIX = "tier:"
 
@@ -39,7 +37,7 @@ def unknown_tier_notes(items: Iterable) -> list[str]:
     """One doctor NOTE per live item carrying a `tier:` tag with an unknown value."""
     notes = []
     for it in items:
-        if it.removed or it.state in (DONE, ABANDONED):
+        if it.removed or it.terminal:
             continue
         if bad := unknown_tiers(it.tags):
             notes.append(

@@ -24,7 +24,7 @@ def _pct(done: int, total: int) -> str:
 
 
 def _live(st: State):
-    return [it for it in st.items.values() if not it.removed and it.state != ABANDONED]
+    return [it for it in st.live_items() if it.state != ABANDONED]
 
 
 def _pct_of(n: PR.Tally) -> str:
