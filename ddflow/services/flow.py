@@ -34,6 +34,7 @@ from ..infra.log import EventLog
 from . import completion as CM
 from . import gates as G
 from . import leases as L
+from .cleanup import record_item_removed
 
 
 def _state(log: EventLog) -> State:
@@ -297,7 +298,7 @@ def _remove_tree(repo: Path, cfg: Config, log: EventLog, it: Item, info: FG.PRIn
         return f"kept {path}: its HEAD is not the head that merged"
     r = W.remove(repo, cfg, wt, force=True)
     if r.ok:
-        log.append("worktree.removed", it.id, {"path": it.worktree})
+        record_item_removed(log, it)
         return ""
     return f"kept {path}: {r.err or r.out}"
 

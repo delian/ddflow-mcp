@@ -147,6 +147,13 @@ def _protected(root: Path, cfg: Config, state: State, now: float | None = None) 
     return p
 
 
+def record_item_removed(log: EventLog, it) -> None:
+    """THE writer of `worktree.removed` (B54909478c4): the item's tree as `claim` recorded
+    it (`it.worktree`, often repo-relative), whoever removed it -- merge, the PR flow or
+    cleanup -- so a change to the event is made in one place."""
+    log.append("worktree.removed", it.id, {"path": it.worktree})
+
+
 def record_removed(log: EventLog, root: Path, path: str) -> None:
     """`worktree.removed` for every item whose recorded tree is ``path``, as `merge`
     writes it, so the fold stops pointing at a directory that is gone (B5e83fb22cb).
@@ -154,7 +161,7 @@ def record_removed(log: EventLog, root: Path, path: str) -> None:
     gone = _key(path)
     for it in fold(log.read_all(), strict=False).items.values():
         if it.worktree and _key(str(W.load_path(root, it.worktree))) == gone:
-            log.append("worktree.removed", it.id, {"path": it.worktree})
+            record_item_removed(log, it)
 
 
 def our_prefixes(cfg: Config) -> list[str]:

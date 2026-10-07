@@ -9,6 +9,7 @@ from typing import Any
 
 from ...core import outcome as O
 from ...infra import worktree as W
+from ...services.cleanup import record_item_removed
 from .._base import _load
 from ._common import _require
 from .claim import callers_tree
@@ -315,7 +316,7 @@ def _dispose_tree(
     rr = W.remove(repo, cfg, wt)
     if not rr.ok:
         return False, rr.err
-    log.append("worktree.removed", it.id, {"path": str(wt.path)})
+    record_item_removed(log, it)
     return True, ""
 
 
