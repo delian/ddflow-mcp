@@ -128,6 +128,7 @@ def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
     rename would take it over), one the caller may not write (`write_text` refuses it,
     a rename would not), and, when the rename itself is refused (EACCES, EPERM, EBUSY), a
     writable file in a directory the caller may not write or a bind-mounted single file.
+    `fsync` still applies there: the written descriptor is flushed to disk.
     """
     named = Path(path)
     target = Path(os.path.realpath(named)) if named.is_symlink() else named
@@ -146,14 +147,24 @@ def replace_text(path: Path | str, text: str, *, fsync: bool = True) -> None:
     if st is not None and (
         st.st_nlink > 1 or st.st_uid != os.geteuid() or not os.access(target, os.W_OK)
     ):
-        target.write_text(text, "utf-8")
+        _write_in_place(target, text, fsync=fsync)
         return
     try:
         atomic_write(target, text, fsync=fsync)
     except OSError as e:
         if st is None or e.errno not in (errno.EACCES, errno.EPERM, errno.EBUSY):
             raise
-        target.write_text(text, "utf-8")
+        _write_in_place(target, text, fsync=fsync)
+
+
+def _write_in_place(path: Path, text: str, *, fsync: bool) -> None:
+    """What `path.write_text(text, "utf-8")` does (truncate, write: same inode, owner,
+    links), plus the flush to disk `fsync` asks for."""
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+        if fsync:
+            fh.flush()
+            os.fsync(fh.fileno())
 
 
 def _link_exclusive(

@@ -377,3 +377,16 @@ def test_replace_text_through_a_link_keeps_the_targets_mode(tmp_path):
     assert _mode(target) == 0o755
     assert target.read_text() == "#!/bin/sh\nexit 0\n"
     assert _leftovers(tmp_path) == []
+
+
+def test_replace_text_in_place_still_fsyncs(tmp_path, monkeypatch):
+    (tmp_path / "f.md").write_text("old\n")
+    os.link(tmp_path / "f.md", tmp_path / "g.md")
+    synced: list[int] = []
+    real = os.fsync
+    monkeypatch.setattr(fsio.os, "fsync", lambda fd: (synced.append(fd), real(fd))[1])
+    fsio.replace_text(tmp_path / "f.md", "new\n")
+    assert (tmp_path / "g.md").read_text() == "new\n"
+    assert len(synced) == 1
+    fsio.replace_text(tmp_path / "f.md", "newer\n", fsync=False)
+    assert len(synced) == 1
