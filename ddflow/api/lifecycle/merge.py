@@ -55,7 +55,6 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     """
     from ...core import flow as F
     from ...services import flow as FS
-    from ...services import gates as G
 
     log, cfg, st = _load(repo, agent)
     it = _require(st, item, "worktree.merged")
@@ -120,11 +119,11 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
         if r.attempted:  # a refused precondition says nothing about this branch
-            G.record(
+            _record_merge_gate(
+                repo,
                 log,
                 cfg,
                 item,
-                "merge",
                 "failed",
                 reason=(r.err or r.out or "merge failed")[:500],
                 evidence={"branch": wt.branch, "git_exit": r.code},
@@ -162,14 +161,13 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         (back_merged if br.ok else back_failed).append(
             extra if br.ok else f"{extra}: {br.err or br.out}"
         )
-    G.record(
+    human_gate = _record_merge_gate(
+        repo,
         log,
         cfg,
         item,
-        "merge",
         "passed",
         evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
-        gates=G.load_gates(repo, cfg),
     )
     removed_tree, kept_reason = _dispose_tree(
         repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
@@ -196,8 +194,27 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         pr="",
         branch=wt.branch,
         **_scope_fields(outside, listed=borrowed),
+        # The merge gate is a person's to clear here; nothing was recorded for it.
+        merge_gate_human=human_gate,
         **({"export_refresh": refreshed} if refreshed else {}),
     )
+
+
+def _record_merge_gate(repo: Path, log, cfg, item: str, outcome: str, **kw: Any) -> bool:
+    """Record the merge gate's outcome -- through the human-gate guard, with the gate
+    definitions (B279a0ebfc1). A project whose `merge` gate is a HUMAN checkpoint gets no
+    outcome from this command, passed OR failed: an agent's `failed` on a human gate reads
+    as the person's rejection. `merge_failure_rate` then has no data for such a project
+    (None) instead of the biased rate it had when only failures were recorded (the landed
+    path raised). Returns whether it is such a gate, so the caller can say so."""
+    from ...services import gates as G
+
+    gates = G.load_gates(repo, cfg)
+    gdef = gates.get("merge")
+    if gdef is not None and gdef.is_human_gate:
+        return True
+    G.record(log, cfg, item, "merge", outcome, gates=gates, **kw)
+    return False
 
 
 def _refresh_documents(repo: Path, cfg, wt: W.Worktree) -> dict[str, Any]:

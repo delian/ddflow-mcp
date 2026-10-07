@@ -373,6 +373,7 @@ def cmd_merge(a, c: Ctx) -> int:
         return OK
     if out.data["kept_reason"]:
         print(f"  {out.data['kept_reason']}", file=sys.stderr)
+    _say_human_merge_gate(out, a.id)
     outside = out.data.get("outside_globs") or []
     if out.data.get("outside_globs_unknown"):
         print(
@@ -421,6 +422,16 @@ def _shell_cwd() -> Path | None:
 
 #: The wire body of `merge` on both surfaces. `pr` is empty for a local merge. `sha` is
 #: the landing on `base`; `branch_head` the merged branch's own head.
+def _say_human_merge_gate(out, item: str) -> None:
+    """A project whose merge gate is a person's checkpoint: merge recorded nothing for it."""
+    if out.data.get("merge_gate_human"):
+        print(
+            f"  the merge gate is a human checkpoint: it is not recorded by merge -- ask the "
+            f"operator to run `ddflow approve {item} merge`",
+            file=sys.stderr,
+        )
+
+
 MERGE_PAYLOAD = (
     "id",
     "sha",
@@ -430,6 +441,7 @@ MERGE_PAYLOAD = (
     "branch",
     "outside_globs",
     "outside_globs_unknown",
+    "merge_gate_human",
     "worktree",
     "worktree_removed",
 )

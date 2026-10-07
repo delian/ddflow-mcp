@@ -368,6 +368,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "branch",
             "outside_globs",
             "outside_globs_unknown",
+            "merge_gate_human",
             "worktree",
             "worktree_removed",
         ),
