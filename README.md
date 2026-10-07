@@ -3729,7 +3729,7 @@ findings are never offered again. `ddflow history --kind repair` shows it.
 
 `ddflow doctor` reports what is pending. A torn line or an edited event is a PROBLEM until
 a repair has quarantined it, and a NOTE after that. A reviewed unknown author is no longer
-named. Running the repairs is the job of `ddflow upgrade`. A bug fix task tagged
+named. Doctor only reports: it never applies a repair. A bug fix task tagged
 `data-damage` must ship a repair that names the bug, or a `FOLD_ONLY` entry saying why
 reading the log is already enough. A test on this project's own log enforces this.
 
