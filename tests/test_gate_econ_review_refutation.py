@@ -118,3 +118,16 @@ def test_a_clean_review_pass_is_not_flagged(repo, tmp_path):
     assert api.review(repo, gate="critic", item="T1").data["outcome"] == "passed"
     st = fold(EventLog(repo).read_all(), strict=False)
     assert G.on_refutation(st.items["T1"], "critic") is None
+
+
+def test_the_refutation_pass_is_not_a_review_round(repo, tmp_path):
+    """roborev on 1e5dab6e: the pass copies the review's evidence, review_kind included,
+    and was counted as a third round."""
+    _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1")
+    api.review(repo, gate="critic", item="T1")
+    api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="ran it")
+    assert _gate(repo).outcome == "passed"
+    assert api._rounds_used(EventLog(repo), "T1", "critic") == 2
+    out = api.review(repo, gate="critic", item="T1")
+    assert "has had 2 review rounds" in out.reason, out.reason

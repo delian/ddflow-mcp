@@ -208,7 +208,9 @@ def triage(
     run that shows the finding false -- or ``confirmed`` -- ``probe`` is the fix or test
     that answers it. Appends a `review.triaged` event; the gate's outcome is untouched
     (decision D-review-triage: a review that reported findings stays `failed`, and that
-    does not block completion -- the log now shows what became of each finding).
+    does not block completion -- the log now shows what became of each finding) --
+    except once the review budget is spent: the triage that settles the gate's LAST
+    finding records it passed on refutation, flagged (`_settle_after_cap`).
 
     Finding numbers are per gate, so an omitted ``gate`` is never defaulted (bug
     Bca71987363): it resolves only when exactly one gate has numbered findings, else it
@@ -661,6 +663,7 @@ def _full_rounds(log, item: str, gate: str) -> int:
         and e.kind.startswith("gate.")
         and e.data.get("gate") == gate
         and (e.data.get("evidence") or {}).get("review_kind") == "full"
+        and not _settled_pass(e)
     )
 
 
@@ -675,7 +678,14 @@ def _delta_rounds(log, item: str, gate: str) -> int:
         and e.data.get("gate") == gate
         and (e.data.get("evidence") or {}).get("review_kind") == "delta"
         and (e.data.get("evidence") or {}).get("status") in ("REVIEWED", "PARTIAL")
+        and not _settled_pass(e)
     )
+
+
+def _settled_pass(e) -> bool:
+    """A pass `_settle_after_cap` recorded: it carries the settled review's evidence,
+    `review_kind` included, but is no review round (roborev on 1e5dab6e)."""
+    return bool((e.data.get("evidence") or {}).get("passed_on_refutation"))
 
 
 def _rounds_used(log, item: str, gate: str) -> int:

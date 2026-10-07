@@ -1240,7 +1240,8 @@ recorded outcome. `review triage` records what became of each finding as its own
 (`review.triaged`): *refuted*, with the run that shows it false, or *confirmed*, with the
 fix or test that answers it. The gate's outcome is not changed — a review that reported
 findings stays `failed`, and that does not block completion; the log now shows what became
-of each finding. Triage appears in `gate status` and `show`, and a re-review carries it over
+of each finding (once the round budget is spent, the triage that settles the LAST finding
+records the gate passed on refutation, flagged: see below). Triage appears in `gate status` and `show`, and a re-review carries it over
 only for a finding whose text is identical (decision D-review-triage). Over MCP it is
 `ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`. The `triage` verb is
 required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` are refused
