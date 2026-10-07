@@ -3456,6 +3456,12 @@ constraint, and the probe output behind a rejected design.
 **Secrets are redacted on the way in**, not on the way out — the log is committed, so a
 scrub at read time is a scrub that `git show` walks straight past.
 
+One shared `Redactor` (`core/redact.py`) serves the log, the views, the exports, upstream reports and
+argv shapes, each a named profile. The log profile is the full one: besides secrets (which keep their
+surrounding words, `api_key: [REDACTED]`) it removes private addresses and hosts, this machine's hostname, home-directory paths,
+emails, and (once the `[upstream]` section exists) its `redact_extra` names from every NEW prompt and note. Events already written are
+not rewritten.
+
 ---
 
 ## Lessons that check themselves

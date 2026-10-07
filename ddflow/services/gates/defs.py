@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ...config import Config, _is_code_tree
 from ...core.model import Item
+from ...infra import proc as P
 
 # Exit vocabulary lives in ONE place: `cli.py`. It used to be declared here too, with a
 # different third name for the same code, and nothing imported this copy.
@@ -21,7 +22,7 @@ class GateDef:
     command: str = ""
     required: bool = False
     evidence: bool = False
-    timeout_s: int = 1800
+    timeout_s: int = P.TIMEOUTS["gate"]
     reviewer: str = ""  # "" | "different_family" | "same_family_ok"
     applies_to: str = "task"  # task | phase | both
     cwd: str = "worktree"  # worktree | repo

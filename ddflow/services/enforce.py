@@ -45,6 +45,7 @@ from ..core.globs import inside as path_in_glob
 from ..core.globs import overlap as globs_overlap
 from ..core.model import Lease, fold
 from ..core.schedule import is_shared, shared_globs
+from ..infra import git as G
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.fsio import replace_text
@@ -145,15 +146,10 @@ def hooks_dir(repo: Path) -> Path:
     may relocate hooks entirely. Reading the resolved path from git rather than assuming
     `.git/hooks` is what makes this work inside the worktrees ddflow itself creates.
     """
-    r = P.run(
-        ["git", "-C", str(repo), "rev-parse", "--git-path", "hooks"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if r.returncode != 0:
+    r = G.run(repo, "rev-parse", "--git-path", "hooks", timeout=P.TIMEOUTS["probe"])
+    if not r.ok:
         raise RuntimeError(f"not a git repository: {repo}")
-    path = Path(r.stdout.strip())
+    path = Path(r.out)
     return path if path.is_absolute() else (Path(repo) / path).resolve()
 
 
@@ -932,10 +928,10 @@ def _this_worktree(repo: Path) -> Path | None:
     `--show-toplevel` from the cwd, because the hook's cwd IS the tree being committed
     — which is exactly the information needed to decide which lease applies.
     """
-    r = P.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=30)
-    if r.returncode != 0 or not r.stdout.strip():
+    r = G.run(".", "rev-parse", "--show-toplevel", timeout=P.TIMEOUTS["probe"])
+    if not r.ok or not r.out:
         return None
-    return Path(r.stdout.strip()).resolve()
+    return Path(r.out).resolve()
 
 
 def _committing_tree(repo: Path) -> Path | None:
@@ -1340,12 +1336,14 @@ def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | 
     the disk while the commit carried the broken bytes. Read in the committing tree, the
     same index `staged_paths` listed ``path`` from.
     """
-    r = P.run(
-        ["git", "-C", str(tree or _index_tree(repo)), "show", f":{path}"],
-        capture_output=True,
-        timeout=60,
+    r = G.run(
+        tree or _index_tree(repo),
+        "show",
+        f":{path}",
+        binary=True,
+        timeout=P.TIMEOUTS["git_listing"],
     )
-    return r.stdout if r.returncode == 0 else None
+    return r.out_bytes if r.ok else None
 
 
 def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
@@ -2049,20 +2047,11 @@ def _trailers(message: str) -> list[tuple[str, str]] | None:
     found nothing (roborev 827). A check that disagrees with the query it serves
     certifies commits the audit will miss.
     """
-    try:
-        parsed = P.run(
-            ["git", "interpret-trailers", "--parse"],
-            input=message,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, P.SubprocessError):
-        return None
-    if parsed.returncode != 0:
+    parsed = G.run(".", "interpret-trailers", "--parse", input=message, timeout=P.TIMEOUTS["probe"])
+    if not parsed.ok:
         return None
     out = []
-    for ln in parsed.stdout.splitlines():
+    for ln in parsed.out.splitlines():
         key, sep, value = ln.partition(":")
         if sep:
             out.append((key.strip(), value.strip()))

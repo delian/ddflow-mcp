@@ -226,7 +226,7 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     A full test suite outlives a lease (25 minutes against 1800 s on the project this
     was built beside), and over MCP the caller cannot heartbeat while it is blocked in
     the call. Called between polls of the running command, on this thread -- see
-    `gates._run_ticking` for why not a background thread. A failed renewal must not kill
+    `runner.run_command_gate` for why not a background thread. A failed renewal must not kill
     the gate, so it is swallowed; the lease then expires as it would have anyway.
     """
     from ..services import leases as L
