@@ -78,13 +78,10 @@ def _git_z(repo: Path, *args: str) -> list[str] | None:
     """`W.git_paths` -- `-z`, read as bytes, so a non-ASCII path comes back as the file
     is named, not C-quoted (B9c56de9d58) -- and None when git could not run or did not
     answer in time, never an exception out of doctor or a config write."""
+    from ..infra import git as G
     from ..infra import proc as P
-    from ..infra import worktree as W
 
-    try:
-        return W.git_paths(repo, *args, timeout=30)
-    except (OSError, P.SubprocessError):
-        return None
+    return G.git_paths(repo, *args, timeout=P.TIMEOUTS["probe"])
 
 
 def drivers(repo: Path, glob: str) -> dict[str, str]:
