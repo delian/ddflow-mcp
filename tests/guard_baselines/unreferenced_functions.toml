@@ -27,4 +27,3 @@ baseline = 6
 "ddflow/core/graph.py:transitive_reduction" = "B-rm-graph"
 # The upgrade manifest (B-upgrade.2-changes.1-manifest): the upgrade plan reads what changed
 # since a project's version; the release lint compares the running knobs with the replay.
-"ddflow/services/upgrade_manifest.py:changes_since" = "B-upgrade.3-plan"

@@ -175,6 +175,7 @@ from .setup import (
     help_topic,
     hooks,
     prompts,
+    upgrade,
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
@@ -317,6 +318,7 @@ __all__ = [
     "task_add",
     "unblock",
     "update",
+    "upgrade",
     "verify_item",
     "verify_sweep",
     "verify_tool",

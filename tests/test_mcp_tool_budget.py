@@ -19,7 +19,9 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # 93_500 (raised, B-dupes-sweep): ddflow_dupes + ddflow_link settle near-duplicate pairs
 # already in the log; together ~1.3 KB. The cheaper alternative (one tool with a mode
 # argument) would still carry most of the text and need the same flag exemptions.
-TOOLS_LIST_BUDGET = 93_500
+# 94_500 (raised, B-upgrade.3-plan): ddflow_upgrade is the MCP face of `ddflow upgrade --plan`
+# (~0.7 KB): one tool with one optional argument; main sat at 93,4xx.
+TOOLS_LIST_BUDGET = 94_500
 SHARED_DESCRIPTION_MAX = 200
 
 

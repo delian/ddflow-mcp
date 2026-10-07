@@ -135,7 +135,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "When something is wrong",
-        ("doctor", "recover", "loops", "rebuild", "replay", "cadence", "bisect"),
+        ("doctor", "upgrade", "recover", "loops", "rebuild", "replay", "cadence", "bisect"),
     ),
     ("Help", ("help",)),
 )
