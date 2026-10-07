@@ -124,14 +124,49 @@ def test_without_a_passing_ci_the_fix_runs_the_whole_suite(repo):
     assert code == FAIL and "ci gate is skipped" in ev["scope_why"], ev
 
 
-def test_a_ci_pass_on_older_source_does_not_select(repo):
+def test_an_edit_after_ci_does_not_select(repo):
     _project(repo)
     wt = _fix(repo)
     _ci(repo, "fix-B1")
     (wt / "src.py").write_text("def f():\n    return 2  # edited after ci\n")
     code, ev = _run_unit_tests(repo, "fix-B1")
     assert code == FAIL, ev
-    assert ev["scope"] == "full" and "other source" in ev["scope_why"], ev
+    assert ev["scope"] == "full" and "the tree changed since the ci gate passed" in ev["scope_why"]
+    _commit(wt, "the edit, committed")
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == FAIL and "the tree changed since" in ev["scope_why"], ev
+
+
+def test_a_ci_pass_on_a_dirty_tree_does_not_select_even_once_committed(repo):
+    """roborev on 5ddf11f7: ci tests the committed HEAD, so a pass recorded over
+    uncommitted edits never ran them; committing them afterwards must not make it count."""
+    _project(repo)
+    _cli(repo, "bug", "found", "--id", "B1", "--summary", "f returns 1")
+    _cli(repo, "claim", "fix-B1")
+    wt = _worktree(repo, "fix-B1")
+    (wt / "src.py").write_text("def f():\n    return 2\n")
+    (wt / "tests" / "test_f.py").write_text(REACHES_F)
+    _ci(repo, "fix-B1")  # over uncommitted edits
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == FAIL and "uncommitted changes" in ev["scope_why"], ev
+    _commit(wt, "fix f")
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == FAIL and "uncommitted changes" in ev["scope_why"], ev
+
+
+def test_without_a_ci_gate_in_the_pipeline_it_says_so(repo):
+    _project(repo)
+    _cli(
+        repo,
+        "config",
+        "--set",
+        "gates.task_pipeline",
+        json.dumps(["implement", "unit_tests", "merge"]),
+    )
+    _fix(repo)
+    code, ev = _run_unit_tests(repo, "fix-B1")
+    assert code == FAIL, ev
+    assert "no ci gate in this item's pipeline" in ev["scope_why"], ev
 
 
 def test_scope_full_runs_the_whole_suite(repo):

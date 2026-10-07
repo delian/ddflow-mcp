@@ -199,7 +199,8 @@ ddflow tests --item <ID>                         # [ddflow_tests] after EACH cha
   set as soon as its file exists.
 - **At the gate**, run `ci` first -- it runs the **whole** suite on the branch merged with
   the base -- then `ddflow gate run <ID> unit_tests`; never record unit_tests from a run of
-  your own. Once ci has passed on the tree as it is, a bug fix or a small task runs only
+  your own. Once ci has passed on the committed tree as it is (commit before ci: it tests
+  HEAD), a bug fix or a small task runs only
   the selection there (decision D-gate-economy 1; the evidence lists the tests and why);
   anything else, or an edit after ci, runs the whole suite. A targeted run says your
   change is fine and nothing about what was already broken; the full run is where

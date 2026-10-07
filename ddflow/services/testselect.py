@@ -6,7 +6,7 @@ reach, in parallel, after each change. The other half is the WHOLE suite, becaus
 targeted sweep hides standing breakage (on the source project a full run found 12
 pre-existing failures that every targeted run had missed). Where that whole run happens
 is `unit_tests_scope`'s answer (D-gate-economy 1): once the item's ci gate has PASSED the
-whole suite on the source its tree holds now, the unit_tests gate of a bug fix or a small
+whole suite on the clean commit its tree holds now, the unit_tests gate of a bug fix or a small
 task runs the selection; in every other case -- no passing ci on this tree, a larger
 task, a selection that cannot be made -- the unit_tests gate runs the whole suite itself.
 
@@ -439,7 +439,7 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     if it.kind == "phase" or it.promote_to:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
-    if why := _ci_not_passed_here(it, tree):
+    if why := _ci_not_passed_here(cfg, it, tree):
         return Scope("full", why)
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
@@ -452,18 +452,29 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     return _selected(st, it, command, tree, base, kind, lines)
 
 
-def _ci_not_passed_here(it, tree: Path) -> str:
-    """ "" when the item's ci gate PASSED on the source ``tree`` holds now; else why not."""
+def _ci_not_passed_here(cfg, it, tree: Path) -> str:
+    """ "" when the item's ci gate PASSED on exactly the commit ``tree`` holds now, clean;
+    else why not. `ddflow ci run` tests the committed HEAD merged with the base, never
+    uncommitted edits, so a pass counts only when the tree was clean when ci ran and is
+    the same clean commit now (roborev on 5ddf11f7: comparing the dirty source let a pass
+    on an older commit vouch for edits it never ran)."""
     ci = it.gates.get("ci")
     if ci is None or ci.outcome != "passed":
         state = "has no outcome" if ci is None else f"is {ci.outcome}"
+        if "ci" not in G.pipeline_for(it, cfg):
+            return "no ci gate in this item's pipeline runs the whole suite, so this gate runs it"
         return (
             f"the ci gate {state}: the whole suite has not passed on this tree, so this "
             "gate runs it (run ci first, and a bug fix or small task then runs the selection)"
         )
-    ran_on = (ci.evidence or {}).get("source_tree", "")
-    if not ran_on or ran_on != G.source_tree(tree):
-        return "the ci gate passed on other source than this tree holds now: this gate runs the whole suite"
+    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    if not ran.endswith("+clean"):
+        return (
+            "the ci gate passed on a tree with uncommitted changes, and ci tests only the "
+            "committed HEAD: this gate runs the whole suite (commit, then re-run ci)"
+        )
+    if ran != G.normal_fingerprint(G.tree_fingerprint(tree)):
+        return "the tree changed since the ci gate passed (another commit, or uncommitted edits): this gate runs the whole suite"
     return ""
 
 
