@@ -368,3 +368,4 @@
 {"agent":"U5","data":{"gate":"ci"},"id":"ec9d427ac059dcad7ee84b2b1","kind":"gate.started","lamport":33544,"schema":1,"subject":"B-uni-compat-tests.2-old-reads-new","ts":"2026-10-07T17:50:44.386815Z"}
 {"agent":"U5","data":{"at":1791395481.328089,"holder":"U5"},"id":"ed5dc98c0141336403a35c9e4","kind":"lease.renewed","lamport":33549,"schema":1,"subject":"B-uni-compat-tests.2-old-reads-new","ts":"2026-10-07T17:51:21.402663Z"}
 {"agent":"U5","data":{"at":1791395559.6293366,"holder":"U5"},"id":"eedb08ea26d1ec8927090e0a6","kind":"lease.renewed","lamport":33563,"schema":1,"subject":"B-uni-compat-tests.2-old-reads-new","ts":"2026-10-07T17:52:39.717838Z"}
+{"agent":"U5","data":{"at":1791395682.4017224,"holder":"U5"},"id":"ee11e127e5f21a62c98e485e0","kind":"lease.renewed","lamport":33586,"schema":1,"subject":"B-uni-compat-tests.2-old-reads-new","ts":"2026-10-07T17:54:42.447054Z"}
