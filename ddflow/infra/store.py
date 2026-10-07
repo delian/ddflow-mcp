@@ -44,7 +44,7 @@ SCHEMA = 10
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
-MIN_TERM_CHARS = 2
+MIN_TERM_CHARS = textsim.MIN_WORD_CHARS
 
 #: How long a rebuild waits for another one to finish. A rebuild runs at ~12k events/s,
 #: so this is minutes of headroom, not an expected wait.
