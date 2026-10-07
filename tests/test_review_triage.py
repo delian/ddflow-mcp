@@ -4,6 +4,8 @@ Decision D-review-triage (operator 2026-10-02): a review that reports findings s
 recorded `failed` -- which does not block completion (D-failed-critic-not-blocking) -- and
 the author's triage of each finding is its own event. Before it, an author who refuted
 every finding re-recorded the gate `passed`, and the log read as if a fix had happened.
+(Once the round budget is spent, the triage settling the last finding records a pass
+flagged as on refutation: tests/test_gate_econ_review_refutation.py.)
 """
 
 from __future__ import annotations

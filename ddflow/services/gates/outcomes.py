@@ -38,7 +38,9 @@ class GateStatus:
     #: blocks completion.
     silent: list[str] = field(default_factory=list)
     #: gate -> "3 finding(s): 2 refuted, 1 confirmed, 0 untriaged" for a recorded review
-    #: that reported findings (`triage_counts`). The gate's outcome is NOT changed by it.
+    #: that reported findings (`triage_counts`), with "-- PASSED ON REFUTATION" when the
+    #: triage that settled its last finding after the round cap recorded the pass
+    #: (`on_refutation`). Counting changes no outcome; only that settling triage does.
     triage: dict[str, str] = field(default_factory=dict)
     #: gate -> "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed.
     rounds: dict[str, str] = field(default_factory=dict)
@@ -100,6 +102,17 @@ def rounds_line(it, gate: str) -> str:
     return f"{n(full, 'full')}, {n(delta, 'delta')}"
 
 
+def on_refutation(it, gate: str) -> dict[str, Any] | None:
+    """The `passed_on_refutation` flag of ``gate``'s recorded PASS (its refuted and
+    confirmed counts and the rounds it took), or None: passed by a clean review, or not
+    passed (decision D-unify 5: such a pass is allowed, and always visible)."""
+    rec = it.gates.get(gate)
+    if rec is None or rec.outcome != "passed":
+        return None
+    flag = (rec.evidence or {}).get("passed_on_refutation")
+    return flag if isinstance(flag, dict) else None
+
+
 def triage_line(counts: dict[str, int]) -> str:
     return (
         f"{counts['findings']} finding(s): {counts['refuted']} refuted, "
@@ -139,7 +152,11 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         complete=complete,
         rows=rows,
         silent=[g for g, o in rows if not o],
-        triage={g: triage_line(c) for g, _o in rows if (c := triage_counts(it, g))},
+        triage={
+            g: triage_line(c) + (" -- PASSED ON REFUTATION" if on_refutation(it, g) else "")
+            for g, _o in rows
+            if (c := triage_counts(it, g))
+        },
         rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
     )
 
