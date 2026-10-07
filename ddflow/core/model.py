@@ -23,6 +23,7 @@ from collections.abc import Callable
 
 from .events import (
     OLDER_MARK,
+    REPAIR_APPLIED_KIND,
     SCHEMA_VERSION,
     SEEN_KIND,
     SKEW_OVERRIDDEN_KIND,
@@ -138,6 +139,7 @@ from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,
     _h_ddflow_seen,
+    _h_repair_applied,
     _h_session_ended,
     _h_session_note,
     _h_session_prompt,
@@ -281,6 +283,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     SEEN_KIND: _h_ddflow_seen,
     SKEW_OVERRIDDEN_KIND: _h_skew_overridden,
     UPGRADE_APPLIED_KIND: _h_upgrade_applied,
+    # first writer: services/repairs apply
+    REPAIR_APPLIED_KIND: _h_repair_applied,
 }
 
 

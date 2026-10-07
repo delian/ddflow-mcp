@@ -47,4 +47,5 @@ HISTORY_VERBS: dict[str, str] = {
     "ddflow.seen": "ddflow version stamped",
     "skew.overridden": "OLDER ddflow let write",
     "upgrade.applied": "upgrade applied",
+    "repair.applied": "data repair applied",
 }

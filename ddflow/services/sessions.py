@@ -252,31 +252,44 @@ def orphans(events: list) -> list:
     ]
 
 
-def adopt_orphans(log: EventLog) -> int:
-    """Attach each orphan to the nearest session by time; returns how many were attached.
-
-    The log is append-only, so the orphan stays and a copy carrying `adopted_from` is
-    written under the session. A copy already written is not written again. Nearest is
-    the session whose start is the latest one not after the orphan, else the earliest;
-    with no session at all, an implicit one is opened.
-    """
-    events = log.read_all()
+def unadopted_orphans(events: list) -> list:
+    """The orphans no copy carrying `adopted_from` has adopted yet, in log order."""
     done = {e.data.get("adopted_from") for e in events if e.data.get("adopted_from")}
+    return [o for o in orphans(events) if o.id not in done]
+
+
+def plan_adoptions(events: list, cfg: Config | None = None) -> list[tuple[str, str, dict]]:
+    """The events that adopt every unadopted orphan, as `(kind, subject, data)`, in the
+    order they must be appended -- pure, so `services.repairs` can show them before writing.
+
+    Nearest is the session whose start is the latest one not after the orphan, else the
+    earliest; with no session at all, one implicit session is opened first.
+    """
     starts = sorted((e.ts, e.subject) for e in events if e.kind == "session.started" and e.subject)
-    n = 0
-    for o in orphans(events):
-        if o.id in done:
-            continue
+    out: list[tuple[str, str, dict]] = []
+    for o in unadopted_orphans(events):
         if starts:
             before = [sid for ts, sid in starts if ts <= o.ts]
             sid = before[-1] if before else starts[0][1]
         else:
-            sid = new_session_id(_cfg_of(log), events)
-            log.append("session.started", sid, {"model": "", "tool": "", "implicit": True})
+            sid = new_session_id(cfg, events)
+            out.append(("session.started", sid, {"model": "", "tool": "", "implicit": True}))
             starts = [(o.ts, sid)]
-        log.append(o.kind, sid, {**o.data, "adopted_from": o.id, "orphan_at": o.ts})
-        n += 1
-    return n
+        out.append((o.kind, sid, {**o.data, "adopted_from": o.id, "orphan_at": o.ts}))
+    return out
+
+
+def adopt_orphans(log: EventLog) -> int:
+    """Attach each orphan to the nearest session by time; returns how many were attached.
+
+    The log is append-only, so the orphan stays and a copy carrying `adopted_from` is
+    written under the session. A copy already written is not written again
+    (`plan_adoptions` says where each goes).
+    """
+    planned = plan_adoptions(log.read_all(), _cfg_of(log))
+    for kind, subject, data in planned:
+        log.append(kind, subject, data)
+    return sum(1 for _k, _s, d in planned if "adopted_from" in d)
 
 
 def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = "") -> int:
