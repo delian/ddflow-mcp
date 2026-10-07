@@ -22,13 +22,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
 from ..core.plain import plain
 from ..services import gates as G
+from ..services import testselect as TS
 from ._base import _load
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
@@ -401,6 +402,9 @@ def run(
     repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
     if repeated is not None:
         return repeated
+    scope = TS.unit_tests_scope(cfg, st, it, gdef.command, cwd) if gate == "unit_tests" else None
+    if scope is not None and scope.command:
+        gdef = replace(gdef, command=scope.command)
     log.append("gate.started", item, {"gate": gate})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = G.run_command_gate(
@@ -410,6 +414,8 @@ def run(
         tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
         keep_output=G.run_log_writer(repo, item, gate),
     )
+    if scope is not None:
+        ev.update(scope.evidence())
     reason = ev.get("reason", "")
     if not reason and result != "passed":
         # Synthesised from what actually happened. The requirement that a non-pass carries
