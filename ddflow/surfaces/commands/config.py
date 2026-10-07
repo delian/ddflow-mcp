@@ -18,10 +18,8 @@ import sys
 from ...services.configwrite import (  # noqa: F401  -- re-exported for cli.py
     KeyRefused,
     _guarded_human_gates,
-    _outside_quotes,
     _toml_literal,
     _toml_upsert,
-    _value_span,
     _workflow_problems,
     _write_config,
 )

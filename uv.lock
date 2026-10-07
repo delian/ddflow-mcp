@@ -255,6 +255,7 @@ name = "ddflow-mcp"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
+    { name = "tomlkit" },
 ]
 
 [package.optional-dependencies]
@@ -294,6 +295,7 @@ requires-dist = [
     { name = "model2vec", marker = "extra == 'rag'", specifier = ">=0.9.0" },
     { name = "rapidfuzz", marker = "extra == 'search'", specifier = ">=3.14.6" },
     { name = "sqlite-vec", marker = "extra == 'rag'", specifier = ">=0.1.9" },
+    { name = "tomlkit", specifier = ">=0.13" },
     { name = "watchfiles", marker = "extra == 'watch'", specifier = ">=1.3.0" },
 ]
 provides-extras = ["mcp-sdk", "rag", "search", "watch"]

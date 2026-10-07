@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ddflow.services.companions import _toml
+from ddflow.infra.tomlcfg import value as _toml
 from ddflow.services.configwrite import _toml_literal
 from ddflow.surfaces.commands.review import _toml_value
 
