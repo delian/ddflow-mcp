@@ -67,3 +67,16 @@ def test_an_umbrella_whose_sub_tasks_were_all_abandoned_does_not_complete(repo):
         assert run_cli(repo, "abandon", child, "--reason", "dropped")[0] == OK
     assert _state(repo, "P.T") != "done"
     assert run_cli(repo, "complete", "P.T")[0] != OK
+
+
+def test_completing_a_settled_umbrella_completes_the_one_above_it(repo):
+    """Nested: P.T split into P.T.a and P.T.b, P.T.b split again into P.T.b.x and P.T.b.y. Completing the settled
+    inner umbrella by hand settles the outer one too."""
+    _split(repo)
+    assert run_cli(repo, "split", "P.T.b", "--into", "P.T.b.x=x", "--into", "P.T.b.y=y")[0] == OK
+    log = EventLog(repo)
+    for child in ("P.T.a", "P.T.b.x", "P.T.b.y"):
+        log.append("item.completed", child, {"sha": "", "kind": "task", "forced": True})
+    assert run_cli(repo, "complete", "P.T.b")[0] == OK
+    assert _state(repo, "P.T.b") == "done"
+    assert _state(repo, "P.T") == "done", "the outer umbrella was left open"
