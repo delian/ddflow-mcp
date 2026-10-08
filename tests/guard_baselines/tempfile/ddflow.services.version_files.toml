@@ -1,0 +1,4 @@
+# Ratchet `tempfile` for ddflow.services.version_files (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+baseline = 1
