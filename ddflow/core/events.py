@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import clock
+from . import digest as _digest
 from . import redact as _redact
-from .digest import content_digest
 
 SCHEMA_VERSION = 1
 
@@ -418,16 +418,17 @@ def utcnow() -> str:
     return clock.now_iso()
 
 
-def canonical(obj: Any) -> str:
-    """Stable JSON: sorted keys, no spaces. The input to every content hash."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+#: The one canonical form lives in `core.digest` beside `of_obj`; re-exported (every writer
+#: and test imports it from here).
+canonical = _digest.canonical
 
 
 def canonical_digest(obj: Any, *, size: int = 12) -> str:
-    """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id, and a
-    definition record's content digest (`core.defs`). One hash for both, so the same
-    content always reads as the same digest."""
-    return content_digest(canonical(obj), "blake2b", size=size)
+    """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id. A
+    definition's content digest (`core.defs.digest`) is the same hash of the fields with
+    their redaction markers normalized; this spelling, unnormalized, is
+    `core.defs.legacy_digest` (what records written before that carry)."""
+    return _digest.of_obj(obj, size=size)
 
 
 #: The keep-a-changelog categories an item.completed / bug.fixed `changelog` field may carry
