@@ -825,3 +825,113 @@ def test_a_refusal_on_the_cli_json_path_still_says_why_on_stderr(old: Path) -> N
     code, _out, err = cli(old, "--json", "upgrade", "--plan", "--apply")
 
     assert code == 3 and "not both" in err
+
+
+# -- B-upgrade.4-apply.1c-knobs: [upgrade] backup / backup_keep / config_changes --------------
+
+
+def set_knob(repo: Path, key: str, value: str) -> None:
+    assert run_cli(repo, "config", "--set", key, value)[0] == 0
+
+
+def backups(repo: Path) -> list[str]:
+    root = repo / ".ddflow" / "backups"
+    return sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+
+
+def test_the_knob_defaults_are_the_decided_ones() -> None:
+    up = Config().upgrade
+
+    assert (up.backup, up.backup_keep, up.config_changes) == ("local", 10, "agent")
+
+
+def test_backup_none_in_the_config_skips_the_copy(old: Path) -> None:
+    set_knob(old, "upgrade.backup", "none")
+
+    code, out, _ = cli(old, "upgrade", "--apply", "hooks")
+
+    assert code == 0 and "backup:" not in out and backups(old) == []
+
+
+def test_the_backup_flag_overrides_the_knob_for_one_run(old: Path) -> None:
+    set_knob(old, "upgrade.backup", "none")
+
+    code, _out, _ = cli(old, "upgrade", "--apply", "hooks", "--backup", "local")
+
+    assert code == 0 and len(backups(old)) == 1
+
+
+def test_backup_keep_removes_the_oldest_beyond_it(old: Path) -> None:
+    set_knob(old, "upgrade.backup_keep", "1")
+    assert cli(old, "upgrade", "--apply", "hooks")[0] == 0
+    (first,) = backups(old)
+
+    assert cli(old, "upgrade", "--apply", "instructions")[0] == 0
+
+    left = backups(old)
+    assert len(left) == 1 and left != [first], "the older backup was pruned, the new one kept"
+
+
+def test_backup_keep_zero_keeps_every_backup(old: Path) -> None:
+    set_knob(old, "upgrade.backup_keep", "0")
+    assert cli(old, "upgrade", "--apply", "hooks")[0] == 0
+    assert cli(old, "upgrade", "--apply", "instructions")[0] == 0
+
+    assert len(backups(old)) == 2
+
+
+def test_prune_touches_only_directories_that_are_backups(tmp_path: Path) -> None:
+    from ddflow.services import backups as BK
+
+    root = tmp_path / ".ddflow" / "backups"
+    for name in ("20260101T000000Z-a", "20260102T000000Z-b", "20260103T000000Z-c"):
+        (root / name).mkdir(parents=True)
+        (root / name / BK.MANIFEST).write_text("{}")
+    (root / "notes").mkdir()
+    (root / "notes" / "keep.txt").write_text("mine")
+
+    removed = BK.prune(tmp_path, 2)
+
+    assert removed == ["20260101T000000Z-a"] and (root / "notes" / "keep.txt").exists()
+    assert BK.prune(tmp_path, 0) == [] and BK.prune(tmp_path / "nowhere", 1) == []
+
+
+def test_config_changes_ask_makes_the_cli_refuse_an_unset_knob_too(old: Path) -> None:
+    set_knob(old, "upgrade.config_changes", "ask")
+
+    code, out, _err = cli(old, "upgrade", "--apply", "config")
+
+    assert code == 3
+    assert "[refused] knob_changed:worktree.root" in out
+    assert "config_changes = ask" in out
+
+
+def test_config_changes_operator_with_a_confirm_applies_it(old: Path) -> None:
+    set_knob(old, "upgrade.config_changes", "operator")
+
+    code, out, _ = cli(
+        old,
+        "upgrade",
+        "--apply",
+        "config",
+        "--confirm",
+        "worktree.root",
+        "--confirm",
+        "worktree.max_parallel",
+        "--reason",
+        "the operator accepted the new defaults",
+    )
+
+    assert code in (0, 3), out
+    assert "[acknowledged] knob_changed:worktree.root" in out
+    assert "[refused] knob_changed:worktree.root" not in out
+
+
+def test_a_bad_backup_value_still_makes_the_backup(old: Path) -> None:
+    (old / ".ddflow" / "config.toml").write_text(
+        (old / ".ddflow" / "config.toml").read_text() + '\n[upgrade]\nbackup = "snapshotty"\n'
+    )
+
+    cfg = Config.load(old)
+
+    assert cfg.upgrade.backup == "local" and cfg.upgrade.config_changes == "agent"

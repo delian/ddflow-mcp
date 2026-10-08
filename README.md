@@ -891,7 +891,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 193 knobs.
+cadences, and the rest of the 196 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3860,12 +3860,14 @@ The upgrade plan reads it to tell a project what its upgrade will change.
 applied or acknowledged, 1 when a step failed, 2 when one could not run (never read as
 done), 3 while an item waits for the operator. Before it rewrites any file it copies the
 originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, never shared;
-`--backup none` skips it) with a `manifest.json` of what was
+`--backup none` or `[upgrade].backup = "none"` skips it, `[upgrade].backup_keep` (default 10) is how many are
+kept) with a `manifest.json` of what was
 there, and prints the backup and `git diff` to review the change. What each category does:
 
 - **repairs**: the pending data repairs (new corrective events, never an edit of the log);
   one only the operator may decide waits for `--confirm <repair id>`.
-- **config**: a changed default for a knob the project never set takes effect by itself, so
+- **config** (`[upgrade].config_changes`: `agent` (default), `ask` or `operator`; the last two
+  make every change wait for `--confirm`): a changed default for a knob the project never set takes effect by itself, so
   applying it only *acknowledges* it, lists it with `ddflow config --set KNOB OLD` to pin
   the old behaviour, and records it. A value anyone set (in a config layer, via `ddflow
   config`) is never changed without the operator: `--apply` refuses it (exit 3, naming the
@@ -4467,7 +4469,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 193): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 196): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4952,7 +4954,7 @@ declared once and persists — see
 
 ## Configuration
 
-193 knobs across 28 sections, every one documented in place and listed, with its default
+196 knobs across 28 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -4996,8 +4998,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=911611452353 -->
-<details><summary>All 193 knobs across 28 sections</summary>
+<!-- ddflow:begin README/knobs sha=404bb76d1f3a -->
+<details><summary>All 196 knobs across 28 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5155,6 +5157,9 @@ long default is left to `ddflow config --explain`.
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
+| `upgrade.backup` | `"local"` | `local` \| `none` |
+| `upgrade.backup_keep` | `10` |  |
+| `upgrade.config_changes` | `"agent"` | `agent` \| `ask` \| `operator` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `ci.command` | `""` |  |

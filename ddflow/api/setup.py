@@ -1047,7 +1047,6 @@ def _upgrade_apply(
             "upgrade", "--confirm names what the operator accepts and needs --reason: say why"
         )
     log, cfg, st = _load(repo, agent)
-    up = getattr(cfg, "upgrade", None)
     try:
         done = UA.apply(
             repo,
@@ -1056,8 +1055,8 @@ def _upgrade_apply(
             st,
             categories=categories,
             confirm=dict.fromkeys(keys, reason.strip()),
-            config_changes=getattr(up, "config_changes", "agent"),
-            backup=backup or getattr(up, "backup", "local"),
+            config_changes=cfg.upgrade.config_changes,
+            backup=backup or cfg.upgrade.backup,
             agent=agent,
         )
     except ValueError as exc:
