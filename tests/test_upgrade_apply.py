@@ -659,12 +659,21 @@ def test_a_refusal_from_a_nested_rules_file_is_that_items_and_not_its_namesakes(
     twins = sorted(p for p in paths if names.count(Path(p).name) > 1)
     assert len(twins) >= 2, "the native rules table no longer has two block surfaces sharing a name"
     assert run_cli(old, "adopt", "--agents", ",".join(keys))[0] == 0
-    bad = old / twins[0]
+    bad, twin = old / twins[0], old / twins[1]
     bad.write_bytes(b"# caf\xe9 not utf-8\n")
+    twin.write_text(twin.read_text().replace("Claim before you edit", "Claim sometime"))
 
     out = go(old, "instructions")
 
-    refused = ids(out, "refused")
-    assert f"instructions:{twins[0]}" in refused
-    assert f"instructions:{twins[1]}" not in refused, "a namesake file was not refused"
+    assert f"instructions:{twins[0]}" in ids(out, "refused")
+    assert f"instructions:{twins[1]}" in ids(out, "applied"), "the namesake must be refreshed"
+    assert "Claim before you edit" in twin.read_text()
     assert bad.read_bytes() == b"# caf\xe9 not utf-8\n"
+
+
+def test_an_action_naming_two_items_belongs_to_the_one_written() -> None:
+    items = [{"path": "AGENTS.md"}, {"path": ".aider.conf.yml"}]
+
+    assert UA._owner("added AGENTS.md to read: in .aider.conf.yml", items) == ".aider.conf.yml"
+    assert UA._owner("updated the managed block in AGENTS.md", items) == "AGENTS.md"
+    assert UA._owner("nothing about either", items) == ""
