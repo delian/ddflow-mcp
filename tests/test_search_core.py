@@ -142,7 +142,7 @@ def test_rule_search_regex_cannot_hang_on_a_catastrophic_pattern(repo):
 
 
 def _lessons(log):
-    log.append("lesson.recorded", "L1", {"title": "parsers recover from errors", "rule": "recover"})
+    log.append("lesson.recorded", "L1", {"title": "recovering from errors", "rule": "keep going"})
     log.append("lesson.recorded", "L2", {"title": "worktree per claim", "rule": "always claim"})
     log.append(
         "lesson.recorded",
@@ -166,14 +166,19 @@ def test_the_like_fallback_ranks_best_first_and_honours_the_limit(repo, log):
     got = [r["id"] for r in st.search("lessons", "claim worktree", 5)]
     assert got[0] == "L3" and set(got) == {"L2", "L3"}
     assert [r["id"] for r in st.search("lessons", "claim worktree", 1)] == ["L3"]
-    assert st.search("lessons", "the and of", 5) == []
-    assert st.search("lessons", "parsing errors", 5)[0]["id"] == "L1"  # parsers~parsing, stemmed
+    assert st.search("lessons", "x", 5) == []  # too short to be a term, as for FTS5
+    # a stop word is a word, as it is for FTS5: L3's title has "the"
+    assert [r["id"] for r in st.search("lessons", "the", 5)] == ["L3"]
+    assert st.search("lessons", "recover errors", 5)[0]["id"] == "L1"  # recovering~recover
     assert st.search("lessons", "zzzqqq", 5) == []
 
 
 def test_both_backends_put_the_same_lesson_first(repo, log):
     from ddflow.config import Config
-    from ddflow.infra.store import Store
+    from ddflow.infra.store import Store, _has_fts5
+
+    if not _has_fts5():
+        pytest.skip("this SQLite has no FTS5: only the like fallback exists here")
 
     _lessons(log)
     first = {}

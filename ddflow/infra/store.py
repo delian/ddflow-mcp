@@ -578,17 +578,17 @@ class Store:
                     out = [dict(r) for r in full]
                     out.sort(key=lambda r: scores.get(r["id"], 0.0))
                     return out
-            # The fallback ranks with the same BM25 the search core uses (`core/rank`)
-            # over the same normalised words (`textsim.tokens`: stemmed, like FTS5's porter
-            # tokenizer), not a substring LIKE that returned the first rows it met. A term
-            # is usable at the same minimum length FTS5 uses: both take it from
-            # `textsim.words(..., min_len=MIN_TERM_CHARS)`.
-            if not _like_terms(query):
+            # The fallback ranks with the same BM25 the search core uses (`core/rank`) over
+            # the words FTS5 would see: split by `textsim.words`, lower-cased, lightly
+            # stemmed (FTS5's porter tokenizer does the same job), no stop words removed
+            # (FTS5 keeps them). It replaces a substring LIKE that returned the first rows
+            # it met. A term is usable at the same minimum length FTS5 uses.
+            qtoks = _fallback_words(" ".join(_like_terms(query)))
+            if not qtoks:
                 return []
-            qtoks = textsim.tokens(query)
             # bandit B608: `table` passed the `cols[table]` lookup above; no value is interpolated.
             rows = [dict(r) for r in con.execute(f"select * from {table}")]  # nosec B608
-            docs = [textsim.tokens(" ".join(str(r.get(c) or "") for c in cols)) for r in rows]
+            docs = [_fallback_words(" ".join(str(r.get(c) or "") for c in cols)) for r in rows]
             scores = bm25(docs, qtoks)
             order = sorted(scores, key=lambda i: (-scores[i], str(rows[i].get("id", ""))))
             return [rows[i] for i in order[:limit]]
@@ -612,6 +612,11 @@ def _fts_query(text: str) -> str:
 
 #: How many terms of a query reach FTS5, and how many reach the LIKE fallback.
 _FTS_TERMS, _LIKE_TERMS = 12, 8
+
+
+def _fallback_words(text: str) -> list[str]:
+    """The words the FTS5-less fallback ranks on: every word, lower-cased and stemmed."""
+    return [textsim.stem(w) for w in textsim.words(text, min_len=1, fold=True)]
 
 
 def _like_terms(query: str) -> list[str]:
