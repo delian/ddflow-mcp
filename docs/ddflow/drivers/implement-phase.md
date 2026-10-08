@@ -1,3 +1,4 @@
+<!-- ddflow:begin drivers/implement-phase ddflow=0.2.0 fmt=1 sha=ed9cba808f3a -->
 # Driver: `implement phase <NAME>`
 
 **This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
@@ -350,3 +351,4 @@ disposable on purpose.
   from `ddflow export eject <doc>`), then `ddflow export <doc> --update`. Printing writes
   nothing; `ddflow export` lists what is selected and each document's state.
 - If something goes sideways, **stop and re-plan**. Do not keep pushing.
+<!-- ddflow:end drivers/implement-phase -->

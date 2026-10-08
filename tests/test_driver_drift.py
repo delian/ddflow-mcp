@@ -16,6 +16,12 @@ DRIVER = "docs/ddflow/drivers/implement-phase.md"
 DELTA = "docs/ddflow/drivers/deltas/claude-code.md"
 
 
+def _body(path: Path) -> str:
+    """The managed region's body: what the template says, whatever the header says."""
+    region = AD._driver_region(str(path.relative_to(path.parents[3])))
+    return AD._region_body(region, path.read_text())
+
+
 def _ddflow(cwd: Path, *argv: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
     env.pop("DDFLOW_AGENT", None)
@@ -66,8 +72,8 @@ def test_refresh_docs_rewrites_only_docs_and_rules(repo):
     assert p.returncode == 0, p.stderr + p.stdout
     assert DRIVER in p.stdout and DELTA in p.stdout
     templates = ROOT / "ddflow" / "templates" / "drivers"
-    assert (repo / DRIVER).read_bytes() == (templates / "implement-phase.md").read_bytes()
-    assert (repo / DELTA).read_bytes() == (templates / "deltas" / "claude-code.md").read_bytes()
+    assert _body(repo / DRIVER) == (templates / "implement-phase.md").read_text()
+    assert _body(repo / DELTA) == (templates / "deltas" / "claude-code.md").read_text()
     assert "Claim before you edit" in agents.read_text()
     for rel, data in keep.items():
         path = Path(rel) if os.path.isabs(rel) else repo / rel
@@ -97,7 +103,7 @@ def test_refresh_docs_from_a_linked_worktree_writes_there(repo):
     p = _ddflow(tree, "adopt", "--refresh-docs")
     assert p.returncode == 0, p.stderr
     templates = ROOT / "ddflow" / "templates" / "drivers"
-    assert (tree / DRIVER).read_bytes() == (templates / "implement-phase.md").read_bytes()
+    assert _body(tree / DRIVER) == (templates / "implement-phase.md").read_text()
     assert (repo / DRIVER).read_bytes() != b""
     status = subprocess.run(
         ["git", "-C", str(repo), "status", "--porcelain", "--", "docs", "AGENTS.md"],
