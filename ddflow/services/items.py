@@ -179,6 +179,13 @@ def add_task(
         kind="task",
         title=draft.title or "",
         parent=draft.parent or "",
+        needs=list(draft.needs or []),
+        globs=list(draft.globs or []),
+        resources=list(draft.resources or []),
+        body=draft.body or "",
+        tags=list(draft.tags or []),
+        priority=100 if draft.priority is None else draft.priority,
+        line=draft.line or "",
         fixes=list(draft.extra.get("fixes", [])),
     )
     return Added(draft.id)

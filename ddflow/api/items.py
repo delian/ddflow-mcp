@@ -510,7 +510,12 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
                 },
             )
             added = IT.add_task(
-                log, st, cfg, port, dedupe="a port of the fix just checked: one per release line"
+                log,
+                st,
+                cfg,
+                port,
+                dedupe="a port of the fix just checked: one per release line",
+                readd=readd,
             )
             if not added.ok:
                 return O.failed("task.added", added.problem, id=item)

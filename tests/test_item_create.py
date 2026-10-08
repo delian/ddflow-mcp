@@ -57,6 +57,7 @@ def test_add_task_appends_the_event_and_tells_the_state(repo):
     st.items["P"] = Item(id="P", kind="phase", title="p")
     out = IT.add_task(log, st, cfg, IT.TaskDraft("T1", parent="P", title="one"), dedupe=WHY)
     assert out.ok and st.items["T1"].parent == "P"
+    assert (st.items["T1"].title, st.items["T1"].priority) == ("one", 100)
     assert _data(log, "T1") == [{"parent": "P", "title": "one"}]
     # a second add in the same batch sees the first
     again = IT.add_task(log, st, cfg, IT.TaskDraft("T1", title="two"), dedupe=WHY)
@@ -144,6 +145,18 @@ def test_split_children_inherit_and_the_umbrella_lets_go(repo):
     assert A.split(repo, "T", into=["bad:id", "ok"]).exit == 1
 
 
+def test_a_split_that_cannot_finish_writes_nothing(repo):
+    """Every child is checked before the first is written: a later bad or taken id leaves
+    no half-split umbrella behind."""
+    A.task_add(repo, "T", title="big", globs="a/**")
+    A.task_add(repo, "T.a", title="taken")
+    for into in (["T.c=third", "T.a=first"], ["ok", "bad:id"], ["ok", "ok"]):
+        out = A.split(repo, "T", into=into)
+        assert out.exit == 1 and out.data["created"] == [], into
+    log = EventLog(repo)
+    assert not {"T.c", "ok"} & set(fold(log.read_all()).items)
+
+
 def test_a_trigger_fire_files_through_add_task_and_a_missing_phase_suppresses(repo):
     log, cfg = _log(repo), Config.load(repo)
     A.phase_add(repo, "P1", title="phase")
@@ -156,12 +169,14 @@ def test_a_trigger_fire_files_through_add_task_and_a_missing_phase_suppresses(re
     ds = [
         TR.Decision("t", "k", True, events=["e1"], hop=1),
         TR.Decision("u", "k", True, events=["e2"], hop=1),
+        TR.Decision("ghost", "k", False, reason="debounce", events=["e3"]),
     ]
+
     st = fold(log.read_all())
     from datetime import UTC, datetime
 
     SCHED._apply(log, cfg, st, defs, {"t": good, "u": bad}, ds, datetime.now(UTC), [])
-    assert [d.fire for d in ds] == [True, False]
+    assert [d.fire for d in ds] == [True, False, False]  # a suppression needs no trigger
     assert ds[1].reason == "item_refused" and "no such parent" in ds[1].detail
     st = fold(log.read_all())
     assert ds[0].items == ["T-t-1"] and st.items["T-t-1"].parent == "P1"
@@ -303,8 +318,9 @@ def test_screen_compares_batch_members_only_where_asked(monkeypatch, repo):
     assert [r.of for r in reps] == ["a"]
     # an id that collides with a stored record's is not that record
     st = _queue()
-    clash = {**a, "id": "L1", "body": "something else entirely about release notes tooling"}
-    assert similar.screen([clash], st, cfg, compare=lambda r, t: True)[1] == []
+    clash = {**a, "id": "L1", "title": "Shared cache"}  # L1 under its own id
+    [rep] = similar.screen([clash], st, cfg, compare=lambda r, t: True)[1]
+    assert (rep.of, rep.where) == ("L1", "queue")
 
 
 def test_a_done_phase_stays_open_when_the_checks_refuse_one_of_its_tasks(repo):
@@ -327,3 +343,15 @@ def test_adding_a_second_child_does_not_release_a_lease_twice(repo):
     assert IT.release_umbrella(log, st, "T", note="n") is True
     assert IT.release_umbrella(log, st, "T", note="n") is False
     assert len([e for e in log.read_all() if e.kind == "lease.released"]) == 1
+
+
+def test_an_imported_branch_is_a_task_with_its_source(repo):
+    log = _log(repo)
+    branch = IM.Found(
+        kind="branch", ident="feat-x", title="feat-x", source="git:feat-x", extra={"ahead": 3}
+    )
+    counts = IM.apply_import(repo, log, IM.ImportPlan(found=[branch]))
+    assert counts == {"branch": 1}
+    [ev] = _data(log, "feat-x")
+    assert ev["source"] == "git:feat-x" and "carries 3 commit(s)" in ev["body"]
+    assert set(ev) == {"title", "body", "source"}
