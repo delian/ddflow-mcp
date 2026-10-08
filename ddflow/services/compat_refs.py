@@ -32,7 +32,7 @@ from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from .backups import make_backup
 from .enforce import HOOK_MARKER, hooks_dir
 
-OK, DEPRECATED, UNKNOWN = "ok", "deprecated", "unknown"
+OK, DEPRECATED, UNKNOWN, UNCHECKED = "ok", "deprecated", "unknown", "unchecked"
 #: The longest command path: `group command`.
 MAX_WORDS = 2
 #: Words that look like a tool name and are not one (the distribution's module).
@@ -82,6 +82,8 @@ class Vocabulary:
     tool_aliases: Mapping[str, Renamed] = field(default_factory=dict)
     #: A vocabulary built from the tool table alone (an MCP server) cannot judge a command
     #: word, nor one built from the parser alone a tool name: that half is not checked.
+    #: With the half unchecked, its references come back `unchecked`, not `ok`: a report must
+    #: never read as an all-clear for names nobody looked at.
     check_commands: bool = True
     check_tools: bool = True
 
@@ -215,6 +217,8 @@ def _command_at(line: str, at: int, vocab: Vocabulary) -> Ref | None:
     if not words:
         return None
     names = tuple(w for w, _ in words)
+    if not vocab.check_commands:
+        return Ref("command", " ".join(names), words[0][1], UNCHECKED)
     status, replacement, renamed = vocab.resolve_command(names)
     cols = tuple(col for _, col in words)
     return Ref("command", " ".join(names), words[0][1], status, replacement, renamed, cols)
@@ -234,15 +238,18 @@ def refs_in(line: str, vocab: Vocabulary, *, code: bool) -> Iterator[Ref]:
             spans = [(0, line[:scan_to])]
     else:
         spans = [(m.start(1), m.group(1)) for m in _BACKTICK.finditer(line)]
-    for base, chunk in spans if vocab.check_commands else ():
+    for base, chunk in spans:
         for m in _CLI.finditer(chunk):
             if not _POSITION.search(chunk[: m.start()]):
                 continue
             ref = _command_at(line, base + m.end(), vocab)
             if ref is not None:
                 yield ref
-    for m in _TOOL.finditer(line, 0, scan_to if vocab.check_tools else 0):
+    for m in _TOOL.finditer(line, 0, scan_to):
         if m.group() in NOT_TOOLS:
+            continue
+        if not vocab.check_tools:
+            yield Ref("tool", m.group(), m.start(), UNCHECKED)
             continue
         status, replacement, renamed = vocab.resolve_tool(m.group())
         yield Ref("tool", m.group(), m.start(), status, replacement, renamed)
@@ -435,14 +442,27 @@ def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
 def report(findings: Iterable[Finding]) -> tuple[list[str], list[str]]:
     """``(problems, notes)`` for doctor. A reference ddflow itself wrote that names nothing
     is a problem (the command it runs will fail); a deprecated one, or one in the
-    project's own text, is a note."""
+    project's own text, is a note. References nobody could check are one note that says so."""
     problems: list[str] = []
     notes: list[str] = []
+    unchecked: list[Finding] = []
     for f in findings:
-        if f.ref.status == UNKNOWN and f.managed:
+        if f.ref.status == UNCHECKED:
+            unchecked.append(f)
+        elif f.ref.status == UNKNOWN and f.managed:
             problems.append(f.describe())
         else:
             notes.append(f.describe())
+    if unchecked:
+        kinds = sorted({f.ref.kind for f in unchecked})
+        files = sorted({f.path for f in unchecked})
+        shown = ", ".join(files[:3]) + (" ..." if len(files) > len(files[:3]) else "")
+        missing = "command table" if "command" in kinds else "tool table"
+        hint = " (the CLI's `ddflow doctor` checks command words)" if "command" in kinds else ""
+        notes.append(
+            f"{len(unchecked)} {'/'.join(kinds)} reference(s) in {shown} were not checked: "
+            f"this process has no {missing} loaded{hint}"
+        )
     return problems, notes
 
 
