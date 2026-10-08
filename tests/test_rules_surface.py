@@ -28,14 +28,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 from ddflow.services.adopt import (
-    BEGIN,
     CURRENT,
     MISSING,
     NO_BLOCK,
     STALE,
+    project_body,
     project_section,
     rules_status,
 )
+
+BEGIN = "ddflow:begin rules/work-queue"
+END = "ddflow:end rules/work-queue"
 
 
 def _adopted(repo: Path) -> None:
@@ -80,7 +83,7 @@ def test_the_checker_compares_against_the_SAME_text_adopt_writes(repo):
     block = (repo / "AGENTS.md").read_text()
     want = project_section().strip()
     assert want in block, "adopt and rules_status disagree about the managed block"
-    assert BEGIN in want
+    assert BEGIN in want and project_body().strip() in want
 
 
 def test_a_missing_CLAUDE_md_is_not_a_defect(repo):
@@ -227,8 +230,6 @@ def test_re_adopting_leaves_exactly_ONE_managed_block(repo):
     passes while every re-adopt grows the file by another block. Two blocks is worse than a
     stale one: the agent reads both, and nothing says which is current.
     """
-    from ddflow.services.adopt import END
-
     _adopted(repo)
     once = (repo / "AGENTS.md").read_text()
     assert once.count(BEGIN) == 1 and once.count(END) == 1
@@ -338,10 +339,10 @@ def test_the_native_rule_is_not_expected_for_agents_that_were_not_adopted(repo):
 def test_the_native_rule_and_AGENTS_md_carry_the_SAME_text(repo):
     """One source, so the two copies cannot say different things. The only difference is the
     frontmatter, which is what makes the Cursor rule bind."""
-    from ddflow.services.adopt import END, native_rule_text
+    from ddflow.services.adopt import native_rule_text
 
     _adopted_for(repo, "cursor")
-    body = project_section().replace(BEGIN, "").replace(END, "").strip()
+    body = project_body().strip()
     native = native_rule_text()
     assert body in native, "the native rule is not the same block"
     assert native.startswith("---\n"), "frontmatter must be first or the rule does not bind"

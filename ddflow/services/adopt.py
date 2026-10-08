@@ -24,8 +24,9 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..core import clock
 from ..infra import paths
-from ..infra.fsio import replace_text
+from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from . import install_info as _INSTALL
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
     SHAPE_COPILOT,
@@ -46,8 +47,15 @@ from .mcpconfig import register as _register_server
 #: Where an operator reads the manual step for an agent with no project config.
 _DOCS_HINT = "docs/ddflow/drivers/deltas/"
 
-BEGIN = "<!-- DDFLOW:BEGIN (managed — edits inside this block are overwritten) -->"
-END = "<!-- DDFLOW:END -->"
+#: The managed rules block in `AGENTS.md`, `CLAUDE.md` and the block-form native rules: the
+#: D-doc-regions grammar with the writer's version, format level and body digest
+#: (`fsio.Managed`), so an older, newer or hand-edited block is told apart, not just "differs".
+BLOCK = Managed("rules/work-queue")
+
+#: The markers ddflow wrote before the stamped grammar. Still READ -- a project adopted by an
+#: older ddflow carries them -- and migrated to `BLOCK` the next time the block is written.
+LEGACY_BEGIN = "<!-- DDFLOW:BEGIN (managed — edits inside this block are overwritten) -->"
+LEGACY_END = "<!-- DDFLOW:END -->"
 
 
 @dataclass(frozen=True)
@@ -238,8 +246,7 @@ NATIVE_RULES: dict[str, NativeRule] = {
 #
 # Projects that drive ddflow from a shell instead get the same block plus a pointer to
 # the full driver, which is where the long form lives.
-_SECTION = """{begin}
-## Work queue — ddflow
+_SECTION = """## Work queue — ddflow
 
 Work in this project is a queue of **phases** containing **tasks**, with declared
 dependencies and declared file globs. It is managed by ddflow. The event log in
@@ -281,14 +288,13 @@ when they decline, record that gate `unavailable` rather than passing it unaided
 refused. Never treat `2` as `0`.
 
 {driver_line}
-{end}
 """
 
 _DRIVER_LINE = "Full driver: [`{driver}`]({driver}) · per-agent notes: `{deltas}/`"
 
 
-def project_section(docs_dir: str = "docs/ddflow") -> str:
-    """The managed block this version of ddflow would write.
+def project_body(docs_dir: str = "docs/ddflow") -> str:
+    """The text of the managed block this version of ddflow would write, without its markers.
 
     Factored out of `adopt` so `rules_status` can compare what is ON DISK against what
     SHOULD be there. Two generators would be two answers to the same question, and the
@@ -296,13 +302,41 @@ def project_section(docs_dir: str = "docs/ddflow") -> str:
     behave.
     """
     return _SECTION.format(
-        begin=BEGIN,
-        end=END,
         driver_line=_DRIVER_LINE.format(
             driver=f"{docs_dir}/drivers/implement-phase.md",
             deltas=f"{docs_dir}/drivers/deltas",
         ),
     )
+
+
+def project_section(docs_dir: str = "docs/ddflow") -> str:
+    """The managed block as written to a file: `project_body` between its stamped markers."""
+    return BLOCK.render(project_body(docs_dir))
+
+
+def block_body(text: str) -> str | None:
+    """The managed block's body in ``text`` -- under the stamped markers or the legacy ones --
+    or None when the file holds no block. Raises RegionError for broken markers."""
+    at = BLOCK._region().find(text)
+    if at is not None:
+        return text[at[1] : at[2]]
+    if LEGACY_BEGIN in text and LEGACY_END in text:
+        return text[text.index(LEGACY_BEGIN) + len(LEGACY_BEGIN) : text.index(LEGACY_END)]
+    return None
+
+
+def has_legacy_block(text: str) -> bool:
+    return LEGACY_BEGIN in text and LEGACY_END in text and not BLOCK.owns(text)
+
+
+def block_marker(line: str) -> str:
+    """`"begin"` or `"end"` when this line is the managed block's marker (either grammar),
+    else ""."""
+    if LEGACY_BEGIN in line or f"ddflow:begin {BLOCK.name}" in line:
+        return "begin"
+    if LEGACY_END in line or f"ddflow:end {BLOCK.name}" in line:
+        return "end"
+    return ""
 
 
 #: The rules surfaces whose state `rules_status` reports. `AGENTS.md` is the one more than
@@ -377,8 +411,7 @@ def native_rule_text(docs_dir: str = "docs/ddflow") -> str:
     same reason `project_section` was: the checker has to compare against what the writer
     writes, and two generators would be two answers.
     """
-    body = project_section(docs_dir).replace(BEGIN, "").replace(END, "").strip()
-    return _NATIVE_FRONTMATTER + body + "\n"
+    return _NATIVE_FRONTMATTER + project_body(docs_dir).strip() + "\n"
 
 
 def adopted_agents(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[str]:
@@ -406,6 +439,21 @@ def has_been_adopted(repo: Path, *, docs_dir: str = "docs/ddflow") -> bool:
     return (Path(repo) / docs_dir / "drivers" / "implement-phase.md").is_file()
 
 
+def _block_state(text: str, want: str) -> str:
+    """CURRENT when the file's managed block says what this ddflow would write, NO_BLOCK when
+    it holds none (or its markers are broken), else STALE. A block under the legacy markers
+    is STALE even when its words match: the next write migrates it to the stamped grammar."""
+    try:
+        body = block_body(text)
+    except RegionError:
+        return NO_BLOCK
+    if body is None:
+        return NO_BLOCK
+    if has_legacy_block(text) or body.strip() != want:
+        return STALE
+    return CURRENT
+
+
 def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesState]:
     """Is every agent-facing rules file present and CURRENT?
 
@@ -425,7 +473,7 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
     if not has_been_adopted(repo, docs_dir=docs_dir):
         return []
     out: list[RulesState] = []
-    want = project_section(docs_dir).strip()
+    want = project_body(docs_dir).strip()
     for name in RULES_FILES:
         path = Path(repo) / name
         if not path.exists():
@@ -434,11 +482,7 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
             out.append(RulesState(name, MISSING))
             continue
         text = path.read_text("utf-8", errors="replace")
-        if BEGIN not in text or END not in text:
-            out.append(RulesState(name, NO_BLOCK))
-            continue
-        block = text[text.index(BEGIN) : text.index(END) + len(END)].strip()
-        out.append(RulesState(name, CURRENT if block == want else STALE))
+        out.append(RulesState(name, _block_state(text, want)))
 
     # The NATIVE surfaces, which for some agents OUTRANK `AGENTS.md` and are therefore what
     # actually binds. Cursor's precedence is Team Rules > Project Rules > User Rules >
@@ -450,7 +494,7 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
     # No BEGIN/END markers here: the frontmatter has to be first for the rule to bind, so
     # the file is ddflow's entirely and `no_block` cannot apply. Missing, drifted, current.
     want_native = native_rule_text(docs_dir)
-    want_block = project_section(docs_dir).strip()
+    want_block = want
     for key in adopted_agents(repo, docs_dir=docs_dir):
         rule = NATIVE_RULES.get(key)
         if rule is None:
@@ -466,11 +510,7 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
             out.append(RulesState(rule.path, CURRENT if listed else NOT_BINDING))
             continue
         if rule.form == FORM_BLOCK:
-            if BEGIN not in got or END not in got:
-                out.append(RulesState(rule.path, NO_BLOCK))
-                continue
-            block = got[got.index(BEGIN) : got.index(END) + len(END)].strip()
-            out.append(RulesState(rule.path, CURRENT if block == want_block else STALE))
+            out.append(RulesState(rule.path, _block_state(got, want_block)))
             continue
         if got == want_native:
             out.append(RulesState(rule.path, CURRENT))
@@ -700,12 +740,28 @@ def driver_drift(
     ]
 
 
+def _backup_docs(
+    repo: Path, docs_dir: str, package_dir: Path | None, only: Collection[str] | None
+) -> str:
+    """Copy aside the agent-facing documents a refresh is about to rewrite; the directory,
+    or "" when none differs (a no-op refresh leaves no backup)."""
+    from .backups import make_backup
+
+    stale = driver_drift(repo, docs_dir=docs_dir, package_dir=package_dir)
+    stale += [r.path for r in rules_status(repo, docs_dir=docs_dir) if r.needs_attention]
+    files = [Path(repo) / rel for rel in dict.fromkeys(stale) if only is None or rel in only]
+    if not files:
+        return ""
+    return str(make_backup(repo, files, "", "", name=f"{clock.compact_at()}-refresh-docs"))
+
+
 def refresh_docs(
     repo: Path,
     *,
     docs_dir: str = "docs/ddflow",
     package_dir: Path | None = None,
     only: Collection[str] | None = None,
+    backup: bool = True,
 ) -> list[str]:
     """Rewrite ONLY the agent-facing documents: the driver docs, the managed rules blocks
     and the adopted agents' native rules. Never the MCP launch, the hooks, the command
@@ -714,6 +770,9 @@ def refresh_docs(
 
     ``only`` limits the refresh to those repo-relative paths (the upgrade apply step
     refreshes the files its plan listed and leaves a hand-edited one it must not touch).
+    Before a file is rewritten its original is copied to `.ddflow/backups/` (``backup``;
+    `ddflow upgrade --apply` makes its own backup and passes False), and the first action
+    says where.
 
     Refuses (ValueError) a project that was never adopted: a refresh must not adopt.
     """
@@ -731,6 +790,10 @@ def refresh_docs(
         )
     actions: list[str] = []
     agents = adopted_agents(repo, docs_dir=docs_dir)
+    if backup:
+        saved = _backup_docs(repo, docs_dir, package_dir, only)
+        if saved:
+            actions.append(f"saved the originals in {saved}")
     for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
         if only is not None and rel not in only:
             continue
@@ -857,28 +920,62 @@ AGENT_COMMANDS: dict[str, dict[str, str]] = {
     "claude": {".claude/commands/implement.md": "commands/claude/implement.md"},
 }
 
-#: The line that marks a command file as ddflow's own. A file without it is the operator's
-#: -- a project adopting mid-stream often has an `/implement` of its own already, and
-#: overwriting it would destroy the one workflow the project actually runs.
+#: The line that marked a command file as ddflow's own before the stamped grammar. A file
+#: carrying it is still ours (adopt migrates it to the region below); a file without it, or
+#: with a region someone broke, is the operator's -- a project adopting mid-stream often has
+#: an `/implement` of its own already, and overwriting it would destroy the one workflow the
+#: project actually runs. To keep your own: delete the begin line.
 MANAGED_MARK = "<!-- DDFLOW:MANAGED"
+
+
+def _command_region(rel: str) -> Managed:
+    return Managed(f"commands/{Path(rel).stem}")
+
+
+def _split_front_matter(text: str) -> tuple[str, str]:
+    """`(front matter incl. its closing line, the rest)`: the managed region starts after
+    the front matter so a slash command's `---` block stays first in the file."""
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            cut = end + len("\n---\n")
+            return text[:cut], text[cut:]
+    return "", text
+
+
+def _region_body(region: Managed, text: str) -> str | None:
+    at = region._region().find(text)
+    return None if at is None else text[at[1] : at[2]]
 
 
 def _write_command(repo: Path, rel: str, src: Path) -> str:
     path = repo / rel
-    text = src.read_text("utf-8")
+    head, body = _split_front_matter(src.read_text("utf-8"))
+    region = _command_region(rel)
+    desired = head + region.render(body)
     if path.exists() and not path.is_file():
         return Refused(f"SKIPPED {rel}: it exists and is not a file; move it and re-run adopt")
     if path.exists():
         existing = path.read_text("utf-8")
-        if existing == text:
-            return f"{rel} is current"
+        try:
+            owned = region.owns(existing)
+        except RegionError:
+            owned = False  # a broken region is the operator's file: leave it alone
+        if owned:
+            if _region_body(region, existing) == body:
+                return f"{rel} is current"
+            try:
+                replace_text(path, region.splice(existing, body))
+            except NewerContent as exc:
+                return Refused(f"REFUSED {rel}: {exc}")
+            return f"wrote {rel}"
         if MANAGED_MARK not in existing:
             return (
                 f"kept {rel}: it is the project's own, not ddflow's. The ddflow version is "
                 f"the MCP prompt `implement`. Delete the file and re-run adopt to take it"
             )
     path.parent.mkdir(parents=True, exist_ok=True)
-    replace_text(path, text)
+    replace_text(path, desired)
     return f"wrote {rel}"
 
 
@@ -1006,12 +1103,28 @@ def _aider_read_values(after_colon: str) -> tuple[list[str], str]:
     return ([raw] if raw else []), comment
 
 
+def _section_body(section: str) -> str:
+    """The body of a rendered block (`project_section`): what `Managed.splice` takes."""
+    body = block_body(section)
+    return section if body is None else body
+
+
 def _upsert_block(path: Path, section: str) -> str:
     """Insert or replace the managed block, leaving the rest of the file untouched."""
     existing = path.read_text("utf-8") if path.exists() else ""
-    if BEGIN in existing and END in existing:
-        head = existing[: existing.index(BEGIN)]
-        tail = existing[existing.index(END) + len(END) :]
+    try:
+        owned = BLOCK.owns(existing)
+    except RegionError as exc:
+        return Refused(f"SKIPPED {path.name}: {exc}; fix the markers and re-run adopt")
+    if owned:
+        try:
+            replace_text(path, BLOCK.splice(existing, _section_body(section)))
+        except NewerContent as exc:
+            return Refused(f"REFUSED {path.name}: {exc}")
+        return f"updated the managed block in {path.name}"
+    if has_legacy_block(existing):
+        head = existing[: existing.index(LEGACY_BEGIN)]
+        tail = existing[existing.index(LEGACY_END) + len(LEGACY_END) :]
         replace_text(path, head + section.strip() + tail)
         return f"updated the managed block in {path.name}"
     prefix = existing.rstrip() + "\n\n" if existing.strip() else f"# {path.parent.name}\n\n"

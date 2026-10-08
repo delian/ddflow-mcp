@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_this_repository_runs_its_own_queue():
-    assert "DDFLOW:BEGIN" in (ROOT / "AGENTS.md").read_text()
-    assert "DDFLOW:BEGIN" in (ROOT / "CLAUDE.md").read_text()
+    assert "ddflow:begin rules/work-queue" in (ROOT / "AGENTS.md").read_text()
+    assert "ddflow:begin rules/work-queue" in (ROOT / "CLAUDE.md").read_text()
     assert (ROOT / ".ddflow" / "config.toml").is_file()
     assert (ROOT / "docs" / "ddflow" / "QUEUE.md").is_file()
     shards = list((ROOT / ".ddflow" / "events").glob("*.jsonl"))
