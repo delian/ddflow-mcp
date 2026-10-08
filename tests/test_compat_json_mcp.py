@@ -73,7 +73,7 @@ def test_each_object_tool_declares_the_schema_the_registry_generates(on):
 @pytest.mark.parametrize("version", ["2024-11-05", "2025-03-26"])
 def test_a_revision_without_structured_output_is_served_as_before(on, version):
     server = _server(on, version)
-    assert not any("outputSchema" in t for t in _tools(server).values())
+    assert not any("outputSchema" in t or "_meta" in t for t in _tools(server).values())
     res = _rpc(server, "tools/call", {"name": "ddflow_status", "arguments": {}})
     assert "structuredContent" not in res
 
