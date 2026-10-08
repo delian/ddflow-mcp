@@ -198,6 +198,9 @@ def git_state(where: Path | str) -> dict[str, str] | None:
     None when git could not answer: "could not tell" is not "unchanged"."""
     parts = {
         "head": ("rev-parse", "HEAD"),
+        # The branch HEAD is on (or "HEAD" when detached): a checkout of the same commit
+        # moves it without moving the sha.
+        "ref": ("rev-parse", "--symbolic-full-name", "HEAD"),
         "status": ("status", "--porcelain=v2", "--untracked-files=all"),
         "diff": ("diff", "HEAD", "--binary"),
         "stash": ("stash", "list", "--format=%H %gs"),
