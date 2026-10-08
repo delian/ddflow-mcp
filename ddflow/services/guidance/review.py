@@ -112,13 +112,17 @@ def reviewed(outcome: str, today: date, *, interval_days: int = DEFAULT_INTERVAL
 
 
 def reminders(items: list[Due], limit: int = 5) -> list[str]:
-    """Lines for brief and doctor, at most ``limit``: the oldest review first, and a last
-    line counting the rest so a long backlog is visible without filling the page."""
+    """Lines for brief and doctor, at most ``limit`` in all: the oldest review first, and
+    when there are more than fit a last line counting the rest, so a long backlog is
+    visible without filling the page."""
+    if limit < 1:
+        return []
+    shown = items if len(items) <= limit else items[: limit - 1]
     lines = [
         f"{d.record.kind} {d.record.id}: {d.reason}"
         + (f" ({d.overdue_days} days)" if d.overdue_days else "")
-        for d in items[:limit]
+        for d in shown
     ]
-    if len(items) > limit:
-        lines.append(f"... and {len(items) - limit} more due for review")
+    if len(shown) < len(items):
+        lines.append(f"... and {len(items) - len(shown)} more due for review")
     return lines

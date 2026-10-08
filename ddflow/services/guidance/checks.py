@@ -26,8 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ...core import digest as DG
 from ...core import globs as G
+from ...core.events import canonical_digest
 from .record import GuidanceRecord
 
 PASS, FAIL, UNAVAILABLE, WAIVED = "pass", "fail", "unavailable", "waived"
@@ -99,13 +99,25 @@ class CheckResult:
     reason: str = ""
     #: The ids of the waivers that covered findings.
     waivers: tuple[str, ...] = ()
+    #: How hard the record binds (`ENFORCEMENTS`), carried with the result so the gate
+    #: verdict never depends on a second, separately derived list of records.
+    enforcement: str = "advisory"
 
     @property
     def digest(self) -> str:
         """Equal outcomes, equal digest: what a cache keyed by the tree fingerprint stores."""
-        parts = [self.record, self.check_id, self.status, self.reason]
-        parts += [f"{f.path}:{f.line}:{f.message}" for f in self.findings]
-        return DG.content_digest("\n".join(parts), "sha256", length=16)
+        return canonical_digest(
+            {
+                "record": self.record,
+                "check": self.check_id,
+                "status": self.status,
+                "reason": self.reason,
+                "enforcement": self.enforcement,
+                "findings": [[f.path, f.line, f.message] for f in self.findings],
+                "waived": [[f.path, f.line, f.message] for f in self.waived],
+                "waivers": list(self.waivers),
+            }
+        )
 
 
 def check_id(rec: GuidanceRecord, index: int, check: dict[str, Any]) -> str:
@@ -137,7 +149,7 @@ def in_scope(rec: GuidanceRecord, paths: Iterable[str]) -> tuple[str, ...]:
 
 
 def _unavailable(rec: GuidanceRecord, cid: str, kind: str, why: str) -> CheckResult:
-    return CheckResult(rec.id, cid, kind, UNAVAILABLE, reason=why)
+    return CheckResult(rec.id, cid, kind, UNAVAILABLE, reason=why, enforcement=rec.enforcement)
 
 
 def run_check(rec: GuidanceRecord, index: int, ctx: CheckContext) -> CheckResult:
@@ -161,7 +173,8 @@ def run_check(rec: GuidanceRecord, index: int, ctx: CheckContext) -> CheckResult
         return _unavailable(rec, cid, kind, f"{type(exc).__name__}: {exc}")
     if not isinstance(found, list) or not all(isinstance(f, Finding) for f in found):
         return _unavailable(rec, cid, kind, "the evaluator did not return a list of findings")
-    return CheckResult(rec.id, cid, kind, FAIL if found else PASS, tuple(found))
+    status = FAIL if found else PASS
+    return CheckResult(rec.id, cid, kind, status, tuple(found), enforcement=rec.enforcement)
 
 
 def run_record(rec: GuidanceRecord, ctx: CheckContext) -> list[CheckResult]:
@@ -169,7 +182,16 @@ def run_record(rec: GuidanceRecord, ctx: CheckContext) -> list[CheckResult]:
     guidance is held to its checks."""
     if not rec.live:
         return []
-    return [run_check(rec, i, ctx) for i in range(len(rec.checks))]
+    out = []
+    seen: set[str] = set()
+    for i in range(len(rec.checks)):
+        res = run_check(rec, i, ctx)
+        if res.check_id in seen:
+            # Two checks of one record under one id: a waiver for one would cover both.
+            res = _unavailable(rec, res.check_id, res.kind, f"duplicate check id {res.check_id!r}")
+        seen.add(res.check_id)
+        out.append(res)
+    return out
 
 
 @dataclass
@@ -202,12 +224,11 @@ class Verdict:
         return ", ".join(parts) or "no findings"
 
 
-def gate_verdict(records: Iterable[GuidanceRecord], results: Iterable[CheckResult]) -> Verdict:
+def gate_verdict(results: Iterable[CheckResult]) -> Verdict:
     """Fold ``results`` into the one outcome a gate records. ``failed`` when a ``block``
     record has a failing check; else ``unavailable`` when any check could not run (a check
     that did not run is a coverage gap, not a pass); else ``passed``. Warnings, notes and
     waived findings never change the outcome but are always carried."""
-    level = {r.id: r.enforcement for r in records}
     v = Verdict(PASSED)
     for res in results:
         if res.waived:
@@ -215,7 +236,7 @@ def gate_verdict(records: Iterable[GuidanceRecord], results: Iterable[CheckResul
         if res.status == UNAVAILABLE:
             v.unavailable.append(res)
         elif res.status == FAIL:
-            how = level.get(res.record, "advisory")
+            how = res.enforcement
             (v.blocking if how == "block" else v.warnings if how == "warn" else v.notes).append(res)
     v.outcome = FAILED if v.blocking else "unavailable" if v.unavailable else PASSED
     return v
