@@ -335,3 +335,63 @@ def test_the_apply_remedies_no_longer_say_not_available(old: Path) -> None:
     text = UP.render(plan(old))
 
     assert "not available yet" not in text
+
+
+def test_a_repair_that_could_not_run_exits_2_not_0(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import repairs as RP
+
+    synthetic = {
+        "id": "repair:torn-lines",
+        "category": "repairs",
+        "repair": "torn-lines",
+        "summary": "x",
+        "action": UP.AGENT,
+        "fix": "ddflow upgrade --apply",
+    }
+    full = plan(old)
+    full["categories"] = {c: [] for c in UP.CATEGORIES} | {"repairs": [synthetic]}
+    monkeypatch.setattr(
+        RP,
+        "apply",
+        lambda repo, log, cfg, ids=None: [
+            {"repair": "torn-lines", "unavailable": "shard unreadable", "findings": [], "events": 0}
+        ],
+    )
+
+    log, cfg, st = _load(old, "upgrader")
+    out = UA.apply(old, log, cfg, st, categories="repairs", plan=full)
+
+    assert out["exit"] == 2 and out["unavailable"] == 1 and out["applied"] == 0
+    assert "unavailable" in out["text"] and upgrades(old) == []
+
+
+def test_a_failed_backup_reports_the_version_it_did_not_leave(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_disk(*a: Any, **k: Any) -> Path:
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(UA, "make_backup", no_disk)
+
+    out = go(old, "hooks")
+
+    assert out["exit"] == 1 and out["to"] != plan(old)["running"]
+    assert "nothing was changed" in out["text"] and upgrades(old) == []
+    assert not (old / ".claude" / "settings.json").exists()
+
+
+def test_the_upgrade_is_in_the_fold_replay_and_history(old: Path) -> None:
+    go(old, "config", confirm={"worktree.max_parallel": "the new default fits"})
+
+    recorded = upgrades(old)[-1]
+    assert recorded["confirmed"] == {"worktree.max_parallel": "the new default fits"}
+    assert any(i.startswith("knob_changed:worktree.max_parallel") for i in recorded["items"])
+    assert {c["key"] for c in recorded["config_changes"]} >= {"worktree.root"}
+    from conftest import run_cli
+
+    _code, text, _err = run_cli(old, "replay")
+    assert "Upgraded the project from ddflow" in text and "worktree.max_parallel" in text, text
+    _code, hist, _err = run_cli(old, "history")
+    assert "upgrade applied" in hist
