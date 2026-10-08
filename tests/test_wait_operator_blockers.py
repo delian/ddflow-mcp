@@ -14,6 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import pytest
 from conftest import run_cli
 
 from ddflow.api import lifecycle as A
@@ -56,18 +57,51 @@ def test_an_any_wait_still_sleeps_when_something_is_waitable(repo):
     assert out.data["waiting_on"] == ["T1"]
 
 
-def test_an_any_wait_on_an_expired_lease_alone_does_not_sleep(repo):
+class _AheadClock:
+    """The wait module's clock, ``ahead_s`` seconds past the real one: a lease that expires
+    is made to by the test, not by how long the machine took (B06a0a99c0e: 1 s leases, and
+    under load the live one had lapsed too by the time the wait looked)."""
+
+    def __init__(self, ahead_s: float) -> None:
+        self.ahead_s = ahead_s
+        self.sleeps = 0
+
+    def time(self) -> float:
+        return time.time() + self.ahead_s
+
+    def monotonic(self) -> float:
+        return time.monotonic()
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps += 1
+        time.sleep(seconds)
+
+
+@pytest.mark.parametrize("slow_machine_s", [0, 3])
+def test_an_any_wait_on_an_expired_lease_alone_does_not_sleep(repo, monkeypatch, slow_machine_s):
+    """E1's lease (1000 s) has lapsed and BUSY's (100000 s) has not, 2000 s on."""
+    import importlib
+
     run_cli(repo, "init")
-    for k, v in (("lease.ttl_s", "1"), ("lease.grace_s", "0"), ("lease.reclaim_policy", "report")):
+    for k, v in (
+        ("lease.grace_s", "0"),
+        ("lease.reclaim_policy", "report"),
+        ("lease.ttl_s", "1000"),
+    ):
         code, _o, err = run_cli(repo, "config", "--set", k, v)
         assert code == 0, err
     run_cli(repo, "task", "add", "E1", "--globs", "e1.py")
     assert A.claim(repo, "E1", no_worktree=True, agent="agent-crashed").ok
-    time.sleep(1.5)  # the crashed agent's lease lapses; `report` keeps it from anyone
-    _busy_unrelated(repo)  # claimed after the lapse, so this one is live
-    started = time.monotonic()
+    code, _o, err = run_cli(repo, "config", "--set", "lease.ttl_s", "100000")
+    assert code == 0, err
+    _busy_unrelated(repo)  # a live lease that blocks nobody
+    time.sleep(slow_machine_s)
+    clock = _AheadClock(2000)
+    monkeypatch.setattr(importlib.import_module("ddflow.api.lifecycle.wait"), "time", clock)
     out = A.wait(repo, timeout_s=5, poll_s=0.05, agent=WAITER)
-    assert time.monotonic() - started < 2, "slept to its timeout on an expired lease"
+    # Counted, not timed: a wait that sleeps once has already gone wrong, however fast the
+    # machine, and a descheduled one that does not sleep has not.
+    assert clock.sleeps == 0, "slept on an expired lease"
     assert out.exit == O.NOTHING and out.data["waitable"] is False
     assert "expired" in out.reason
 
