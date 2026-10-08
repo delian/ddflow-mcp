@@ -61,9 +61,9 @@ def popen(*args: Any, **kwargs: Any) -> subprocess.Popen:
     return subprocess.Popen(*args, **kwargs)
 
 
-def kill_group(p: subprocess.Popen, sig: int = signal.SIGKILL) -> None:
-    """Signal ``p`` AND everything it started: its whole process group (``sig``, SIGKILL by
-    default; SIGTERM to ask it to stop first).
+def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
+    """Signal ``p`` AND everything it started: its whole process group (``sig``; SIGKILL when None,
+    SIGTERM to ask it to stop first). SIGKILL is named only on POSIX: Windows has no such signal.
 
     ``p`` must have been started in a session of its own (`run_shell` does), so the
     group is its pid; call it before ``p`` is reaped, while that pid -- and so the group
@@ -72,7 +72,7 @@ def kill_group(p: subprocess.Popen, sig: int = signal.SIGKILL) -> None:
     """
     if os.name == "posix":
         try:
-            os.killpg(p.pid, sig)
+            os.killpg(p.pid, sig or signal.SIGKILL)
             return
         except (ProcessLookupError, PermissionError):
             pass  # gone already, or not ours: the direct child is all we can still reach
@@ -84,7 +84,7 @@ def kill_group(p: subprocess.Popen, sig: int = signal.SIGKILL) -> None:
                 timeout=TIMEOUTS["instant"],
             )
     with contextlib.suppress(OSError):
-        if sig == signal.SIGKILL:
+        if sig is None:
             p.kill()
         else:
             p.terminate()
