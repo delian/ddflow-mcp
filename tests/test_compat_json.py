@@ -256,7 +256,7 @@ def test_parsed_path_is_what_argparse_took():
         return R.parsed_path(parser.parse_args(argv))
 
     assert path("gate", "status", "T1") == ("gate", "status")
-    assert path("--agent", "A", "gate", "status") == ("gate", "status")
+    assert path("--agent", "A", "gate", "status", "T1") == ("gate", "status")
     # an option's VALUE can spell another command; `--` makes the rest positional
     assert path("--agent", "task", "hooks", "status") == ("hooks", "status")
     assert path("gate", "--repo", "status", "record", "T1", "research") == ("gate", "record")
