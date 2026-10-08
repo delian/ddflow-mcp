@@ -40,6 +40,8 @@ def old(tmp_path: Path) -> Path:
 
 def go(repo: Path, categories: Any = None, **kw: Any) -> dict[str, Any]:
     log, cfg, st = _load(repo, "upgrader")
+    if "config_changes" in kw:  # the policy is the knob: plan and apply both read it
+        cfg.upgrade.config_changes = kw.pop("config_changes")
     return UA.apply(repo, log, cfg, st, categories=categories, agent="upgrader", **kw)
 
 
@@ -321,7 +323,7 @@ def test_bad_policy_and_backup_values_are_errors(old: Path) -> None:
     with pytest.raises(ValueError, match="backup mode"):
         go(old, backup="sideways")
     with pytest.raises(ValueError, match="config_changes"):
-        go(old, config_changes="whenever")
+        go(old, config_changes="whenever")  # a value the strictest fallback never lets through
 
 
 def test_backup_none_writes_no_copy_but_still_records(old: Path) -> None:
@@ -825,3 +827,180 @@ def test_a_refusal_on_the_cli_json_path_still_says_why_on_stderr(old: Path) -> N
     code, _out, err = cli(old, "--json", "upgrade", "--plan", "--apply")
 
     assert code == 3 and "not both" in err
+
+
+# -- B-upgrade.4-apply.1c-knobs: [upgrade] backup / backup_keep / config_changes --------------
+
+
+def set_knob(repo: Path, key: str, value: str) -> None:
+    assert run_cli(repo, "config", "--set", key, value)[0] == 0
+
+
+def backups(repo: Path) -> list[str]:
+    root = repo / ".ddflow" / "backups"
+    return sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+
+
+def test_the_knob_defaults_are_the_decided_ones() -> None:
+    up = Config().upgrade
+
+    assert (up.backup, up.backup_keep, up.config_changes) == ("local", 10, "agent")
+
+
+def test_backup_none_in_the_config_skips_the_copy(old: Path) -> None:
+    set_knob(old, "upgrade.backup", "none")
+
+    code, out, _ = cli(old, "upgrade", "--apply", "hooks")
+
+    assert code == 0 and "backup:" not in out and backups(old) == []
+
+
+def test_the_backup_flag_overrides_the_knob_for_one_run(old: Path) -> None:
+    set_knob(old, "upgrade.backup", "none")
+
+    code, _out, _ = cli(old, "upgrade", "--apply", "hooks", "--backup", "local")
+
+    assert code == 0 and len(backups(old)) == 1
+
+
+def test_backup_keep_removes_the_oldest_beyond_it(old: Path) -> None:
+    set_knob(old, "upgrade.backup_keep", "1")
+    assert cli(old, "upgrade", "--apply", "hooks")[0] == 0
+    (first,) = backups(old)
+
+    assert cli(old, "upgrade", "--apply", "instructions")[0] == 0
+
+    left = backups(old)
+    assert len(left) == 1 and left != [first], "the older backup was pruned, the new one kept"
+
+
+def test_backup_keep_zero_keeps_every_backup(old: Path) -> None:
+    set_knob(old, "upgrade.backup_keep", "0")
+    assert cli(old, "upgrade", "--apply", "hooks")[0] == 0
+    assert cli(old, "upgrade", "--apply", "instructions")[0] == 0
+
+    assert len(backups(old)) == 2
+
+
+def test_prune_touches_only_directories_that_are_backups(tmp_path: Path) -> None:
+    from ddflow.services import backups as BK
+
+    root = tmp_path / ".ddflow" / "backups"
+    for name in ("20260101T000000Z-a", "20260102T000000Z-b", "20260103T000000Z-c"):
+        (root / name).mkdir(parents=True)
+        (root / name / BK.MANIFEST).write_text("{}")
+    (root / "notes").mkdir()
+    (root / "notes" / "keep.txt").write_text("mine")
+
+    removed = BK.prune(tmp_path, 2)
+
+    assert removed == ["20260101T000000Z-a"] and (root / "notes" / "keep.txt").exists()
+    assert BK.prune(tmp_path, 0) == [] and BK.prune(tmp_path / "nowhere", 1) == []
+
+
+def test_config_changes_ask_makes_the_cli_refuse_an_unset_knob_too(old: Path) -> None:
+    set_knob(old, "upgrade.config_changes", "ask")
+
+    code, out, _err = cli(old, "upgrade", "--apply", "config")
+
+    assert code == 3
+    assert "[refused] knob_changed:worktree.root" in out
+    assert "config_changes = ask" in out
+
+
+def test_config_changes_operator_with_a_confirm_applies_it(old: Path) -> None:
+    set_knob(old, "upgrade.config_changes", "operator")
+
+    code, out, _ = cli(
+        old,
+        "upgrade",
+        "--apply",
+        "config",
+        "--confirm",
+        "worktree.root",
+        "--confirm",
+        "worktree.max_parallel",
+        "--reason",
+        "the operator accepted the new defaults",
+    )
+
+    assert "[acknowledged] knob_changed:worktree.root" in out
+    assert "[applied] knob_changed:worktree.max_parallel" in out
+    assert "[refused] knob_changed:worktree.root" not in out
+    assert "[refused] knob_changed:worktree.max_parallel" not in out
+    assert code == 0, out
+    # a knob at its default is acknowledged, never written out as if the operator had chosen it
+    assert "worktree.root" not in (old / ".ddflow" / "config.toml").read_text()
+
+
+def test_the_plan_marks_unset_knob_changes_as_the_operators_only_under_operator(old: Path) -> None:
+    def action(key: str) -> str:
+        return next(i["action"] for i in plan(old)["categories"]["config"] if i["key"] == key)
+
+    assert action("worktree.root") == UP.AGENT
+    set_knob(old, "upgrade.config_changes", "ask")
+    assert action("worktree.root") == UP.AGENT, "ask: the agent asks, the plan is unchanged"
+    set_knob(old, "upgrade.config_changes", "operator")
+    assert action("worktree.root") == UP.OPERATOR
+    # a new knob is only news, whatever the policy
+    assert action("dedupe.min_words") == UP.NOTE
+
+
+def test_a_prune_that_could_not_remove_a_backup_does_not_claim_it_did(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from ddflow.services import backups as BK
+
+    root = tmp_path / ".ddflow" / "backups"
+    for name in ("20260101T000000Z-a", "20260102T000000Z-b"):
+        (root / name).mkdir(parents=True)
+        (root / name / BK.MANIFEST).write_text("{}")
+    monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)  # the removal is refused
+
+    assert BK.prune(tmp_path, 1) == []
+
+
+def test_a_prune_that_cannot_read_the_directory_is_not_an_apply_failure(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import backups as BK
+
+    real = Path.iterdir
+
+    def deny(self: Path):
+        if self.name == "backups":
+            raise PermissionError("denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "iterdir", deny)
+
+    assert BK.prune(old, 1) == []
+    code, out, _ = cli(old, "upgrade", "--apply", "hooks")
+    assert code == 0 and "[applied] hooks:missing" in out
+
+
+def test_a_bad_backup_value_still_makes_the_backup(old: Path) -> None:
+    (old / ".ddflow" / "config.toml").write_text(
+        (old / ".ddflow" / "config.toml").read_text() + '\n[upgrade]\nbackup = "snapshotty"\n'
+    )
+
+    assert Config.load(old).upgrade.backup == "local"
+    code, out, _ = cli(old, "upgrade", "--apply", "hooks")
+
+    assert code == 0 and "backup:" in out and len(backups(old)) == 1
+
+
+def test_one_policy_serves_the_plan_and_the_apply(old: Path) -> None:
+    set_knob(old, "upgrade.config_changes", "ask")
+
+    plan_action = next(
+        i["action"] for i in plan(old)["categories"]["config"] if i["key"] == "worktree.root"
+    )
+    out = go(old, "config")
+
+    # under `ask` the plan leaves the change to the agent: only apply's own read of the knob
+    # makes it wait for --confirm, so a second policy source in apply() would fail here
+    assert plan_action == UP.AGENT
+    assert any(r["key"] == "worktree.root" and r["status"] == "refused" for r in out["results"])
