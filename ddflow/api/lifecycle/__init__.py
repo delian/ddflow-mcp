@@ -51,6 +51,7 @@ from ...core.model import (
 from ...core.plain import plain  # noqa: F401
 from ...core.schedule import needs_tree, plan  # noqa: F401
 from ...infra import worktree as W  # noqa: F401
+from ...services import changes as CH  # noqa: F401
 from ...services import flowstate as FL  # noqa: F401
 from ...services import gates as G  # noqa: F401
 from ...services import leases as L  # noqa: F401

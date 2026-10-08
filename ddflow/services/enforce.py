@@ -51,6 +51,7 @@ from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from ..infra.log import EventLog
+from . import changes as CH
 from .backups import make_backup
 from .install_info import running_from_source
 
@@ -1082,8 +1083,8 @@ def staged_paths(repo: Path, *, tree: Path | None = None) -> list[str] | None:
     refuse on None. NOT a held `index.lock`: these reads take no lock and succeed under
     one (verified), so naming it would send an operator hunting for the wrong cause.
     """
-    return W.git_paths(
-        tree or _index_tree(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR"
+    return CH.changed_paths(
+        tree or _index_tree(repo), include=("staged",), renames=True, diff_filter="ACMR"
     )
 
 
@@ -1879,7 +1880,9 @@ def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> 
         return Drift(base, 0)
     # Three dots: what changed on `base` since the merge base -- NOT this branch's own
     # edits, which are the new rules rather than stale ones.
-    changed = W.git_paths(here, "diff", "--name-only", f"HEAD...{base}", "--", *rulebooks())
+    changed = CH.changed_paths(
+        here, "HEAD", tip=base, include=("committed",), renames=True, pathspec=rulebooks()
+    )
     if changed is None:
         return Drift(base, None, detail=f"git could not diff HEAD...{base}")
     if changed:
@@ -1889,8 +1892,15 @@ def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> 
         # (reviewer, reproduced). Content is the question: a rulebook this branch ALSO
         # changed, differently, still differs and still must merge. Only the paths
         # already flagged are compared, literally -- they are names, not globs.
-        differ = W.git_paths(
-            here, "--literal-pathspecs", "diff", "--name-only", "HEAD", base, "--", *changed
+        differ = CH.changed_paths(
+            here,
+            "HEAD",
+            tip=base,
+            include=("committed",),
+            fork=False,
+            renames=True,
+            pathspec=changed,
+            literal=True,
         )
         if differ is None:
             return Drift(base, None, detail=f"git could not diff HEAD {base}")
