@@ -16,7 +16,6 @@ or leave.
 
 from __future__ import annotations
 
-import contextlib
 import re
 from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -24,7 +23,6 @@ from pathlib import Path
 from typing import TypeVar
 
 from ..config import Config
-from ..core.model import fold
 from ..infra import worktree as W
 from ..infra.log import EventLog, effective_agent_id
 from . import cleanup as C
@@ -272,18 +270,6 @@ def render(leftovers: list[Leftover]) -> str:
     return "\n".join(lines)
 
 
-def _branch_exists(repo: Path, name: str) -> bool:
-    return W.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").ok
-
-
-def _held(repo: Path, cfg: Config, log: EventLog | None, path: Path, branch: str) -> str:
-    """Why the tree must be left alone (a live lease, or adopted by an item), or ""."""
-    if log is None:
-        return ""
-    root = W.repo_root(repo)
-    return C._protected(root, cfg, fold(log.read_all(), strict=False)).why(str(path), branch)[1]
-
-
 def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -> dict[str, str]:
     """Remove one approved worktree and its branch, reporting git's own answer.
 
@@ -305,13 +291,12 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -
             "detail": "changed or no longer merged since the report; re-run the preflight",
         }
     worktree = W.Worktree(item="", path=path, branch=item.branch, base=base)
-    had_branch = bool(item.branch) and _branch_exists(repo, item.branch)
     # force only AFTER this module's own inspection: the tree is merged, unlocked and
     # holds nothing beyond caches. `W.remove`'s check counts an untracked `__pycache__`
     # or `.venv` as work and would refuse the very trees the report called removable
     # (critic on f0d27314); nothing else reaches here, because dirty/unique/locked items
     # never carry action "remove". In an adopted project, under the log lock with the
-    # leases re-read -- what `cleanup` does -- and recorded (B5e83fb22cb).
+    # leases re-read -- what `cleanup` does -- and recorded (B5e83fb22cb): `dispose_tree`.
     log = (
         EventLog(
             repo,
@@ -322,49 +307,27 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -
         if (repo / ".ddflow" / "events").is_dir()
         else None
     )
-    with log.transaction() if log else contextlib.nullcontext():
-        held = _held(repo, cfg, log, path, item.branch)
-        if held:
-            # Refused, not failed: coordination said no, and the tree was left as it is.
-            return {"name": item.name, "kind": "worktree", "outcome": "refused", "detail": held}
-        r = W.remove(repo, cfg, worktree, force=True)
-        if r.ok and log:
-            C.record_removed(log, W.repo_root(repo), str(path))
-    if not r.ok:
+    gone = C.dispose_tree(
+        repo,
+        cfg,
+        log,
+        worktree,
+        forced_by="inspected just before: merged, and nothing beyond caches",
+    )
+    row = {"name": item.name, "kind": "worktree"}
+    if gone.outcome == "refused":
+        # Refused, not failed: coordination said no, and the tree was left as it is.
+        return {**row, "outcome": "refused", "detail": gone.why}
+    if not gone.removed:
+        return {**row, "outcome": "failed", "detail": gone.why}
+    if gone.branch_left:
         return {
-            "name": item.name,
-            "kind": "worktree",
+            **row,
             "outcome": "failed",
-            "detail": (r.err or r.out).strip() or f"git exit {r.code}",
+            "detail": f"worktree removed, branch {item.branch} not deleted: {gone.branch_left}",
         }
-    if not had_branch:
-        return {
-            "name": item.name,
-            "kind": "worktree",
-            "outcome": "removed",
-            "detail": "worktree removed",
-        }
-    if not _branch_exists(repo, item.branch):
-        return {
-            "name": item.name,
-            "kind": "worktree",
-            "outcome": "removed",
-            "detail": f"worktree and branch {item.branch} removed",
-        }
-    rb = W.git(repo, "branch", "-d", item.branch)
-    if rb.ok:
-        return {
-            "name": item.name,
-            "kind": "worktree",
-            "outcome": "removed",
-            "detail": f"worktree and branch {item.branch} removed",
-        }
-    return {
-        "name": item.name,
-        "kind": "worktree",
-        "outcome": "failed",
-        "detail": f"worktree removed, branch {item.branch} not deleted: {(rb.err or rb.out).strip() or f'git exit {rb.code}'}",
-    }
+    what = f"worktree and branch {item.branch} removed" if gone.had_branch else "worktree removed"
+    return {**row, "outcome": "removed", "detail": what}
 
 
 _T = TypeVar("_T")

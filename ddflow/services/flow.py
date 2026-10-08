@@ -35,7 +35,7 @@ from ..infra.log import EventLog
 from . import completion as CM
 from . import gates as G
 from . import leases as L
-from .cleanup import record_item_removed
+from .cleanup import dispose_tree
 
 
 def _state(log: EventLog) -> State:
@@ -297,11 +297,15 @@ def _remove_tree(repo: Path, cfg: Config, log: EventLog, it: Item, info: FG.PRIn
         return f"kept {path}: uncommitted files the merge did not contain"
     if info.head_sha and W.head_sha(path) != info.head_sha:
         return f"kept {path}: its HEAD is not the head that merged"
-    r = W.remove(repo, cfg, wt, force=True)
-    if r.ok:
-        record_item_removed(log, it)
-        return ""
-    return f"kept {path}: {r.err or r.out}"
+    gone = dispose_tree(
+        repo,
+        cfg,
+        log,
+        wt,
+        item=it,
+        forced_by="no uncommitted file, HEAD is the head the forge merged",
+    )
+    return "" if gone.removed else f"kept {path}: {gone.why}"
 
 
 def _diff_patch_id(repo: Path, a: str, b: str) -> str:
