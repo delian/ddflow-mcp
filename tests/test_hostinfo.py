@@ -95,8 +95,9 @@ def test_a_machine_that_cannot_name_itself_matches_no_record(monkeypatch):
     assert H.same_host("") is True
 
 
-def test_a_human_approval_stamps_the_short_host(tmp_path):
-    """`approve` records this machine's SHORT name, as it did before it used the helper."""
+def test_a_human_approval_stamps_what_short_host_returns(tmp_path, monkeypatch):
+    """`approve` stamps `hostinfo.short_host()`: a sentinel the log's hostname redaction
+    cannot mask shows where the stamp comes from, and that it is the short form."""
     import subprocess
     import sys
     from pathlib import Path
@@ -104,8 +105,11 @@ def test_a_human_approval_stamps_the_short_host(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from conftest import run_cli
 
+    from ddflow.config import Config
     from ddflow.core.model import fold
     from ddflow.infra.log import EventLog
+    from ddflow.services.gates import outcomes
+    from ddflow.services.gates.defs import load_gates
 
     repo = tmp_path / "p"
     repo.mkdir()
@@ -116,8 +120,10 @@ def test_a_human_approval_stamps_the_short_host(tmp_path):
     )
     run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "approve", "T1", "plan_approved")
-    rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["plan_approved"]
-    # The committed log redacts this machine's name (`[REDACTED:hostname]`); anything else
-    # on disk must be the short form, never the full one.
-    assert rec.evidence.get("host") in (H.short_host(), "[REDACTED:hostname]"), rec.evidence
+    monkeypatch.setattr(H, "short_host", lambda: "sentinel-box")
+    log = EventLog(repo)
+    cfg = Config.load(repo)
+    gates = load_gates(repo, cfg)
+    outcomes.approve(log, cfg, "T1", "plan_approved", gates=gates)
+    rec = fold(log.read_all(), strict=False).items["T1"].gates["plan_approved"]
+    assert rec.evidence.get("host") == "sentinel-box", rec.evidence
