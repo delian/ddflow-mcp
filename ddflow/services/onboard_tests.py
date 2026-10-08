@@ -18,8 +18,6 @@ command that could not run is `ran=False`, never a passing baseline.
 from __future__ import annotations
 
 import re
-import shutil
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,45 +87,45 @@ def baseline(repo: Path, command: str, *, timeout: int = P.TIMEOUTS["suite_basel
     session, not the project. The detached tree is removed whatever happens.
     """
     repo = Path(repo)
-    tmp = Path(tempfile.mkdtemp(prefix="ddflow-baseline-"))
-    add = W.git(repo, "worktree", "add", "--detach", str(tmp), W.default_branch(repo))
-    if not add.ok:
-        shutil.rmtree(tmp, ignore_errors=True)
-        return Baseline(
-            command,
-            False,
-            -1,
-            f"could not make a detached worktree: {add.err.strip() or add.out.strip()}",
-        )
-    started = time.monotonic()
-    try:
-        code, out = _run_bounded(command, tmp, timeout)
-        seconds = time.monotonic() - started
-        if code is None:
-            return Baseline(command, False, -1, f"the command did not finish within {timeout}s")
-        if code == _NOT_FOUND:
-            # A command that could not be found measured NOTHING; "exit 127" is not a
-            # baseline (critic on 215407bb).
-            return Baseline(command, False, 127, "the command could not be found (exit 127)")
-        summary = TC.last_count_line(out)
-        if code != 0 and not summary:
-            # A non-zero exit with nothing a baseline recognises is a run that could not
-            # be MEASURED (the runner may not exist on the default branch at all), not a
-            # red suite (roborev on 72ee825).
+    default = W.default_branch(repo)
+    with W.scratch_tree(repo, default, detach=True, prefix="ddflow-baseline-") as s:
+        if s.path is None:
             return Baseline(
                 command,
                 False,
-                code,
-                f"the command failed with no test counts (exit {code}); the runner may not exist on {W.default_branch(repo)}",
+                -1,
+                f"could not make a detached worktree: {s.error.strip()}",
             )
-        counts = TC.counts_of(summary)
-        failing = [m.group(2) for line in out.splitlines() if (m := _FAILING.match(line))]
+        return _measure(command, s.path, timeout, default)
+
+
+def _measure(command: str, tmp: Path, timeout: int, default: str) -> Baseline:
+    """Run ``command`` in ``tmp`` and read the counts out of what it printed."""
+    started = time.monotonic()
+    code, out = _run_bounded(command, tmp, timeout)
+    seconds = time.monotonic() - started
+    if code is None:
+        return Baseline(command, False, -1, f"the command did not finish within {timeout}s")
+    if code == _NOT_FOUND:
+        # A command that could not be found measured NOTHING; "exit 127" is not a
+        # baseline (critic on 215407bb).
+        return Baseline(command, False, 127, "the command could not be found (exit 127)")
+    summary = TC.last_count_line(out)
+    if code != 0 and not summary:
+        # A non-zero exit with nothing a baseline recognises is a run that could not
+        # be MEASURED (the runner may not exist on the default branch at all), not a
+        # red suite (roborev on 72ee825).
         return Baseline(
-            command, True, code, summary or f"exit {code}", counts, failing, seconds, out[-_TAIL:]
+            command,
+            False,
+            code,
+            f"the command failed with no test counts (exit {code}); the runner may not exist on {default}",
         )
-    finally:
-        W.git(repo, "worktree", "remove", "--force", str(tmp))
-        shutil.rmtree(tmp, ignore_errors=True)
+    counts = TC.counts_of(summary)
+    failing = [m.group(2) for line in out.splitlines() if (m := _FAILING.match(line))]
+    return Baseline(
+        command, True, code, summary or f"exit {code}", counts, failing, seconds, out[-_TAIL:]
+    )
 
 
 def _run_bounded(command: str, cwd: Path, timeout: int) -> tuple[int | None, str]:
