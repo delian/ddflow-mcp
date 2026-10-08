@@ -335,7 +335,7 @@ def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
 def _static_cycles(state: State, sev: str) -> list[LoopFinding]:
     from ..core.schedule import find_cycles
 
-    items = {i.id: i for i in state.items.values() if not i.removed}
+    items = state.live_by_id()
     out = []
     for cyc in find_cycles(items):
         out.append(
@@ -499,7 +499,7 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
     out = []
     by_globs: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for it in state.items.values():
-        if it.removed or it.state in (DONE, ABANDONED) or not it.globs:
+        if it.removed or it.terminal or not it.globs:
             continue
         by_globs[tuple(sorted(it.globs))].append(it.id)
     waits: dict[str, set[str]] = {}
@@ -567,7 +567,7 @@ def _waits_on(state: State, item_id: str) -> set[str]:
 
     def live(i: str) -> bool:
         it = state.items.get(i)
-        return bool(it and not it.removed and it.state not in (DONE, ABANDONED))
+        return bool(it and not it.removed and not it.terminal)
 
     def waits(i: str) -> list[str]:
         out: list[str] = []

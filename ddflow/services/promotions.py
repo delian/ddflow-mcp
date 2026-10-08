@@ -19,7 +19,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import flow as F
-from ..core.model import ABANDONED, DONE, Item, State
+from ..core.model import DONE, Item, State
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import flow as FS
@@ -31,9 +31,7 @@ class PromotionError(ValueError):
 
 def _open(st: State, env: str) -> list[Item]:
     return [
-        i
-        for i in st.items.values()
-        if i.promote_to == env and not i.removed and i.state not in (DONE, ABANDONED)
+        i for i in st.items.values() if i.promote_to == env and not i.removed and not i.terminal
     ]
 
 
