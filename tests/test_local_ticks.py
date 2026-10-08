@@ -360,6 +360,7 @@ def test_load_runs_the_ticks_and_the_flow_sample_is_taken_once_per_interval(proj
     from ddflow.api._base import _load
 
     assert run_cli(proj, "config", "--set", "schedule.parallel", "auto")[0] == 0
+    shutil.rmtree(proj / ".ddflow/local", ignore_errors=True)  # the set itself sampled
     ring = proj / ".ddflow/local/flow"
 
     _load(proj)
@@ -486,3 +487,90 @@ def test_status_says_a_tick_without_an_interval_runs_every_pass(proj: Path) -> N
     rows = {r["name"]: r for r in TK.status(proj)}
 
     assert rows["flow.sample"]["status"] == "every-pass"
+
+
+def test_a_tick_that_outruns_its_own_interval_is_still_claimed_by_the_running_pass(
+    proj: Path,
+) -> None:
+    clock, log, inner = Clock(), [], []
+
+    def hook(c: TK.TickCtx) -> None:
+        log.append("outer")
+        clock.advance(5)  # the run takes longer than every_s
+        inner.append(run(proj, [t], clock))
+
+    t = TK.Tick("a", every_s=1, budget_s=30, target=hook)
+
+    run(proj, [t], clock)
+
+    assert log == ["outer"] and inner == [[]], "the running claim held past the interval"
+
+
+def test_a_claim_of_a_command_that_died_is_taken_back_after_the_budget_window(proj: Path) -> None:
+    clock, log = Clock(), []
+    t = TK.Tick("a", every_s=1, budget_s=10, target=counting(log))
+    fsio.ensure_ignored_dir(proj / ".ddflow/local")
+    (proj / ".ddflow/local/ticks.json").write_text(
+        json.dumps({"format": 1, "ticks": {"a": {"last_at": clock.now - 25, "status": "running"}}})
+    )
+
+    assert [r.status for r in run(proj, [t], clock)] == [TK.RAN], "2 budgets (20s) have passed"
+
+
+def test_handing_back_a_claim_never_erases_another_commands_newer_claim(proj: Path) -> None:
+    clock = Clock()
+    t = TK.Tick("a", every_s=60, budget_s=5, target=lambda c: None)
+    path = proj / ".ddflow/local/ticks.json"
+    fsio.ensure_ignored_dir(proj / ".ddflow/local")
+    path.write_text(
+        json.dumps({"format": 1, "ticks": {"a": {"last_at": clock.now + 7, "status": "running"}}})
+    )
+
+    TK._release(path, t, clock.now)  # ours was at clock.now; the row now belongs to someone else
+
+    assert state_rows(proj)["a"] == {"last_at": clock.now + 7, "status": "running"}
+
+
+def test_a_success_clears_an_earlier_failure_of_a_zero_interval_tick(proj: Path) -> None:
+    clock, mode = Clock(), ["fail"]
+
+    def hook(c: TK.TickCtx) -> None:
+        if mode[0] == "fail":
+            raise TK.TickUnavailable("the ring is read-only")
+
+    t = TK.Tick("z", every_s=0, budget_s=1, target=hook)
+    TK.register(t)
+    try:
+        run(proj, [t], clock)
+        assert [r["status"] for r in TK.status(proj) if r["name"] == "z"] == [TK.UNAVAILABLE]
+        mode[0] = "ok"
+        run(proj, [t], clock)
+        assert [r["status"] for r in TK.status(proj) if r["name"] == "z"] == [TK.RAN]
+    finally:
+        TK.unregister("z")
+
+
+def test_a_tick_that_cannot_be_judged_is_recorded_once_not_dropped(proj: Path) -> None:
+    clock = Clock()
+    boom = TK.Tick("boom", every_s=60, budget_s=1, target=lambda c: None, enabled=lambda c: 1 / 0)
+
+    run(proj, [boom], clock)
+    before = (proj / ".ddflow/local/ticks.json").read_text()
+    run(proj, [boom], clock)
+
+    assert state_rows(proj)["boom"]["status"] == TK.FAILED
+    assert "enabled check failed" in state_rows(proj)["boom"]["detail"]
+    assert (proj / ".ddflow/local/ticks.json").read_text() == before, "no rewrite per pass"
+
+
+def test_load_calls_the_registry_with_the_project(
+    proj: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.api._base import _load
+
+    seen: list[TK.TickCtx] = []
+    monkeypatch.setattr(TK, "run_due", lambda c, **k: seen.append(c) or [])
+
+    _load(proj)
+
+    assert len(seen) == 1 and Path(seen[0].repo) == proj

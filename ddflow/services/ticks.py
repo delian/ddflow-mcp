@@ -47,10 +47,14 @@ FORMAT = 1
 
 #: Seconds the whole pass may spend running ticks before the rest are deferred.
 PASS_BUDGET_S = 15.0
+#: A claim is honoured for this many budgets of the claimed tick before it is taken for
+#: a command that died mid-run.
+CLAIM_WINDOWS = 2
 #: Seconds a state-file lock is waited for: it is held only to read, claim and write.
 LOCK_WAIT_S = 1.0
 
 RAN = "ran"
+RUNNING = "running"
 CUT = "cut"
 FAILED = "failed"
 DEFERRED = "deferred"
@@ -205,6 +209,10 @@ def _due(t: Tick, row: dict[str, Any], now: float) -> bool:
         return True
     if now < last:
         return False  # the clock went back: wait until it catches up, never run twice
+    if row.get("status") == RUNNING and now - last < CLAIM_WINDOWS * t.budget_s:
+        # Claimed by a command that has not finished -- a tick that outruns its own interval
+        # is still ours until its budget (and a margin) has passed, not due again.
+        return False
     return now - last >= t.every_s
 
 
@@ -216,7 +224,7 @@ def _claim(path: Path, due: list[Tick], now: float) -> list[Tick]:
         rows = _read(path)
         for t in due:
             if _due(t, rows.get(t.name, {}), now):
-                rows[t.name] = {**rows.get(t.name, {}), "last_at": now, "status": "running"}
+                rows[t.name] = {**rows.get(t.name, {}), "last_at": now, "status": RUNNING}
                 won.append(t)
         if won:
             _write(path, rows)
@@ -319,7 +327,7 @@ def _split_due(
     return due, unjudged
 
 
-def _run_one(t: Tick, ctx: TickCtx, path: Path, budget_left: float) -> TickResult:
+def _run_one(t: Tick, ctx: TickCtx, path: Path, budget_left: float, prior: str = "") -> TickResult:
     """Run ``t`` inside its budget (and what is left of the pass's) and record the outcome."""
     budget = min(t.budget_s, budget_left)
     begun = ctx.mono()
@@ -330,8 +338,9 @@ def _run_one(t: Tick, ctx: TickCtx, path: Path, budget_left: float) -> TickResul
     result = TickResult(t.name, status_, detail, ctx.mono() - begun)
     # A tick with `every_s == 0` has its own throttle (it is asked on every pass), so it is
     # recorded only when it fails or is cut -- the state file is not rewritten on every
-    # command -- which a doctor line must be able to show.
-    if t.every_s > 0 or status_ != RAN:
+    # command -- which a doctor line must be able to show,
+    # ... and when a success follows a recorded failure, so a healthy tick is not shown broken.
+    if t.every_s > 0 or status_ != RAN or prior in (FAILED, CUT, UNAVAILABLE):
         with contextlib.suppress(OSError, fsio.LockTimeout):
             _record(path, t, result)
     return result
@@ -344,10 +353,16 @@ def _run_due(
         return []
     path = _dir(ctx.repo) / STATE
     now = clock()
-    due, results = _split_due(ticks, ctx, _read(path), now)
+    rows = _read(path)
+    due, results = _split_due(ticks, ctx, rows, now)
     if not due and not results:
         return []
     fsio.ensure_ignored_dir(_dir(ctx.repo))  # only now that something will be written
+    for r in results:  # a tick that could not be judged is shown, once, not dropped
+        prior = rows.get(r.name, {})
+        if (prior.get("status"), prior.get("detail")) != (r.status, r.detail):
+            with contextlib.suppress(OSError, fsio.LockTimeout, KeyError):
+                _record(path, next(t for t in ticks if t.name == r.name), r)
     started = ctx.mono()
     stateful_due = [t for t in due if t.every_s > 0]
     claimed = {t.name for t in _claim(path, stateful_due, now)} if stateful_due else set()
@@ -363,19 +378,22 @@ def _run_due(
                 results.append(TickResult(t.name, DEFERRED, "the pass budget was spent"))
                 continue
             pending.discard(t.name)
-            results.append(_run_one(t, ctx, path, left))
+            results.append(_run_one(t, ctx, path, left, rows.get(t.name, {}).get("status", "")))
     finally:
         for name in sorted(pending):  # an abort (KeyboardInterrupt, ...) must not strand a claim
             with contextlib.suppress(OSError, fsio.LockTimeout):
-                _release(path, by_name[name])
+                _release(path, by_name[name], now)
     return results
 
 
-def _release(path: Path, t: Tick) -> None:
-    """Undo a claim for a tick that was not run: it is due again."""
+def _release(path: Path, t: Tick, claimed_at: float) -> None:
+    """Undo OUR claim of a tick that was not run: it is due again. A row another command has
+    claimed or recorded since (its `last_at` is no longer ours) is left alone."""
     with fsio.file_lock(path.with_name(LOCK), LOCK_WAIT_S):
         rows = _read(path)
         row = rows.get(t.name, {})
+        if row.get("last_at") != claimed_at or row.get("status") != RUNNING:
+            return
         row.pop("last_at", None)
         row["status"] = DEFERRED
         rows[t.name] = row
