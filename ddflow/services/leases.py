@@ -29,9 +29,9 @@ from typing import Any
 from ..config import Config
 from ..core import globspec as GS
 from ..core import schedule
-from ..core.flow import line_key
+from ..core.admission import glob_conflict
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
-from ..core.schedule import capacities, conflicts, plan_blocker, resource_shortfall
+from ..core.schedule import capacities, plan_blocker, resource_shortfall
 from ..infra import worktree as W
 from ..infra.log import EventLog
 
@@ -153,17 +153,16 @@ def glob_clash(
     One copy, asked by `claim` and by `update --globs` on a claimed item, so widening a
     claim cannot take paths that claiming them would have been refused.
     """
-    my_line = line_key(state, it, cfg)
-    for other_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
-        if other_id == it.id or lease.holder == holder:
-            continue
-        other = state.items.get(other_id)
-        if other is not None and line_key(state, other, cfg) != my_line:
-            continue  # different release lines: different branches, no collision
-        pairs = conflicts(globs, lease.globs, schedule.shared_globs(cfg))
-        if pairs:
-            return other_id, lease, pairs[0]
-    return None
+    clash = glob_conflict(
+        state,
+        cfg,
+        it,
+        globs,
+        holder,
+        against="live",
+        live=state.active_leases(now, cfg.lease.grace_s),
+    )
+    return (clash.item, clash.lease, clash.pair) if clash else None
 
 
 def acquire(
