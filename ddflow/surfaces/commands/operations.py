@@ -278,8 +278,19 @@ def cmd_tests(a, c: Ctx) -> int:
             print(f"  {t['path']}  -- {t['reason']}")
         if d["command"]:
             print(f"\nRun them now, in parallel:\n  {d['command']}")
-    if d["full_suite"]:
-        print(f"\nThe unit_tests gate still runs the whole suite:\n  {d['full_suite']}")
+    g = d.get("unit_tests_gate") or {}
+    if g.get("scope") == "selected":
+        print(f"\nThe unit_tests gate runs only the selected tests ({g['why']}):")
+        for t in g["tests"]:
+            print(f"  {t['path']}  -- {t['reason']}")
+        print(f"  {g['command']}")
+    elif g:
+        print(f"\nThe unit_tests gate runs the whole suite: {g['why']}\n  {d['full_suite']}")
+    elif d["full_suite"]:
+        print(
+            "\nThe unit_tests gate may run the whole suite; pass --item <id> to see which "
+            f"mode it would use for that item:\n  {d['full_suite']}"
+        )
     if d["advice"]:
         print(f"  NOTE: that command {d['advice']}")
     return out.exit
