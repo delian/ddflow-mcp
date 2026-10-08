@@ -275,3 +275,19 @@ def test_remove_keeps_the_lock_file_so_exclusion_survives(store):
     inode = lock.stat().st_ino
     store.remove("d.json")
     assert store.read("d.json") is None and lock.stat().st_ino == inode
+
+
+def test_a_put_is_stamped_when_it_holds_the_lock_not_when_it_was_called(store):
+    started = threading.Event()
+
+    def late_put():
+        started.set()
+        store.queue_put("q.json", "k", 1)
+
+    with store.lock("q.json"):
+        t = threading.Thread(target=late_put)
+        t.start()
+        started.wait()
+        store.fake.t += 50  # the put is waiting on the lock while time passes
+    t.join()
+    assert store.queue_pending("q.json")["k"]["last_at"] == 1050.0

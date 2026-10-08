@@ -248,9 +248,9 @@ class LocalStore:
         """Queue `payload` under `key`. A key already waiting is COALESCED: its payload is
         replaced, its `first_at` kept, its `count` raised and its quiet period restarted.
         Returns how many puts this key now stands for."""
-        now = self.clock()
 
         def put(cur: Any) -> dict[str, Any]:
+            now = self.clock()  # read under the lock, so last_at never runs backwards
             q = dict(cur) if isinstance(cur, dict) else {}
             old = q.get(key)
             q[key] = {
@@ -276,10 +276,10 @@ class LocalStore:
         """Remove and return the entries that are due (quiet for their `debounce_s`), oldest
         first, at most `limit`. Taking is one atomic swap: a crash before it leaves the
         entries queued, after it leaves them taken, never half."""
-        now = self.clock()
         taken: list[tuple[str, dict[str, Any]]] = []
 
         def take(cur: Any) -> dict[str, Any]:
+            now = self.clock()
             q = dict(cur) if isinstance(cur, dict) else {}
             order = sorted(q.items(), key=lambda kv: (kv[1].get("first_at", 0), kv[0]))
             for key, entry in order:
