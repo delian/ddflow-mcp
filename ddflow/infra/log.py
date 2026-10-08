@@ -39,6 +39,9 @@ from ..core import redact as R
 from ..core import upcasters as UP
 from ..core import version as V
 from ..core.events import (
+    CAP_ID_TEMPLATE,
+    CAP_LOG_REDACTION,
+    CAPABILITIES_KIND,
     OLDER_MARK,
     PROVENANCE_KINDS,
     SCHEMA_VERSION,
@@ -47,8 +50,12 @@ from ..core.events import (
     TAIL_MAX_BYTES,
     TAIL_WINDOW_BYTES,
     Event,
+    RecordedCapability,
     SkewRefused,
     canonical,
+    capabilities_used,
+    capability_gap,
+    capability_unrecorded,
     stamp_facts,
     utcnow,
 )
@@ -75,7 +82,7 @@ _AGENT_ID_CACHE: dict[str, str] = {}
 
 #: Kinds an append writes WITHOUT the stamp-and-guard step: the stamp itself, and the
 #: override that exists to be written while the guard would refuse everything else.
-_STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND})
+_STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND, CAPABILITIES_KIND})
 
 #: The local, git-ignored marker: the last ddflow version THIS machine acted under.
 SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
@@ -175,6 +182,20 @@ def skew_message(
         f"allow_older_version argument carrying the reason). That override is recorded "
         f"(skew.overridden), marks this session's events as written by an older ddflow, and "
         f"covers this session only. [upgrade].skew = warn or off turns the guard down."
+    )
+
+
+def capability_message(name: str, since: str, kind: str, version: str, by: str = "") -> str:
+    """The refusal for ONE write whose capability this ddflow lacks (decision D-compat 2):
+    it names the capability, the kind refused and the release that provides it, and says
+    everything else proceeds."""
+    who = f" (recorded by {by})" if by else ""
+    return (
+        f"REFUSED: this write ({kind}) needs the `{name}` capability, which this project's "
+        f"log records{who} and ddflow {version} does not have: writing it could misread or "
+        f"drop what a newer ddflow recorded under it. Upgrade ddflow-mcp to >= {since} "
+        f"and retry. Only writes of this kind are refused; everything else proceeds. If "
+        f'you cannot upgrade, ask the user; `[upgrade].skew = "off"` is theirs to set.'
     )
 
 
@@ -815,6 +836,7 @@ class EventLog:
         # The directory is created on the first append instead.
         self._lamport = 0
         self._redactor: Any = None
+        self._caps_active: set[str] | None = None
         self.skipped_lines = 0
 
     @property
@@ -970,7 +992,7 @@ class EventLog:
                 # The version stamp and the skew guard, in the same lock as the write: a
                 # refusal must not be raced past, and the stamp must precede the event
                 # that caused it (decisions D-upgrade-event-kinds, D-upgrade-skew-guard).
-                payload.update(self._stamp_and_guard())
+                payload.update(self._stamp_and_guard(kind))
             return self._write(kind, subject, payload, observed)
 
     def _write(
@@ -1062,7 +1084,7 @@ class EventLog:
         for p in self.shards():
             yield from self._read_shard(p)[0]
 
-    def _stamp_and_guard(self) -> dict[str, Any]:
+    def _stamp_and_guard(self, kind: str = "") -> dict[str, Any]:
         """Refuse an older ddflow's write to a newer log, stamp this version on first use.
 
         Returns extra `data` for the event about to be written: the older-version mark when
@@ -1091,13 +1113,47 @@ class EventLog:
                 extra[OLDER_MARK] = version
             elif policy == "warn":
                 _warn_skew_once(version, facts.highest, facts.highest_format, fmt)
+        gap = capability_gap(facts.capabilities, kind) if kind else None
+        if gap is not None and self._skew_policy() == "refuse" and facts.override is None:
+            name, rec = gap
+            raise SkewRefused(capability_message(name, rec.version, kind, version, rec.by))
         if not facts.seen_by_me and version_known(version):
             stamp: dict[str, Any] = {"version": version, "install": install_kind()}
             if fmt:
                 stamp["format_level"] = fmt
             self._write(SEEN_KIND, "ddflow", stamp)
             _write_seen_marker(self.root, version)
+        if kind:
+            self._record_capabilities(kind, facts.capabilities)
         return extra
+
+    def _active_capabilities(self) -> set[str]:
+        """The capabilities the project's own settings make every write of their kinds use:
+        the full log redaction profile always, id templates once any `[ids]` knob is not its
+        default. Read from the config once per log object (a stale answer only delays the
+        record to the next object; the guard never depends on it)."""
+        if self._caps_active is None:
+            active = {CAP_LOG_REDACTION}
+            try:
+                ids = Config.load(self.root).ids
+                if ids != type(ids)():
+                    active.add(CAP_ID_TEMPLATE)
+            except Exception:
+                pass
+            self._caps_active = active
+        return self._caps_active
+
+    def _record_capabilities(self, kind: str, recorded: dict[str, RecordedCapability]) -> None:
+        """Record, before the write that is about to use it, each capability it uses that the
+        log does not yet record in full (`ddflow.capabilities`). Caller holds the lock."""
+        for name in capabilities_used(kind, self._active_capabilities()):
+            cap = capability_unrecorded(recorded, name)
+            if cap is not None:
+                self._write(
+                    CAPABILITIES_KIND,
+                    "ddflow",
+                    {"capability": cap.name, "kinds": sorted(cap.kinds), "version": cap.since},
+                )
 
     def _skew_policy(self) -> str:
         """`[upgrade].skew`: refuse (default) | warn | off. Read only when a skew is actually

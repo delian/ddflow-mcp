@@ -603,6 +603,8 @@ def _history_line(ev) -> str:
         detail = f"as {d['sha'][:8]}"
     elif ev.kind == "ddflow.seen":
         detail = f"{d.get('version', '?')} ({d.get('install', '?')})"
+    elif ev.kind == "ddflow.capabilities":
+        detail = f"{d.get('capability', '?')} (ddflow {d.get('version', '?')})"
     elif ev.kind == "upgrade.applied":
         detail = (
             f"{d.get('from') or 'unstamped'} -> {d.get('to', '?')}: "

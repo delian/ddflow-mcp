@@ -17,6 +17,7 @@ from typing import Any
 
 from ..config import ID_PREFIXES, Config, id_problem
 from .digest import content_digest
+from .events import ID_MINTING_KINDS
 
 
 def auto_id(prefix: str, *parts: str) -> str:
@@ -127,19 +128,7 @@ class Minted:
 
 
 #: The events that record a minted record and may carry its `key` (`key_field`).
-KEYED_EVENTS = frozenset(
-    {
-        "bug.found",
-        "lesson.recorded",
-        "research.recorded",
-        "decision.recorded",
-        "memory.recorded",
-        "job.started",
-        "session.started",
-        "task.added",
-        "phase.added",
-    }
-)
+KEYED_EVENTS = ID_MINTING_KINDS
 
 
 def taken(state: Any, events: Any = ()) -> dict[str, str]:

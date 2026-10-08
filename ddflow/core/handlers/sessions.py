@@ -100,6 +100,21 @@ def _h_ddflow_seen(st: State, ev: Event) -> None:
     rec["at"] = min(rec["at"], ev.ts)
 
 
+def _h_ddflow_capabilities(st: State, ev: Event) -> None:
+    """A capability the log's data needs (`ddflow.capabilities`): the kinds union and the
+    highest release, folded the same way the write guard does (`events._fold_capability`)."""
+    name, kinds, v = ev.data.get("capability"), ev.data.get("kinds"), ev.data.get("version")
+    if not (isinstance(name, str) and name and isinstance(kinds, list) and isinstance(v, str)):
+        return
+    rec = st.capabilities.setdefault(name, {"kinds": [], "version": v, "agents": [], "at": ev.ts})
+    rec["kinds"] = sorted({*rec["kinds"], *(k for k in kinds if isinstance(k, str))})
+    if (version_key(v), v) > (version_key(rec["version"]), rec["version"]):
+        rec["version"] = v
+    if ev.agent not in rec["agents"]:
+        rec["agents"].append(ev.agent)
+    rec["at"] = min(rec["at"], ev.ts)
+
+
 def _h_skew_overridden(st: State, ev: Event) -> None:
     d = ev.data
     st.skew_overrides.append(
