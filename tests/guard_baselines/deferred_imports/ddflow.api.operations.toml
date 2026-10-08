@@ -1,4 +1,4 @@
 # Ratchet `deferred_imports` for ddflow.api.operations (tests/test_architecture_guards.py).
 # Lower it in the same change that removes sites; delete the file at zero.
 # Never raise it.
-baseline = 23
+baseline = 22
