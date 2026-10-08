@@ -709,10 +709,25 @@ ddflow adopt --agents claude,cursor,vscode,kimi   # or name the ones you use
 ```
 
 After upgrading ddflow, `ddflow doctor` notes any driver doc (`implement-phase.md`, an
-adopted agent's delta) that differs byte-for-byte from the template the running ddflow
-ships. `ddflow adopt --refresh-docs` (MCP: `ddflow_setup` with `refresh_docs`) rewrites
+adopted agent's delta) that differs from the template the running ddflow ships.
+`ddflow adopt --refresh-docs` (MCP: `ddflow_setup` with `refresh_docs`) rewrites
 only those docs, the AGENTS.md/CLAUDE.md blocks and the agents' native rules -- never the
 MCP launch, hooks or command files -- and refuses a project that was never adopted.
+
+A driver doc is a stamped region (`<!-- ddflow:begin drivers/implement-phase ddflow=V fmt=N
+sha=H -->` ... `<!-- ddflow:end drivers/implement-phase -->`): the version that wrote it, its
+format level and a digest of its body. That is how a refresh and `ddflow upgrade` tell an
+unedited copy from an older release (replaced) from a **hand edit** (the digest no longer
+matches). A hand edit is never silently overwritten: before the refresh rewrites the file,
+your version is copied whole to `<file>.local-edits` (`.local-edits.2`, `.3` ... when that
+name is taken) and the action says so; text you wrote outside the region stays where it is,
+and the originals also go to `.ddflow/backups/`. The same holds for an edit inside the
+AGENTS.md/CLAUDE.md block, and for the `/implement` command file when a plain
+`ddflow adopt` rewrites it (a refresh never touches command files). A copy written before the
+stamp (a driver an older ddflow copied) has no digest to tell by: it is replaced after a
+backup, and `ddflow upgrade --plan` calls it *stale* when a release has shipped since the
+project last worked and *hand-edited* (needs the operator) when none has. A doc written at
+a higher format level than this ddflow understands is left alone: upgrade ddflow.
 
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
 them and leaves your own prose alone. It writes the MCP registration into each agent's
@@ -5350,7 +5365,7 @@ knob with its value, source and documentation.
 | `.ddflow/templates/export/<kind>.md.j2` | shared | Format of each generated document | `ddflow export eject <kind>` |
 | `.ddflow/rules/<id>.toml` | shared | Project rules agents are told to follow | `ddflow rule add/edit/remove`, `ddflow_rule_*` |
 | `AGENTS.md` / `CLAUDE.md` | shared | The managed ddflow block plus your own prose | `ddflow adopt` (re-run), editor outside the block |
-| `docs/ddflow/drivers/implement-phase.md` and `deltas/<agent>.md` | shared | The implementation driver and per-agent notes | edit; `ddflow adopt --refresh-docs` resets to shipped |
+| `docs/ddflow/drivers/implement-phase.md` and `deltas/<agent>.md` | shared | The implementation driver and per-agent notes | edit (outside the stamped region freely; an edit inside it is kept in `<file>.local-edits` when `ddflow adopt --refresh-docs` resets it to shipped) |
 | `.claude/commands/implement.md` (and other agents' command dirs) | shared | The slash command that drives the queue | edit after `ddflow adopt` |
 | Agent MCP config (`.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, …) | shared | How the agent launches ddflow; see [Wiring it into your agent](#wiring-it-into-your-agent) | `ddflow adopt --agents …` |
 | `.ddflow/events/` | shared | The source-of-truth log. **Append-only: do not edit.** | the CLI/MCP only |
