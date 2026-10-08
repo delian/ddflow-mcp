@@ -407,16 +407,21 @@ def _run_repairs(repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]])
     return out
 
 
-def _run_instructions(repo: Path, items: list[dict[str, Any]]) -> list[dict]:
+def _run_instructions(repo: Path, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     paths = [i["path"] for i in items]
     try:
         actions = AD.refresh_docs(repo, only=paths, backup=False)
     except (OSError, ValueError) as exc:
         return [_rec(i, FAILED, f"{type(exc).__name__}: {exc}") for i in items]
-    return [
-        _rec(i, APPLIED, "; ".join(a for a in actions if i["path"] in a) or "refreshed")
-        for i in items
-    ]
+    out = []
+    for i in items:
+        mine = [a for a in actions if i["path"] in a]
+        if any(isinstance(a, AD.Refused) for a in mine):
+            # A refusal (a newer format, broken markers) is never counted as applied.
+            out.append(_rec(i, REFUSED, "; ".join(mine)))
+        else:
+            out.append(_rec(i, APPLIED, "; ".join(mine) or "refreshed"))
+    return out
 
 
 def _rec(item: dict[str, Any], status: str, detail: str) -> dict[str, Any]:

@@ -372,6 +372,8 @@ class RulesState:
     #: The block carries the stamped markers (so "differs" is proven to be an unedited older
     #: copy unless `edited`); False for the legacy markers, which hold no digest.
     stamped: bool = False
+    #: The stamped block was written at a higher format level than this ddflow understands.
+    newer: bool = False
 
     @property
     def needs_attention(self) -> bool:
@@ -460,6 +462,14 @@ def _stamped(text: str) -> bool:
         return False
 
 
+def block_newer(text: str) -> bool:
+    """Was the stamped managed block in ``text`` written at a newer format level?"""
+    try:
+        return BLOCK.state(text) == "newer"
+    except RegionError:
+        return False
+
+
 def block_edited(text: str) -> bool:
     """Was the stamped managed block in ``text`` changed by hand since it was written?"""
     try:
@@ -511,7 +521,15 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
             out.append(RulesState(name, MISSING))
             continue
         text = path.read_text("utf-8", errors="replace")
-        out.append(RulesState(name, _block_state(text, want), block_edited(text), _stamped(text)))
+        out.append(
+            RulesState(
+                name,
+                _block_state(text, want),
+                block_edited(text),
+                _stamped(text),
+                block_newer(text),
+            )
+        )
 
     # The NATIVE surfaces, which for some agents OUTRANK `AGENTS.md` and are therefore what
     # actually binds. Cursor's precedence is Team Rules > Project Rules > User Rules >

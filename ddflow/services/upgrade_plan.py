@@ -218,6 +218,19 @@ def _provenance(by_release: bool, *, edited: bool, proven: bool) -> tuple[str, s
     return "hand-edited", OPERATOR
 
 
+def _newer_item(path: str, text: str) -> dict[str, Any]:
+    return {
+        "category": "instructions",
+        "id": f"instructions:{path}",
+        "path": path,
+        "state": "newer",
+        "provenance": "newer",
+        "summary": f"{text}: upgrade ddflow, do not refresh it",
+        "action": NOTE,
+        "fix": "upgrade ddflow",
+    }
+
+
 def instruction_items(
     repo: Path, drifted_by_release: bool, docs_dir: str = "docs/ddflow"
 ) -> list[dict[str, Any]]:
@@ -227,16 +240,14 @@ def instruction_items(
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
 
-    def add(path: str, state: str, text: str, provenance: str, action: str) -> None:
+    def add(
+        path: str, state: str, text: str, provenance: str, action: str, *, kept: bool = False
+    ) -> None:
         if path in seen:
             return
         seen.add(path)
         missing = state == AD.MISSING
-        keeps = (
-            " (a refresh keeps your edits in .local-edits)"
-            if provenance == "hand-edited" and not missing
-            else ""
-        )
+        keeps = " (a refresh keeps your edits in .local-edits)" if kept and not missing else ""
         out.append(
             {
                 "category": "instructions",
@@ -254,29 +265,30 @@ def instruction_items(
         if st == AD.DOC_NEWER:
             # Written by a newer ddflow: nothing this one may do (D-compat 2).
             seen.add(rel)
-            out.append(
-                {
-                    "category": "instructions",
-                    "id": f"instructions:{rel}",
-                    "path": rel,
-                    "state": st,
-                    "provenance": "newer",
-                    "summary": f"{rel} was written by a newer ddflow: upgrade ddflow, do not refresh it",
-                    "action": NOTE,
-                    "fix": "upgrade ddflow",
-                }
-            )
+            out.append(_newer_item(rel, f"{rel} was written by a newer ddflow"))
             continue
         prov, action = _provenance(
             drifted_by_release, edited=st == AD.DOC_EDITED, proven=st == AD.DOC_STALE
         )
-        add(rel, "differs", f"{rel} differs from the one this ddflow ships", prov, action)
+        add(
+            rel,
+            "differs",
+            f"{rel} differs from the one this ddflow ships",
+            prov,
+            action,
+            kept=st == AD.DOC_EDITED,
+        )
     for rs in AD.rules_status(repo, docs_dir=docs_dir):
-        if rs.needs_attention:
-            prov, action = _provenance(
-                drifted_by_release, edited=rs.edited, proven=rs.stamped and rs.state == AD.STALE
-            )
-            add(rs.path, rs.state, rs.render(), prov, action)
+        if not rs.needs_attention:
+            continue
+        if rs.newer:
+            seen.add(rs.path)
+            out.append(_newer_item(rs.path, f"{rs.path}'s block was written by a newer ddflow"))
+            continue
+        prov, action = _provenance(
+            drifted_by_release, edited=rs.edited, proven=rs.stamped and rs.state == AD.STALE
+        )
+        add(rs.path, rs.state, rs.render(), prov, action, kept=rs.edited and rs.stamped)
     return out
 
 
