@@ -265,7 +265,7 @@ def test_exemption_derivations():
         ("search",): ("ddflow_list", "search"),
     }
     assert R.covering_tools(cmds) == {"init": ("ddflow_setup",)}
-    assert R.declared_words(cmds) == {"mcp", "init", "search"}
+    assert R.declared_words(cmds) == {"mcp"}
     assert R.flag_exemptions(cmds) == {("ddflow_ci", "--sha"): "why"}
     assert R.prose_reasons(cmds) == {"ddflow_brief": "text"}
     with pytest.raises(ValueError):
