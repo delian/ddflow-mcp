@@ -49,11 +49,20 @@ def _rewritable(ctx: Context) -> tuple[Vocabulary | None, list[Ref]]:
     return vocab, found
 
 
+def _key(f: Ref) -> str:
+    return f"{f.path}:{f.line}:{f.ref.text}"
+
+
+def _chosen(ctx: Context, found: list[Finding]) -> tuple[Vocabulary | None, list[Ref]]:
+    """The references to act on: the current ones that are among the detected ``found``.
+    Anything that appeared since is not part of what was shown and backed up."""
+    vocab, refs = _rewritable(ctx)
+    keys = {f.key for f in found}
+    return vocab, [f for f in refs if _key(f) in keys]
+
+
 def _detect(ctx: Context) -> list[Finding]:
-    return [
-        Finding(f"{f.path}:{f.line}:{f.ref.text}", f.describe(), f.path)
-        for f in _rewritable(ctx)[1]
-    ]
+    return [Finding(_key(f), f.describe(), f.path) for f in _rewritable(ctx)[1]]
 
 
 def _shown(repo: Path, rel: str) -> str:
@@ -68,7 +77,7 @@ def _shown(repo: Path, rel: str) -> str:
 
 def _plan(ctx: Context, found: list[Finding]) -> list[Change]:
     by_path: dict[str, list[str]] = {}
-    for f in _rewritable(ctx)[1]:
+    for f in _chosen(ctx, found)[1]:
         by_path.setdefault(f.path, []).append(f"`{f.ref.text}` -> `{f.ref.replacement}`")
     return [
         Change(_shown(ctx.repo, rel), "rewrite " + ", ".join(sorted(set(names))))
@@ -77,7 +86,7 @@ def _plan(ctx: Context, found: list[Finding]) -> list[Change]:
 
 
 def _apply(ctx: Context, found: list[Finding]) -> list[Corrective]:
-    vocab, refs = _rewritable(ctx)
+    vocab, refs = _chosen(ctx, found)
     if vocab is not None:
         # The runner saved the planned files first; this only rewrites ddflow's own regions.
         rewrite(ctx.repo, vocab, refs, backup=False)

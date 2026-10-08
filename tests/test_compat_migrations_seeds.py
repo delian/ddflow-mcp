@@ -97,3 +97,17 @@ def test_without_a_vocabulary_there_is_nothing_to_judge_by(old: Path) -> None:
     R.provide(None)
     assert [p for p in M.pending(_ctx(old)) if p.migration.id == ID] == []
 
+
+def test_apply_acts_only_on_what_was_detected_and_planned(old: Path) -> None:
+    """A deprecated name that appears after the plan (so after the backup) is not rewritten."""
+    m = M.by_id(ID)
+    ctx = _ctx(old)
+    found = m.detect(ctx)
+    other = old / "CLAUDE.md"
+    other.write_text(_managed("Run `ddflow doc show` later.\n"))
+    m.apply(ctx, found)
+    assert "ddflow docs show" in (old / "AGENTS.md").read_text()
+    assert other.read_text() == _managed("Run `ddflow doc show` later.\n")
+    assert [
+        c.path for c in m.plan(_ctx(old), [f for f in m.detect(_ctx(old)) if f.path == "CLAUDE.md"])
+    ] == ["CLAUDE.md"]
