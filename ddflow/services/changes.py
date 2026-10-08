@@ -12,8 +12,12 @@ Two answers, for two situations:
   ``path -> content hash`` manifest, and what differs between a stored manifest and the
   disk now (added, modified, removed). The manifest is plain data the caller keeps
   wherever it keeps state; nothing here writes. A file whose size and modification time
-  are unchanged since the detector last hashed it is not read again, so a scan that finds
-  nothing new costs one ``stat`` per file.
+  (and change time) are unchanged since the detector last hashed it is not read again, so a
+  scan that finds nothing new costs one ``stat`` per file -- except for a file modified too
+  recently to trust: a coarse clock can give two quick writes one timestamp, so a file whose
+  mtime is within `RACY_NS` of the moment it was hashed is hashed again (git's "racily
+  clean" rule). The change time is part of the signature because a tool that restores
+  mtimes (``cp -p``, ``tar -x``, ``git checkout``) cannot restore it.
 - `changed_since`: the paths git says differ from a commit -- committed after it, staged,
   unstaged and untracked -- optionally narrowed to a glob set. None when git cannot say:
   "could not tell" is never "nothing changed".
@@ -27,6 +31,7 @@ from __future__ import annotations
 
 import os
 import stat
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +41,9 @@ from ..infra import git as G
 
 #: Directory names no scan descends into: git's own, never part of a work tree's content.
 PRUNE = (".git",)
+#: A file modified less than this long before it was hashed may be rewritten within the same
+#: timestamp tick (FAT keeps two seconds): its cached hash is not trusted.
+RACY_NS = 2_000_000_000
 #: Bytes read per ``read`` while hashing a file.
 CHUNK = 1 << 20
 
@@ -100,8 +108,10 @@ class ChangeDetector:
     exclude: tuple[str, ...] = ()
     prune: tuple[str, ...] = PRUNE
     hasher: Callable[[Path], str | None] = file_hash
-    #: path -> ((size, mtime_ns), hash) of the last read: the unread-again cache.
-    _seen: dict[str, tuple[tuple[int, int], str]] = field(default_factory=dict, repr=False)
+    #: Nanoseconds now, on the clock the file times use; injectable for a test.
+    now_ns: Callable[[], int] = time.time_ns
+    #: path -> ((size, mtime_ns, ctime_ns), hash) of the last trusted read: the unread-again cache.
+    _seen: dict[str, tuple[tuple[int, int, int], str]] = field(default_factory=dict, repr=False)
 
     def candidates(self) -> list[str]:
         """The matching regular files on disk, sorted. Symlinks are not followed or listed."""
@@ -131,13 +141,15 @@ class ChangeDetector:
                 continue
             if not stat.S_ISREG(st.st_mode):
                 continue
-            sig = (st.st_size, st.st_mtime_ns)
+            sig = (st.st_size, st.st_mtime_ns, st.st_ctime_ns)
             cached = self._seen.get(rel)
             if cached is not None and cached[0] == sig:
                 value: str | None = cached[1]
             else:
+                started = self.now_ns()
                 value = self.hasher(path)
-                if value is not None:
+                self._seen.pop(rel, None)
+                if value is not None and started - st.st_mtime_ns >= RACY_NS:
                     self._seen[rel] = (sig, value)
             if value is not None:
                 manifest[rel] = value

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -60,11 +61,16 @@ def test_changes_report_added_modified_and_removed(tmp_path):
     assert not again and again.paths == ()
 
 
+def _later() -> int:
+    """A clock far past every file's mtime, so the cache is trusted (see the racy tests)."""
+    return 2**62
+
+
 def test_a_file_whose_stat_is_unchanged_is_not_read_again(tmp_path):
     _write(tmp_path, "a.md", "one")
     _write(tmp_path, "b.md", "two")
     counting = Counting()
-    det = C.ChangeDetector(tmp_path, hasher=counting)
+    det = C.ChangeDetector(tmp_path, hasher=counting, now_ns=_later)
     det.scan()
     assert sorted(counting.reads) == ["a.md", "b.md"]
     counting.reads.clear()
@@ -75,15 +81,34 @@ def test_a_file_whose_stat_is_unchanged_is_not_read_again(tmp_path):
     assert counting.reads == ["a.md"]
 
 
-def test_a_same_size_rewrite_is_noticed_when_its_mtime_moves(tmp_path):
+def test_a_same_size_rewrite_with_a_restored_mtime_is_noticed_by_its_ctime(tmp_path):
+    """Mutant: the signature without the change time. `cp -p`, `tar -x` and `git checkout`
+    put the old mtime back; the ctime cannot be put back."""
     _write(tmp_path, "a.md", "aaa")
-    det = C.ChangeDetector(tmp_path)
+    old = (tmp_path / "a.md").stat()
+    det = C.ChangeDetector(tmp_path, now_ns=_later)
     before = det.scan()
+    time.sleep(0.05)  # past the kernel's coarse timestamp tick
     _write(tmp_path, "a.md", "bbb")
-    st = (tmp_path / "a.md").stat()
-    os.utime(tmp_path / "a.md", ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+    os.utime(tmp_path / "a.md", ns=(old.st_atime_ns, old.st_mtime_ns))
     got, _ = det.changes(before)
     assert got.modified == ("a.md",)
+
+
+def test_a_file_modified_just_before_it_was_hashed_is_hashed_again(tmp_path):
+    """Mutant: trusting the cache for a racily clean file. Two writes inside one timestamp
+    tick look alike to a stat; the file is read again until it has aged past RACY_NS."""
+    _write(tmp_path, "a.md", "one")
+    counting = Counting()
+    clock = {"now": (tmp_path / "a.md").stat().st_mtime_ns + 1_000}
+    det = C.ChangeDetector(tmp_path, hasher=counting, now_ns=lambda: clock["now"])
+    det.scan()
+    det.scan()
+    assert counting.reads == ["a.md", "a.md"], "too fresh to trust"
+    clock["now"] += C.RACY_NS
+    det.scan()
+    det.scan()
+    assert counting.reads == ["a.md", "a.md", "a.md"], "aged: hashed once more, then trusted"
 
 
 def test_exclude_prune_symlinks_and_unreadable_files(tmp_path):
