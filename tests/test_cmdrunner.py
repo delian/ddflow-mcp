@@ -31,8 +31,10 @@ def _gone(pid: int, wait_s: float = 5.0) -> bool:
         try:
             if Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
                 return True
+        except FileNotFoundError:
+            return True  # reaped between the two looks
         except (OSError, IndexError):
-            return True
+            raise AssertionError(f"cannot tell whether {pid} is gone") from None
         time.sleep(0.05)
     return False
 
@@ -195,3 +197,20 @@ def test_the_installed_check_uses_the_path_the_command_will_run_under(tmp_path):
         decl("u1-only-here"), timeout_s=5, env={"PATH": f"{tmp_path}:/usr/bin:/bin"}
     )
     assert run.ran and run.out == "found\n"
+
+
+def test_a_command_reviewer_is_checked_against_the_path_it_runs_under(tmp_path):
+    from ddflow.services.review import Reviewer, _chat_command
+
+    tool = tmp_path / "u1-reviewer-tool"
+    tool.write_text("#!/bin/sh\ncat >/dev/null\necho reviewed\n")
+    tool.chmod(0o755)
+    rev = Reviewer(
+        name="x",
+        kind="command",
+        command="u1-reviewer-tool",
+        model="m",
+        env={"PATH": f"{tmp_path}:/usr/bin:/bin"},
+    )
+    out, err = _chat_command(rev, "sys", "user", 30)
+    assert "not on PATH" not in err and "reviewed" in out, (out, err)

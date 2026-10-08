@@ -24,6 +24,7 @@ and what it may leak. This module is the one place that decides them.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import shutil
@@ -96,7 +97,8 @@ def executable_missing(command: str, path: str | None = None) -> str:
     about the easy case is the point: a guess about compound shell would produce false
     UNAVAILABLEs, which stall a pipeline as surely as a false pass corrupts one.
 
-    ``path`` is the ``PATH`` the command will run under (default: this process's).
+    ``path`` is the ``PATH`` the command will run under (default: this process's); an
+    environment handed to the child without a ``PATH`` leaves it the default search path.
     """
     cmd = command.strip()
     if not cmd or cmd[0] in SHELL_META:
@@ -152,7 +154,7 @@ class CommandRun:
     elapsed_s: float = 0.0
     #: The program that is not installed, for kind MISSING.
     missing: str = ""
-    #: Of the whole raw output (``output_bytes`` in characters, as gate evidence counts them),
+    #: Of the whole raw output (``output_bytes`` is a count of characters),
     #: before any clipping or redaction.
     digest: str = ""
     output_bytes: int = 0
@@ -214,7 +216,9 @@ class CommandRunner:
             raise TypeError("CommandRunner.run takes a Declared operator command, not a string")
         line = declared.line
         if check_installed and (
-            missing := executable_missing(line, None if env is None else env.get("PATH"))
+            missing := executable_missing(
+                line, None if env is None else env.get("PATH", os.defpath)
+            )
         ):
             return _unavailable(line, MISSING, f"{missing!r} is not installed", missing=missing)
         if self.slots is None:
