@@ -32,6 +32,7 @@ from typing import Any, Literal
 
 from ddflow import FORMAT_LEVEL, __version__
 from ddflow.core.digest import content_digest
+from ddflow.core.events import is_older
 
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
@@ -434,10 +435,6 @@ class NewerContent(RuntimeError):
         self.fmt = fmt
 
 
-def _vkey(version: str) -> tuple[int, ...]:
-    return tuple(int(n) for n in re.findall(r"\d+", version)[:4])
-
-
 def _digest(body: str) -> str:
     return content_digest(body, length=MANAGED_DIGEST_LEN)
 
@@ -523,7 +520,7 @@ class Managed:
             return "newer"
         if s.sha != _digest(text[at[1] : at[2]]):
             return "edited"
-        return "older" if (s.fmt, _vkey(s.version)) < (fmt, _vkey(version)) else "current"
+        return "older" if s.fmt < fmt or is_older(s.version, version) else "current"
 
     def render(
         self,
