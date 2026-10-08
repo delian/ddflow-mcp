@@ -35,7 +35,7 @@ from ..api import records as R
 from ..core import outcome as O
 from . import dedupe_flags
 from .context import Ctx
-from .registry import AS_AGENT, Alias, Command, Param
+from .registry import AS_AGENT, Alias, Command, Param, add_commands
 from .render import emit_json
 
 #: Parameter names the surface itself uses; a field may not take one.
@@ -241,6 +241,78 @@ def answer_of(args: Mapping[str, Any]) -> DD.Answer:
     return dataclasses.replace(answer, check_only=bool(args.get("check_only")))
 
 
+#: What each verb cannot run without.
+_NEEDS: dict[str, tuple[str, ...]] = {
+    "show": ("id",),
+    "add": ("id",),
+    "edit": ("id",),
+    "remove": ("id", "reason"),
+    "revise": ("id", "reason"),
+    "search": ("query",),
+}
+
+
+def _call_list(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return R.record_list(
+        repo,
+        kind,
+        filters=_where(args.get("where")),
+        all=bool(args.get("all")),
+        limit=args.get("limit"),
+        agent=agent,
+    )
+
+
+def _call_search(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return R.record_search(
+        repo,
+        kind,
+        str(args["query"]),
+        mode=args.get("mode") or "ranked",
+        filters=_where(args.get("where")),
+        all=bool(args.get("all")),
+        limit=args.get("limit"),
+        agent=agent,
+    )
+
+
+def _call_show(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return R.record_show(repo, kind, str(args["id"]), agent=agent)
+
+
+def _call_remove(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    return R.record_remove(repo, kind, str(args["id"]), reason=str(args["reason"]), agent=agent)
+
+
+def _call_add(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, answer: Any):
+    given = answer if answer is not None else answer_of(args)
+    return R.record_add(repo, kind, str(args["id"]), _fields(kind, args), answer=given, agent=agent)
+
+
+def _call_revise(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    fields = _fields(kind, args)
+    return R.record_revise(
+        repo, kind, str(args["id"]), fields, reason=str(args["reason"]), agent=agent
+    )
+
+
+def _call_edit(repo: Any, kind: R.RecordKind, args: Mapping[str, Any], agent: str, _a: Any):
+    fields = _fields(kind, args)
+    fields.update({str(n): None for n in args.get("unset") or ()})
+    return R.record_edit(repo, kind, str(args["id"]), fields, agent=agent)
+
+
+_CALLS: dict[str, Callable[..., O.Outcome]] = {
+    "list": _call_list,
+    "search": _call_search,
+    "show": _call_show,
+    "add": _call_add,
+    "edit": _call_edit,
+    "remove": _call_remove,
+    "revise": _call_revise,
+}
+
+
 def dispatch(
     repo: Any,
     kind: R.RecordKind,
@@ -250,51 +322,17 @@ def dispatch(
     answer: DD.Answer | None = None,
 ) -> O.Outcome:
     """Run the verb ``args["verb"]`` of ``kind``. Raises ValueError (a malformed call, as
-    every tool does) for a missing or unknown verb or an argument that cannot be read;
-    answers a refusal for arguments the verb does not take."""
+    every tool does) for a missing or unknown verb, a missing id, query or reason, or an
+    argument that cannot be read; answers a refusal for arguments the verb does not take."""
     verb = args.get("verb")
     if verb not in R.VERBS or verb not in kind.verbs:
         raise ValueError(f"verb must be one of {', '.join(kind.verbs)}; got {verb!r}")
     if stray := _stray(kind, verb, args):
         return O.refused(f"{kind.name}.{verb}", stray)
-    rid = str(args.get("id") or "")
-    if verb in ("show", "add", "edit", "remove", "revise") and not rid:
-        raise ValueError(f"{verb} needs id")
-    if verb == "search" and not args.get("query"):
-        raise ValueError("search needs query")
-    if verb in ("remove", "revise") and not str(args.get("reason") or "").strip():
-        raise ValueError(f"{verb} needs reason")
-    common: dict[str, Any] = {"agent": agent}
-    if verb in ("list", "search"):
-        common.update(
-            filters=_where(args.get("where")), all=bool(args.get("all")), limit=args.get("limit")
-        )
-    if verb == "list":
-        return R.record_list(repo, kind, **common)
-    if verb == "search":
-        return R.record_search(
-            repo, kind, str(args["query"]), mode=args.get("mode") or "ranked", **common
-        )
-    if verb == "show":
-        return R.record_show(repo, kind, rid, **common)
-    if verb == "remove":
-        return R.record_remove(repo, kind, rid, reason=str(args.get("reason") or ""), **common)
-    fields = _fields(kind, args)
-    if verb == "add":
-        return R.record_add(
-            repo,
-            kind,
-            rid,
-            fields,
-            answer=answer if answer is not None else answer_of(args),
-            **common,
-        )
-    if verb == "revise":
-        return R.record_revise(
-            repo, kind, rid, fields, reason=str(args.get("reason") or ""), **common
-        )
-    fields.update({str(n): None for n in args.get("unset") or ()})
-    return R.record_edit(repo, kind, rid, fields, **common)
+    for name in _NEEDS.get(verb, ()):
+        if not str(args.get(name) or "").strip():
+            raise ValueError(f"{verb} needs {name}")
+    return _CALLS[verb](repo, kind, args, agent, answer)
 
 
 # -- the CLI side -----------------------------------------------------------------------
@@ -420,16 +458,26 @@ def record_commands(kind: R.RecordKind) -> tuple[Command, ...]:
     return tuple(cmds)
 
 
-def record_groups(kind: R.RecordKind) -> dict[str, str]:
-    """The group help `registry.add_commands` takes."""
-    return {kind.name: kind.summary}
-
-
-def record_group_aliases(kind: R.RecordKind, since: str) -> dict[str, tuple[Alias, ...]]:
+def _group_aliases(kind: R.RecordKind, since: str) -> dict[str, tuple[Alias, ...]]:
     """The old words of the kind's group (`add_commands`' ``group_aliases``), each hidden
     and always callable; ``since`` is the release that renamed them."""
     if not kind.aliases:
         return {}
-    return {
-        kind.name: tuple(Alias("command", old, kind.name, since) for old in kind.aliases),
-    }
+    return {kind.name: tuple(Alias("command", old, kind.name, since) for old in kind.aliases)}
+
+
+def add_record_commands(
+    subparsers: argparse._SubParsersAction, kind: R.RecordKind, *, since: str
+) -> Command:
+    """Register the CLI half of ``kind`` under ``subparsers`` (the root's) and return the
+    tool-only `Command` whose ``tool_entry()`` the MCP table takes. This is what a family
+    calls to move onto the record surface; its group word is ``kind.name`` and ``since``
+    dates the hidden old words."""
+    commands = record_commands(kind)
+    add_commands(
+        subparsers,
+        commands,
+        groups={kind.name: kind.summary},
+        group_aliases=_group_aliases(kind, since),
+    )
+    return commands[0]
