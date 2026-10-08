@@ -176,3 +176,20 @@ def test_consent_and_version_gate_what_runs(old: Path) -> None:
     assert [o.status for o in out] == ["applied"]
     with pytest.raises(KeyError):
         M.run(old, log, cfg, ["nope"])
+
+
+def test_default_backup_saves_the_original_first(old: Path) -> None:
+    M.register(TOY)
+    out = M.run(old, EventLog(old, "migrator"), Config.load(old))
+    assert out[0].status == "applied" and out[0].backup
+    saved = list(Path(out[0].backup).rglob("notes.txt"))
+    assert [p.read_text() for p in saved] == [f"top\n{OLD_LINE}\nbody\n"]
+
+
+def test_unavailable_after_apply_is_failed_not_unavailable(old: Path) -> None:
+    def verify(ctx: M.Context) -> list[str]:
+        raise M.Unavailable("tool gone")
+
+    M.register(replace(TOY, verify=verify))
+    out = M.run(old, EventLog(old, "migrator"), Config.load(old))
+    assert out[0].status == "failed" and "could not be confirmed" in out[0].detail

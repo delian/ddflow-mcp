@@ -19,6 +19,7 @@ from ... import FORMAT_LEVEL
 from ...config import Config
 from ...core.events import is_older, version_key
 from ...infra.log import EventLog, running_version
+from ..backups import make_backup
 from .base import (
     AGENT,
     KINDS,
@@ -164,8 +165,9 @@ def run(
 ) -> list[Outcome]:
     """Apply the pending migrations: every `agent`-consent one, or exactly the named ones
     (an `operator`-consent migration runs only when named). ``backup`` receives the files a
-    migration's plan names and returns where it saved them; it raises OSError when it
-    cannot, and the migration then writes NOTHING (reported `failed`). One outcome per
+    migration's plan names and returns where it saved them (default: a local backup under
+    `.ddflow/backups`); it raises OSError when it cannot, and the migration then writes
+    NOTHING (reported `failed`). One outcome per
     migration that had something to do, in registry order. Raises KeyError for an unknown id."""
     running = running or running_version()
     named = None if ids is None else {by_id(i).id for i in ids}
@@ -184,6 +186,16 @@ def run(
     return out
 
 
+def _default_backup(repo: Path) -> Callable[[list[Path]], str]:
+    """The backup used when the caller passes none: every migration saves the files its plan
+    names first (`.ddflow/backups`, local), so none rewrites a file without a copy."""
+
+    def save(files: list[Path]) -> str:
+        return str(make_backup(repo, files, "migrate", running_version()))
+
+    return save
+
+
 def _run_one(
     m: Migration, ctx: Context, backup: Callable[[list[Path]], str] | None
 ) -> Outcome | None:
@@ -194,9 +206,9 @@ def _run_one(
         return None
     where = ""
     files = p.files(ctx.repo)
-    if backup is not None and files:
+    if files:
         try:
-            where = backup(files)
+            where = (backup or _default_backup(ctx.repo))(files)
         except OSError as exc:
             return Outcome(
                 m.id,
@@ -212,7 +224,11 @@ def _run_one(
         left = [f.detail for f in m.detect(after)]
         problems = left + list(m.verify(after))
     except Unavailable as exc:
-        return Outcome(m.id, UNAVAILABLE, f"could not run: {exc}", len(p.findings), where)
+        # Past the detector: files may be written and events appended, so this is never
+        # "nothing happened" -- the migration ran and its result is not confirmed.
+        return Outcome(
+            m.id, FAILED, f"ran, but could not be confirmed: {exc}", len(p.findings), where
+        )
     except (OSError, ValueError) as exc:
         return Outcome(m.id, FAILED, f"{type(exc).__name__}: {exc}", len(p.findings), where)
     if problems:
