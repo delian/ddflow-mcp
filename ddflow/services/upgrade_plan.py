@@ -16,6 +16,8 @@ one list, grouped by CATEGORY:
   their confirmation (decision D-upgrade-config-changes);
 - `instructions`: driver docs, rules blocks and native rules whose bytes differ from the ones
   this ddflow ships, and whether the drift is a release's (`stale`) or an edit (`hand-edited`);
+  also a note per file whose OWN text names a deprecated command or tool (never edited for
+  you: the `stale-references` migration rewrites only what ddflow wrote);
 - `hooks`: git and harness hooks that point at a launcher that is gone, and the harness hooks
   an adopted agent should have and does not;
 - `mcp`: an MCP entry that launches a ddflow that is gone;
@@ -42,6 +44,8 @@ from . import launchers as LA
 from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_manifest as UM
+from .compat_refs import DEPRECATED, scan
+from .migrations import refs as MR
 
 CATEGORIES = ("repairs", "migrations", "config", "instructions", "hooks", "mcp", "features")
 
@@ -328,6 +332,37 @@ def instruction_items(
     return out
 
 
+def reference_items(repo: Path) -> list[dict[str, Any]]:
+    """One note per file whose OWN text (not a region ddflow wrote) names a deprecated command
+    or tool. An upgrade never edits it: the plan says what to change, the alias keeps the old
+    name working until 1.0. (What ddflow wrote itself is rewritten by the `stale-references`
+    migration.)"""
+    vocab = MR._vocabulary()
+    if vocab is None:
+        return []  # nothing loaded to judge names by: nothing is reported (as `doctor` does)
+    by_path: dict[str, list[Any]] = {}
+    for f in scan(repo, vocab):
+        if not f.managed and f.ref.status == DEPRECATED and f.ref.replacement:
+            by_path.setdefault(f.path, []).append(f)
+    out: list[dict[str, Any]] = []
+    for path, found in sorted(by_path.items()):
+        out.append(
+            {
+                "category": "instructions",
+                "id": f"instructions:references:{path}",
+                "path": path,
+                "state": "references",
+                "provenance": "yours",
+                "summary": f"{path} names {len(found)} deprecated ddflow name(s) in your own text",
+                "findings": [{"key": f.where, "detail": f.proposal} for f in found[:_SHOWN]],
+                "finding_count": len(found),
+                "action": NOTE,
+                "fix": "edit them yourself; the old names keep working until 1.0",
+            }
+        )
+    return out
+
+
 def hook_items(repo: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     mcp = LA.check_mcp(repo)
@@ -410,7 +445,8 @@ def build(
         "repairs": repair_items(repo, log, cfg),
         "migrations": migration_items(repo, log, cfg, running),
         "config": config_items(changes, cfg),
-        "instructions": instruction_items(repo, not baseline or is_older(baseline, running)),
+        "instructions": instruction_items(repo, not baseline or is_older(baseline, running))
+        + reference_items(repo),
         "hooks": hook_items(repo),
         "mcp": mcp_items(repo),
         "features": feature_items(changes),
