@@ -116,7 +116,18 @@ jobs:
           }
           version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
 
+          # A version published as declared (a tag, or a declared version PyPI lacks) must be at
+          # least the step the manifest's declared impact asks for: a breaking change is a
+          # minor while ddflow is 0.x. The bump path below chooses its own step.
+          declared_ok() {
+            uv run --frozen python scripts/release_impact.py check || {
+              echo "::error::the declared version is a smaller step than the impact the upgrade manifest declares"
+              exit 1
+            }
+          }
+
           if [ "${{ github.ref_type }}" = "tag" ]; then
+            declared_ok
             {
               echo "publish=true"; echo "version=$version"; echo "sha=$(git rev-parse HEAD)"
             } >> "$GITHUB_OUTPUT"
@@ -130,6 +141,7 @@ jobs:
           code=$(pypi "$version")
           case "$code" in
             404)
+              declared_ok
               echo "$version is declared and not on PyPI yet — publishing it without a bump" ;;
             200)
               # The impact of what changed since the last release decides the step; then the
@@ -139,7 +151,12 @@ jobs:
               # would put a false release on main before the upload failed. Checked here,
               # before any commit. A taken candidate moves on by patch.
               level=patch
-              if base=$(uv run --frozen python scripts/release_impact.py base); then
+              # exit 2 = no release yet (a patch); anything else is a failure, never a patch
+              base=$(uv run --frozen python scripts/release_impact.py base) || case $? in
+                2) base="" ;;
+                *) echo "::error::could not find the last release"; exit 1 ;;
+              esac
+              if [ -n "$base" ]; then
                 level=$(uv run --frozen python scripts/release_impact.py level --base "$base")
               fi
               echo "declared impact since the last release asks for a $level bump"

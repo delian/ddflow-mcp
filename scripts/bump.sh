@@ -33,22 +33,11 @@ CUR=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
 WHAT="${1:-}"
 case "$WHAT" in
   patch|minor|major)
-    NEW=$(python3 - "$CUR" "$WHAT" <<'PY'
-import sys
-cur, part = sys.argv[1], sys.argv[2]
-bits = cur.split(".")
-if len(bits) != 3 or not all(b.isdigit() for b in bits):
-    sys.exit(f"cannot bump {cur!r}: not three numeric parts. Pass an exact version.")
-major, minor, patch = (int(b) for b in bits)
-if part == "major":
-    major, minor, patch = major + 1, 0, 0
-elif part == "minor":
-    minor, patch = minor + 1, 0
-else:
-    patch += 1
-print(f"{major}.{minor}.{patch}")
-PY
-    ) ;;
+    # The arithmetic lives in scripts/release_impact.py, which CI uses for the same steps:
+    # one definition, so a manual bump and an automatic one cannot number differently.
+    NEW=$(python3 scripts/release_impact.py next "$CUR" "$WHAT") \
+      || { echo "cannot bump $CUR: not three numeric parts. Pass an exact version." >&2; exit 1; }
+    ;;
   '' | -h | --help)
     sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
     printf '\ncurrent version: %s\n' "$CUR"
