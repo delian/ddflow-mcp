@@ -204,13 +204,24 @@ def status(repo: Path | str) -> list[dict[str, Any]]:
 # -- the pass -------------------------------------------------------------------------------
 
 
+def _claim_is_live(t: Tick, row: dict[str, Any], now: float) -> bool:
+    """Is ``row`` a claim some command is still running? One definition, for the due check
+    and for a note that must not end such a claim."""
+    last = row.get("last_at")
+    return (
+        row.get("status") == RUNNING
+        and isinstance(last, int | float)
+        and now - last < CLAIM_WINDOWS * t.budget_s
+    )
+
+
 def _due(t: Tick, row: dict[str, Any], now: float) -> bool:
     last = row.get("last_at")
     if not isinstance(last, int | float):
         return True
     if now < last:
         return False  # the clock went back: wait until it catches up, never run twice
-    if row.get("status") == RUNNING and now - last < CLAIM_WINDOWS * t.budget_s:
+    if _claim_is_live(t, row, now):
         # Claimed by a command that has not finished -- a tick that outruns its own interval
         # is still ours until its budget (and a margin) has passed, not due again.
         return False
@@ -239,10 +250,8 @@ def _record(path: Path, t: Tick, result: TickResult, *, live_at: float | None = 
     with fsio.file_lock(path.with_name(LOCK), LOCK_WAIT_S):
         rows = _read(path)
         row = rows.get(t.name, {})
-        if live_at is not None and row.get("status") == RUNNING:
-            last = row.get("last_at")
-            if isinstance(last, int | float) and live_at - last < CLAIM_WINDOWS * t.budget_s:
-                return
+        if live_at is not None and _claim_is_live(t, row, live_at):
+            return
         rows[t.name] = {
             **row,
             "status": result.status,
