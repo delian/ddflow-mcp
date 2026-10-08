@@ -35,7 +35,7 @@ from ..core.digest import content_digest, hasher
 from ..core.events import Event
 from ..core.model import known_kinds
 from ..core.redact import redact_argv
-from ..core.textcut import clip
+from ..core.textcut import clip, whole_marks
 from . import install_info as _install
 from .redact_report import redactor
 
@@ -365,7 +365,7 @@ def _command(failure: Failure | None, clean: Callable[[object], str]) -> dict[st
 
 def _cut(text: str, n: int) -> str:
     """The first `n` characters, not ending inside a `[REDACTED:...]` marker."""
-    return clip(text, n, rstrip=False)
+    return whole_marks(text[:n])
 
 
 def _tail(text: str, limit: int) -> str:
