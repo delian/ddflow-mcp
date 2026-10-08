@@ -220,13 +220,14 @@ def refs_in(line: str, vocab: Vocabulary, *, code: bool) -> Iterator[Ref]:
     """Every reference in one line. ``code``: the whole line is a command line (its comment
     is not); otherwise (prose) only what sits inside backticks counts for a command, since
     "ddflow is" is a sentence."""
+    scan_to = len(line)  # a code line's trailing comment names nothing that runs
     if code:
-        body = line.lstrip()
-        if body.startswith("#"):
-            spans = []
+        if line.lstrip().startswith("#"):
+            spans, scan_to = [], 0
         else:
             cut = re.search(r"\s#", line)
-            spans = [(0, line[: cut.start()] if cut else line)]
+            scan_to = cut.start() if cut else len(line)
+            spans = [(0, line[:scan_to])]
     else:
         spans = [(m.start(1), m.group(1)) for m in _BACKTICK.finditer(line)]
     for base, chunk in spans:
@@ -236,7 +237,7 @@ def refs_in(line: str, vocab: Vocabulary, *, code: bool) -> Iterator[Ref]:
             ref = _command_at(line, base + m.end(), vocab)
             if ref is not None:
                 yield ref
-    for m in _TOOL.finditer(line):
+    for m in _TOOL.finditer(line, 0, scan_to):
         if m.group() in NOT_TOOLS:
             continue
         status, replacement, renamed = vocab.resolve_tool(m.group())
