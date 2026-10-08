@@ -85,16 +85,25 @@ def prune(repo: Path, keep: int) -> list[str]:
     """Remove the oldest backups beyond ``keep`` (0 keeps every one); the names removed.
 
     Only directories this module wrote (each holds a `manifest.json`) are touched, and the
-    newest ``keep`` stay: names start with a sortable UTC stamp."""
+    newest ``keep`` restore points stay: names start with a sortable UTC stamp. A snapshot's
+    sidecar (what git could not hold) is no restore point of its own and does not count; it
+    goes only once its tag is gone, so a restore of a surviving tag always finds it."""
     root = Path(repo) / BACKUPS
     if keep <= 0 or not root.is_dir():
         return []
     try:
-        ours = sorted(p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+        dirs = [p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file()]
     except OSError:  # unreadable or gone meanwhile: nothing to prune, and nothing to fail over
         return []
+    sidecars = {p: m["snapshot"] for p in dirs if (m := _manifest(p)) and "snapshot" in m}
+    ours = sorted(p for p in dirs if p not in sidecars)
+    doomed = ours[: max(0, len(ours) - keep)]
+    tags = git.run(Path(repo), "tag", "--list", f"{SNAPSHOT_PREFIX}*")
+    if tags.ok:  # only with git's answer: "could not tell" never deletes
+        live = set(tags.out.splitlines())
+        doomed += [p for p, tag in sidecars.items() if tag not in live]
     removed: list[str] = []
-    for old in ours[: max(0, len(ours) - keep)]:
+    for old in sorted(doomed):
         shutil.rmtree(old, ignore_errors=True)
         if not old.exists():  # a removal that was refused is not a removal
             removed.append(old.name)
@@ -210,8 +219,9 @@ def local_backups(repo: Path) -> list[str]:
     root = Path(repo) / BACKUPS
     if not root.is_dir():
         return []
-    found = ((p, _manifest(p)) for p in root.iterdir() if p.is_dir())
-    return sorted(p.name for p, m in found if m is not None and "snapshot" not in m)
+    found = ((p, _manifest(p)) for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+    # a manifest that cannot be read is still a backup (restoring it will say why not)
+    return sorted(p.name for p, m in found if m is None or "snapshot" not in m)
 
 
 def _sidecar(repo: Path, tag: str) -> Path | None:
