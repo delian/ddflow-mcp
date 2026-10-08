@@ -31,8 +31,8 @@ def _gone(pid: int, wait_s: float = 5.0) -> bool:
         try:
             if Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
                 return True
-        except FileNotFoundError:
-            return True  # reaped between the two looks
+        except (FileNotFoundError, ProcessLookupError):
+            return True  # reaped between the two looks (reading an exiting process raises ESRCH)
         except (OSError, IndexError):
             raise AssertionError(f"cannot tell whether {pid} is gone") from None
         time.sleep(0.05)
