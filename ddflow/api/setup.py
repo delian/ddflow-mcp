@@ -1232,7 +1232,7 @@ def setup(
     this design exists to prevent. Detection only; nothing is installed, because fetching
     and running code on someone's machine is not a thing a work-queue tool gets to do.
     """
-    from ..services.adopt import AGENT_TARGETS, adopt, adopted_agents, refresh_docs
+    from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, refresh_docs
 
     plan = plan or Adoption()
     _log, cfg, _st = _load(repo, agent)
@@ -1245,7 +1245,6 @@ def setup(
             actions = refresh_docs(tree, docs_dir=plan.docs)
         except ValueError as exc:
             return O.failed("setup", str(exc), actions=[], agents=[], text="")
-        from ..services.adopt import Refused
         from ..views import human as _human
 
         data = {
@@ -1284,7 +1283,6 @@ def setup(
         if not st.is_gap:
             continue
         (ready if st.state == "installed" else absent).append(st.companion.id)
-    from ..services.adopt import Refused
     from ..views import human
 
     data = {
