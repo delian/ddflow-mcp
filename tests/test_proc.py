@@ -52,3 +52,13 @@ def test_kill_group_sends_the_chosen_signal_to_the_whole_group(sig, code):
 
 def test_the_popen_alias_is_the_standard_one():
     assert P.Popen is subprocess.Popen
+
+
+@pytest.mark.parametrize("sig", [None, signal.SIGTERM])
+def test_signalling_a_group_that_is_already_gone_is_not_an_error(sig):
+    """Mutant: `kill_group` letting `ProcessLookupError` out. `companions._stop` relies on it
+    when a server exited on its own before it was stopped."""
+    p = P.popen(["true"], start_new_session=True)
+    p.wait(timeout=10)
+    P.kill_group(p, sig)
+    P.kill_group(p, sig)
