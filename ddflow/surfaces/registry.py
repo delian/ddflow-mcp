@@ -29,6 +29,9 @@ TYPES = ("string", "boolean", "integer", "number", "array")
 
 _UNSET: Any = object()
 
+#: The longest CLI path: `group command`.
+GROUP_DEPTH = 2
+
 
 @dataclass(frozen=True)
 class Param:
@@ -251,7 +254,7 @@ def add_commands(
         if len(cmd.path) == 1:
             cmd.add_to(subparsers)
             continue
-        if len(cmd.path) != 2:
+        if len(cmd.path) != GROUP_DEPTH:
             raise ValueError(f"{'/'.join(cmd.path)}: only one- and two-word paths are supported")
         group = cmd.path[0]
         if group not in made:
