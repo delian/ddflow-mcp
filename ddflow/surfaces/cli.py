@@ -92,8 +92,8 @@ def cmd_item_update(a, c: Ctx) -> int:
 def cmd_approve(a, c: Ctx) -> int:
     """A person clears, or refuses, a human-approval gate.
 
-    CLI ONLY, on purpose, and `tests/test_mcp_parity.py` records the exemption with its
-    reason. A human checkpoint an agent can satisfy through the MCP surface is not a
+    CLI ONLY, on purpose, and `surfaces/exemptions.py` records the exemption with its
+    reason (`tests/test_mcp_parity.py` enforces it). A human checkpoint an agent can satisfy through the MCP surface is not a
     human checkpoint — it is a second `gate record` with a longer name.
     """
     # `_require_item` FIRST, like every sibling. Without it `approve` was the one
