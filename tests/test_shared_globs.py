@@ -530,3 +530,7 @@ def test_a_glob_git_cannot_read_is_a_problem_through_core_globs():
     cfg.lease.shared_globs = ["a[z-a]"]
     problems, _notes = SF.findings(Path("/nonexistent-repo"), cfg)
     assert any("a[z-a]" in p and "cannot be read as git reads it" in p for p in problems)
+    # and it is core.globs' reader that does it: the module uses that very function
+    from ddflow.core import globs
+
+    assert SF.regex is globs.regex
