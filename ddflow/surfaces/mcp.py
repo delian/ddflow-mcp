@@ -307,9 +307,9 @@ def _outcome_result(
     body = json.dumps(full, separators=(",", ":"), default=str)
     result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
     if structured and isinstance(full, dict) and out.exit != 1:
-        # The same object, for a client that validates against the tool's `outputSchema`;
+        # The same object (as JSON, so a value only `default=str` can write is its string), for a client that validates against the tool's `outputSchema`;
         # the text block stays (a client without structured support reads it).
-        result["structuredContent"] = full
+        result["structuredContent"] = json.loads(body)  # as sent: `default=str` applied
     if out.reason:
         # A SECOND content block, never a prefix. The reason used to be prepended to the
         # JSON, which reads well and breaks every machine consumer: `json.loads` on

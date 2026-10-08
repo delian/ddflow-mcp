@@ -152,3 +152,19 @@ def test_an_offloaded_worker_serves_the_revision_the_client_negotiated(on, versi
     frames = [json.loads(line) for line in done.stdout.splitlines() if line.startswith("{")]
     result = frames[-1]["result"]
     assert ("structuredContent" in result) is structured, done.stderr[-400:]
+
+
+def test_structured_content_is_json_as_sent_not_the_live_object():
+    import datetime
+
+    from ddflow.core import outcome as O
+    from ddflow.surfaces.mcp import _outcome_result
+
+    out = O.ok("x", when=datetime.date(2026, 10, 8), where=Path("/x"))
+    res = _outcome_result(out, "", command="x", structured=True)
+    assert res["structuredContent"] == {
+        "schema": "x@1",
+        "when": "2026-10-08",
+        "where": "/x",
+    }
+    assert json.dumps(res)  # a plain writer can serialise the whole reply
