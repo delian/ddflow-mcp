@@ -35,7 +35,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from ..config import Config, InvalidValue, parallel_range_problems
+from ..config import RENAMED, Config, InvalidValue, parallel_range_problems
 from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import reviewer_trust as RT
@@ -444,9 +444,19 @@ def _apply_edits(text: str, pairs: list[tuple[str, str]]) -> tuple[str, str]:
         if "." not in dotted:
             return text, f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command"
         try:
-            text = _toml_upsert(text, dotted, _toml_literal(value))
+            # A renamed knob is written under its CURRENT key (D-compat); the old spelling
+            # still works as an argument.
+            key = RENAMED[dotted][0] if dotted in RENAMED else dotted
+            text = _toml_upsert(text, key, _toml_literal(value))
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return text, f"that edit would break the config: {exc}"
+    # The next write moves what the file still holds under an old key (D-compat).
+    try:
+        text, _ = TC.move_keys(
+            text, {old: new for old, (new, _s, _r) in RENAMED.items()}, live=Config()._sections()
+        )
+    except (tomllib.TOMLDecodeError, ValueError) as exc:
+        return text, f"that edit would break the config: {exc}"
     return text, ""
 
 
