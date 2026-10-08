@@ -27,6 +27,7 @@ from typing import Any
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
 from .config_sections._compat import is_source_tree, upgrade_advice
 from .config_sections._docs import DECLARED, KNOB_DOCS, RENAMED, declared_tables
+from .config_sections._layers import layer_path
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
     AgentConfig,
@@ -273,7 +274,7 @@ class Config:
                 cfg.sources[f"{sec}.{f.name}"] = "default"
 
         if root is not None:
-            path = Path(root) / ".ddflow" / "config.toml"
+            path = layer_path(root, "file")
             if path.is_file():
                 data = tomllib.loads(path.read_text("utf-8"))
                 # Lenient only when the code is ANOTHER tree's: there the file may be
@@ -284,7 +285,7 @@ class Config:
             # The MACHINE-LOCAL layer, read last: .ddflow/local/ is git-ignored, so what
             # belongs to whoever runs this checkout -- their services, their machine's
             # sizing -- overrides the committed, generic config without ever reaching git.
-            local = Path(root) / ".ddflow" / "local" / "config.toml"
+            local = layer_path(root, "local")
             if local.is_file():
                 cfg._apply(tomllib.loads(local.read_text("utf-8")), "local")
 

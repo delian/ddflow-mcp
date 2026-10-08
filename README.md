@@ -916,8 +916,18 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 196 knobs.
+cadences, and the rest of the 197 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
+
+Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
+`config --set`, `--append-toml`, `ddflow_configure`, `workflow pipeline|gate|drop`,
+`reviewers add|detect --write` and `export enable` all compose the edit, judge the RESULT once
+(format, schema, plain keys, the adaptive range, `[gate.*]` tables, the human-approval gates,
+and the workflow's coherence) and replace the file atomically under a lock. The same guards hold
+for the committed and the local layer and for every kind of edit, so an appended block is held
+to what `--set` is held to. Only a person typing on the command line writes a number or boolean
+as text; a `workflow gate --command 5` is the string `"5"`. A committed write brings
+`.gitattributes` up to date with `[lease] append_only_globs`, whichever command made it.
 
 #### What is committed, and what stays on your machine
 
@@ -4552,7 +4562,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 196): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 197): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -4762,6 +4772,19 @@ on every session, so `tests/test_mcp_tool_budget.py` fails if the compact `tools
 exceeds its byte budget (about 91 KB for the whole list, down from 119 KB) or if the shared
 `as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
 Their full text lives once, in `ddflow_identify` and the handshake instructions.
+
+**Result schemas.** `[mcp].output_schemas = "off" | "on"` (env `DDFLOW_MCP_OUTPUT_SCHEMAS`;
+default `off`) makes `tools/list` declare an `outputSchema` for each tool whose result is a JSON
+object of declared fields (`{"type": "object", "properties": {"schema": {"const": "claim@1"}, <its fields>: {}}}`:
+additive, nothing required, so a field added within a version never invalidates a result) and
+return that object also as `structuredContent` next to the text block. It needs MCP 2025-06-18
+or later (an older client is served as with `off`), costs about 16 KB more `tools/list` and
+sends every such result twice, which is why it is off. (A tool that answers one record or
+`null` -- `show`, `decision_show`, `recall` -- or text, or what the arguments decide, declares
+none.) A tool whose result is a bare array
+keeps its exact shape; its schema is under the tool's `_meta["ddflow/outputSchema"]`, because an
+`outputSchema` must describe an object. The `schema` tag in the result itself is there with the
+knob off too (see "What `--json` and the MCP tools return has a name", near the top).
 
 **Tool tiers.** A client that loads every tool schema up front still pays that ~91 KB, so
 `[mcp].tools = "core" | "standard" | "all"` (env `DDFLOW_MCP_TOOLS`; default `all`) chooses
@@ -5037,7 +5060,7 @@ declared once and persists — see
 
 ## Configuration
 
-196 knobs across 28 sections, every one documented in place and listed, with its default
+197 knobs across 28 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5104,8 +5127,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=d6f52fdfd94b -->
-<details><summary>All 196 knobs across 28 sections</summary>
+<!-- ddflow:begin README/knobs sha=4feadc7c9703 -->
+<details><summary>All 197 knobs across 28 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5268,6 +5291,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.config_changes` | `"agent"` | `agent` \| `ask` \| `operator` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
+| `mcp.output_schemas` | `"off"` | `off` \| `on` |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |
 | `ci.timeout_s` | `3600` |  |

@@ -116,7 +116,7 @@ def test_its_reviews_do_not_count_until_a_person_approves(proj, log, cfg):
 
 def test_approval_is_for_the_entry_as_approved(proj, log, cfg):
     """A tool changing the endpoint after approval makes a new, unapproved reviewer."""
-    from ddflow.services.configwrite import append_block
+    from conftest import add_block as append_block
 
     assert AS.configure(proj, AS.ConfigEdit(append_toml=HTTP, local=True)).exit == 0
     assert run_cli(proj, "reviewers", "approve", "lan")[0] == 0

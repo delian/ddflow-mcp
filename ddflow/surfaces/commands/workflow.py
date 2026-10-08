@@ -157,7 +157,7 @@ def _render_workflow(v) -> str:
 
 
 def _workflow_pipeline(a, c: Ctx) -> int:
-    out = A.pipeline(c.repo, a.which, a.gates, dry_run=a.dry_run)
+    out = A.pipeline(c.repo, a.which, a.gates, dry_run=a.dry_run, agent=c.requested_agent)
     verb = "would set" if a.dry_run else "set"
     return _report(
         c,
@@ -184,6 +184,7 @@ def _workflow_gate(a, c: Ctx) -> int:
             required=bool(a.required),
         ),
         dry_run=a.dry_run,
+        agent=c.requested_agent,
     )
     verb = "would configure" if a.dry_run else "configured"
     return _report(
@@ -195,7 +196,7 @@ def _workflow_gate(a, c: Ctx) -> int:
 
 
 def _workflow_drop(a, c: Ctx) -> int:
-    out = A.drop(c.repo, a.id, dry_run=a.dry_run)
+    out = A.drop(c.repo, a.id, dry_run=a.dry_run, agent=c.requested_agent)
     if out.exit == NOTHING:
         print(out.reason, file=sys.stderr)
         return NOTHING

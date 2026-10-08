@@ -113,3 +113,47 @@ def finish(repo: Path, item: str, *args: str, model: str = "claude-opus-5") -> t
     """Pass the whole pipeline and complete the item. Returns complete's result."""
     pass_pipeline(repo, item)
     return run_cli(repo, "complete", item, "--model", model, *args)
+
+
+# -- config writes (services/configwrite.apply_edit), spelled as the tests read best -------
+
+
+def write_config(repo, pairs, *, check_workflow=True, local=False, dry_run=False, agent=""):
+    """`(error, text)` of setting `pairs` the way `config --set` does (values as typed)."""
+    from ddflow.services import configwrite as CW
+
+    res = CW.apply_edit(
+        repo,
+        CW.SetPairs([(k, CW.Spelled(v)) for k, v in pairs]),
+        layer="local" if local else "file",
+        guards=CW.Guards(workflow=check_workflow),
+        dry_run=dry_run,
+        agent=agent,
+    )
+    return res.error, res.text
+
+
+def append_config(repo, toml_text, *, local=False, agent=""):
+    """`(error, path)` of appending TOML text the way `config --append-toml` does."""
+    from ddflow.services import configwrite as CW
+
+    res = CW.apply_edit(
+        repo, CW.AppendText(toml_text), layer="local" if local else "file", agent=agent
+    )
+    return res.error, res.path
+
+
+def add_block(repo, block, *, shared=False, own="", person=False, agent=""):
+    """The path a hand-built block (a `[[reviewer]]`) was appended to; ValueError if refused."""
+    from ddflow.services import configwrite as CW
+
+    res = CW.apply_edit(
+        repo,
+        CW.Block(block, own=own),
+        layer="file" if shared else "local",
+        person=person,
+        agent=agent,
+    )
+    if res.error:
+        raise ValueError(res.error)
+    return res.path

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from . import TOOLS
 
@@ -69,6 +70,16 @@ def tier_tools(tier: str) -> frozenset[str]:
     return frozenset(TOOLS)
 
 
+def _config(repo: Path) -> Any:
+    """The repository's config, or None when it cannot be read at all."""
+    try:
+        from ...config import Config
+
+        return Config.load(repo)
+    except Exception:
+        return None
+
+
 def resolve_tier(repo: Path) -> str:
     """`[mcp].tools` for this repository (env `DDFLOW_MCP_TOOLS` wins), read once.
 
@@ -77,13 +88,16 @@ def resolve_tier(repo: Path) -> str:
     EVERYTHING rather than failing the handshake. Over-listing costs context; under-listing
     would hide a tool the agent needs.
     """
-    try:
-        from ...config import Config
-
-        tier = Config.load(repo).mcp.tools
-    except Exception:
-        return DEFAULT_TIER
+    cfg = _config(repo)
+    tier = cfg.mcp.tools if cfg is not None else DEFAULT_TIER
     return tier if tier in TIERS else DEFAULT_TIER
+
+
+def resolve_output_schemas(repo: Path) -> bool:
+    """`[mcp].output_schemas` for this repository, read once: on or off. A value this version
+    does not know, or a config that cannot be read, is off -- the smaller, unchanged list."""
+    cfg = _config(repo)
+    return cfg is not None and cfg.mcp.output_schemas == "on"
 
 
 def tier_note(tier: str, *, names: bool = True) -> str:

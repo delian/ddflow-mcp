@@ -433,19 +433,21 @@ def append_entries(
 def register_append_only(repo: Path | str, rel: str) -> bool:
     """Add ``rel`` to the committed ``[lease].append_only_globs`` (and its ``merge=union``
     line). True if it was added, False if already there."""
-    from ..configwrite import _toml_literal, _write_config
-    from ..shared_files import committed_append_only, sync_attributes
+    from ..configwrite import Guards, SetPairs, apply_edit
+    from ..shared_files import committed_append_only
 
     have = committed_append_only(Path(repo))
     if rel in have:
         return False
-    items = ", ".join(_toml_literal(g) for g in [*have, rel])
-    err, _ = _write_config(
-        Path(repo), [("lease.append_only_globs", f"[{items}]")], check_workflow=False
+    # The committed write also brings `.gitattributes` up to date (`merge=union`).
+    res = apply_edit(
+        Path(repo),
+        SetPairs([("lease.append_only_globs", [*have, rel])]),
+        guards=Guards(workflow=False),
     )
-    if err:
+    if res.error:
         raise ExportError(
-            f"could not register {rel} in [lease].append_only_globs: {err}", EXIT_UNAVAILABLE
+            f"could not register {rel} in [lease].append_only_globs: {res.error}",
+            EXIT_UNAVAILABLE,
         )
-    sync_attributes(Path(repo))
     return True

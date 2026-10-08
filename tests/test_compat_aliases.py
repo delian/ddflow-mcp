@@ -14,12 +14,12 @@ import tomllib
 from dataclasses import fields
 
 import pytest
+from conftest import write_config as _write_config
 
 from ddflow.config import RENAMED, Config
 from ddflow.config_sections._compat import check_rename
 from ddflow.config_sections._docs import knob
 from ddflow.core.outcome import Outcome
-from ddflow.services.configwrite import _write_config
 from ddflow.surfaces import cli
 from ddflow.surfaces import registry as R
 from ddflow.surfaces.mcp import TOOLS, Server
