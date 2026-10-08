@@ -10,8 +10,8 @@ from ._docs import declare, knob
 
 #: What `[upgrade].skew` accepts (decision D-upgrade-skew-guard).
 UPGRADE_SKEW_POLICIES = ("refuse", "warn", "off")
-#: What `[upgrade].backup` accepts (decision D-upgrade-backups): `snapshot` joins them with its task.
-UPGRADE_BACKUPS = ("local", "none")
+#: What `[upgrade].backup` accepts (decision D-upgrade-backups).
+UPGRADE_BACKUPS = ("local", "snapshot", "none")
 #: What `[upgrade].config_changes` accepts (decision D-upgrade-config-changes).
 UPGRADE_CONFIG_CHANGES = ("agent", "ask", "operator")
 
@@ -31,7 +31,7 @@ class UpgradeConfig:
 
     backup: str = knob(
         "local",
-        doc="Where `ddflow upgrade --apply` saves the files it is about to rewrite (decision D-upgrade-backups). `local` (default): a copy under `.ddflow/backups/<stamp>-<from>-to-<to>/` with a `manifest.json` of what was there -- git-ignored, never shared between machines, cost: disk on this machine only; pruned to `backup_keep`. `none`: no copy (the files are in git, or you do not want them). `ddflow upgrade --apply --backup MODE` overrides it for one run.",
+        doc="Where `ddflow upgrade --apply` saves the files it is about to rewrite (decision D-upgrade-backups). `local` (default): a copy under `.ddflow/backups/<stamp>-<from>-to-<to>/` with a `manifest.json` of what was there -- git-ignored, never shared between machines, cost: disk on this machine only; pruned to `backup_keep`. `snapshot`: a git-tracked backup instead -- a tag `ddflow-upgrade-snapshot/<stamp>-<from>-to-<to>` on HEAD (after committing any affected file git did not track yet), shared when pushed, durable, undone with `git checkout <tag> -- <file>` or `ddflow upgrade --restore`; refused (exit 3) with the reason on a tree with uncommitted changes or without git, and files git cannot hold (ignored ones, the git hooks) still get a local copy. `none`: no copy (the files are in git, or you do not want them). `ddflow upgrade --apply --backup MODE` overrides it for one run.",
         choices=UPGRADE_BACKUPS,
         strictest=("local", "a bad value still makes the backup"),
     )
