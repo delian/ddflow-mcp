@@ -381,3 +381,33 @@ def test_a_symlink_is_held_as_the_link_not_as_its_target(old: Path) -> None:
     snap = BK.make_snapshot(old, [link], "a", "b")
 
     assert snap.held == ("link",) and snap.created == ()
+
+
+def test_a_damaged_sidecar_refuses_the_whole_restore_before_anything_changes(old: Path) -> None:
+    hook = old / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\n# ddflow-managed\n")
+    snap = BK.make_snapshot(old, [hook, old / DRIVER], "a", "b")
+    (old / DRIVER).write_text("changed\n")
+    (Path(snap.local) / BK.MANIFEST).write_text("{broken")
+
+    with pytest.raises(LookupError, match="cannot be read"):
+        BK.restore(old, snap.tag)
+
+    assert (old / DRIVER).read_text() == "changed\n", "no file was touched"
+
+
+def test_a_symlink_is_backed_up_and_restored_as_a_link(old: Path) -> None:
+    import os
+
+    real = old / "real.txt"
+    real.write_text("data\n")
+    link = old / "link.txt"
+    os.symlink("real.txt", link)
+    dest = BK.make_backup(old, [link], "a", "b")
+    link.unlink()
+    link.write_text("a plain file now\n")
+
+    BK.restore(old, dest.name)
+
+    assert link.is_symlink() and os.readlink(link) == "real.txt"
+    assert real.read_text() == "data\n", "the target was never written through"
