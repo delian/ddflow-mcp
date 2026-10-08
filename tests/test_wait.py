@@ -252,21 +252,50 @@ def test_waiting_for_anything_with_nothing_in_flight_is_refused(repo):
     assert "no other agent holds anything" in out.reason
 
 
-def test_an_expired_lease_wakes_the_waiter_although_no_event_is_written(repo, monkeypatch):
+class _SkewedClock:
+    """The wait module's clock, ahead of the real one: ``time()`` is real time plus a skew
+    that jumps by ``jump`` seconds at the waiter's first sleep. Time passing is driven by
+    the test, not by how long the machine takes (B06a0a99c0e: a 1 s TTL, and the waiter
+    started late under load, saw the lease already gone and never waited)."""
+
+    def __init__(self, jump: float) -> None:
+        self.skew, self.jump = 0.0, jump
+
+    def time(self) -> float:
+        return time.time() + self.skew
+
+    def monotonic(self) -> float:
+        return time.monotonic()
+
+    def sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
+        self.skew = self.jump
+
+
+@pytest.mark.parametrize("slow_machine_s", [0, 3])
+def test_an_expired_lease_wakes_the_waiter_although_no_event_is_written(
+    repo, monkeypatch, slow_machine_s
+):
     """Expiry is time passing, not an append -- so the log mark never changes. The periodic
-    re-check is the only thing that notices, and without it this waits to its deadline."""
+    re-check is the only thing that notices, and without it this waits to its deadline.
+
+    The lease keeps its real TTL and the wait module's clock is moved past it after the
+    first check, so the test holds however slowly the machine gets from the claim to the
+    wait (``slow_machine_s`` is that delay: a 1 s TTL made 3 s of it fail the test)."""
+    import importlib
+
     run_cli(repo, "init")
-    cfg = repo / ".ddflow" / "config.toml"
-    assert "ttl_s = 1800" in cfg.read_text()
-    # The TTL is fixed when the lease is taken, so it is shortened BEFORE the claim.
-    cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
     run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
     run_cli(repo, "task", "add", "T2", "--globs", "src/a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
+    time.sleep(slow_machine_s)
     monkeypatch.setattr(WT, "RECHECK_S", 0.2)
+    clock = _SkewedClock(jump=1800 + 3600)  # past the TTL and any grace
+    monkeypatch.setattr(importlib.import_module("ddflow.api.lifecycle.wait"), "time", clock)
     out = A.wait(repo, item="T2", timeout_s=20, poll_s=0.05, agent=WAITER)
     assert out.exit == O.OK, out.reason
     assert out.data["freed_by"] == ["T1: lease expired"]
+    assert clock.skew == clock.jump, "the wait never slept: it did not wait for the expiry"
 
 
 def test_the_claim_refusal_points_at_wait(proj):
