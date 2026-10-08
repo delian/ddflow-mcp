@@ -3871,7 +3871,22 @@ done), 3 while an item waits for the operator. Before it rewrites any file it co
 originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, never shared;
 `--backup none` or `[upgrade].backup = "none"` skips it, `[upgrade].backup_keep` (default 10) is how many are
 kept) with a `manifest.json` of what was
-there, and prints the backup and `git diff` to review the change. What each category does:
+there, and prints the backup and `git diff` to review the change.
+
+**Backups: local or snapshot** (decision D-upgrade-backups; `[upgrade].backup`, or `--backup`
+for one run). Both are explained here so you can choose:
+
+| | `local` (default) | `snapshot` (`--backup snapshot`) |
+|---|---|---|
+| what it is | the files copied under `.ddflow/backups/<stamp>-<from>-to-<to>/` with a `manifest.json` | a git tag `ddflow-upgrade-snapshot/<stamp>-<from>-to-<to>` on HEAD, after committing affected files git did not track yet ("ddflow: snapshot before upgrade") |
+| where it lives | this machine only, git-ignored; the newest `[upgrade].backup_keep` (10) are kept | in the repository: shared when you push it, durable |
+| cost | disk; nothing in your history | a tag and, for untracked files, one commit; needs git, and a clean working tree (the snapshot is what HEAD holds) |
+| stops when | the backup cannot be written (a failure, exit 1) | there is no git, no commit, or uncommitted changes to tracked files: exit 3 and nothing is changed, with the reason |
+| undo | copy the files back from `<backup>/files/in/` (`manifest.json` lists them) | `git checkout <tag> -- <file>` (the upgrade's changes stay uncommitted until you commit them; once committed, `git revert` that commit) |
+
+A snapshot cannot hold a file git ignores or one outside the project (the git hooks): those
+still get a local copy, named in the output. `--backup none` (or `[upgrade].backup = "none"`)
+skips saving. What each category does:
 
 - **repairs**: the pending data repairs (new corrective events, never an edit of the log);
   one only the operator may decide waits for `--confirm <repair id>`.
@@ -5007,7 +5022,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=404bb76d1f3a -->
+<!-- ddflow:begin README/knobs sha=d6f52fdfd94b -->
 <details><summary>All 196 knobs across 28 sections</summary>
 
 | Knob | Default | Values |
@@ -5166,7 +5181,7 @@ long default is left to `ddflow config --explain`.
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
-| `upgrade.backup` | `"local"` | `local` \| `none` |
+| `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |
 | `upgrade.config_changes` | `"agent"` | `agent` \| `ask` \| `operator` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
