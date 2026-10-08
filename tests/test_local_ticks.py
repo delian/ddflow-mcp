@@ -594,3 +594,18 @@ def test_a_note_about_a_tick_never_ends_a_claim_another_command_holds(proj: Path
     run(proj, [boom], clock)
 
     assert state_rows(proj)["boom"] == claimed
+
+
+def test_a_dead_commands_claim_does_not_hide_that_a_tick_cannot_be_judged(proj: Path) -> None:
+    clock = Clock()
+    boom = TK.Tick("boom", every_s=60, budget_s=10, target=lambda c: None, enabled=lambda c: 1 / 0)
+    fsio.ensure_ignored_dir(proj / ".ddflow/local")
+    (proj / ".ddflow/local/ticks.json").write_text(
+        json.dumps(
+            {"format": 1, "ticks": {"boom": {"last_at": clock.now - 600, "status": "running"}}}
+        )
+    )
+
+    run(proj, [boom], clock)
+
+    assert state_rows(proj)["boom"]["status"] == TK.FAILED
