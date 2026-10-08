@@ -95,6 +95,14 @@
    },
    "v": 1
   },
+  "ddflow.capabilities": {
+   "fields": {
+    "capability": ["str"],
+    "kinds": ["list"],
+    "version": ["str"]
+   },
+   "v": 1
+  },
   "ddflow.seen": {
    "fields": {
     "format_level": ["int"],

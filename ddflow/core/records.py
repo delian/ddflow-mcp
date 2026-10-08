@@ -911,6 +911,10 @@ class State:
     #: (the `older_ddflow` mark on their data).
     older_version_events: dict[str, int] = field(default_factory=dict)
 
+    #: Capability name -> what the log records of it (`ddflow.capabilities`): {"kinds" (sorted),
+    #: "version" (the highest release providing it), "agents", "at"}.
+    capabilities: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     @property
     def highest_version(self) -> str:
         """The highest ddflow version that has stamped this log, "" when none has."""

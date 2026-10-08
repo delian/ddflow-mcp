@@ -45,6 +45,7 @@ HISTORY_VERBS: dict[str, str] = {
     "bug.reported_upstream": "bug reported upstream",
     "cadence.ran": "cadence ran",
     "ddflow.seen": "ddflow version stamped",
+    "ddflow.capabilities": "ddflow capability recorded",
     "skew.overridden": "OLDER ddflow let write",
     "upgrade.applied": "upgrade applied",
     "repair.applied": "data repair applied",

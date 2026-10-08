@@ -3775,12 +3775,13 @@ the parity test.
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
 checkout running an older ddflow than its teammates, is a fact instead of a guess
-(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Four event kinds, all skipped
+(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Five event kinds, all skipped
 with a note by a ddflow that predates them:
 
 | kind | written | carries |
 |---|---|---|
 | `ddflow.seen` | once per (agent, version, format level), on that agent's first write after either changes | `version`, install kind (`installed` or `source-tree`), `format_level` (the `FORMAT_LEVEL` the writer wrote at) |
+| `ddflow.capabilities` | on the first write that uses a capability (below) | `capability`, the `kinds` it governs, the release (`version`) that provides it |
 | `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version (and, for a format skew, its format level), session, the reason |
 | `upgrade.applied` | when `ddflow upgrade --apply` applied or acknowledged something | from, to, categories, backup, items, confirmed, config_changes, summary |
 | `repair.applied` | when a versioned data repair is applied (below) | repair id, since, version, the settled findings' keys and details |
@@ -3820,6 +3821,21 @@ then names both levels (`... at data format level 3, and this ddflow (0.2.0) wri
 and `--allow-older-version` overrides it for the session the same way, against that level:
 a later, higher level is refused again. A stamp from before the field says nothing about the
 level and never refuses. The same `[upgrade].skew` policy governs both.
+
+**Capabilities.** A version number and a format level are coarse: some data needs one
+specific ability of the writer. The first write that uses such a **capability** records a
+`ddflow.capabilities` event naming it, the event kinds it governs and the release that
+provides it, like git's repository format extensions. A writer that lacks a recorded
+capability (it does not know the name, or does not govern that kind) is refused **just the
+writes it governs** (exit 3), with the version to upgrade to; every other write proceeds.
+Two exist: `id-template` (ids minted under a non-default `[ids]` template; governs the kinds
+that mint ids: `bug.found`, `lesson.recorded`, `research.recorded`, `decision.recorded`,
+`memory.recorded`, `job.started`, `session.started`, `task.added`, `phase.added`) and
+`log-redaction-full` (free text written through the full `log` redaction profile; governs
+every kind with free-text fields). Because every free-text write uses the second, a log's
+first such write is preceded by its record. `[upgrade].skew = "warn"` or `"off"` skips the
+refusal; there is no per-session override, since the gap is in the writer's abilities, not
+its age. The fold keeps them in `State.capabilities`.
 
 `[upgrade].skew` is the policy: `refuse` (default), `warn` (write, say so on stderr) or
 `off`. Set it with `ddflow config` or `ddflow_configure`.
