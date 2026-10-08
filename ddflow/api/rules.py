@@ -15,6 +15,9 @@ import ddflow.api._dedupe as DD
 
 from ..core import outcome as O
 from ..infra.fsio import replace_text
+from ..services.guidance.kinds import RULE
+from ..services.guidance.limits import limits_for, over_limit
+from ..services.guidance.similarity import similar
 from ..services.rules import Rule, RulesStorage
 from ._base import _load
 
@@ -157,25 +160,6 @@ def _related_to_rule(
     return out
 
 
-def _compared(rule: Rule, title: str, content: str) -> tuple[float, str, str]:
-    """(score, my text, its text) for a new rule against `rule`.
-
-    Content against content, as always, while both have content. A rule with no content
-    is a title-only rule, and content alone scored every pair of them 1.0 (two empty
-    contents are "identical"): a second title-only rule was refused as a duplicate of each
-    of them whatever it said (bug Bd4c9bcb87e). So two title-only rules compare their
-    titles, and a title-only rule against one with content compares title and content
-    together. With no `title` given, the content-only comparison is kept unchanged."""
-    if not title or (content and rule.content):
-        return rule.similarity_score(content), content, rule.content
-    if not content and not rule.content:
-        mine, theirs = title, rule.title
-    else:
-        mine = "\n".join(x for x in (title, content) if x)
-        theirs = "\n".join(x for x in (rule.title, rule.content) if x)
-    return dataclasses.replace(rule, content=theirs).similarity_score(mine), mine, theirs
-
-
 def rule_dedup_check(
     content: str,
     existing_rules: list[Rule],
@@ -183,7 +167,7 @@ def rule_dedup_check(
     *,
     title: str = "",
 ) -> tuple[bool, list[dict[str, Any]]]:
-    """Check if a rule is similar to existing rules (`_compared` says by what).
+    """Check if a rule is similar to existing rules (`guidance.similarity.compared` says by what).
 
     Uses the same similarity engine as the Rule class.
 
@@ -199,26 +183,21 @@ def rule_dedup_check(
         - candidates: List of similar rules with scores and details,
           sorted by score descending
     """
-    candidates: list[dict[str, Any]] = []
-
-    for rule in existing_rules:
-        score, text, theirs = _compared(rule, title, content)
-        if score >= threshold:
-            candidates.append(
-                {
-                    "id": rule.id,
-                    "title": rule.title,
-                    "score": score,
-                    "scope": rule.scope,
-                    "tags": rule.tags,
-                    "overlap": _get_overlap_terms(text, theirs),
-                }
-            )
-
-    # Sort by score descending
-    candidates.sort(key=lambda c: -c["score"])
-    is_duplicate = len(candidates) > 0
-    return is_duplicate, candidates
+    found = similar(
+        [r.to_record() for r in existing_rules], content, title=title, threshold=threshold
+    )
+    candidates: list[dict[str, Any]] = [
+        {
+            "id": f.record.id,
+            "title": f.record.title,
+            "score": f.score,
+            "scope": f.record.level,
+            "tags": f.record.tags,
+            "overlap": f.overlap,
+        }
+        for f in found
+    ]
+    return bool(candidates), candidates
 
 
 def rule_dedup_check_dry_run(
@@ -271,27 +250,6 @@ def rule_dedup_check_dry_run(
         candidates=candidates,
         would_ask=would_ask,
     )
-
-
-def _get_overlap_terms(content1: str, content2: str, max_terms: int = 5) -> list[str]:
-    """Extract the most significant overlapping terms between two contents.
-
-    Uses the tokenization from Rule._tokenize for consistency.
-
-    Args:
-        content1: First content string
-        content2: Second content string
-        max_terms: Maximum number of terms to return
-
-    Returns:
-        List of overlapping terms
-    """
-    from ..services.rules import _tokenize
-
-    tokens1 = set(_tokenize(content1))
-    tokens2 = set(_tokenize(content2))
-    overlap = sorted(tokens1 & tokens2)
-    return overlap[:max_terms]
 
 
 def rules_manifest(storage: RulesStorage) -> str:
@@ -475,17 +433,7 @@ def apply_rule_update(
 def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
     """Refuse a new rule that breaks the project's [rules] limits."""
     cfg = _load(repo, agent)[1]
-    problem = ""
-    if len(rule.content.encode("utf-8")) > cfg.rules.max_size_bytes:
-        problem = f"content is over rules.max_size_bytes ({cfg.rules.max_size_bytes})"
-    elif rule.scope not in cfg.rules.scopes_allowed:
-        problem = f"scope {rule.scope!r} is not in rules.scopes_allowed {cfg.rules.scopes_allowed}"
-    elif cfg.rules.tags_allowed and (
-        bad := [t for t in rule.tags if t not in cfg.rules.tags_allowed]
-    ):
-        problem = f"tags {bad} are not in rules.tags_allowed {cfg.rules.tags_allowed}"
-    elif len(RulesStorage(repo).list()) >= cfg.rules.max_rules:
-        problem = f"the project already has rules.max_rules ({cfg.rules.max_rules}) rules"
+    problem = over_limit(rule.to_record(), limits_for(cfg, RULE), len(RulesStorage(repo).list()))
     return O.refused("rule.added", problem) if problem else None
 
 
