@@ -5,5 +5,7 @@
 * `resolve`  -- which guidance governs this work, and why;
 * `fileformat` / `store` -- the authored ``.ddflow/<kind>s/*.toml`` format and its files;
 * `limits`   -- per-kind limits and the lint every record passes;
+* `checks` / `waivers` / `review` -- holding guidance to account: typed checks and the gate
+  verdict, scoped expiring waivers approved by a person, review dates and revisit triggers;
 * `similarity` -- how alike two pieces of guidance read.
 """
