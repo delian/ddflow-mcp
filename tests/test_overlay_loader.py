@@ -209,6 +209,8 @@ def test_prompts_resolve_pins_precedence_provenance_and_messages(tmp_path, monke
         P.resolve("not_a_template", tmp_path)
     assert str(exc.value).startswith("unknown template 'not_a_template'. Known: review_system, ")
     monkeypatch.setattr(P, "builtin_dir", lambda: tmp_path / "no-such-pkg")
+    mine.write_text("a literal {{ never closed\n")  # resolving does not parse the text
+    assert P.resolve("review_system", tmp_path).text == "a literal {{ never closed\n"
     mine.unlink()
     with pytest.raises(P.TemplateError) as exc:
         P.resolve("review_system", tmp_path)
