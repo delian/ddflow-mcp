@@ -447,3 +447,15 @@ def test_scan_reads_an_ejected_mcp_instructions(tmp_path):
     )
     got = {(f.artifact, f.ref.text) for f in C.scan(tmp_path, VOCAB)}
     assert got == {("ejected prompt", "ddflow_old_next"), ("ejected prompt", "cl")}
+
+
+def test_a_comment_in_a_command_line_names_no_tool_either():
+    assert [
+        (r.text, r.status) for r in C.refs_in("# remove ddflow_oldtool later", VOCAB, code=True)
+    ] == []
+    assert [
+        (r.text, r.status) for r in C.refs_in("ddflow next  # ddflow_oldtool", VOCAB, code=True)
+    ] == [("next", "ok")]
+    assert [r.text for r in C.refs_in("# ddflow_oldtool is gone", VOCAB, code=False)] == [
+        "ddflow_oldtool"
+    ]
