@@ -201,18 +201,20 @@ CAP_ID_TEMPLATE = "id-template"
 CAP_LOG_REDACTION = "log-redaction-full"
 
 #: The capabilities THIS ddflow has. A new one is added here, with the release that ships it.
+#: `since` is the release that FIRST ships the capability (0.2.1 was cut before this one existed);
+#: a refusal tells the writer to upgrade to it.
 CAPABILITIES: dict[str, Capability] = {
     c.name: c
     for c in (
         Capability(
             CAP_ID_TEMPLATE,
-            "0.2.1",
+            "0.2.2",
             ID_MINTING_KINDS,
             "ids minted under a configured [ids] template",
         ),
         Capability(
             CAP_LOG_REDACTION,
-            "0.2.1",
+            "0.2.2",
             frozenset(_redact.LOG_TEXT_FIELDS),  # a Mapping keyed by EVENT KIND -> its text fields
             "free text written through the full log redaction profile",
         ),
