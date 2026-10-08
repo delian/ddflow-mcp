@@ -647,3 +647,28 @@ def test_a_rules_file_that_is_not_utf8_is_skipped_and_left_whole(old: Path) -> N
 
     assert any(isinstance(a, AD.Refused) and "not UTF-8" in a for a in actions)
     assert agents.read_bytes() == raw
+
+
+def test_a_refusal_naming_only_the_file_is_still_this_items_refusal(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import adopt as AD
+
+    _adopted_old(old)
+    nested = old / "docs" / "AGENTS.md"
+    nested.parent.mkdir(exist_ok=True)
+    nested.write_text("# mine\n")
+    item = {
+        "id": "instructions:docs/AGENTS.md",
+        "category": "instructions",
+        "path": "docs/AGENTS.md",
+        "action": UP.AGENT,
+        "summary": "x",
+    }
+    monkeypatch.setattr(
+        AD, "refresh_docs", lambda *a, **k: [AD.Refused("SKIPPED AGENTS.md: it is not UTF-8 text")]
+    )
+
+    (rec,) = UA._run_instructions(old, [item])
+
+    assert rec["status"] == UA.REFUSED
