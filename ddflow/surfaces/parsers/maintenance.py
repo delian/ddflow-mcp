@@ -76,7 +76,23 @@ def register(s: argparse._SubParsersAction) -> None:
         "--backup",
         default="",
         metavar="MODE",
-        help="with --apply: where the originals go: local (default) or none",
+        help="with --apply: where the originals go: local (default), snapshot or none",
+    )
+    up.add_argument(
+        "--snapshot",
+        action="store_true",
+        default=False,
+        help="with --apply: save the originals as a git snapshot (a tag on HEAD) instead of "
+        "a local copy; the same as --backup snapshot",
+    )
+    up.add_argument(
+        "--restore",
+        nargs="?",
+        const="latest",
+        default=None,
+        metavar="NAME",
+        help="put back what a local backup or a snapshot holds (NAME, or the newest when "
+        "omitted), saving what it replaces; stands alone: no other option may accompany it",
     )
     up.set_defaults(fn=cmd_upgrade)
 

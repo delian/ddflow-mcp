@@ -66,14 +66,16 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_upgrade": {
         "description": (
-            "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it does the plan after saving originals to .ddflow/backups, returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. Plan exit: 0 up to date, 1 items."
+            "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`), returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. `restore` undoes an apply. Plan exit: 0 up to date, 1 items."
         ),
         "properties": {
             "plan": ("boolean", "Dry run (default); false applies all.", False),
             "apply": ("string", "Categories to apply: all, or a comma list.", False),
             "confirm": ("array", "With apply: keys the operator accepts (needs reason).", False),
             "reason": ("string", "Why they accept it.", False),
-            "backup": ("string", "local or none.", False),
+            "backup": ("string", "local, snapshot or none.", False),
+            "snapshot": ("boolean", "apply: git snapshot backup.", False),
+            "restore": ("string", "Undo: backup name or latest; alone.", False),
         },
         "api": lambda repo, a, agent: _api().upgrade(
             repo,
@@ -82,12 +84,16 @@ TOOLS: dict[str, dict[str, Any]] = {
             confirm=[str(x) for x in (a.get("confirm") or [])],
             reason=str(a.get("reason") or ""),
             backup=str(a.get("backup") or ""),
+            snapshot=bool(a.get("snapshot")),
+            restore=str(a.get("restore") or ""),
             agent=agent,
         ),
-        # The plan's fields; an apply also carries what it did (`applied`), so the body is
-        # the same parsed value as the CLI's `--json` in either mode.
+        # The plan's fields; an apply also carries what it did (`applied`) and a restore what
+        # it put back (`restored`), so the body is the same parsed value as the CLI's `--json`.
         "payload": lambda a: (
-            _api().setup.UPGRADE_APPLY_PAYLOAD
+            _api().setup.UPGRADE_RESTORE_PAYLOAD
+            if a.get("restore")
+            else _api().setup.UPGRADE_APPLY_PAYLOAD
             if (a.get("apply") or a.get("plan") is False)
             else _api().setup.UPGRADE_PAYLOAD
         ),
