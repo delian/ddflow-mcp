@@ -2,18 +2,18 @@
 
 Read-only inventory: only the name, a one-line description and a path are kept. Content is
 never copied into the brief -- the agent's own tooling loads the file when it is wanted.
-Ranking is BM25 over name + description (+ a bounded head of the body), the same scoring the
-lessons use, computed in memory because this inventory is tiny and has no index.
+Ranking is BM25 over name + description (+ a bounded head of the body), by the search core's
+ranker (`searchcore/rank.py`), computed in memory because this inventory is tiny and has no index.
 """
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..core import textsim
+from .searchcore.rank import bm25
 
 MAX_FILES = 200
 BODY_HEAD_CHARS = 1500
@@ -117,23 +117,9 @@ def rank(entries: list[Entry], query: str, limit: int = 3) -> list[Entry]:
     q = set(_tokens(query))
     if not q or not entries:
         return []
-    docs = [_tokens(e.text) for e in entries]
-    n = len(docs)
-    avg = (sum(len(d) for d in docs) / n) or 1.0
-    df = {t: sum(1 for d in docs if t in d) for t in q}
-    scored: list[tuple[float, int]] = []
-    for i, d in enumerate(docs):
-        score = 0.0
-        for t in q:
-            tf = d.count(t)
-            if not tf:
-                continue
-            idf = math.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5))
-            score += idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * len(d) / avg))
-        if score > 0:
-            scored.append((score, i))
-    scored.sort(key=lambda s: (-s[0], entries[s[1]].path))
-    return [entries[i] for _, i in scored[:limit]]
+    scores = bm25([_tokens(e.text) for e in entries], q)
+    order = sorted(scores, key=lambda i: (-scores[i], entries[i].path))
+    return [entries[i] for i in order[:limit]]
 
 
 def relevant(repo: Path, query: str, limit: int = 3) -> list[Entry]:

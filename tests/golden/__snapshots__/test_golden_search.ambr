@@ -1,0 +1,425 @@
+# serializer version: 1
+# name: test_rule_search[rule bad regex]
+  tuple(
+    2,
+    '''
+      No rules found matching '('
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule exact]
+  tuple(
+    0,
+    '''
+      r-tests  [project] Write a failing test first
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule none]
+  tuple(
+    2,
+    '''
+      No rules found matching 'zzzqqqxxx'
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule ranked fallback]
+  tuple(
+    0,
+    '''
+      r-naming  [project] Name things plainly
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule ranked]
+  tuple(
+    0,
+    '''
+      r-style  [project] Keep functions short
+      r-naming  [project] Name things plainly
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule regex]
+  tuple(
+    0,
+    '''
+      r-naming  [project] Name things plainly
+      r-style  [project] Keep functions short
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule substring]
+  tuple(
+    0,
+    '''
+      r-naming  [project] Name things plainly
+      r-style  [project] Keep functions short
+  
+    ''',
+  )
+# ---
+# name: test_rule_search[rule tag]
+  tuple(
+    0,
+    '''
+      r-naming  [project] Name things plainly
+      r-style  [project] Keep functions short
+  
+    ''',
+  )
+# ---
+# name: test_rule_search_rows_with_scores
+  dict({
+    'exact:functions': list([
+      tuple(
+        'r-naming',
+        1.0,
+      ),
+      tuple(
+        'r-style',
+        1.0,
+      ),
+    ]),
+    'exact:plain tests names': list([
+    ]),
+    'exact:plain|short': list([
+    ]),
+    'exact:regression test': list([
+      tuple(
+        'r-tests',
+        1.0,
+      ),
+    ]),
+    'exact:small functions': list([
+      tuple(
+        'r-style',
+        1.0,
+      ),
+    ]),
+    'ranked:functions': list([
+      tuple(
+        'r-naming',
+        1.0,
+      ),
+      tuple(
+        'r-style',
+        1.0,
+      ),
+    ]),
+    'ranked:plain tests names': list([
+      tuple(
+        'r-naming',
+        0.42857142857142855,
+      ),
+    ]),
+    'ranked:plain|short': list([
+      tuple(
+        'r-naming',
+        0.125,
+      ),
+    ]),
+    'ranked:regression test': list([
+      tuple(
+        'r-tests',
+        1.0,
+      ),
+    ]),
+    'ranked:small functions': list([
+      tuple(
+        'r-style',
+        1.0,
+      ),
+      tuple(
+        'r-naming',
+        0.125,
+      ),
+    ]),
+    'regex:functions': list([
+      tuple(
+        'r-naming',
+        0.8,
+      ),
+      tuple(
+        'r-style',
+        0.8,
+      ),
+    ]),
+    'regex:plain tests names': list([
+    ]),
+    'regex:plain|short': list([
+      tuple(
+        'r-naming',
+        0.8,
+      ),
+      tuple(
+        'r-style',
+        0.8,
+      ),
+    ]),
+    'regex:regression test': list([
+      tuple(
+        'r-tests',
+        0.8,
+      ),
+    ]),
+    'regex:small functions': list([
+      tuple(
+        'r-style',
+        0.8,
+      ),
+    ]),
+  })
+# ---
+# name: test_search[bad kind]
+  tuple(
+    3,
+    '''
+      unknown kind nope: one of task, phase, bug, research, decision, lesson, session, prompt, log
+  
+    ''',
+  )
+# ---
+# name: test_search[exact]
+  tuple(
+    0,
+    '''
+        bug       B1                     open         2026-01-01  Tokenizer drops a trailing comment
+  
+    ''',
+  )
+# ---
+# name: test_search[log]
+  tuple(
+    0,
+    '''
+        log       ed29be632f75d8a8061332 phase.added  2026-01-01  …: "", "needs": [], "priority": 100, "tags": [], "title": "Ship the parser"}
+        log       ebb9773ff4c01632f0160d decision.rec 2026-01-01  …: "accepted", "supersedes": [], "tags": [], "title": "Hand-written parser"}
+        log       e920a07beee33642ce3eb0 lesson.recor 2026-01-01  lesson.recorded L1 {"how": "golden tests", "rule": "Snapshot parser output first", "seen_in": [], "supersedes": [], "tags": [], "title": "Pi…
+  
+    ''',
+  )
+# ---
+# name: test_search[nothing]
+  tuple(
+    2,
+    '''
+      No matches for 'zzzqqqxxx' (ranked); searched 10 records.
+  
+    ''',
+  )
+# ---
+# name: test_search[ranked json]
+  tuple(
+    0,
+    '''
+      {
+        "schema": "list@1",
+        "record_kind": "search",
+        "query": "recursive descent parser",
+        "mode": "ranked",
+        "rows": [
+          {
+            "kind": "decision",
+            "id": "D1",
+            "state": "accepted",
+            "date": "2026-01-01T00:06:00Z",
+            "owner": "golden",
+            "snippet": "Hand-written parser Recursive descent, no generator",
+            "score": 0.6323
+          },
+          {
+            "kind": "research",
+            "id": "R49b608db82",
+            "state": "confirmed",
+            "date": "2026-01-01T00:09:00Z",
+            "owner": "",
+            "snippet": "Is recursive descent fast enough? It parses 10k lines in under 50ms Over 50ms python bench.py 31ms CONFIRMED",
+            "score": 0.2747
+          },
+          {
+            "kind": "phase",
+            "id": "P1",
+            "state": "open",
+            "date": "2026-01-01T00:01:00Z",
+            "owner": "",
+            "snippet": "Ship the parser Parse the config files.",
+            "score": 0.1834
+          },
+          {
+            "kind": "lesson",
+            "id": "L1",
+            "state": "active",
+            "date": "2026-01-01T00:05:00Z",
+            "owner": "golden",
+            "snippet": "Pin the grammar before refactoring it Snapshot parser output first A refactor changed precedence silently golden tests",
+            "score": 0.1079
+          }
+        ],
+        "total": 4,
+        "shown": 4,
+        "limit": 20,
+        "truncated": false,
+        "searched": 10,
+        "filters": {},
+        "note": ""
+      }
+  
+    ''',
+  )
+# ---
+# name: test_search[ranked kind filter]
+  tuple(
+    0,
+    '''
+        lesson    L1                     active       2026-01-01  Pin the grammar before refactoring it Snapshot parser output first A refactor changed precedence silently golden tests
+  
+    ''',
+  )
+# ---
+# name: test_search[ranked limit]
+  tuple(
+    0,
+    '''
+        phase     P1                     open         2026-01-01  Ship the parser Parse the config files.
+      
+      (showing 1 of 3; raise --limit, at most 200)
+  
+    ''',
+  )
+# ---
+# name: test_search[ranked parser]
+  tuple(
+    0,
+    '''
+        task      T2                     open         2026-01-01  Grammar
+        lesson    L1                     active       2026-01-01  Pin the grammar before refactoring it Snapshot parser output first A refactor changed precedence silently golden tests
+        phase     P1                     open         2026-01-01  Ship the parser Parse the config files.
+        decision  D1                     accepted     2026-01-01  Hand-written parser Recursive descent, no generator
+  
+    ''',
+  )
+# ---
+# name: test_search[ranked tokenizer]
+  tuple(
+    0,
+    '''
+        bug       B1                     open         2026-01-01  Tokenizer drops a trailing comment
+        task      T1                     done         2026-01-01  Tokenizer
+  
+    ''',
+  )
+# ---
+# name: test_search[regex backref]
+  tuple(
+    3,
+    '''
+      regex refused: back-references can take exponential time
+  
+    ''',
+  )
+# ---
+# name: test_search[regex unsafe]
+  tuple(
+    3,
+    '''
+      regex refused: a repeat of variable length inside another repeat can take exponential time
+  
+    ''',
+  )
+# ---
+# name: test_search[regex]
+  tuple(
+    0,
+    '''
+        decision  D1                     accepted     2026-01-01  Hand-written parser Recursive descent, no generator
+        lesson    L1                     active       2026-01-01  Pin the grammar before refactoring it Snapshot parser output first A refactor changed precedence silently golden tests
+        phase     P1                     open         2026-01-01  Ship the parser Parse the config files.
+  
+    ''',
+  )
+# ---
+# name: test_search[stop words only]
+  tuple(
+    3,
+    '''
+      nothing searchable in that text (only stop words or ids); use --exact for a literal match
+  
+    ''',
+  )
+# ---
+# name: test_skills_rank[agent]
+  list([
+    tuple(
+      'rule',
+      'AGENTS.md',
+    ),
+  ])
+# ---
+# name: test_skills_rank[cursor rule naming]
+  list([
+    tuple(
+      'rule',
+      'naming',
+    ),
+  ])
+# ---
+# name: test_skills_rank[deploy the release]
+  list([
+    tuple(
+      'command',
+      'release',
+    ),
+    tuple(
+      'skill',
+      'deploy',
+    ),
+  ])
+# ---
+# name: test_skills_rank[inventory]
+  list([
+    tuple(
+      'skill',
+      'deploy',
+      '.claude/skills/deploy/SKILL.md',
+    ),
+    tuple(
+      'skill',
+      'tester',
+      '.claude/skills/tester/SKILL.md',
+    ),
+    tuple(
+      'command',
+      'release',
+      '.claude/commands/release.md',
+    ),
+    tuple(
+      'rule',
+      'naming',
+      '.cursor/rules/naming.mdc',
+    ),
+    tuple(
+      'rule',
+      'AGENTS.md',
+      'AGENTS.md',
+    ),
+  ])
+# ---
+# name: test_skills_rank[write a test]
+  list([
+    tuple(
+      'skill',
+      'tester',
+    ),
+  ])
+# ---
+# name: test_skills_rank[zzzqqq]
+  list([
+  ])
+# ---

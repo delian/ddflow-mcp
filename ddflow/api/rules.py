@@ -16,7 +16,7 @@ import ddflow.api._dedupe as DD
 from ..core import outcome as O
 from ..infra.fsio import replace_text
 from ..services.guidance.kinds import RULE
-from ..services.guidance.limits import over_limit
+from ..services.guidance.limits import lint, over_limit
 from ..services.guidance.similarity import similar
 from ..services.rules import Rule, RulesStorage
 from ._base import _load
@@ -444,6 +444,9 @@ def _refused_up_front(
     check runs. Never joined with `or`: an Outcome is falsy unless OK, so a refusal would
     read as "nothing" (roborev)."""
     refusal = _over_limits(repo, rule, agent)
+    if refusal is None and (problems := lint(rule.to_record(), RULE)):
+        # A file whose id no loader accepts would be written and then never found again.
+        refusal = O.failed("rule.added", problems[0], id=rule.id)
     if refusal is None and answer is not None and answer.problem:
         refusal = O.failed("rule.added", answer.problem, id=rule.id)
     return refusal
