@@ -205,38 +205,75 @@ def repair_items(repo: Path, log: Any, cfg: Config) -> list[dict[str, Any]]:
     return out
 
 
+def _provenance(by_release: bool, *, edited: bool, proven: bool) -> tuple[str, str]:
+    """`(provenance, action)` for a differing instruction file. A stamped copy PROVES what it
+    is: edited since ddflow wrote it, or an unedited older release; both are safe for an
+    agent (a refresh keeps an edit in `.local-edits`). A copy with no stamp is judged by
+    whether a release has shipped since the project last worked: only then can the drift be a
+    stale copy, else somebody edited it and the operator decides."""
+    if edited:
+        return "hand-edited", AGENT
+    if proven or by_release:
+        return "stale", AGENT
+    return "hand-edited", OPERATOR
+
+
 def instruction_items(
     repo: Path, drifted_by_release: bool, docs_dir: str = "docs/ddflow"
 ) -> list[dict[str, Any]]:
     """Driver docs and rules files that differ from this ddflow's templates. ``drifted_by_release``
-    is whether a release has shipped since the project last worked: only then can the drift
-    be a stale copy; a project at the running version has EDITED the file."""
-    kind = "stale" if drifted_by_release else "hand-edited"
+    is whether a release has shipped since the project last worked: it settles only the files
+    that carry no stamp (see `_provenance`)."""
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
 
-    def add(path: str, state: str, text: str) -> None:
+    def add(path: str, state: str, text: str, provenance: str, action: str) -> None:
         if path in seen:
             return
         seen.add(path)
+        keeps = (
+            " (a refresh keeps your edits in .local-edits)" if provenance == "hand-edited" else ""
+        )
         out.append(
             {
                 "category": "instructions",
                 "id": f"instructions:{path}",
                 "path": path,
                 "state": state,
-                "provenance": kind if state not in (AD.MISSING,) else "missing",
-                "summary": text,
-                "action": AGENT if kind == "stale" or state == AD.MISSING else OPERATOR,
+                "provenance": provenance if state != AD.MISSING else "missing",
+                "summary": f"{text} ({provenance}){keeps}",
+                "action": AGENT if state == AD.MISSING else action,
                 "fix": "ddflow adopt --refresh-docs",
             }
         )
 
-    for rel in AD.driver_drift(repo, docs_dir=docs_dir):
-        add(rel, "differs", f"{rel} differs from the one this ddflow ships ({kind})")
+    for rel, st in AD.driver_states(repo, docs_dir=docs_dir).items():
+        if st == AD.DOC_NEWER:
+            # Written by a newer ddflow: nothing this one may do (D-compat 2).
+            seen.add(rel)
+            out.append(
+                {
+                    "category": "instructions",
+                    "id": f"instructions:{rel}",
+                    "path": rel,
+                    "state": st,
+                    "provenance": "newer",
+                    "summary": f"{rel} was written by a newer ddflow: upgrade ddflow, do not refresh it",
+                    "action": NOTE,
+                    "fix": "upgrade ddflow",
+                }
+            )
+            continue
+        prov, action = _provenance(
+            drifted_by_release, edited=st == AD.DOC_EDITED, proven=st == AD.DOC_STALE
+        )
+        add(rel, "differs", f"{rel} differs from the one this ddflow ships", prov, action)
     for rs in AD.rules_status(repo, docs_dir=docs_dir):
         if rs.needs_attention:
-            add(rs.path, rs.state, f"{rs.render()} ({kind})")
+            prov, action = _provenance(
+                drifted_by_release, edited=rs.edited, proven=rs.stamped and rs.state == AD.STALE
+            )
+            add(rs.path, rs.state, rs.render(), prov, action)
     return out
 
 
