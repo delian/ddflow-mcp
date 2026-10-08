@@ -310,7 +310,9 @@ class CommandRunner:
                 setattr(run, name, red.text)
                 for kind, n in red.counts.items():
                     run.redactions[kind] = run.redactions.get(kind, 0) + n
-            run.reason = self.redactor.text(run.reason).text  # not counted: it repeats stderr
+            run.reason = self.redactor.text(
+                run.reason
+            ).text  # masked, not counted: counts describe the output
         if self.max_output is not None:
             marker = f"[... clipped to the last {self.max_output} characters]\n"
             for name in ("out", "err"):
