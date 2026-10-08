@@ -27,6 +27,7 @@ import os
 import re
 import secrets
 import socket
+import sys
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, fields
@@ -34,6 +35,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from ..config import Config, LogConfig, SessionConfig
+from ..config_sections import _compat as CV
 from ..core import digest as D
 from ..core import redact as R
 from ..core import upcasters as UP
@@ -58,6 +60,7 @@ from ..core.events import (
     capability_unrecorded,
     stamp_facts,
     utcnow,
+    version_key,
 )
 from ..core.model import known_kinds
 from ..core.slug import safe_filename
@@ -112,16 +115,12 @@ SNAPSHOT_ENV = "DDFLOW_SNAPSHOT"
 
 def running_version() -> str:
     """The version of the code that is running (read at call time, so a test can set it)."""
-    import ddflow
-
-    return str(getattr(ddflow, "__version__", "") or "")
+    return V.running()
 
 
 def version_known(version: str) -> bool:
     """A version worth stamping: one that parses. A source tree reporting "unknown" must not
     stamp a log with a version that compares as nothing."""
-    from ..core.events import version_key
-
     return bool(version_key(version))
 
 
@@ -129,12 +128,17 @@ def install_kind() -> str:
     """How this ddflow is installed, cheaply: `source-tree` when the package lives in a
     checkout, else `installed`. (`services.install_info` is richer and runs git; a stamp
     written on every first write must not.)"""
-    here = Path(__file__).resolve()
-    return (
-        "installed"
-        if any(p in ("site-packages", "dist-packages") for p in here.parts)
-        else ("source-tree")
-    )
+    return "source-tree" if CV.is_source_tree() else "installed"
+
+
+def upgrade_remedy(highest: str = "") -> str:
+    """`config_sections._compat.upgrade_advice` for how this ddflow is installed, as the
+    sentence a refusal opens its remedy with: a source checkout merges main, an installed
+    ddflow upgrades its package (``highest`` is the version needed, "" when unknown)."""
+    text = CV.upgrade_advice(highest, install_kind())
+    if highest and highest not in text:  # a source checkout's advice names no version
+        text += f" (ddflow >= {highest} is needed)"
+    return text[:1].upper() + text[1:]
 
 
 def skew_message(
@@ -162,8 +166,8 @@ def skew_message(
             f"one recorded."
         )
         remedy = (
-            f"Upgrade ddflow-mcp to a release that writes data format level {log_format} or "
-            f"higher (ddflow {format_version or highest} did)"
+            f"{upgrade_remedy()} (the release needed writes data format level {log_format} or "
+            f"higher; ddflow {format_version or highest} did)"
         )
     else:
         head = (
@@ -173,11 +177,9 @@ def skew_message(
         )
         if log_format > format_level > 0:
             head += f" Its data format level ({log_format}) is ahead of this ddflow's too ({format_level})."
-        remedy = f"Upgrade ddflow-mcp to >= {highest}"
+        remedy = upgrade_remedy(highest)
     return (
-        f"{head} {remedy} and retry (for example "
-        f"`uvx --refresh --from ddflow-mcp ddflow ...`, or restart the MCP server after "
-        f"upgrading). Reads still work. If you cannot upgrade, ask the user; only if the "
+        f"{head} {remedy} and retry. Reads still work. If you cannot upgrade, ask the user; only if the "
         f'user insists, rerun with --allow-older-version --reason "<why>" (MCP: the '
         f"allow_older_version argument carrying the reason). That override is recorded "
         f"(skew.overridden), marks this session's events as written by an older ddflow, and "
@@ -193,7 +195,7 @@ def capability_message(name: str, since: str, kind: str, version: str, by: str =
     return (
         f"REFUSED: this write ({kind}) needs the `{name}` capability, which this project's "
         f"log records{who} and ddflow {version} does not have: writing it could misread or "
-        f"drop what a newer ddflow recorded under it. Upgrade ddflow-mcp to >= {since} "
+        f"drop what a newer ddflow recorded under it. {upgrade_remedy(since)} "
         f"and retry. Only writes of this kind are refused; everything else proceeds. If "
         f'you cannot upgrade, ask the user; `[upgrade].skew = "off"` is theirs to set.'
     )
@@ -209,8 +211,6 @@ def _warn_skew_once(version: str, highest: str, log_format: int = 0, format_leve
     if key in _SKEW_WARNED:
         return
     _SKEW_WARNED.add(key)
-    import sys
-
     ahead = (
         f" (data format level {log_format}, this ddflow writes {format_level})"
         if (log_format > format_level > 0)
@@ -1159,8 +1159,6 @@ class EventLog:
         """`[upgrade].skew`: refuse (default) | warn | off. Read only when a skew is actually
         found, so the common append never loads the config for it."""
         try:
-            from ..config import Config
-
             return str(Config.load(self.root).upgrade.skew)
         except Exception:
             return "refuse"
