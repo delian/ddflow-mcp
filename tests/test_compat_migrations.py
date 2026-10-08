@@ -204,3 +204,12 @@ def test_unavailable_before_apply_writes_is_unavailable(old: Path) -> None:
     out = M.run(old, EventLog(old, "migrator"), Config.load(old))
     assert [o.status for o in out] == ["unavailable"] and "git missing" in out[0].detail
     assert (old / "notes.txt").read_bytes() == before
+
+
+def test_apply_oserror_is_failed_with_the_error(old: Path) -> None:
+    def apply(ctx: M.Context, found: list[M.Finding]) -> list[M.Corrective]:
+        raise OSError("read-only file system")
+
+    M.register(replace(TOY, apply=apply))
+    out = M.run(old, EventLog(old, "migrator"), Config.load(old))
+    assert out[0].status == "failed" and "OSError: read-only file system" in out[0].detail

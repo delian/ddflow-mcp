@@ -5,7 +5,8 @@ here and are not implemented ad hoc. `pending` runs every detector and the dry-r
 `run` applies the pending ones, each as: detect, plan, BACK UP the files the plan names,
 apply, append the corrective events, then check the result -- a fresh detect finds nothing
 and `verify` reports no problem. A migration whose check fails is reported `failed` with
-what remains, never `applied`; one whose detector could not run is `unavailable`.
+what remains, never `applied`; one whose detector (or apply, before it wrote) could not run
+is `unavailable`.
 """
 
 from __future__ import annotations
