@@ -485,3 +485,17 @@ def test_the_tool_table_registers_itself_without_the_api():
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.stdout.split() == ["True", "True", "False"], out.stderr
+
+
+def test_a_parser_without_a_tool_table_says_its_tool_names_were_not_checked(tmp_path):
+    import argparse
+
+    from ddflow.api.refs import stale_references
+
+    root = argparse.ArgumentParser()
+    root.add_subparsers(dest="cmd").add_parser("next")
+    (tmp_path / "AGENTS.md").write_text("`ddflow next` and ddflow_brief\n")
+    problems, notes = stale_references(tmp_path, lambda: root, None)
+    assert problems == [] and len(notes) == 1
+    assert "1 tool reference(s) in AGENTS.md were not checked" in notes[0]
+    assert "no tool table loaded" in notes[0]

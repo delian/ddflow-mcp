@@ -9,7 +9,9 @@ still answers to:
 
 * ``ok``         -- a current name;
 * ``deprecated`` -- an alias, with the name that replaces it;
-* ``unknown``    -- neither (a typo, or a name from a ddflow that is gone).
+* ``unknown``    -- neither (a typo, or a name from a ddflow that is gone);
+* ``unchecked``  -- the process holds no table to judge it by (an MCP server has no command
+  parser): said in one note, never read as ``ok``.
 
 The vocabulary is handed IN: the command table and the tool registry belong to the
 surfaces, and a service must not import them (``surfaces.vocabulary`` builds it).
@@ -152,7 +154,7 @@ class Ref:
 
 @dataclass(frozen=True)
 class Finding:
-    """A deprecated or unknown reference in one file."""
+    """A deprecated, unknown or unchecked reference in one file."""
 
     path: str  #: repo-relative
     line: int  #: 1-based
