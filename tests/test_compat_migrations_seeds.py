@@ -63,7 +63,10 @@ def test_the_seed_is_registered_with_a_valid_declaration() -> None:
 
 def test_detect_and_plan_see_only_ddflows_own_regions(old: Path) -> None:
     (got,) = [p for p in M.pending(_ctx(old)) if p.migration.id == ID]
-    assert sorted(f.key.rsplit(":", 1)[1] for f in got.findings) == ["ddflow_old_next", "doc show"]
+    assert sorted(f.key.rsplit(":", 1)[1].split("#")[0] for f in got.findings) == [
+        "ddflow_old_next",
+        "doc show",
+    ]
     assert all(f.path == "AGENTS.md" for f in got.findings)
     assert [(c.path, "docs show" in c.action) for c in got.changes] == [("AGENTS.md", True)]
 
@@ -98,16 +101,17 @@ def test_without_a_vocabulary_there_is_nothing_to_judge_by(old: Path) -> None:
     assert [p for p in M.pending(_ctx(old)) if p.migration.id == ID] == []
 
 
-def test_apply_acts_only_on_what_was_detected_and_planned(old: Path) -> None:
-    """A deprecated name that appears after the plan (so after the backup) is not rewritten."""
+def test_plan_and_apply_act_only_on_what_was_detected(old: Path) -> None:
+    """A deprecated name that appears after the detect (so after the backup) is not rewritten,
+    and a line inserted above a detected one does not change what it is."""
     m = M.by_id(ID)
     ctx = _ctx(old)
     found = m.detect(ctx)
     other = old / "CLAUDE.md"
     other.write_text(_managed("Run `ddflow doc show` later.\n"))
-    m.apply(ctx, found)
-    assert "ddflow docs show" in (old / "AGENTS.md").read_text()
+    assert [c.path for c in m.plan(_ctx(old), found)] == ["AGENTS.md"], "CLAUDE.md is not in it"
+    agents = old / "AGENTS.md"
+    agents.write_text("a new first line\n" + agents.read_text())  # every line number shifts
+    m.apply(_ctx(old), found)
+    assert "Run `ddflow docs show`, then ddflow_next." in agents.read_text()
     assert other.read_text() == _managed("Run `ddflow doc show` later.\n")
-    assert [
-        c.path for c in m.plan(_ctx(old), [f for f in m.detect(_ctx(old)) if f.path == "CLAUDE.md"])
-    ] == ["CLAUDE.md"]
