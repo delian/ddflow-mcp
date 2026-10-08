@@ -17,8 +17,8 @@ yet. It gives:
 Compatibility (D-compat 2): a document written by a NEWER schema is refused for what would
 lose its content (`NewerContent`, exit 3, "upgrade ddflow to >= X"); keys this version does
 not know are kept when it rewrites a document of its own schema. Unreadable state is never
-silently an empty store: `read` raises `StoreUnreadable` unless the caller asks for a
-default, because a quota or lease that "loses" its file grants itself everything.
+silently an empty store: `read` raises `StoreUnreadable` (its `default` is for a MISSING
+document only), because a quota or lease that "loses" its file grants itself everything.
 
 Every time comes from the injected `clock` (default `time.time`), so debounce and retention
 are testable without sleeping. The directory ignores itself (`fsio.ensure_ignored_dir`).
@@ -146,7 +146,7 @@ class LocalStore:
     # -- documents ---------------------------------------------------------------------
 
     def read(self, name: str, *, schema: int = 1, default: Any = None) -> Any:
-        """The value of the document `name`. Missing: `default`. A document of a NEWER
+        """The value of the document `name`. Missing: `default` (only then). A document of a NEWER
         schema than `schema` raises `fsio.NewerContent` (it holds what this code cannot
         interpret); one that cannot be read raises `StoreUnreadable`."""
         doc = self._load(name, schema)
@@ -196,8 +196,11 @@ class LocalStore:
         if not isinstance(found, int) or isinstance(found, bool):
             raise StoreUnreadable(path, f"schema {found!r} is not a number")
         if found > schema:
+            fmt = raw.get("fmt")
             raise fsio.NewerContent(
-                str(path), str(raw.get("ddflow", "a newer version")), int(raw.get("fmt", found))
+                str(path),
+                str(raw.get("ddflow", "a newer version")),
+                fmt if isinstance(fmt, int) and not isinstance(fmt, bool) else found,
             )
         extra = tuple((k, v) for k, v in raw.items() if k not in _ENVELOPE)
         return Doc(raw.get("data"), found, extra)
@@ -293,14 +296,15 @@ class LocalStore:
     # -- housekeeping ------------------------------------------------------------------
 
     def sweep(self, subdir: str, retention: Retention) -> list[Path]:
-        """Apply `retention` to the files of `subdir` under the root."""
-        return retention.sweep(self.root / subdir, now=self.clock())
+        """Apply `retention` to the files of `subdir` under the root (a plain directory name:
+        a retention sweep deletes, so it never leaves the store)."""
+        return retention.sweep(self.path(subdir), now=self.clock())
 
     def remove(self, name: str) -> None:
-        """Delete the store `name` (and its lock file); a missing one is fine."""
-        for p in (self.path(name), fsio.lock_path_for(self.path(name))):
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(p)
+        """Delete the document `name`, under its lock; a missing one is fine. The lock file
+        stays: unlinking it would let a second holder lock a new inode beside the first."""
+        with self.lock(name), contextlib.suppress(FileNotFoundError):
+            os.unlink(self.path(name))
 
 
 def _as_list(value: Any) -> list[Any]:
