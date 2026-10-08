@@ -607,7 +607,12 @@ def list_worktrees(repo: Path) -> list[dict[str, str]]:
 
 
 def capture_diff(
-    tree: Path, base: str = "", *, include_untracked: bool = True, exclude: tuple[str, ...] = ()
+    tree: Path,
+    base: str = "",
+    *,
+    include_untracked: bool = True,
+    exclude: tuple[str, ...] = (),
+    since: str = "",
 ) -> str:
     """The diff a reviewer should actually see, including NEW files.
 
@@ -624,14 +629,26 @@ def capture_diff(
     ``exclude`` drops paths starting with any of those prefixes from every part of it.
     Untracked paths are listed with `-z`, so a non-ASCII name is added as the file it
     is rather than as its C-quoted spelling, which names no file (B7ab10b58f2).
+
+    ``since`` is the commit the committed part is taken from (default: ``base``'s merge
+    base with HEAD). Raises RuntimeError when git cannot produce a part of the diff: a
+    failure is never an empty "nothing changed".
     """
     untracked = untracked_files(tree, exclude)
     spec = ["--", ".", *(f":(exclude){p}" for p in exclude)] if exclude else []
     if include_untracked and untracked:
         git(tree, "add", "-N", "--", *untracked)
     try:
-        if base:
-            merge_base = git(tree, "merge-base", base, "HEAD").out or base
+        if since or base:
+            if since:
+                merge_base = since
+            else:
+                found = git(tree, "merge-base", base, "HEAD")
+                if not found.ok or not found.out:
+                    raise RuntimeError(
+                        f"git merge-base {base} HEAD in {tree} failed: {found.err or found.out}"
+                    )
+                merge_base = found.out
             committed = _diff_text(tree, f"{merge_base}..HEAD", *spec)
         else:
             committed = ""
@@ -654,7 +671,10 @@ def _diff_text(tree: Path, *args: str) -> str:
     non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
     raised (`git()` replaces by default; stated here because a strict decode once aborted the
     whole review)."""
-    return git(tree, "diff", *_DIFF_PREFIXES, *args, errors="replace").out
+    r = git(tree, "diff", *_DIFF_PREFIXES, *args, errors="replace")
+    if not r.ok:  # could not run: never "nothing changed"
+        raise RuntimeError(f"git diff in {tree} failed: {r.err or r.out}")
+    return r.out
 
 
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:

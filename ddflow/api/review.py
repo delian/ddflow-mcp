@@ -102,7 +102,10 @@ def diff_for(
     if not branch and wt_path and wt_path.exists():
         # The branch's commits plus TRACKED edits. An untracked file is a draft nobody
         # committed (B2bf4d38cc1): it is named, not reviewed.
-        diff = W.capture_diff(wt_path, base, include_untracked=False)
+        try:
+            diff = W.capture_diff(wt_path, base, include_untracked=False)
+        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
+            return "", f"{base}..HEAD in {wt_path} could not be read: {exc}"
         how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
         if untracked := W.untracked_files(wt_path):
             shown = ", ".join(untracked[:SHOWN_UNTRACKED]) + (
@@ -1145,14 +1148,8 @@ def _delta_of_tree(wt: Path, head: str, base: str) -> str:
     """The delta of an item's worktree: its commits and tracked edits since the start.
     Raises RuntimeError when a diff cannot be produced: never "nothing changed"."""
     start = _delta_start(wt, "HEAD", head, base)
-    # `start..HEAD` plus the tracked edits: what `capture_diff(wt, head)` sent (a delta is
-    # only taken from a head the branch contains), with each git call's failure kept.
-    committed = W.git(wt, "diff", "--no-color", start, "HEAD")
-    working = W.git(wt, "diff", "--no-color", "HEAD")
-    for part in (committed, working):
-        if not part.ok:  # could not run: never "nothing changed"
-            raise RuntimeError(f"git diff in {wt} failed: {part.err or part.out}")
-    return "\n".join(p.out for p in (committed, working) if p.out.strip())
+    # `start..HEAD` plus the tracked edits: what a review sent, with a git failure kept.
+    return W.capture_diff(wt, include_untracked=False, since=start)
 
 
 def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
