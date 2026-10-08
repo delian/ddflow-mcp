@@ -96,7 +96,10 @@ def diff_for(
     """
     base = base or cfg.worktree.base_ref or W.default_branch(repo)
     if not item:
-        return W.capture_diff(repo), f"working tree in {repo}"
+        try:
+            return W.capture_diff(repo), f"working tree in {repo}"
+        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
+            return "", f"working tree in {repo} could not be read: {exc}"
     it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
@@ -140,10 +143,14 @@ def diff_for(
     if not branch:
         from ..services.enforce import SELF_MANAGED
 
-        return W.capture_diff(repo, exclude=SELF_MANAGED), (
+        how = (
             f"working tree in {repo}, ddflow's bookkeeping excluded -- for {item}'s work "
             f"on a branch, pass --branch <branch> or run review from its worktree"
         )
+        try:
+            return W.capture_diff(repo, exclude=SELF_MANAGED), how
+        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
+            return "", f"working tree in {repo} could not be read: {exc}"
     d = W.git(repo, "diff", "--no-color", f"{base}...{branch}")
     return (d.out + "\n") if d.ok and d.out else "", f"{base}...{branch} ({chosen})"
 
