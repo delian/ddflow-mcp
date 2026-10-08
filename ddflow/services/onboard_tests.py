@@ -82,10 +82,6 @@ class Report:
     notes: list[str] = field(default_factory=list)
 
 
-def _text(path: Path) -> str:
-    return path.read_text("utf-8", errors="replace") if path.is_file() else ""
-
-
 def baseline(repo: Path, command: str, *, timeout: int = P.TIMEOUTS["suite_baseline"]) -> Baseline:
     """Run `command` in a DETACHED worktree of the default branch and measure it.
 
@@ -157,7 +153,7 @@ def live_test(repo: Path) -> Proposal | None:
     uvproject = (repo / "uv.lock").is_file()
     runner = "uv run " if uvproject else ""
     pyproject = repo / "pyproject.toml"
-    text = _text(pyproject)
+    text = TC.file_text(pyproject)
     scripts = re.search(r"^\[project\.scripts\]\s*$", text, re.M)
     if scripts:
         for line in text[scripts.end() :].splitlines():

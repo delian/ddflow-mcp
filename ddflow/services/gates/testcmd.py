@@ -106,6 +106,12 @@ def _manifest_texts(root: Path) -> list[str]:
     return out
 
 
+def _named_in(root: Path) -> list[str]:
+    """The manifests (relative names) whose text, comments removed, names pytest."""
+    names = [*_PY_MANIFESTS, *sorted(p.name for p in root.glob("requirements*.txt"))]
+    return [n for n in names if _PYTEST_NAME.search(_COMMENT.sub("", file_text(root / n)))]
+
+
 def declares_xdist(root: Path) -> bool:
     """Whether the project's manifests declare pytest-xdist."""
     return any(_XDIST_NAME.search(t) for t in _manifest_texts(root))
@@ -156,12 +162,9 @@ class Runner:
     command: str  #: base command WITHOUT a worker count
     evidence: str  #: the file that said so
     workers: str = ""  #: e.g. "-n 12", when parallelism applies and is declared
-    #: The unit_tests command `gate run` proposes when none is configured
-    #: (`suggested_test_command`): "" for a project that does not use pytest.
-    suggested: str = ""
 
 
-def _text(path: Path) -> str:
+def file_text(path: Path) -> str:
     return path.read_text("utf-8", errors="replace") if path.is_file() else ""
 
 
@@ -176,30 +179,37 @@ def detect(root: Path) -> Runner | None:
     """
     root = Path(root)
     pyproject = root / "pyproject.toml"
-    text = _text(pyproject)
+    text = file_text(pyproject)
     tests = root / "tests"
-    if (
-        uses_pytest(root)
+    in_tree = (
+        (root / "pytest.ini").is_file()
+        or (root / "conftest.py").is_file()
         or (root / "tox.ini").is_file()
         or (tests.is_dir() and any(tests.glob("test_*.py")))
-    ):
-        evidence = str(pyproject) if "[tool.pytest.ini_options]" in text else "tests/ + conftest"
+    )
+    if in_tree or uses_pytest(root):
+        if "[tool.pytest.ini_options]" in text:
+            evidence = str(pyproject)
+        elif in_tree:
+            evidence = "tests/ + conftest"
+        else:  # pytest is only NAMED, by a manifest: say which one
+            evidence = next(str(root / m) for m in _named_in(root))
         workers = ""
         if declares_xdist(root):
             # Several agents run this gate at once, so a count that saturates the box is
             # the wrong answer (`auto` included); a quarter of the cores leaves room.
             workers = f"-n {max(2, (os.cpu_count() or 4) // 4)}"
         base = "uv run pytest" if (root / "uv.lock").is_file() else "python -m pytest"
-        return Runner("python", base, evidence, workers, suggested_test_command(root))
+        return Runner("python", base, evidence, workers)
     package = root / "package.json"
     if package.is_file():
         try:
-            scripts = json.loads(_text(package)).get("scripts") or {}
+            scripts = json.loads(file_text(package)).get("scripts") or {}
         except json.JSONDecodeError:
             scripts = {}
         if isinstance(scripts, dict) and scripts.get("test"):
             return Runner("node", "npm test --silent", str(package))
     makefile = root / "Makefile"
-    if re.search(r"^test:", _text(makefile), re.M):
+    if re.search(r"^test:", file_text(makefile), re.M):
         return Runner("make", "make test", str(makefile))
     return None
