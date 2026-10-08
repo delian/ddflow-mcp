@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
-import shutil
 import tempfile
-import time
 import tomllib
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
 from ...infra import fsio
-from ...infra import proc as P
+from .. import cmdrunner
 from .defs import GateDef
 from .evidence import diff_stat, digest, source_tree, tree_fingerprint
 from .testcmd import suggested_test_command, summary_lines
@@ -60,6 +57,26 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
     return keep
 
 
+def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, Any]:
+    """The evidence of a command gate whose command did not run: why, and never a failure."""
+    if p.kind == cmdrunner.MISSING:
+        return {
+            "reason": f"executable {p.missing!r} is not on PATH -- the gate could not run. "
+            f"This is NOT a failing check; install it or reconfigure the gate.",
+            "command": gdef.command,
+            "missing_executable": p.missing,
+        }
+    if p.kind == cmdrunner.TIMEOUT:
+        return {
+            "reason": p.reason,
+            "command": gdef.command,
+            "elapsed_s": round(p.elapsed_s, 1),
+        }
+    if p.kind == cmdrunner.NOT_FOUND:
+        return {"reason": p.reason, "command": gdef.command, "exit": p.code}
+    return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
+
+
 def run_command_gate(
     gdef: GateDef,
     cwd: Path,
@@ -89,20 +106,6 @@ def run_command_gate(
     if not cwd.exists():
         return "unavailable", {"reason": f"working directory {cwd} does not exist"}
 
-    # Pre-flight the executable. Under `shell=True` a missing binary exits 127, which
-    # is indistinguishable from a test suite that chose to exit 127 -- so a tool that
-    # quietly stopped being installed would read as a suite that ran and failed.
-    # Resolving it BEFORE running removes the ambiguity at the source. Only attempted
-    # for a simple leading token; anything with shell syntax up front is the operator
-    # deliberately writing shell, and is left alone.
-    missing = _missing_executable(gdef.command)
-    if missing:
-        return "unavailable", {
-            "reason": f"executable {missing!r} is not on PATH -- the gate could not run. "
-            f"This is NOT a failing check; install it or reconfigure the gate.",
-            "command": gdef.command,
-            "missing_executable": missing,
-        }
     # No bytecode cache in either direction. CPython invalidates a `.pyc` on the
     # source's mtime and SIZE -- and an agent editing in a loop produces same-second,
     # same-size edits by accident, which leaves a stale cache that looks valid. The run
@@ -132,46 +135,29 @@ def run_command_gate(
             **gdef.env,
             **(env or {}),
         }
-        start = time.time()
-        # A command gate IS a shell command line the operator wrote in gates.toml. It ticks
-        # on THIS thread (the first keep-alive renewed the lease from a background thread,
-        # and the log's parse cache and lock bookkeeping are process-global and unlocked:
-        # roborev 827); on timeout its whole process group dies (Bed0f5b6d99).
+        # A command gate IS a shell command line the operator wrote in gates.toml, run by the
+        # one CommandRunner: it checks the executable is installed BEFORE running (under
+        # `shell=True` a missing binary exits 127, indistinguishable from a suite that chose
+        # to exit 127), ticks on THIS thread (the first keep-alive renewed the lease from a
+        # background thread, and the log's parse cache and lock bookkeeping are
+        # process-global and unlocked: roborev 827) and, on timeout, kills the whole process
+        # group (Bed0f5b6d99).
         ticking = on_tick is not None and tick_s > 0
-        try:
-            p = P.run_shell(
-                gdef.command,
-                timeout_s=gdef.timeout_s,
-                cwd=str(cwd),
-                env=full_env,
-                on_tick=on_tick if ticking else None,
-                tick_s=tick_s if ticking else 0,
-            )
-        except (OSError, ValueError) as exc:  # the keep-alive tick failed; the command is killed
-            return "unavailable", {"reason": f"could not execute: {exc}", "command": gdef.command}
-    if p.timed_out:
-        return "unavailable", {
-            "reason": f"timed out after {gdef.timeout_s}s",
-            "command": gdef.command,
-            "elapsed_s": round(time.time() - start, 1),
-        }
-    if p.could_not_run:
-        return "unavailable", {"reason": f"could not execute: {p.err}", "command": gdef.command}
+        p = cmdrunner.CommandRunner().run(
+            cmdrunner.Declared(gdef.command, f"gates.toml [gate.{gdef.id}]"),
+            cwd=cwd,
+            env=full_env,
+            timeout_s=gdef.timeout_s,
+            on_tick=on_tick if ticking else None,
+            tick_s=tick_s if ticking else 0,
+        )
+    if not p.ran:
+        return "unavailable", _unavailable_evidence(gdef, p)
     out = p.output
-    # Belt and braces for the compound-command case the pre-flight cannot inspect
-    # (pipes, &&, subshells): POSIX reserves 127 for "command not found" and 126 for
-    # "found but not executable", and the shell says so on stderr.
-    if p.code in (126, 127) and _looks_like_not_found(p.err):
-        return "unavailable", {
-            "reason": f"shell reported exit {p.code} (command not found / not "
-            f"executable): {p.err.strip()[:200]}",
-            "command": gdef.command,
-            "exit": p.code,
-        }
     ev = {
         "command": gdef.command,
         "exit": p.code,
-        "elapsed_s": round(time.time() - start, 1),
+        "elapsed_s": round(p.elapsed_s, 1),
         "output_digest": digest(out),
         "output_bytes": len(out),
         "tail": out[-2000:],
@@ -374,62 +360,9 @@ def classify_exit(gdef: GateDef, code: int, output: str) -> tuple[str, str]:
     return "passed", ""
 
 
-_SHELL_META = set(";|&<>()$`\n")
-
-
-def _missing_executable(command: str) -> str:
-    """The leading executable of ``command`` if it is simple and absent, else "".
-
-    Returns "" (meaning "no opinion") for anything that is not a bare leading token:
-    an assignment prefix, a pipeline, a subshell, a builtin. Being sure only about
-    the easy case is the point -- a heuristic that guessed at compound shell would
-    produce false UNAVAILABLEs, which stall a pipeline as surely as a false pass
-    corrupts one.
-    """
-    cmd = command.strip()
-    if not cmd or cmd[0] in _SHELL_META:
-        return ""
-    try:
-        tokens = shlex.split(cmd)
-    except ValueError:
-        return ""
-    if not tokens:
-        return ""
-    head = tokens[0]
-    if any(ch in _SHELL_META for ch in head) or "=" in head:
-        return ""
-    if head in _SHELL_BUILTINS or "/" in head:
-        return ""  # builtins have no PATH entry; paths are checked by exec
-    return "" if shutil.which(head) else head
-
-
-#: Builtins that legitimately have no PATH entry. `exit`/`true`/`false` appear in real
-#: gate configs and in this project's own tests.
-_SHELL_BUILTINS = frozenset(
-    {
-        "exit",
-        "true",
-        "false",
-        "cd",
-        "echo",
-        "test",
-        "[",
-        ":",
-        "set",
-        "unset",
-        "export",
-        "eval",
-        "source",
-        ".",
-        "read",
-        "wait",
-        "trap",
-        "shift",
-        "return",
-    }
-)
-
-
-def _looks_like_not_found(stderr: str) -> bool:
-    low = stderr.lower()
-    return "not found" in low or "no such file or directory" in low or "permission denied" in low
+#: The executable pre-flight and the shell-word list moved to the one CommandRunner; these
+#: names stay so `gates._missing_executable` and the rest keep working.
+_SHELL_META = cmdrunner.SHELL_META
+_SHELL_BUILTINS = cmdrunner.SHELL_WORDS
+_missing_executable = cmdrunner.executable_missing
+_looks_like_not_found = cmdrunner.looks_like_not_found

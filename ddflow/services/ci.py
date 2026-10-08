@@ -14,7 +14,6 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 from __future__ import annotations
 
 import re
-import shlex
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -25,12 +24,11 @@ from pathlib import Path
 from ..config import CI_ON_MERGE_MODES, Config
 from ..core.digest import content_digest
 from ..core.slug import ascii_slug
-from ..infra import proc as P
 from ..infra import worktree as W
+from .cmdrunner import COULD_NOT_RUN, TIMEOUT, CommandRunner, Declared, executable_missing
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
-_ENV_WORD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
 
@@ -82,22 +80,9 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return DEFAULT_COMMAND, ""
 
 
-_SHELL_WORDS = frozenset(
-    {"cd", "export", "set", "source", ".", "(", "{", "if", "for", "test", "[", "[[", "(("}
-)
-
-
 def tool_missing(command: str) -> str:
     """The executable the command starts with, when it is not installed ("" when it is)."""
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        return command
-    # `SKIP=tests pre-commit run ...`: leading VAR=value words are environment, not the program.
-    program = next((w for w in words if not _ENV_WORD.match(w)), "")
-    if program in _SHELL_WORDS:  # a builtin or compound command: the shell, not `which`, decides
-        return ""
-    return "" if (program and shutil.which(program)) else program
+    return executable_missing(command)
 
 
 @contextmanager
@@ -184,17 +169,22 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
             return Result(status, command=cmd, sha=sha, reason=failure)
         # The operator's own [ci].command, run as they wrote it; on timeout its whole
         # process group dies, not just the shell (Bed0f5b6d99).
-        p = P.run_shell(cmd, timeout_s=cfg.ci.timeout_s, cwd=tree)
-        if p.timed_out:
+        p = CommandRunner().run(
+            Declared(cmd, "[ci].command"),
+            cwd=tree,
+            timeout_s=cfg.ci.timeout_s,
+            check_installed=False,  # checked above, before the scratch worktree was made
+        )
+        if p.kind == TIMEOUT:
             return Result(
                 "unavailable",
                 command=cmd,
                 sha=sha,
-                reason=f"timed out after {cfg.ci.timeout_s}s: raise [ci].timeout_s",
+                reason=f"{p.reason}: raise [ci].timeout_s",
             )
-        if p.could_not_run:
-            return Result("unavailable", command=cmd, sha=sha, reason=f"could not execute: {p.err}")
-    out = p.output
+        if p.kind == COULD_NOT_RUN:
+            return Result("unavailable", command=cmd, sha=sha, reason=p.reason)
+    out = p.output  # a shell "not found" exit is the command's verdict here: it ran and failed
     checks = parse_checks(out)
     if p.code != 0 and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
