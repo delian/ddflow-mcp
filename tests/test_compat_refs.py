@@ -264,3 +264,66 @@ def test_doctor_reports_a_stale_reference_with_file_and_line(repo):
     (repo / "AGENTS.md").write_text("# a\n\nrun `ddflow next` first\n")
     _, out, _ = run_cli(repo, "doctor")
     assert "AGENTS.md:3" not in out
+
+
+def test_a_rewritten_settings_file_keeps_every_other_byte(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    ours = Managed("hooks/session-start", open="#", close="").render("ddflow doc show || true\n")
+    path = tmp_path / ".claude" / "settings.json"
+    path.parent.mkdir()
+    raw = (
+        '{\n    "model": "caf\u00e9",\n  "hooks": {"SessionStart": [{"hooks": '
+        '[{"type": "command", "command": ' + json.dumps(ours) + "}]}]},\n"
+        '        "note": "keep   me"}\n'
+    )
+    path.write_text(raw)
+    C.rewrite(tmp_path, VOCAB, C.scan(tmp_path, VOCAB))
+    after = path.read_text()
+    assert (
+        after != raw
+        and "docs show" in json.loads(after)["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    )
+    assert '"model": "caf\\u00e9"' in after and '"note": "keep   me"' in after
+    assert after.startswith('{\n    "model"')  # not reformatted
+
+
+def test_a_renamed_subcommand_of_a_renamed_group_is_deprecated_not_unknown():
+    vocab = C.Vocabulary(
+        commands=frozenset({("check",), ("check", "run")}),
+        tools=frozenset(),
+        command_aliases={
+            ("gate",): C.Renamed("check"),
+            ("check", "record"): C.Renamed("run"),
+            ("gate", "log"): C.Renamed("run"),
+        },
+    )
+    assert vocab.resolve_command(("gate", "record"))[:2] == ("deprecated", "check run")
+    assert vocab.resolve_command(("gate", "log"))[:2] == ("deprecated", "check run")
+    assert vocab.resolve_command(("check", "record"))[:2] == ("deprecated", "check run")
+
+
+def test_the_live_parser_lists_current_names_and_keeps_aliases_apart():
+    import argparse
+
+    from ddflow.api.refs import command_names
+    from ddflow.surfaces import registry as R
+
+    root = argparse.ArgumentParser()
+    sub = root.add_subparsers(dest="cmd")
+    docs = sub.add_parser("docs")
+    docs.add_subparsers(dest="docs_cmd").add_parser("show")
+    R.add_command_alias(sub, docs, "doc", R.Alias("command", "doc", "docs", "0.1.17"))
+    commands, aliases = command_names(root)
+    assert commands == {("docs",), ("docs", "show")}  # the old word is not a current command
+    assert aliases[("doc",)].new == "docs"
+    vocab = C.Vocabulary(commands=commands, tools=frozenset(), command_aliases=aliases)
+    assert vocab.resolve_command(("doc", "show"))[:2] == ("deprecated", "docs show")
+
+
+def test_installing_a_renamed_hook_twice_adds_nothing(tmp_path):
+    spec = CH.spec("claude", "session-start")
+    renamed = CH.HookSpec(**{**spec.__dict__, "run": "start-session"})
+    for _ in range(3):
+        CH.install_spec(tmp_path, renamed)
+    data = json.loads((tmp_path / CH.CLAUDE_SETTINGS).read_text())
+    assert sum(len(g["hooks"]) for g in data["hooks"]["SessionStart"]) == 1

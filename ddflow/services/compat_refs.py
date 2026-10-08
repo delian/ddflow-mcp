@@ -70,7 +70,9 @@ class Renamed:
 @dataclass(frozen=True)
 class Vocabulary:
     """The names this ddflow answers to. ``commands`` are full canonical paths (one or two
-    words); an alias is keyed by the OLD path, a renamed group by its one word."""
+    words); an alias is keyed by the OLD path (a renamed group by its one word, a renamed
+    subcommand by its group, written either way, and the old word) and its ``new`` is the
+    one word or group that replaces it."""
 
     commands: frozenset[tuple[str, ...]]
     tools: frozenset[str]
@@ -100,7 +102,7 @@ class Vocabulary:
         group = old.new if old is not None and old.new in groups else head
         if group in groups and rest:
             sub = rest[0]
-            leaf = self.command_aliases.get((group, sub))
+            leaf = self.command_aliases.get((head, sub)) or self.command_aliases.get((group, sub))
             if leaf is not None and (group, leaf.new) in self.commands:
                 return DEPRECATED, f"{group} {leaf.new}", leaf
             if (group, sub) in self.commands:
@@ -503,7 +505,9 @@ def _resolve(repo: Path, rel: str) -> Path | None:
 
 def _rewrite_settings(text: str, vocab: Vocabulary) -> str:
     """The settings file with each ddflow-written hook command rewritten as a text of its
-    own (its stamped region is the command's); a hook of the person's is not touched."""
+    own (its stamped region is the command's); a hook of the person's is not touched, and
+    neither is any byte outside the rewritten command strings (the file is not reformatted).
+    A command string that cannot be found exactly once in the file is left."""
     data = json.loads(text)
     for groups in (data.get("hooks") or {}).values():
         for g in groups if isinstance(groups, list) else ():
@@ -517,5 +521,18 @@ def _rewrite_settings(text: str, vocab: Vocabulary) -> str:
                     if f.managed and f.ref.status == DEPRECATED
                 ]
                 if found:
-                    h["command"] = _rewrite_text(cmd, found)
-    return json.dumps(data, indent=2) + "\n"
+                    text = _swap_json_string(text, cmd, _rewrite_text(cmd, found))
+    return text
+
+
+def _swap_json_string(text: str, old: str, new: str) -> str:
+    """``text`` with the JSON string ``old`` replaced by ``new``, spelled as the file spells
+    it (escaped or not); unchanged when ``old`` is not there exactly once."""
+    for ascii_only in (True, False):
+        was, now = (
+            json.dumps(old, ensure_ascii=ascii_only),
+            json.dumps(new, ensure_ascii=ascii_only),
+        )
+        if text.count(was) == 1:
+            return text.replace(was, now, 1)
+    return text
