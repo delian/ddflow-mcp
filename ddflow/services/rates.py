@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from ..config import Config
 from ..core.events import Event
 from ..core.model import State
+from .schedule import count_at_last_run, count_passes
 
 #: Gate outcomes that mean "this gate said no". `skipped` is deliberately NOT here: a
 #: skipped gate did not fire, and counting it as a failure would make an unconfigured gate
@@ -163,29 +164,18 @@ def cadence_rates(state: State, cfg: Config) -> list[CadenceRate]:
     wall-clock: `expected` is `completed // every`, which is a fact about the log. A
     wall-clock cadence could only be estimated, and an estimate is what nobody argues from.
     """
-    done_tasks = sum(1 for i in state.items.values() if i.kind == "task" and i.state == "done")
-    done_phases = sum(1 for i in state.items.values() if i.kind == "phase" and i.state == "done")
-    c = cfg.cadence
-    spec = (
-        ("integration_tests", c.integration_tests_every_tasks, "tasks", done_tasks),
-        ("dedupe_sweep", c.dedupe_sweep_every_tasks, "tasks", done_tasks),
-        ("architecture_review", c.architecture_review_every_phases, "phases", done_phases),
-        ("mutation_tests", c.mutation_tests_every_phases, "phases", done_phases),
-        ("lessons_pass", c.lessons_pass_every_phases, "phases", done_phases),
-    )
-    out = []
-    for name, every, unit, count in spec:
-        runs = state.cadences.get(name, [])
-        # The completion count the LAST run recorded, which is what `api.cadence` reads to
-        # compute due-ness. A malformed or absent `result` reads as 0 — treating an
-        # unparseable record as "it never ran" errs toward reporting, which is the safe
-        # direction for a check whose whole purpose is to notice silence.
-        try:
-            at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
-        except (TypeError, ValueError):
-            at_last = 0
-        out.append(CadenceRate(name, every, unit, count, len(runs), at_last))
-    return out
+    return [
+        CadenceRate(
+            p.name,
+            p.every,
+            p.unit,
+            p.count,
+            len(state.cadences.get(p.name, [])),
+            # What `count_due` reads, so due-ness and this rate cannot disagree.
+            count_at_last_run(state, p.name),
+        )
+        for p in count_passes(state, cfg)
+    ]
 
 
 def stalled(state: State, cfg: Config) -> list[CadenceRate]:

@@ -13,57 +13,28 @@ is the layer check doing exactly what it is for.
 from __future__ import annotations
 
 import json
-import math
 from typing import Any
 
-
-def calendar(cfg) -> dict[str, float]:
-    """`[cadence] every_days` as name -> days. Raises ValueError naming the knob for an
-    entry that is not `name=<positive number>`: one typo raised a bare float() error,
-    and an entry without `=` was DROPPED -- a weekly pass never reported due, and
-    nothing said the knob was ignored (roborev 830)."""
-    out: dict[str, float] = {}
-    for spec in cfg.cadence.every_days:
-        name, sep, days = spec.partition("=")
-        try:
-            value = float(days) if sep and name.strip() else 0.0
-        except ValueError:
-            value = 0.0
-        # Not `value <= 0`: nan and inf (also "1e309") pass that, and a period no elapsed
-        # time reaches is a pass that silently never falls due (bug B1c68fe5e9c).
-        if not (math.isfinite(value) and value > 0):
-            raise ValueError(
-                f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
-                f'number of days (e.g. "bug_hunt=7")'
-            )
-        out[name.strip()] = value
-    return out
+from .schedule import (
+    calendar,
+    count_at_last_run,
+    count_passes,
+)
 
 
 def count_due(st, cfg, *, replaced: set[str] = frozenset()) -> list[dict[str, Any]]:
     """Passes due by COMPLETED WORK (tasks or phases). Needs nothing but the folded state
     and the config, so `complete <phase>` can ask it even when a calendar knob is malformed.
     `replaced` names calendar entries, which take the place of the count-based pass."""
-    done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
-    done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
-    c = cfg.cadence
     due: list[dict[str, Any]] = []
-    for name, every, unit, count in (
-        ("integration_tests", c.integration_tests_every_tasks, "tasks", done_tasks),
-        ("dedupe_sweep", c.dedupe_sweep_every_tasks, "tasks", done_tasks),
-        ("architecture_review", c.architecture_review_every_phases, "phases", done_phases),
-        ("mutation_tests", c.mutation_tests_every_phases, "phases", done_phases),
-        ("lessons_pass", c.lessons_pass_every_phases, "phases", done_phases),
-    ):
-        if name in replaced:
+    for p in count_passes(st, cfg):
+        if p.name in replaced:
             # The calendar entry of the same name REPLACES this pass; without the skip
             # it would also fall due by completions, reported twice under one name.
             continue
-        runs = st.cadences.get(name, [])
-        at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
-        since = count - at_last
-        if every > 0 and since >= every:
-            due.append({"cadence": name, "since": since, "every": every, "unit": unit})
+        since = p.count - count_at_last_run(st, p.name)
+        if p.every > 0 and since >= p.every:
+            due.append({"cadence": p.name, "since": since, "every": p.every, "unit": p.unit})
     return due
 
 
