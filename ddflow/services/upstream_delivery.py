@@ -149,12 +149,13 @@ def prepare(root: Path, bundle: Bundle, repo: str) -> Outcome:
 def _safe(exc: Exception, root: Path | str) -> str:
     """``exc``'s message with the upstream profile's masks AND the project's configured
     redaction patterns ([session].redact_patterns / redact_extra). A config that cannot
-    be read falls back to the defaults: the message is masked either way."""
+    be read, or holds a pattern that does not compile, falls back to the profile alone:
+    this runs while reporting a failure, so it must never raise a second one."""
+    text = str(exc)
     try:
-        cfg = Config.load(Path(root))
+        return redactor("upstream", Config.load(Path(root))).text(text).text
     except (OSError, ValueError, KeyError, TypeError):
-        cfg = None
-    return redactor("upstream", cfg).text(str(exc)).text
+        return redactor("upstream").text(text).text
 
 
 def _refusal(consent: ConsentLike | None, digest: str, now: float) -> str:
