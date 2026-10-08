@@ -69,6 +69,17 @@ def test_array_and_enum_properties():
     assert Param("kind", choices=("a", "b"), schema_enum=True).schema()["enum"] == ["a", "b"]
 
 
+def test_command_schema_keeps_a_params_enum():
+    """Review finding #1: the schema must come from the Param, not a lossy tuple."""
+    cmd = Command(
+        path=("x",),
+        tool="ddflow_x",
+        params=(Param("mode", choices=("a", "b"), schema_enum=True, help="m"),),
+    )
+    assert cmd.input_schema()["properties"]["mode"]["enum"] == ["a", "b"]
+    assert cmd.input_schema()["properties"][AS_AGENT]["type"] == "string"
+
+
 def test_deprecated_argument_is_accepted_but_not_advertised():
     props = {"a": ("string", "", False), "old": ("string", "", False)}
     assert list(properties_schema(props, deprecated={"old": "a"})["properties"]) == ["a"]
