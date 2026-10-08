@@ -100,14 +100,30 @@ def test_a_non_numeric_last_result_reads_as_never_run_not_a_crash():
     assert SV.count_at_last_run(st, "integration_tests") == 0
 
 
-def test_the_recorded_count_of_a_run_follows_the_one_table():
+def test_the_recorded_count_of_a_run_follows_the_one_table(repo):
     """`cadence --ran` writes the completion count of the pass's own unit, derived from
-    COUNT_PASSES rather than a second literal list of names (roborev 2205)."""
-    assert {n: SV.count_unit(n) for n, _k, _u in SV.COUNT_PASSES} == {
-        "integration_tests": "tasks",
-        "dedupe_sweep": "tasks",
-        "architecture_review": "phases",
-        "mutation_tests": "phases",
-        "lessons_pass": "phases",
-    }
+    COUNT_PASSES rather than a second literal list of names (roborev 2205/2206): one done
+    task and no done phase, so a task pass records 1 and a phase pass 0."""
+    import json
+
+    from conftest import finish, run_cli
+
+    assert run_cli(repo, "init")[0] == 0
+    for args in (
+        ("phase", "add", "P0", "--title", "p"),
+        ("task", "add", "P0.T1", "--phase", "P0", "--globs", "p0/*"),
+        ("claim", "P0.T1", "--no-worktree"),
+    ):
+        assert run_cli(repo, *args)[0] == 0
+    assert finish(repo, "P0.T1")[0] == 0
+    for name in ("integration_tests", "architecture_review"):
+        assert run_cli(repo, "cadence", "--ran", name)[0] == 0
+    ran = {}
+    for path in (repo / ".ddflow" / "events").glob("*.jsonl"):
+        for line in path.read_text().splitlines():
+            ev = json.loads(line)
+            if ev.get("kind") == "cadence.ran":
+                ran[ev["subject"]] = ev["data"]["result"]
+    assert ran == {"integration_tests": "1", "architecture_review": "0"}
+    assert SV.count_unit("integration_tests") == "tasks"
     assert SV.count_unit("bug_hunt") == ""
