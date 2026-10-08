@@ -181,15 +181,28 @@ def _unknown_author_notes(repo: Path, log, ctx: RP.Context | None = None) -> lis
 
 
 def _driver_drift_notes(repo: Path) -> list[str]:
-    """One note naming driver docs that differ from the templates this ddflow ships."""
-    from ...services.adopt import driver_drift
+    """One note naming driver docs that differ from the templates this ddflow ships, each
+    with WHAT the difference is (the Managed state): an unedited older release, a hand edit,
+    a newer ddflow's format, or a copy with no stamp."""
+    from ...services import adopt as AD
 
-    lagging = driver_drift(repo)
+    lagging = AD.driver_states(repo)
     if not lagging:
         return []
+    why = {
+        AD.DOC_STALE: "older release",
+        AD.DOC_EDITED: "edited by hand",
+        AD.DOC_NEWER: "newer format: upgrade ddflow",
+        AD.DOC_LEGACY: "no version stamp",
+    }
+    names = ", ".join(f"{rel} ({why.get(st, st)})" for rel, st in lagging.items())
+    note = f"driver docs differ from the templates this ddflow ships: {names}"
+    if all(st == AD.DOC_NEWER for st in lagging.values()):
+        return [note + " — a refresh will not overwrite them; upgrade ddflow"]
     return [
-        f"driver docs differ from the templates this ddflow ships: {', '.join(lagging)}"
-        " — `ddflow adopt --refresh-docs` rewrites them (and the rules blocks) and nothing else"
+        note + " — `ddflow adopt --refresh-docs` rewrites them (and the rules blocks) and"
+        " nothing else"
+        + ("; upgrade ddflow for the newer ones" if AD.DOC_NEWER in lagging.values() else "")
     ]
 
 
@@ -388,9 +401,14 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     for state in rules_status(repo):
         if not state.needs_attention:
             continue
+        # A block a newer ddflow wrote is not rewritten by a refresh: its own line says so.
         line = (
-            f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
-            "(plain `ddflow adopt` also rewrites MCP launches)"
+            state.render()
+            if state.newer
+            else (
+                f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
+                "(plain `ddflow adopt` also rewrites MCP launches)"
+            )
         )
         # NOT_BINDING sits with MISSING: a rule the agent may never load is not a
         # milder version of a drifted one, it is the mechanism switched off.
