@@ -964,7 +964,7 @@ def refresh_docs(
         path = repo / name
         if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
             continue
-        actions.append(_upsert_block(path, section))
+        actions.append(_upsert_block(path, section, name))
     for key in agents:
         if key in NATIVE_RULES and (only is None or NATIVE_RULES[key].path in only):
             actions.append(_write_native_rule(repo, key, docs_dir))
@@ -1032,7 +1032,7 @@ def adopt(
         path = repo / name
         if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
             continue
-        actions.append(_upsert_block(path, section))
+        actions.append(_upsert_block(path, section, name))
 
     if install_hooks:
         from ..services.enforce import install as install_hook
@@ -1170,7 +1170,7 @@ def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> s
     if rule.form == FORM_BLOCK:
         # A file the project may already own (`QWEN.md`, `replit.md`, `.goosehints`), so a
         # managed block rather than a wholesale write — the operator's own rules stay.
-        return _upsert_block(path, project_section(docs_dir))
+        return _upsert_block(path, project_section(docs_dir), rule.path)
     if rule.form == FORM_AIDER:
         return _add_aider_read(path)
     raise ValueError(f"unknown native rules form {rule.form!r}")
@@ -1280,44 +1280,46 @@ def _section_body(section: str) -> str:
     return section if body is None else body
 
 
-def _upsert_block(path: Path, section: str) -> str:
-    """Insert or replace the managed block, leaving the rest of the file untouched."""
+def _upsert_block(path: Path, section: str, label: str = "") -> str:
+    """Insert or replace the managed block, leaving the rest of the file untouched. Messages
+    name the file ``label`` (its project path), else its bare name."""
+    name = label or path.name
     try:
         existing = path.read_text("utf-8") if path.exists() else ""
     except UnicodeDecodeError:
         return Refused(
-            f"SKIPPED {path.name}: it is not UTF-8 text, so ddflow cannot place its block "
+            f"SKIPPED {name}: it is not UTF-8 text, so ddflow cannot place its block "
             f"in it safely; convert it to UTF-8 and re-run adopt"
         )
     try:
         owned = BLOCK.owns(existing)
     except RegionError as exc:
-        return Refused(f"SKIPPED {path.name}: {exc}; fix the markers and re-run adopt")
+        return Refused(f"SKIPPED {name}: {exc}; fix the markers and re-run adopt")
     if owned:
         edited = block_edited(existing) and block_body(existing) != _section_body(section)
         try:
             updated = BLOCK.splice(existing, _section_body(section))
         except NewerContent as exc:
-            return Refused(f"REFUSED {path.name}: {exc}")
+            return Refused(f"REFUSED {name}: {exc}")
         note = ""
         if edited:  # a hand edit inside the block: kept, not lost
             aside = local_edits_path(path)
             atomic_write(aside, path.read_bytes())
             note = f" (your edits are kept in {aside.name})"
         replace_text(path, updated)
-        return f"updated the managed block in {path.name}{note}"
+        return f"updated the managed block in {name}{note}"
     if LEGACY_BEGIN in existing and LEGACY_END in existing and not has_legacy_block(existing):
         return Refused(
-            f"SKIPPED {path.name}: the legacy block markers are reversed; fix them and re-run adopt"
+            f"SKIPPED {name}: the legacy block markers are reversed; fix them and re-run adopt"
         )
     if has_legacy_block(existing):
         head = existing[: existing.index(LEGACY_BEGIN)]
         tail = existing[existing.index(LEGACY_END) + len(LEGACY_END) :]
         replace_text(path, head + section.strip() + tail)
-        return f"updated the managed block in {path.name}"
+        return f"updated the managed block in {name}"
     prefix = existing.rstrip() + "\n\n" if existing.strip() else f"# {path.parent.name}\n\n"
     replace_text(path, prefix + section.strip() + "\n")
-    return f"{'appended to' if existing.strip() else 'created'} {path.name}"
+    return f"{'appended to' if existing.strip() else 'created'} {name}"
 
 
 #: The module an agent spawns to get the MCP server, and the directory that must be on
