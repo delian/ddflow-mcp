@@ -20,7 +20,7 @@ import ddflow
 from ddflow.core import events as E
 from ddflow.core import version as V
 from ddflow.core.events import Event, SkewRefused, stamp_facts
-from ddflow.infra.log import EventLog, skew_message
+from ddflow.infra.log import EventLog, skew_message, upgrade_remedy
 
 
 def _stamp(repo: Path, version: str, fmt: int | None, agent: str = "future", n: int = 1) -> None:
@@ -108,7 +108,7 @@ def test_a_version_skew_keeps_its_own_message(repo: Path):
     with pytest.raises(SkewRefused) as exc:
         EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
     assert "data format level" not in str(exc.value)
-    assert "Upgrade ddflow-mcp to >= 99.0.0" in str(exc.value)
+    assert upgrade_remedy("99.0.0") in str(exc.value)
 
 
 def test_policy_warn_and_off_never_refuse_a_format_skew(repo: Path):
@@ -213,13 +213,13 @@ def test_the_format_only_message_names_the_stamp_that_carries_the_format_and_wha
     assert "ddflow 2.0.0 (stamped by y) at data format level 5" in msg
     assert "writes level 2" in msg and "(stamped by x)" not in msg  # not misattributed
     # "upgrade to >= <this version>" would already be satisfied, so it is not what is asked
-    assert "release that writes data format level 5 or higher" in msg
+    assert "writes data format level 5 or higher" in msg
     assert "to >= 3.0.0" not in msg
 
 
 def test_a_version_skew_that_is_also_a_format_skew_says_both():
     msg = skew_message("0.2.0", "0.3.0", "w", log_format=3, format_level=2)
-    assert "Upgrade ddflow-mcp to >= 0.3.0" in msg
+    assert upgrade_remedy("0.3.0") in msg
     assert "data format level (3) is ahead of this ddflow's too (2)" in msg
     plain = skew_message("0.2.0", "0.3.0", "w")
     assert "format level" not in plain
@@ -399,9 +399,7 @@ def test_a_writer_lacking_a_recorded_capability_is_refused_just_its_kinds(repo: 
         log.append("bug.found", "B1", {"summary": "s"})
     msg = str(exc.value)
     assert exc.value.exit_code == 3
-    assert (
-        "`future-thing`" in msg and "bug.found" in msg and "Upgrade ddflow-mcp to >= 9.9.9" in msg
-    )
+    assert "`future-thing`" in msg and "bug.found" in msg and upgrade_remedy("9.9.9") in msg
     assert "everything else proceeds" in msg
     log.append("lease.renewed", "T1", {})  # a kind it does not govern proceeds
     assert [e for e in log.read_all() if e.kind == "bug.found"] == []
