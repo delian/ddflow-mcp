@@ -125,7 +125,8 @@ def test_an_override_covers_that_format_and_a_higher_one_is_refused_again(repo: 
     assert ov is not None
     assert ov.data["log_format"] == ddflow.FORMAT_LEVEL + 1
     log.append("phase.added", "P1", {"title": "p"})
-    assert log.read_all()[-1].data["older_ddflow"] == ddflow.__version__
+    (added,) = [e for e in log.read_all() if e.kind == "phase.added"]
+    assert added.data["older_ddflow"] == ddflow.__version__
     _stamp(repo, ddflow.__version__, ddflow.FORMAT_LEVEL + 2, agent="future2")
     with pytest.raises(SkewRefused):
         log.append("phase.added", "P2", {"title": "p"})
