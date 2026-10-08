@@ -3951,7 +3951,9 @@ finds nothing and writes nothing.
 Registered now: `stale-references` (kind `references`) rewrites the deprecated command and
 tool names (an old name kept as an alias after a rename) that sit inside a region ddflow wrote and nobody
 edited, in settings hooks, git hooks, driver docs and instruction blocks; the project's own
-text and a hand-edited region are left, and `ddflow doctor` proposes the change. The surface
+text and a hand-edited region are left: `ddflow doctor` proposes the change, and `ddflow upgrade --plan`
+lists each such file as a note under *instructions* (one line per name, with its replacement; the old
+names keep working until 1.0) that `--apply` leaves alone. The surface
 that runs the upgrade hands it the command and tool tables (`api.refs.provide_upgrade_vocabulary`): the
 CLI registers its parser and the tool table when it is imported, the MCP server the tool table when it first
 reaches the api, so `ddflow upgrade` and `ddflow_upgrade` both find the names.
