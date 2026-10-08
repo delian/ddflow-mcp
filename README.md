@@ -4886,7 +4886,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=c127867d1ce5 -->
+<!-- ddflow:begin README/tools sha=c2e143f95f65 -->
 <details><summary>All 112 MCP tools: 32 in the `core` tier, 47 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -4906,7 +4906,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_rule_remove` | standard | Delete a rule and regenerate the DDFLOW.md manifest. |
 | Setting up | `ddflow_rule_search` | standard | Search rules by title or content, ranked by relevance, for an area or topic. |
 | Setting up | `ddflow_rule_show` | standard | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
-| Setting up | `ddflow_rule_sync` | standard | Make the log and the rule files agree: record hand-edited or new rule files (def.updated / def.recorded) and… |
+| Setting up | `ddflow_rule_sync` | standard | Sync rule files with the log: record hand edits and new files, restore missing ones. |
 | Setting up | `ddflow_setup` | core | Install ddflow into this repository: creates .ddflow/, writes the driver and the AGENTS.md section, and… |
 | The rules this project runs by | `ddflow_flow_choose` | all | Record a workflow choice for this project, attributed to you, with a reason the next agent will read. |
 | The rules this project runs by | `ddflow_flow_show` | standard | How THIS project works: its branching model, release lines, and every workflow choice (model, integration… |

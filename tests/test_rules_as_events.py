@@ -533,3 +533,17 @@ def test_a_staged_rule_file_without_its_log_events_is_refused(repo: Path) -> Non
     _git(repo, "add", ".ddflow/rules")
     code, msg = E.check_views(repo, Config.load(repo))
     assert code == 1 and "the commit does not record" in msg, msg
+
+
+def test_a_rule_file_that_cannot_be_written_back_is_a_failure_not_a_traceback(
+    repo: Path, monkeypatch
+) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    (repo / ".ddflow" / "rules" / "r-w.toml").unlink()
+
+    def boom(*_a, **_k):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(RV.files(repo).__class__, "write", boom)
+    out = ARULES.rule_sync(repo, agent="t")
+    assert out.exit == 1 and "read-only file system" in out.reason, out
