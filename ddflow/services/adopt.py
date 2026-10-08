@@ -28,6 +28,7 @@ from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from . import install_info as _INSTALL
+from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
     SHAPE_COPILOT,
     SHAPE_MCP_DOT_SERVERS,
@@ -745,8 +746,6 @@ def _backup_docs(
 ) -> str:
     """Copy aside the agent-facing documents a refresh is about to rewrite; the directory,
     or "" when none differs (a no-op refresh leaves no backup)."""
-    from .backups import make_backup
-
     stale = driver_drift(repo, docs_dir=docs_dir, package_dir=package_dir)
     stale += [r.path for r in rules_status(repo, docs_dir=docs_dir) if r.needs_attention]
     files = [Path(repo) / rel for rel in dict.fromkeys(stale) if only is None or rel in only]
