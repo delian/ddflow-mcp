@@ -164,12 +164,6 @@ def test_emit_json_is_the_bytes_every_command_printed(capsys):
     assert capsys.readouterr().out == "[]\n"
 
 
-#: An UPPER BOUND on the modules that print their own JSON, not an exact list: `reporting.py`
-#: and `cli.py` were held by another agent when the emitter landed, and whoever migrates one
-#: may land first. The migrating change deletes its entry here; the list only shrinks.
-_OWN_JSON = {"reporting.py", "cli.py"}
-
-
 def test_no_command_module_prints_its_own_json():
     import ast
 
@@ -191,4 +185,4 @@ def test_no_command_module_prints_its_own_json():
             for n in ast.walk(tree)
         ):
             own.append(path.name)
-    assert set(own) <= _OWN_JSON, f"modules printing their own json.dumps beyond the list: {own}"
+    assert not own, f"modules printing their own json.dumps instead of render.emit_json: {own}"
