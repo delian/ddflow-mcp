@@ -348,7 +348,9 @@ def reference_items(repo: Path) -> list[dict[str, Any]]:
     or tool. An upgrade never edits it: the plan says what to change, the alias keeps the old
     name working. (What ddflow wrote itself is rewritten by the `stale-references` migration.)
     References this process had no table to judge are one more note that says so, never
-    silence: "nobody looked" must not read as "none"."""
+    silence: "nobody looked" must not read as "none". A caller with no vocabulary at all (a
+    library use that wired no surface; the CLI and the MCP server always do) gets nothing,
+    exactly as `doctor`'s stale-reference check reports nothing then."""
     vocab = MR._vocabulary()
     if vocab is None:
         return []  # nothing loaded to judge names by: nothing is reported (as `doctor` does)
