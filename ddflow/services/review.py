@@ -48,6 +48,7 @@ from ..core import unidiff
 from ..core.digest import content_digest
 from ..infra import proc as P
 from ..services.gates import _missing_executable
+from ..services.gates.reviewers import git_state, git_state_change
 
 REVIEWED, ERROR, UNAVAILABLE, PARTIAL = 0, 1, 2, 3
 
@@ -705,6 +706,8 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
             f"executable {missing!r} is not on PATH -- the reviewer could not run. "
             f"This is NOT a clean review."
         )
+    # A reviewer must leave git as it found it (B5ce30dd94d); its cwd is this process's.
+    state_before = git_state(os.getcwd())
     try:
         # Its own process group, so a timeout or a winning copy kills the reviewer the
         # shell started, not just the shell.
@@ -731,6 +734,9 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     except OSError as exc:
         _abort(p)
         return "", f"could not execute: {exc}"
+    moved = git_state_change(state_before, git_state(os.getcwd()))
+    if moved:
+        return "", moved
     out = (stdout or "").strip()
     if p.returncode != 0:
         return "", (f"command exited {p.returncode}: {((stderr or '') + out).strip()[:300]}")

@@ -31,6 +31,7 @@ from ..core.model import GateOutcome
 from ..core.plain import plain
 from ..services import gates as G
 from ..services import testselect as TS
+from ..services.gates.reviewers import run_watching_git
 from ._base import _load
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
@@ -426,12 +427,16 @@ def run(
         gdef = replace(gdef, command=scope.command)
     log.append("gate.started", item, {"gate": gate})
     keeper = _lease_keeper(log, cfg, it)
-    result, ev = G.run_command_gate(
+    result, ev = run_watching_git(
         gdef,
         cwd,
-        on_tick=keeper,
-        tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
-        keep_output=G.run_log_writer(repo, item, gate),
+        lambda: G.run_command_gate(
+            gdef,
+            cwd,
+            on_tick=keeper,
+            tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
+            keep_output=G.run_log_writer(repo, item, gate),
+        ),
     )
     if scope is not None:
         ev.update(scope.evidence())
