@@ -366,16 +366,25 @@ def _retire_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> 
             return outcome
         res = def_retire(repo, RULE.kind, rule_id, reason="the rule was removed", agent=agent)
     except Exception as exc:
-        return _unrecorded(outcome, str(exc))
-    return outcome if res.exit in (O.OK, O.NOTHING) else _unrecorded(outcome, res.reason)
+        return _unrecorded(outcome, str(exc), removed=True)
+    if res.exit in (O.OK, O.NOTHING):
+        return outcome
+    return _unrecorded(outcome, res.reason, removed=True)
 
 
-def _unrecorded(outcome: O.Outcome, why: str) -> O.Outcome:
-    """``outcome`` plus the fact that the rule file was written and the log could not say so."""
-    note = (
-        f"the rule file was written but not recorded in the log ({why}); "
-        f"`ddflow upgrade` records it"
-    )
+def _unrecorded(outcome: O.Outcome, why: str, *, removed: bool = False) -> O.Outcome:
+    """``outcome`` plus the fact that the rule file was written (or ``removed``) and the log
+    could not say so."""
+    if removed:
+        note = (
+            f"the rule file was removed but the log still holds the rule ({why}); "
+            f"add it again and remove it to retire it"
+        )
+    else:
+        note = (
+            f"the rule file was written but not recorded in the log ({why}); "
+            f"`ddflow upgrade` records it"
+        )
     return dataclasses.replace(outcome, data={**outcome.data, "unrecorded": note})
 
 
@@ -426,13 +435,13 @@ def apply_rule_update(
 ) -> O.Outcome:
     """Add or update a rule and write the manifest.
 
-    Stores rules in the filesystem and updates the manifest.
-    Rules are not logged to the event log (they're filesystem-backed configuration).
+    Writes the rule file and the manifest, then records the rule's definition in the log
+    (`_record_in_log`): the file is the view of that record (D-unify 7).
 
     Args:
         repo: Path to the repository root
         rule: The Rule to add or update
-        agent: Agent ID for event logging (not currently used for rules)
+        agent: Agent ID the definition's provenance names
         operation: Operation kind: "created", "updated"
 
     Returns:
@@ -616,7 +625,7 @@ def rule_add(
             id=rule.id,
         )
 
-    # "related": a different rule, filed as such. Rules are files, not log records, so
+    # "related": a different rule, filed as such. A rule definition has no link field, so
     # there is no link to record; the answer is reported (bug B3be768717c: it was
     # advertised by both surfaces and failed as an unknown relation).
     if dedup_answer.relation == "related":

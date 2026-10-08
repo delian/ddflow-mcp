@@ -35,9 +35,10 @@ _PAYLOADS = {
         "extended_kind",
         "relation",
         "dedupe_unavailable",
+        "unrecorded",
     ),
-    "edit": ("id", "candidates", "related", "options", "dedupe_unavailable"),
-    "remove": ("id",),
+    "edit": ("id", "candidates", "related", "options", "dedupe_unavailable", "unrecorded"),
+    "remove": ("id", "unrecorded"),
     "show": ("id", "title", "content", "tags", "scope", "priority", "globs", "created", "updated"),
 }
 
@@ -88,6 +89,8 @@ def _emit(c: Ctx, out, verb: str, human: str) -> int:
         print(out.reason, file=sys.stderr)
     else:
         print(human or out.reason)
+    if (note := out.data.get("unrecorded")) and not c.json:
+        print(f"warning: {note}", file=sys.stderr)
     return out.exit
 
 
@@ -149,7 +152,7 @@ def cmd_rule(a, c: Ctx) -> int:
         )
         return _emit(c, out, verb, human)
     if verb == "remove":
-        out = rule_remove(c.repo, a.id)
+        out = rule_remove(c.repo, a.id, agent=_agent(c))
         return _emit(c, out, verb, f"removed {a.id}")
     if verb == "edit":
         return _cmd_edit(a, c)
