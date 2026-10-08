@@ -212,6 +212,35 @@ def literal(text: str) -> str:
     return basic_string(text)
 
 
+def _tomlkit() -> Any:
+    """The tomlkit module, imported on first use: 38 ms, and most commands never edit a config."""
+    import tomlkit
+
+    return tomlkit
+
+
+def remove(text: str, dotted: str) -> tuple[str, bool]:
+    """``(text without <section>.<key>, whether it was there)``, everything else as it was
+    (comments, blank lines, key order). Raises ``tomllib.TOMLDecodeError`` when ``text`` is
+    not TOML. A section left empty stays: the table header is the operator's."""
+    tomlkit = _tomlkit()
+    section, _, key = dotted.rpartition(".")
+    try:
+        doc = tomlkit.parse(text)
+    except tomlkit.exceptions.TOMLKitError:
+        tomllib.loads(text)
+        raise
+    table: Any = doc
+    for part in [p.strip() for p in section.split(".")] if section else []:
+        table = table.get(part) if isinstance(table, dict) else None
+        if table is None:
+            return text, False
+    if not isinstance(table, dict) or key.strip() not in table:
+        return text, False
+    del table[key.strip()]
+    return tomlkit.dumps(doc), True
+
+
 def upsert(text: str, dotted: str, literal_text: str) -> str:
     """``text`` with ``<section>.<key>`` set to the TOML value ``literal_text``, everything
     else as it was: comments, blank lines, key order and the spelling of every other value.
@@ -224,7 +253,7 @@ def upsert(text: str, dotted: str, literal_text: str) -> str:
     the end of its section; a missing section is appended after a blank line. Raises
     ``tomllib.TOMLDecodeError`` when ``text`` is not TOML and ``ValueError`` when the
     section names something that is not a table."""
-    import tomlkit  # deferred: 38 ms, and most commands never edit a config
+    tomlkit = _tomlkit()
 
     section, _, key = dotted.rpartition(".")
     parts = [p.strip() for p in section.split(".")] if section else []  # no dot: top level
