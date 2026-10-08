@@ -179,7 +179,12 @@ def _hide_from_abbreviation(parser: argparse.ArgumentParser) -> None:
 
 
 class SuggestingParser(argparse.ArgumentParser):
-    """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it."""
+    """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it,
+    and every level records the command word taken (`_WordsRecorder`)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.register("action", "parsers", _WordsRecorder)
 
     def error(self, message: str) -> Any:
         for a in self._actions:
@@ -823,50 +828,29 @@ def tag_body(body: Any, command: str) -> Any:
     return {**tag, **body}
 
 
-def _after_options(node: argparse.ArgumentParser, tokens: list[str], at: int) -> int:
-    """The index of the first token from ``at`` that is neither an option of ``node`` nor
-    that option's value: where a command word (or a positional) can stand. Past ``--`` every
-    token is positional, as argparse reads it."""
-    while at < len(tokens):
-        token = tokens[at]
-        if token == "--":
-            return at + 1
-        if not token.startswith("-") or token == "-":
-            return at
-        action = node._option_string_actions.get(token.split("=", 1)[0])
-        at += 1
-        if action is None or "=" in token or action.nargs == 0:
-            continue
-        if action.nargs in (None, "?"):
-            takes = 1
-        elif isinstance(action.nargs, int):
-            takes = action.nargs
-        else:  # "+", "*": values run to the next option
-            takes = len(tokens)
-        while takes and at < len(tokens) and not tokens[at].startswith("-"):
-            at, takes = at + 1, takes - 1
-    return at
+class _WordsRecorder(argparse._SubParsersAction):
+    """A subparsers action that also records which command word was taken, on the namespace
+    under `WORDS`: ``("gate", "record")``. Read from argparse's own decision, not rebuilt from
+    the words typed (an option's value can spell a command, ``--`` makes the rest positional,
+    and an option can share a subparser's ``dest``: ``bisect --cmd`` overwrote ``cmd``)."""
+
+    def __call__(self, parser, namespace, values, option_string=None):  # type: ignore[no-untyped-def]
+        word = values[0] if isinstance(values, (list, tuple)) else values
+        super().__call__(parser, namespace, values, option_string)
+        target = self._name_parser_map.get(word)
+        # the sub-namespace was copied over ours by now and carries the deeper words
+        canonical = next((n for n, p in self.choices.items() if p is target), word)
+        setattr(namespace, WORDS, (canonical, *getattr(namespace, WORDS, ())))
 
 
-def parsed_path(parser: argparse.ArgumentParser, argv: Iterable[str]) -> tuple[str, ...]:
-    """The command words ``argv`` went through, aliases resolved to the command they name:
-    ``("gate", "record")``. Read from the words typed, skipping options and their values (a
-    value can spell a command), not from the parsed namespace: an option can share a
-    subparser's ``dest`` (``bisect --cmd`` overwrote ``cmd``)."""
-    tokens = list(argv)
-    words: list[str] = []
-    node = parser
-    at = 0
-    while True:
-        sub = next((a for a in node._actions if isinstance(a, argparse._SubParsersAction)), None)
-        if sub is None:
-            return tuple(words)
-        at = _after_options(node, tokens, at)
-        if at >= len(tokens) or tokens[at] not in sub.choices:
-            return tuple(words)
-        target = sub.choices[tokens[at]]
-        words.append(next((n for n, p in sub.choices.items() if p is target), tokens[at]))
-        node, at = target, at + 1
+#: The namespace attribute `_WordsRecorder` fills.
+WORDS = "_command_words"
+
+
+def parsed_path(args: argparse.Namespace) -> tuple[str, ...]:
+    """The command words a parsed command line went through, aliases resolved to the
+    command they name: ``("gate", "record")``; empty when no subcommand was taken."""
+    return tuple(getattr(args, WORDS, ()))
 
 
 #: CLI commands whose words are not the name of the tool that serves them and which no
