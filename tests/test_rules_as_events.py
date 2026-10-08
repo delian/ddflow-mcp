@@ -325,7 +325,7 @@ def test_a_log_that_cannot_record_leaves_the_file_and_says_so(repo: Path, monkey
     def refuse(*a, **k):
         raise RuntimeError("log is locked")
 
-    monkeypatch.setattr(ADEFS, "def_record_unchecked", refuse)
+    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
     out = ARULES.rule_add(repo, _rule(), agent="t")
     assert out.exit == 0 and (repo / ".ddflow" / "rules" / "r-w.toml").exists()
     assert (
