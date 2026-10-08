@@ -326,6 +326,15 @@ def test_enforce_names_its_exit_codes() -> None:
         and isinstance(r.value.elts[0], ast.Constant)
         and isinstance(r.value.elts[0].value, int)
     ]
+    bare += [
+        c.lineno
+        for fn in checks
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call)
+        and ast.unparse(c.func) == "Verdict"
+        and c.args
+        and isinstance(c.args[0], ast.Constant)
+    ]
     assert not bare, f"literal exit codes at lines {bare}; return Verdict(OK|FAIL|NOTHING, ...)"
 
     def is_int_str_tuple(node: ast.AST) -> bool:
