@@ -122,6 +122,27 @@ def test_exclude_prune_symlinks_and_unreadable_files(tmp_path):
     assert sorted(det.scan()) == ["keep/a.md"]
     broken = C.ChangeDetector(tmp_path, ("keep/a.md",), hasher=lambda p: None)
     assert broken.scan() == {}, "an unreadable file is left out, not hashed as empty"
+    assert broken.unreadable == ["keep/a.md"]
+
+
+def test_an_unreadable_file_is_not_reported_removed(tmp_path):
+    """Mutant: dropping an unreadable file from the manifest. "Could not read" is not "gone"."""
+    _write(tmp_path, "a.md", "one")
+    flaky = {"fail": False}
+
+    def hasher(path: Path) -> str | None:
+        return None if flaky["fail"] else C.file_hash(path)
+
+    det = C.ChangeDetector(tmp_path, hasher=hasher, now_ns=_later)
+    before = det.scan()
+    time.sleep(0.05)
+    _write(tmp_path, "a.md", "two!")
+    flaky["fail"] = True
+    got, now = det.changes(before)
+    assert not got and now == before and det.unreadable == ["a.md"]
+    flaky["fail"] = False
+    got, _ = det.changes(now)
+    assert got.modified == ("a.md",) and det.unreadable == []
 
 
 def test_a_vanished_file_leaves_the_unread_again_cache(tmp_path):
