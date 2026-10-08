@@ -387,6 +387,7 @@ def test_the_upgrade_is_in_the_fold_replay_and_history(old: Path) -> None:
 
     recorded = upgrades(old)[-1]
     assert recorded["confirmed"] == {"worktree.max_parallel": "the new default fits"}
+    assert recorded["summary"].startswith("upgrade ") and "config" in recorded["summary"]
     assert any(i.startswith("knob_changed:worktree.max_parallel") for i in recorded["items"])
     assert {c["key"] for c in recorded["config_changes"]} >= {"worktree.root"}
     from conftest import run_cli
