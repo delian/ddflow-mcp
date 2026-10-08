@@ -1010,7 +1010,11 @@ def rule_sync(repo: Path, *, agent: str = "") -> O.Outcome:
             (recorded if how == RV.RECORD else updated).append(rec.id)
         else:
             failed.append({"id": rec.id, "why": res.reason})
-    restored = RV.restore(repo, _load(repo, agent)[2])
+    try:
+        restored = RV.restore(repo, _load(repo, agent)[2])
+    except (OSError, ValueError) as exc:
+        failed.append({"id": "(files)", "why": f"could not write a rule file from the log: {exc}"})
+        restored = []
     data = {"recorded": recorded, "updated": updated, "restored": restored, "failed": failed}
     if failed:
         return O.failed(
