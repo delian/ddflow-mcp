@@ -95,14 +95,19 @@ def router_set(model: str, routers: dict[str, list[str]]) -> list[str] | None:
 
 
 def _routers_members(v: Any) -> tuple[Any, list[str]]:
-    """`[agent].routers` from a file: the entries that are lists of family names, and a note
-    for each other (a shape a newer release gives a router)."""
+    """`[agent].routers` from a file. An entry in a shape this ddflow lacks (a newer release's)
+    is KEPT with an empty family set, which `router_set` reads as "unknown" -- so the router
+    still counts as a router and its author is refused as independent of nothing, rather than
+    the entry vanishing and the model passing as an ordinary one. Each is noted."""
     if not isinstance(v, dict):
         return v, []
-    keep = {
-        k: m for k, m in v.items() if isinstance(m, list) and all(isinstance(x, str) for x in m)
-    }
-    return keep, [f"router {k!r}" for k in v if k not in keep]
+    ok = {k: m for k, m in v.items() if isinstance(m, list) and all(isinstance(x, str) for x in m)}
+    kept = {k: ok.get(k, []) for k in v}
+    return kept, [
+        f"router {k!r} (a shape not known here, so its families are unknown)"
+        for k in v
+        if k not in ok
+    ]
 
 
 @declare("agent")

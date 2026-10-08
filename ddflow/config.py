@@ -327,6 +327,8 @@ class Config:
         Applied to a throwaway instance so a rejected fragment cannot leave a
         half-updated Config behind.
         """
+        if isinstance(written, str):  # one key, not its characters
+            written = (written,)
         wrote = None if written is None else frozenset(written)
         cls()._apply(data, "check", written=wrote)
 
@@ -454,6 +456,11 @@ class Config:
                 f"{key}: ignored {what} (not known to this ddflow)" for what in ignored
             )
         check = _KNOB_CHECKS.get(key)
+        if ignored and not value:
+            # Emptied by the filter: a check that accepts an empty table would let it
+            # replace the layer below, so this is "nothing usable left" whatever the check says.
+            self.ignored_members.append(f"{key}: nothing usable left; the value below stays")
+            return
         if check and (why := check(value)):
             if ignored:
                 # Nothing usable is left of a list a newer release wrote: the layer below

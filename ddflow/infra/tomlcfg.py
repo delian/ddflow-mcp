@@ -146,13 +146,16 @@ def skipped_fields(
         if not Path(path).is_file():
             continue
         data = tomllib.loads(Path(path).read_text("utf-8"))
-        if array:
-            for n, raw in enumerate(data.get(table) or [], 1):
+        found = data.get(table)
+        # The wrong container (`[[gate]]` for `[gate.x]`) is not this report's to explain:
+        # the loaders say so; skip it rather than fail the report.
+        if array and isinstance(found, list):
+            for n, raw in enumerate(found, 1):
                 if isinstance(raw, dict) and (extra := sorted(set(raw) - known)):
                     ident = raw.get(key) or (raw.get(fallback_key) if fallback_key else "")
                     out.append((f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}", extra))
-        else:
-            for name, raw in (data.get(table) or {}).items():
+        elif not array and isinstance(found, dict):
+            for name, raw in found.items():
                 if isinstance(raw, dict) and (extra := sorted(set(raw) - known)):
                     out.append((f"[{table}.{name}] in {path}", extra))
     return out

@@ -69,7 +69,7 @@ class Knob:
     members: Callable[[Any], tuple[Any, list[str]]] | None = None
     #: The release that changed this knob's DEFAULT, and the default before it. A value
     #: anyone set is never changed by the move (D-upgrade-config-changes): this is the
-    #: declaration `config --explain` shows and the upgrade manifest is checked against.
+    #: declaration `config --explain` shows.
     default_changed_in: str = ""
     default_was: Any = None
 

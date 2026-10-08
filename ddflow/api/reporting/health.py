@@ -6,20 +6,15 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...config import CONFIG_FORMAT, Config, _is_code_tree
+from ...config import Config
 from ...core import outcome as O
 from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
 from ...core.schedule import stale_package_globs
 from ...core.tier import unknown_tier_notes
-from ...infra import tomlcfg as TC
 from ...infra import worktree as W
-from ...services import install_info as II
+from ...services import configcompat as CC
 from ...services import repairs as RP
-from ...services.companions import Companion
-from ...services.gates.defs import GateDef
-from ...services.macros import Macro
-from ...services.review import Reviewer
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..refs import stale_references
@@ -225,65 +220,6 @@ def _orphan_notes(events: list) -> list[str]:
     ]
 
 
-def _config_compat_findings(repo: Path, cfg: Config, problems: list[str], notes: list[str]) -> None:
-    """What an older ddflow skipped or ignored in the config files (D-compat 2), in EVERY
-    table: unknown keys and values (problems), fields of `[gate.*]`, `[[reviewer]]`,
-    `[[companion]]` and `[[macro]]` (problems), members of a checked list (notes), and a
-    `format` newer than this code (a note). The remedy fits how this ddflow is installed."""
-    fix = ""
-
-    def advice() -> str:
-        nonlocal fix
-        fix = fix or II.upgrade_advice()
-        return fix
-
-    bad_values = cfg.invalid_value_indices()
-    problems += [
-        f"{'invalid value for' if i in bad_values else 'unknown config key'} "
-        f"{k} in .ddflow/config.toml: a typo, or written by a newer ddflow than this "
-        f"one runs ({advice()})"
-        for i, k in enumerate(cfg.unknown_knobs)
-    ]
-    problems += [
-        f"{where}: field(s) {', '.join(fields)} skipped -- a typo, or written by a newer "
-        f"ddflow than this one runs ({advice()})"
-        for where, fields in _skipped_table_fields(repo)
-    ]
-    notes += [f"config: {m}; the rest of the setting applies" for m in cfg.ignored_members]
-    if cfg.file_format > CONFIG_FORMAT:
-        notes.append(
-            f"config is format {cfg.file_format}, newer than the format {CONFIG_FORMAT} this "
-            f"ddflow understands: what it knows is applied, and writes to it are refused "
-            f"({advice()})"
-        )
-
-
-def _skipped_table_fields(repo: Path) -> list[tuple[str, list[str]]]:
-    """`(where, fields)` the loaders of `[gate.*]`, `[[reviewer]]`, `[[companion]]` and
-    `[[macro]]` skip for a file a newer ddflow wrote. In ddflow's own source tree a committed
-    file's unknown field is an error on load, so only the machine-local layer is read there."""
-    own = _is_code_tree(repo)
-    out: list[tuple[str, list[str]]] = []
-    for file, table, cls, array, key, fallback in _FIELD_TABLES:
-        paths = [
-            p
-            for p in TC.config_paths(repo, file)
-            if not own or (p.parent.name == "local" and p.parent.parent.name == ".ddflow")
-        ]
-        out += TC.skipped_fields(paths, table, cls, array=array, key=key, fallback_key=fallback)
-    return out
-
-
-#: The tables whose fields a loader skips: (own file, table, the class that knows the
-#: fields, `[[array]]`?, the field naming an entry, its fallback).
-_FIELD_TABLES = (
-    ("gates.toml", "gate", GateDef, False, "", ""),
-    ("reviewers.toml", "reviewer", Reviewer, True, "name", "model"),
-    ("companions.toml", "companion", Companion, True, "id", ""),
-    ("macros.toml", "macro", Macro, True, "name", ""),
-)
-
-
 def _launcher_findings(repo: Path, problems: list[str], notes: list[str]) -> None:
     """A launcher recorded in a hook or MCP entry whose target is gone. The git hooks fail
     open now, so the check silently stops: a PROBLEM, unless `ddflow` on PATH still runs
@@ -381,7 +317,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # A KNOWN knob with a value this code does not know is an INVALID VALUE, not an
     # unknown key (Bf3566bbacd) -- asked of the config's bookkeeping, never of the entry's
     # text, which holds the user's own spelling (roborev on 183bcf03 and eb6a482d).
-    _config_compat_findings(repo, cfg, problems, notes)
+    CC.report(repo, cfg, problems, notes)
     # Events this code has no handler for: the fold skipped them (B168), so every number
     # below is computed WITHOUT them. A note, as an unknown config knob is named but the
     # old code keeps working -- the remedy is the same: bring in the newer ddflow.
