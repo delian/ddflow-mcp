@@ -469,7 +469,9 @@ def test_an_mcp_server_checks_tool_names_and_leaves_command_words_to_the_cli(tmp
 
     (tmp_path / "AGENTS.md").write_text("`ddflow frobnicate`, ddflow_brief and ddflow_nothing\n")
     problems, notes = stale_references(tmp_path, None, TOOLS)
-    assert problems == [] and len(notes) == 1 and "ddflow_nothing" in notes[0]
+    assert problems == [] and len(notes) == 2
+    assert any("ddflow_nothing" in n and "not a ddflow tool" in n for n in notes)
+    assert any("1 command reference(s) in AGENTS.md were not checked" in n for n in notes)
     assert stale_references(tmp_path, None, None) == ([], [])
 
 
