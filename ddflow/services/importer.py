@@ -43,11 +43,12 @@ from typing import Any
 from ..config import Config
 from ..core.globs import match as glob_match
 from ..core.ids import free
-from ..core.model import DONE, OPEN
+from ..core.model import DONE, OPEN, Item, fold
 from ..core.schedule import is_external
 from ..core.slug import slug as _slug
 from ..infra import git as G
 from ..infra.log import EventLog
+from .items import TaskDraft, add_task
 
 #: Where projects actually keep these things. Ordered so the most specific wins when a
 #: repository has several; every match is reported, none is guessed between.
@@ -2859,9 +2860,6 @@ def _resolve_chains(dropped: dict[int, Duplicate], in_plan: dict[str, Found]) ->
             d.score = min(d.score, nxt.score)
 
 
-#: Marks a record of THIS import in the similarity index (see `_dedupe_found`).
-_THIS_IMPORT = "\x00import:"
-
 #: Identical repeats named in the plan's note (the rest are counted).
 _SHOWN_IDENTICAL = 12
 
@@ -2884,7 +2882,6 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     and the operator answers that. Naming an existing id does not count: an imported
     lesson citing `L12` is not a copy of it.
     """
-    from ..infra.store import similar_records
     from . import similar
 
     cfg = Config.load(repo)
@@ -2895,19 +2892,6 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     mine = [f for f in plan.found if f.kind in checked and f.kind in dd.kinds]
     if not mine:
         return
-    base = similar_records(state) if state is not None else []
-
-    def rec(f: Found) -> dict[str, str]:
-        # Marked, so a record of this import never shares an id with a stored one (a
-        # bug or an item can carry the same word): the marker says which side a
-        # candidate came from.
-        return {
-            "id": _THIS_IMPORT + f.ident,
-            "kind": f.kind,
-            "title": f.title,
-            "body": f.body,
-            "item": "",
-        }
 
     # Another record of this import is a target only for a summary-born lesson, and a
     # target must outrank it: a summary bullet repeats the corpus, never the reverse.
@@ -2917,24 +2901,22 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     def is_summary(f: Found) -> bool:
         return f.kind == "lesson" and "summary" in f.extra.get("tags", ())
 
-    index = similar.build([*base, *(rec(f) for f in mine)])
     in_plan = {f.ident: f for f in mine}
-    dropped: dict[int, Duplicate] = {}
-    for f in mine:
-        a = similar.assess(index, rec(f), cfg)
-        for c in a.candidates:
-            tgt = in_plan.get(c.id.removeprefix(_THIS_IMPORT))
-            where = "queue"
-            if c.id.startswith(_THIS_IMPORT) and tgt is not None:
-                where = "import"
-                if not is_summary(f) or is_summary(tgt):
-                    continue
-            ident = "identical" in c.flags
-            if similar.is_duplicate(c, a, cfg):
-                dropped[id(f)] = Duplicate(
-                    f, c.id.removeprefix(_THIS_IMPORT), c.score, ident, where
-                )
-                break
+    records = [
+        {"id": f.ident, "kind": f.kind, "title": f.title, "body": f.body, "item": ""} for f in mine
+    ]
+    _, repeats = similar.screen(
+        records,
+        state,
+        cfg,
+        compare=lambda rec, tgt: (
+            is_summary(in_plan[rec["id"]]) and not is_summary(in_plan[tgt["id"]])
+        ),
+    )
+    dropped = {
+        id(mine[h.index]): Duplicate(mine[h.index], h.of, h.score, h.identical, h.where)
+        for h in repeats
+    }
     if not dropped:
         return
     _resolve_chains(dropped, in_plan)
@@ -3025,6 +3007,57 @@ def _imported_research(f: Found) -> dict[str, Any]:
     }
 
 
+def _add_imported_tasks(
+    log: EventLog, st: Any, cfg: Config, plan: ImportPlan, bump: Callable[[str], None]
+) -> int:
+    """Write the plan's tasks, each held to the checks every new task passes (`add_task`),
+    then its state; and its branches. Returns how many the checks refused -- none of those
+    is written, and nothing is recorded about it."""
+    refused = 0
+    for f in plan.by_kind("task"):
+        draft = TaskDraft(
+            f.ident,
+            parent=f.extra.get("phase", ""),
+            title=f.title,
+            needs=f.needs,
+            globs=f.globs,
+            resources=f.extra.get("resources", []),
+            body=f"Imported from {f.source}.",
+            # Both: the prose is what a human reads in `ddflow show`, the field is
+            # what `import --verify` counts. Deriving one from the other by regex is
+            # how a reworded sentence silently zeroes a verification.
+            extra={"source": f.source},
+        )
+        if not add_task(log, st, cfg, draft, dedupe=_SCREENED).ok:
+            refused += 1
+            continue
+        bump("task")
+        _apply_state(log, f, bump)
+    for f in plan.by_kind("branch"):
+        draft = TaskDraft(
+            f.ident,
+            title=f.title,
+            body=(
+                f"Imported from {f.source}: this branch carries "
+                f"{f.extra.get('ahead', '?')} commit(s) not on the base branch. "
+                f"Declare its globs before anyone claims it."
+            ),
+            extra={"source": f.source},
+        )
+        if not add_task(log, st, cfg, draft, dedupe=_SCREENED).ok:
+            refused += 1
+            continue
+        bump("branch")
+    return refused
+
+
+#: Why an imported task is not checked again when it is written.
+_SCREENED = "the plan was screened against the queue before apply (tasks carry dependencies)"
+
+#: The count of imported tasks and branches the item checks refused (`apply_import`).
+_REFUSED_KEY = "task(s) refused by the item checks (id, globs, parent or already queued)"
+
+
 def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     """Write the proposal to the log. Called only after someone has looked at it.
 
@@ -3037,32 +3070,17 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     def bump(kind: str) -> None:
         counts[kind] = counts.get(kind, 0) + 1
 
+    cfg = Config.load(repo)
+    st = fold(log.read_all(), strict=False)
     for f in plan.by_kind("phase"):
         log.append(
             "phase.added",
             f.ident,
             {"title": f.title, "body": f"Imported from {f.source}.", "source": f.source},
         )
+        st.items[f.ident] = Item(id=f.ident, kind="phase", title=f.title)
         bump("phase")
-    for f in plan.by_kind("task"):
-        log.append(
-            "task.added",
-            f.ident,
-            {
-                "parent": f.extra.get("phase", ""),
-                "title": f.title,
-                "needs": f.needs,
-                "globs": f.globs,
-                "resources": f.extra.get("resources", []),
-                "body": f"Imported from {f.source}.",
-                # Both: the prose is what a human reads in `ddflow show`, the field is
-                # what `import --verify` counts. Deriving one from the other by regex is
-                # how a reworded sentence silently zeroes a verification.
-                "source": f.source,
-            },
-        )
-        bump("task")
-        _apply_state(log, f, bump)
+    refused = _add_imported_tasks(log, st, cfg, plan, bump)
     # Phases LAST: finished by what is under them, so only once that is written -- a
     # reader of the log never sees a phase done over tasks that do not exist yet.
     for f in [p for p in plan.by_kind("phase") if p.done] + plan.by_kind("completion"):
@@ -3148,21 +3166,8 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     for f in plan.by_kind("research"):
         log.append("research.recorded", f.ident, _imported_research(f))
         bump("research")
-    for f in plan.by_kind("branch"):
-        log.append(
-            "task.added",
-            f.ident,
-            {
-                "title": f.title,
-                "body": (
-                    f"Imported from {f.source}: this branch carries "
-                    f"{f.extra.get('ahead', '?')} commit(s) not on the base branch. "
-                    f"Declare its globs before anyone claims it."
-                ),
-                "source": f.source,
-            },
-        )
-        bump("branch")
+    if refused:
+        counts[_REFUSED_KEY] = refused
     if plan.ticked_left_out:
         # Not written -- LEFT OUT, and said in the one line `--apply` prints, because
         # otherwise the report of what landed is read as the whole story (B45d5aa72fa).

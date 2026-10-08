@@ -33,14 +33,14 @@ from __future__ import annotations
 import re
 import sqlite3
 from array import array
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 from ..config import Config
 from ..core import textsim
-from ..infra.store import Store
+from ..infra.store import Store, similar_records
 
 #: What ``assess`` decided. ``off``: not checked (on_match off, or a kind not in
 #: [dedupe].kinds). ``none``: nothing reached the show floor. ``show``: candidates to
@@ -347,6 +347,98 @@ def is_duplicate(candidate: Candidate, assessment: Assessment, cfg: Config) -> b
     )
 
 
-def first_duplicate(assessment: Assessment, cfg: Config) -> Candidate | None:
-    """The first candidate `is_duplicate` accepts, or None."""
-    return next((c for c in assessment.candidates if is_duplicate(c, assessment, cfg)), None)
+# ------------------------------------------------------------------------- the one screen
+
+#: Marks a record of the batch being screened in the index, so it never shares an id with
+#: a stored one (a bug or an item can carry the same word).
+_IN_BATCH = "\x00batch:"
+
+
+@dataclass
+class Screened:
+    """A screened record that repeats an existing one: ``index`` is its position in the
+    batch, ``of`` the id it repeats, ``where`` ``queue`` (already in the log) or
+    ``import`` (another record of the same batch)."""
+
+    index: int
+    of: str
+    score: float
+    identical: bool = False
+    where: str = "queue"
+
+
+def same_text(text: str) -> str:
+    """``text`` folded for an exact-copy test: case and whitespace do not count."""
+    return " ".join(text.casefold().split())
+
+
+def screen(
+    records: Iterable[Mapping[str, Any]],
+    state: Any,
+    cfg: Config,
+    *,
+    compare: Callable[[Mapping[str, Any], Mapping[str, Any]], bool] | None = None,
+    fold_copies: bool = False,
+) -> tuple[list[Mapping[str, Any]], list[Screened]]:
+    """Split a batch of records about to be added into ``(kept, repeats)`` -- the ONE
+    screen an import applies (D-no-duplicates; the same engine and `[dedupe]` thresholds
+    an add uses, `assess` and `is_duplicate`).
+
+    Each record is weighed against every record in ``state`` (None: an empty queue) and
+    left out when one is a duplicate. Records of the batch are not compared with each
+    other unless asked: ``compare(record, target)`` says which pairs are -- a record is
+    then also weighed against the batch members it admits (the importer's rule: only a
+    summary-born lesson, against a record that is not) -- and ``fold_copies`` drops the
+    later of two batch records with the same text (case and whitespace aside), which is
+    what the harness memory import wants. Which of two near records to keep is otherwise
+    the author's call, and dropping the later would make the outcome depend on the order
+    the files were read. ``repeats`` is in batch order. With ``[dedupe] on_match = "off"``
+    or a kind not in ``[dedupe].kinds`` nothing is left out (`assess` says ``off``).
+    """
+    batch = list(records)
+    base = similar_records(state) if state is not None else []
+    if compare is None:
+        index = build(base)
+        probes = batch
+    else:
+        probes = [{**r, "id": _IN_BATCH + str(r["id"])} for r in batch]
+        index = build([*base, *probes])
+    peers = {str(p["id"]): i for i, p in enumerate(probes)} if compare else {}
+    repeats: list[Screened] = []
+    seen: dict[str, str] = {}
+    for i, probe in enumerate(probes):
+        hit = _repeat_of(i, probe, index, cfg, batch, peers, compare)
+        if hit is None and fold_copies:
+            key = same_text(str(batch[i].get("body") or ""))
+            if key in seen:
+                hit = Screened(i, seen[key], 1.0, True, "import")
+            else:
+                seen[key] = str(batch[i]["id"])
+        if hit is not None:
+            repeats.append(hit)
+    dropped = {h.index for h in repeats}
+    return [r for i, r in enumerate(batch) if i not in dropped], repeats
+
+
+def _repeat_of(
+    i: int,
+    probe: Mapping[str, Any],
+    index: Matcher,
+    cfg: Config,
+    batch: list[Mapping[str, Any]],
+    peers: dict[str, int],
+    compare: Callable[[Mapping[str, Any], Mapping[str, Any]], bool] | None,
+) -> Screened | None:
+    """The first existing record, or batch member ``compare`` admits, that ``probe``
+    repeats under `[dedupe]` (`is_duplicate`), or None."""
+    a = assess(index, probe, cfg)
+    for c in a.candidates:
+        peer = peers.get(c.id)
+        if peer is not None and not (compare and compare(batch[i], batch[peer])):
+            continue
+        if is_duplicate(c, a, cfg):
+            of = str(batch[peer]["id"]) if peer is not None else c.id
+            return Screened(
+                i, of, c.score, "identical" in c.flags, "queue" if peer is None else "import"
+            )
+    return None
