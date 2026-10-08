@@ -20,7 +20,7 @@ from conftest import run_cli
 
 from ddflow import api
 from ddflow.config import Config
-from ddflow.core.model import fold
+from ddflow.core.model import Item, State, fold
 from ddflow.infra.log import EventLog
 from ddflow.services import cleanup as CL
 
@@ -46,7 +46,7 @@ def test_a_foreign_branch_that_only_contains_the_prefix_is_not_ours(repo):
     _git(repo, "worktree", "add", "-q", str(foreign), "-b", "someone/ddflow-experiments")
 
     assert foreign.resolve() not in _unclaimed(repo)
-    assert not [n for n in _notes(repo) if str(foreign) in n and "no item claims" in n]
+    assert not [n for n in _notes(repo) if str(foreign.resolve()) in n and "no item claims" in n]
 
 
 def test_a_tree_on_our_branch_that_no_item_claims_is_reported_once(repo):
@@ -84,3 +84,21 @@ def test_doctor_and_survey_name_the_same_unclaimed_trees(repo):
     surveyed = sorted(Path(t.path).resolve() for t in plan.trees if not t.item)
     assert surveyed == sorted(_unclaimed(repo))
     assert len(surveyed) == 2
+    said = sorted(
+        Path(n.split()[1]).resolve() for n in _notes(repo) if n.endswith("no item claims it")
+    )
+    assert said == surveyed
+
+
+def test_a_tree_claimed_under_a_differently_spelled_path_is_claimed(repo):
+    run_cli(repo, "init")
+    prefix = Config.load(repo).worktree.branch_prefix
+    tree = repo.parent / "spelled-tree"
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", f"{prefix}spelled")
+    cfg = Config.load(repo)
+    # Same directory, spelled with a `..` detour; the item's branch does not match either.
+    spelled = f"{repo}/../{tree.name}"
+    state = State(items={"T1": Item(id="T1", kind="task", worktree=spelled, branch="other")})
+
+    assert CL.unclaimed_trees(repo, cfg, state) == []
+    assert [Path(p).resolve() for p in CL.unclaimed_trees(repo, cfg, State())] == [tree.resolve()]
