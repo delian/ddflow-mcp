@@ -482,7 +482,8 @@ LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "task.added": ("body", "title", "line"),
     "task.removed": ("reason",),
     "task.updated": ("body", "title"),
-    "trigger.suppressed": ("detail",),
+    "trigger.evaluated": ("errors",),
+    "trigger.suppressed": ("detail", "reason"),
 }
 
 #: Kinds whose payload is ids, digests, paths, flags and numbers only. Declared so a NEW kind
@@ -518,7 +519,6 @@ LOG_NO_TEXT = frozenset(
         "reviewer.approved",
         "reviewer.configured",
         "schedule.updated",
-        "trigger.evaluated",
         "trigger.fired",
         "upgrade.applied",
         "worktree.adopted",
@@ -528,19 +528,18 @@ LOG_NO_TEXT = frozenset(
     }
 )
 
-#: Leaves of a dict or list field that are looked up, compared or opened, not read: shas,
-#: digests, trees, paths, ids, branches, model and gate names.
-_KEEP_KEYS = re.compile(
-    r"(?:^|_)(?:sha|digest|tree|head|base|path|paths|worktree|branch|file|files|log|id|ids"
-    r"|kind|model|family|reviewer|gate|status|outcome|agent|event|ts|source|key|category"
-    r"|tests|regression_tests|output_file|output_log)$"
-)
+#: Keys whose string value is a path something opens or compares (a worktree, an output log):
+#: only secrets are masked there, so the path still resolves. Every other leaf of a text
+#: field is redacted whatever its key, since keys come from data (gate names, `def` fields).
+_PATH_KEYS = frozenset({"worktree", "output_file", "output_log", "source_tree", "path"})
 
 
 def redact_leaves(value: object, redactor: Redactor, key: str = "") -> object:
-    """``value`` with every string leaf redacted, except under a lookup key (`_KEEP_KEYS`)."""
+    """``value`` with every string leaf redacted; under a `_PATH_KEYS` key, only its secrets."""
     if isinstance(value, str):
-        return value if key and _KEEP_KEYS.search(key) else redactor.text(value).text
+        if key in _PATH_KEYS:
+            return mask_secrets(value, redactor.secret_patterns)[0]
+        return redactor.text(value).text
     if isinstance(value, Mapping):
         return {k: redact_leaves(v, redactor, str(k)) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -549,8 +548,16 @@ def redact_leaves(value: object, redactor: Redactor, key: str = "") -> object:
 
 
 def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
-    """``data`` of an event of ``kind`` with its declared text fields redacted (new dict)."""
-    names = LOG_TEXT_FIELDS.get(kind, ())
-    if not names or not any(n in data for n in names):
+    """``data`` of an event of ``kind`` with its declared text fields redacted (new dict).
+
+    A kind in neither `LOG_TEXT_FIELDS` nor `LOG_NO_TEXT` (a test refuses one in the
+    vocabulary) has EVERY field treated as text: unknown is not the same as text-free."""
+    if kind in LOG_NO_TEXT:
         return data
-    return {k: redact_leaves(v, redactor, "") if k in names else v for k, v in data.items()}
+    names = LOG_TEXT_FIELDS.get(kind)
+    if names is not None and not any(n in data for n in names):
+        return data
+    return {
+        k: redact_leaves(v, redactor, k) if names is None or k in names else v
+        for k, v in data.items()
+    }
