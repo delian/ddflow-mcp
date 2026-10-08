@@ -11,6 +11,7 @@ inside a release block. This is the one place that turns those declarations into
     release_impact.py level [--base REF]        patch | minor, from what the manifest gained
                                                 since REF (default: the last release)
     release_impact.py next VERSION LEVEL        the version a release at LEVEL moves VERSION to
+    release_impact.py candidate                 the version a release made now would be numbered
     release_impact.py check [--base REF]        exit 1 when the declared __version__ is a smaller
                                                 step than the declared impact asks for
 
@@ -26,6 +27,7 @@ is built.
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import subprocess
@@ -185,6 +187,19 @@ def declared_version(cwd: Path | None = None) -> str:
     return m.group(1) if m else ""
 
 
+def candidate(cwd: Path | None = None) -> str:
+    """The version a release made now would be numbered: the declared impact's step from the
+    NEWER of the declared version and the last release. A `v*` tag publishes out of band and
+    never moves main's declared version, so the declared one can be the older of the two --
+    and the step must be taken from the release the impact was measured against."""
+    declared = declared_version(cwd)
+    last = last_release(cwd)
+    start = declared
+    if last is not None and _vkey(last[1]) > _vkey(declared):
+        start = last[1]
+    return next_version(start, level_since(last[0] if last else None, cwd))
+
+
 def check(ref: str | None = None, cwd: Path | None = None) -> tuple[bool, str]:
     """Is the declared ``__version__`` a big enough step from the last release for the impact
     the manifest declares? ``(ok, a sentence)``."""
@@ -194,8 +209,13 @@ def check(ref: str | None = None, cwd: Path | None = None) -> tuple[bool, str]:
     ref, released = last
     level = level_since(ref, cwd)
     declared = declared_version(cwd)
-    if level == PATCH or _vkey(declared) >= _vkey(next_version(released, MINOR)):
-        return True, f"{declared} after {released}: the declared impact needs a {level} step"
+    if level == PATCH:
+        return True, (
+            f"{declared} after {released}: no breaking change is declared since, so any "
+            f"version is enough (a declared version PyPI does not have is published as it is)"
+        )
+    if _vkey(declared) >= _vkey(next_version(released, MINOR)):
+        return True, f"{declared} after {released}: a minor step, as the declared impact asks"
     return False, (
         f"the manifest declares a BREAKING change since {released}, which is a minor release "
         f"while ddflow is 0.x ({next_version(released, MINOR)}), but ddflow/__init__.py "
@@ -205,25 +225,41 @@ def check(ref: str | None = None, cwd: Path | None = None) -> tuple[bool, str]:
 
 
 def main(argv: list[str]) -> int:
-    cmd, rest = (argv[0], argv[1:]) if argv else ("", [])
-    ref = rest[rest.index("--base") + 1] if "--base" in rest else None
+    parser = argparse.ArgumentParser(prog="release_impact.py", description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("base", help="the git ref of the last release (exit 2: there is none)")
+    for name, text in (
+        ("level", "patch | minor, from what the manifest gained since the base"),
+        ("check", "exit 1 when the declared version is a smaller step than the impact asks"),
+    ):
+        sp = sub.add_parser(name, help=text)
+        sp.add_argument(
+            "--base", default=None, help="the ref to compare with (default: last release)"
+        )
+    sub.add_parser("candidate", help="the version a release made now would be numbered")
+    nxt = sub.add_parser("next", help="the version a release at LEVEL moves VERSION to")
+    nxt.add_argument("version")
+    nxt.add_argument("level")
     try:
-        if cmd == "base":
+        args = parser.parse_args(argv)
+    except SystemExit as exc:  # argparse's own exit 2 is "bad usage"; keep it as such
+        return int(exc.code or 0)
+    try:
+        if args.cmd == "base":
             last = last_release()
             if last is None:
                 return 2
             print(last[0])
-        elif cmd == "level":
-            print(level_since(ref))
-        elif cmd == "next" and len(rest) == 2:  # noqa: PLR2004
-            print(next_version(rest[0], rest[1]))
-        elif cmd == "check":
-            ok, why = check(ref)
+        elif args.cmd == "level":
+            print(level_since(args.base))
+        elif args.cmd == "candidate":
+            print(candidate())
+        elif args.cmd == "next":
+            print(next_version(args.version, args.level))
+        else:
+            ok, why = check(args.base)
             print(why, file=sys.stdout if ok else sys.stderr)
             return 0 if ok else 1
-        else:
-            print(__doc__, file=sys.stderr)
-            return 2
     except (RuntimeError, ValueError) as exc:  # a ManifestError is a ValueError
         print(f"release_impact: {exc}", file=sys.stderr)
         return 1

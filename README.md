@@ -1071,8 +1071,8 @@ The same rule makes a release that failed *before* its PyPI upload retry its num
 the next push. One that failed after it — Docker Hub, ghcr.io, the MCP registry — does
 not: PyPI has the number, so the next push moves past it; re-run that run's failed jobs
 from the Actions page instead. A bump never lands on a number PyPI already holds (a `v*`
-tag can publish one out of band): CI skips to the next free patch before it commits
-anything. `scripts/release.sh` refuses a declared version that is a smaller step than the manifest's
+tag can publish one out of band): CI takes the next free number at the declared level
+(moving on by patch when that one is taken) before it commits anything. `scripts/release.sh` refuses a declared version that is a smaller step than the manifest's
 `impact = "breaking"` entries ask for, and a surface change (a command, flag, tool, argument, knob or
 event kind gone) that the previous release's snapshot shows and nothing declares, with the options. The bump is pushed to main *before* anything publishes: a push that
 loses a race with another commit fails the run and publishes nothing, where pushed last it
