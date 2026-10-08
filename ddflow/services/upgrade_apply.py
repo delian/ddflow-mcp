@@ -246,7 +246,6 @@ def apply(
     *,
     categories: str | Collection[str] | None = None,
     confirm: Mapping[str, str] | None = None,
-    config_changes: str = "agent",
     backup: str = "local",
     agent: str = "",
     plan: dict[str, Any] | None = None,
@@ -261,6 +260,7 @@ def apply(
     detector was unavailable). Raises ValueError for an unknown category,
     ``config_changes`` or ``backup`` value."""
     repo = Path(repo)
+    config_changes = cfg.upgrade.config_changes  # the one source: the plan reads it too
     _check_modes(backup, config_changes)
     confirm = dict(confirm or {})
     plan = plan or UP.build(repo, log, cfg, st)
