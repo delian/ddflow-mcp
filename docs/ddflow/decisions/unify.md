@@ -120,3 +120,79 @@ The task bodies hold the engineering.
 - Leaving rules as unrecorded files.
 - Adopting the server's worktree for a client that names itself in `_meta`.
 - Leaving the memory, disk and log signals measured but never acted on.
+
+## Re-pointing record (B-uni-repoint, 2026-10-08)
+
+Each open, unstarted task below now needs the shared-interface task instead of building its own (existing needs kept). Reason per group:
+
+| task | new need | group | reason |
+|---|---|---|---|
+| B-rules-cli | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-skills-events | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-skills-author | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-sub-events | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-sched-author | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-dt-surfaces | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-ds-surfaces | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-docs-check-command | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-quota-surfaces | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-hx-cli | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-id-surfaces | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-af-surface | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-coh-resolve | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B199 | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-rw-revise | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-rules-inventory | B-uni-record-surface | record-surface | one RecordKind descriptor generates the CRUD surface |
+| B-ds-search | B-uni-search-core | search-core | docs search is a source of the one search engine |
+| B-ds-rag | B-uni-search-core | search-core | docs search is a source of the one search engine |
+| B-rw-inject | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-skills-context | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-rules-context-gate | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-rules-rag | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-dt-rules | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-ds-rag | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B202 | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-ds-semantic | B-uni-context-pack | context-pack | budgeted context injection and the Embedder are shared |
+| B-dt-obligations | B-uni-triggers | triggers | due/trigger evaluation is shared; the task registers a template |
+| B-upstream-detectors | B-uni-triggers | triggers | due/trigger evaluation is shared; the task registers a template |
+| B-bugs-fix-now | B-uni-triggers | triggers | due/trigger evaluation is shared; the task registers a template |
+| B-security-pass | B-uni-triggers | triggers | due/trigger evaluation is shared; the task registers a template |
+| B-dependency-upgrades | B-uni-triggers | triggers | due/trigger evaluation is shared; the task registers a template |
+| B-doctor-overdue-cadences | B-uni-triggers | triggers | due/trigger evaluation is shared; the task registers a template |
+| B-dt-sources | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-docs-lint-and-links | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-docscheck-extractors | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-ds-semantic | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-sched-run | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-precommit-integration | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-security-pass | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-dependency-upgrades | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-skills-install | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-upgrade.9-self-upgrade | B-uni-cmdrunner | cmdrunner | configured commands run through the one CommandRunner |
+| B-dt-workflow | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-research-items | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-rw-workflow | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-sched-run | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-docs-gate-evidence | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-gate-evidence-fields | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-gate-when-globs | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-cochange-checks | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-dt-obligations | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-reviewer-pool | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-sub-route | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-rules-context-gate | B-uni-kind-pipeline | kind-pipeline | per-kind pipelines and gate predicates are data on one registry |
+| B-quota-loop | B-hx-hook-core | hub | harness hook table (HookSpec) lands first; the task installs/uses hooks through it |
+| B-rw-trigger | B-hx-hook-core | hub | harness hook table (HookSpec) lands first; the task installs/uses hooks through it |
+| B-upgrade.6-notice | B-hx-hook-core | hub | harness hook table (HookSpec) lands first; the task installs/uses hooks through it |
+| B-ds-watch | B-hx-hook-core | hub | harness hook table (HookSpec) lands first; the task installs/uses hooks through it |
+| B-res-brief-recovery-link | B-hx-hook-core | hub | harness hook table (HookSpec) lands first; the task installs/uses hooks through it |
+| B-skills-model | B-hx-descriptor | hub | harness descriptors land first; skills model reads the per-agent layout from them |
+| B-export-security-md | B-dt-sources | exports | exported documents are doc types whose section source is kind:<export kind>; build on the doc-type sources instead of a separate export kind |
+| B-sched-docs-acceptance | B-dt-sources | exports | exported documents are doc types whose section source is kind:<export kind>; build on the doc-type sources instead of a separate export kind |
+| B-skills-export-docs | B-dt-sources | exports | exported documents are doc types whose section source is kind:<export kind>; build on the doc-type sources instead of a separate export kind |
+| B-sub-docs | B-dt-sources | exports | exported documents are doc types whose section source is kind:<export kind>; build on the doc-type sources instead of a separate export kind |
+| B-dt-library | removes B-export-security-md | exports | inverted: SECURITY.md is an export doc type built on B-dt-sources, so the library consumes it, not the reverse |
+
+Skipped: groups whose interface task is already done (def-records, overlay, local-worker, plan-pipeline, approval) need no edge; tasks already done (B-sched-model, B-trigger-model, B-id-config, B-af-sampler) are untouched; needs already present (B-semantic-recall, B-rw-stale, B-rw-gate-link) are not repeated.
+B-semantic-recall and B-ds-semantic are not merged into one task: both now consume the one Embedder of B-uni-context-pack (no infra/embed.py, no second backend).
+The stray open task 'nosuch' was removed.
