@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.slug import ascii_slug, claude_project_slug
 from ..infra.log import EventLog
 from .enforce import UnreadableYaml, read_precommit_yaml
 from .importer import Duplicate, Found
@@ -50,7 +51,7 @@ class HarnessScan:
 
 def project_slug(path: Path) -> str:
     """Claude Code's directory name for a checkout: every non-alphanumeric byte -> '-'."""
-    return re.sub(r"[^A-Za-z0-9]", "-", str(path))
+    return claude_project_slug(path)
 
 
 def _projects_root(projects_root: Path | None) -> Path:
@@ -82,7 +83,7 @@ def harness_memory_dir(repo: Path, *, projects_root: Path | None = None) -> Path
 
 def _id_fragment(text: str, limit: int) -> str:
     """A stable, readable id fragment; `""` only for text with no alphanumerics at all."""
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:limit]
+    return ascii_slug(text.lower(), limit, restrip=False)
 
 
 def _frontmatter(text: str) -> tuple[dict, str, str]:

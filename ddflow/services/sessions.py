@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import textwrap
 import time
 from collections.abc import Iterable
@@ -41,6 +40,7 @@ from ..config import Config
 from ..core import clock
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
+from ..core.slug import safe_filename
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 from .redact_report import redactor
 
@@ -270,7 +270,7 @@ def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str 
 def harness_session_id(raw: str) -> str:
     """The ddflow session id for a harness's own session id (one session per conversation)."""
     raw = str(raw)
-    safe = re.sub(r"[^A-Za-z0-9._-]", "", raw)[:48]
+    safe = safe_filename(raw, repl="", max=48)
     if not safe:
         return ""
     if safe != raw:

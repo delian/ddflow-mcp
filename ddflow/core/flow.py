@@ -37,6 +37,7 @@ from ..config import (
     Config,
 )
 from .model import REVIEW, Item, State
+from .slug import safe_filename
 
 # The value sets are declared in config.py beside the knobs, where `Config.check` refuses
 # anything else; these are the names this module has always used for them.
@@ -212,7 +213,7 @@ def branch_kind(it: Item, cfg: Config) -> str:
 
 
 def safe_name(item_id: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]", "-", item_id).strip("-") or "item"
+    return safe_filename(item_id, strip="-", default="item")
 
 
 def branch_name(it: Item, cfg: Config) -> str:
