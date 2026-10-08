@@ -196,9 +196,13 @@ def _driver_drift_notes(repo: Path) -> list[str]:
         AD.DOC_LEGACY: "no version stamp",
     }
     names = ", ".join(f"{rel} ({why.get(st, st)})" for rel, st in lagging.items())
+    note = f"driver docs differ from the templates this ddflow ships: {names}"
+    if all(st == AD.DOC_NEWER for st in lagging.values()):
+        return [note + " — a refresh will not overwrite them; upgrade ddflow"]
     return [
-        f"driver docs differ from the templates this ddflow ships: {names}"
-        " — `ddflow adopt --refresh-docs` rewrites them (and the rules blocks) and nothing else"
+        note + " — `ddflow adopt --refresh-docs` rewrites them (and the rules blocks) and"
+        " nothing else"
+        + ("; upgrade ddflow for the newer ones" if AD.DOC_NEWER in lagging.values() else "")
     ]
 
 
