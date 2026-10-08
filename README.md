@@ -4339,7 +4339,10 @@ detected and `--check` regenerates and compares exactly), `region` (only the tex
 file; the rest is kept byte for byte) and `append` (a kind that can grow a log, today the changelog: entries are
 added after the last exported event). Writes are atomic under a lock. A hand-edited generated file,
 an unmarked file or an edited region is never overwritten without `--force` (exit 3, with the
-diff); paths outside the repo, symlinks and `.git` / `.ddflow` are refused.
+diff); paths outside the repo, symlinks and `.git` / `.ddflow` are refused. A document or region
+written at a higher format level than this ddflow's (`fmt=N` in its header, written only above
+level 1) is never rewritten, even with `--force` (exit 3, "upgrade ddflow"); `--check` and `--diff`
+still report it.
 
 ```console
 $ ddflow export roadmap --update          # write the target; asks to confirm on a terminal
