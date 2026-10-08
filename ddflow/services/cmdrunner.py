@@ -84,6 +84,19 @@ SHELL_WORDS = frozenset(
         "select",
         "function",
         "time",
+        "command",
+        "builtin",
+        "exec",
+        "type",
+        "hash",
+        "alias",
+        "unalias",
+        "let",
+        "local",
+        "declare",
+        "readonly",
+        "umask",
+        "ulimit",
     }
 )
 
@@ -275,7 +288,7 @@ class CommandRunner:
         run.digest = content_digest(raw, "blake2b", size=8, errors="replace")
         run.output_bytes = len(raw)
         if self.redactor is not None:
-            for name in ("out", "err"):
+            for name in ("out", "err", "reason"):
                 red = self.redactor.text(getattr(run, name))
                 setattr(run, name, red.text)
                 for kind, n in red.counts.items():
