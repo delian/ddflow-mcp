@@ -1389,6 +1389,36 @@
           is refused); `config --set`, `ddflow_configure` and the environment refuse
           it, and so does loading ddflow's own source tree, where the file and the
           code are one commit.
+      upgrade.backup = 'local'   [default]
+          Where `ddflow upgrade --apply` saves the files it is about to rewrite
+          (decision D-upgrade-backups). `local` (default): a copy under
+          `.ddflow/backups/<stamp>-<from>-to-<to>/` with a `manifest.json` of what was
+          there -- git-ignored, never shared between machines, cost: disk on this
+          machine only; pruned to `backup_keep`. `none`: no copy (the files are in
+          git, or you do not want them). `ddflow upgrade --apply --backup MODE`
+          overrides it for one run. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'local', the strictest (a bad
+          value still makes the backup); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
+      upgrade.backup_keep = 10   [default]
+          How many local upgrade backups (`.ddflow/backups/`) are kept: after an apply
+          writes a new one, the oldest beyond this many are removed. 0 keeps every
+          one.
+      upgrade.config_changes = 'agent'   [default]
+          Who may apply an upgrade's config change (decision D-upgrade-config-
+          changes). `agent` (default): an agent applies a change to a knob the project
+          never set (it takes the new default; the plan, the notice and
+          `upgrade.applied` always list it), while a value anyone set -- in a config
+          layer, with `ddflow config` -- is never changed without the operator:
+          `ddflow upgrade --apply` refuses it (exit 3) unless `--confirm KNOB --reason
+          WHY` is passed. `ask`: every config change waits for `--confirm`, so the
+          agent asks the operator first. `operator`: the same, and the plan marks each
+          as the operator's to apply. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'operator', the strictest (a
+          bad value makes the operator decide every config change); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest

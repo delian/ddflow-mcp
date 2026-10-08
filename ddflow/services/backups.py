@@ -68,3 +68,19 @@ def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name:
     manifest = {"from": frm, "to": to, "mode": "local", "files": entries}
     replace_text(dest / MANIFEST, json.dumps(manifest, indent=2) + "\n")
     return dest
+
+
+def prune(repo: Path, keep: int) -> list[str]:
+    """Remove the oldest backups beyond ``keep`` (0 keeps every one); the names removed.
+
+    Only directories this module wrote (each holds a `manifest.json`) are touched, and the
+    newest ``keep`` stay: names start with a sortable UTC stamp."""
+    root = Path(repo) / BACKUPS
+    if keep <= 0 or not root.is_dir():
+        return []
+    ours = sorted(p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+    removed: list[str] = []
+    for old in ours[: max(0, len(ours) - keep)]:
+        shutil.rmtree(old, ignore_errors=True)
+        removed.append(old.name)
+    return removed

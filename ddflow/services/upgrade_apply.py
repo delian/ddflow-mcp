@@ -44,7 +44,7 @@ from . import configwrite as CW
 from . import enforce as E
 from . import repairs as RP
 from . import upgrade_plan as UP
-from .backups import BACKUPS, MANIFEST, backup_name, make_backup  # noqa: F401 -- the backups' home
+from .backups import BACKUPS, MANIFEST, backup_name, make_backup, prune  # noqa: F401 -- the home
 
 BACKUP_MODES = ("local", "none")
 #: What `[upgrade].config_changes` accepts: who may apply a config change on a knob nobody set.
@@ -266,6 +266,7 @@ def apply(
     if files and backup == "local":
         try:
             backup_dir = str(make_backup(repo, files, frm, to))
+            prune(repo, cfg.upgrade.backup_keep)
         except OSError as exc:
             detail = f"no backup could be written ({exc}); nothing was changed"
             failed = results + [_rec(i, FAILED, detail) for i in todo]
