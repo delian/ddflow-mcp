@@ -89,7 +89,7 @@ def test_load_toml_dir_contract(tmp_path):
         return (None, ["no"]) if stem == "b" else (spec["x"], [])
 
     out, errors = load_toml_dir(tmp_path, Path("d"), build, lambda i: f"{i} mismatch")
-    assert out == [("a", 1)]
+    assert out == [("a", 1, "d/a.toml")]
     assert [s for s, _ in seen] == ["a", "b"]
     assert errors[0] == "d/b.toml: no"
     assert errors[1].startswith("d/c.toml: cannot read it: ")
