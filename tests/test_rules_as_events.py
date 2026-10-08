@@ -373,3 +373,146 @@ def test_the_mcp_tools_show_an_unrecorded_write_as_an_error(repo: Path, monkeypa
     text = res["content"][0]["text"]
     assert "not recorded in the log" in text and "log is locked" in text
     assert (repo / ".ddflow" / "rules" / "r-mcp.toml").exists()
+
+
+# -- the rule files as a checked generated view -------------------------------------------
+
+import subprocess  # noqa: E402
+
+from ddflow.services import enforce as E  # noqa: E402
+from ddflow.services.guidance import ruleview as RV  # noqa: E402
+
+
+def _state(repo: Path):
+    return fold(EventLog(repo, "reader").read_all(), strict=False)
+
+
+def _drift(repo: Path):
+    return RV.drift(repo, Config.load(repo), _state(repo))
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def test_files_the_log_says_have_no_drift(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    assert _drift(repo) == []
+    assert RV.notes(repo, Config.load(repo), _state(repo)) == []
+
+
+def test_drift_names_an_unrecorded_file_an_edit_and_a_missing_file(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule("r-a"), agent="t")
+    ARULES.rule_add(
+        repo,
+        Rule(id="r-b", title="Name modules plainly", content="Modules take short nouns."),
+        agent="t",
+    )
+    _put(repo, "r-c", MINIMAL)
+    edited = repo / ".ddflow" / "rules" / "r-a.toml"
+    edited.write_text(edited.read_text().replace("Always run", "Never skip"))
+    (repo / ".ddflow" / "rules" / "r-b.toml").unlink()
+    assert [(d.id, d.how) for d in _drift(repo)] == [
+        ("r-a", "edited"),
+        ("r-b", "missing"),
+        ("r-c", "unrecorded"),
+    ]
+    (note,) = RV.notes(repo, Config.load(repo), _state(repo))
+    assert "3 rule file(s)" in note and "ddflow rule sync" in note
+
+
+def test_doctor_notes_a_hand_edited_rule_file(repo: Path) -> None:
+    from ddflow.api.reporting import doctor
+
+    ARULES.rule_add(repo, _rule(), agent="t")
+    path = repo / ".ddflow" / "rules" / "r-w.toml"
+    path.write_text(path.read_text().replace("Always run", "Never skip"))
+    out = doctor(repo, agent="t")
+    assert any("rule file(s) disagree with the log" in n for n in out.data.get("notes", [])), (
+        out.data
+    )
+
+
+def test_sync_records_a_hand_edit_a_new_file_and_restores_a_deleted_one(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule("r-a"), agent="t")
+    ARULES.rule_add(
+        repo,
+        Rule(id="r-b", title="Name modules plainly", content="Modules take short nouns."),
+        agent="t",
+    )
+    a = repo / ".ddflow" / "rules" / "r-a.toml"
+    a.write_text(a.read_text().replace("Always run", "Never skip"))
+    _put(repo, "r-c", MINIMAL)
+    gone = repo / ".ddflow" / "rules" / "r-b.toml"
+    want = gone.read_text()
+    gone.unlink()
+    out = ARULES.rule_sync(repo, agent="t")
+    assert out.exit == 0, out
+    assert (out.data["recorded"], out.data["updated"], out.data["restored"]) == (
+        ["r-c"],
+        ["r-a"],
+        ["r-b"],
+    )
+    defs = _defs(repo)
+    assert (
+        "Never skip" in defs["rule:r-a"].fields["body"]
+        and defs["rule:r-a"].provenance["via"] == "sync"
+    )
+    assert defs["rule:r-c"].live
+    assert fileformat.parse(gone.read_text(), RULE).body == fileformat.parse(want, RULE).body
+    assert _drift(repo) == []
+    again = ARULES.rule_sync(repo, agent="t")
+    assert again.exit == 0 and not any(again.data[k] for k in ("recorded", "updated", "restored"))
+
+
+def test_sync_leaves_a_retired_rules_file_alone(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    assert ADEFS.def_retire(repo, "rule", "r-w", reason="obsolete", agent="t").exit == 0
+    out = ARULES.rule_sync(repo, agent="t")
+    assert (
+        out.exit == 0 and out.data["restored"] == [] and _defs(repo)["rule:r-w"].status == "retired"
+    )
+
+
+def test_the_sync_command_and_tool_run_the_api(repo: Path) -> None:
+    from conftest import run_cli
+
+    _put(repo, "r-c", MINIMAL)
+    code, out, err = run_cli(repo, "--json", "rule", "sync")
+    assert code == 0, (out, err)
+    assert json.loads(out)["recorded"] == ["r-c"]
+    code, out, err = run_cli(repo, "rule", "sync")
+    assert code == 0 and "agree" in out, (out, err)
+
+
+def test_a_staged_hand_edit_is_refused_until_it_is_recorded(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    _git(repo, "add", "-A")
+    assert E.check_views(repo, Config.load(repo)) == (0, "")
+    path = repo / ".ddflow" / "rules" / "r-w.toml"
+    path.write_text(path.read_text().replace("Always run", "Never skip"))
+    _git(repo, "add", "-A")
+    code, msg = E.check_views(repo, Config.load(repo))
+    assert code == 1 and "r-w.toml" in msg and "ddflow rule sync" in msg, msg
+    assert ARULES.rule_sync(repo, agent="t").exit == 0
+    _git(repo, "add", "-A")
+    assert E.check_views(repo, Config.load(repo)) == (0, "")
+
+
+def test_a_staged_rule_file_the_log_never_recorded_is_refused(repo: Path) -> None:
+    _put(repo, "r-c", MINIMAL)
+    _git(repo, "add", "-A")
+    code, msg = E.check_views(repo, Config.load(repo))
+    assert code == 1 and "r-c.toml" in msg and "no record" in msg, msg
+
+
+def test_replay_rebuilds_the_rule_files_from_the_log(repo: Path, tmp_path: Path) -> None:
+    from ddflow.api.reporting import replay
+
+    ARULES.rule_add(repo, _rule(), agent="t")
+    out = replay(repo, out_dir=str(tmp_path / "kit"))
+    rebuilt = tmp_path / "kit" / "rules" / "r-w.toml"
+    assert out.exit == 0 and rebuilt.is_file()
+    want = fileformat.parse((repo / ".ddflow" / "rules" / "r-w.toml").read_text(), RULE)
+    got = fileformat.parse(rebuilt.read_text(), RULE)
+    assert DF.to_fields(got, RULE) == DF.to_fields(want, RULE)

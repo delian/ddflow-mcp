@@ -208,6 +208,15 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().rule_remove(repo, a["id"], agent=agent),
         "payload": ("id",),
     },
+    "ddflow_rule_sync": {
+        "description": (
+            "Make the log and the rule files agree: record hand-edited or new rule files "
+            "(def.updated / def.recorded) and write the files the log has but the disk lacks."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().rule_sync(repo, agent=agent),
+        "payload": ("recorded", "updated", "restored", "failed"),
+    },
     "ddflow_rule_show": {
         "description": (
             "One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps."
