@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .overlay import OverlayError, OverlayLoader
+
 #: Every template the system uses. Registered here so `ddflow prompts list` can show
 #: them all, and so a typo in a template name fails loudly instead of falling back to a
 #: default nobody notices.
@@ -296,25 +298,28 @@ def resolve(
 ) -> Template:
     if name not in TEMPLATE_NAMES:
         raise TemplateError(f"unknown template {name!r}. Known: {', '.join(TEMPLATE_NAMES)}")
-    explicit = (overrides or {}).get(name, "")
-    if explicit:
-        path = Path(explicit)
-        if not path.is_absolute() and repo:
-            path = repo / path
-        if not path.is_file():
-            # A configured override that does not exist is an error, never a silent
-            # fallback: the operator asked for THEIR prompt and would otherwise get
-            # the default while believing their edit was live.
-            raise TemplateError(f"[prompts].{name} points at {path}, which does not exist")
-        return Template(name, path.read_text("utf-8"), "config", path)
-    if repo:
-        path = repo / ".ddflow" / "prompts" / f"{name}.md"
-        if path.is_file():
-            return Template(name, path.read_text("utf-8"), "project", path)
-    path = builtin_dir() / f"{name}.md"
-    if not path.is_file():
-        raise TemplateError(f"shipped template {name}.md is missing from the package")
-    return Template(name, path.read_text("utf-8"), "builtin", path)
+    # A configured override that does not exist is an error, never a silent fallback: the
+    # operator asked for THEIR prompt and would otherwise get the default while believing
+    # their edit was live.
+    try:
+        got = _loader().resolve(name, repo, (overrides or {}).get(name, ""))
+    except OverlayError as exc:
+        raise TemplateError(str(exc)) from exc
+    return Template(name, got.text, got.source, got.path)
+
+
+def _loader() -> OverlayLoader:
+    """The overlay of the shipped prompts (D-unify, B-uni-overlay.2): config path, then
+    ``.ddflow/prompts/<name>.md``, then the package default."""
+    return OverlayLoader(
+        "template",
+        shipped_dir=builtin_dir(),
+        project_subdir="prompts",
+        suffix=".md",
+        missing_configured=lambda name, path: (
+            f"[prompts].{name} points at {path}, which does not exist"
+        ),
+    )
 
 
 def render(tmpl: Template | str, **vars: Any) -> str:

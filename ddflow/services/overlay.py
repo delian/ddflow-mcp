@@ -144,6 +144,7 @@ class OverlayLoader:
         suffix: str,
         syntax: str = "jinja",
         check: Callable[[str], None] | None = None,
+        missing_configured: Callable[[str, Path], str] | None = None,
     ) -> None:
         if syntax not in _MARKERS:
             raise ValueError(f"unknown syntax {syntax!r}; one of {', '.join(_MARKERS)}")
@@ -153,6 +154,9 @@ class OverlayLoader:
         self.suffix = suffix
         self.syntax = syntax
         self._check = check or (check_jinja if syntax == "jinja" else check_toml)
+        #: The kind's own sentence for "the configured path does not exist" (name, path), for
+        #: a caller whose messages predate the loader and are quoted in its docs and tests.
+        self._missing_configured = missing_configured
 
     # -- where ------------------------------------------------------------------------
 
@@ -192,7 +196,9 @@ class OverlayLoader:
                 path = Path(repo) / path
             if not path.is_file():
                 raise OverlayError(
-                    f"the configured {self.kind} for {name} is {path}, which does not exist"
+                    self._missing_configured(name, path)
+                    if self._missing_configured
+                    else f"the configured {self.kind} for {name} is {path}, which does not exist"
                 )
             return Asset(name, _read(path), CONFIG, path)
         if repo:

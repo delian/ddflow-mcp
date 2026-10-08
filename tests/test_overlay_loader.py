@@ -177,3 +177,54 @@ def test_eject_does_not_write_through_a_symlinked_intermediate_directory(tmp_pat
     with pytest.raises(O.OverlayError, match="symlink"):
         nested.eject(repo, "a")
     assert not list((repo / "elsewhere").rglob("*"))
+
+
+# -- B-uni-overlay.2: prompts.resolve runs on the loader, with its own words ---------------
+
+
+def test_prompts_resolve_pins_precedence_provenance_and_messages(tmp_path, monkeypatch):
+    """Literal expectations, so the migration cannot hide behind comparing a loader with
+    itself: layer, path, relative-path handling and every message `resolve` ever said."""
+    built = P.builtin_dir() / "review_system.md"
+    got = P.resolve("review_system", tmp_path)
+    assert (got.source, got.path, got.kind) == ("builtin", built, "template")
+    assert P.resolve("review_system").source == "builtin"  # no repo: the shipped default
+    mine = tmp_path / ".ddflow" / "prompts" / "review_system.md"
+    mine.parent.mkdir(parents=True)
+    mine.write_text("mine\n")
+    got = P.resolve("review_system", tmp_path)
+    assert (got.source, got.path, got.text) == ("project", mine, "mine\n")
+    (tmp_path / "rel.md").write_text("configured\n")
+    got = P.resolve("review_system", tmp_path, {"review_system": "rel.md"})
+    assert (got.source, got.path, got.text) == ("config", tmp_path / "rel.md", "configured\n")
+    got = P.resolve("review_system", None, {"review_system": str(tmp_path / "rel.md")})
+    assert (got.source, got.path) == ("config", tmp_path / "rel.md")
+    assert P.resolve("review_system", tmp_path, {"review_system": ""}).source == "project"
+    with pytest.raises(P.TemplateError) as exc:
+        P.resolve("review_system", tmp_path, {"review_system": "nope.md"})
+    assert str(exc.value) == (
+        f"[prompts].review_system points at {tmp_path / 'nope.md'}, which does not exist"
+    )
+    with pytest.raises(P.TemplateError) as exc:
+        P.resolve("not_a_template", tmp_path)
+    assert str(exc.value).startswith("unknown template 'not_a_template'. Known: review_system, ")
+    monkeypatch.setattr(P, "builtin_dir", lambda: tmp_path / "no-such-pkg")
+    mine.write_text("a literal {{ never closed\n")  # resolving does not parse the text
+    assert P.resolve("review_system", tmp_path).text == "a literal {{ never closed\n"
+    mine.unlink()
+    with pytest.raises(P.TemplateError) as exc:
+        P.resolve("review_system", tmp_path)
+    assert str(exc.value) == "shipped template review_system.md is missing from the package"
+
+
+def test_an_undecodable_prompt_is_a_template_error_not_a_traceback(tmp_path):
+    """B-undecodable-prompt: `resolve` read the file raw, so a binary override escaped as
+    UnicodeDecodeError through callers that promise a TemplateError (the review gate)."""
+    (tmp_path / "bad.md").write_bytes(b"\xff\xfe")
+    with pytest.raises(P.TemplateError, match=r"could not read .*bad\.md"):
+        P.resolve("review_system", tmp_path, {"review_system": "bad.md"})
+    mine = tmp_path / ".ddflow" / "prompts" / "review_system.md"
+    mine.parent.mkdir(parents=True)
+    mine.write_bytes(b"\xff")
+    with pytest.raises(P.TemplateError, match="could not read"):
+        P.resolve("review_system", tmp_path)
