@@ -4772,7 +4772,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=165d7f9a7197 -->
+<!-- ddflow:begin README/tools sha=f2ea2577d87d -->
 <details><summary>All 111 MCP tools: 32 in the `core` tier, 46 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -4886,7 +4886,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_rebuild` | all | Re-derive the search index from the event log. |
 | When something is wrong | `ddflow_recover` | standard | Find work left behind by a crashed agent: expired leases, orphaned worktrees, items stuck running. |
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
-| When something is wrong | `ddflow_upgrade` | all | What upgrading this project to the running ddflow would change, by category (repairs, config, instructions… |
+| When something is wrong | `ddflow_upgrade` | all | What upgrading this project to the running ddflow would change, by category (repairs, migrations, config… |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
 
 </details>
