@@ -746,4 +746,12 @@ def bundle(
     for name, text in render_views(state, cfg).items():
         (out_dir / name).write_text(text, "utf-8")
         written.append(out_dir / name)
+    # The rule files are a view of the rule definitions (D-unify 7): rebuilt from the log.
+    from .guidance import ruleview as RV
+
+    for rid in RV.live_rule_ids(state):
+        target = out_dir / "rules" / f"{rid}.toml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(RV.render(state, rid), "utf-8")
+        written.append(target)
     return written

@@ -1479,7 +1479,8 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
         return _verdict(mode, [_UNKNOWN_STAGED])
     configured = {p for _d, p, _m in cfg.export.targets()}
     staged, exports = _staged_generated(repo, listed, names, tree, configured)
-    if not staged and not exports:
+    rules = _staged_rule_files(repo, listed, tree)
+    if not staged and not exports and not rules:
         return Verdict(OK, "")
     noun = (
         "generated view or document"
@@ -1487,6 +1488,8 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
         else "generated view"
         if staged
         else "generated document"
+        if exports
+        else "rule file"
     )
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
@@ -1551,8 +1554,10 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     # whoever typed `git commit`, not to the view.
     fresh_cfg = Config.load(repo, env={})
     lines: list[str] = []
+    if rules:
+        lines += _wrong_rule_files(repo, log, fresh_cfg, rules)
     if staged:
-        lines += _wrong_views(log, fresh_cfg, staged)
+        lines += [*([""] if lines else []), *_wrong_views(log, fresh_cfg, staged)]
     if exports:
         err, bad = _wrong_exports(repo, fresh_cfg, exports)
         if err:
@@ -1593,6 +1598,50 @@ def _staged_generated(
         if data is not None and data.startswith(GENERATED_PREFIX.encode("utf-8")):
             staged[p] = data
     return staged, exports
+
+
+def _staged_rule_files(repo: Path, listed: list[str], tree: Path) -> dict[str, bytes]:
+    """The staged rule files ``{path: bytes}``: ``.ddflow/rules/<id>.toml``, which the log
+    renders (D-unify 7). A deletion is not listed (`staged_paths` is ACMR)."""
+    from .guidance import ruleview as RV
+
+    prefix = RV.files(repo).directory.relative_to(repo).as_posix() + "/"
+    found: dict[str, bytes] = {}
+    for p in listed:
+        if p.startswith(prefix) and p.endswith(".toml") and "/" not in p[len(prefix) :]:
+            data = staged_bytes(repo, p, tree=tree)
+            if data is not None:
+                found[p] = data
+    return found
+
+
+def _wrong_rule_files(
+    repo: Path, log: EventLog, cfg: Config, staged: dict[str, bytes]
+) -> list[str]:
+    """Message lines for the staged rule files the log does not say (empty: all fine): a file
+    with no record, or whose content differs from its live record -- a hand edit, which
+    ``ddflow rule sync`` records. A retired rule and a file that does not load are not
+    this check's (``doctor`` reports the latter)."""
+    from .guidance import ruleview as RV
+
+    st = fold(log.read_all(), strict=False)
+    wrong: list[tuple[str, str]] = []
+    for p in sorted(staged):
+        why = RV.disagreement(cfg, st, Path(p).stem, staged[p].decode("utf-8", errors="replace"))
+        if why:
+            wrong.append((p, why))
+    if not wrong:
+        return []
+    return [
+        f"ddflow: {len(wrong)} staged rule file(s) are not what the event log says:",
+        "",
+        *(f"  {p}  ({why})" for p, why in wrong),
+        "",
+        "A rule file is a view of the rule's record in the log. Record the edit and stage",
+        "the log with it:",
+        "    ddflow rule sync",
+        "    git add " + " ".join(shlex.quote(p) for p, _w in wrong) + " " + _rel(repo, log.dir),
+    ]
 
 
 def _wrong_views(log: EventLog, cfg: Config, staged: dict[str, bytes]) -> list[str]:
