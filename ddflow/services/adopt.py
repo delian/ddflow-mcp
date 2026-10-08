@@ -391,9 +391,31 @@ class RulesState:
         return {
             MISSING: f"{self.path} does not exist — the agent has no project rules at all",
             NO_BLOCK: f"{self.path} exists but its ddflow section was removed",
-            STALE: f"{self.path}'s ddflow section is from an older version and has drifted",
+            STALE: self._stale_line(),
             CURRENT: f"{self.path} is current",
         }[self.state]
+
+    def _stale_line(self) -> str:
+        """Say WHICH difference this is, from what the stamp proves (D-compat 2): a section a
+        newer ddflow wrote is not 'older', a hand edit is not 'from an older version', and a
+        copy with no stamp cannot be told either way."""
+        if self.newer:
+            return (
+                f"{self.path}'s ddflow section was written at a newer format level than "
+                "this ddflow understands; upgrade ddflow (a refresh will not overwrite it)"
+            )
+        if self.edited:
+            return (
+                f"{self.path}'s ddflow section was edited by hand since ddflow wrote it "
+                "(a refresh keeps your version in a .local-edits file)"
+            )
+        if self.stamped:
+            return f"{self.path}'s ddflow section is from an older version and has drifted"
+        return (
+            f"{self.path}'s ddflow section differs from what this ddflow writes "
+            "(it carries no version stamp, so nothing says whether it is an older copy "
+            "or was edited)"
+        )
 
     @property
     def not_binding_reason(self) -> str:
@@ -679,6 +701,48 @@ DDFLOW_GITIGNORE = (
 UNION_MERGE_LINE = ".ddflow/events/*.jsonl merge=union\n"
 
 
+#: `.ddflow/.gitignore`'s ddflow part, a stamped region (fsio.Managed) so a line a person
+#: adds outside it survives and a copy of an older release is told from a hand edit. The
+#: region is rewritten only when its BODY differs: a release alone changes no byte of it.
+GITIGNORE_REGION = Managed("gitignore", open="#", close="")
+
+
+def write_ddflow_gitignore(gi: Path) -> bool:
+    """Bring ``.ddflow/.gitignore`` to this ddflow's text; True when it was written.
+
+    A file with the region keeps everything outside it; a file with none (the whole-file
+    constant an earlier ddflow wrote, or a hand-made one) is replaced outright, as before."""
+    have = gi.read_text("utf-8", errors="replace") if gi.is_file() else None
+    if have is not None:
+        try:
+            body = GITIGNORE_REGION._region().body(have)
+        except RegionError:
+            # Broken markers: drop the stray marker lines and write a fresh region after what
+            # is left, so a line a person added outside it survives.
+            kept = [
+                ln for ln in have.splitlines(keepends=True) if "ddflow:begin gitignore" not in ln
+            ]
+            kept = [ln for ln in kept if "ddflow:end gitignore" not in ln]
+            text = "".join(kept)
+            replace_text(
+                gi,
+                text
+                + ("" if text.endswith("\n") or not text else "\n")
+                + GITIGNORE_REGION.render(DDFLOW_GITIGNORE),
+            )
+            return True
+        if body == DDFLOW_GITIGNORE:
+            return False
+        if body is not None:
+            try:
+                replace_text(gi, GITIGNORE_REGION.splice(have, DDFLOW_GITIGNORE))
+            except NewerContent:
+                return False  # a newer ddflow's region: never downgraded
+            return True
+    replace_text(gi, GITIGNORE_REGION.render(DDFLOW_GITIGNORE))
+    return True
+
+
 def _append_once(path: Path, present: frozenset[str], text: str) -> bool:
     """Append `text` to a file the PROJECT owns unless one of its lines is in `present`.
 
@@ -722,8 +786,7 @@ def init_files(repo: Path) -> list[str]:
     d = repo / ".ddflow"
     (d / "events").mkdir(parents=True, exist_ok=True)
     gi = d / ".gitignore"
-    if not gi.is_file() or gi.read_text("utf-8") != DDFLOW_GITIGNORE:
-        replace_text(gi, DDFLOW_GITIGNORE)
+    if write_ddflow_gitignore(gi):
         actions.append("wrote .ddflow/.gitignore")
     cfgp = d / "config.toml"
     if not cfgp.exists():
