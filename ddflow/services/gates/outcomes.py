@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config
-from ...core.model import GATE_OUTCOMES, State
+from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra.log import EventLog
 from .defs import GateDef, pipeline_for
 from .evidence import (
@@ -46,16 +46,8 @@ class GateStatus:
     rounds: dict[str, str] = field(default_factory=dict)
 
     def render(self) -> str:
-        marks = {
-            "passed": "[x]",
-            "failed": "[!]",
-            "unavailable": "[?]",
-            "partial": "[~]",
-            "skipped": "[-]",
-            "": "[ ]",
-        }
         return "\n".join(
-            f"  {marks.get(o, '[ ]')} {g}"
+            f"  [{OUTCOME_MARK.get(o, ' ')}] {g}"
             + (f"  -- {self.triage[g]}" if g in self.triage else "")
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             for g, o in self.rows

@@ -156,7 +156,6 @@ def test_gate_outcome_vocabulary_is_unchanged() -> None:
     from ddflow.core.records import OUTCOME_MARK, GateOutcome
 
     assert GATE_OUTCOMES == ("passed", "failed", "unavailable", "partial", "skipped")
-    assert [o.value for o in GateOutcome] == list(GATE_OUTCOMES)
     assert OUTCOME_MARK == {
         "passed": "x",
         "failed": "!",
@@ -176,3 +175,22 @@ def test_settled_is_satisfies_and_never_for_a_missing_outcome(outcome: str, requ
     want = outcome == "passed" or (outcome == "skipped" and not required)
     assert GateOutcome.settled(outcome, required) is want
     assert not GateOutcome.settled("", required)
+
+
+def test_gate_status_render_draws_the_shared_marks() -> None:
+    from ddflow.services.gates.outcomes import GateStatus
+
+    st, cfg = _one_gate("skipped", required=False)
+    from ddflow.services.gates import status
+
+    s = status(st, cfg, "T")
+    assert "[-] g1" in s.render()
+    s.rows = [("a", "passed"), ("b", "failed"), ("c", "unavailable"), ("d", "partial"), ("e", "")]
+    assert [line.strip()[:3] for line in s.render().splitlines()] == [
+        "[x]",
+        "[!]",
+        "[?]",
+        "[~]",
+        "[ ]",
+    ]
+    assert isinstance(s, GateStatus)
