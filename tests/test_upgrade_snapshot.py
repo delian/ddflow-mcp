@@ -279,7 +279,7 @@ def test_a_backup_with_a_damaged_manifest_is_listed_and_restoring_it_says_why_no
     (dest / BK.MANIFEST).write_text("{not json")
 
     assert BK.local_backups(old) == [dest.name]
-    with pytest.raises(ValueError):
+    with pytest.raises(LookupError, match="cannot be read"):
         BK.restore(old, "latest")
     assert A.upgrade(old, restore="latest", agent="upgrader").exit == 1
 
@@ -337,3 +337,47 @@ def test_a_dangling_link_is_not_mistaken_for_a_file_that_did_not_exist(old: Path
     snap = BK.make_snapshot(old, [link], "a", "b")
 
     assert "link" not in snap.created
+
+
+def test_a_snapshot_apply_prunes_the_local_backups_too(old: Path) -> None:
+    assert run_cli(old, "config", "--set", "upgrade.backup_keep", "1")[0] == 0
+    git(old, "add", "-A")
+    git(old, "commit", "-qm", "knob")
+    for n in range(3):
+        BK.make_backup(old, [old / DRIVER], "a", f"older{n}")
+
+    out = go(old, "hooks", backup="snapshot")
+
+    assert out["exit"] == 0, out["text"]
+    assert len(BK.local_backups(old)) == 1, "backup_keep applies in snapshot mode as well"
+
+
+def test_a_sidecar_whose_manifest_is_unreadable_is_still_a_sidecar(old: Path) -> None:
+    hook = old / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\n# ddflow-managed\n")
+    snap = BK.make_snapshot(old, [hook], "a", "b")
+    (Path(snap.local) / BK.MANIFEST).write_text("{broken")
+    for n in range(3):
+        BK.make_backup(old, [old / DRIVER], "a", f"later{n}")
+
+    removed = BK.prune(old, 1)
+
+    assert Path(snap.local).is_dir() and Path(snap.local).name not in removed
+    assert snap.local.endswith(BK.SIDECAR_SUFFIX) and BK.local_backups(old) != []
+
+
+def test_a_symlink_is_held_as_the_link_not_as_its_target(old: Path) -> None:
+    import os
+
+    target = old / "target.txt"
+    target.write_text("x\n")
+    git(old, "add", "-A")
+    git(old, "commit", "-qm", "target")
+    link = old / "link"
+    os.symlink("target.txt", link)
+    git(old, "add", "link")
+    git(old, "commit", "-qm", "link")
+
+    snap = BK.make_snapshot(old, [link], "a", "b")
+
+    assert snap.held == ("link",) and snap.created == ()
