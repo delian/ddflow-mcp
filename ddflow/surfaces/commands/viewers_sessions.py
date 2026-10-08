@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import sys
 
+from ...api import view_read
 from ...core import clock
 from ...services import session_view as V
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..render import emit_json
+from .viewers_search import view_head
 
 
 def add_session_view_parsers(sub) -> None:
@@ -32,43 +34,28 @@ def _day(ts: str) -> str:
 
 
 def cmd_session_list(a, c: Ctx) -> int:
-    try:
-        view = V.list_sessions(
-            c.log.read_all(), c.cfg, state=a.state, agent=a.owner, since=a.since, limit=a.limit
-        )
-    except V.SessionViewError as exc:
-        print(str(exc), file=sys.stderr)
-        return REFUSED
-    if c.json:
-        # The shape `task|phase|bug|research list --json` prints, so a consumer tells a
-        # page from the whole; the filter is echoed under the flag's own name.
-        body = {
-            "record_kind": "session",
-            "rows": view.rows,
-            "total": view.total,
-            "shown": len(view.rows),
-            "limit": view.limit,
-            "truncated": view.truncated,
-            "filters": {("owner" if k == "agent" else k): v for k, v in view.filters.items()},
-        }
-        emit_json(body)
-        return OK if view.rows else NOTHING
-    if not view.rows:
-        which = f" matching {view.filters}" if view.filters else ""
+    out = view_read(c.repo, "session", state=a.state, owner=a.owner, since=a.since, limit=a.limit)
+    # --json is the shape `task|phase|bug|research list --json` prints, so a consumer tells a
+    # page from the whole; the filter is echoed under the flag's own name.
+    if (done := view_head(c, out)) is not None:
+        return done
+    d = out.data
+    if not d["rows"]:
+        which = f" matching {d['filters']}" if d["filters"] else ""
         print(
             f"No sessions{which}. (Prompts recorded with no session are attached by "
             "`ddflow session adopt-orphans`.)"
         )
         return NOTHING
-    for r in view.rows:
+    for r in d["rows"]:
         flags = r["state"] + (", implicit" if r["implicit"] else "")
         span = f"{_day(r['started'])} .. {_day(r['ended']) if r['ended'] else 'now'}"
         print(
             f"  {r['id']:<22.22s} {r['agent']:<14.14s} {span}  "
             f"{r['prompts']}p {r['notes']}n {r['items']} item(s)  [{flags}]"
         )
-    if view.truncated:
-        print(f"\n(showing {len(view.rows)} of {view.total}; raise --limit, at most {V.MAX_LIMIT})")
+    if d["truncated"]:
+        print(f"\n(showing {len(d['rows'])} of {d['total']}; raise --limit, at most {V.MAX_LIMIT})")
     return OK
 
 
