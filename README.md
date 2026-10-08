@@ -3943,6 +3943,15 @@ edited, in settings hooks, git hooks, driver docs and instruction blocks; the pr
 text and a hand-edited region are left, and `ddflow doctor` proposes the change. The surface
 that runs the upgrade hands it the command and tool tables (`services.migrations.refs.provide`).
 
+`rules-to-events` (kinds `rules`, `log`) imports the project's rule files once: every
+`.ddflow/rules/<id>.toml` with no `rule` definition in the log becomes a `def.recorded` whose
+provenance says `via = import` and whose `source` is the file, and a file whose content
+differs by digest from its active record (a hand edit) becomes a `def.updated`. Timestamps
+are not content, a retired rule is left alone, a file that does not load is not imported (see
+`ddflow doctor`), and the files are not touched: it only appends events, so a second run finds
+nothing. Rules are recorded definitions from here on (decision D-unify 7); the files become a
+checked view in the slices that follow.
+
 ### Applying an upgrade
 
 `ddflow upgrade` (or `--plan`) only reads. `ddflow upgrade --apply` does what the plan lists
