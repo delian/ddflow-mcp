@@ -234,9 +234,11 @@ def test_a_positional_parameter_is_required_on_both_surfaces():
     cmd = Command(
         path=("x",),
         tool="ddflow_x",
-        params=(Param("file", positional=True), Param("other", positional=True, default="y")),
+        params=(Param("file", positional=True), Param("other", positional=True)),
     )
     assert cmd.input_schema()["required"] == ["file", "other"]
+    with pytest.raises(ValueError):
+        Param("p", positional=True, default="y")
     root = _root()
     add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
     with pytest.raises(SystemExit):
