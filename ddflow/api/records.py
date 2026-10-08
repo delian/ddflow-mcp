@@ -412,25 +412,29 @@ def record_add(
     return _as(out, kind, "add", rid)
 
 
+#: How `api.defs` ends a reason about a definition that is no longer active.
+_BRING_BACK = "; record it again to bring it back"
+
+
 def _named(kind: RecordKind, rid: str, reason: str) -> str:
     """``reason`` (worded by `api.defs` for a definition of the storage kind) in the record's
-    own name: a ``note`` filed as a ``skill`` definition says note, and ``revise`` brings
-    one back."""
-    dk, name = kind.def_kind, kind.name
-    swaps = [
-        ("record it again to bring it back", "revise it to bring it back"),
-        ("retiring a definition", f"retiring a {name}"),
-        ("definition id", f"{name} id"),
-    ]
-    if dk != name:
-        swaps = [
-            (f"{dk} definition", name),
-            (f"{dk} {rid!r}", f"{name} {rid!r}"),
-            (f"{dk} {rid}:", f"{name} {rid}:"),
-            *swaps,
-        ]
-    for old, new in swaps:
-        reason = reason.replace(old, new)
+    own name: a ``note`` filed as a ``skill`` definition says note, and ``revise`` brings one
+    back. Only the opening words and the closing clause of a known reason are rewritten,
+    never text inside the id."""
+    dk, name, q = kind.def_kind, kind.name, repr(rid)
+    heads = (
+        (f"no {dk} definition {q}", f"no {name} {q}"),
+        (f"{dk} {q} is ", f"{name} {q} is "),
+        (f"{dk} {rid}: ", f"{name} {rid}: "),
+        (f"definition id {q} ", f"{name} id {q} "),
+        ("retiring a definition ", f"retiring a {name} "),
+    )
+    for old, new in heads:
+        if reason.startswith(old):
+            reason = new + reason[len(old) :]
+            break
+    if reason.endswith(_BRING_BACK):
+        reason = reason[: -len(_BRING_BACK)] + "; revise it to bring it back"
     return reason
 
 

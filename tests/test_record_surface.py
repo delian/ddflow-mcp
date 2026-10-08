@@ -171,9 +171,16 @@ def test_the_answer_flags_are_those_of_dedupe_flags_with_the_same_help():
     assert mine == theirs
 
 
-def test_a_reason_for_a_missing_remove_reason_names_the_record(repo):
-    out = _tool().tool_entry()["api"](repo, {"verb": "remove", "id": "x"}, "ag")
-    assert out.exit == O.FAIL and "retiring a note" in out.reason and "definition" not in out.reason
+def test_remove_and_revise_need_a_reason_on_the_tool_as_they_do_on_the_cli(repo):
+    call = _tool().tool_entry()["api"]
+    for args in (
+        {"verb": "remove", "id": "x"},
+        {"verb": "revise", "id": "x", "title": "t", "reason": " "},
+    ):
+        with pytest.raises(ValueError, match="needs reason"):
+            call(repo, args, "ag")
+    with pytest.raises(SystemExit):  # argparse: --reason is required
+        _parser().parse_args(["note", "remove", "x"])
 
 
 def test_a_field_may_not_be_called_as_agent():

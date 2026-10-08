@@ -422,3 +422,20 @@ def test_a_reason_names_the_record_kind_not_the_kind_it_is_stored_as(repo):
     assert reasons[2] == "note 'alpha' is retired; revise it to bring it back"
     assert reasons[3] == "note beta: nothing changed"
     assert not [r for r in reasons if "skill" in r or "definition" in r], reasons
+
+
+def test_a_reason_is_rewritten_around_the_id_never_inside_it(repo):
+    for rid in (
+        "definition",
+        "definitions-v2",
+        "record it again to bring it back",
+        "skill definition",
+    ):
+        assert R.record_edit(repo, NOTE, rid, {"body": "x"}).reason == f"no note {rid!r}"
+        _add(repo, rid)
+        R.record_remove(repo, NOTE, rid, reason="done")
+        gone = R.record_edit(repo, NOTE, rid, {"body": "x"}).reason
+        assert gone == f"note {rid!r} is retired; revise it to bring it back"
+    assert R.record_remove(repo, NOTE, "x", reason=" ").reason == "retiring a note needs a reason"
+    bad = R.record_remove(repo, NOTE, "Bad Id!", reason="r").reason
+    assert bad.startswith("note id 'Bad Id!' ") and "definition" not in bad
