@@ -136,6 +136,7 @@ def release_umbrella(log: EventLog, st: State, parent: str, *, note: str) -> boo
     if not (holder and holder.lease):
         return False
     L.release(log, parent, note=note)
+    holder.lease = None  # a second child added in this batch finds nothing to release
     return True
 
 
@@ -161,7 +162,7 @@ def add_task(
     in the order its events have always had. ``st`` gains the new item so a caller adding
     several sees the earlier ones.
     """
-    if isinstance(dedupe, str) and not dedupe.strip():
+    if not hasattr(dedupe, "fields") and not (isinstance(dedupe, str) and dedupe.strip()):
         raise ValueError("add_task: dedupe is a settled check, or the reason there is none")
     bad = problem_of(draft) or missing_parent(st, draft.parent)
     if bad:

@@ -78,9 +78,10 @@ def test_add_task_refuses_what_the_adders_refuse(repo, draft, says):
     assert not _data(log, draft.id)
 
 
-def test_add_task_needs_the_check_or_the_reason_there_is_none(repo):
+@pytest.mark.parametrize("dedupe", [" ", "", None])
+def test_add_task_needs_the_check_or_the_reason_there_is_none(repo, dedupe):
     with pytest.raises(ValueError, match="reason"):
-        IT.add_task(_log(repo), State(), Config.load(repo), IT.TaskDraft("X"), dedupe=" ")
+        IT.add_task(_log(repo), State(), Config.load(repo), IT.TaskDraft("X"), dedupe=dedupe)
 
 
 def test_a_removed_id_comes_back_only_when_asked(repo):
@@ -126,10 +127,16 @@ def test_task_add_writes_its_shape_and_a_sub_task_releases_the_parents_lease(rep
 
 
 def test_split_children_inherit_and_the_umbrella_lets_go(repo):
+    from ddflow.services import leases as L
+
     A.task_add(repo, "T", title="big", globs="a/**", priority=5)
+    L.acquire(_log(repo), Config.load(repo), "T", worktree=str(repo), branch="b")
     out = A.split(repo, "T", into=["T.a=first", "T.b=second"], needs="Z")
     assert out.data["created"] == ["T.a", "T.b"]
     log = EventLog(repo)
+    released = [e for e in log.read_all() if e.kind == "lease.released" and e.subject == "T"]
+    assert len(released) == 1 and "split into T.a, T.b" in released[0].data["note"]
+    assert fold(log.read_all()).items["T"].lease is None
     assert _data(log, "T.a") == [
         {"parent": "T", "title": "first", "globs": ["a/**"], "needs": ["Z"], "priority": 5}
     ]
@@ -253,7 +260,7 @@ def _found(i: int, text: str) -> IM.Found:
     return IM.Found(kind="memory", ident=f"M-{i}", title="", source="m.md", body=text)
 
 
-@pytest.mark.parametrize("on_match", ["ask", "warn", "off"])
+@pytest.mark.parametrize("on_match", ["ask", "warn"])
 def test_the_harness_dedupe_is_the_old_one(monkeypatch, repo, on_match):
     monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", on_match)
     cfg = Config.load(repo)
@@ -263,6 +270,22 @@ def test_the_harness_dedupe_is_the_old_one(monkeypatch, repo, on_match):
         want_kept, want_dups = _oracle_harness(found, state, cfg)
         assert [f.ident for f in kept] == want_kept
         assert [(d.found.ident, d.of, d.score, d.identical, d.where) for d in dups] == want_dups
+
+
+def test_with_the_check_off_the_harness_dedupe_drops_nothing(monkeypatch, repo):
+    """Bug Be31dbdb811: the harness folded word-for-word copies of one batch even with
+    `[dedupe] on_match = "off"`, which the knob and the docstring say drops nothing."""
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "off")
+    found = [_found(i, t) for i, (t, _) in enumerate(_TEXTS)]
+    kept, dups = H.dedupe(found, _queue(), Config.load(repo))
+    assert [f.ident for f in kept] == [f.ident for f in found] and dups == []
+
+
+def test_records_with_no_text_are_not_copies_of_each_other(monkeypatch, repo):
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "ask")
+    blank = [{"id": "m1", "kind": "memory"}, {"id": "m2", "kind": "memory", "body": "  "}]
+    kept, reps = similar.screen(blank, None, Config.load(repo), fold_copies=True)
+    assert len(kept) == 2 and reps == []
 
 
 def test_screen_compares_batch_members_only_where_asked(monkeypatch, repo):
@@ -282,3 +305,25 @@ def test_screen_compares_batch_members_only_where_asked(monkeypatch, repo):
     st = _queue()
     clash = {**a, "id": "L1", "body": "something else entirely about release notes tooling"}
     assert similar.screen([clash], st, cfg, compare=lambda r, t: True)[1] == []
+
+
+def test_a_done_phase_stays_open_when_the_checks_refuse_one_of_its_tasks(repo):
+    log = _log(repo)
+    done = IM.Found(kind="phase", ident="P8", title="phase", source="docs/todo.md:1", done=True)
+    plan = IM.ImportPlan(found=[done, _task("fine", phase="P8"), _task("bad:id", phase="P8")])
+    IM.apply_import(repo, log, plan)
+    st = fold(log.read_all())
+    assert "fine" in st.items and "bad:id" not in st.items
+    assert st.items["P8"].state == "open"
+
+
+def test_adding_a_second_child_does_not_release_a_lease_twice(repo):
+    from ddflow.services import leases as L
+
+    log, cfg = _log(repo), Config.load(repo)
+    A.task_add(repo, "T", title="parent")
+    L.acquire(log, cfg, "T", worktree=str(repo), branch="b")
+    st = fold(log.read_all())
+    assert IT.release_umbrella(log, st, "T", note="n") is True
+    assert IT.release_umbrella(log, st, "T", note="n") is False
+    assert len([e for e in log.read_all() if e.kind == "lease.released"]) == 1

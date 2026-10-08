@@ -4364,7 +4364,7 @@ Every evaluation that finds a condition met is an event: `trigger.fired` (with t
 it filed, the key, the hop and the definition's digest) or `trigger.suppressed` with the
 reason -- `disabled`, `debounce`, `cooldown`, `open` (the key's remediation is still open),
 `max_open`, `hop_limit`, `breaker`, `item_refused` (the item it would file fails the checks every
-new task passes, e.g. `action.phase` names no phase: nothing is filed, the detail says why) or
+new task passes, e.g. `action.phase` names no phase: nothing is filed, the detail says why; a `--dry-run` does not predict it) or
 `global_cap` (at most `[triggers].max_fires_per_hour`
 fires in any rolling hour across every trigger: default 10, an integer from 0 to 200, the
 fire history the log keeps; 0 stops every trigger without disabling one; a bad value in a
