@@ -93,8 +93,8 @@ def test_the_last_release_is_the_newest_release_commit_or_tag(repo: Path) -> Non
     git(repo, "tag", "v0.1.9")  # a tag publishes out of band, and is newer than the commit
     assert RI.last_release(repo) == ("v0.1.9", "0.1.9")
     older = git(repo, "rev-parse", "HEAD~2").strip()
-    git(repo, "tag", "v0.1.99", older)  # an OLDER commit's tag does not win by name alone
-    assert RI.last_release(repo)[0] != "v0.1.99" or RI.last_release(repo)[1] == "0.1.99"
+    git(repo, "tag", "v0.1.99", older)  # an OLDER commit's tag does not win by its number
+    assert RI.last_release(repo) == ("v0.1.9", "0.1.9")
 
 
 # -- the level ----------------------------------------------------------------------------
@@ -165,7 +165,7 @@ def test_next_version(version: str, level: str, want: str) -> None:
 
 
 def test_next_version_refuses_what_it_cannot_number() -> None:
-    for bad in (("0.1", "patch"), ("0.1.5", "major"), ("x", "minor")):
+    for bad in (("0.1", "patch"), ("0.1.5", "huge"), ("x", "minor")):
         with pytest.raises(ValueError):
             RI.next_version(*bad)
 
@@ -187,6 +187,13 @@ def test_a_patch_is_enough_without_a_breaking_change(repo: Path) -> None:
     fragment(repo, "a", "additive")
     declared(repo, "0.1.6")
     assert RI.check(None, repo)[0] is True
+
+
+def test_bump_sh_numbers_through_the_same_function_as_ci() -> None:
+    text = (ROOT / "scripts" / "bump.sh").read_text()
+    assert 'release_impact.py next "$CUR" "$WHAT"' in text
+    assert "int(b) for b in bits" not in text, "a second definition of the arithmetic"
+    assert RI.next_version("0.1.5", "major") == "1.0.0"
 
 
 def test_the_command_line_numbers_a_version() -> None:
@@ -222,6 +229,9 @@ def test_publish_bumps_by_the_declared_impact_not_always_by_patch() -> None:
     assert 'release_impact.py next "$next" patch' in gate
     assert "uv run python" not in gate, "uv run without --frozen could rewrite uv.lock"
     assert 'c + 1}")\' "$next"' not in gate, "the hard-coded patch increment is gone"
+    # a version published as declared must be a big enough step; a failing `base` is not a patch
+    assert gate.count("declared_ok") >= 3 and "release_impact.py check" in gate
+    assert "could not find the last release" in gate
 
 
 def test_release_sh_checks_the_impact_and_the_surface_before_the_suite() -> None:

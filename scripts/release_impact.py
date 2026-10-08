@@ -19,7 +19,9 @@ release an entry sits in: cutting a version moves fragments into a release block
 make the same breaking entry count a second time (or never). The last release is the newest
 of the latest `release X.Y.Z` commit the publish workflow makes and the latest `v*` tag.
 
-Stdlib and `ddflow.services.upgrade_manifest` only; it runs in CI before anything is built.
+Stdlib only for `base` and `next` (`scripts/bump.sh` calls `next` with the system python); the
+manifest comparisons import `ddflow.services.upgrade_manifest`. It runs in CI before anything
+is built.
 """
 
 from __future__ import annotations
@@ -29,17 +31,29 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ddflow.services.upgrade_manifest import Change, Manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ddflow.core.events import version_key  # noqa: E402
-from ddflow.services import upgrade_manifest as UM  # noqa: E402
-
 MANIFEST_DIR = "ddflow/templates/upgrade"
-PATCH, MINOR = "patch", "minor"
+PATCH, MINOR, MAJOR = "patch", "minor", "major"
 _RELEASE_SUBJECT = re.compile(r"^release (\d+\.\d+\.\d+)$")
 _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+
+def _um():
+    from ddflow.services import upgrade_manifest
+
+    return upgrade_manifest
+
+
+def _vkey(version: str) -> tuple[int, ...]:
+    m = _VERSION.match(version)
+    return tuple(int(x) for x in m.groups()) if m else ()
 
 
 def _git(*argv: str, cwd: Path | None = None) -> str:
@@ -60,10 +74,14 @@ def last_release(cwd: Path | None = None) -> tuple[str, str] | None:
         if m:
             found.append((sha, m.group(1)))
             break
-    tags = _git("tag", "--merged", "HEAD", "--list", "v[0-9]*", cwd=cwd).split()
-    tags = sorted((t for t in tags if _VERSION.match(t[1:])), key=lambda t: version_key(t[1:]))
-    if tags:
-        found.append((tags[-1], tags[-1][1:]))
+    try:
+        tag = _git(
+            "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD", cwd=cwd
+        ).strip()
+    except RuntimeError:  # no tag is reachable from HEAD
+        tag = ""
+    if _VERSION.match(tag[1:]):
+        found.append((tag, tag[1:]))
     if not found:
         return None
     # Of the two, the one that is NOT an ancestor of the other is the later release.
@@ -77,10 +95,11 @@ def last_release(cwd: Path | None = None) -> tuple[str, str] | None:
     return best
 
 
-def manifest_at(ref: str | None, cwd: Path | None = None) -> UM.Manifest:
+def manifest_at(ref: str | None, cwd: Path | None = None) -> Manifest:
     """The upgrade manifest, with its unreleased fragments, as it was at ``ref`` (the working
     tree when ``ref`` is None)."""
     where = cwd or ROOT
+    UM = _um()
     if ref is None:
         return UM.load(where / MANIFEST_DIR / "changes.toml")
     text = _git("show", f"{ref}:{MANIFEST_DIR}/changes.toml", cwd=cwd)
@@ -91,7 +110,7 @@ def manifest_at(ref: str | None, cwd: Path | None = None) -> UM.Manifest:
     return UM.parse(text, frags)
 
 
-def _identity(c: UM.Change) -> tuple:
+def _identity(c: Change) -> tuple:
     """What an entry IS, apart from the release block it sits in."""
     return (
         c.kind,
@@ -105,13 +124,13 @@ def _identity(c: UM.Change) -> tuple:
     )
 
 
-def gained(base: UM.Manifest, now: UM.Manifest) -> list[UM.Change]:
+def gained(base: Manifest, now: Manifest) -> list[Change]:
     """The entries ``now`` has that ``base`` did not, wherever they sit."""
     before = {_identity(c) for c in base.changes()}
     return [c for c in now.changes() if _identity(c) not in before]
 
 
-def level_of(changes: list[UM.Change], version: str) -> str:
+def level_of(changes: list[Change], version: str) -> str:
     """``minor`` when any change is declared breaking and ``version`` is a 0.x release (the
     contract's rule), else ``patch``."""
     breaking = any(c.impact == "breaking" for c in changes)
@@ -124,11 +143,13 @@ def next_version(version: str, level: str) -> str:
     if not m:
         raise ValueError(f"{version!r} is not X.Y.Z")
     a, b, c = (int(x) for x in m.groups())
+    if level == MAJOR:
+        return f"{a + 1}.0.0"
     if level == MINOR:
         return f"{a}.{b + 1}.0"
     if level == PATCH:
         return f"{a}.{b}.{c + 1}"
-    raise ValueError(f"unknown level {level!r}: patch or minor")
+    raise ValueError(f"unknown level {level!r}: patch, minor or major")
 
 
 def level_since(ref: str | None = None, cwd: Path | None = None) -> str:
@@ -173,7 +194,7 @@ def check(ref: str | None = None, cwd: Path | None = None) -> tuple[bool, str]:
     ref, released = last
     level = level_since(ref, cwd)
     declared = declared_version(cwd)
-    if level == PATCH or version_key(declared) >= version_key(next_version(released, MINOR)):
+    if level == PATCH or _vkey(declared) >= _vkey(next_version(released, MINOR)):
         return True, f"{declared} after {released}: the declared impact needs a {level} step"
     return False, (
         f"the manifest declares a BREAKING change since {released}, which is a minor release "
@@ -203,7 +224,7 @@ def main(argv: list[str]) -> int:
         else:
             print(__doc__, file=sys.stderr)
             return 2
-    except (RuntimeError, ValueError, UM.ManifestError) as exc:
+    except (RuntimeError, ValueError) as exc:  # a ManifestError is a ValueError
         print(f"release_impact: {exc}", file=sys.stderr)
         return 1
     return 0
