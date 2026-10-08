@@ -4600,16 +4600,16 @@ previous one turned out to be too shallow:
 
 A fourth ratchet bounds the cost of that surface: the whole tool list is sent to the model
 on every session, so `tests/test_mcp_tool_budget.py` fails if the compact `tools/list`
-exceeds its byte budget (about 91 KB for 92 tools, down from 119 KB) or if the shared
+exceeds its byte budget (about 91 KB for the whole list, down from 119 KB) or if the shared
 `as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
 Their full text lives once, in `ddflow_identify` and the handshake instructions.
 
 **Tool tiers.** A client that loads every tool schema up front still pays that ~91 KB, so
 `[mcp].tools = "core" | "standard" | "all"` (env `DDFLOW_MCP_TOOLS`; default `all`) chooses
-which tools `tools/list` advertises: `core` is 32 tools, 38 KB (the daily loop: brief, next,
+which tools `tools/list` advertises: `core` is 38 KB (the daily loop: brief, next,
 claim, heartbeat, gates, complete, merge, status, show, recall, bugs, lessons, decisions,
 sessions, identify, task add/update, wait, review, help, pr sync, similar, setup), `standard`
-is 64 tools, 66 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
+is 66 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
 before. It is a start-time choice and only about what is listed: a tool outside the tier is
 **still callable by name**, `ddflow_help` and the connection instructions say what the tier
 hides and how to widen it, and `listChanged` stays false, so change the knob and restart the
@@ -4630,6 +4630,132 @@ paragraph so the client can decode it again helps nobody. But `decision add` ret
 JSON while `task add` returned prose for no reason either could state. Each prose tool
 now carries its justification as the `prose_reason` of its declaration in
 `ddflow/surfaces/exemptions.py`.
+
+### All MCP tools
+
+The table is generated from the tool registry itself (`uv run python -m
+ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by hand unless
+given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
+drift. The groups are the ones `ddflow help` prints.
+
+<!-- ddflow:begin README/tools sha=15bd7afc5097 -->
+<details><summary>All 110 MCP tools: 32 in the `core` tier, 77 in `standard`</summary>
+
+| Group | Tool | Tier | What it does |
+|---|---|---|---|
+| Setting up | `ddflow_companions` | standard | Which companion MCP servers serve this project's gates, which are installed, which an agent launches. |
+| Setting up | `ddflow_companions_add` | all | WRITES the agent config: registers companion MCP servers that are ALREADY installed (exit 3 for one that is… |
+| Setting up | `ddflow_companions_verify` | all | Launch MCP companions and require a JSON-RPC answer to `initialize`. |
+| Setting up | `ddflow_configure` | standard | Read or write .ddflow/config.toml (WRITES). |
+| Setting up | `ddflow_hooks` | all | Inspect or install the enforcement git hook — the one layer of this workflow that does not depend on the… |
+| Setting up | `ddflow_identify` | core | Declare WHO you are on this connection before anything that writes. |
+| Setting up | `ddflow_onboard` | standard | The onboarding stages in one call: status (standing drift report), preflight, legacy, memory, test-gate… |
+| Setting up | `ddflow_precommit` | all | A .pre-commit-config.yaml proposed for THIS repository: its stacks (Python, shell, Docker, JS, Go, Rust… |
+| Setting up | `ddflow_prompts` | all | Inspect the prompt templates this project uses and where each comes from (shipped, project override, or… |
+| Setting up | `ddflow_rule_add` | standard | Add a project rule; duplicate-checked like every add (answer new \| extends:ID \| duplicate_of:ID \| related:ID). |
+| Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
+| Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
+| Setting up | `ddflow_rule_remove` | standard | Delete a rule and regenerate the DDFLOW.md manifest. |
+| Setting up | `ddflow_rule_search` | standard | Search rules by title or content, ranked by relevance, for an area or topic. |
+| Setting up | `ddflow_rule_show` | standard | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
+| Setting up | `ddflow_setup` | core | Install ddflow into this repository: creates .ddflow/, writes the driver and the AGENTS.md section, and… |
+| The rules this project runs by | `ddflow_flow_choose` | all | Record a workflow choice for this project, attributed to you, with a reason the next agent will read. |
+| The rules this project runs by | `ddflow_flow_show` | standard | How THIS project works: its branching model, release lines, and every workflow choice (model, integration… |
+| The rules this project runs by | `ddflow_workflow` | all | The rules THIS project runs by, in one answer: the gates every task and phase passes in order, the… |
+| The rules this project runs by | `ddflow_workflow_drop` | all | Take a gate out of every pipeline -- task, phase and promotion -- and out of `required`, so it does not… |
+| The rules this project runs by | `ddflow_workflow_gate` | all | Define or change one gate, optionally in a pipeline. |
+| The rules this project runs by | `ddflow_workflow_pipeline` | all | Set the ordered list of gates a task or a phase must pass. |
+| The rules this project runs by | `ddflow_workflow_state` | standard | One-call project overview: workflow, rules, decisions, active work, queue and bugs with names and… |
+| Shaping the work | `ddflow_external_sync` | all | Observe the items in SIBLING repositories that this queue depends on (`needs = ['run_nemo_run:132.D']`… |
+| Shaping the work | `ddflow_import` | all | For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons… |
+| Shaping the work | `ddflow_import_verify` | all | Was this project's history imported, is that still true, and did anyone FINISH it? |
+| Shaping the work | `ddflow_phase_add` | standard | Add a phase to the queue. |
+| Shaping the work | `ddflow_remove` | standard | Take an item out of the queue. |
+| Shaping the work | `ddflow_resolve` | standard | Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a… |
+| Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
+| Shaping the work | `ddflow_task_add` | core | Add a task to a phase. |
+| Shaping the work | `ddflow_update` | core | Change an item's fields. |
+| Doing the work | `ddflow_abandon` | standard | Stop work on an item without completing it, with a reason. |
+| Doing the work | `ddflow_block` | standard | Mark an item blocked on something outside the queue — a decision, an upstream outage, an operator question. |
+| Doing the work | `ddflow_claim` | core | Lease an item and create its isolated git worktree. |
+| Doing the work | `ddflow_complete` | core | Finish an item. |
+| Doing the work | `ddflow_heartbeat` | core | Renew the lease on an item. |
+| Doing the work | `ddflow_job_add` | all | Register a long-running process you started some other way (torchrun, a launcher script), by pid, while it… |
+| Doing the work | `ddflow_job_end` | all | Record that a job ended and how. |
+| Doing the work | `ddflow_job_list` | all | Long-running jobs and their LIVE status: running, exited (with the exit code its log recorded), gone… |
+| Doing the work | `ddflow_job_run` | all | Launch a LONG-RUNNING command for an item (a training run, a data generation, a model server) detached into… |
+| Doing the work | `ddflow_next` | core | What may be started RIGHT NOW, and for everything that may not, the reason. |
+| Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
+| Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
+| Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
+| Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
+| Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
+| Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
+| Gates and review | `ddflow_gate_skip` | core | Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. |
+| Gates and review | `ddflow_gate_status` | core | Where an item stands in its quality pipeline, which gate is next, and the instruction for that gate. |
+| Gates and review | `ddflow_gate_verify` | core | Break what a gate guards and require it to NOTICE: applies each mutation registered on the gate, runs it… |
+| Gates and review | `ddflow_pins` | all | BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt… |
+| Gates and review | `ddflow_review` | core | Run the configured cross-family reviewer over an item's diff and record the result: the critic gate… |
+| Gates and review | `ddflow_review_triage` | standard | Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that… |
+| Gates and review | `ddflow_reviewers_detect` | all | Probe well-known local ports for an OpenAI-compatible model server (ollama, vLLM, LM Studio, llama.cpp… |
+| Gates and review | `ddflow_reviewers_list` | standard | Show the configured reviewers, their families and which gates they serve. |
+| Gates and review | `ddflow_tests` | standard | AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly… |
+| Landing it | `ddflow_cleanup` | standard | Classify every ddflow worktree and branch: merged (safe to remove), unmerged (carries commits nobody… |
+| Landing it | `ddflow_merge` | core | Land an item's branch without ever switching a checkout's branch. |
+| Landing it | `ddflow_pr_status` | standard | Every item's pull request as last recorded — review, checks, target, rounds of changes and when it was last… |
+| Landing it | `ddflow_pr_sync` | core | Ask the forge (GitHub/GitLab) what reviewers did with every request in REVIEW and record it: a merged… |
+| Landing it | `ddflow_pr_threads` | standard | An item's review threads, read live from the forge. |
+| Landing it | `ddflow_promote_add` | all | File a PROMOTION to an environment branch ([flow].environments): a task that merges the branch immediately… |
+| Landing it | `ddflow_promote_deployed` | all | Record the sha a deploy put LIVE in an environment (from the deploy hook); promote_status then shows what… |
+| Landing it | `ddflow_promote_status` | all | Each environment: head, commits behind its upstream, open promotion, auto_promote, and the live (deployed)… |
+| Landing it | `ddflow_version_cut` | all | Tag the next version. |
+| Landing it | `ddflow_version_show` | standard | The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the release branch), the next one, the… |
+| What the project remembers | `ddflow_bug_file_tasks` | all | File a fix task for every open bug that has none (one-shot after an upgrade; `ddflow_bug_found` files one… |
+| What the project remembers | `ddflow_bug_fixed` | core | Close a bug. |
+| What the project remembers | `ddflow_bug_found` | core | Report a bug the moment you find it, BEFORE fixing it. |
+| What the project remembers | `ddflow_bug_invalid` | core | Close a bug as a FALSE finding -- nothing was broken, so nothing was fixed. |
+| What the project remembers | `ddflow_decision_add` | core | Record an architectural decision so the project stays consistent and the reasoning survives: HOW the… |
+| What the project remembers | `ddflow_decision_applicable` | standard | The architectural decisions that govern a specific item's declared files. |
+| What the project remembers | `ddflow_decision_list` | standard | Every architectural decision in force. |
+| What the project remembers | `ddflow_decision_show` | standard | Read ONE architectural decision in full — its context, what was decided, the consequences, and what was… |
+| What the project remembers | `ddflow_decision_supersede` | standard | Mark a decision replaced by a newer one. |
+| What the project remembers | `ddflow_dupes` | standard | 'IS ANYTHING FILED TWICE?' -- the near-duplicate PAIRS already in the log, skipping pairs already linked or… |
+| What the project remembers | `ddflow_lesson_add` | core | Record a lesson so it is never re-learned. |
+| What the project remembers | `ddflow_lesson_search` | standard | Search past lessons by relevance (BM25). |
+| What the project remembers | `ddflow_lesson_verify` | all | Re-scan every lesson that declared a code `pattern` and report the sites where it has REAPPEARED. |
+| What the project remembers | `ddflow_link` | standard | Settle a near-duplicate pair: say how record `subject` relates to record `target`. |
+| What the project remembers | `ddflow_memory_add` | standard | Remember ONE operational fact about this machine, repository or working state ('this box has 8 H200s', 'use… |
+| What the project remembers | `ddflow_memory_forget` | all | Stop believing a memory that is no longer true. |
+| What the project remembers | `ddflow_memory_list` | standard | The project's operational memories, newest first -- or ranked against `query`. |
+| What the project remembers | `ddflow_recall` | core | 'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons… |
+| What the project remembers | `ddflow_research_add` | standard | Record a research finding. |
+| What the project remembers | `ddflow_session_end` | core | Close a session with a summary of what it achieved. |
+| What the project remembers | `ddflow_session_note` | core | Record something that happened during a session which is neither an operator prompt nor a decision — a… |
+| What the project remembers | `ddflow_session_prompt` | core | Record the operator's prompt verbatim. |
+| What the project remembers | `ddflow_session_start` | core | Open a session for provenance logging. |
+| What the project remembers | `ddflow_similar` | core | 'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson… |
+| Looking at it | `ddflow_board` | standard | The whole work queue as a readable board, with the critical path. |
+| Looking at it | `ddflow_brief` | core | START HERE every session. |
+| Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
+| Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
+| Looking at it | `ddflow_list` | standard | Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. |
+| Looking at it | `ddflow_progress` | standard | What work has ACTUALLY been done, aggregated from the event log: attempts per item, wall-clock held, gate… |
+| Looking at it | `ddflow_render` | standard | Regenerate the human-readable markdown views (queue, lessons, the one-paragraph lessons summary, research)… |
+| Looking at it | `ddflow_show` | core | Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared globs, the… |
+| Looking at it | `ddflow_status` | core | The state of the whole project in one answer: how many tasks are done and which, what is in flight and who… |
+| Looking at it | `ddflow_verify` | standard | Re-check a done task's claims; fails if one does not hold. |
+| When something is wrong | `ddflow_bisect` | all | Which earlier test file makes `victim` fail only in full-suite order? |
+| When something is wrong | `ddflow_cadence` | all | Which periodic whole-repo passes are due — integration tests, architecture review, mutation testing, dedupe… |
+| When something is wrong | `ddflow_doctor` | standard | Integrity and health check: log corruption, dependency cycles, unknown dependencies, orphaned worktrees… |
+| When something is wrong | `ddflow_loops` | all | Detect circular references and runtime loops: dependency cycles, an item claimed and given up over and over… |
+| When something is wrong | `ddflow_rebuild` | all | Re-derive the search index from the event log. |
+| When something is wrong | `ddflow_recover` | standard | Find work left behind by a crashed agent: expired leases, orphaned worktrees, items stuck running. |
+| When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
+| When something is wrong | `ddflow_upgrade` | all | What upgrading this project to the running ddflow would change, by category: data repairs, config (new… |
+| Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
+
+</details>
+<!-- ddflow:end README/tools -->
 
 ---
 
