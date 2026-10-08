@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..vocabulary import current_vocabulary
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -97,7 +98,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "unknown dependencies, orphaned worktrees, stale index."
         ),
         "properties": {},
-        "api": lambda repo, a, agent: _api().doctor(repo, agent=agent),
+        "api": lambda repo, a, agent: _api().doctor(
+            repo, agent=agent, vocabulary=current_vocabulary()
+        ),
         # PROSE, as it has always been: a list of problems with advice attached is
         # what an operator and an agent both want, and `views/human.py` renders it once
         # for both.

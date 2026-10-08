@@ -39,6 +39,11 @@ from typing import Any
 
 from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
 
+# The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
+# this module routes between them. Every name below is re-exported so imports of
+# `ddflow.surfaces.mcp.<name>` keep working.
+from . import cli as _cli  # noqa: F401  (registers the command table for `doctor`)
+
 # The protocol engine -- revisions, negotiation, the modern envelope, multi round-trip --
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
 from . import mcp_protocol as protocol
@@ -61,10 +66,6 @@ from .mcp_protocol import err as _err
 from .mcp_protocol import modern_check as _modern_check
 from .mcp_protocol import modernize as _modernize
 from .mcp_protocol import ok as _ok
-
-# The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
-# this module routes between them. Every name below is re-exported so imports of
-# `ddflow.surfaces.mcp.<name>` keep working.
 from .tools import ADD_TOOLS, DEDUPE_PROPERTIES, TOOLS  # noqa: F401
 from .tools._common import (  # noqa: F401
     _AGENT_KEYS,
