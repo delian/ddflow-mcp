@@ -531,3 +531,13 @@ def test_the_legacy_unstamped_driver_is_refreshed_and_stamped(old: Path) -> None
 
     assert AD._driver_region(DRIVER).owns((old / DRIVER).read_text())
     assert not (old / (DRIVER + ".local-edits")).exists()
+
+
+def test_a_missing_rules_file_is_summarised_as_missing_not_as_an_edit(old: Path) -> None:
+    _adopted_old(old)
+    (old / "AGENTS.md").unlink()
+
+    item = next(i for i in plan(old)["categories"]["instructions"] if i["path"] == "AGENTS.md")
+
+    assert item["provenance"] == "missing" and item["action"] == UP.AGENT
+    assert "hand-edited" not in item["summary"] and ".local-edits" not in item["summary"]
