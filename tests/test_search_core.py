@@ -55,11 +55,10 @@ def test_bm25_is_the_formula_skills_used():
 
 def test_rrf_fuses_rankings_and_ties_break_by_id():
     from ddflow.services.searchcore import rrf
-    from ddflow.services.searchcore.rank import best_first
 
     fused = rrf([["a", "b", "c"], ["b", "a"]])
     assert fused["a"] == fused["b"] > fused["c"]
-    assert best_first(fused) == ["a", "b", "c"]
+    assert sorted(fused, key=lambda i: (-fused[i], i)) == ["a", "b", "c"]
     assert rrf([]) == {}
 
 
