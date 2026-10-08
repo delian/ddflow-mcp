@@ -10,6 +10,7 @@ from typing import Any
 from ...core import outcome as O
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, DONE, REVIEW, State, fold
+from ...services import gates as G
 from ...services import leases as L
 from .._base import _load
 from ._common import _require
@@ -159,6 +160,7 @@ def complete(
     )
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
+    extra.update(_refuted_extra(st, item))
     from ...services import progress_line as PL
 
     # The item is complete and released by now: a report that cannot be built must
@@ -180,6 +182,12 @@ def complete(
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _refuted_extra(st: State, item: str) -> dict[str, Any]:
+    """D-unify 5: a gate passed on refutation is never silent in the completion result."""
+    flagged = G.refuted_passes(st, [item])
+    return {"refuted_passes": [G.refuted_line(r) for r in flagged]} if flagged else {}
 
 
 def _umbrella_children(st: State, it) -> list[str]:
