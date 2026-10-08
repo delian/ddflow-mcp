@@ -23,8 +23,8 @@ from ..services.guidance.similarity import similar
 from ..services.guidance.store import GuidanceFiles
 from ..services.rules import Rule, RulesStorage
 from ..services.searchcore import SearchError, check_regex
-from . import defs as ADEFS
 from ._base import _load
+from .defs import def_record_unchecked, def_retire, def_update
 
 DEFAULT_RULE_PRIORITY = 50
 
@@ -345,11 +345,11 @@ def _record_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> 
         if known is not None and known.live:
             if D.same(DF.logged(fields, log_cfg[1]), known.digest):
                 return outcome  # a re-save that changed no content (a timestamp is not content)
-            res = ADEFS.def_update(
+            res = def_update(
                 repo, RULE.kind, rule_id, fields, source=source, provenance=prov, agent=agent
             )
         else:  # new, or brought back after a removal
-            res = ADEFS.def_record_unchecked(
+            res = def_record_unchecked(
                 repo, RULE.kind, rule_id, fields, source=source, provenance=prov, agent=agent
             )
     except Exception as exc:
@@ -364,7 +364,7 @@ def _retire_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> 
         known = _load(repo, agent)[2].defs.get(D.key(RULE.kind, rule_id))
         if known is None or not known.live:
             return outcome
-        res = ADEFS.def_retire(repo, RULE.kind, rule_id, reason="the rule was removed", agent=agent)
+        res = def_retire(repo, RULE.kind, rule_id, reason="the rule was removed", agent=agent)
     except Exception as exc:
         return _unrecorded(outcome, str(exc))
     return outcome if res.exit in (O.OK, O.NOTHING) else _unrecorded(outcome, res.reason)
@@ -372,11 +372,11 @@ def _retire_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> 
 
 def _unrecorded(outcome: O.Outcome, why: str) -> O.Outcome:
     """``outcome`` plus the fact that the rule file was written and the log could not say so."""
-    outcome.data["unrecorded"] = (
+    note = (
         f"the rule file was written but not recorded in the log ({why}); "
         f"`ddflow upgrade` records it"
     )
-    return outcome
+    return dataclasses.replace(outcome, data={**outcome.data, "unrecorded": note})
 
 
 def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") -> O.Outcome:
