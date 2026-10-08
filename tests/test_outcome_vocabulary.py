@@ -278,3 +278,83 @@ def test_the_exit_literal_scan_sees_every_spelling(line: str, tmp_path: Path, mo
     (pkg / "mod.py").write_text(line + "\n")
     monkeypatch.setattr(sys.modules[__name__], "PKG", pkg)
     assert _exit_literals() == ["mod.py:1"]
+
+
+# -- services return a named verdict, not a bare (int, str) -----------------------------
+
+
+def test_verdict_is_a_tuple_with_named_parts() -> None:
+    from ddflow.core.outcome import FAIL, Verdict
+
+    v = Verdict(FAIL, "why")
+    assert v == (1, "why") and (v.exit, v.message) == (1, "why")
+    assert Verdict(0) == (0, "")
+    code, msg = v
+    assert (code, msg) == (1, "why")
+
+
+def test_enforce_checks_return_verdicts(repo: Path) -> None:
+    from ddflow.services import enforce as E
+
+    for got in (
+        E.check_commit(repo),
+        E.check_views(repo),
+        E.check_docs(repo),
+        E.check_forbidden_trailers("s\n", []),
+    ):
+        assert type(got).__name__ == "Verdict" and got.exit in (0, 1, 2, 3)
+
+
+def test_enforce_names_its_exit_codes() -> None:
+    """No `return 1, msg` or `return (1, msg)`, however spaced: a check's exit comes from
+    core/outcome, so 2 cannot be typed as 0. And no check is annotated as a bare
+    (int, str) tuple."""
+    tree = ast.parse((PKG / "services" / "enforce.py").read_text())
+    checks = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name.startswith(("check_", "_check_", "_verdict"))
+    ]
+    assert len(checks) >= 6
+    bare = [
+        r.lineno
+        for fn in checks
+        for r in ast.walk(fn)
+        if isinstance(r, ast.Return)
+        and isinstance(r.value, ast.Tuple)
+        and r.value.elts
+        and isinstance(r.value.elts[0], ast.Constant)
+        and isinstance(r.value.elts[0].value, int)
+    ]
+    bare += [
+        c.lineno
+        for fn in checks
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call)
+        and ast.unparse(c.func) == "Verdict"
+        and c.args
+        and isinstance(c.args[0], ast.Constant)
+    ]
+    assert not bare, f"literal exit codes at lines {bare}; return Verdict(OK|FAIL|NOTHING, ...)"
+
+    def is_int_str_tuple(node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Subscript)
+            and ast.unparse(node.value) in ("tuple", "Tuple", "typing.Tuple")
+            and ast.unparse(node.slice).replace(" ", "") == "int,str"
+        )
+
+    tupled = [
+        fn.name
+        for fn in checks
+        if fn.returns is not None and any(is_int_str_tuple(n) for n in ast.walk(fn.returns))
+    ]
+    assert not tupled, f"{tupled} return a bare (int, str); return Verdict"
+
+
+def test_classify_exit_returns_gate_outcomes() -> None:
+    from ddflow.core.records import GateOutcome
+    from ddflow.services.gates import GateDef, classify_exit
+
+    got = classify_exit(GateDef(id="g"), 0, "")
+    assert got == ("passed", "") and got.outcome is GateOutcome.PASSED

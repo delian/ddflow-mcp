@@ -54,12 +54,13 @@ from collections.abc import Callable, Iterable, Mapping  # noqa: F401
 from dataclasses import dataclass, field, fields  # noqa: F401
 from datetime import UTC, datetime  # noqa: F401
 from pathlib import Path  # noqa: F401
-from typing import Any  # noqa: F401
+from typing import Any, NamedTuple  # noqa: F401
 
 from ...config import Config, _is_code_tree  # noqa: F401
 from ...core.bookkeeping import STATE_EXCLUDE, is_state  # noqa: F401
 from ...core.digest import content_digest, hasher  # noqa: F401
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
+from ...core.records import GateOutcome  # noqa: F401
 from ...infra import fsio  # noqa: F401
 from ...infra import git as GIT  # noqa: F401
 from ...infra import proc as P  # noqa: F401
@@ -151,6 +152,7 @@ from .runner import (  # noqa: F401
     _SHELL_META,
     KEEP_RUN_LOGS,
     RUNS_DIR,
+    Classified,
     _account_for_drift,
     _looks_like_not_found,
     _missing_executable,
