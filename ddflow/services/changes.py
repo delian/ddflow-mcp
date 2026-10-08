@@ -23,8 +23,8 @@ Two answers, for two situations:
   unstaged and untracked -- optionally narrowed to a glob set. None when git cannot say:
   "could not tell" is never "nothing changed".
 
-- `changed_paths` / `base_changed`: what differs from a base -- committed, staged, in the
-  work tree, untracked -- as the ONE answer every "changed against the base" caller reads
+- `changed_paths` / `base_changed`: what differs from a base -- committed, staged, tracked,
+  untracked -- as the ONE answer every "changed against the base" caller reads
   (decision D-unify). A rename counts as both its paths unless the caller asks for git's
   own rename detection. None / None when git cannot say: "could not tell" is never
   "nothing changed".
@@ -202,7 +202,7 @@ def changed_since(
 
 
 #: The four places a change can be, in the order `changed_paths` reads them.
-KINDS = ("committed", "staged", "worktree", "untracked")
+KINDS = ("committed", "staged", "tracked", "untracked")
 
 
 def changed_paths(
@@ -221,7 +221,7 @@ def changed_paths(
 
     ``include`` picks from `KINDS`: ``committed`` (``base`` to ``tip``: with ``fork``, what
     ``tip`` did since it left ``base``, git's ``base...tip``; without, the two commits
-    compared as they are), ``staged`` (the index against HEAD), ``worktree`` (tracked
+    compared as they are), ``staged`` (the index against HEAD), ``tracked`` (tracked
     files, staged or not, against HEAD) and ``untracked`` (not ignored). The default is
     every kind that applies: ``committed`` only when a ``base`` is given, and the three
     tree kinds only when ``tip`` is HEAD. A rename is both its old and its new path
@@ -241,7 +241,7 @@ def changed_paths(
             root, *pre, *diff, *([f"{base}...{tip}"] if fork else [base, tip]), *tail
         ),
         "staged": lambda: G.paths(root, *pre, "diff", "--cached", *flags, *tail),
-        "worktree": lambda: G.paths(root, *pre, *diff, "HEAD", *tail),
+        "tracked": lambda: G.paths(root, *pre, *diff, "HEAD", *tail),
         "untracked": lambda: G.files(root, "untracked", pathspec=tuple(spec), literal=literal),
     }
     found = [queries[k]() for k in kinds]

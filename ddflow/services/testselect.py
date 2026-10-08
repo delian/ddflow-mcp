@@ -105,7 +105,7 @@ def changed_files(tree: Path, base: str) -> list[str] | None:
     and untracked. None when git cannot answer — never an empty "nothing changed"."""
     # A rename is its OLD path too (`changed_paths` default): the old module's importers
     # are the ones a rename breaks.
-    return CH.changed_paths(tree, base, include=("committed", "worktree", "untracked"))
+    return CH.changed_paths(tree, base, include=("committed", "tracked", "untracked"))
 
 
 def module_name(path: str) -> str:

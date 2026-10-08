@@ -199,7 +199,7 @@ def test_changed_paths_reads_every_kind_and_both_sides_of_a_rename(forked):
     ]
     assert CH.changed_paths(repo, include=("staged",)) == ["staged.txt"]
     assert CH.changed_paths(repo, include=("untracked",)) == ["new file.txt"]
-    assert CH.changed_paths(repo, include=("worktree",)) == ["base.txt", "staged.txt"]
+    assert CH.changed_paths(repo, include=("tracked",)) == ["base.txt", "staged.txt"]
 
 
 def test_changed_paths_renames_flag_and_filter(forked):
@@ -277,4 +277,20 @@ def test_diff_for_says_unavailable_when_git_cannot_read_the_tree(tmp_path_factor
     cfg = SimpleNamespace(worktree=SimpleNamespace(base_ref=""))
     outside = tmp_path_factory.mktemp("not-a-repo")
     diff, how = R.diff_for(outside, cfg, SimpleNamespace(items={}), "")
-    assert diff == "" and "could not be read" in how
+    assert diff == "" and "could not read it" in how
+
+
+def test_no_common_ancestor_is_unknown_for_changed_paths(forked):
+    _git(forked, "checkout", "-q", "--orphan", "other")
+    _git(forked, "rm", "-rqf", ".")
+    (forked / "o.txt").write_text("o\n")
+    _git(forked, "add", "o.txt")
+    _git(forked, "commit", "-qm", "orphan")
+    assert CH.changed_paths(forked, "main") is None  # base...HEAD has no merge base
+
+
+def test_literal_files_refuses_an_exclude(forked):
+    from ddflow.infra import git as G
+
+    with pytest.raises(ValueError):
+        G.files(forked, "all", exclude=(":(exclude)x",), literal=True)
