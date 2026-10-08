@@ -253,3 +253,9 @@ def test_reversed_legacy_markers_are_a_broken_block_not_an_empty_one() -> None:
     with pytest.raises(RegionError):
         A.block_body(text)
     assert A._block_state(text, "want") == A.NO_BLOCK
+
+
+def test_an_empty_front_matter_block_stays_first() -> None:
+    assert A._split_front_matter("---\n---\nbody\n") == ("---\n---\n", "body\n")
+    assert A._split_front_matter("---\na: 1\n---\nbody\n") == ("---\na: 1\n---\n", "body\n")
+    assert A._split_front_matter("no front matter\n") == ("", "no front matter\n")

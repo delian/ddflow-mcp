@@ -944,7 +944,7 @@ def _split_front_matter(text: str) -> tuple[str, str]:
     """`(front matter incl. its closing line, the rest)`: the managed region starts after
     the front matter so a slash command's `---` block stays first in the file."""
     if text.startswith("---\n"):
-        end = text.find("\n---\n", 4)
+        end = text.find("\n---\n", 3)
         if end != -1:
             cut = end + len("\n---\n")
             return text[:cut], text[cut:]
