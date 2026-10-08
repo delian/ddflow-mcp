@@ -122,6 +122,10 @@ def _h_upgrade_applied(st: State, ev: Event) -> None:
             "to": d.get("to", ""),
             "categories": list(d.get("categories") or []),
             "backup": d.get("backup", ""),
+            "items": [i for i in d.get("items") or [] if isinstance(i, str)],
+            "confirmed": dict(d["confirmed"]) if isinstance(d.get("confirmed"), dict) else {},
+            "config_changes": [c for c in d.get("config_changes") or [] if isinstance(c, dict)],
+            "summary": str(d.get("summary", "")),
             "agent": ev.agent,
             "at": ev.ts,
         }
