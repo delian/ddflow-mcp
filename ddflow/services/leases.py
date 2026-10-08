@@ -32,7 +32,6 @@ from ..core import schedule
 from ..core.admission import glob_conflict
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
-from ..infra import git as G
 from ..infra import worktree as W
 from ..infra.log import EventLog
 
@@ -832,16 +831,14 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
         )
         return
     base = cfg.worktree.base_ref or W.default_branch(repo)
-    probe = W.Worktree(item=rec.item, path=wt, branch=rec.branch, base=base)
-    status = G.status_run(wt)
-    entries = G.parse_status(status)
-    rec.dirty_files = len(entries) if entries is not None else -1
-    rec.unmerged_commits = W.ahead(probe)
+    tw = W.tree_work(wt, base)
+    rec.dirty_files = len(tw.dirty) if tw.readable else -1
+    rec.unmerged_commits = tw.ahead
     if rec.dirty_files < 0 or rec.unmerged_commits < 0:
         rec.salvageable = None
         rec.advice = (
             f"COULD NOT MEASURE this worktree (git returned "
-            f"{status.err or 'an error'!r:.80}). Treat it as containing work until "
+            f"{tw.err or 'an error'!r:.80}). Treat it as containing work until "
             f"you have looked: `git -C {wt} status` and `git -C {wt} log {base}..HEAD`. "
             f"It will NOT be swept automatically."
         )
