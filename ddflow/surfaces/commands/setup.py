@@ -184,11 +184,9 @@ def cmd_upgrade(a, c: Ctx) -> int:
     doing it. The plan exits 0 up to date, 1 while it has anything in it; an apply exits 0
     done, 1 a step failed, 2 a step could not run, 3 an item needs `--confirm`."""
     apply = getattr(a, "apply", None)
-    if apply is not None and getattr(a, "plan", False):
-        print("ddflow upgrade: choose --plan or --apply, not both", file=sys.stderr)
-        return 2
     out = A.upgrade(
         c.repo,
+        plan=True if getattr(a, "plan", False) else None,
         apply=apply or "",
         confirm=getattr(a, "confirm", None) or (),
         reason=getattr(a, "reason", "") or "",

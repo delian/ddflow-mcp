@@ -76,7 +76,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         },
         "api": lambda repo, a, agent: _api().upgrade(
             repo,
-            plan=a.get("plan", True) is not False,
+            plan=a.get("plan") if isinstance(a.get("plan"), bool) else None,
             apply=str(a.get("apply") or ""),
             confirm=[str(x) for x in (a.get("confirm") or [])],
             reason=str(a.get("reason") or ""),

@@ -1001,7 +1001,7 @@ _APPLIED_FIELDS = (
 def upgrade(
     repo: Path,
     *,
-    plan: bool = True,
+    plan: bool | None = None,
     apply: str = "",
     confirm: Sequence[str] = (),
     reason: str = "",
@@ -1013,13 +1013,16 @@ def upgrade(
 
     The plan exits 0 when the project is up to date and 1 while it has anything in it, the
     way a diff exits: the plan is the finding, and an agent checking "is there work" needs
-    no parsing. An apply takes ``apply`` as the categories (a comma list, or ``all``; the
-    MCP ``plan=false`` means ``all``), backs up what it will rewrite first, and returns the
+    no parsing. ``plan`` is None when the caller said nothing (the plan), True to ask for
+    it explicitly (refused together with ``apply``) and False for an apply of everything.
+    An apply takes ``apply`` as the categories (a comma list, or ``all``), backs up what it will rewrite first, and returns the
     plan that is LEFT with an ``applied`` report: exit 0 when everything chosen was applied
     or acknowledged, 3 while an item waits for the operator's confirmation (``confirm`` names
     each by key, ``reason`` says why; both recorded), 1 when a step failed, 2 when one could
     not run. The body is the same on the CLI's `--json` and over MCP.
     """
+    if apply and plan is True:
+        return O.refused("upgrade", "choose the plan or --apply, not both")
     if apply or plan is False:
         return _upgrade_apply(repo, apply or "all", confirm, reason, backup, agent)
     log, cfg, st = _load(repo, agent)
