@@ -14,8 +14,6 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 from __future__ import annotations
 
 import re
-import shutil
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -91,15 +89,11 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
 
     Removed on exit. A base already contained in `ref` needs no merge; a base that
     conflicts with `ref` is reported as the failure it is."""
-    tmp = Path(tempfile.mkdtemp(prefix="ddflow-ci."))
-    tree = tmp / "tree"
-    added = False
-    try:
-        r = W.git(repo, "worktree", "add", "--quiet", "--detach", str(tree), ref)
-        if not r.ok:
-            yield None, f"could not create a scratch worktree of {ref}: {r.err or r.out}"
+    with W.scratch_tree(repo, ref, detach=True, prefix="ddflow-ci.", quiet=True) as s:
+        if s.path is None:
+            yield None, f"could not create a scratch worktree of {ref}: {s.error}"
             return
-        added = True
+        tree = s.path
         if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
             m = W.git(
                 tree,
@@ -116,10 +110,6 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
                 yield None, f"{ref} does not merge with {base}: {(m.out or m.err)[-400:]}"
                 return
         yield tree, ""
-    finally:
-        if added:
-            W.git(repo, "worktree", "remove", "--force", str(tree))
-        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def parse_checks(output: str) -> list[Check]:
