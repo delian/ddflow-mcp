@@ -993,12 +993,14 @@ def test_a_bad_backup_value_still_makes_the_backup(old: Path) -> None:
 
 
 def test_one_policy_serves_the_plan_and_the_apply(old: Path) -> None:
-    set_knob(old, "upgrade.config_changes", "operator")
+    set_knob(old, "upgrade.config_changes", "ask")
 
     plan_action = next(
         i["action"] for i in plan(old)["categories"]["config"] if i["key"] == "worktree.root"
     )
     out = go(old, "config")
 
-    assert plan_action == UP.OPERATOR
+    # under `ask` the plan leaves the change to the agent: only apply's own read of the knob
+    # makes it wait for --confirm, so a second policy source in apply() would fail here
+    assert plan_action == UP.AGENT
     assert any(r["key"] == "worktree.root" and r["status"] == "refused" for r in out["results"])
