@@ -423,3 +423,27 @@ def test_scan_reads_the_macros_in_the_projects_config(tmp_path):
     )
     got = {(f.artifact, f.ref.text) for f in C.scan(tmp_path, VOCAB)}
     assert got == {("config macro", "doc show"), ("config macro", "ddflow_old_next")}
+
+
+def test_the_same_managed_hook_under_two_events_is_found_twice_and_rewritten(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    ours = Managed("hooks/session-start", open="#", close="").render("ddflow doc show\n")
+    hook = {"hooks": [{"type": "command", "command": ours}]}
+    path = tmp_path / ".claude" / "settings.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"hooks": {"SessionStart": [hook], "PreCompact": [hook]}}, indent=2))
+    found = C.scan(tmp_path, VOCAB)
+    assert len(found) == 2 and found[0].line != found[1].line
+    C.rewrite(tmp_path, VOCAB, found)
+    assert C.scan(tmp_path, VOCAB) == []
+    assert path.read_text().count("ddflow docs show") == 2
+
+
+def test_scan_reads_an_ejected_mcp_instructions(tmp_path):
+    prompts = tmp_path / ".ddflow" / "prompts"
+    prompts.mkdir(parents=True)
+    (prompts / "mcp_instructions.md").write_text(
+        "Call ddflow_old_next first, then `ddflow cl B1`.\n"
+    )
+    got = {(f.artifact, f.ref.text) for f in C.scan(tmp_path, VOCAB)}
+    assert got == {("ejected prompt", "ddflow_old_next"), ("ejected prompt", "cl")}
