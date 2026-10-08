@@ -38,6 +38,7 @@ from pathlib import Path
 
 from ..core import clock
 from ..core.digest import content_digest
+from ..core.slug import safe_filename
 from ..infra import fsio
 from ..infra.tomlcfg import atomic_write
 from .jobs import alive, proc_start
@@ -149,7 +150,7 @@ def register(repo: Path, w: Waiter) -> Waiter:
     w.host = w.host or socket.gethostname()
     w.since = w.since or time.time()
     if not w.path:
-        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in w.agent)
+        safe = safe_filename(w.agent, repl="_", unicode=True)
         w.path = str(d / f"{safe}-{w.pid}-{clock.run_stamp()}.json")
     _write(w)
     return w
@@ -195,8 +196,8 @@ def _queue_path(repo: Path, agent: str, item: str) -> Path:
     # Sanitised for the filesystem, then keyed by a hash of the exact pair: two pairs that
     # sanitise alike ("a/b" and "a_b") must not share one place in line.
     digest = content_digest(f"{agent}\0{item}", "sha1", errors="surrogateescape", length=10)
-    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in f"{agent}-q-{item}")
-    return _dir(repo) / f"{safe[:80]}-{digest}.json"
+    safe = safe_filename(f"{agent}-q-{item}", repl="_", unicode=True, max=80)
+    return _dir(repo) / f"{safe}-{digest}.json"
 
 
 def queue(
