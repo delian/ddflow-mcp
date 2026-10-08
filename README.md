@@ -1299,7 +1299,7 @@ silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, 
 counts such gates (`refuted_passes` in `--json`), the brief names those of unfinished
 items, `complete` prints a `PASSED ON REFUTATION:` line for each (`refuted_passes` in its result), and `ddflow gate list --refuted` (MCP `ddflow_gate_list` with
 `refuted=true`) lists every one for the operator to spot-check. Without `--refuted`, `gate
-list` lists the gates the project defines. A finding still without a verdict holds the gate where it is,
+list` lists the gates the project defines. A gate whose findings were ALL confirmed (and fixed), none refuted, is recorded `passed` too but is not flagged: `gate status` shows `-- findings fixed` and `gate list --refuted` leaves it out; a mix of refuted and confirmed is flagged with both counts. A finding still without a verdict holds the gate where it is,
 and the triage output says so: settle it, or ask the operator for one more round
 (`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
 never passed this way; a re-review settles it.
