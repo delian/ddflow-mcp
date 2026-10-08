@@ -27,28 +27,23 @@ command that pins the old behaviour.
 
 from __future__ import annotations
 
-import json
-import shutil
 import tomllib
 from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from ..core import clock
 from ..core.events import UPGRADE_APPLIED_KIND
 from ..core.model import State
 from ..infra import tomlcfg as TC
-from ..infra.fsio import ensure_ignored_dir, replace_text
+from ..infra.fsio import replace_text
 from . import adopt as AD
 from . import claudehooks as CH
 from . import configwrite as CW
 from . import enforce as E
 from . import repairs as RP
 from . import upgrade_plan as UP
-
-BACKUPS = ".ddflow/backups"
-MANIFEST = "manifest.json"
+from .backups import BACKUPS, MANIFEST, backup_name, make_backup  # noqa: F401 -- the backups' home
 
 BACKUP_MODES = ("local", "none")
 #: What `[upgrade].config_changes` accepts: who may apply a config change on a knob nobody set.
@@ -121,51 +116,6 @@ def touched(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
         except RuntimeError:
             pass
     return out
-
-
-# -- backup ----------------------------------------------------------------------------------
-
-
-def backup_name(frm: str, to: str) -> str:
-    return f"{clock.compact_at()}-{frm or 'unstamped'}-to-{to}"
-
-
-def make_backup(repo: Path, files: Collection[Path], frm: str, to: str) -> Path:
-    """Copy every file that exists to `.ddflow/backups/<stamp>-<from>-to-<to>/`, a file inside
-    the project at its relative path and one outside it under `_outside/`, and write a
-    `manifest.json` listing each file, whether it existed and where its copy is. Returns the
-    backup directory. Raises OSError when it cannot be written: the caller then writes
-    nothing."""
-    repo = Path(repo).resolve()
-    root = ensure_ignored_dir(
-        repo / BACKUPS, comment="ddflow upgrade backups: local, not shared, never committed"
-    )
-    name = backup_name(frm, to)
-    dest = root / name
-    for n in range(2, 100):  # two applies in one clock tick keep their own directories
-        try:
-            dest.mkdir(parents=True)
-            break
-        except FileExistsError:
-            dest = root / f"{name}-{n}"
-    entries: list[dict[str, Any]] = []
-    for f in dict.fromkeys(Path(x).resolve() for x in files):
-        try:
-            rel = f.relative_to(repo)
-            stored = rel.as_posix()
-            shown = stored
-        except ValueError:
-            stored = "_outside/" + f.as_posix().lstrip("/")
-            shown = f.as_posix()
-        existed = f.is_file()
-        if existed:
-            target = dest / stored
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(f, target)
-        entries.append({"path": shown, "stored": stored if existed else "", "existed": existed})
-    manifest = {"from": frm, "to": to, "mode": "local", "files": entries}
-    replace_text(dest / MANIFEST, json.dumps(manifest, indent=2) + "\n")
-    return dest
 
 
 # -- appliers ----------------------------------------------------------------------------------
@@ -460,7 +410,7 @@ def _run_repairs(repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]])
 def _run_instructions(repo: Path, items: list[dict[str, Any]]) -> list[dict]:
     paths = [i["path"] for i in items]
     try:
-        actions = AD.refresh_docs(repo, only=paths)
+        actions = AD.refresh_docs(repo, only=paths, backup=False)
     except (OSError, ValueError) as exc:
         return [_rec(i, FAILED, f"{type(exc).__name__}: {exc}") for i in items]
     return [

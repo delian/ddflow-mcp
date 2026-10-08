@@ -17,6 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from ddflow.services import adopt as A
 from ddflow.services import legacy as L
 from ddflow.services.adopt import Refused
 from ddflow.services.enforce import read_precommit_yaml
@@ -59,7 +60,7 @@ def test_the_managed_block_is_never_scanned(repo):
     _write(
         repo,
         "CLAUDE.md",
-        f"intro\n{L.BEGIN}\n- tick the checkbox\n{L.END}\n- tick the checkbox\n",
+        f"intro\n{A.LEGACY_BEGIN}\n- tick the checkbox\n{A.LEGACY_END}\n- tick the checkbox\n",
     )
     proposals = L.scan(repo, [])
     assert [p.line for p in proposals] == [5]
