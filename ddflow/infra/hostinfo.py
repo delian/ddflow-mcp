@@ -2,8 +2,8 @@
 
 `hostname()` is the name the OS reports: the full form a wait or a job records, and the one
 a redactor must scrub. `short_host()` is its first label: the form an actor or an agent id
-carries. A record stamped in one form and read in the other is the same machine, so every
-comparison goes through `same_host`, never `==`.
+carries. Waits and jobs record the full form and compare it through `same_host`, so the
+form is decided once.
 """
 
 from __future__ import annotations
@@ -25,17 +25,12 @@ def short_host() -> str:
 
 
 def same_host(recorded: str, here: str | None = None) -> bool:
-    """Is ``recorded`` (a name stamped by any ddflow, full or short) this machine?
+    """Is ``recorded`` (the name a wait or a job stamped) this machine?
 
-    Two full names are equal or different machines; a short name stands for the first
-    label of a full one, so ``box`` is ``box.example.org``. ``here`` defaults to this
-    machine; an empty ``recorded`` names no machine and is not "elsewhere".
+    Exactly the name this machine reports: a short name is NOT bridged to a full one,
+    because two machines of one site can report ``node1`` and ``node1.example.org``, and
+    "elsewhere" is the safe answer for a record on a shared checkout (its pid means
+    nothing here). ``here`` defaults to this machine; an empty ``recorded`` names no
+    machine and is not "elsewhere".
     """
-    if not recorded:
-        return True
-    mine = hostname() if here is None else here
-    if recorded == mine:
-        return True
-    if "." in recorded and "." in mine:
-        return False
-    return recorded.split(".", maxsplit=1)[0] == mine.split(".")[0]
+    return not recorded or recorded == (hostname() if here is None else here)

@@ -30,22 +30,21 @@ def test_an_os_error_is_an_empty_name_not_a_crash(monkeypatch):
 @pytest.mark.parametrize(
     ("recorded", "same"),
     [
-        ("box.example.org", True),  # the full form this machine reports
-        ("box", True),  # the short form another ddflow stamped
+        ("box.example.org", True),  # the name this machine reports
         ("", True),  # no name recorded: not "elsewhere"
+        ("box", False),  # a short name is not bridged: another site's `box` is elsewhere
         ("other.example.org", False),
-        ("other", False),
-        ("box.other.org", False),  # two full names are equal or different machines
+        ("box.other.org", False),
     ],
 )
-def test_same_host_compares_across_forms(box, recorded, same):
+def test_same_host_is_the_machines_own_name(box, recorded, same):
     assert H.same_host(recorded) is same
 
 
-def test_a_machine_reporting_a_short_name_matches_a_full_record(monkeypatch):
+def test_a_machine_reporting_a_short_name_matches_its_own_record(monkeypatch):
     monkeypatch.setattr(socket, "gethostname", lambda: "box")
-    assert H.same_host("box.example.org") is True
-    assert H.same_host("other.example.org") is False
+    assert H.same_host("box") is True
+    assert H.same_host("box.example.org") is False
 
 
 def test_stamps_keep_their_forms(box):
@@ -58,17 +57,20 @@ def test_stamps_keep_their_forms(box):
     assert L.bare_agent_id(".").startswith("box-")
 
 
-def test_a_wait_stamped_short_is_still_this_machines(box):
+def test_a_wait_of_this_machine_falls_through_to_its_pid_and_another_machines_does_not(box):
+    """`Waiter.live` asks `same_host`: a wait stamped with this machine's name reads its pid
+    (pid 0: gone), one stamped elsewhere is live on its deadline alone."""
     from ddflow.services import waits
 
-    live = waits.Waiter(agent="a", pid=0, until=0.0, host="box")
-    other = waits.Waiter(agent="a", pid=0, until=9e12, host="other.example.org")
-    assert other.live() is True  # another machine: only its deadline speaks
-    assert live.host == "box" and H.same_host(live.host)
+    here = waits.Waiter(agent="a", pid=0, until=9e12, host="box.example.org")
+    there = waits.Waiter(agent="a", pid=0, until=9e12, host="other.example.org")
+    assert here.live() is False
+    assert there.live() is True
 
 
-def test_a_job_stamped_short_is_still_here(box):
+def test_a_job_on_another_machine_is_elsewhere_and_this_ones_is_checked(box):
     from ddflow.services import jobs
 
-    assert jobs.status(jobs.Job(id="j", pid=0, host="box")).state != "elsewhere"
-    assert jobs.status(jobs.Job(id="j", pid=0, host="other")).state == "elsewhere"
+    assert jobs.status(jobs.Job(id="j", pid=0, host="other.example.org")).state == "elsewhere"
+    assert jobs.status(jobs.Job(id="j", pid=0, host="box.example.org")).state != "elsewhere"
+    assert jobs.status(jobs.Job(id="j", pid=0, host="box")).state == "elsewhere"
