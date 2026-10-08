@@ -267,7 +267,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     from ...core import progress as PR
     from ...core.schedule import plan
     from ...infra import container as CT
-    from ...infra import worktree as W
     from ...infra.store import Store
     from ...services import leases as L
     from ...services import workflow as WF
@@ -429,18 +428,8 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
         tree_at_risk = may_hold_work(r) and r.kind != "stale_running"
         (problems if tree_at_risk else notes).append(f"{r.kind}: {r.item} — {r.advice}")
 
-    known = {str(W.load_path(repo, it.worktree)) for it in st.items.values() if it.worktree}
-    for w in W.list_worktrees(repo):
-        path = w.get("worktree", "")
-        if (
-            path
-            and (
-                cfg.worktree.branch_prefix.rstrip("/") in w.get("branch", "")
-                or CL.is_ours(w.get("branch", "").replace("refs/heads/", ""), cfg)
-            )
-            and path not in known
-        ):
-            notes.append(f"worktree {path} exists but no item claims it")
+    for path in CL.unclaimed_trees(repo, cfg, st):
+        notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
 
