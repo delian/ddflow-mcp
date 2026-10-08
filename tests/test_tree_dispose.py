@@ -189,6 +189,39 @@ def test_dispose_without_a_log_removes_and_records_nothing(repo):
     assert d.removed and not tree.exists() and _removed_events(repo) == []
 
 
+def _bound_names(tree) -> tuple[set[str], set[str]]:
+    """(names bound to the worktree module, names bound to its `remove`) in one module."""
+    import ast
+
+    modules: set[str] = set()
+    funcs: set[str] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom):
+            mod = n.module or ""
+            for a in n.names:
+                if mod.endswith("infra") and a.name == "worktree":
+                    modules.add(a.asname or a.name)
+                elif mod.endswith("infra.worktree") and a.name == "remove":
+                    funcs.add(a.asname or a.name)
+        elif isinstance(n, ast.Import):
+            modules |= {a.asname or a.name for a in n.names if a.name.endswith("infra.worktree")}
+    return modules, funcs
+
+
+def _calls_remove(tree, modules: set[str], funcs: set[str]) -> bool:
+    import ast
+
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Attribute) and f.attr == "remove" and ast.unparse(f.value) in modules:
+            return True
+        if isinstance(f, ast.Name) and f.id in funcs:
+            return True
+    return False
+
+
 def _removal_callers(root: Path) -> list[str]:
     """The modules that CALL `infra.worktree.remove`, under whatever name they bound it:
     the module under an alias (`W`, `worktree`, ...) or the function imported by name."""
@@ -199,30 +232,9 @@ def _removal_callers(root: Path) -> list[str]:
         if path.name == "worktree.py":
             continue
         tree = ast.parse(path.read_text())
-        modules: set[str] = set()  # names bound to the worktree module
-        funcs: set[str] = set()  # names bound to its `remove`
-        for n in ast.walk(tree):
-            if isinstance(n, ast.ImportFrom):
-                for a in n.names:
-                    if (n.module or "").endswith("infra") and a.name == "worktree":
-                        modules.add(a.asname or a.name)
-                    elif (n.module or "").endswith("infra.worktree") and a.name == "remove":
-                        funcs.add(a.asname or a.name)
-            elif isinstance(n, ast.Import):
-                for a in n.names:
-                    if a.name.endswith("infra.worktree"):
-                        modules.add(a.asname or a.name)
-        for n in ast.walk(tree):
-            if not isinstance(n, ast.Call):
-                continue
-            f = n.func
-            if isinstance(f, ast.Attribute) and f.attr == "remove":
-                base = ast.unparse(f.value)
-                if base in modules:
-                    found.append(str(path.relative_to(root)))
-            elif isinstance(f, ast.Name) and f.id in funcs:
-                found.append(str(path.relative_to(root)))
-    return sorted(set(found))
+        if _calls_remove(tree, *_bound_names(tree)):
+            found.append(str(path.relative_to(root)))
+    return found
 
 
 def test_nothing_but_dispose_removes_a_worktree():
