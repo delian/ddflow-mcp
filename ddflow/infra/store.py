@@ -579,9 +579,10 @@ class Store:
                     out.sort(key=lambda r: scores.get(r["id"], 0.0))
                     return out
             # The fallback ranks with the same BM25 the search core uses (`core/rank`) over
-            # the words FTS5 would see: split by `textsim.words`, lower-cased, lightly
-            # stemmed (FTS5's porter tokenizer does the same job), no stop words removed
-            # (FTS5 keeps them). It replaces a substring LIKE that returned the first rows
+            # the words FTS5 would see: split by `textsim.words`, lower-cased, no stop words
+            # removed (FTS5 keeps them), lightly stemmed. The stemmer is `textsim.stem`, an
+            # approximation of FTS5's porter tokenizer: they agree on plurals and -ed/-ing,
+            # not on every word. It replaces a substring LIKE that returned the first rows
             # it met. A term is usable at the same minimum length FTS5 uses.
             qtoks = _fallback_words(" ".join(_like_terms(query)))
             if not qtoks:

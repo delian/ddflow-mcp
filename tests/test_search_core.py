@@ -167,7 +167,7 @@ def test_the_like_fallback_ranks_best_first_and_honours_the_limit(repo, log):
     assert got[0] == "L3" and set(got) == {"L2", "L3"}
     assert [r["id"] for r in st.search("lessons", "claim worktree", 1)] == ["L3"]
     assert st.search("lessons", "x", 5) == []  # too short to be a term, as for FTS5
-    # a stop word is a word, as it is for FTS5: L3's title has "the"
+    # stop words are kept, as FTS5 keeps them: L3's title has "the"
     assert [r["id"] for r in st.search("lessons", "the", 5)] == ["L3"]
     assert st.search("lessons", "recover errors", 5)[0]["id"] == "L1"  # recovering~recover
     assert st.search("lessons", "zzzqqq", 5) == []
