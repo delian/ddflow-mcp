@@ -18,3 +18,10 @@ def running() -> str:
     """The version of the code that is running, read at call time (a test sets it);
     "" when the package declares none."""
     return str(getattr(ddflow, "__version__", "") or "")
+
+
+def format_level() -> int:
+    """The on-disk FORMAT_LEVEL of the code that is running, read at call time (a test sets
+    it); 0 when the package declares none, which compares as "no format" and never refuses."""
+    raw = getattr(ddflow, "FORMAT_LEVEL", 0)
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) else 0

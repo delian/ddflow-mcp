@@ -97,6 +97,7 @@
   },
   "ddflow.seen": {
    "fields": {
+    "format_level": ["int"],
     "install": ["str"],
     "version": ["str"]
    },
@@ -664,6 +665,7 @@
   },
   "skew.overridden": {
    "fields": {
+    "log_format": ["int"],
     "log_version": ["str"],
     "reason": ["str"],
     "running": ["str"],

@@ -3771,8 +3771,8 @@ with a note by a ddflow that predates them:
 
 | kind | written | carries |
 |---|---|---|
-| `ddflow.seen` | once per (agent, version), on that agent's first write after a version change | `version`, install kind (`installed` or `source-tree`) |
-| `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version, session, the reason |
+| `ddflow.seen` | once per (agent, version, format level), on that agent's first write after either changes | `version`, install kind (`installed` or `source-tree`), `format_level` (the `FORMAT_LEVEL` the writer wrote at) |
+| `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version (and, for a format skew, its format level), session, the reason |
 | `upgrade.applied` | when `ddflow upgrade --apply` applied or acknowledged something | from, to, categories, backup, items, confirmed, config_changes, summary |
 | `repair.applied` | when a versioned data repair is applied (below) | repair id, since, version, the settled findings' keys and details |
 
@@ -3801,6 +3801,16 @@ version (`older_ddflow` in its data): `ddflow history` shows `[older ddflow 0.1.
 cover, to be reviewed after upgrading. The override is per session, not per command: a new
 session, another agent, or a newer stamp is refused again. Only versions that ship the
 guard can refuse; releases before it cannot.
+
+**The format level.** A version number alone misses a branch or source tree that changes an
+on-disk format without a bump, and every patch release looks newer than the last. So each
+`ddflow.seen` stamp also carries the `FORMAT_LEVEL` its writer wrote at
+(`docs/ddflow/compatibility.md`), and the guard refuses a write when the log's highest
+stamped level is **above** the running one, even when the version is not older. The message
+then names both levels (`... at data format level 3, and this ddflow (0.2.0) writes level 2`),
+and `--allow-older-version` overrides it for the session the same way, against that level:
+a later, higher level is refused again. A stamp from before the field says nothing about the
+level and never refuses. The same `[upgrade].skew` policy governs both.
 
 `[upgrade].skew` is the policy: `refuse` (default), `warn` (write, say so on stderr) or
 `off`. Set it with `ddflow config` or `ddflow_configure`.
