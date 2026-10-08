@@ -17,8 +17,8 @@ import pytest
 from conftest import run_cli
 
 import ddflow
-from ddflow.core import version as V
 from ddflow.core import events as E
+from ddflow.core import version as V
 from ddflow.core.events import Event, SkewRefused, stamp_facts
 from ddflow.infra.log import EventLog, skew_message
 
@@ -399,7 +399,9 @@ def test_a_writer_lacking_a_recorded_capability_is_refused_just_its_kinds(repo: 
         log.append("bug.found", "B1", {"summary": "s"})
     msg = str(exc.value)
     assert exc.value.exit_code == 3
-    assert "`future-thing`" in msg and "bug.found" in msg and "Upgrade ddflow-mcp to >= 9.9.9" in msg
+    assert (
+        "`future-thing`" in msg and "bug.found" in msg and "Upgrade ddflow-mcp to >= 9.9.9" in msg
+    )
     assert "everything else proceeds" in msg
     log.append("lease.renewed", "T1", {})  # a kind it does not govern proceeds
     assert [e for e in log.read_all() if e.kind == "bug.found"] == []
@@ -461,4 +463,6 @@ def test_the_state_folds_the_recorded_capabilities(repo: Path):
     log = EventLog(repo, "a1")
     log.append("phase.added", "P1", {"title": "p"})
     st = fold(log.read_all())
-    assert st.capabilities[E.CAP_LOG_REDACTION]["version"] == E.CAPABILITIES[E.CAP_LOG_REDACTION].since
+    assert (
+        st.capabilities[E.CAP_LOG_REDACTION]["version"] == E.CAPABILITIES[E.CAP_LOG_REDACTION].since
+    )

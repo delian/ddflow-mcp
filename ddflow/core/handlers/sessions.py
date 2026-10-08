@@ -106,9 +106,7 @@ def _h_ddflow_capabilities(st: State, ev: Event) -> None:
     name, kinds, v = ev.data.get("capability"), ev.data.get("kinds"), ev.data.get("version")
     if not (isinstance(name, str) and name and isinstance(kinds, list) and isinstance(v, str)):
         return
-    rec = st.capabilities.setdefault(
-        name, {"kinds": [], "version": v, "agents": [], "at": ev.ts}
-    )
+    rec = st.capabilities.setdefault(name, {"kinds": [], "version": v, "agents": [], "at": ev.ts})
     rec["kinds"] = sorted({*rec["kinds"], *(k for k in kinds if isinstance(k, str))})
     if (version_key(v), v) > (version_key(rec["version"]), rec["version"]):
         rec["version"] = v

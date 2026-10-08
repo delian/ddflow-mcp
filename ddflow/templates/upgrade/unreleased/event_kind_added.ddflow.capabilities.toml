@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "ddflow.capabilities"
+why = "Records that a write used a capability (the kinds it governs and the release providing it), so an older ddflow lacking it is refused just those writes."
+impact = "additive"

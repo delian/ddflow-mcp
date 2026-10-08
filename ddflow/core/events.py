@@ -213,7 +213,7 @@ CAPABILITIES: dict[str, Capability] = {
         Capability(
             CAP_LOG_REDACTION,
             "0.2.1",
-            frozenset(_redact.LOG_TEXT_FIELDS),
+            frozenset(_redact.LOG_TEXT_FIELDS),  # a Mapping keyed by EVENT KIND -> its text fields
             "free text written through the full log redaction profile",
         ),
     )
