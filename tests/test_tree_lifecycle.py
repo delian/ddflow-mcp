@@ -88,8 +88,8 @@ def test_a_stale_registration_is_pruned_even_when_the_tree_was_deleted_by_the_bo
 
 
 def test_a_registration_whose_remove_failed_is_still_pruned(repo, monkeypatch):
-    """A `remove` that fails (a lock, a transient error) must not leave the entry behind:
-    the directory is deleted first so the prune after it can drop the registration."""
+    """A `remove` that fails (a transient git error) must not leave the entry behind: the
+    directory is deleted first so the prune after it can drop the registration."""
     real = W.git
 
     def refuse_remove(root, *args, **kw):
