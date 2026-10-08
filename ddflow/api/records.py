@@ -412,6 +412,32 @@ def record_add(
     return _as(out, kind, "add", rid)
 
 
+#: How `api.defs` ends a reason about a definition that is no longer active.
+_BRING_BACK = "; record it again to bring it back"
+
+
+def _named(kind: RecordKind, rid: str, reason: str) -> str:
+    """``reason`` (worded by `api.defs` for a definition of the storage kind) in the record's
+    own name: a ``note`` filed as a ``skill`` definition says note, and ``revise`` brings one
+    back. Only the opening words and the closing clause of a known reason are rewritten,
+    never text inside the id."""
+    dk, name, q = kind.def_kind, kind.name, repr(rid)
+    heads = (
+        (f"no {dk} definition {q}", f"no {name} {q}"),
+        (f"{dk} {q} is ", f"{name} {q} is "),
+        (f"{dk} {rid}: ", f"{name} {rid}: "),
+        (f"definition id {q} ", f"{name} id {q} "),
+        ("retiring a definition ", f"retiring a {name} "),
+    )
+    for old, new in heads:
+        if reason.startswith(old):
+            reason = new + reason[len(old) :]
+            break
+    if reason.endswith(_BRING_BACK):
+        reason = reason[: -len(_BRING_BACK)] + "; revise it to bring it back"
+    return reason
+
+
 def _as(out: O.Outcome, kind: RecordKind, verb: str, rid: str) -> O.Outcome:
     """``out`` (an `api.defs` answer) as this surface's: the same data, its own event name
     and the record's kind and id."""
@@ -421,7 +447,7 @@ def _as(out: O.Outcome, kind: RecordKind, verb: str, rid: str) -> O.Outcome:
     if out.exit == O.OK:
         return O.ok(ev, **data)
     make = {O.NOTHING: O.nothing, O.REFUSED: O.refused}.get(out.exit, O.failed)
-    return make(ev, out.reason, **data)
+    return make(ev, _named(kind, rid, out.reason), **data)
 
 
 def record_edit(
