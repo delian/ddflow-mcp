@@ -677,14 +677,23 @@ def diff_covers_everything(
     changed = _status_paths(tree, ignore_untracked)
     if changed is None:  # git could not say: never read as "nothing changed"
         return False, ["(git status failed: the diff cannot be checked)"]
-    shown = unidiff.touched_paths(diff)
-    # The diff text is decoded with errors="replace" (`_diff_text`), so a non-UTF-8 byte in
-    # a name is U+FFFD there but an escape in the status path: compare as the diff holds it.
-    missing = [
-        p
-        for p in changed
-        if p not in shown and os.fsencode(p).decode("utf-8", "replace") not in shown
-    ]
+    seen = [p for f in unidiff.files(diff) for p in f.paths]
+    shown = set(seen)
+    # The diff text is decoded with errors="replace" (`_diff_text`), so under
+    # `core.quotepath=false` a non-UTF-8 byte in a name is U+FFFD there but an escape in
+    # the status path. Such names cannot be told apart in the diff, so a lossy spelling
+    # covers as many changed names as the diff holds sections for it, no more.
+    def lossy(p: str) -> str:
+        return os.fsencode(p).decode("utf-8", "replace")
+
+    absent = [p for p in changed if p not in shown]
+    room = {name: seen.count(name) for name in {lossy(p) for p in absent}}
+    missing = []
+    for p in absent:
+        if room[lossy(p)] > 0:
+            room[lossy(p)] -= 1
+        else:
+            missing.append(p)
     return (not missing), missing
 
 
