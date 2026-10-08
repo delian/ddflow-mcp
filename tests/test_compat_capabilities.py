@@ -1,5 +1,9 @@
 """Mixed-version clones (B-uni-compat-capabilities, decision D-compat 2).
 
+Slice 2, capabilities: the first write that uses one records it (`ddflow.capabilities`), and a
+writer that lacks a recorded capability is refused just the kinds it governs, with the release
+that provides it.
+
 Slice 1, the format level: the skew guard keys on the version AND on FORMAT_LEVEL
 (`ddflow/__init__.py`), so a branch or source tree that changes an on-disk format without a
 version bump is still refused the writes its format cannot make safely.
@@ -14,6 +18,7 @@ from conftest import run_cli
 
 import ddflow
 from ddflow.core import version as V
+from ddflow.core import events as E
 from ddflow.core.events import Event, SkewRefused, stamp_facts
 from ddflow.infra.log import EventLog, skew_message
 
@@ -327,3 +332,128 @@ def test_a_version_skew_is_not_reported_as_format_only_even_with_a_higher_format
     facts = stamp_facts(ev, "me", "1.0", 2)
     assert facts.skewed and not facts.format_skewed  # the running VERSION is older: not format-only
     assert facts.highest == "3.0" and facts.format_version == "2.0"
+
+
+# -- slice 2: capabilities ----------------------------------------------------------------
+
+
+def _record(repo: Path, name: str, kinds: list[str], version: str, agent="future", n=1) -> None:
+    """A `ddflow.capabilities` event another clone wrote, as a merge brings it in."""
+    shard = repo / ".ddflow" / "events"
+    shard.mkdir(parents=True, exist_ok=True)
+    ev = Event(
+        kind="ddflow.capabilities",
+        subject="ddflow",
+        data={"capability": name, "kinds": kinds, "version": version},
+        agent=agent,
+        lamport=n,
+        ts="2099-01-01T00:00:00.000000Z",
+    )
+    ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
+    with (shard / f"{agent}.jsonl").open("a") as fh:
+        fh.write(ev.to_json() + "\n")
+
+
+def _caps(log: EventLog) -> list[Event]:
+    return [e for e in log.read_all() if e.kind == "ddflow.capabilities"]
+
+
+def test_the_first_text_write_records_the_redaction_capability_once(repo: Path):
+    log = EventLog(repo, "a1")
+    log.append("phase.added", "P1", {"title": "p"})
+    log.append("phase.added", "P2", {"title": "q"})
+    (rec,) = _caps(log)
+    cap = E.CAPABILITIES[E.CAP_LOG_REDACTION]
+    assert rec.data["capability"] == E.CAP_LOG_REDACTION
+    assert rec.data["version"] == cap.since
+    assert rec.data["kinds"] == sorted(cap.kinds)
+    # the record precedes the write that used it
+    kinds = [e.kind for e in log.read_all()]
+    assert kinds.index("ddflow.capabilities") < kinds.index("phase.added")
+
+
+def test_a_write_that_uses_no_capability_records_none(repo: Path):
+    log = EventLog(repo, "a1")
+    log.append("lease.renewed", "T1", {})
+    assert _caps(log) == []
+
+
+def test_a_configured_id_template_records_the_id_capability(repo: Path):
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text('[ids]\nbug = "bug-{seq}"\n')
+    log = EventLog(repo, "a1")
+    log.append("bug.found", "bug-1", {"summary": "s"})
+    assert {e.data["capability"] for e in _caps(log)} == {E.CAP_ID_TEMPLATE, E.CAP_LOG_REDACTION}
+
+
+def test_default_templates_do_not_record_the_id_capability(repo: Path):
+    log = EventLog(repo, "a1")
+    log.append("bug.found", "B1", {"summary": "s"})
+    assert {e.data["capability"] for e in _caps(log)} == {E.CAP_LOG_REDACTION}
+
+
+def test_a_writer_lacking_a_recorded_capability_is_refused_just_its_kinds(repo: Path):
+    _record(repo, "future-thing", ["bug.found"], "9.9.9")
+    log = EventLog(repo, "me")
+    with pytest.raises(SkewRefused) as exc:
+        log.append("bug.found", "B1", {"summary": "s"})
+    msg = str(exc.value)
+    assert exc.value.exit_code == 3
+    assert "`future-thing`" in msg and "bug.found" in msg and "Upgrade ddflow-mcp to >= 9.9.9" in msg
+    assert "everything else proceeds" in msg
+    log.append("lease.renewed", "T1", {})  # a kind it does not govern proceeds
+    assert [e for e in log.read_all() if e.kind == "bug.found"] == []
+
+
+def test_a_known_capability_whose_kinds_this_writer_lacks_is_refused(repo: Path):
+    _record(repo, E.CAP_ID_TEMPLATE, ["bug.found", "gate.passed"], "9.9.9")
+    with pytest.raises(SkewRefused):
+        EventLog(repo, "me").append("gate.passed", "T1", {"gate": "x"})
+    EventLog(repo, "me").append("bug.found", "B1", {"summary": "s"})  # it has this one
+
+
+def test_the_cli_refuses_the_governed_write_and_still_reads(repo: Path):
+    _record(repo, "future-thing", ["phase.added"], "9.9.9")
+    code, _out, err = run_cli(repo, "phase", "add", "P1", "--title", "p")
+    assert code == 3 and "future-thing" in err
+    assert run_cli(repo, "status")[0] == 0
+
+
+def test_policy_off_and_warn_never_refuse_a_capability_gap(repo: Path):
+    _record(repo, "future-thing", ["phase.added"], "9.9.9")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(exist_ok=True)
+    for policy in ("warn", "off"):
+        cfg.write_text(f'[upgrade]\nskew = "{policy}"\n')
+        EventLog(repo, f"me-{policy}").append("phase.added", f"P-{policy}", {"title": "p"})
+
+
+def test_the_capability_fold_is_independent_of_event_order():
+    def ev(kinds, v, agent, n):
+        return Event(
+            kind="ddflow.capabilities",
+            subject="ddflow",
+            data={"capability": "c", "kinds": kinds, "version": v},
+            agent=agent,
+            lamport=n,
+        )
+
+    a, b = ev(["x"], "0.1.9", "p", 1), ev(["y"], "0.1.10", "q", 2)
+    one = stamp_facts([a, b], "me", "1.0").capabilities["c"]
+    two = stamp_facts([b, a], "me", "1.0").capabilities["c"]
+    assert one == two
+    assert one.kinds == {"x", "y"} and one.version == "0.1.10" and one.by == "q"
+
+
+def test_a_malformed_capability_event_is_ignored():
+    bad = Event(kind="ddflow.capabilities", subject="ddflow", data={"capability": 3}, agent="x")
+    assert stamp_facts([bad], "me", "1.0").capabilities == {}
+
+
+def test_the_state_folds_the_recorded_capabilities(repo: Path):
+    from ddflow.core.model import fold
+
+    log = EventLog(repo, "a1")
+    log.append("phase.added", "P1", {"title": "p"})
+    st = fold(log.read_all())
+    assert st.capabilities[E.CAP_LOG_REDACTION]["version"] == E.CAPABILITIES[E.CAP_LOG_REDACTION].since

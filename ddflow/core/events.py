@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import clock
+from . import redact as _redact
 from .digest import content_digest
 
 SCHEMA_VERSION = 1
@@ -118,6 +119,10 @@ UPGRADE_APPLIED_KIND = "upgrade.applied"
 #: id and the keys of the findings it settled, so the same findings are never offered again.
 #: Like the stamp kinds, an older ddflow skips it with a note.
 REPAIR_APPLIED_KIND = "repair.applied"
+#: A capability a write used was recorded (B-uni-compat-capabilities, decision D-compat 2).
+#: Written by the log itself on the first write that uses it; an older ddflow skips it with a
+#: note, which is exactly why a gap is decided by the writer, not the reader.
+CAPABILITIES_KIND = "ddflow.capabilities"
 #: The key a session-scoped skew override adds to the `data` of every event written under it:
 #: the version of the (older) ddflow that wrote it. Shown by history, replay and doctor.
 OLDER_MARK = "older_ddflow"
@@ -162,6 +167,97 @@ class SkewRefused(Exception):
 
 
 @dataclass(frozen=True)
+class Capability:
+    """Something a write can need that a version number does not say: the log records that a
+    write used it, and a writer without it is refused just the kinds it governs."""
+
+    name: str
+    #: The release that provides it: named in the refusal, recorded in the event.
+    since: str
+    #: The event kinds a write of which uses it.
+    kinds: frozenset[str]
+    summary: str
+
+
+#: Ids minted under a configured `[ids]` template (decision D-id-schemes-final): a ddflow
+#: that cannot render the template would mint a different id for the same record.
+CAP_ID_TEMPLATE = "id-template"
+#: The committed log goes through the full `log` redaction profile (decision D-unify 6): a
+#: writer without it would commit text the profile removes, into a log that has none of it.
+CAP_LOG_REDACTION = "log-redaction-full"
+
+#: The capabilities THIS ddflow has. A new one is added here, with the release that ships it.
+CAPABILITIES: dict[str, Capability] = {
+    c.name: c
+    for c in (
+        Capability(
+            CAP_ID_TEMPLATE,
+            "0.2.1",
+            frozenset(
+                {
+                    "bug.found",
+                    "lesson.recorded",
+                    "research.recorded",
+                    "decision.recorded",
+                    "memory.recorded",
+                    "job.started",
+                    "session.started",
+                    "task.added",
+                    "phase.added",
+                }
+            ),
+            "ids minted under a configured [ids] template",
+        ),
+        Capability(
+            CAP_LOG_REDACTION,
+            "0.2.1",
+            frozenset(_redact.LOG_TEXT_FIELDS),
+            "free text written through the full log redaction profile",
+        ),
+    )
+}
+
+
+@dataclass(frozen=True)
+class RecordedCapability:
+    """What the log says about one capability: the kinds it governs and the release that
+    provides it, as the highest-release `ddflow.capabilities` event put it."""
+
+    kinds: frozenset[str]
+    version: str
+    by: str = ""
+
+
+def capabilities_used(kind: str, active: Iterable[str]) -> list[str]:
+    """The capabilities, of those ``active`` for this write, that a write of ``kind`` uses."""
+    return [n for n in sorted(set(active)) if n in CAPABILITIES and kind in CAPABILITIES[n].kinds]
+
+
+def capability_gap(
+    recorded: dict[str, RecordedCapability], kind: str
+) -> tuple[str, RecordedCapability] | None:
+    """The first recorded capability that governs ``kind`` and that this ddflow lacks (it
+    does not know the name, or its own copy does not govern the kind), else None."""
+    for name in sorted(recorded):
+        rec = recorded[name]
+        mine = CAPABILITIES.get(name)
+        if kind in rec.kinds and (mine is None or kind not in mine.kinds):
+            return name, rec
+    return None
+
+
+def capability_unrecorded(recorded: dict[str, RecordedCapability], name: str) -> Capability | None:
+    """``name`` as this ddflow has it when the log does not yet record all it governs."""
+    mine = CAPABILITIES.get(name)
+    if mine is None:
+        return None
+    rec = recorded.get(name)
+    if rec is None or not mine.kinds <= rec.kinds:
+        return mine
+    return None
+
+
+@dataclass(frozen=True)
 class StampFacts:
     """What the log says about version skew, for one (agent, running version)."""
 
@@ -190,11 +286,30 @@ class StampFacts:
     #: Only the format level is behind: the running version is not older than the log's
     #: highest stamp (a branch that changed a format without a version bump).
     format_skewed: bool = False
+    #: Capability name -> what the log records of it (`ddflow.capabilities`).
+    capabilities: dict[str, RecordedCapability] = field(default_factory=dict)
 
 
 def _open_session(started: dict[str, tuple[int, str]], ended: set[str]) -> str:
     live = [(pos, sid) for sid, pos in started.items() if sid not in ended]
     return max(live)[1] if live else ""
+
+
+def _fold_capability(caps: dict[str, RecordedCapability], e: Event) -> None:
+    """Fold one `ddflow.capabilities` event into ``caps``: the kinds union, the version the
+    highest, so the result does not depend on the order the shards are read in."""
+    name, kinds, v = e.data.get("capability"), e.data.get("kinds"), e.data.get("version")
+    if not (isinstance(name, str) and name and isinstance(kinds, list) and isinstance(v, str)):
+        return
+    new = frozenset(k for k in kinds if isinstance(k, str))
+    old = caps.get(name)
+    if old is None:
+        caps[name] = RecordedCapability(new, v, e.agent)
+        return
+    newer = (version_key(v), v) > (version_key(old.version), old.version)
+    caps[name] = RecordedCapability(
+        old.kinds | new, v if newer else old.version, e.agent if newer else old.by
+    )
 
 
 def _format_of(data: dict[str, Any]) -> int:
@@ -224,6 +339,7 @@ def stamp_facts(
     started: dict[str, tuple[int, str]] = {}
     ended: set[str] = set()
     overrides: list[Event] = []
+    caps: dict[str, RecordedCapability] = {}
     last_session_event = 0
     for e in events:
         k = e.kind
@@ -253,6 +369,8 @@ def stamp_facts(
             ended.add(e.subject)
         elif k == SKEW_OVERRIDDEN_KIND and e.agent == agent:
             overrides.append(e)
+        elif k == CAPABILITIES_KIND:
+            _fold_capability(caps, e)
     session = _open_session(started, ended)
     format_skewed = format_level is not None and highest_format > format_level
     override = None
@@ -286,6 +404,7 @@ def stamp_facts(
         format_version=format_version,
         format_by=format_by,
         format_skewed=format_skewed and not version_skewed,
+        capabilities=caps,
     )
 
 
