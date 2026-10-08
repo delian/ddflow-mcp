@@ -37,20 +37,21 @@ def _vocabulary() -> Vocabulary | None:
     return _source() if _source is not None else None
 
 
-def _rewritable(ctx: Context) -> tuple[Vocabulary | None, list[Ref]]:
+def _rewritable(ctx: Context) -> tuple[Vocabulary | None, list[tuple[str, Ref]]]:
+    """``(vocabulary, [(key, reference)])`` for the deprecated names in ddflow's own regions.
+    The key is the path, the name and which occurrence of it in that file: stable when lines
+    above it come and go, so a later scan finds the same reference under the same key."""
     vocab = _vocabulary()
     if vocab is None:
         return None, []
-    found = [
-        f
-        for f in scan(ctx.repo, vocab)
-        if f.managed and f.ref.status == DEPRECATED and f.ref.replacement
-    ]
-    return vocab, found
-
-
-def _key(f: Ref) -> str:
-    return f"{f.path}:{f.line}:{f.ref.text}"
+    seen: dict[tuple[str, str], int] = {}
+    out: list[tuple[str, Ref]] = []
+    for f in scan(ctx.repo, vocab):
+        if not (f.managed and f.ref.status == DEPRECATED and f.ref.replacement):
+            continue
+        n = seen[f.path, f.ref.text] = seen.get((f.path, f.ref.text), 0) + 1
+        out.append((f"{f.path}:{f.ref.text}#{n}", f))
+    return vocab, out
 
 
 def _chosen(ctx: Context, found: list[Finding]) -> tuple[Vocabulary | None, list[Ref]]:
@@ -58,11 +59,11 @@ def _chosen(ctx: Context, found: list[Finding]) -> tuple[Vocabulary | None, list
     Anything that appeared since is not part of what was shown and backed up."""
     vocab, refs = _rewritable(ctx)
     keys = {f.key for f in found}
-    return vocab, [f for f in refs if _key(f) in keys]
+    return vocab, [f for key, f in refs if key in keys]
 
 
 def _detect(ctx: Context) -> list[Finding]:
-    return [Finding(_key(f), f.describe(), f.path) for f in _rewritable(ctx)[1]]
+    return [Finding(key, f.describe(), f.path) for key, f in _rewritable(ctx)[1]]
 
 
 def _shown(repo: Path, rel: str) -> str:
