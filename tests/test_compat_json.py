@@ -54,6 +54,12 @@ def test_the_result_schemas_are_pinned():
     )
 
 
+def test_result_shape_only_returns_declared_shapes():
+    seen = {R.result_shape(s.get("payload", ""), text=s.get("text", False)) for s in TOOLS.values()}
+    assert seen <= set(R.SHAPES)
+    assert seen == set(R.SHAPES), "a shape no tool has is a shape nothing pins"
+
+
 def test_every_tool_has_one_command_name():
     names = [R.command_name(t) for t in TOOLS]
     assert len(set(names)) == len(names)
@@ -72,6 +78,8 @@ def test_the_tag_is_first_and_only_on_objects():
     assert R.tag_body({"b": 1}, "claim")["schema"] == "claim@1"
     for body in ([1], [], "text", None, 3):
         assert R.tag_body(body, "claim") == body
+    refused = {"refusal": {"exit": 3}, "item": None}
+    assert list(R.tag_body(refused, "claim")) == ["refusal", "schema", "item"]
     kept = {"schema": "mine", "x": 1}
     assert R.tag_body(kept, "claim") == kept
 
