@@ -1,6 +1,0 @@
-# Ratchet `tomlkit` (tests/test_architecture_guards.py) counts
-# any use of the tomlkit module outside ddflow.infra.tomlcfg.
-#
-# Lower the baseline in the same change that removes sites; the failure message
-# prints the exact value. Never raise it.
-baseline = 0
