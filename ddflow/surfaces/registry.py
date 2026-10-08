@@ -823,10 +823,36 @@ def tag_body(body: Any, command: str) -> Any:
     return {**tag, **body}
 
 
+def _after_options(node: argparse.ArgumentParser, tokens: list[str], at: int) -> int:
+    """The index of the first token from ``at`` that is neither an option of ``node`` nor
+    that option's value: where a command word (or a positional) can stand. Past ``--`` every
+    token is positional, as argparse reads it."""
+    while at < len(tokens):
+        token = tokens[at]
+        if token == "--":
+            return at + 1
+        if not token.startswith("-") or token == "-":
+            return at
+        action = node._option_string_actions.get(token.split("=", 1)[0])
+        at += 1
+        if action is None or "=" in token or action.nargs == 0:
+            continue
+        if action.nargs in (None, "?"):
+            takes = 1
+        elif isinstance(action.nargs, int):
+            takes = action.nargs
+        else:  # "+", "*": values run to the next option
+            takes = len(tokens)
+        while takes and at < len(tokens) and not tokens[at].startswith("-"):
+            at, takes = at + 1, takes - 1
+    return at
+
+
 def parsed_path(parser: argparse.ArgumentParser, argv: Iterable[str]) -> tuple[str, ...]:
     """The command words ``argv`` went through, aliases resolved to the command they name:
-    ``("gate", "record")``. Read from the words typed, not from the parsed namespace: an
-    option can share a subparser's ``dest`` (``bisect --cmd`` overwrote ``cmd``)."""
+    ``("gate", "record")``. Read from the words typed, skipping options and their values (a
+    value can spell a command), not from the parsed namespace: an option can share a
+    subparser's ``dest`` (``bisect --cmd`` overwrote ``cmd``)."""
     tokens = list(argv)
     words: list[str] = []
     node = parser
@@ -835,12 +861,12 @@ def parsed_path(parser: argparse.ArgumentParser, argv: Iterable[str]) -> tuple[s
         sub = next((a for a in node._actions if isinstance(a, argparse._SubParsersAction)), None)
         if sub is None:
             return tuple(words)
-        typed = next((i for i in range(at, len(tokens)) if tokens[i] in sub.choices), None)
-        if typed is None or "--" in tokens[at:typed]:
+        at = _after_options(node, tokens, at)
+        if at >= len(tokens) or tokens[at] not in sub.choices:
             return tuple(words)
-        target = sub.choices[tokens[typed]]
-        words.append(next((n for n, p in sub.choices.items() if p is target), tokens[typed]))
-        node, at = target, typed + 1
+        target = sub.choices[tokens[at]]
+        words.append(next((n for n, p in sub.choices.items() if p is target), tokens[at]))
+        node, at = target, at + 1
 
 
 #: CLI commands whose words are not the name of the tool that serves them and which no

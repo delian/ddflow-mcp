@@ -248,6 +248,14 @@ def test_parsed_path_resolves_an_alias_to_its_command():
     parser = build_parser()
     assert R.parsed_path(parser, ["gate", "status", "T1"]) == ("gate", "status")
     assert R.parsed_path(parser, ["--agent", "A", "gate", "status"]) == ("gate", "status")
+    # an option's VALUE can spell another command; `--` makes the rest positional
+    assert R.parsed_path(parser, ["--agent", "task", "hooks", "status"]) == ("hooks", "status")
+    assert R.parsed_path(parser, ["gate", "--repo", "status", "record", "T1"]) == ("gate", "record")
+    assert R.parsed_path(parser, ["task", "--", "list"]) == ("task", "list")
+    assert R.parsed_path(parser, ["--json", "--allow-older-version", "task", "list"]) == (
+        "task",
+        "list",
+    )
     # an option that shares a subparser's dest (`bisect --cmd` overwrote `cmd`) does not confuse it
     assert R.parsed_path(parser, ["bisect", "a", "--cmd", "x {tests}"]) == ("bisect",)
     assert R.command_for_path(("gate", "status"), {}, {}) == "gate_status"
