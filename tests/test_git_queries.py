@@ -89,10 +89,7 @@ def test_header_only_sections_fall_back_to_the_diff_line():
 
 
 def test_content_lines_that_look_like_headers_are_not_headers():
-    diff = (
-        "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1 +1 @@\n"
-        "--- a/evil\n+++ b/evil\n"
-    )
+    diff = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1 +1 @@\n--- a/evil\n+++ b/evil\n"
     assert _touched(diff) == {"f"}
 
 
@@ -149,7 +146,9 @@ def test_lossy_names_cover_only_as_many_changed_files_as_the_diff_shows(repo):
 
 def test_header_only_sections_with_two_different_names_split_at_the_boundary():
     """Mutant: the final `return None, pair`. A `--no-index` binary diff names two files."""
-    plain = "diff --git a/old.bin b/new.bin\nindex 0..1\nBinary files a/old.bin and b/new.bin differ\n"
+    plain = (
+        "diff --git a/old.bin b/new.bin\nindex 0..1\nBinary files a/old.bin and b/new.bin differ\n"
+    )
     one_quoted = 'diff --git a/old.txt "b/n\\303\\266.bin"\nBinary files differ\n'
     both = 'diff --git "a/\\303\\266 x" "b/\\303\\266 y"\nBinary files differ\n'
     assert [f.paths for f in unidiff.files(plain)] == [("old.bin", "new.bin")]

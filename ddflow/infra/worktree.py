@@ -679,6 +679,7 @@ def diff_covers_everything(
         return False, ["(git status failed: the diff cannot be checked)"]
     seen = [p for f in unidiff.files(diff) for p in f.paths]
     shown = set(seen)
+
     # The diff text is decoded with errors="replace" (`_diff_text`), so under
     # `core.quotepath=false` a non-UTF-8 byte in a name is U+FFFD there but an escape in
     # the status path. Such names cannot be told apart in the diff, so a lossy spelling

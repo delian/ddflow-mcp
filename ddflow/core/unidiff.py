@@ -63,6 +63,8 @@ class FileDiff:
         return tuple(dict.fromkeys(p for p in (self.old, self.new) if p))
 
 
+#: The two sides of a diff: before and after.
+SIDES = ("old", "new")
 _QUOTED = r'"(?:[^"\\]|\\.)*"'
 
 
@@ -73,7 +75,7 @@ def _from_header_line(head: str) -> tuple[str | None, str | None]:
     (``a/X b/X``, or ``X X`` under ``diff.noprefix``), or a single `` b/`` boundary."""
     pair = head[len("diff --git ") :]
     quoted = re.findall(_QUOTED, pair)
-    if len(quoted) == 2:
+    if len(quoted) == len(SIDES):
         return header_path(f"--- {quoted[0]}", "a/"), header_path(f"+++ {quoted[1]}", "b/")
     if len(quoted) == 1:
         rest = pair.replace(quoted[0], "", 1).strip()
