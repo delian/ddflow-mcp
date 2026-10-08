@@ -232,3 +232,10 @@ def test_the_changelog_cut_dry_run_refuses_what_the_real_cut_refuses(tmp_path, m
     apply = C._region("CHANGELOG.md", "unreleased\n", "## [1.0.0]\n- x\n", "1.0.0", {})
     with pytest.raises(W.Refused, match="upgrade ddflow before"):
         apply(tmp_path, force=False, dry=True)
+
+
+def test_managed_reads_a_huge_fmt_without_crashing():
+    t = f"<!-- ddflow:begin doc/main ddflow=0.1.5 fmt={'9' * 5000} sha=abc -->\nx\n<!-- ddflow:end doc/main -->\n"
+    assert M.stamp(t).fmt > 10**6 and M.state(t) == "newer"
+    with pytest.raises(NewerContent):
+        M.splice(t, "y\n")

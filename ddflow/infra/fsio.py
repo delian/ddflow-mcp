@@ -421,6 +421,20 @@ MANAGED_DIGEST_LEN = 12
 _ATTR = re.compile(r"([A-Za-z0-9_-]+)=(\S+)")
 
 
+#: A format level longer than this many digits is read as MAX_LEVEL: above any real level,
+#: and never run through ``int`` (CPython refuses a very long digit string).
+MAX_LEVEL_DIGITS = 9
+MAX_LEVEL = 10**MAX_LEVEL_DIGITS
+
+
+def parse_level(text: str) -> int | None:
+    """The format level a ``fmt=`` value spells, or None when it is not a plain decimal
+    number (an unknown attribute). An absurdly long number is a level above every real one."""
+    if not (text.isascii() and text.isdecimal()):
+        return None
+    return int(text) if len(text) <= MAX_LEVEL_DIGITS else MAX_LEVEL
+
+
 class NewerContent(RuntimeError):
     """A write would replace content a NEWER ddflow wrote (D-compat 2): the one refusal
     the contract allows. `needs` is the version to upgrade to (exit 3, "upgrade ddflow to
@@ -495,13 +509,14 @@ class Managed:
             return None
         line = text[at[0] : at[1]].strip().removeprefix(self.open).removesuffix(self.close)
         attrs = dict(_ATTR.findall(line))
-        if not {"ddflow", "fmt", "sha"} <= attrs.keys() or not (
-            attrs["fmt"].isascii() and attrs["fmt"].isdigit()
-        ):
+        if not {"ddflow", "fmt", "sha"} <= attrs.keys():
+            return None
+        level = parse_level(attrs["fmt"])
+        if level is None:
             return None
         known = {"ddflow", "fmt", "sha"}
         extra = tuple((k, v) for k, v in _ATTR.findall(line) if k not in known)
-        return Stamp(attrs["ddflow"], int(attrs["fmt"]), attrs["sha"], extra)
+        return Stamp(attrs["ddflow"], level, attrs["sha"], extra)
 
     def version(self, text: str) -> str | None:
         s = self.stamp(text)
