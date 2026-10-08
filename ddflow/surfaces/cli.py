@@ -23,6 +23,7 @@ import os
 import sys
 
 from ..api import items as A_ITEMS
+from ..api.refs import provide_upgrade_vocabulary
 from ..core import clock
 from ..core.model import fold
 from ..core.outcome import INTERRUPTED, exit_for
@@ -328,6 +329,7 @@ _NOTICES = Notices()
 
 # What the stale-reference scan (`doctor`) checks names against: this parser and the tool table.
 provide(parser=build_parser, tools=TOOLS)
+provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names against
 
 
 def main(argv: list[str] | None = None) -> int:

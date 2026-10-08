@@ -20,6 +20,7 @@ from ..services.compat_refs import (  # noqa: F401  -- the types a surface names
     rewrite,
     scan,
 )
+from ..services.migrations import refs as MR
 
 
 def _renamed(alias: Any) -> Renamed:
@@ -77,21 +78,19 @@ def vocabulary(
     )
 
 
-def stale_references(
-    repo: Path,
+def _vocabulary_of(
     parser: Callable[[], argparse.ArgumentParser] | None,
     tools: Mapping[str, Mapping[str, Any]] | None,
-) -> tuple[list[str], list[str]]:
-    """``(problems, notes)`` for `doctor`: the stale references in the project's files.
+) -> Vocabulary | None:
+    """The vocabulary of what a surface has loaded, or None when it has loaded neither.
 
     What a surface has loaded is what it can check: with the tool table the tool names, and
-    with the CLI parser the command words too. With neither there is nothing to check
-    against and nothing is reported."""
+    with the CLI parser the command words too."""
     if parser is None and tools is None:
-        return [], []
+        return None
     commands, command_aliases = command_names(parser()) if parser is not None else (frozenset(), {})
     names, tool_aliases = tool_names(tools) if tools is not None else (frozenset(), {})
-    vocab = Vocabulary(
+    return Vocabulary(
         commands=commands,
         tools=names,
         command_aliases=command_aliases,
@@ -99,4 +98,35 @@ def stale_references(
         check_commands=parser is not None,
         check_tools=tools is not None,
     )
-    return report(scan(repo, vocab))
+
+
+def stale_references(
+    repo: Path,
+    parser: Callable[[], argparse.ArgumentParser] | None,
+    tools: Mapping[str, Mapping[str, Any]] | None,
+) -> tuple[list[str], list[str]]:
+    """``(problems, notes)`` for `doctor`: the stale references in the project's files.
+
+    With neither a parser nor a tool table there is nothing to check against and nothing is
+    reported."""
+    vocab = _vocabulary_of(parser, tools)
+    return report(scan(repo, vocab)) if vocab is not None else ([], [])
+
+
+_registered: dict[str, Any] = {"parser": None, "tools": None}
+
+
+def provide_upgrade_vocabulary(
+    parser_factory: Callable[[], argparse.ArgumentParser] | None = None,
+    tools: Mapping[str, Mapping[str, Any]] | None = None,
+) -> None:
+    """Hand the command and tool tables to the stale-references migration
+    (`services.migrations.refs`), so `ddflow upgrade` finds the deprecated names ddflow wrote.
+
+    Called where a surface registers its vocabulary: the CLI with its parser and the tool
+    table, the MCP server with the tools only. A later call adds to an earlier one (the CLI
+    loads the tool table too). The vocabulary is built when an upgrade asks for it, not here,
+    because building the parser costs more than most commands need."""
+    _registered["parser"] = parser_factory or _registered["parser"]
+    _registered["tools"] = tools if tools is not None else _registered["tools"]
+    MR.provide(lambda: _vocabulary_of(_registered["parser"], _registered["tools"]))
