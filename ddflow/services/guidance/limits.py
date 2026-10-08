@@ -8,12 +8,15 @@ checks run when a file is read and when a record is built.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ...core import clock
 from .record import ENFORCEMENTS, STATUSES, GuidanceRecord, KindSpec, Limits
 
 
-def over_limit(rec: GuidanceRecord, lim: Limits | None, existing: int) -> str:
-    """Why a NEW record breaks the limits (``existing`` already filed), or ""."""
+def over_limit(rec: GuidanceRecord, lim: Limits | None, existing: Callable[[], int]) -> str:
+    """Why a NEW record breaks the limits, or "". ``existing`` counts the records already
+    filed; it is called only when the other limits hold, as the count costs a read of them all."""
     if lim is None:
         return ""
     s, directory = lim.section, rec.kind + "s"
@@ -23,7 +26,7 @@ def over_limit(rec: GuidanceRecord, lim: Limits | None, existing: int) -> str:
         return f"scope {rec.level!r} is not in {s}.scopes_allowed {lim.scopes_allowed}"
     if lim.tags_allowed and (bad := [t for t in rec.tags if t not in lim.tags_allowed]):
         return f"tags {bad} are not in {s}.tags_allowed {lim.tags_allowed}"
-    if existing >= lim.max_items:
+    if existing() >= lim.max_items:
         return f"the project already has {s}.max_{directory} ({lim.max_items}) {directory}"
     return ""
 

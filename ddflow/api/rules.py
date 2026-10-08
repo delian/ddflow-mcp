@@ -433,7 +433,7 @@ def apply_rule_update(
 def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
     """Refuse a new rule that breaks the project's [rules] limits."""
     cfg = _load(repo, agent)[1]
-    problem = over_limit(rule.to_record(), RULE.limits(cfg), len(RulesStorage(repo).list()))
+    problem = over_limit(rule.to_record(), RULE.limits(cfg), lambda: len(RulesStorage(repo).list()))
     return O.refused("rule.added", problem) if problem else None
 
 
