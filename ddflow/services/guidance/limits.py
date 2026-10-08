@@ -2,40 +2,14 @@
 
 Limits are the project's caps on how much guidance a kind may hold (``[rules]``:
 ``max_rules``, ``max_size_bytes``, ``scopes_allowed``, ``tags_allowed``); a kind with no
-config section has none. Lint is what makes a record well-formed whatever its kind: the same
+config section has none (`KindSpec.limits`). Lint is what makes a record well-formed whatever its kind: the same
 checks run when a file is read and when a record is built.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-
 from ...core import clock
-from .record import ENFORCEMENTS, STATUSES, GuidanceRecord, KindSpec
-
-
-@dataclass(frozen=True)
-class Limits:
-    section: str  # the config section that holds them: the name in the refusal
-    max_items: int
-    max_size_bytes: int
-    scopes_allowed: list[str]
-    tags_allowed: list[str]
-
-
-def limits_for(cfg: Any, spec: KindSpec) -> Limits | None:
-    """The limits ``cfg`` sets for a kind, or None when the kind has no config section."""
-    sec = getattr(cfg, spec.section, None) if spec.section else None
-    if sec is None:
-        return None
-    return Limits(
-        spec.section,
-        getattr(sec, f"max_{spec.directory}"),
-        sec.max_size_bytes,
-        sec.scopes_allowed,
-        sec.tags_allowed,
-    )
+from .record import ENFORCEMENTS, STATUSES, GuidanceRecord, KindSpec, Limits
 
 
 def over_limit(rec: GuidanceRecord, lim: Limits | None, existing: int) -> str:

@@ -16,7 +16,7 @@ import ddflow.api._dedupe as DD
 from ..core import outcome as O
 from ..infra.fsio import replace_text
 from ..services.guidance.kinds import RULE
-from ..services.guidance.limits import limits_for, over_limit
+from ..services.guidance.limits import over_limit
 from ..services.guidance.similarity import similar
 from ..services.rules import Rule, RulesStorage
 from ._base import _load
@@ -433,7 +433,7 @@ def apply_rule_update(
 def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
     """Refuse a new rule that breaks the project's [rules] limits."""
     cfg = _load(repo, agent)[1]
-    problem = over_limit(rule.to_record(), limits_for(cfg, RULE), len(RulesStorage(repo).list()))
+    problem = over_limit(rule.to_record(), RULE.limits(cfg), len(RulesStorage(repo).list()))
     return O.refused("rule.added", problem) if problem else None
 
 

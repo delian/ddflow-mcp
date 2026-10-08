@@ -27,7 +27,7 @@ from ddflow.services.guidance.kinds import (
     governing,
     is_valid_rule_id,
 )
-from ddflow.services.guidance.limits import limits_for, lint, over_limit
+from ddflow.services.guidance.limits import lint, over_limit
 from ddflow.services.guidance.record import GuidanceRecord, Scope
 from ddflow.services.guidance.resolve import resolve
 from ddflow.services.guidance.store import GuidanceFiles
@@ -80,6 +80,12 @@ def test_a_file_with_the_shared_keys_round_trips() -> None:
     )
     text = fileformat.render(rec, RULE)
     assert fileformat.parse(text, RULE) == rec
+
+
+def test_a_stamped_record_without_provenance_is_stamped_on_write_not_a_crash() -> None:
+    text = fileformat.render(GuidanceRecord(id="r-z", kind="rule", title="z", body="b"), RULE)
+    got = fileformat.parse(text, RULE)
+    assert got.provenance["created"] and got.provenance["updated"]
 
 
 def test_a_decision_file_uses_the_same_schema() -> None:
@@ -297,11 +303,11 @@ def _cfg(**over):
     ],
 )
 def test_limits_say_what_they_were_broken_by(rec, cfg, existing, message) -> None:
-    assert over_limit(rec, limits_for(cfg, RULE), existing) == message
+    assert over_limit(rec, RULE.limits(cfg), existing) == message
 
 
 def test_a_kind_with_no_config_section_has_no_limits() -> None:
-    assert limits_for(_cfg(), DECISION) is None
+    assert DECISION.limits(_cfg()) is None
     assert over_limit(_rec(body="x" * 10**6), None, 10**6) == ""
 
 
