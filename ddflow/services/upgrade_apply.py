@@ -168,25 +168,14 @@ def make_backup(repo: Path, files: Collection[Path], frm: str, to: str) -> Path:
 def _remove_key(path: Path, key: str) -> bool:
     """Delete ``<section>.<knob>`` from the TOML file at ``path``, comments and layout kept.
     True when it was there. The result is parsed before it is written."""
-    import tomlkit
-
     if not path.is_file():
         return False
-    section, _, knob = key.rpartition(".")
     with TC.locked(path):
-        doc = tomlkit.parse(path.read_text("utf-8"))
-        table: Any = doc
-        for part in section.split(".") if section else []:
-            table = table.get(part) if isinstance(table, dict) else None
-            if table is None:
-                return False
-        if not isinstance(table, dict) or knob not in table:
-            return False
-        del table[knob]
-        text = tomlkit.dumps(doc)
-        tomllib.loads(text)
-        replace_text(path, text)
-    return True
+        text, was = TC.remove(path.read_text("utf-8"), key)
+        if was:
+            tomllib.loads(text)
+            replace_text(path, text)
+    return was
 
 
 def _value_text(value: Any) -> str:
@@ -303,19 +292,14 @@ def apply(
     detector was unavailable). Raises ValueError for an unknown category,
     ``config_changes`` or ``backup`` value."""
     repo = Path(repo)
-    if backup not in BACKUP_MODES:
-        raise ValueError(f"unknown backup mode {backup!r}; known: {', '.join(BACKUP_MODES)}")
-    if config_changes not in CONFIG_POLICIES:
-        raise ValueError(
-            f"unknown config_changes policy {config_changes!r}; known: {', '.join(CONFIG_POLICIES)}"
-        )
+    _check_modes(backup, config_changes)
     confirm = dict(confirm or {})
     plan = plan or UP.build(repo, log, cfg, st)
     frm, to = plan["project_version"], plan["running"]
     results, todo = _select(plan, parse_categories(categories), confirm, config_changes)
 
-    files = [p for i in todo for p in touched(repo, cfg, i)]
     backup_dir = ""
+    files = [p for i in todo for p in touched(repo, cfg, i)]
     if files and backup == "local":
         try:
             backup_dir = str(make_backup(repo, files, frm, to))
@@ -325,32 +309,62 @@ def apply(
             return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
     results += _execute(repo, log, cfg, todo, agent)
-    ok = {r["id"] for r in results if r["status"] in (APPLIED, ACKNOWLEDGED)}
-    done_cats = [
-        c for c in UP.CATEGORIES if any(r["category"] == c and r["id"] in ok for r in results)
-    ]
-    reasons = {_ident(i): why for i in todo if i["id"] in ok and (why := _confirmed(i, confirm))}
+    ok, done_cats, reasons = _summarise(results, todo, confirm)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     if ok:
-        log.append(
-            UPGRADE_APPLIED_KIND,
-            "upgrade",
-            {
-                "from": frm,
-                "to": new_to,
-                "categories": done_cats,
-                "backup": backup_dir,
-                "items": sorted(ok),
-                "confirmed": reasons,
-                "config_changes": [
-                    {k: i[k] for k in ("key", "change", "old", "new")}
-                    for i in todo
-                    if i["category"] == "config" and i["id"] in ok
-                ],
-                "summary": f"upgrade {frm or 'unstamped'} -> {to}: {', '.join(done_cats)}",
-            },
-        )
+        _record(log, todo, ok, frm, new_to, to, done_cats, backup_dir, reasons)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
+
+
+def _summarise(
+    results: list[dict[str, Any]], todo: list[dict[str, Any]], confirm: Mapping[str, str]
+) -> tuple[set[str], list[str], dict[str, str]]:
+    """`(ids settled, categories with something settled, the operator's reasons)`."""
+    ok = {r["id"] for r in results if r["status"] in (APPLIED, ACKNOWLEDGED)}
+    cats = [c for c in UP.CATEGORIES if any(r["category"] == c and r["id"] in ok for r in results)]
+    reasons = {_ident(i): why for i in todo if i["id"] in ok and (why := _confirmed(i, confirm))}
+    return ok, cats, reasons
+
+
+def _check_modes(backup: str, config_changes: str) -> None:
+    if backup not in BACKUP_MODES:
+        raise ValueError(f"unknown backup mode {backup!r}; known: {', '.join(BACKUP_MODES)}")
+    if config_changes not in CONFIG_POLICIES:
+        raise ValueError(
+            f"unknown config_changes policy {config_changes!r}; known: {', '.join(CONFIG_POLICIES)}"
+        )
+
+
+def _record(
+    log: Any,
+    todo: list[dict[str, Any]],
+    ok: set[str],
+    frm: str,
+    new_to: str,
+    to: str,
+    cats: list[str],
+    backup_dir: str,
+    reasons: dict[str, str],
+) -> None:
+    """Append the one `upgrade.applied` event: replay's account of this upgrade."""
+    log.append(
+        UPGRADE_APPLIED_KIND,
+        "upgrade",
+        {
+            "from": frm,
+            "to": new_to,
+            "categories": cats,
+            "backup": backup_dir,
+            "items": sorted(ok),
+            "confirmed": reasons,
+            "config_changes": [
+                {k: i[k] for k in ("key", "change", "old", "new")}
+                for i in todo
+                if i["category"] == "config" and i["id"] in ok
+            ],
+            "summary": f"upgrade {frm or 'unstamped'} -> {to}: {', '.join(cats)}",
+        },
+    )
 
 
 def _ident(item: dict[str, Any]) -> str:
