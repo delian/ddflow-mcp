@@ -20,15 +20,16 @@ from __future__ import annotations
 
 import math
 import re
-import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import fieldcheck as FC
 from ..core import schedule as CS
 from ..core.model import SCHEDULE_FIELDS, Schedule, State
 from .cadence import calendar
+from .tomldir import load_toml_dir
 
 #: Where a project keeps its job files.
 SCHEDULES_DIR = Path(".ddflow") / "schedules"
@@ -79,17 +80,11 @@ class Definitions:
 # -- one definition ------------------------------------------------------------------------
 
 
-def _is_int(v: Any) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
-
-
-def _str_list(name: str, v: Any, errors: list[str]) -> list[str]:
-    if isinstance(v, str):
-        v = [x.strip() for x in v.split(",") if x.strip()]
-    if not isinstance(v, list) or not all(isinstance(x, str) and x.strip() for x in v):
-        errors.append(f"{name} must be a list of non-empty strings, got {v!r}")
-        return []
-    return [x.strip() for x in v]
+_is_int = FC.is_int
+_str_list = FC.str_list
+_text = FC.text
+_one_of = FC.one_of
+_flag = FC.flag
 
 
 def check_id(jid: str) -> str:
@@ -100,35 +95,6 @@ def check_id(jid: str) -> str:
             f"D-plain-keys)"
         )
     return ""
-
-
-def _text(name: str, what: str):
-    def check(v: Any, errors: list[str]) -> Any:
-        if not isinstance(v, str):
-            errors.append(f"{name} must be {what}, got {v!r}")
-        return v.strip() if isinstance(v, str) else None
-
-    return check
-
-
-def _one_of(name: str, allowed: tuple[str, ...]):
-    def check(v: Any, errors: list[str]) -> Any:
-        if v not in allowed:
-            errors.append(f"{name} must be one of {', '.join(allowed)}, got {v!r}")
-            return None
-        return v
-
-    return check
-
-
-def _flag(name: str):
-    def check(v: Any, errors: list[str]) -> Any:
-        if not isinstance(v, bool):
-            errors.append(f"{name} must be true or false, got {v!r}")
-            return None
-        return v
-
-    return check
 
 
 def _needs(v: Any, errors: list[str]) -> list[str]:
@@ -266,28 +232,13 @@ def from_cadence(cfg: Config) -> tuple[list[Schedule], list[str]]:
 def load_files(repo: Path) -> tuple[list[tuple[Schedule, str]], list[str]]:
     """Every `.ddflow/schedules/*.toml`, one job per file, id = the file name. A file
     that does not parse or validate is reported and left out; it never stops the rest."""
-    d = Path(repo) / SCHEDULES_DIR
-    out: list[tuple[Schedule, str]] = []
-    errors: list[str] = []
-    if not d.is_dir():
-        return out, errors
-    for f in sorted(d.glob("*.toml")):
-        rel = (SCHEDULES_DIR / f.name).as_posix()
-        try:
-            spec = tomllib.loads(f.read_text("utf-8"))
-        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-            errors.append(f"{rel}: cannot read it: {exc}")
-            continue
-        jid = spec.pop("id", f.stem)
-        if jid != f.stem:
-            errors.append(f"{rel}: id {jid!r} differs from the file name; a job file is <id>.toml")
-            continue
-        job, bad = build(f.stem, spec)
-        if job is None:
-            errors.append(f"{rel}: " + "; ".join(bad))
-            continue
-        out.append((job, f"file:{rel}"))
-    return out, errors
+    loaded, errors = load_toml_dir(
+        repo,
+        SCHEDULES_DIR,
+        build,
+        lambda jid: f"id {jid!r} differs from the file name; a job file is <id>.toml",
+    )
+    return [(job, f"file:{rel}") for _, job, rel in loaded], errors
 
 
 def definitions(repo: Path, cfg: Config, st: State) -> Definitions:
