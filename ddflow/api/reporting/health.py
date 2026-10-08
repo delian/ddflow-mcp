@@ -181,14 +181,23 @@ def _unknown_author_notes(repo: Path, log, ctx: RP.Context | None = None) -> lis
 
 
 def _driver_drift_notes(repo: Path) -> list[str]:
-    """One note naming driver docs that differ from the templates this ddflow ships."""
-    from ...services.adopt import driver_drift
+    """One note naming driver docs that differ from the templates this ddflow ships, each
+    with WHAT the difference is (the Managed state): an unedited older release, a hand edit,
+    a newer ddflow's format, or a copy with no stamp."""
+    from ...services import adopt as AD
 
-    lagging = driver_drift(repo)
+    lagging = AD.driver_states(repo)
     if not lagging:
         return []
+    why = {
+        AD.DOC_STALE: "older release",
+        AD.DOC_EDITED: "edited by hand",
+        AD.DOC_NEWER: "newer format: upgrade ddflow",
+        AD.DOC_LEGACY: "no version stamp",
+    }
+    names = ", ".join(f"{rel} ({why.get(st, st)})" for rel, st in lagging.items())
     return [
-        f"driver docs differ from the templates this ddflow ships: {', '.join(lagging)}"
+        f"driver docs differ from the templates this ddflow ships: {names}"
         " — `ddflow adopt --refresh-docs` rewrites them (and the rules blocks) and nothing else"
     ]
 

@@ -136,7 +136,12 @@ def render(
     # or the pre-commit check (B18) refuses a correct render made under one environment
     # and committed under another -- blaming a hand edit that never happened.
     committed_cfg = Config.load(repo, env={})
-    files = render_md.write_views(repo, Store(repo, cfg).ensure(log), committed_cfg, subdir=out_dir)
+    try:
+        files = render_md.write_views(
+            repo, Store(repo, cfg).ensure(log), committed_cfg, subdir=out_dir
+        )
+    except render_md.NewerView as exc:
+        return O.refused("render", str(exc))
     return O.ok("render", show="", text="", files=[str(f) for f in files])
 
 
