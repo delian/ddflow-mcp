@@ -598,7 +598,8 @@ def _brief_current(
             f"- worktree: `{load_path(repo, it.worktree) if repo else it.worktree}`"
             f" on `{it.branch}`"
         )
-    todo = [g for g in pipeline_for(it, cfg) if it.gate_outcome(g) not in ("passed", "skipped")]
+    required = set(cfg.gates.required)
+    todo = [g for g in pipeline_for(it, cfg) if not it.gate_satisfied(g, g in required)]
     out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
     if repo is not None and not suggested:
         from ..services.completion import readme_report
