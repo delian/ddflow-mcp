@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import knowledge as K
 from ._common import _answer, _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -93,15 +94,5 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("session",),
     },
-    "ddflow_decision_show": {
-        "description": (
-            "Read ONE architectural decision in full — its context, what was decided, "
-            "the consequences, and what was rejected. `ddflow_decision_list` gives "
-            "you the titles; this is what you read before working against one, and "
-            "especially before proposing something it already considered."
-        ),
-        "properties": {"id": ("string", "Decision id.", True)},
-        "api": lambda repo, a, agent: _api().decision_show(repo, a["id"]),
-        "payload": "decision",
-    },
+    "ddflow_decision_show": K.BY_TOOL["ddflow_decision_show"].tool_entry(),
 }

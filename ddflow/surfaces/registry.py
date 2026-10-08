@@ -16,6 +16,7 @@ both depend on it.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import difflib
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -250,6 +251,16 @@ class Param:
     #: Not offered on the MCP surface / on the CLI.
     cli_only: bool = False
     mcp_only: bool = False
+    #: argparse's ``nargs`` of a positional (``"?"``: optional, so not required on MCP).
+    nargs: str | None = None
+    #: Whether the MCP property is required when that differs from the CLI flag (a prompt's
+    #: ``--text`` is read from stdin when absent; the tool has no stdin).
+    tool_required: bool | None = None
+    #: argparse's ``metavar`` (``--extends ID``), and the name of the mutually exclusive
+    #: group (``add_mutually_exclusive_group``) the flag belongs to: every parameter of a
+    #: command sharing the name is in one group.
+    metavar: str | None = None
+    exclusive: str | None = None
     #: Earlier names that still work (D-compat): as a tool argument, and as the CLI flag
     #: ``--name`` spelled the way `option` is (a name starting with ``-`` is a CLI-only flag
     #: spelling taken as written). Hidden from help and the schema; needs ``deprecated_since``.
@@ -274,13 +285,19 @@ class Param:
             raise ValueError(f"param {self.name!r}: type {self.type!r} not in {TYPES}")
         if self.repeat and self.type != "array":
             object.__setattr__(self, "type", "array")
-        if self.positional and self.default is not _UNSET:
+        if self.positional and self.default is not _UNSET and self.nargs != "?":
             raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
-        if self.positional and not self.required:
+        if self.nargs is not None and not self.positional:
+            raise ValueError(f"param {self.name!r}: nargs is for a positional")
+        if self.positional and not self.required and self.nargs is None:
             # argparse refuses a missing positional, so the schema must say it is required.
             object.__setattr__(self, "required", True)
         if self.cli_only and self.mcp_only:
             raise ValueError(f"param {self.name!r} is neither on the CLI nor on MCP")
+
+    @property
+    def mcp_required(self) -> bool:
+        return self.required if self.tool_required is None else self.tool_required
 
     @property
     def option(self) -> str:
@@ -322,20 +339,9 @@ class Param:
             out["enum"] = list(self.choices)
         return out
 
-    def add_to(self, parser: argparse.ArgumentParser) -> None:
-        """Add this parameter to ``parser``."""
+    def _value_kwargs(self) -> dict[str, Any]:
+        """What argparse is told of the VALUE: its action, type, choices and default."""
         kwargs: dict[str, Any] = {}
-        help_ = self.help if self.cli_help is None else self.cli_help
-        if help_:
-            kwargs["help"] = help_
-        if self.positional:
-            args: tuple[str, ...] = (self.name,)
-        else:
-            args = (self.option,)
-            if self.required:
-                kwargs["required"] = True
-            if self.flag is not None:
-                kwargs["dest"] = self.name  # a custom flag must still land on the param's name
         if self.action is not None:
             kwargs["action"] = self.action
         elif self.type == "boolean":
@@ -350,7 +356,34 @@ class Param:
             kwargs["choices"] = list(self.choices)
         if self.default is not _UNSET:
             kwargs["default"] = self.default
-        action = parser.add_argument(*args, **kwargs)
+        if self.metavar is not None:
+            kwargs["metavar"] = self.metavar
+        return kwargs
+
+    def add_to(self, parser: argparse.ArgumentParser, groups: dict[str, Any] | None = None) -> None:
+        """Add this parameter to ``parser``. ``groups`` holds the mutually exclusive groups
+        made so far for this parser (a parameter naming one joins it, a new name makes it)."""
+        kwargs: dict[str, Any] = self._value_kwargs()
+        help_ = self.help if self.cli_help is None else self.cli_help
+        if help_:
+            kwargs["help"] = help_
+        if self.positional:
+            args: tuple[str, ...] = (self.name,)
+            if self.nargs is not None:
+                kwargs["nargs"] = self.nargs
+        else:
+            args = (self.option,)
+            if self.required:
+                kwargs["required"] = True
+            if self.flag is not None:
+                kwargs["dest"] = self.name  # a custom flag must still land on the param's name
+        target: Any = parser
+        if self.exclusive is not None:
+            groups = {} if groups is None else groups
+            if self.exclusive not in groups:
+                groups[self.exclusive] = parser.add_mutually_exclusive_group()
+            target = groups[self.exclusive]
+        action = target.add_argument(*args, **kwargs)
         # An old flag is the SAME action under another option string: parsing finds it,
         # `--help` (which prints the action's own strings) does not.
         for option, alias in self.flag_aliases().items():
@@ -364,7 +397,7 @@ class Param:
 
     def spec(self) -> tuple[str, str, bool]:
         """The ``(json_type, description, required)`` tuple the MCP engine's tool table holds."""
-        return (self.type, self.help, self.required)
+        return (self.type, self.help, self.mcp_required)
 
 
 def params_schema(
@@ -377,7 +410,7 @@ def params_schema(
     old = deprecated or {}
     items = params.values() if isinstance(params, Mapping) else params
     shown = [p for p in items if p.name not in old]
-    required = [p.name for p in shown if p.required]
+    required = [p.name for p in shown if p.mcp_required]
     return {
         "type": "object",
         "properties": {p.name: p.schema() for p in shown},
@@ -445,8 +478,22 @@ class Command:
     removed_in: str = MIN_REMOVED_IN
     #: What an old name should be replaced by when that is not simply this command.
     replacement: str = ""
+    #: The order ``tools/list`` has always served the properties in, when it is not the order
+    #: of ``params`` (which is the CLI's, and so the order of ``--help``). Empty: the same.
+    tool_order: tuple[str, ...] = ()
+    #: Attributes the CLI parser sets on every parse of this command, beside the handler.
+    defaults: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        self._check_names()
+        self._check_params()
+        if not self.path and not self.tool:
+            raise ValueError("a command needs a CLI path or an MCP tool name")
+        if len(self.via) > MAX_VIA:
+            raise ValueError(f"{'/'.join(self.path)}: via is (tool,) or (tool, selector)")
+
+    def _check_names(self) -> None:
+        """The old names this command answers to are well formed."""
         _check_aliases(
             f"{'/'.join(self.path) or self.tool}",
             self.aliases,
@@ -465,6 +512,9 @@ class Command:
             raise ValueError(f"{self.tool}: CLI aliases need a CLI path")
         if self.tool_aliases and not self.tool:
             raise ValueError(f"{'/'.join(self.path)}: tool aliases need a tool")
+
+    def _check_params(self) -> None:
+        """The parameters are distinct, and ``tool_order`` names each tool one once."""
         names = [p.name for p in self.params]
         if len(set(names)) != len(names):
             raise ValueError(f"{'/'.join(self.path)}: duplicate parameter names")
@@ -474,14 +524,19 @@ class Command:
                 f"{'/'.join(self.path) or self.tool}: a parameter alias is also another "
                 "parameter's name or alias"
             )
-        if not self.path and not self.tool:
-            raise ValueError("a command needs a CLI path or an MCP tool name")
-        if len(self.via) > MAX_VIA:
-            raise ValueError(f"{'/'.join(self.path)}: via is (tool,) or (tool, selector)")
+        tool_names = sorted(p.name for p in self.params if not p.cli_only)
+        if self.tool_order and sorted(self.tool_order) != tool_names:
+            raise ValueError(
+                f"{self.tool or '/'.join(self.path)}: tool_order must name each tool parameter once"
+            )
 
     @property
     def mcp_params(self) -> tuple[Param, ...]:
-        return tuple(p for p in self.params if not p.cli_only)
+        own = tuple(p for p in self.params if not p.cli_only)
+        if not self.tool_order:
+            return own
+        by_name = {p.name: p for p in own}
+        return tuple(by_name[n] for n in self.tool_order if n in by_name)
 
     @property
     def cli_params(self) -> tuple[Param, ...]:
@@ -542,10 +597,13 @@ class Command:
         if self.summary:
             kwargs["help"] = self.summary
         sub = subparsers.add_parser(self.path[-1], **kwargs)
+        groups: dict[str, Any] = {}
         for p in self.cli_params:
-            p.add_to(sub)
+            p.add_to(sub, groups)
         if self.handler is not None:
             sub.set_defaults(fn=self.handler)
+        if self.defaults:
+            sub.set_defaults(**self.defaults)
         for word in self.aliases:
             old = " ".join((*self.path[:-1], word))
             add_command_alias(
@@ -563,25 +621,43 @@ class Command:
         return sub
 
 
+def _group_subparsers(
+    subparsers: argparse._SubParsersAction, group: str
+) -> argparse._SubParsersAction | None:
+    """The subparsers action of a group parser already on ``subparsers``, or None."""
+    parser = subparsers.choices.get(group)
+    if parser is None:
+        return None
+    return next((a for a in parser._actions if isinstance(a, argparse._SubParsersAction)), None)
+
+
 def add_commands(
     subparsers: argparse._SubParsersAction,
     commands: tuple[Command, ...] | list[Command],
     *,
     groups: Mapping[str, str] | None = None,
     group_aliases: Mapping[str, tuple[Alias, ...]] | None = None,
+    handlers: Mapping[tuple[str, ...], Callable[..., Any]] | None = None,
 ) -> None:
     """Register ``commands`` on the root ``subparsers``, in order.
 
     A command whose path is longer than one word goes under a group parser, created on
-    first use with the one-line help ``groups`` gives it. Only paths of one or two words
-    exist today. ``group_aliases`` maps a group to the old names of the whole group
-    (``{"docs": (Alias("command", "doc", "docs", "0.1.17"),)}``): hidden, always callable.
+    first use with the one-line help ``groups`` gives it (a group not named there is not
+    listed in the parent's help) or, when ``subparsers`` already holds that group, added to
+    it. Only paths of one or two words exist today. ``group_aliases`` maps a group to the
+    old names of the whole group (``{"docs": (Alias("command", "doc", "docs", "0.1.17"),)}``):
+    hidden, always callable. ``handlers`` supplies the CLI function of a command that
+    declares none (its path is the key), so a declaration can live where the parser's
+    imports are not wanted.
     """
     made: dict[str, argparse._SubParsersAction] = {}
     parsers: dict[str, argparse.ArgumentParser] = {}
-    for cmd in commands:
-        if not cmd.path:
+    for declared in commands:
+        if not declared.path:
             continue
+        cmd = declared
+        if handlers and cmd.handler is None and cmd.path in handlers:
+            cmd = dataclasses.replace(cmd, handler=handlers[cmd.path])
         if len(cmd.path) == 1:
             cmd.add_to(subparsers)
             continue
@@ -589,15 +665,26 @@ def add_commands(
             raise ValueError(f"{'/'.join(cmd.path)}: only one- and two-word paths are supported")
         group = cmd.path[0]
         if group not in made:
-            gp = subparsers.add_parser(group, help=(groups or {}).get(group, ""))
-            parsers[group] = gp
-            made[group] = gp.add_subparsers(dest=f"{group}_cmd", required=True)
+            existing = _group_subparsers(subparsers, group)
+            if existing is not None:
+                made[group] = existing
+            else:
+                kw = {"help": groups[group]} if groups and group in groups else {}
+                gp = subparsers.add_parser(group, **kw)
+                parsers[group] = gp
+                made[group] = gp.add_subparsers(dest=f"{group}_cmd", required=True)
         cmd.add_to(made[group])
     for group, aliases in (group_aliases or {}).items():
         if group not in made:
             raise ValueError(f"group alias for {group!r}, which no command declares")
         for alias in aliases:
             add_command_alias(subparsers, parsers[group], alias.old, alias)
+
+
+def by_tool(commands: Iterable[Command]) -> dict[str, Command]:
+    """The commands that have an MCP tool, by tool name (a tool module takes its entries
+    from here: ``by_tool(COMMANDS)["ddflow_x"].tool_entry()``)."""
+    return {c.tool: c for c in commands if c.tool}
 
 
 # -- the MCP side of aliases ----------------------------------------------------------
