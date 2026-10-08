@@ -96,3 +96,14 @@ def test_tfidf_ranks_the_closest_doc_first_and_omits_docs_sharing_no_term():
     assert set(got) == {0, 2}
     assert got[0] > got[2] > 0
     assert tfidf(docs, ["zzz"]) == {}
+
+
+def test_search_sources_are_registered_and_cover_every_kind_in_order():
+    from ddflow.services import search as S
+    from ddflow.services.searchcore import registered
+
+    names = [src.name for src in registered() if src.name in {"records", "sessions", "log"}]
+    assert names == ["records", "sessions", "log"]
+    covered = {k for src in registered() for k in src.kinds}
+    assert set(S.SOURCES) <= covered
+    assert {k for src in registered() if src.name in names for k in src.kinds} == set(S.SOURCES)
