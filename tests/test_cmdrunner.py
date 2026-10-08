@@ -225,3 +225,13 @@ def test_a_reason_quoting_the_commands_stderr_is_redacted_like_its_output():
     )
     assert run.kind == CR.NOT_FOUND
     assert "hunter2" not in run.reason and "hunter2" not in run.output
+
+
+def test_every_unavailable_path_redacts_its_reason_and_counts_once(tmp_path):
+    red = Redactor("log", secret_patterns=[r"hunter2"])
+    runner = CR.CommandRunner(redactor=red)
+    gone = runner.run(decl("true"), timeout_s=5, cwd=tmp_path / "hunter2")
+    assert gone.kind == CR.COULD_NOT_RUN and "hunter2" not in gone.reason
+    nf = runner.run(decl("echo hunter2 not found >&2; exit 127"), timeout_s=5)
+    assert nf.kind == CR.NOT_FOUND and "hunter2" not in nf.reason
+    assert sum(nf.redactions.values()) == 1  # the reason repeats stderr; one secret, one count
