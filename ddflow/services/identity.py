@@ -1,4 +1,13 @@
-"""Carrying this clone's leases across the B190 identity upgrade.
+"""Who is calling: the one place an agent identity is resolved, and the B190 lease re-homing.
+
+`resolve(root, cfg, declared)` answers `AgentId(id, source)` for every surface -- the CLI's
+`Ctx`, the typed api layer, the hooks and onboarding -- instead of each building the log's
+agent from its own copy of the precedence (an explicit declaration, `DDFLOW_AGENT`,
+`[agent].id`, then the tree-derived default). `open_log` is the shared "resolve, then open
+the log as that agent" step, and `bind` writes the answer back into the config so
+`config --explain` names the layer that really won.
+
+Carrying this clone's leases across the B190 identity upgrade.
 
 B190 gave derived ids a per-clone suffix: `{host}-{tree}` became `{host}-{tree}-{hex6}`.
 A lease claimed before that kept the bare id as its holder, and every holder comparison
@@ -29,12 +38,60 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 from ..config import Config
 from ..core.model import Lease, State, fold
 from ..infra import worktree as W
-from ..infra.log import EventLog, bare_agent_id, clone_suffix_since
+from ..infra.log import EventLog, bare_agent_id, clone_suffix_since, resolve_agent_id
 from . import leases as L
+
+
+class AgentId(NamedTuple):
+    """An identity and WHICH LAYER produced it: explicit, env, config or derived (the CLI
+    adds ddflow_identify for a harness's declaration)."""
+
+    id: str
+    source: str
+
+
+def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> AgentId:
+    """The identity a write will carry. ``declared`` is what the caller EXPLICITLY asked
+    for (`--agent`, `as_agent`, a harness declaration) and "" for nothing: passing a
+    resolved value back in makes it look explicit, which is how `config --explain` once
+    blamed the environment for a variable nobody had set."""
+    return AgentId(*resolve_agent_id(root, cfg, declared))
+
+
+def bind(cfg: Config, who: AgentId) -> None:
+    """Record the resolved identity on ``cfg`` (value and the layer that won), as one
+    invocation's fact that every surface must agree on."""
+    if who.id != cfg.agent.id:
+        cfg.agent.id = who.id
+        cfg.sources["agent.id"] = who.source
+
+
+def open_log(
+    root: Path | str,
+    cfg: Config,
+    declared: str = "",
+    *,
+    lock_timeout_s: float | None = None,
+    bind_cfg: bool = False,
+) -> tuple[EventLog, AgentId]:
+    """Resolve the identity and open the log as that agent; also returns the answer. ``bind_cfg`` also writes the
+    answer back into ``cfg`` (see :func:`bind`); ``lock_timeout_s`` defaults to
+    ``[lease].acquire_timeout_s`` (a hook passes a shorter wait)."""
+    who = resolve(root, cfg, declared)
+    if bind_cfg:
+        bind(cfg, who)
+    log = EventLog(
+        root,
+        who.id,
+        lock_timeout_s=cfg.lease.acquire_timeout_s if lock_timeout_s is None else lock_timeout_s,
+        log_cfg=cfg.log,
+    )
+    return log, who
 
 
 def _pre_upgrade(cfg: Config, st: State, bare: str, since: float) -> list[str]:

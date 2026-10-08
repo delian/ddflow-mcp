@@ -399,3 +399,58 @@ def test_a_dangling_or_empty_git_pointer_is_no_repository(tmp_path):
         (work / ".git").write_text(line)
         assert paths.common_dir(work, ask_git=False) is None, line
         assert paths.primary_checkout(work) is None
+
+
+# -- services.identity.resolve / bind / open_log (B-uni-identity.3-resolver.2-resolve) -----
+
+
+@pytest.mark.parametrize(
+    ("declared", "env", "config_id", "layer"),
+    [
+        ("exp", "", "", "explicit"),
+        ("exp", "envy", CFG_ID, "explicit"),
+        ("", "envy", "", "env"),
+        ("", "envy", CFG_ID, "config"),
+        ("", "", CFG_ID, "config"),
+        ("", "", "", "derived"),
+    ],
+)
+def test_identity_resolve_answers_what_the_log_resolver_answers(
+    adopted, monkeypatch, declared, env, config_id, layer
+):
+    from ddflow.services import identity as ID
+
+    monkeypatch.chdir(adopted)
+    if env:
+        monkeypatch.setenv("DDFLOW_AGENT", env)
+    cfg = _cfg(adopted, config_id=config_id)
+    got = ID.resolve(adopted, cfg, declared)
+    assert got.source == layer
+    assert tuple(got) == L.resolve_agent_id(adopted, cfg, declared)
+    assert ID.resolve(adopted, None, declared).id == L.resolve_agent_id(adopted, None, declared)[0]
+
+
+def test_bind_writes_the_identity_and_its_layer_back_only_when_it_differs(adopted, monkeypatch):
+    from ddflow.services import identity as ID
+
+    monkeypatch.chdir(adopted)
+    cfg = _cfg(adopted)
+    ID.bind(cfg, ID.resolve(adopted, cfg))
+    assert (cfg.agent.id, cfg.sources["agent.id"]) == (L.default_agent_id(adopted), "derived")
+    cfg2 = _cfg(adopted, config_id=CFG_ID)
+    before = dict(cfg2.sources)
+    ID.bind(cfg2, ID.resolve(adopted, cfg2))
+    assert cfg2.sources == before, "an identity the config already carries is not re-sourced"
+
+
+def test_open_log_opens_as_the_resolved_agent_and_can_bind_the_config(adopted, monkeypatch):
+    from ddflow.services import identity as ID
+
+    monkeypatch.chdir(adopted)
+    monkeypatch.setenv("DDFLOW_AGENT", "envy")
+    cfg = _cfg(adopted)
+    log, who = ID.open_log(adopted, cfg, bind_cfg=True, lock_timeout_s=1.5)
+    assert (log.agent_id, tuple(who)) == ("envy", ("envy", "env"))
+    assert (cfg.agent.id, cfg.sources["agent.id"]) == ("envy", "env")
+    log2, who2 = ID.open_log(adopted, _cfg(adopted), "flagged")
+    assert (log2.agent_id, who2.source) == ("flagged", "explicit")
