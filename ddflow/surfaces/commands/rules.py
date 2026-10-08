@@ -83,6 +83,9 @@ def _emit(c: Ctx, out, verb: str, human: str) -> int:
             lead = {"reason": out.reason, "outcome": EXIT_NAMES[REFUSED], "exit": REFUSED}
             body = {"refusal": lead, **body}
         emit_json(body)
+    elif out.exit == REFUSED:
+        # `human` is the success sentence ("added rule r-x"); a refusal says why instead.
+        print(out.reason, file=sys.stderr)
     else:
         print(human or out.reason)
     return out.exit
