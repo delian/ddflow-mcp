@@ -54,7 +54,7 @@ def test_the_popen_alias_is_the_standard_one():
     assert P.Popen is subprocess.Popen
 
 
-@pytest.mark.parametrize("sig", [None, signal.SIGTERM])
+@pytest.mark.parametrize("sig", [None, signal.SIGKILL, signal.SIGTERM])
 @pytest.mark.parametrize("error", [ProcessLookupError, PermissionError])
 def test_a_group_that_cannot_be_signalled_is_not_an_error(monkeypatch, sig, error):
     """Mutant: `kill_group` letting the error out. The group is gone, or not ours: the direct
@@ -68,7 +68,7 @@ def test_a_group_that_cannot_be_signalled_is_not_an_error(monkeypatch, sig, erro
 
         monkeypatch.setattr(os, "killpg", refuse)
         P.kill_group(p, sig)
-        assert p.wait(timeout=10) == -(sig or signal.SIGKILL)
+        assert p.wait(timeout=10) == -(signal.SIGKILL if sig is None else sig)
     finally:
         p.kill()
         p.wait()
