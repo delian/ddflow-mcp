@@ -311,7 +311,13 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     read = src[src.index('if method == "resources/read"') :]
     read = read[: read.index('if method == "prompts/list"')]
     assert "fold(" not in read, f"resources/read still folds the log itself:\n{read}"
-    assert read.count("_run_cli") == 1, f"one path, one call:\n{read}"
+    # One table (`RESOURCES`), read through one call; the table's entries go through the api.
+    assert "RESOURCE_BY_URI" in read and read.count("resource.read(") == 1, (
+        f"one path, one call:\n{read}"
+    )
+    table = inspect.getsource(M)
+    table = table[table.index("RESOURCES: tuple") : table.index("class Server")]
+    assert "fold(" not in table and "EventLog" not in table, "a resource folds the log itself"
 
 
 def test_the_render_views_are_reachable_from_the_command_line(repo):
