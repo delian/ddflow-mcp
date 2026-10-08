@@ -20,7 +20,7 @@ import pytest
 
 from ddflow.core import textsim
 from ddflow.infra.store import MIN_TERM_CHARS, _fts_query, _like_terms
-from ddflow.services.rules import _tokenize
+from ddflow.services.guidance.similarity import words as _tokenize
 
 #: (text, fts expression, LIKE terms, rule tokens), from the code as it was before the slice
 GOLDEN = [
@@ -164,7 +164,7 @@ def test_no_second_word_splitter_is_left_behind() -> None:
     spelling = re.compile(
         r"re\.(split|findall|sub|finditer|compile)\(\s*r?[\"'][^\"']*(\\[wW]|\[\^?\\w)"
     )
-    for path in ("ddflow/infra/store.py", "ddflow/services/rules.py"):
+    for path in ("ddflow/infra/store.py", "ddflow/services/guidance/similarity.py"):
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
         hits = [n for n, line in enumerate(lines, 1) if spelling.search(line)]
