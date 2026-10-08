@@ -18,47 +18,21 @@ there is nothing to back up. The fields, their digest and the redaction profile 
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ...core import defs as D
 from ..guidance import deffields as DF
+from ..guidance import ruleview as RV
 from ..guidance.kinds import RULE
 from ..guidance.record import GuidanceRecord
 from ..guidance.store import GuidanceFiles
-from ..overlay import OverlayError
 from . import register
 from .base import Change, Context, Corrective, Finding, Migration
 
-RECORD, UPDATE = "record", "update"
-
-
-def _own_files(ctx: Context) -> list[GuidanceRecord]:
-    """The rules the PROJECT has a file for (not the ones ddflow ships beneath them), keyed by
-    FILE NAME -- the id `rule get` reads them by -- even when the file's own ``id`` says
-    otherwise. Only reads: the rules directory is not created."""
-    files = GuidanceFiles(ctx.repo, RULE)
-    out: list[GuidanceRecord] = []
-    for name in files.names():
-        if not files.path(name).is_file():
-            continue
-        try:
-            out.append(replace(files.read(name), id=name))
-        except (OSError, OverlayError, ValueError):
-            continue  # a file that does not load is `ddflow doctor`'s to report
-    return out
+RECORD, UPDATE = RV.RECORD, RV.UPDATE
 
 
 def _needed(ctx: Context) -> list[tuple[str, GuidanceRecord]]:
     """``(RECORD | UPDATE, rule)`` for each rule file the log does not already say."""
-    out: list[tuple[str, GuidanceRecord]] = []
-    for rec in _own_files(ctx):
-        known = ctx.st.defs.get(D.key(RULE.kind, rec.id))
-        digest = DF.digest_of(DF.to_fields(rec, RULE), ctx.cfg)
-        if known is None:
-            out.append((RECORD, rec))
-        elif known.live and known.digest != digest:
-            out.append((UPDATE, rec))
-    return out
+    return RV.edits(ctx.repo, ctx.cfg, ctx.st)
 
 
 def _detect(ctx: Context) -> list[Finding]:

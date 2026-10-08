@@ -17,6 +17,7 @@ from ..core import defs as D
 from ..core import outcome as O
 from ..infra.fsio import replace_text
 from ..services.guidance import deffields as DF
+from ..services.guidance import ruleview as RV
 from ..services.guidance.kinds import RULE
 from ..services.guidance.limits import lint, over_limit
 from ..services.guidance.similarity import similar
@@ -973,3 +974,52 @@ def rule_search(
 
     except Exception as exc:
         return O.failed("rule.search", f"Failed to search rules: {exc}")
+
+
+def rule_sync(repo: Path, *, agent: str = "") -> O.Outcome:
+    """Make the log say what the rule files say, and the files exist for what the log says.
+
+    The files are a generated view of the rule definitions (D-unify 7). A rule file with no
+    record is recorded (``def.recorded``, provenance ``via = sync``); a file whose content
+    differs from its live record -- a hand edit -- is recorded as ``def.updated``; a live
+    record with no file has its file written from the log. A file already recorded, a retired
+    rule and a file that does not load are left as they are. Fails (exit 1) when an event could
+    not be appended; what was done before stays done, and a second call finishes the rest."""
+    _log, cfg, st = _load(repo, agent)
+    recorded: list[str] = []
+    updated: list[str] = []
+    failed: list[dict[str, str]] = []
+    for how, rec in RV.edits(repo, cfg, st):
+        fields = DF.to_fields(rec, RULE)
+        prov = {"via": "sync", **DF.to_provenance(rec)}
+        try:
+            write = def_record_unchecked if how == RV.RECORD else def_update
+            res = write(
+                repo,
+                RULE.kind,
+                rec.id,
+                fields,
+                source=RV.relpath(repo, rec.id),
+                provenance=prov,
+                agent=agent,
+            )
+        except Exception as exc:
+            failed.append({"id": rec.id, "why": str(exc)})
+            continue
+        if res.exit in (O.OK, O.NOTHING):
+            (recorded if how == RV.RECORD else updated).append(rec.id)
+        else:
+            failed.append({"id": rec.id, "why": res.reason})
+    try:
+        restored = RV.restore(repo, _load(repo, agent)[2])
+    except (OSError, ValueError) as exc:
+        failed.append({"id": "(files)", "why": f"could not write a rule file from the log: {exc}"})
+        restored = []
+    data = {"recorded": recorded, "updated": updated, "restored": restored, "failed": failed}
+    if failed:
+        return O.failed(
+            "rule.sync",
+            "could not record: " + "; ".join(f"{f['id']} ({f['why']})" for f in failed),
+            **data,
+        )
+    return O.ok("rule.sync", **data)

@@ -10,7 +10,7 @@ from typing import Any
 from ...core import outcome as O
 from ...infra import worktree as W
 from ...services import changes as CH
-from ...services.cleanup import record_item_removed
+from ...services.cleanup import dispose_tree, record_item_removed  # noqa: F401  (re-exported)
 from .._base import _load
 from ._common import _require
 from .claim import callers_tree
@@ -330,11 +330,8 @@ def _dispose_tree(
             f"your shell in a deleted directory. cd {W.repo_root(repo)} -- `ddflow cleanup "
             f"--apply` removes the tree once {it.id} is complete."
         )
-    rr = W.remove(repo, cfg, wt)
-    if not rr.ok:
-        return False, rr.err
-    record_item_removed(log, it)
-    return True, ""
+    gone = dispose_tree(repo, cfg, log, wt, item=it)
+    return (True, "") if gone.removed else (False, gone.why)
 
 
 def _stands_in(tree: Path, *wheres: Path | None) -> bool:

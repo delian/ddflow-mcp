@@ -8,6 +8,7 @@ import argparse
 
 from ..commands.ci import add_ci_parser
 from ..commands.onboard import add_onboard_parser
+from ..commands.rule_sync import cmd_rule_sync
 from ..commands.rules import cmd_rule
 from ..commands.verify import add_verify_parser
 
@@ -60,6 +61,11 @@ def register(s: argparse._SubParsersAction) -> None:
     rur = ru_s.add_parser("remove")
     rur.add_argument("id")
     rur.set_defaults(fn=cmd_rule)
+    rusy = ru_s.add_parser(
+        "sync",
+        help="record hand-edited rule files in the log; write the files the log has and the disk lacks",
+    )
+    rusy.set_defaults(fn=cmd_rule_sync)
     ru.set_defaults(fn=cmd_rule, rule_cmd="list", tag="", scope="")
 
     add_verify_parser(s)
