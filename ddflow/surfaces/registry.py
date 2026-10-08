@@ -778,9 +778,18 @@ def array_schema(command: str, payload: Any) -> dict[str, Any] | None:
 
 
 def tag_body(body: Any, command: str) -> Any:
-    """``body`` with its ``schema`` key first when it is an object; any other body (an
-    array, text, a scalar, null) comes back unchanged. A body already carrying the key keeps
-    its own value: the tag never overwrites a field."""
+    """``body`` with its ``schema`` key placed first when it is an object; any other body
+    (an array, text, a scalar, null) comes back unchanged. A refusal body keeps `refusal`
+    as its first key (`mcp._refusal_body`: the block a machine reads first) and the tag
+    follows it. A body already carrying the key keeps its own value: the tag never
+    overwrites a field."""
     if not isinstance(body, dict) or SCHEMA_KEY in body:
         return body
-    return {SCHEMA_KEY: schema_tag(command), **body}
+    tag = {SCHEMA_KEY: schema_tag(command)}
+    if REFUSAL_KEY in body and next(iter(body)) == REFUSAL_KEY:
+        return {
+            REFUSAL_KEY: body[REFUSAL_KEY],
+            **tag,
+            **{k: v for k, v in body.items() if k != REFUSAL_KEY},
+        }
+    return {**tag, **body}
