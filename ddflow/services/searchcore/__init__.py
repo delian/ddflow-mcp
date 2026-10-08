@@ -1,7 +1,7 @@
 """One search engine with pluggable sources (B-uni-search-core; D-unify 3).
 
 `hit` is the one row type and the source registry, `rank` the rankers, `regexsafe` the
-regex check every mode shares. `services/search.py` is the caller behind `ddflow search`.
+regex check for the modes that take a pattern. `services/search.py` is the caller behind `ddflow search`.
 """
 
 from __future__ import annotations

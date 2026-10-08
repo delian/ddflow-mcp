@@ -36,6 +36,7 @@ from . import viewers as V
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 from .searchcore.hit import Hit as Doc
+from .searchcore.rank import tfidf
 from .searchcore.regexsafe import (  # noqa: F401 -- re-exported: the old import path
     MAX_BRANCH_REPS,
     MAX_OPEN_REPEATS,
@@ -219,15 +220,9 @@ def _ranked(docs: list[Doc], query: str) -> list[tuple[float, Doc]]:
             "nothing searchable in that text (only stop words or ids); "
             "use --exact for a literal match"
         )
-    corpus = [textsim.tokens(d.text[: 2 * MAX_SCAN]) for d in docs]
-    df, post = textsim.invert(corpus)
-    scores = textsim.cosine(textsim.vector(qtoks, df, max(1, len(corpus))), post)
+    scores = tfidf([textsim.tokens(d.text[: 2 * MAX_SCAN]) for d in docs], qtoks)
     # The log repeats what the records say, in terse machine words; rank it last.
-    return [
-        (sc * LOG_WEIGHT if docs[i].kind == "log" else sc, docs[i])
-        for i, sc in scores.items()
-        if sc > 0
-    ]
+    return [(sc * LOG_WEIGHT if docs[i].kind == "log" else sc, docs[i]) for i, sc in scores.items()]
 
 
 def _scan(

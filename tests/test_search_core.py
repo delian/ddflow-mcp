@@ -87,3 +87,13 @@ def test_sources_register_and_gather_only_the_kinds_asked_for():
     finally:
         H._REGISTRY.clear()
         H._REGISTRY.update(saved)
+
+
+def test_tfidf_ranks_the_closest_doc_first_and_drops_zero_scores():
+    from ddflow.services.searchcore import tfidf
+
+    docs = [["alpha", "beta"], ["gamma"], ["alpha"], []]
+    got = tfidf(docs, ["alpha", "beta"])
+    assert set(got) == {0, 2}
+    assert got[0] > got[2] > 0
+    assert tfidf(docs, ["zzz"]) == {}
