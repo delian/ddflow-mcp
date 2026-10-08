@@ -40,7 +40,8 @@ from pathlib import Path
 from ..core import digest, globs
 from ..infra import git as G
 
-#: Directory names no scan descends into: git's own, never part of a work tree's content.
+#: Names no scan descends into or lists: git's own (a directory, or the `.git` FILE of a linked
+#: worktree or submodule), never part of a work tree's content.
 PRUNE = (".git",)
 #: A file modified less than this long before it was hashed may be rewritten within the same
 #: timestamp tick (FAT keeps two seconds): its cached hash is not trusted.
@@ -126,7 +127,7 @@ class ChangeDetector:
         for here, dirs, names in os.walk(root, followlinks=False):
             dirs[:] = sorted(d for d in dirs if d not in self.prune)
             rel_dir = os.path.relpath(here, root)
-            for name in sorted(names):
+            for name in sorted(n for n in names if n not in self.prune):
                 rel = name if rel_dir == "." else f"{rel_dir}/{name}".replace(os.sep, "/")
                 if matches(rel, self.patterns) and not any(
                     globs.match(rel, g) for g in self.exclude
