@@ -504,7 +504,8 @@ def _report_init(c: Ctx, tree: Path | None = None) -> int:
             "CLAUDE.md",
             "docs/ddflow",
         )
-        if (tree / rel).exists() and W.git(tree, "status", "--porcelain", "--", rel).out.strip()
+        # An unreadable status counts as touched: the hint is only advice to commit.
+        if (tree / rel).exists() and W.status(tree, rel) != []
     ]
     commit_hint = ""
     if touched:

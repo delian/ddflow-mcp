@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
+from ..infra import git as GIT
 from ..infra import tomlcfg
 from ..infra import worktree as W
 from .export import frame as F
@@ -237,10 +238,13 @@ def commit_on(
             )
         tree = tmp
     try:
-        dirty = _git(tree, "status", "--porcelain", "--", prep.path)
-        if not dirty.ok:
+        dirty = GIT.status_run(tree, prep.path)
+        if dirty.unavailable:  # a timeout or a missing git
+            raise ExportError(f"could not run git: {dirty.err}", EXIT_UNAVAILABLE)
+        entries = GIT.parse_status(dirty)
+        if entries is None:
             raise ExportError(f"git status failed: {dirty.err}", EXIT_UNAVAILABLE)
-        if dirty.out.strip() and not force:
+        if entries and not force:
             raise EW.Refused(
                 f"{prep.path} has uncommitted changes; refusing to commit them into the "
                 f"release (commit or discard them, or --force)"
