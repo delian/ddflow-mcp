@@ -3941,7 +3941,9 @@ Registered now: `stale-references` (kind `references`) rewrites the deprecated c
 tool names (an old name kept as an alias after a rename) that sit inside a region ddflow wrote and nobody
 edited, in settings hooks, git hooks, driver docs and instruction blocks; the project's own
 text and a hand-edited region are left, and `ddflow doctor` proposes the change. The surface
-that runs the upgrade hands it the command and tool tables (`services.migrations.refs.provide`).
+that runs the upgrade hands it the command and tool tables (`api.refs.provide_upgrade_vocabulary`): the
+CLI registers its parser and the tool table when it is imported, the MCP server the tool table when it first
+reaches the api, so `ddflow upgrade` and `ddflow_upgrade` both find the names.
 
 ### Applying an upgrade
 
