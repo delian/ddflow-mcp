@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...core.clock import WAIT_MAX_S
+
 
 def _AGENT_KEYS() -> list[str]:
     """Every supported harness, from the one registry that defines them.
@@ -28,16 +30,21 @@ def _AGENT_KEYS() -> list[str]:
 
 #: `ddflow_wait` over MCP: shorter than the CLI's default, because the client -- not
 #: ddflow -- decides when a tool call has hung, and a timed-out call is a lost answer.
-#: Capped for the same reason; an agent that wants longer calls again.
+#: Capped for the same reason, at the cap the CLI's wait has too; an agent that wants longer
+#: calls again.
 MCP_WAIT_DEFAULT_S = 300
-MCP_WAIT_MAX_S = 1800
+MCP_WAIT_MAX_S = WAIT_MAX_S  # one cap for both surfaces: core.clock
 
 
 def _wait_timeout(a: dict[str, Any]) -> float:
     """`timeout` as given (0 included -- it means "ask, do not sleep"), else the MCP
     default; never above the cap."""
     t = a.get("timeout")
-    return min(float(MCP_WAIT_DEFAULT_S if t is None else t), float(MCP_WAIT_MAX_S))
+    t = MCP_WAIT_DEFAULT_S if t is None else t
+    try:
+        return min(float(t), float(MCP_WAIT_MAX_S))
+    except OverflowError:  # a JSON integer past a double's range is far past the cap
+        return float(MCP_WAIT_MAX_S)
 
 
 def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:
