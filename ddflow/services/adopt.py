@@ -749,6 +749,7 @@ def _backup_docs(
     stale = driver_drift(repo, docs_dir=docs_dir, package_dir=package_dir)
     stale += [r.path for r in rules_status(repo, docs_dir=docs_dir) if r.needs_attention]
     files = [Path(repo) / rel for rel in dict.fromkeys(stale) if only is None or rel in only]
+    files = [f for f in files if f.is_file()]  # a file about to be CREATED has no original
     if not files:
         return ""
     return str(make_backup(repo, files, "", "", name=f"{clock.compact_at()}-refresh-docs"))

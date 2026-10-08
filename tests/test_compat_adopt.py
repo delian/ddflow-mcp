@@ -76,7 +76,7 @@ def test_a_hand_edit_inside_the_block_is_seen_as_edited_and_saved_before_it_is_r
     assert A.BLOCK.state(path.read_text()) == "current"
     saved = _backups(repo)
     assert len(saved) == 1 and saved[0].name.endswith("-refresh-docs")
-    assert (saved[0] / "AGENTS.md").read_text() == edited
+    assert (saved[0] / "files" / "AGENTS.md").read_text() == edited
 
 
 def test_a_noop_refresh_leaves_no_backup(repo: Path) -> None:
@@ -96,7 +96,9 @@ def test_a_stale_driver_doc_is_saved_byte_for_byte_before_the_refresh(repo: Path
     assert run_cli(repo, "adopt", "--refresh-docs")[0] == 0
 
     (saved,) = _backups(repo)
-    assert (saved / "docs/ddflow/drivers/implement-phase.md").read_text() == "an older driver\n"
+    assert (
+        saved / "files" / "docs/ddflow/drivers/implement-phase.md"
+    ).read_text() == "an older driver\n"
     assert driver.read_text() != "an older driver\n"
 
 
@@ -190,3 +192,24 @@ def test_a_command_file_a_newer_ddflow_wrote_is_refused(repo: Path) -> None:
 
     assert code != 0 and "upgrade ddflow to >=" in out + err
     assert "Run `/loop2`" in path.read_text()
+
+
+def test_a_deleted_rules_file_is_recreated_without_a_backup_of_nothing(repo: Path) -> None:
+    _adopted(repo)
+    (repo / "AGENTS.md").unlink()
+
+    code, out, _ = run_cli(repo, "adopt", "--refresh-docs")
+
+    assert code == 0 and (repo / "AGENTS.md").is_file()
+    assert "saved the originals" not in out and _backups(repo) == []
+
+
+def test_a_project_file_named_like_the_manifest_does_not_overwrite_it(tmp_path: Path) -> None:
+    from ddflow.services.backups import MANIFEST, make_backup
+
+    (tmp_path / "manifest.json").write_text("mine\n")
+
+    dest = make_backup(tmp_path, [tmp_path / "manifest.json"], "a", "b")
+
+    assert (dest / "files" / "manifest.json").read_text() == "mine\n"
+    assert '"existed": true' in (dest / MANIFEST).read_text()
