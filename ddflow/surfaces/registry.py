@@ -68,6 +68,9 @@ class Param:
             raise ValueError(f"param {self.name!r}: type {self.type!r} not in {TYPES}")
         if self.repeat and self.type != "array":
             object.__setattr__(self, "type", "array")
+        if self.positional and self.default is _UNSET and not self.required:
+            # argparse refuses a missing positional, so the schema must say it is required.
+            object.__setattr__(self, "required", True)
         if self.cli_only and self.mcp_only:
             raise ValueError(f"param {self.name!r} is neither on the CLI nor on MCP")
 
@@ -159,7 +162,10 @@ class Command:
     not exposed, with ``reason`` saying why -- the parity test's exemption as a field).
     ``call(repo, args, agent)`` returns an `Outcome`; ``payload`` is the field tuple both
     surfaces print; ``prose`` says the MCP body is text, not JSON; ``tier`` is the MCP
-    tool tier; ``render`` is the optional human renderer.
+    tool tier and ``render`` the optional human renderer. ``tier`` and ``render`` are
+    declared here for the slices that generate the tier table (`tools/tiers.py`) and the
+    CLI's human output; `tool_entry` does not carry them because the engine reads tiers
+    from the tier table, not from the entry.
     """
 
     path: tuple[str, ...]
