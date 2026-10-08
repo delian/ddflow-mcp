@@ -218,14 +218,20 @@ def _run_one(
             )
     try:
         corrective = m.apply(ctx, p.findings)
+    except Unavailable as exc:
+        # `apply` raises it only BEFORE it writes anything (see `Migration`): nothing ran.
+        return Outcome(m.id, UNAVAILABLE, f"could not run: {exc}", len(p.findings), where)
+    except (OSError, ValueError) as exc:
+        return Outcome(m.id, FAILED, f"{type(exc).__name__}: {exc}", len(p.findings), where)
+    try:
         for kind, subject, data in corrective:
             ctx.log.append(kind, subject, data)
         after = context(ctx.repo, ctx.log, ctx.cfg)
         left = [f.detail for f in m.detect(after)]
         problems = left + list(m.verify(after))
     except Unavailable as exc:
-        # Past the detector: files may be written and events appended, so this is never
-        # "nothing happened" -- the migration ran and its result is not confirmed.
+        # Past the apply: files are written and events appended, so this is never "nothing
+        # happened" -- the migration ran and its result is not confirmed.
         return Outcome(
             m.id, FAILED, f"ran, but could not be confirmed: {exc}", len(p.findings), where
         )
