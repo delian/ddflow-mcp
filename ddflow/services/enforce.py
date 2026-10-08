@@ -388,9 +388,12 @@ def uninstall(repo: Path) -> str:
         except RegionError:  # broken markers: nothing here says what is ours to cut
             out.append(f"REFUSED: {hook} has broken ddflow markers; leaving it alone")
             continue
-        if rest != text and not exact and rest.strip() not in ("", "#!/bin/sh"):
+        if rest != text and not exact and "\ufffd" in rest:
+            # A byte OUTSIDE the region that is not UTF-8: writing `rest` back would turn it
+            # into U+FFFD. One inside the region goes with the region.
             out.append(
-                f"REFUSED: {hook} has bytes that are not UTF-8 beside ddflow's lines; remove ddflow's region by hand"
+                f"REFUSED: {hook} has bytes that are not UTF-8 beside ddflow's lines; "
+                f"remove ddflow's region by hand"
             )
             continue
         if rest == text or rest.strip() in ("", "#!/bin/sh"):  # no region: wholly ddflow's

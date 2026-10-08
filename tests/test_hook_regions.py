@@ -127,6 +127,15 @@ def test_bytes_that_are_not_utf8_around_the_region_are_never_rewritten(repo):
     assert "installed the ddflow pre-commit hook" in E.install(repo, force=True)
 
 
+def test_a_stray_byte_inside_the_region_goes_with_it_on_uninstall(repo):
+    E.install(repo)
+    hook = _hook(repo)
+    raw = hook.read_bytes().replace(b"Refuses", b"Refus\xffes", 1)
+    hook.write_bytes(b"#!/bin/sh\necho mine\n" + raw.split(b"\n", 1)[1])
+    assert "removed the ddflow pre-commit hook" in E.uninstall(repo)
+    assert hook.read_bytes() == b"#!/bin/sh\necho mine\n"
+
+
 # -- the harness settings entry ----------------------------------------------------------
 
 
@@ -181,6 +190,19 @@ def test_a_hand_edited_harness_hook_is_backed_up_before_it_is_rewritten(repo):
     copies = [c for c in (repo / ".ddflow" / "backups").rglob("settings.json") if c.is_file()]
     assert copies and copies[0].read_text() == edited
     assert "--mine" not in _entries(repo)[0]["command"]
+
+
+def test_a_harness_hook_with_a_lone_marker_is_refused_not_a_crash(repo):
+    p = repo / ".claude" / "settings.json"
+    p.parent.mkdir(parents=True)
+    cmd = CH.command(CH.spec("claude", "session-start")) + "\n# ddflow:end hooks/session-start\n"
+    p.write_text(
+        json.dumps({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": cmd}]}]}})
+    )
+    before = p.read_text()
+    with pytest.raises(CH.SettingsError, match="region markers"):
+        _install_session_hook(repo)
+    assert p.read_text() == before
 
 
 def test_an_older_ddflow_does_not_downgrade_a_newer_harness_hook(repo):
