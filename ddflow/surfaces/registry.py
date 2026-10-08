@@ -121,25 +121,34 @@ class Param:
         return (self.type, self.help, self.required)
 
 
-def properties_schema(
-    props: Mapping[str, tuple[str, str, bool]], *, deprecated: Mapping[str, Any] | None = None
+def params_schema(
+    params: Mapping[str, Param] | tuple[Param, ...], *, deprecated: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
-    """The tool ``inputSchema`` for ``{name: (type, description, required)}``.
+    """The tool ``inputSchema`` for these parameters, each rendered by `Param.schema`.
 
-    A deprecated argument is still ACCEPTED (D-compat) but is not advertised. One
-    function for the table-driven tools and for `Command.input_schema`, so the two
-    cannot disagree about the shape.
+    A deprecated argument is still ACCEPTED (D-compat) but is not advertised.
     """
     old = deprecated or {}
-    shown = {n: p for n, p in props.items() if n not in old}
-    properties = {n: Param(n, type=t, help=d).schema() for n, (t, d, _req) in shown.items()}
-    required = [n for n, (_t, _d, req) in shown.items() if req]
+    items = params.values() if isinstance(params, Mapping) else params
+    shown = [p for p in items if p.name not in old]
+    required = [p.name for p in shown if p.required]
     return {
         "type": "object",
-        "properties": properties,
+        "properties": {p.name: p.schema() for p in shown},
         **({"required": required} if required else {}),
         "additionalProperties": False,
     }
+
+
+def properties_schema(
+    props: Mapping[str, tuple[str, str, bool]], *, deprecated: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    """`params_schema` for the engine's ``{name: (type, description, required)}`` table, so
+    the table-driven tools and `Command.input_schema` share one rendering."""
+    return params_schema(
+        tuple(Param(n, type=t, help=d, required=req) for n, (t, d, req) in props.items()),
+        deprecated=deprecated,
+    )
 
 
 @dataclass(frozen=True)
@@ -191,10 +200,11 @@ class Command:
 
     def input_schema(self) -> dict[str, Any]:
         """The MCP ``inputSchema``, ``as_agent`` included for every tool but identify."""
-        props = self.properties()
+        params = self.mcp_params
         if not self.identify:
-            props[AS_AGENT] = AS_AGENT_SPEC
-        return properties_schema(props, deprecated=self.deprecated)
+            t, d, req = AS_AGENT_SPEC
+            params = (*params, Param(AS_AGENT, type=t, help=d, required=req))
+        return params_schema(params, deprecated=self.deprecated)
 
     def tool_listing(self) -> dict[str, Any]:
         """One entry of the ``tools/list`` result."""
