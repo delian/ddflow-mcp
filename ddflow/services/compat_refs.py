@@ -80,6 +80,10 @@ class Vocabulary:
     tools: frozenset[str]
     command_aliases: Mapping[tuple[str, ...], Renamed] = field(default_factory=dict)
     tool_aliases: Mapping[str, Renamed] = field(default_factory=dict)
+    #: A vocabulary built from the tool table alone (an MCP server) cannot judge a command
+    #: word, nor one built from the parser alone a tool name: that half is not checked.
+    check_commands: bool = True
+    check_tools: bool = True
 
     @property
     def groups(self) -> frozenset[str]:
@@ -230,14 +234,14 @@ def refs_in(line: str, vocab: Vocabulary, *, code: bool) -> Iterator[Ref]:
             spans = [(0, line[:scan_to])]
     else:
         spans = [(m.start(1), m.group(1)) for m in _BACKTICK.finditer(line)]
-    for base, chunk in spans:
+    for base, chunk in spans if vocab.check_commands else ():
         for m in _CLI.finditer(chunk):
             if not _POSITION.search(chunk[: m.start()]):
                 continue
             ref = _command_at(line, base + m.end(), vocab)
             if ref is not None:
                 yield ref
-    for m in _TOOL.finditer(line, 0, scan_to):
+    for m in _TOOL.finditer(line, 0, scan_to if vocab.check_tools else 0):
         if m.group() in NOT_TOOLS:
             continue
         status, replacement, renamed = vocab.resolve_tool(m.group())

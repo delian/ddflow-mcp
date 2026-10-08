@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..vocabulary import provide
 from . import (
     companions,
     decisions,
@@ -73,6 +74,8 @@ DEDUPE_PROPERTIES: dict[str, tuple[str, str, bool]] = {
         False,
     ),
 }
+
+provide(tools=TOOLS)  # what `doctor` checks tool names against
 
 for _name in ADD_TOOLS:
     TOOLS[_name]["properties"].update(DEDUPE_PROPERTIES)

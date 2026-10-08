@@ -42,8 +42,6 @@ from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
 # The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
 # this module routes between them. Every name below is re-exported so imports of
 # `ddflow.surfaces.mcp.<name>` keep working.
-from . import cli as _cli  # noqa: F401  (registers the command table for `doctor`)
-
 # The protocol engine -- revisions, negotiation, the modern envelope, multi round-trip --
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
 from . import mcp_protocol as protocol

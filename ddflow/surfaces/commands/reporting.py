@@ -16,7 +16,7 @@ from ...api import reporting as A
 from ...infra import worktree as W
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, NOTHING, OK, Ctx
-from ..vocabulary import current_vocabulary
+from ..vocabulary import sources
 from .setup import cmd_upgrade
 
 
@@ -334,7 +334,8 @@ def cmd_doctor(a, c: Ctx) -> int:
     """
     if getattr(a, "upgrade", False):
         return cmd_upgrade(a, c)
-    out = A.doctor(c.repo, agent=c.requested_agent, vocabulary=current_vocabulary())
+    parser, tools = sources()
+    out = A.doctor(c.repo, agent=c.requested_agent, parser=parser, tools=tools)
     if c.json:
         print(json.dumps(out.body(("problems", "notes", "events", "items")), indent=2))
         return out.exit

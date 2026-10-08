@@ -243,10 +243,12 @@ def test_an_entry_written_before_the_stamp_is_found_by_its_command_text(tmp_path
 
 def test_every_reference_in_the_shipped_templates_names_something_real():
     import ddflow.surfaces.cli  # noqa: F401  (registers the command table)
-    from ddflow.surfaces.vocabulary import current_vocabulary
+    from ddflow.api.refs import vocabulary
+    from ddflow.surfaces.vocabulary import sources
 
-    vocab = current_vocabulary()
-    assert vocab is not None and ("gate", "record") in vocab.commands
+    parser, tools = sources()
+    vocab = vocabulary(parser(), tools)
+    assert ("gate", "record") in vocab.commands and "ddflow_brief" in vocab.tools
     root = Path(C.__file__).resolve().parents[1] / "templates"
     bad = []
     for path in sorted(p for p in root.rglob("*") if p.suffix in (".md", ".toml", ".txt", ".json")):
@@ -459,3 +461,25 @@ def test_a_comment_in_a_command_line_names_no_tool_either():
     assert [r.text for r in C.refs_in("# ddflow_oldtool is gone", VOCAB, code=False)] == [
         "ddflow_oldtool"
     ]
+
+
+def test_an_mcp_server_checks_tool_names_and_leaves_command_words_to_the_cli(tmp_path):
+    from ddflow.api.refs import stale_references
+    from ddflow.surfaces.tools import TOOLS
+
+    (tmp_path / "AGENTS.md").write_text("`ddflow frobnicate`, ddflow_brief and ddflow_nothing\n")
+    problems, notes = stale_references(tmp_path, None, TOOLS)
+    assert problems == [] and len(notes) == 1 and "ddflow_nothing" in notes[0]
+    assert stale_references(tmp_path, None, None) == ([], [])
+
+
+def test_the_tool_table_registers_itself_without_the_api():
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, ddflow.surfaces.tools as t; from ddflow.surfaces.vocabulary import sources;"
+        "print(sources()[1] is t.TOOLS, sources()[0] is None, 'ddflow.api' in sys.modules)"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.stdout.split() == ["True", "True", "False"], out.stderr
