@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ...api import setup as A
 from ...infra import worktree as W
-from ..context import FAIL, NOTHING, OK, Ctx, _wrap
+from ..context import FAIL, NOTHING, OK, REFUSED, Ctx, _wrap
 
 _MARKS = {"registered": "[x]", "installed": "[+]", "missing": "[ ]", "unknown": "[?]"}
 
@@ -180,13 +180,29 @@ def _config_key_value(a) -> tuple[str, str]:
 
 
 def cmd_upgrade(a, c: Ctx) -> int:
-    """What upgrading would change (the plan; nothing is written). Exit 0 up to date, 1
-    while the plan has anything in it."""
-    out = A.upgrade(c.repo, plan=bool(getattr(a, "plan", True)), agent=c.requested_agent)
+    """What upgrading would change (the plan; nothing is written), or -- with `--apply` --
+    doing it. The plan exits 0 up to date, 1 while it has anything in it; an apply exits 0
+    done, 1 a step failed, 2 a step could not run, 3 an item needs `--confirm`."""
+    apply = getattr(a, "apply", None)
+    if apply is not None and getattr(a, "plan", False):
+        print("ddflow upgrade: choose --plan or --apply, not both", file=sys.stderr)
+        return 2
+    out = A.upgrade(
+        c.repo,
+        apply=apply or "",
+        confirm=getattr(a, "confirm", None) or (),
+        reason=getattr(a, "reason", "") or "",
+        backup=getattr(a, "backup", "") or "",
+        agent=c.requested_agent,
+    )
     if c.json:
-        print(json.dumps(out.body(A.UPGRADE_PAYLOAD), indent=2))
-    else:
+        payload = A.UPGRADE_APPLY_PAYLOAD if "applied" in out.data else A.UPGRADE_PAYLOAD
+        print(json.dumps(out.body(payload), indent=2))
+    elif out.data.get("text"):
         print(out.data["text"])
+    # The reason says what the exit code means; the text already says what was found.
+    if out.reason and not c.json and (out.exit == REFUSED or not out.data.get("text")):
+        print(out.reason, file=sys.stderr)
     return out.exit
 
 

@@ -266,13 +266,13 @@ def test_a_hook_that_could_not_be_checked_is_said_not_dropped(
     assert not any(i["id"].startswith("hooks:missing:") for i in got)
 
 
-def test_apply_is_refused_rather_than_ignored(repo: Path) -> None:
+def test_plan_false_applies_and_an_up_to_date_project_has_nothing_to_apply(repo: Path) -> None:
     from ddflow.api import setup as A
 
     out = A.upgrade(repo, plan=False)
 
-    assert out.exit == 3 and "plan" in out.reason
-    assert A.upgrade(repo).exit == 0
+    assert out.exit == 0 and out.data["applied"]["noop"] is True
+    assert A.upgrade(repo).exit == 0 and "applied" not in A.upgrade(repo).data
 
 
 def test_a_knob_added_then_removed_inside_the_window_never_reached_the_project() -> None:
@@ -285,7 +285,7 @@ def test_a_knob_added_then_removed_inside_the_window_never_reached_the_project()
     assert UP._net(back)["s.k"][0] == "knob_added"
 
 
-def test_over_mcp_plan_defaults_to_the_plan_and_false_is_refused(old: Path) -> None:
+def test_over_mcp_plan_defaults_to_the_plan_and_false_applies(old: Path) -> None:
     from ddflow.surfaces.mcp import Server
 
     def call(args: dict) -> dict:
@@ -300,11 +300,13 @@ def test_over_mcp_plan_defaults_to_the_plan_and_false_is_refused(old: Path) -> N
         return reply["result"]
 
     planned = call({})
-    refused = call({"plan": False})
+    applied = call({"plan": False})
 
     assert json.loads(planned["content"][0]["text"])["total"] > 0
-    assert refused["_meta"]["exit"] == 3 and "plan" in json.dumps(refused)
-    assert call({"plan": True})["content"] == planned["content"]
+    assert "applied" not in json.loads(planned["content"][0]["text"])
+    done = json.loads(applied["content"][0]["text"])
+    assert "applied" in done and done["applied"]["results"], "plan=false applied the plan"
+    assert call({"plan": True})["content"] != applied["content"]
 
 
 def test_the_cli_plan_flag_is_the_default_spelled_out(old: Path) -> None:
