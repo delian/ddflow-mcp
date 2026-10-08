@@ -561,6 +561,12 @@ class Managed:
             + "\n"
         )
 
+    def remove(self, text: str) -> str:
+        """`text` less the region (both marker lines included), the rest byte for byte;
+        unchanged when it holds none. Raises RegionError for broken markers."""
+        at = self._region().find(text)
+        return text if at is None else text[: at[0]] + text[at[3] :]
+
     def splice(
         self,
         text: str,

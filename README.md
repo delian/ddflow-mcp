@@ -5113,6 +5113,16 @@ part that matters.
   next `pre-commit install` would discard the edit): it advises a `repo: local` hook in
   `.pre-commit-config.yaml` (`ddflow precommit` proposes it), says nothing needs installing
   when the framework already runs ddflow's check, and `--force` replaces the generated hook.
+* **Hooks say which ddflow wrote them.** A git hook, a Claude/Gemini hook command and the
+  frozen-files block `onboard` adds to `.pre-commit-config.yaml` are each a stamped
+  region (`# ddflow:begin hooks/pre-commit ddflow=<version> fmt=<level> sha=<digest>` ...
+  `# ddflow:end ...`; the Claude/Gemini command carries its markers as shell comments).
+  `hooks install` refreshes the region and keeps every line around it; an older ddflow
+  refuses (`upgrade ddflow to >= X`) to rewrite one a newer format level wrote, and a region
+  you edited by hand is copied to `.ddflow/backups/` first. A hook written before the stamp
+  (it carries only the `# DDFLOW-HOOK v1` line, which the region keeps for older ddflow
+  versions) is still ddflow's and is upgraded in place. `hooks uninstall` removes the
+  region and leaves your own lines.
 * **Hooks find ddflow when they run, and fail open.** The git hooks and the Claude/Gemini
   hook commands record the launcher that installed them, but try it only first: if that
   script or interpreter no longer exists or is no longer executable (a deleted venv, an uninstalled tool, a removed
