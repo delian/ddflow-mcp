@@ -30,6 +30,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from ddflow import FORMAT_LEVEL, __version__
+from ddflow.core.digest import content_digest
+from ddflow.core.events import is_older
+
 #: How often a lock with a timeout retries.
 LOCK_POLL_S = 0.05
 
@@ -407,3 +411,160 @@ class Region:
 
 #: The markerless region: splicing it appends.
 APPEND = Region(None, None)
+
+
+# --- Managed: the one "is this region ours, and who wrote it" interface -----------------
+
+#: Hex characters of the body digest a managed header carries.
+MANAGED_DIGEST_LEN = 12
+
+_ATTR = re.compile(r"([A-Za-z0-9_-]+)=(\S+)")
+
+
+class NewerContent(RuntimeError):
+    """A write would replace content a NEWER ddflow wrote (D-compat 2): the one refusal
+    the contract allows. `needs` is the version to upgrade to (exit 3, "upgrade ddflow to
+    >= X")."""
+
+    def __init__(self, what: str, needs: str, fmt: int) -> None:
+        super().__init__(
+            f"{what} was written by ddflow {needs} (format level {fmt}); "
+            f"upgrade ddflow to >= {needs} before rewriting it"
+        )
+        self.needs = needs
+        self.fmt = fmt
+
+
+def _digest(body: str) -> str:
+    return content_digest(body, length=MANAGED_DIGEST_LEN)
+
+
+@dataclass(frozen=True, slots=True)
+class Stamp:
+    """What a managed region's begin line says: the writer's version, its format level,
+    the digest of the body it wrote, and every attribute this version does not know
+    (kept, in order, when the region is rewritten at the same level)."""
+
+    version: str
+    fmt: int
+    sha: str
+    extra: tuple[tuple[str, str], ...] = ()
+
+
+#: What `Managed.state` answers.
+State = Literal["absent", "current", "older", "newer", "edited"]
+
+
+@dataclass(frozen=True, slots=True)
+class Managed:
+    """One kind of managed region: `<open> ddflow:begin <name> ddflow=V fmt=N sha=H <close>`
+    ... `<open> ddflow:end <name> <close>`, each a whole line (the D-doc-regions grammar,
+    extended by version, format level and body digest).
+
+    `owns` says whether a text holds the region, `stamp` what wrote it, `state` how it
+    compares with this ddflow -- `newer` (a higher FORMAT LEVEL; a higher version alone never refuses), `older`, `edited`
+    (the body no longer matches its digest, so a person changed it) or `current` -- and
+    `splice` replaces it, refusing (NewerContent) only a write that would downgrade a
+    newer region. The 3-way merge of an `edited` region is the caller's (D-doc-regions).
+    """
+
+    name: str
+    open: str = "<!--"
+    close: str = "-->"
+
+    def _line(self, edge: str, attrs: str = "") -> str:
+        tail = f" {attrs}" if attrs else ""
+        return f"{self.open} ddflow:{edge} {self.name}{tail}" + (
+            f" {self.close}" if self.close else ""
+        )
+
+    def _region(self) -> Region:
+        o, c = re.escape(self.open), (rf" {re.escape(self.close)}" if self.close else "")
+        n = re.escape(self.name)
+        return Region(rf"{o} ddflow:begin {n}(?: [^\n]*?)?{c}", rf"{o} ddflow:end {n}{c}")
+
+    def owns(self, text: str) -> bool:
+        """True when the text holds this region. Raises RegionError for broken markers."""
+        return self._region().find(text) is not None
+
+    def stamp(self, text: str) -> Stamp | None:
+        """The begin line's stamp, or None when the region is absent or carries none (a
+        region written before stamps existed)."""
+        at = self._region().find(text)
+        if at is None:
+            return None
+        line = text[at[0] : at[1]].strip().removeprefix(self.open).removesuffix(self.close)
+        attrs = dict(_ATTR.findall(line))
+        if not {"ddflow", "fmt", "sha"} <= attrs.keys() or not (
+            attrs["fmt"].isascii() and attrs["fmt"].isdigit()
+        ):
+            return None
+        known = {"ddflow", "fmt", "sha"}
+        extra = tuple((k, v) for k, v in _ATTR.findall(line) if k not in known)
+        return Stamp(attrs["ddflow"], int(attrs["fmt"]), attrs["sha"], extra)
+
+    def version(self, text: str) -> str | None:
+        s = self.stamp(text)
+        return None if s is None else s.version
+
+    def state(self, text: str, *, version: str | None = None, fmt: int | None = None) -> State:
+        version, fmt = version or __version__, FORMAT_LEVEL if fmt is None else fmt
+        region = self._region()
+        at = region.find(text)
+        if at is None:
+            return "absent"
+        s = self.stamp(text)
+        if s is None:
+            return "older"
+        if s.fmt > fmt:
+            return "newer"
+        if s.sha != _digest(text[at[1] : at[2]]):
+            return "edited"
+        return "older" if s.fmt < fmt or is_older(s.version, version) else "current"
+
+    def render(
+        self,
+        body: str,
+        *,
+        version: str | None = None,
+        fmt: int | None = None,
+        extra: tuple[tuple[str, str], ...] = (),
+    ) -> str:
+        """The whole region -- begin line, body, end line -- stamped for this ddflow."""
+        body = body if body.endswith("\n") or not body else body + "\n"
+        attrs = [
+            ("ddflow", version or __version__),
+            ("fmt", str(FORMAT_LEVEL if fmt is None else fmt)),
+            ("sha", _digest(body)),
+            *extra,
+        ]
+        return (
+            self._line("begin", " ".join(f"{k}={v}" for k, v in attrs))
+            + "\n"
+            + body
+            + self._line("end")
+            + "\n"
+        )
+
+    def splice(
+        self,
+        text: str,
+        body: str,
+        *,
+        version: str | None = None,
+        fmt: int | None = None,
+        gap: str = "\n",
+    ) -> str:
+        """`text` with the region replaced by `body` stamped for this ddflow (appended when
+        absent), everything outside it byte for byte. A region written at a newer FORMAT LEVEL is
+        NOT rewritten: NewerContent. At the same level the attributes this version does
+        not know are carried over."""
+        state = self.state(text, version=version, fmt=fmt)
+        s = self.stamp(text)
+        if state == "newer" and s is not None:
+            raise NewerContent(f"the {self.name} region", s.version, s.fmt)
+        level = FORMAT_LEVEL if fmt is None else fmt
+        keep = s.extra if s is not None and s.fmt == level else ()
+        return self._region().splice(
+            text, self.render(body, version=version, fmt=fmt, extra=keep), gap=gap
+        )
