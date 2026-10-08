@@ -152,8 +152,10 @@ def _remove_key(path: Path, key: str) -> bool:
     return was
 
 
-def _value_text(value: Any) -> str:
-    return value if isinstance(value, str) else TC.value(value)
+def _value(value: Any) -> object:
+    """A plan item's new value as `apply_edit` takes it. A string is the TOML literal it
+    spells (a plan stores `"true"` or `"[1, 2]"` as text), any other value is typed."""
+    return CW.Spelled(value) if isinstance(value, str) else value
 
 
 def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
@@ -176,9 +178,14 @@ def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> 
             ", ".join(p.name for p in gone) if gone else "no file (it was not there)"
         )
     local = src.startswith("local")
-    err, _text = CW._write_config(repo, [(key, _value_text(item["new"]))], local=local, agent=agent)
-    if err:
-        return FAILED, f"{key}: {err}"
+    res = CW.apply_edit(
+        repo,
+        CW.SetPairs([(key, _value(item["new"]))]),
+        layer="local" if local else "file",
+        agent=agent,
+    )
+    if res.error:
+        return FAILED, f"{key}: {res.error}"
     return APPLIED, f"set {key} = {_short(item['new'])} (was {_short(item['old'])}, {src})"
 
 

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import append_config, run_cli, write_config
 
 from ddflow import config as C
 from ddflow.config import CONFIG_FORMAT, Config, InvalidValue
@@ -58,7 +58,7 @@ def _repo(tmp_path: Path, text: str = NEWER) -> Path:
 
 
 def _set(repo: Path, key: str, value: str) -> tuple[str, str]:
-    return CW._write_config(repo, [(key, value)], check_workflow=False)
+    return write_config(repo, [(key, value)], check_workflow=False)
 
 
 # -- writes keep what they do not understand -------------------------------------------
@@ -104,14 +104,14 @@ def test_a_newer_enum_value_in_a_key_not_written_does_not_stop_an_edit(tmp_path)
 
 def test_append_toml_over_a_newer_file_keeps_it(tmp_path):
     repo = _repo(tmp_path)
-    err, path = CW._append_config(repo, "[review]\nmax_rounds = 3\n")
+    err, path = append_config(repo, "[review]\nmax_rounds = 3\n")
     assert err == ""
     assert path.read_text().startswith(NEWER)
 
 
 def test_a_typo_in_the_appended_block_is_refused(tmp_path):
     repo = _repo(tmp_path)
-    err, _ = CW._append_config(repo, "[review]\nmax_rounds_typo = 3\n")
+    err, _ = append_config(repo, "[review]\nmax_rounds_typo = 3\n")
     assert "max_rounds_typo" in err
 
 
@@ -228,15 +228,14 @@ def test_a_newer_config_format_is_read_and_never_written(tmp_path):
     assert isinstance(err, CW.KeyRefused)
     assert f"format {CONFIG_FORMAT + 1}" in err and "ddflow" in err
     assert "ttl_s = 321" in (repo / ".ddflow" / "config.toml").read_text()
-    assert isinstance(CW._append_config(repo, "[lease]\nttl_s = 5\n")[0], CW.KeyRefused)
+    assert isinstance(append_config(repo, "[lease]\nttl_s = 5\n")[0], CW.KeyRefused)
 
 
 def test_append_block_refuses_a_newer_format_too(tmp_path):
     repo = _repo(tmp_path, f"format = {CONFIG_FORMAT + 1}\n")
     block = '\n[[reviewer]]\nname = "r"\nmodel = "m"\n'
-    with pytest.raises(CW.FormatRefused) as exc:
-        CW.append_block(repo, block, shared=True)
-    assert exc.value.exit_code == 3 and "format" in str(exc.value)
+    res = CW.apply_edit(repo, CW.Block(block), layer="file")
+    assert isinstance(res.error, CW.KeyRefused) and "format" in res.error
     assert (repo / ".ddflow" / "config.toml").read_text() == f"format = {CONFIG_FORMAT + 1}\n"
 
 
