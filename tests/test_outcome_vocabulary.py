@@ -310,26 +310,35 @@ def test_enforce_names_its_exit_codes() -> None:
     core/outcome, so 2 cannot be typed as 0. And no check is annotated as a bare
     (int, str) tuple."""
     tree = ast.parse((PKG / "services" / "enforce.py").read_text())
-    bare = [
-        n.lineno
+    checks = [
+        n
         for n in ast.walk(tree)
-        if isinstance(n, ast.Return)
-        and isinstance(n.value, ast.Tuple)
-        and n.value.elts
-        and isinstance(n.value.elts[0], ast.Constant)
-        and isinstance(n.value.elts[0].value, int)
+        if isinstance(n, ast.FunctionDef) and n.name.startswith(("check_", "_check_", "_verdict"))
+    ]
+    assert len(checks) >= 6
+    bare = [
+        r.lineno
+        for fn in checks
+        for r in ast.walk(fn)
+        if isinstance(r, ast.Return)
+        and isinstance(r.value, ast.Tuple)
+        and r.value.elts
+        and isinstance(r.value.elts[0], ast.Constant)
+        and isinstance(r.value.elts[0].value, int)
     ]
     assert not bare, f"literal exit codes at lines {bare}; return Verdict(OK|FAIL|NOTHING, ...)"
+
+    def is_int_str_tuple(node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Subscript)
+            and ast.unparse(node.value) in ("tuple", "Tuple", "typing.Tuple")
+            and ast.unparse(node.slice).replace(" ", "") == "int,str"
+        )
+
     tupled = [
-        n.name
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef)
-        and n.name.startswith(("check_", "_check_", "_verdict"))
-        and n.returns is not None
-        and ast.unparse(n.returns)
-        .replace(" ", "")
-        .lower()
-        .startswith(("tuple[int,str]", "tuple[int,"))
+        fn.name
+        for fn in checks
+        if fn.returns is not None and any(is_int_str_tuple(n) for n in ast.walk(fn.returns))
     ]
     assert not tupled, f"{tupled} return a bare (int, str); return Verdict"
 
