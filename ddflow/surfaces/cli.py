@@ -44,7 +44,7 @@ from .context import (
 )
 from .parsers import REGISTER_ORDER
 from .parsers._common import GLOBS_HELP, _Globs, _positive_int  # noqa: F401
-from .registry import SuggestingParser, used_aliases
+from .registry import Notices, SuggestingParser, used_aliases
 
 
 def cmd_item_update(a, c: Ctx) -> int:
@@ -318,6 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+#: The aliases this process has already said are deprecated (one CLI process is one session).
+_NOTICES = Notices()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -325,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
     args._argv = list(sys.argv[1:] if argv is None else argv)
     # An old command, group or flag name still works (D-compat): said once, on stderr, so
     # `--json` output stays parseable.
-    for alias in used_aliases(parser, args, args._argv):
+    for alias in _NOTICES.fresh(used_aliases(parser, args, args._argv)):
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
     try:
         ctx = Ctx(args)

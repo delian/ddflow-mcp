@@ -166,15 +166,12 @@ class SuggestingParser(argparse.ArgumentParser):
     """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it."""
 
     def error(self, message: str) -> Any:
-        m = re.search(r"invalid choice: '([^']*)'", message)
-        if m:
-            names = [
-                n
-                for a in self._actions
-                if isinstance(a, argparse._SubParsersAction)
-                for n in a.choices
-            ]
-            message += _did_you_mean(m.group(1), names)
+        for a in self._actions:
+            # only the command word: another option's bad value is not a command name
+            if isinstance(a, argparse._SubParsersAction) and (
+                m := re.match(rf"argument {re.escape(a.dest)}: invalid choice: '([^']*)'", message)
+            ):
+                message += _did_you_mean(m.group(1), list(a.choices))
         super().error(message)
 
 
@@ -185,6 +182,7 @@ def used_aliases(
     namespace the subparsers filled) and the flags typed (from ``argv``, up to ``--``)."""
     out: list[Alias] = []
     node = parser
+    flags: dict[str, Alias] = dict(getattr(node, "_compat_flags", {}))
     while True:
         sub = next((a for a in node._actions if isinstance(a, argparse._SubParsersAction)), None)
         typed = getattr(args, sub.dest, None) if sub is not None else None
@@ -193,7 +191,7 @@ def used_aliases(
         if hit := getattr(sub, "_compat", {}).get(typed):
             out.append(hit)
         node = sub.choices[typed]
-    flags: Mapping[str, Alias] = getattr(node, "_compat_flags", {})
+        flags.update(getattr(node, "_compat_flags", {}))
     for token in argv:
         if token == "--":
             break
@@ -237,8 +235,12 @@ class Param:
     aliases: tuple[str, ...] = ()
     deprecated_since: str = ""
     removed_in: str = MIN_REMOVED_IN
+    #: What an old name should be replaced by when that is not simply this parameter.
+    replacement: str = ""
 
     def __post_init__(self) -> None:
+        if self.positional and any(a.startswith("-") for a in self.aliases):
+            raise ValueError(f"param {self.name!r}: a positional has no flag to alias")
         _check_aliases(
             f"param {self.name!r}",
             self.aliases,
@@ -265,7 +267,9 @@ class Param:
     def arg_aliases(self) -> dict[str, Alias]:
         """Old tool-argument names -> the `Alias` that says so (those a flag spelling is not)."""
         return {
-            a: Alias("argument", a, self.name, self.deprecated_since, self.removed_in)
+            a: Alias(
+                "argument", a, self.replacement or self.name, self.deprecated_since, self.removed_in
+            )
             for a in self.aliases
             if not a.startswith("-")
         }
@@ -278,7 +282,7 @@ class Param:
             (a if a.startswith("-") else "--" + a.replace("_", "-")): Alias(
                 "flag",
                 a if a.startswith("-") else "--" + a.replace("_", "-"),
-                self.option,
+                self.replacement or self.option,
                 self.deprecated_since,
                 self.removed_in,
             )
@@ -416,6 +420,8 @@ class Command:
     tool_aliases: tuple[str, ...] = ()
     deprecated_since: str = ""
     removed_in: str = MIN_REMOVED_IN
+    #: What an old name should be replaced by when that is not simply this command.
+    replacement: str = ""
 
     def __post_init__(self) -> None:
         _check_aliases(
@@ -439,6 +445,12 @@ class Command:
         names = [p.name for p in self.params]
         if len(set(names)) != len(names):
             raise ValueError(f"{'/'.join(self.path)}: duplicate parameter names")
+        spelled = names + [a for p in self.params for a in p.aliases]
+        if len(set(spelled)) != len(spelled):
+            raise ValueError(
+                f"{'/'.join(self.path) or self.tool}: a parameter alias is also another "
+                "parameter's name or alias"
+            )
         if not self.path and not self.tool:
             raise ValueError("a command needs a CLI path or an MCP tool name")
         if len(self.via) > MAX_VIA:
@@ -497,7 +509,7 @@ class Command:
     def tool_alias_list(self) -> tuple[Alias, ...]:
         """The old names of this command's MCP tool, as `Alias`es."""
         return tuple(
-            Alias("tool", a, self.tool, self.deprecated_since, self.removed_in)
+            Alias("tool", a, self.replacement or self.tool, self.deprecated_since, self.removed_in)
             for a in self.tool_aliases
         )
 
@@ -517,7 +529,13 @@ class Command:
                 subparsers,
                 sub,
                 word,
-                Alias("command", old, " ".join(self.path), self.deprecated_since, self.removed_in),
+                Alias(
+                    "command",
+                    old,
+                    self.replacement or " ".join(self.path),
+                    self.deprecated_since,
+                    self.removed_in,
+                ),
             )
         return sub
 
@@ -601,6 +619,7 @@ def rename_args(
 
 def unknown_arg_hint(known: Iterable[str], unknown: Iterable[str]) -> str:
     """`` Did you mean 'a' (for 'b')?`` for the unknown arguments that have a near name."""
+    known = list(known)  # read once per unknown name
     pairs = [(u, closest(u, known)) for u in unknown]
     said = [f"'{near}' (for '{u}')" for u, near in pairs if near]
     return f" Did you mean {', '.join(said)}?" if said else ""
