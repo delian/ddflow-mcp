@@ -106,7 +106,8 @@ def digest(text: str) -> str:
 def check_jinja(text: str) -> None:
     """Raise `SyntaxProblem` when ``text`` is not a valid Jinja2 template."""
     try:
-        jinja2.Environment().parse(text)
+        # parse only, nothing is rendered, so autoescape is moot
+        jinja2.Environment().parse(text)  # nosec B701
     except jinja2.TemplateSyntaxError as exc:
         raise SyntaxProblem(exc.lineno or 0, exc.message or str(exc)) from exc
 
