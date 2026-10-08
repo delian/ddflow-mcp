@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ddflow.api import defs as ADEFS
 from ddflow.config import Config
+from ddflow.core import defs as D
 from ddflow.services.guidance import deffields as DF
 from ddflow.services.guidance import fileformat
 from ddflow.services.guidance.kinds import DECISION, RULE
@@ -119,4 +120,20 @@ def test_the_log_profile_is_applied_before_the_digest(tmp_path: Path) -> None:
     cfg = Config.load(tmp_path)
     secret = _fields(RICH) | {"body": "token ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"}
     assert DF.logged(secret, cfg)["body"] != secret["body"]
-    assert DF.digest_of(secret, cfg) != DF.digest_of(_fields(RICH), cfg)
+    # the digest is of the LOGGED form: hashing the raw fields would differ from it
+    assert DF.digest_of(secret, cfg) == D.digest(DF.logged(secret, cfg))
+    assert DF.digest_of(secret, cfg) != D.digest(secret)
+
+
+def test_nulls_in_an_old_definition_mean_the_default_not_the_word_none() -> None:
+    nulls = dict.fromkeys(DF.FIELDS) | {"title": "T", "body": "b"}
+    rec = DF.from_fields("r-old", nulls, {}, RULE)
+    assert (rec.owner, rec.category, rec.priority, rec.level, rec.status) == (
+        "",
+        "",
+        50,
+        "project",
+        "accepted",
+    )
+    text = DF.render("r-old", nulls, {}, RULE)
+    assert "None" not in text and fileformat.parse(text, RULE).title == "T"
