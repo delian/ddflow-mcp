@@ -103,6 +103,35 @@ def def_record(
             return chk.refusal
         if chk.extension:
             return DD.extend(log, cfg, chk, "def.recorded")
+    return _write_record(
+        log, cfg, kind, rid, fields, source, provenance, chk, replaced=prev is not None
+    )
+
+
+def def_record_unchecked(
+    repo: Path,
+    kind: str,
+    rid: str,
+    fields: dict[str, Any],
+    *,
+    source: str = "",
+    provenance: dict[str, Any] | None = None,
+    agent: str = "",
+) -> O.Outcome:
+    """`def_record` without the add-time duplicate check, for a writer that has run its own
+    (a rule add checks against rules AND every other kind, with the adder's answer)."""
+    if bad := _bad(kind, rid) or _fields_problem(fields):
+        return O.failed("def.recorded", bad, def_kind=kind, id=rid)
+    log, cfg, st = _load(repo, agent)
+    prev = st.defs.get(D.key(kind, rid))
+    return _write_record(
+        log, cfg, kind, rid, fields, source, provenance, DD.Checked(), replaced=prev is not None
+    )
+
+
+def _write_record(
+    log, cfg, kind, rid, fields, source, provenance, chk: DD.Checked, *, replaced: bool
+) -> O.Outcome:
     fields = _logged(cfg, fields)
     digest = D.digest(fields)
     data = _envelope(cfg, kind, rid, source, provenance)
@@ -115,7 +144,7 @@ def def_record(
         def_kind=kind,
         id=rid,
         digest=digest,
-        replaced=prev is not None,
+        replaced=replaced,
         **chk.data(),
     )
 

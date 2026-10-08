@@ -250,3 +250,126 @@ def test_detecting_does_not_create_the_rules_directory(repo: Path) -> None:
     ctx = M.context(repo, EventLog(repo, "importer"), Config.load(repo))
     assert [p for p in M.pending(ctx) if p.migration.id == ID] == []
     assert not rules.exists()
+
+
+# -- the write path: rule add / update / remove record the definition ---------------------
+
+from ddflow.api import rules as ARULES  # noqa: E402
+from ddflow.services.rules import Rule, RulesStorage  # noqa: E402
+
+
+def _rule(rid: str = "r-w", content: str = "Always run the tests.") -> Rule:
+    return Rule(id=rid, title="Run tests", content=content, tags=["ci"], priority=60)
+
+
+def _events(repo: Path, kind: str):
+    return [e for e in EventLog(repo, "reader").read_all() if e.kind == kind]
+
+
+def test_adding_a_rule_records_the_definition_the_file_is_a_view_of(repo: Path) -> None:
+    out = ARULES.rule_add(repo, _rule(), agent="t")
+    assert out.exit == 0, out
+    rec = _defs(repo)["rule:r-w"]
+    cfg = Config.load(repo)
+    on_disk = RulesStorage(repo).get("r-w").to_record()
+    assert rec.live and rec.fields == DF.logged(DF.to_fields(on_disk, RULE), cfg)
+    assert rec.digest == DF.digest_of(DF.to_fields(on_disk, RULE), cfg)
+    assert rec.source == ".ddflow/rules/r-w.toml"
+    assert rec.provenance["via"] == "write" and rec.provenance["by"]
+    assert "unrecorded" not in out.data
+    assert _run(repo) == [], "the file and the log already agree: nothing for the import"
+
+
+def test_updating_a_rule_appends_an_update_and_a_no_change_appends_nothing(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    out = ARULES.rule_update(repo, "r-w", priority=80, agent="t")
+    assert out.exit == 0, out
+    rec = _defs(repo)["rule:r-w"]
+    assert rec.fields["priority"] == 80
+    assert [h["event"] for h in rec.history] == ["def.recorded", "def.updated"]
+    before = len(_events(repo, "def.updated"))
+    again = ARULES.rule_update(repo, "r-w", priority=80, agent="t")
+    assert again.exit == 0 and len(_events(repo, "def.updated")) == before
+    assert _run(repo) == []
+
+
+def test_extending_a_rule_records_the_longer_text(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    out = ARULES._extend_rule(repo, "r-w", "And lint.", agent="t")
+    assert out.exit == 0, out
+    assert "And lint." in _defs(repo)["rule:r-w"].fields["body"]
+    assert _run(repo) == []
+
+
+def test_removing_a_rule_retires_it_and_adding_it_again_brings_it_back(repo: Path) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+    assert ARULES.rule_remove(repo, "r-w", agent="t").exit == 0
+    assert _defs(repo)["rule:r-w"].status == "retired"
+    assert not (repo / ".ddflow" / "rules" / "r-w.toml").exists()
+    assert ARULES.rule_add(repo, _rule(content="Run the tests, always."), agent="t").exit == 0
+    rec = _defs(repo)["rule:r-w"]
+    assert rec.live and "always" in rec.fields["body"]
+    assert _run(repo) == []
+
+
+def test_removing_a_rule_the_log_never_recorded_writes_nothing(repo: Path) -> None:
+    RulesStorage(repo).add(_rule())  # a file from before rules were events
+    assert ARULES.rule_remove(repo, "r-w", agent="t").exit == 0
+    assert "rule:r-w" not in _defs(repo)
+    assert len(_events(repo, "def.retired")) == 0
+
+
+def test_a_log_that_cannot_record_leaves_the_file_and_says_so(repo: Path, monkeypatch) -> None:
+    def refuse(*a, **k):
+        raise RuntimeError("log is locked")
+
+    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
+    out = ARULES.rule_add(repo, _rule(), agent="t")
+    # a failure, so no surface shows it as a success; the file is there as the caller asked
+    assert out.exit == 1 and (repo / ".ddflow" / "rules" / "r-w.toml").exists()
+    assert "not recorded in the log" in out.reason and "log is locked" in out.reason
+    assert "ddflow upgrade" in out.reason
+    monkeypatch.undo()
+    # the one-time import records it later
+    assert [o.status for o in _run(repo)] == ["applied"]
+    assert _defs(repo)["rule:r-w"].live
+
+
+def test_a_removal_the_log_cannot_retire_says_the_log_still_holds_the_rule(
+    repo: Path, monkeypatch
+) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
+
+    def refuse(*a, **k):
+        raise RuntimeError("log is locked")
+
+    monkeypatch.setattr(ARULES, "def_retire", refuse)
+    out = ARULES.rule_remove(repo, "r-w", agent="t")
+    assert out.exit == 1 and "file was removed but the log still holds the rule" in out.reason
+    assert "log is locked" in out.reason
+    assert not (repo / ".ddflow" / "rules" / "r-w.toml").exists()
+    assert _defs(repo)["rule:r-w"].live
+
+
+def test_the_mcp_tools_show_an_unrecorded_write_as_an_error(repo: Path, monkeypatch) -> None:
+    from ddflow.surfaces.mcp import Server
+
+    def call(name: str, args: dict):
+        return Server(repo).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args},
+            }
+        )["result"]
+
+    def refuse(*a, **k):
+        raise RuntimeError("log is locked")
+
+    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
+    res = call("ddflow_rule_add", {"id": "r-mcp", "title": "T", "content": "Body of the rule."})
+    assert res.get("isError") and res["_meta"]["exit"] == 1, res
+    text = res["content"][0]["text"]
+    assert "not recorded in the log" in text and "log is locked" in text
+    assert (repo / ".ddflow" / "rules" / "r-mcp.toml").exists()
