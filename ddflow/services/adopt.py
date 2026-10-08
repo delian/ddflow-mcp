@@ -19,14 +19,13 @@ after an upgrade updates the block and leaves your own prose alone.
 from __future__ import annotations
 
 import re
-import shutil
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..core import clock
 from ..infra import paths
-from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
+from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
 from . import install_info as _INSTALL
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -367,6 +366,14 @@ class RulesState:
 
     path: str
     state: str
+    #: The stamped block's body no longer matches the digest it was written with: a person
+    #: changed it (so a refresh keeps their version in `.local-edits`).
+    edited: bool = False
+    #: The block carries the stamped markers (so "differs" is proven to be an unedited older
+    #: copy unless `edited`); False for the legacy markers, which hold no digest.
+    stamped: bool = False
+    #: The stamped block was written at a higher format level than this ddflow understands.
+    newer: bool = False
 
     @property
     def needs_attention(self) -> bool:
@@ -448,6 +455,29 @@ def has_been_adopted(repo: Path, *, docs_dir: str = "docs/ddflow") -> bool:
     return (Path(repo) / docs_dir / "drivers" / "implement-phase.md").is_file()
 
 
+def _stamped(text: str) -> bool:
+    try:
+        return BLOCK.stamp(text) is not None
+    except RegionError:
+        return False
+
+
+def block_newer(text: str) -> bool:
+    """Was the stamped managed block in ``text`` written at a newer format level?"""
+    try:
+        return BLOCK.state(text) == "newer"
+    except RegionError:
+        return False
+
+
+def block_edited(text: str) -> bool:
+    """Was the stamped managed block in ``text`` changed by hand since it was written?"""
+    try:
+        return BLOCK.state(text) == "edited"
+    except RegionError:
+        return False
+
+
 def _block_state(text: str, want: str) -> str:
     """CURRENT when the file's managed block says what this ddflow would write, NO_BLOCK when
     it holds none (or its markers are broken), else STALE. A block under the legacy markers
@@ -491,7 +521,15 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
             out.append(RulesState(name, MISSING))
             continue
         text = path.read_text("utf-8", errors="replace")
-        out.append(RulesState(name, _block_state(text, want)))
+        out.append(
+            RulesState(
+                name,
+                _block_state(text, want),
+                block_edited(text),
+                _stamped(text),
+                block_newer(text),
+            )
+        )
 
     # The NATIVE surfaces, which for some agents OUTRANK `AGENTS.md` and are therefore what
     # actually binds. Cursor's precedence is Team Rules > Project Rules > User Rules >
@@ -519,7 +557,15 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
             out.append(RulesState(rule.path, CURRENT if listed else NOT_BINDING))
             continue
         if rule.form == FORM_BLOCK:
-            out.append(RulesState(rule.path, _block_state(got, want_block)))
+            out.append(
+                RulesState(
+                    rule.path,
+                    _block_state(got, want_block),
+                    block_edited(got),
+                    _stamped(got),
+                    block_newer(got),
+                )
+            )
             continue
         if got == want_native:
             out.append(RulesState(rule.path, CURRENT))
@@ -728,25 +774,130 @@ def _driver_pairs(repo: Path, docs_dir: str, templates: Path) -> list[tuple[str,
     return pairs
 
 
+#: What a driver doc is, against the template this ddflow ships (`driver_states`).
+DOC_CURRENT = "current"
+#: Differs and is a copy an older ddflow wrote, unedited (its stamp proves it).
+DOC_STALE = "stale"
+#: Differs and has no stamp to tell by: a copy from before headers, edited or not.
+DOC_LEGACY = "legacy"
+#: Its stamped body no longer matches the digest it was written with: a person changed it.
+DOC_EDITED = "edited"
+#: Written at a higher format level than this ddflow understands (D-compat 2).
+DOC_NEWER = "newer"
+
+
+def _driver_region(rel: str) -> Managed:
+    """The managed region a driver doc is, named by its path under `drivers/`."""
+    name = rel.partition("/drivers/")[2] or Path(rel).name
+    return Managed("drivers/" + name.removesuffix(".md"))
+
+
+def doc_state(text: str, region: Managed, want: str) -> str:
+    """How a managed document compares with ``want``, the body this ddflow ships.
+
+    A file with the region: its body against ``want`` (current), else the stamp -- newer
+    format, edited since it was written, or an unedited copy of an older release (stale).
+    A file without one is a copy an older ddflow made: current when it is ``want`` byte for
+    byte, else legacy (nothing says whether a person touched it, so the caller backs it up)."""
+    try:
+        at = region._region().find(text)
+    except RegionError:
+        return DOC_EDITED  # broken markers: somebody edited around them
+    if at is None:
+        return DOC_CURRENT if text == want else DOC_LEGACY
+    body = text[at[1] : at[2]]
+    state = region.state(text)
+    if state == "newer":
+        return DOC_NEWER
+    if body == want:
+        return DOC_CURRENT
+    return DOC_EDITED if state == "edited" else DOC_STALE
+
+
+def driver_states(
+    repo: Path, *, docs_dir: str = "docs/ddflow", package_dir: Path | None = None
+) -> dict[str, str]:
+    """`{repo-relative path: DOC_*}` for each driver doc that exists and differs from, or is
+    not exactly, the template the RUNNING ddflow ships; documents that are current are
+    left out. Empty for a project that was never adopted."""
+    if not has_been_adopted(repo, docs_dir=docs_dir):
+        return {}
+    templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
+    if not (templates / "drivers" / "implement-phase.md").is_file():
+        return {}  # a packaging fault `adopt` names; doctor must not crash on it
+    out: dict[str, str] = {}
+    for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
+        state = doc_state(
+            mine.read_text("utf-8", errors="replace"),
+            _driver_region(rel),
+            tmpl.read_text("utf-8"),
+        )
+        if state != DOC_CURRENT:
+            out[rel] = state
+    return out
+
+
 def driver_drift(
     repo: Path, *, docs_dir: str = "docs/ddflow", package_dir: Path | None = None
 ) -> list[str]:
-    """Driver docs whose bytes differ from the templates the RUNNING ddflow ships.
+    """Driver docs that differ from the templates the RUNNING ddflow ships.
 
     `rules_status` judges the AGENTS.md block; nothing judged the driver docs themselves,
     so a project adopted by an older ddflow kept a driver that lacked later guidance while
     doctor said Healthy (bug Ba11a054309). Empty for a project that was never adopted.
     """
-    if not has_been_adopted(repo, docs_dir=docs_dir):
-        return []
-    templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
-    if not (templates / "drivers" / "implement-phase.md").is_file():
-        return []  # a packaging fault `adopt` names; doctor must not crash on it
-    return [
-        rel
-        for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates)
-        if mine.read_bytes() != tmpl.read_bytes()
-    ]
+    return list(driver_states(repo, docs_dir=docs_dir, package_dir=package_dir))
+
+
+def local_edits_path(path: Path) -> Path:
+    """Where a hand edit of ``path`` is kept: `<path>.local-edits`, numbered when taken."""
+    first = path.with_name(path.name + ".local-edits")
+    candidate, n = first, 1
+    while candidate.exists():
+        n += 1
+        candidate = path.with_name(f"{first.name}.{n}")
+    return candidate
+
+
+def _write_driver(mine: Path, tmpl: Path, rel: str) -> str:
+    """Write one driver doc as a stamped region, keeping what a person wrote: an EDITED
+    document is copied to `.local-edits` first, text outside the region stays, and one a newer
+    ddflow wrote is refused."""
+    region, want = _driver_region(rel), tmpl.read_text("utf-8")
+    if not mine.exists():
+        mine.parent.mkdir(parents=True, exist_ok=True)
+        replace_text(mine, region.render(want))
+        return f"wrote {rel}"
+    try:
+        existing = mine.read_text("utf-8")
+    except UnicodeDecodeError:
+        # Not text this ddflow can read back: keep the bytes whole and write the shipped doc.
+        aside = local_edits_path(mine)
+        atomic_write(aside, mine.read_bytes())
+        replace_text(mine, region.render(want))
+        return f"wrote {rel} (your file was not UTF-8: it is kept as {aside.name})"
+    state = doc_state(existing, region, want)
+    if state == DOC_NEWER:
+        s = region.stamp(existing)
+        return Refused(
+            f"REFUSED {rel}: written by ddflow {s.version if s else '?'} at a newer format "
+            f"level; upgrade ddflow to >= {s.version if s else 'that version'} before refreshing it"
+        )
+    note = ""
+    if state == DOC_EDITED:
+        aside = local_edits_path(mine)
+        atomic_write(aside, mine.read_bytes())
+        note = f" (your edits are kept in {aside.name})"
+    try:
+        owned = region.owns(existing)
+    except RegionError:
+        owned = False
+    if state == DOC_CURRENT and owned:
+        return f"{rel} is current"
+    replace_text(mine, region.splice(existing, want) if owned else region.render(want))
+    if state == DOC_LEGACY:
+        note = " (a copy from before headers: nothing says whether it was edited; see the backup)"
+    return f"wrote {rel}{note}"
 
 
 def _backup_docs(
@@ -805,11 +956,7 @@ def refresh_docs(
     for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
         if only is not None and rel not in only:
             continue
-        if mine.read_bytes() == tmpl.read_bytes():
-            actions.append(f"{rel} is current")
-        else:
-            shutil.copy2(tmpl, mine)
-            actions.append(f"wrote {rel}")
+        actions.append(_write_driver(mine, tmpl, rel))
     section = project_section(docs_dir)
     for name in ("AGENTS.md", "CLAUDE.md"):
         if only is not None and name not in only:
@@ -817,7 +964,7 @@ def refresh_docs(
         path = repo / name
         if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
             continue
-        actions.append(_upsert_block(path, section))
+        actions.append(_upsert_block(path, section, name))
     for key in agents:
         if key in NATIVE_RULES and (only is None or NATIVE_RULES[key].path in only):
             actions.append(_write_native_rule(repo, key, docs_dir))
@@ -858,24 +1005,34 @@ def adopt(
         )
 
     actions.extend(init_files(repo))
+    if saved := _backup_docs(repo, docs_dir, package_dir, None):  # the originals first
+        actions.append(f"saved the originals in {saved}")
 
     drivers_dst = repo / docs_dir / "drivers"
     drivers_dst.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(templates / "drivers" / "implement-phase.md", drivers_dst / "implement-phase.md")
-    actions.append(f"wrote {docs_dir}/drivers/implement-phase.md")
+    rel = f"{docs_dir}/drivers/implement-phase.md"
+    actions.append(
+        _write_driver(
+            drivers_dst / "implement-phase.md", templates / "drivers" / "implement-phase.md", rel
+        )
+    )
 
     (drivers_dst / "deltas").mkdir(exist_ok=True)
     for key in agents:
         delta = AGENT_TARGETS[key].delta
-        shutil.copy2(templates / "drivers" / "deltas" / delta, drivers_dst / "deltas" / delta)
-        actions.append(f"wrote {docs_dir}/drivers/deltas/{delta}")
+        rel = f"{docs_dir}/drivers/deltas/{delta}"
+        actions.append(
+            _write_driver(
+                drivers_dst / "deltas" / delta, templates / "drivers" / "deltas" / delta, rel
+            )
+        )
 
     section = project_section(docs_dir)
     for name in ("AGENTS.md", "CLAUDE.md"):
         path = repo / name
         if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
             continue
-        actions.append(_upsert_block(path, section))
+        actions.append(_upsert_block(path, section, name))
 
     if install_hooks:
         from ..services.enforce import install as install_hook
@@ -973,10 +1130,16 @@ def _write_command(repo: Path, rel: str, src: Path) -> str:
             if _region_body(region, existing) == body:
                 return f"{rel} is current"
             try:
-                replace_text(path, region.splice(existing, body))
+                updated = region.splice(existing, body)
             except NewerContent as exc:
                 return Refused(f"REFUSED {rel}: {exc}")
-            return f"wrote {rel}"
+            note = ""
+            if region.state(existing) == "edited":  # a hand edit inside the region: kept
+                aside = local_edits_path(path)
+                atomic_write(aside, path.read_bytes())
+                note = f" (your edits are kept in {aside.name})"
+            replace_text(path, updated)
+            return f"wrote {rel}{note}"
         if MANAGED_MARK not in existing:
             return (
                 f"kept {rel}: it is the project's own, not ddflow's. The ddflow version is "
@@ -1007,7 +1170,7 @@ def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> s
     if rule.form == FORM_BLOCK:
         # A file the project may already own (`QWEN.md`, `replit.md`, `.goosehints`), so a
         # managed block rather than a wholesale write — the operator's own rules stay.
-        return _upsert_block(path, project_section(docs_dir))
+        return _upsert_block(path, project_section(docs_dir), rule.path)
     if rule.form == FORM_AIDER:
         return _add_aider_read(path)
     raise ValueError(f"unknown native rules form {rule.form!r}")
@@ -1117,31 +1280,46 @@ def _section_body(section: str) -> str:
     return section if body is None else body
 
 
-def _upsert_block(path: Path, section: str) -> str:
-    """Insert or replace the managed block, leaving the rest of the file untouched."""
-    existing = path.read_text("utf-8") if path.exists() else ""
+def _upsert_block(path: Path, section: str, label: str = "") -> str:
+    """Insert or replace the managed block, leaving the rest of the file untouched. Messages
+    name the file ``label`` (its project path), else its bare name."""
+    name = label or path.name
+    try:
+        existing = path.read_text("utf-8") if path.exists() else ""
+    except UnicodeDecodeError:
+        return Refused(
+            f"SKIPPED {name}: it is not UTF-8 text, so ddflow cannot place its block "
+            f"in it safely; convert it to UTF-8 and re-run adopt"
+        )
     try:
         owned = BLOCK.owns(existing)
     except RegionError as exc:
-        return Refused(f"SKIPPED {path.name}: {exc}; fix the markers and re-run adopt")
+        return Refused(f"SKIPPED {name}: {exc}; fix the markers and re-run adopt")
     if owned:
+        edited = block_edited(existing) and block_body(existing) != _section_body(section)
         try:
-            replace_text(path, BLOCK.splice(existing, _section_body(section)))
+            updated = BLOCK.splice(existing, _section_body(section))
         except NewerContent as exc:
-            return Refused(f"REFUSED {path.name}: {exc}")
-        return f"updated the managed block in {path.name}"
+            return Refused(f"REFUSED {name}: {exc}")
+        note = ""
+        if edited:  # a hand edit inside the block: kept, not lost
+            aside = local_edits_path(path)
+            atomic_write(aside, path.read_bytes())
+            note = f" (your edits are kept in {aside.name})"
+        replace_text(path, updated)
+        return f"updated the managed block in {name}{note}"
     if LEGACY_BEGIN in existing and LEGACY_END in existing and not has_legacy_block(existing):
         return Refused(
-            f"SKIPPED {path.name}: the legacy block markers are reversed; fix them and re-run adopt"
+            f"SKIPPED {name}: the legacy block markers are reversed; fix them and re-run adopt"
         )
     if has_legacy_block(existing):
         head = existing[: existing.index(LEGACY_BEGIN)]
         tail = existing[existing.index(LEGACY_END) + len(LEGACY_END) :]
         replace_text(path, head + section.strip() + tail)
-        return f"updated the managed block in {path.name}"
+        return f"updated the managed block in {name}"
     prefix = existing.rstrip() + "\n\n" if existing.strip() else f"# {path.parent.name}\n\n"
     replace_text(path, prefix + section.strip() + "\n")
-    return f"{'appended to' if existing.strip() else 'created'} {path.name}"
+    return f"{'appended to' if existing.strip() else 'created'} {name}"
 
 
 #: The module an agent spawns to get the MCP server, and the directory that must be on

@@ -596,6 +596,16 @@
   
   '''
 # ---
+# name: test_help[ddflow gate list]
+  '''
+  usage: ddflow gate list [-h] [--refuted]
+  
+  options:
+    -h, --help  show this help message and exit
+    --refuted   list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check
+  
+  '''
+# ---
 # name: test_help[ddflow gate record]
   '''
   usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] id gate
@@ -688,10 +698,11 @@
 # ---
 # name: test_help[ddflow gate]
   '''
-  usage: ddflow gate [-h] {status,run,verify,record,skip} ...
+  usage: ddflow gate [-h] {status,list,run,verify,record,skip} ...
   
   positional arguments:
-    {status,run,verify,record,skip}
+    {status,list,run,verify,record,skip}
+      list                the gates this project defines; --refuted: the gates passed on refutation
       verify              break what this gate guards and require it to notice (exit 1 = it cannot)
   
   options:
@@ -2424,6 +2435,7 @@
     'ddflow flow choose',
     'ddflow flow show',
     'ddflow gate',
+    'ddflow gate list',
     'ddflow gate record',
     'ddflow gate run',
     'ddflow gate skip',

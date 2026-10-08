@@ -131,6 +131,30 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 
+def list_gates(repo: Path, *, refuted: bool = False, agent: str = "") -> O.Outcome:
+    """The gates this project defines; with ``refuted``, the ones recorded passed ON
+    REFUTATION instead (D-unify 5), for the operator to spot-check: every (item, gate)
+    whose last finding was settled by a triage rather than a clean re-review."""
+    _log, cfg, st = _load(repo, agent)
+    if refuted:
+        rows = G.refuted_passes(st)
+        lines = [G.refuted_line(r) + f"  [{r['state']}] {r['title']}" for r in rows]
+        return O.ok(
+            "gate.list",
+            refuted=True,
+            count=len(rows),
+            passes=rows,
+            text="\n".join(lines) if lines else "no gate was passed on refutation",
+        )
+    known = G.load_gates(repo, cfg)
+    rows = [
+        {"gate": g.id, "title": g.title, "applies_to": g.applies_to, "command": g.command}
+        for g in known.values()
+    ]
+    lines = [f"{r['gate']}  ({r['applies_to']})  {r['title']}".rstrip() for r in rows]
+    return O.ok("gate.list", refuted=False, count=len(rows), gates=rows, text="\n".join(lines))
+
+
 def verify(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
     """Can this gate go red at all? Applies a known-bad mutation and restores the tree.
 
