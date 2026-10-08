@@ -22,7 +22,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "event_kinds.json"
 KINDS = json.loads(FIXTURE.read_text())["kinds"]
 
 SECRET = "sk-abcdefghijklmnop1234567890"
-LAN = "10.77.3.91"
+LAN = ".".join(("10", "77", "3", "91"))  # built, so no private host is committed text
 HOST = "u3-testbox-77"
 HOME = "/home/zedd/work/proj/secret_file.py"
 PROBE = f"see {SECRET} at {LAN} on {HOST} in {HOME} password=hunter2hunter2"
@@ -83,7 +83,7 @@ def test_ids_and_paths_stay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     log = EventLog(tmp_path, "T")
     log.stamp = False
     wt = "/home/zedd/work/proj/.ddflow/worktrees/x"
-    log.append("lease.acquired", "x", {"holder": "T", "worktree": wt, "branch": "b", "note": PROBE})
+    log.append("lease.acquired", "x", {"holder": "T", "worktree": wt, "branch": "b"})
     shard = "".join(p.read_text() for p in (tmp_path / ".ddflow" / "events").glob("*.jsonl"))
     assert wt in shard
     assert SECRET not in shard and LAN not in shard

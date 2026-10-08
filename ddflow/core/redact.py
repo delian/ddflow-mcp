@@ -461,7 +461,6 @@ LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "item.unblocked": ("note",),
     "job.ended": ("note",),
     "job.started": ("command",),
-    "lease.acquired": ("note",),
     "lease.expired": ("reason",),
     "lease.released": ("note", "reason"),
     "lesson.recorded": ("how", "pattern", "rule", "summary", "title", "why"),
@@ -502,6 +501,8 @@ LOG_NO_TEXT = frozenset(
         "gate.out_of_order",
         "gate.started",
         "item.started",
+        # a lease note is ddflow's own ("re-homed from <agent id>"): the agent id is a lookup
+        "lease.acquired",
         "lease.renewed",
         "link.recorded",
         "phase.removed",
