@@ -29,8 +29,9 @@ def hasher(data: bytes | memoryview = b"", algo: str = "sha256", *, size: int | 
 
 
 #: A redaction marker in any spelling: the `[REDACTED:<kind>]` of a marker-style profile and
-#: the bare `[REDACTED]` of a masking one. THE grammar: `core.redact` writes and strips markers
-#: with this pattern, so a change to it moves both together.
+#: the bare `[REDACTED]` of a masking one. The grammar `core.redact` strips markers with; the
+#: closed `[REDACTED:<kind>]` form `core.textcut` keeps whole is pinned to what the redactor
+#: writes by `tests/test_compat_digests.py`.
 MARKER = re.compile(r"\[REDACTED(?::[a-z0-9_]*)?\]?")
 #: The one token every spelling of a redaction marker is mapped to before a digest.
 REDACTED = "[REDACTED]"

@@ -43,6 +43,13 @@ def test_the_redactor_and_the_digests_read_one_marker_grammar():
     assert R._MARKER is D.MARKER
 
 
+def test_the_clipper_keeps_whole_the_marker_the_redactor_writes():
+    from ddflow.core import textcut
+
+    assert R._marker("secret").startswith(textcut.MARK_START)
+    assert textcut._MARK.fullmatch(R._marker("secret"))
+
+
 def test_the_markers_the_redactor_writes_are_all_normalized():
     for kind in ("secret", "host", "home", "ip", "name"):
         assert D.normalize_markers(R._marker(kind)) == D.REDACTED
