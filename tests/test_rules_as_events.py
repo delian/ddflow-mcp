@@ -519,9 +519,17 @@ def test_replay_rebuilds_the_rule_files_from_the_log(repo: Path, tmp_path: Path)
 
 
 def test_a_staged_rule_file_without_its_log_events_is_refused(repo: Path) -> None:
-    """The check compares with the log only when the log is committed beside the file: a
-    rule file staged alone (its record unstaged) is refused, never judged by the working log."""
-    ARULES.rule_add(repo, _rule(), agent="t")
+    """In a project that commits its log, the check compares with the log only when the log is
+    committed beside the file: a rule file staged alone (its record unstaged) is refused,
+    never judged by the working log."""
+    ARULES.rule_add(repo, _rule("r-a"), agent="t")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base", "--no-verify")
+    ARULES.rule_add(
+        repo,
+        Rule(id="r-b", title="Name modules plainly", content="Modules take short nouns."),
+        agent="t",
+    )
     _git(repo, "add", ".ddflow/rules")
     code, msg = E.check_views(repo, Config.load(repo))
     assert code == 1 and "the commit does not record" in msg, msg
