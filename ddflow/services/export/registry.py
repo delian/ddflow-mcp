@@ -20,6 +20,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 
 from ...core.digest import content_digest
+from ...core.version import running as running_version
 from ..prompts import Template
 from .frame import DEFAULT_MAX_BYTES, frame, normalize, one_line, truncate
 from .query import EXIT_REFUSED, ExportError, Query
@@ -571,9 +572,7 @@ def render_document(  # noqa: PLR0913 -- the document kind's whole vocabulary: f
         body, more = post(body)
         extra = {**(extra or {}), **more}
     if not version:
-        import ddflow
-
-        version = str(ddflow.__version__)
+        version = running_version()
     try:
         overhead = len(frame("", k.name, version, extra).encode("utf-8"))
     except ValueError as exc:  # an `extra` header attribute the reader could not parse back
