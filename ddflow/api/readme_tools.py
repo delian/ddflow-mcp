@@ -30,6 +30,10 @@ END = f"<!-- ddflow:end {REGION} -->"
 _BEGIN = rf"<!-- ddflow:begin {re.escape(REGION)} sha=(?P<sha>[0-9a-f]{{12}}) -->"
 #: The region's lines, found by the one line-splice primitive every managed block uses.
 _LINES = Region(_BEGIN, re.escape(END))
+#: Whitespace after `.`, `!` or `?` that is not the tail of an abbreviation or an ellipsis.
+_SENTENCE_END = re.compile(
+    r"(?<![Ee]\.g\.)(?<!i\.e\.)(?<!etc\.)(?<!vs\.)(?<!\bNo\.)(?<!\.\.)(?<=[.!?])\s+"
+)
 #: A summary longer than this is cut at a word and ends in an ellipsis.
 SUMMARY_MAX = 110
 #: The rewrite was refused: the region was edited by hand.
@@ -37,8 +41,9 @@ EDITED = 3
 
 
 def summary(description: str) -> str:
-    """The first sentence of a tool's description, as a table cell."""
-    first = re.split(r"(?<=[.!?])\s", " ".join(description.split()), maxsplit=1)[0]
+    """The first sentence of a tool's description, as a table cell. A full stop that ends
+    `e.g.`, `i.e.`, `etc.`, `vs.`, `No.` or an ellipsis does not end the sentence."""
+    first = _SENTENCE_END.split(" ".join(description.split()), maxsplit=1)[0]
     if len(first) > SUMMARY_MAX:
         first = first[: SUMMARY_MAX - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"
     return first.replace("|", "\\|")
@@ -58,7 +63,8 @@ def render(tools: Mapping[str, Mapping[str, object]], tiers: Mapping[str, str]) 
     body = "\n".join(
         [
             f"<details><summary>All {len(tools)} MCP tools: {core} in the `core` tier, "
-            f"{standard} in `standard` (which includes core)</summary>",
+            f"{standard - core} more in `standard`, {len(tools) - standard} more in `all`"
+            "</summary>",
             "",
             "| Group | Tool | Tier | What it does |",
             "|---|---|---|---|",
