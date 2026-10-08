@@ -25,7 +25,7 @@ from pathlib import Path
 
 from ..core import clock
 from ..infra import paths
-from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
+from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
 from . import install_info as _INSTALL
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -559,7 +559,11 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
         if rule.form == FORM_BLOCK:
             out.append(
                 RulesState(
-                    rule.path, _block_state(got, want_block), block_edited(got), _stamped(got)
+                    rule.path,
+                    _block_state(got, want_block),
+                    block_edited(got),
+                    _stamped(got),
+                    block_newer(got),
                 )
             )
             continue
@@ -864,7 +868,14 @@ def _write_driver(mine: Path, tmpl: Path, rel: str) -> str:
         mine.parent.mkdir(parents=True, exist_ok=True)
         replace_text(mine, region.render(want))
         return f"wrote {rel}"
-    existing = mine.read_text("utf-8", errors="replace")
+    try:
+        existing = mine.read_text("utf-8")
+    except UnicodeDecodeError:
+        # Not text this ddflow can read back: keep the bytes whole and write the shipped doc.
+        aside = local_edits_path(mine)
+        atomic_write(aside, mine.read_bytes())
+        replace_text(mine, region.render(want))
+        return f"wrote {rel} (your file was not UTF-8: it is kept as {aside.name})"
     state = doc_state(existing, region, want)
     if state == DOC_NEWER:
         s = region.stamp(existing)
@@ -875,7 +886,7 @@ def _write_driver(mine: Path, tmpl: Path, rel: str) -> str:
     note = ""
     if state == DOC_EDITED:
         aside = local_edits_path(mine)
-        replace_text(aside, existing)
+        atomic_write(aside, mine.read_bytes())
         note = f" (your edits are kept in {aside.name})"
     try:
         owned = region.owns(existing)

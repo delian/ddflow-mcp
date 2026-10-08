@@ -538,7 +538,9 @@ def test_a_missing_rules_file_is_summarised_as_missing_not_as_an_edit(old: Path)
     _adopted_old(old)
     (old / "AGENTS.md").unlink()
 
-    item = next(i for i in plan(old)["categories"]["instructions"] if i["path"] == "AGENTS.md")
+    # no release since the project last worked: the branch that used to say "hand-edited"
+    items = UP.instruction_items(old, drifted_by_release=False)
+    item = next(i for i in items if i["path"] == "AGENTS.md")
 
     assert item["provenance"] == "missing" and item["action"] == UP.AGENT
     assert "hand-edited" not in item["summary"] and ".local-edits" not in item["summary"]
@@ -593,3 +595,36 @@ def test_the_plan_promises_local_edits_only_where_the_writer_keeps_them(old: Pat
     )
 
     assert ".local-edits" not in item["summary"]
+
+
+def test_a_hand_edit_that_is_not_utf8_is_kept_byte_for_byte(old: Path) -> None:
+    _adopted_old(old)
+    driver = old / DRIVER
+    raw = driver.read_bytes().replace(b"Claim before you edit", b"Claim caf\xe9 you edit")
+    driver.write_bytes(raw)
+
+    out = go(old, "instructions")
+
+    assert out["exit"] == 0, out["text"]
+    assert (old / (DRIVER + ".local-edits")).read_bytes() == raw
+    assert b"caf\xe9" not in driver.read_bytes() and "\ufffd" not in driver.read_text()
+
+
+def test_a_native_block_surface_written_by_a_newer_ddflow_is_a_note(old: Path) -> None:
+    import re
+
+    from ddflow import FORMAT_LEVEL
+    from ddflow.services import adopt as AD
+
+    key = next(k for k, r in AD.NATIVE_RULES.items() if r.form == AD.FORM_BLOCK)
+    assert run_cli(old, "adopt", "--agents", key)[0] == 0
+    path = old / AD.NATIVE_RULES[key].path
+    path.write_text(
+        re.sub(r"fmt=\d+", f"fmt={FORMAT_LEVEL + 1}", path.read_text(), count=1).replace(
+            "Claim before you edit", "Claim v2"
+        )
+    )
+
+    state = next(r for r in AD.rules_status(old) if r.path == AD.NATIVE_RULES[key].path)
+
+    assert state.newer and state.stamped
