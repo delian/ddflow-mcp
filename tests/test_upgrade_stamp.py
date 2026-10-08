@@ -400,9 +400,9 @@ def test_doctor_advice_for_skipped_kinds_is_to_upgrade(repo: Path):
     # The remedy fits how this ddflow is installed (B-uni-compat-config): a source checkout
     # merges main, an installed one upgrades its package.
     if II.install_info().kind in ("source-tree", "editable"):
-        assert "Merge main" in out
+        assert "Merge main" in out and "Upgrade ddflow-mcp to" not in out
     else:
-        assert "Upgrade ddflow-mcp to >= 99.0.0" in out
+        assert "Upgrade ddflow-mcp to >= 99.0.0" in out and "Merge main" not in out
 
 
 def test_status_json_carries_the_stamped_versions(repo: Path):

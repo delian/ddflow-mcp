@@ -213,6 +213,13 @@ class KeyRefused(str):
     """A key refused under D-plain-keys: the caller answers exit 3 (refused), not 1."""
 
 
+class FormatRefused(ValueError):
+    """A write to a config file whose `format` is newer than this ddflow understands, from a
+    writer that raises (`append_block`): exit 3, refused (`core.outcome.exit_for`)."""
+
+    exit_code = 3
+
+
 _BARE = re.compile(r"[A-Za-z0-9_-]+")
 
 
@@ -474,7 +481,11 @@ def format_problem(text: str, path: Path) -> str:
     try:
         fmt = tomllib.loads(text).get("format", 1) if text.strip() else 1
     except tomllib.TOMLDecodeError:
-        return ""  # the edit's own parse error says so
+        # A file that does not parse is not a licence to write it: read the declaration
+        # off the top of the text, before the first table.
+        top = re.split(r"(?m)^\s*\[", text, maxsplit=1)[0]
+        m = re.search(r"(?m)^\s*format\s*=\s*(\d+)\s*(?:#.*)?$", top)
+        fmt = int(m.group(1)) if m else 1
     if isinstance(fmt, bool) or not isinstance(fmt, int) or fmt <= CONFIG_FORMAT:
         return ""
     advice = II.upgrade_advice()
@@ -759,6 +770,8 @@ def append_block(
 
     with TC.locked(path):
         prev = path.read_text("utf-8") if path.exists() else ""
+        if refused := format_problem(prev, path):
+            raise FormatRefused(refused)
         merged = fsio.APPEND.splice(prev, block.rstrip() + "\n")
         # Parsed before it replaces anything: a block that does not parse would leave
         # a config no later command can load, and the reader's error would blame a file

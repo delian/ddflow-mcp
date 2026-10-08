@@ -115,6 +115,11 @@ def test_a_typo_in_the_appended_block_is_refused(tmp_path):
     assert "max_rounds_typo" in err
 
 
+def test_a_lone_string_for_written_is_one_key_not_its_characters():
+    with pytest.raises(ValueError, match="widget"):
+        Config.check({"widget": {"bad_knob": 1}}, written="widget.bad_knob")
+
+
 def test_check_without_written_keeps_every_key_strict():
     with pytest.raises(ValueError, match="newsection"):
         Config.check({"newsection": {"x": 1}})
@@ -135,10 +140,15 @@ def test_a_dedupe_kind_from_a_newer_release_is_ignored_with_a_note(tmp_path):
     assert any("dedupe.kinds" in n and "kind-from-the-future" in n for n in cfg.ignored_members)
 
 
-def test_a_router_entry_in_a_shape_this_code_lacks_is_ignored_the_rest_applies(tmp_path):
+def test_a_router_in_a_shape_this_code_lacks_stays_a_router_with_unknown_families(tmp_path):
+    """Dropping the entry would let its author pass as an ordinary model; an empty family
+    set is "unknown", which `router_set` refuses to call independent."""
+    from ddflow.config_sections.agent import router_set
+
     cfg = Config.load(_repo(tmp_path))
-    assert cfg.agent.routers == {"hydrafusion": ["openai"]}
+    assert cfg.agent.routers == {"hydrafusion": ["openai"], "shape-from-the-future": []}
     assert any("shape-from-the-future" in n for n in cfg.ignored_members)
+    assert router_set("x-shape-from-the-future-v2", cfg.agent.routers) == []
 
 
 def test_a_trailer_waiver_this_code_cannot_read_is_ignored(tmp_path):
@@ -154,11 +164,31 @@ def test_a_list_with_nothing_usable_left_keeps_the_value_below(tmp_path):
     assert any("nothing usable left" in n for n in cfg.ignored_members)
 
 
+def test_a_table_the_filter_empties_keeps_the_layer_below(tmp_path):
+    (tmp_path / ".ddflow" / "local").mkdir(parents=True)
+    (tmp_path / ".ddflow" / "config.toml").write_text(
+        '[enforce.trailer_waivers]\nPhase-ships = ["none"]\n'
+    )
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text(
+        "[enforce.trailer_waivers]\nNew-Trailer = { words = ['a'] }\n"
+    )
+    cfg = Config.load(tmp_path)
+    assert cfg.enforce.trailer_waivers == {"Phase-ships": ["none"]}
+    assert any("nothing usable left" in n for n in cfg.ignored_members)
+
+
 def test_the_environment_and_the_write_paths_still_refuse_an_unknown_member(tmp_path):
     with pytest.raises(InvalidValue):
         Config.load(env={"DDFLOW_DEDUPE_KINDS": "bug,kind-from-the-future"})
     err, _ = _set(_repo(tmp_path, ""), "dedupe.kinds", '["bug", "kind-from-the-future"]')
     assert isinstance(err, CW.KeyRefused) and "dedupe.kinds" in err
+
+
+def test_a_malformed_waiver_is_refused_when_written_and_only_noted_in_a_file(tmp_path):
+    """The tolerance is for what a FILE holds: the same value given to `--set` is refused."""
+    for bad in ('{ "Phase-ships" = "none" }', '{ "Phase-ships" = ["none", 5] }'):
+        err, _ = _set(_repo(tmp_path, ""), "enforce.trailer_waivers", bad)
+        assert isinstance(err, CW.KeyRefused) and "enforce.trailer_waivers" in err
 
 
 def test_a_member_filter_is_declared_on_each_growing_list():
@@ -183,6 +213,21 @@ def test_a_newer_config_format_is_read_and_never_written(tmp_path):
     assert f"format {CONFIG_FORMAT + 1}" in err and "ddflow" in err
     assert "ttl_s = 321" in (repo / ".ddflow" / "config.toml").read_text()
     assert isinstance(CW._append_config(repo, "[lease]\nttl_s = 5\n")[0], CW.KeyRefused)
+
+
+def test_append_block_refuses_a_newer_format_too(tmp_path):
+    repo = _repo(tmp_path, f"format = {CONFIG_FORMAT + 1}\n")
+    block = '\n[[reviewer]]\nname = "r"\nmodel = "m"\n'
+    with pytest.raises(CW.FormatRefused) as exc:
+        CW.append_block(repo, block, shared=True)
+    assert exc.value.exit_code == 3 and "format" in str(exc.value)
+    assert (repo / ".ddflow" / "config.toml").read_text() == f"format = {CONFIG_FORMAT + 1}\n"
+
+
+def test_a_newer_format_in_a_file_that_does_not_parse_still_refuses_a_write(tmp_path):
+    repo = _repo(tmp_path, f"format = {CONFIG_FORMAT + 1}\n[gate]\nenabled = yess\n")
+    err, _ = _set(repo, "lease.ttl_s", "600")
+    assert isinstance(err, CW.KeyRefused) and f"format {CONFIG_FORMAT + 1}" in err
 
 
 def test_format_is_not_a_section_and_the_current_one_writes(tmp_path):
@@ -259,8 +304,11 @@ def test_the_running_version_has_one_reader(monkeypatch):
     assert V.running() == ""
 
 
-def test_the_source_tree_test_is_one_function():
-    assert II.running_from_source() is CV.is_source_tree()
+def test_the_source_tree_test_is_one_function(monkeypatch):
+    seen: list = []
+    monkeypatch.setattr(CV, "is_source_tree", lambda p=None: seen.append(p) or "sentinel")
+    assert II.running_from_source("/x") == "sentinel" and seen == ["/x"]
+    monkeypatch.undo()
     assert CV.is_source_tree("/usr/lib/python3/site-packages/ddflow") is False
     assert CV.is_source_tree("/home/x/src/ddflow/ddflow") is True
 
@@ -304,15 +352,25 @@ macro_field_from_the_future = 1
 
 def test_skipped_fields_are_found_for_every_table(tmp_path):
     repo = _repo(tmp_path, TABLES)
-    from ddflow.api.reporting import health
+    from ddflow.services import configcompat
 
-    found = {w.split(" in ")[0]: f for w, f in health._skipped_table_fields(repo)}
+    found = {w.split(" in ")[0]: f for w, f in configcompat.skipped_table_fields(repo)}
     assert found == {
         "[gate.unit_tests]": ["gate_field_from_the_future"],
         "[[reviewer]] #1 (r1)": ["reviewer_field_from_the_future"],
         "[[companion]] #1 (c1)": ["companion_field_from_the_future"],
         "[[macro]] #1 (mac)": ["macro_field_from_the_future"],
     }
+
+
+def test_skipped_fields_survive_a_table_in_the_wrong_container(tmp_path):
+    repo = _repo(tmp_path, '[[gate]]\nname = "g"\nnew_field = 1\n\n[macro]\nx = 1\n')
+    from ddflow.services.gates.defs import GateDef
+    from ddflow.services.macros import Macro
+
+    path = [repo / ".ddflow" / "config.toml"]
+    assert tomlcfg.skipped_fields(path, "gate", GateDef) == []
+    assert tomlcfg.skipped_fields(path, "macro", Macro, array=True) == []
 
 
 def test_skipped_fields_helper_reads_without_warning(tmp_path, capsys):
@@ -340,7 +398,10 @@ def test_doctor_names_every_skipped_field_ignored_member_and_newer_format(repo):
         f"config is format {CONFIG_FORMAT + 1}",
     ):
         assert word in out, word
-    assert "merge main" in out  # the tests run from a source checkout
+    if II.install_info().kind in ("source-tree", "editable"):
+        assert "merge main" in out
+    else:
+        assert "upgrade ddflow-mcp" in out
 
 
 NEWER_BITS = '\n[dedupe]\nkinds = ["bug", "kind-from-the-future"]\n'

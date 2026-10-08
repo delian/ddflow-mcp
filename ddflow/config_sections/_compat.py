@@ -46,7 +46,7 @@ def check_rename(what: str, since: str, removed_in: str) -> None:
 
 def is_source_tree(path: str | Path | None = None) -> bool:
     """Is the package at ``path`` (default: this one) in a checkout rather than in
-    site-packages? The one source-tree test (`core.version`, `services.install_info`)."""
+    site-packages? The source-tree test `services.install_info.running_from_source` and the advice share."""
     here = Path(path).resolve() if path is not None else Path(__file__).resolve()
     return not any(part in ("site-packages", "dist-packages") for part in here.parts)
 
