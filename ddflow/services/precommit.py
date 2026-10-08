@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..infra import worktree as W
+from ..infra import git as GIT
 
 #: Release tags current on 2026-09-29 (`git ls-remote --tags`). Pins age by design --
 #: an unpinned hook changes under you -- and `pre-commit autoupdate` moves them forward.
@@ -161,7 +161,7 @@ def _yaml_args(paths: list[str]) -> list[str]:
 
 def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
     """The hooks that fit ``root``'s stacks. None when git cannot list its files."""
-    paths = W.git_paths(root, "ls-files", "--cached", "--others", "--exclude-standard")
+    paths = GIT.files(root, "all")
     if paths is None:
         return None
     stacks = detect_stacks(paths)

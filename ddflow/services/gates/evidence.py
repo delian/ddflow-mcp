@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from ...core.bookkeeping import STATE_EXCLUDE, is_state
 from ...core.digest import content_digest
 from ...infra import git as GIT
 
@@ -27,21 +28,32 @@ MAX_UNTRACKED_HASHED = 512
 #: Expressed as git pathspecs so the exclusion happens inside git rather than by
 #: filtering its output afterwards — a post-filter has to re-implement pathspec
 #: matching, and would drift from what git itself considers inside the directory.
-FINGERPRINT_EXCLUDE: tuple[str, ...] = (":(exclude).ddflow", ":(exclude).ddflow/**")
+#: Named once in `core.bookkeeping`.
+FINGERPRINT_EXCLUDE: tuple[str, ...] = STATE_EXCLUDE
+
+#: What a fingerprint digests for an untracked listing git could not produce: a tree whose
+#: untracked files are unknown is not the tree with none (it used to read as none).
+UNLISTED = "unlisted"
 
 
-def _untracked_paths(cwd: Path) -> list[str]:
-    """Untracked, non-ignored paths, excluding ddflow's own state. ONE spelling.
+def _untracked_listing(cwd: Path) -> list[str] | None:
+    """Untracked, non-ignored paths, excluding ddflow's own state; None when git could
+    not list them. ONE spelling.
 
     `git ls-files --others --exclude-standard -- . *FINGERPRINT_EXCLUDE` was written out
     twice in this module and run twice per gate. Two copies of an argv list is two
     chances for one of them to forget the exclusion, which is exactly how `.ddflow/`
     crept into a fingerprint and made every completion warn that the tree had moved.
+    Read with `-z`: a non-ASCII name is the file's own, not its C-quoted spelling.
     """
-    from ...infra import worktree as W
+    return GIT.files(cwd, "untracked", exclude=FINGERPRINT_EXCLUDE)
 
-    r = W.git(cwd, "ls-files", "--others", "--exclude-standard", "--", ".", *FINGERPRINT_EXCLUDE)
-    return r.out.splitlines() if r.ok and r.out.strip() else []
+
+def _untracked_paths(cwd: Path) -> list[str]:
+    """`_untracked_listing`, empty when git could not list them: for the callers that only
+    count (`diff_stat` reports zeros when git cannot answer). The fingerprint tells the two
+    apart (`_untracked_digest`)."""
+    return _untracked_listing(cwd) or []
 
 
 def _untracked_digest(cwd: Path) -> str:
@@ -53,7 +65,10 @@ def _untracked_digest(cwd: Path) -> str:
     """
     from ...infra import worktree as W
 
-    paths = _untracked_paths(cwd)
+    listed = _untracked_listing(cwd)
+    if listed is None:
+        return UNLISTED
+    paths = listed
     if not paths:
         return ""
     if len(paths) > MAX_UNTRACKED_HASHED:
@@ -139,9 +154,6 @@ def diff_stat(cwd: Path) -> dict[str, int]:
             # binaries does not report "0 files changed".
             out["insertions"] += int(add) if add.isdigit() else 0
             out["deletions"] += int(rem) if rem.isdigit() else 0
-    u = W.git(cwd, "ls-files", "--others", "--exclude-standard", "--", ".", *FINGERPRINT_EXCLUDE)
-    if u.ok and u.out.strip():
-        out["untracked"] = len(u.out.splitlines())
     return out
 
 
@@ -226,9 +238,7 @@ def _git_z(cwd: Path | str, *args: str) -> list[str] | None:
     return GIT.run(cwd, *args, binary=True).paths()
 
 
-def _ours(path: str) -> bool:
-    """`.ddflow/` is ddflow's bookkeeping, not the work -- see FINGERPRINT_EXCLUDE."""
-    return path == ".ddflow" or path.startswith(".ddflow/")
+_ours = is_state  # `.ddflow/` is ddflow's bookkeeping, not the work -- see FINGERPRINT_EXCLUDE
 
 
 #: One file's identity inside a content tree: (mode, blob id), as git stores it.
@@ -273,7 +283,7 @@ def worktree_entries(cwd: Path | str) -> TreeEntries | None:
     root = Path(top.out)
     index = _git_z(root, "ls-files", "-s", "-z")
     changed = _git_z(root, "diff", "--name-only", "-z", "--no-renames")
-    untracked = _git_z(root, "ls-files", "--others", "--exclude-standard", "-z")
+    untracked = GIT.files(root, "untracked")
     if index is None or changed is None or untracked is None:
         return None
     # The cap counts the work's own files: `.ddflow/` is never hashed, so its untracked
