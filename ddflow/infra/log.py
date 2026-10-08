@@ -37,6 +37,7 @@ from ..config import Config, LogConfig, SessionConfig
 from ..core import digest as D
 from ..core import redact as R
 from ..core import upcasters as UP
+from ..core import version as V
 from ..core.events import (
     OLDER_MARK,
     PROVENANCE_KINDS,
@@ -129,12 +130,45 @@ def install_kind() -> str:
     )
 
 
-def skew_message(version: str, highest: str, by: str = "") -> str:
+def skew_message(
+    version: str,
+    highest: str,
+    by: str = "",
+    *,
+    log_format: int = 0,
+    format_level: int = 0,
+    format_only: bool = False,
+    format_version: str = "",
+    format_by: str = "",
+) -> str:
+    """The refusal for a write by a ddflow behind the log. ``format_only`` is a log whose
+    data FORMAT is ahead although this ddflow's version is not older (`StampFacts.format_skewed`):
+    it names the stamp that carries the format and asks for a release at that level, since
+    "upgrade to >= <this version>" would already be satisfied."""
     who = f" (stamped by {by})" if by else ""
+    if format_only and log_format > format_level > 0:
+        fwho = f" (stamped by {format_by})" if format_by else ""
+        head = (
+            f"REFUSED: this project's log has been worked on by ddflow {format_version or highest}"
+            f"{fwho} at data format level {log_format}, and this ddflow ({version}) writes level "
+            f"{format_level}, which is older: writing now could drop or misread what the newer "
+            f"one recorded."
+        )
+        remedy = (
+            f"Upgrade ddflow-mcp to a release that writes data format level {log_format} or "
+            f"higher (ddflow {format_version or highest} did)"
+        )
+    else:
+        head = (
+            f"REFUSED: this project's log has been worked on by ddflow {highest}{who}, and "
+            f"this ddflow is {version}, which is older: writing now could drop or misread "
+            f"what the newer one recorded."
+        )
+        if log_format > format_level > 0:
+            head += f" Its data format level ({log_format}) is ahead of this ddflow's too ({format_level})."
+        remedy = f"Upgrade ddflow-mcp to >= {highest}"
     return (
-        f"REFUSED: this project's log has been worked on by ddflow {highest}{who}, and this "
-        f"ddflow is {version}, which is older: writing now could drop or misread what the "
-        f"newer one recorded. Upgrade ddflow-mcp to >= {highest} and retry (for example "
+        f"{head} {remedy} and retry (for example "
         f"`uvx --refresh --from ddflow-mcp ddflow ...`, or restart the MCP server after "
         f"upgrading). Reads still work. If you cannot upgrade, ask the user; only if the "
         f'user insists, rerun with --allow-older-version --reason "<why>" (MCP: the '
@@ -144,18 +178,26 @@ def skew_message(version: str, highest: str, by: str = "") -> str:
     )
 
 
-_SKEW_WARNED: set[tuple[str, str]] = set()
+_SKEW_WARNED: set[tuple[str, str, int]] = set()
 
 
-def _warn_skew_once(version: str, highest: str) -> None:
-    if (version, highest) in _SKEW_WARNED:
+def _warn_skew_once(version: str, highest: str, log_format: int = 0, format_level: int = 0) -> None:
+    """Say once per (version, log version, log format) that a policy of `warn` writes into a
+    log that is ahead. The format is part of the key, so a later, higher format is said again."""
+    key = (version, highest, log_format)
+    if key in _SKEW_WARNED:
         return
-    _SKEW_WARNED.add((version, highest))
+    _SKEW_WARNED.add(key)
     import sys
 
+    ahead = (
+        f" (data format level {log_format}, this ddflow writes {format_level})"
+        if (log_format > format_level > 0)
+        else ""
+    )
     print(
-        f"ddflow: this log has been worked on by ddflow {highest}; this ddflow is {version}. "
-        f"Writing anyway ([upgrade].skew = warn).",
+        f"ddflow: this log has been worked on by ddflow {highest}{ahead}; this ddflow is "
+        f"{version}. Writing anyway ([upgrade].skew = warn).",
         file=sys.stderr,
     )
 
@@ -1026,19 +1068,34 @@ class EventLog:
         Returns extra `data` for the event about to be written: the older-version mark when
         a session-scoped override is what lets it through. Raises `SkewRefused` otherwise.
         Caller holds the lock."""
-        version = running_version()
-        facts = stamp_facts(self._all_events(), self.agent_id, version)
+        version, fmt = running_version(), V.format_level()
+        # a level of 0 is "this code declares no format": never compared
+        facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
         extra: dict[str, Any] = {}
         if facts.skewed:
             policy = self._skew_policy()
             if policy == "refuse":
                 if facts.override is None:
-                    raise SkewRefused(skew_message(version, facts.highest, facts.highest_by))
+                    raise SkewRefused(
+                        skew_message(
+                            version,
+                            facts.highest,
+                            facts.highest_by,
+                            log_format=facts.highest_format,
+                            format_level=fmt,
+                            format_only=facts.format_skewed,
+                            format_version=facts.format_version,
+                            format_by=facts.format_by,
+                        )
+                    )
                 extra[OLDER_MARK] = version
             elif policy == "warn":
-                _warn_skew_once(version, facts.highest)
+                _warn_skew_once(version, facts.highest, facts.highest_format, fmt)
         if not facts.seen_by_me and version_known(version):
-            self._write(SEEN_KIND, "ddflow", {"version": version, "install": install_kind()})
+            stamp: dict[str, Any] = {"version": version, "install": install_kind()}
+            if fmt:
+                stamp["format_level"] = fmt
+            self._write(SEEN_KIND, "ddflow", stamp)
             _write_seen_marker(self.root, version)
         return extra
 
@@ -1061,8 +1118,8 @@ class EventLog:
         then overriding silently would only be a slower way of not asking."""
         reason = (reason or "").strip()
         with self.transaction():
-            version = running_version()
-            facts = stamp_facts(self._all_events(), self.agent_id, version)
+            version, fmt = running_version(), V.format_level()
+            facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
             if not facts.skewed:
                 return None
             if facts.override is not None:
@@ -1083,6 +1140,13 @@ class EventLog:
                     "log_version": facts.highest,
                     "session": facts.session,
                     "reason": reason,
+                    # a log whose FORMAT is ahead is overridden against that format, so a
+                    # later, higher format is refused again (`stamp_facts`)
+                    **(
+                        {"log_format": facts.highest_format}
+                        if fmt and facts.highest_format > fmt
+                        else {}
+                    ),
                 },
             )
 
