@@ -17,6 +17,26 @@ def decl(line: str) -> CR.Declared:
     return CR.Declared(line, "test")
 
 
+def _gone(pid: int, wait_s: float = 5.0) -> bool:
+    """The process is dead: not signalable, or an unreaped zombie (state Z)."""
+    import os
+    from pathlib import Path
+
+    end = time.monotonic() + wait_s
+    while time.monotonic() < end:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        try:
+            if Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                return True
+        except (OSError, IndexError):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 def test_a_bare_string_is_not_a_declared_command():
     with pytest.raises(TypeError, match="Declared"):
         CR.CommandRunner().run("echo hi", timeout_s=5)  # type: ignore[arg-type]
@@ -84,11 +104,7 @@ def test_a_timeout_is_unavailable_and_kills_the_whole_group(tmp_path):
     )
     assert run.status == "unavailable" and run.kind == CR.TIMEOUT
     assert run.reason == "timed out after 1s" and time.monotonic() - started < 15
-    time.sleep(0.3)
-    import os
-
-    with pytest.raises(ProcessLookupError):
-        os.kill(int(pidfile.read_text()), 0)
+    assert _gone(int(pidfile.read_text()))
 
 
 def test_a_failing_tick_is_a_command_that_could_not_run():
@@ -149,6 +165,12 @@ def test_slots_admit_one_at_a_time_and_a_full_queue_is_unavailable(tmp_path):
         # B8c962616bb: no opinion where the shell, not `which`, must speak
         ('claude -p "unbalanced', ""),
         ("foo;bar", ""),
+        # compound-command words the shell, not `which`, must run
+        ("while ! ping -c1 host; do sleep 1; done", ""),
+        ("until true; do x; done", ""),
+        ("case x in x) y;; esac", ""),
+        ("! grep -q foo file", ""),
+        ("time make", ""),
     ],
 )
 def test_executable_missing_is_one_answer_for_every_caller(command, expected):
@@ -160,3 +182,16 @@ def test_ci_does_not_report_an_unsplittable_command_as_a_missing_tool():
     """B8c962616bb: the whole command used to be named as the tool that is not installed."""
     assert CI.tool_missing('make "unbalanced') == ""
     assert CI.tool_missing("lint;fix") == ""
+
+
+def test_the_installed_check_uses_the_path_the_command_will_run_under(tmp_path):
+    """A tool only on the PATH handed to the command is installed for it."""
+    tool = tmp_path / "u1-only-here"
+    tool.write_text("#!/bin/sh\necho found\n")
+    tool.chmod(0o755)
+    assert CR.executable_missing("u1-only-here --x") == "u1-only-here"
+    assert CR.executable_missing("u1-only-here --x", str(tmp_path)) == ""
+    run = CR.CommandRunner().run(
+        decl("u1-only-here"), timeout_s=5, env={"PATH": f"{tmp_path}:/usr/bin:/bin"}
+    )
+    assert run.ran and run.out == "found\n"
