@@ -274,8 +274,7 @@ def test_the_one_measurement_equals_the_three_old_ones(tree: Path, state) -> Non
     readable, work, ignored = oracle_onboard(tree)
 
     assert tw.readable is readable
-    if state.__name__ != "_unreadable":
-        assert (tw.ahead, tw.behind) == COUNTS.get(state.__name__, (0, 0))
+    assert (tw.ahead, tw.behind) == COUNTS.get(state.__name__, (0, 0))
     assert (len(tw.dirty) if tw.readable else -1) == count  # lease recovery
     assert tw.ahead == ahead == ahead_c
     assert tw.behind == behind_c
