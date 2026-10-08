@@ -395,3 +395,15 @@ def test_the_upgrade_is_in_the_fold_replay_and_history(old: Path) -> None:
     assert "Upgraded the project from ddflow" in text and "worktree.max_parallel" in text, text
     _code, hist, _err = run_cli(old, "history")
     assert "upgrade applied" in hist
+
+
+def test_toml_remove_keeps_comments_and_reports_whether_the_key_was_there() -> None:
+    from ddflow.infra import tomlcfg as TC
+
+    text = "# top\n[log]\nzzz = 1  # why\nkeep = 2\n"
+
+    out, was = TC.remove(text, "log.zzz")
+
+    assert was is True and out == "# top\n[log]\nkeep = 2\n"
+    assert TC.remove(out, "log.zzz") == (out, False)
+    assert TC.remove(out, "nope.zzz") == (out, False)
