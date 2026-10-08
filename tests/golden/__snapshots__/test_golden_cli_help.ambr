@@ -2123,8 +2123,8 @@
     --snapshot            with --apply: save the originals as a git snapshot (a tag on HEAD) instead
                           of a local copy; the same as --backup snapshot
     --restore [NAME]      put back what a local backup or a snapshot holds (NAME, or the newest when
-                          omitted), saving what it replaces; stands alone: not with --plan, --apply
-                          or --confirm
+                          omitted), saving what it replaces; stands alone: no other option may
+                          accompany it
   
   '''
 # ---

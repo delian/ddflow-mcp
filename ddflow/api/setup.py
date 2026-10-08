@@ -1016,7 +1016,7 @@ def upgrade(
     not run. The body is the same on the CLI's `--json` and over MCP.
     """
     if restore:
-        if apply or plan is not None or confirm or backup or snapshot:
+        if apply or plan is not None or confirm or reason or backup or snapshot:
             return O.refused("upgrade", "--restore stands alone: choose it or the plan or --apply")
         return _upgrade_restore(repo, restore, agent)
     if snapshot:

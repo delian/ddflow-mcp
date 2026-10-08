@@ -3992,8 +3992,8 @@ for one run). Both are explained here so you can choose:
 `--snapshot` is `--backup snapshot` for one run (with `--apply`; MCP: `snapshot: true`); naming
 another `--backup` mode beside it is refused (exit 3). **Undo:** `ddflow upgrade --restore [NAME]`
 (MCP: `restore`) puts back the named local backup or snapshot, or the newest when NAME is
-omitted, and saves what it replaces first; it stands alone, so combining it with `--plan`,
-`--apply`, `--confirm` or `--snapshot` is refused (exit 3). `--json` carries a `restored` object.
+omitted, and saves what it replaces first; it stands alone, so combining it with any other
+option (`--plan`, `--apply`, `--confirm`, `--reason`, `--backup`, `--snapshot`) is refused (exit 3). `--json` carries a `restored` object.
 
 A snapshot cannot hold a file git ignores or one outside the project (the git hooks): those
 still get a local copy, named in the output. `--backup none` (or `[upgrade].backup = "none"`)

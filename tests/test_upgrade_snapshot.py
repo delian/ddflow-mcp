@@ -441,6 +441,10 @@ def test_cli_snapshot_needs_apply_and_does_not_contradict_backup(old: Path) -> N
     assert code == 3 and "stands alone" in err
     code, _out, err = run_cli(old, "upgrade", "--restore", "--apply", "hooks")
     assert code == 3 and "stands alone" in err
+    for extra in (("--backup", "none"), ("--backup", "snapshot"), ("--reason", "why")):
+        code, _out, err = run_cli(old, "upgrade", "--restore", *extra)
+        assert code == 3 and "stands alone" in err, extra
+    assert tags(old) == []
 
 
 def test_the_mcp_tool_carries_snapshot_and_restore(old: Path) -> None:
@@ -451,8 +455,26 @@ def test_the_mcp_tool_carries_snapshot_and_restore(old: Path) -> None:
     before = (old / DRIVER).read_bytes()
     out = spec["api"](old, {"apply": "instructions", "snapshot": True}, "upgrader")
     assert out.exit == 0 and len(tags(old)) == 1
+    assert (old / DRIVER).read_bytes() != before, "the apply changed the file"
     done = spec["api"](old, {"restore": "latest"}, "upgrader")
     assert done.exit == 0 and (old / DRIVER).read_bytes() == before
     payload = spec["payload"]({"restore": "latest"})
     assert "restored" in payload and "applied" not in payload
     assert "applied" in spec["payload"]({"apply": "hooks"})
+
+
+def test_the_mcp_tool_refuses_what_the_cli_refuses(old: Path) -> None:
+    from ddflow.surfaces.tools import maintenance as M
+
+    api = M.TOOLS["ddflow_upgrade"]["api"]
+    for args in (
+        {"restore": "latest", "snapshot": True},
+        {"restore": "latest", "apply": "hooks"},
+        {"restore": "latest", "backup": "none"},
+        {"restore": "latest", "reason": "why"},
+        {"snapshot": True},
+        {"apply": "hooks", "snapshot": True, "backup": "none"},
+    ):
+        out = api(old, args, "upgrader")
+        assert out.exit == 3, (args, out.exit, out.reason)
+    assert tags(old) == []

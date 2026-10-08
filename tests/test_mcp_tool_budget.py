@@ -24,8 +24,7 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # 95_000 (raised, B-gate-econ-review-refutation.2-surfaces): ddflow_gate_list is the MCP face of
 # `ddflow gate list [--refuted]` (~0.5 KB): one tool, one optional argument; the list measures 94,598 bytes with it.
 # 95_300 (raised, B-upgrade.4-apply.3b-wire): ddflow_upgrade gains `snapshot` and `restore`
-# (~0.3 KB of argument text); the list measures 95,2xx with them. The tool's own description
-# was shortened to pay for part of it.
+# and a longer description (~0.3 KB in all); the list measures 95,2xx with them.
 TOOLS_LIST_BUDGET = 95_300
 SHARED_DESCRIPTION_MAX = 200
 
