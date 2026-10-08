@@ -123,15 +123,21 @@ def test_a_tick_runs_when_due_and_not_again_until_every_s_has_passed(proj: Path)
     assert state_rows(proj)["a"]["status"] == TK.RAN
 
 
-def test_a_tick_another_command_already_claimed_is_not_run_twice(proj: Path) -> None:
+def test_a_tick_is_claimed_before_it_runs_so_a_pass_started_meanwhile_skips_it(
+    proj: Path,
+) -> None:
     clock, log = Clock(), []
-    t = TK.Tick("a", every_s=60, budget_s=1, target=counting(log))
-    fsio.ensure_ignored_dir(proj / ".ddflow/local")
-    (proj / ".ddflow/local/ticks.json").write_text(
-        json.dumps({"format": 1, "ticks": {"a": {"last_at": clock.now - 5, "status": "running"}}})
-    )
+    inner: list[list[TK.TickResult]] = []
 
-    assert run(proj, [t], clock) == [] and log == []
+    def hook(c: TK.TickCtx) -> None:
+        log.append("outer")
+        inner.append(run(proj, [t], clock))  # another command starts while this one runs
+
+    t = TK.Tick("a", every_s=60, budget_s=2, target=hook)
+
+    run(proj, [t], clock)
+
+    assert log == ["outer"] and inner == [[]], "the second pass found it already claimed"
 
 
 def test_two_passes_racing_for_one_tick_run_it_once(proj: Path) -> None:
@@ -163,7 +169,9 @@ def test_the_clock_going_back_never_runs_a_tick_twice(proj: Path) -> None:
     assert run(proj, [t], clock) == [] and log == ["a"]
 
 
-def test_ticks_that_do_not_apply_are_left_out(proj: Path) -> None:
+def test_a_tick_that_does_not_apply_is_left_out_and_one_that_cannot_be_judged_is_said(
+    proj: Path,
+) -> None:
     clock, log = Clock(), []
     off = TK.Tick(
         "off", every_s=0, budget_s=1, target=counting(log, "off"), enabled=lambda c: False
@@ -172,7 +180,11 @@ def test_ticks_that_do_not_apply_are_left_out(proj: Path) -> None:
         "boom", every_s=0, budget_s=1, target=counting(log, "boom"), enabled=lambda c: 1 / 0
     )
 
-    assert run(proj, [off, boom], clock) == [] and log == []
+    results = run(proj, [off, boom], clock)
+
+    assert log == []
+    assert [(r.name, r.status) for r in results] == [("boom", TK.FAILED)]
+    assert "enabled check failed" in results[0].detail and "ZeroDivisionError" in results[0].detail
 
 
 def test_a_zero_interval_tick_is_not_recorded_while_it_succeeds(proj: Path) -> None:
@@ -381,3 +393,96 @@ def test_load_survives_a_registry_that_raises(proj: Path, monkeypatch: pytest.Mo
     log, cfg, st = _load(proj)
 
     assert log is not None and cfg is not None and st is not None
+
+
+# -- review fixes -----------------------------------------------------------------------------
+
+
+def test_a_cut_tick_keeps_seeing_its_own_deadline_as_expired(proj: Path) -> None:
+    clock = Clock()
+    release, seen = threading.Event(), []
+
+    def straggler(c: TK.TickCtx) -> None:
+        release.wait(5)
+        seen.append(c.expired())
+
+    slow = TK.Tick("a-slow", every_s=60, budget_s=0.05, target=straggler)
+    next_one = TK.Tick("b-next", every_s=60, budget_s=30, target=lambda c: None)
+    try:  # real monotonic time: the straggler's own deadline passes while it waits
+        TK.run_due(ctx(proj), ticks=[slow, next_one], clock=clock, mono=time.monotonic)
+    finally:
+        release.set()
+    time.sleep(0.2)  # the worker wakes, reads ITS context
+
+    assert seen == [True], "the straggler's deadline was neither cleared nor replaced"
+
+
+def test_an_abort_hands_back_the_ticks_it_had_claimed(
+    proj: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock, log = Clock(), []
+    a = TK.Tick("a", every_s=60, budget_s=1, target=counting(log, "a"))
+    b = TK.Tick("b", every_s=60, budget_s=1, target=counting(log, "b"))
+
+    def interrupted(*args, **kw):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(TK, "_record", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        run(proj, [a, b], clock)
+    monkeypatch.undo()
+
+    assert log == ["a"]
+    assert [r.name for r in run(proj, [a, b], clock)] == ["b"], "b was handed back, not stranded"
+
+
+def test_a_host_with_no_thread_to_spare_fails_the_tick_not_the_pass(
+    proj: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Clock()
+
+    def no_thread(self):
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(threading.Thread, "start", no_thread)
+
+    (res,) = run(proj, [TK.Tick("a", every_s=60, budget_s=1, target=lambda c: None)], clock)
+
+    assert res.status == TK.FAILED and "can't start new thread" in res.detail
+
+
+def test_an_unavailable_flow_sample_is_recorded_not_passed_as_a_run(
+    proj: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import flowstate as FL
+
+    clock = Clock()
+    monkeypatch.setattr(
+        FL, "sample_if_due", lambda *a, **k: FL.SampleResult(False, "the ring is read-only", True)
+    )
+    (flow,) = [t for t in TK.registered() if t.name == "flow.sample"]
+    cfg = SimpleNamespace(schedule=SimpleNamespace(parallel="auto"))
+
+    (res,) = TK.run_due(
+        TK.TickCtx(proj, cfg, None), ticks=[flow], clock=clock, mono=clock.monotonic
+    )
+
+    assert res.status == TK.UNAVAILABLE and "read-only" in res.detail
+    assert state_rows(proj)["flow.sample"]["status"] == TK.UNAVAILABLE
+
+
+def test_nothing_due_writes_nothing_not_even_the_local_directory(proj: Path) -> None:
+    clock = Clock()
+    shutil.rmtree(proj / ".ddflow/local", ignore_errors=True)
+
+    assert run(proj, [], clock) == []
+    off = TK.Tick("off", every_s=0, budget_s=1, target=lambda c: None, enabled=lambda c: False)
+    assert run(proj, [off], clock) == []
+
+    assert not (proj / ".ddflow/local").exists()
+
+
+def test_status_says_a_tick_without_an_interval_runs_every_pass(proj: Path) -> None:
+    rows = {r["name"]: r for r in TK.status(proj)}
+
+    assert rows["flow.sample"]["status"] == "every-pass"
