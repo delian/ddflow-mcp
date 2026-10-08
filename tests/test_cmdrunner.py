@@ -173,6 +173,8 @@ def test_slots_admit_one_at_a_time_and_a_full_queue_is_unavailable(tmp_path):
         ("case x in x) y;; esac", ""),
         ("! grep -q foo file", ""),
         ("time make", ""),
+        ("command /opt/tools/mytool --check", ""),
+        ("exec /opt/tools/mytool", ""),
     ],
 )
 def test_executable_missing_is_one_answer_for_every_caller(command, expected):
@@ -214,3 +216,12 @@ def test_a_command_reviewer_is_checked_against_the_path_it_runs_under(tmp_path):
     )
     out, err = _chat_command(rev, "sys", "user", 30)
     assert "not on PATH" not in err and "reviewed" in out, (out, err)
+
+
+def test_a_reason_quoting_the_commands_stderr_is_redacted_like_its_output():
+    red = Redactor("log", secret_patterns=[r"hunter2"])
+    run = CR.CommandRunner(redactor=red).run(
+        decl("echo 'hunter2 not found' >&2; exit 127"), timeout_s=5
+    )
+    assert run.kind == CR.NOT_FOUND
+    assert "hunter2" not in run.reason and "hunter2" not in run.output
