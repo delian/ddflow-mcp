@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from ddflow.config import Config
+from ddflow.core import agentname
 from ddflow.infra import harness_identity
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog
@@ -236,14 +237,12 @@ def test_a_harness_declaration_names_the_cli_agent_unless_flag_or_env_is_given(
     ["a", "alpha", "A.b_c-9", "x" * 64],
 )
 def test_mcp_accepts_these_agent_names(name):
-    assert mcp._VALID_AGENT.fullmatch(name)
-    assert harness_identity._NAME.fullmatch(name)
+    assert agentname.is_valid(name)
 
 
 @pytest.mark.parametrize("name", ["", "x" * 65, "a b", "a/b", "a\n", "é", "a:b"])
 def test_mcp_refuses_these_agent_names(name):
-    assert not mcp._VALID_AGENT.fullmatch(name)
-    assert not harness_identity._NAME.fullmatch(name)
+    assert not agentname.is_valid(name)
 
 
 def test_mcp_default_agent_reports_the_layer(adopted, monkeypatch):
@@ -328,3 +327,75 @@ def test_export_is_agent_follows_agent_marker_except_over_mcp(monkeypatch):
     assert export_select._is_agent("kilo", False) == "--agent kilo"
     monkeypatch.setenv("DDFLOW_AGENT", "envy")
     assert export_select._is_agent("", False) == "DDFLOW_AGENT=envy"
+
+
+# -- one name rule, one common_dir (B-uni-identity.3-resolver.1-names) -------------------
+
+
+def test_every_surface_shares_the_one_agent_name_pattern():
+    assert not hasattr(mcp, "_VALID_AGENT"), "the surface asks core.agentname, not a copy"
+    assert agentname.is_valid("A.b_c-9") and not agentname.is_valid("a\n")
+    assert agentname.refusal("a b") == (
+        "'a b' is not a usable agent name: use letters, digits, '.', '_' or '-', "
+        "up to 64 characters."
+    )
+
+
+def test_common_dir_agrees_for_a_primary_checkout_and_a_linked_worktree(
+    adopted, tmp_path, monkeypatch
+):
+    import subprocess
+
+    from ddflow.infra import paths
+
+    tree = tmp_path / "wt-c"
+    subprocess.run(
+        ["git", "-C", str(adopted), "worktree", "add", "-q", "-b", "c", str(tree)], check=True
+    )
+    want = (adopted / ".git").resolve()
+    assert paths.common_dir(adopted) == paths.common_dir(tree) == want
+    assert paths.common_dir(adopted, ask_git=False) == paths.common_dir(tree, ask_git=False) == want
+    assert L._common_dir(str(tree)) == L._common_dir(str(adopted)) == str(want)
+    assert harness_identity._dir(tree) == harness_identity._dir(adopted) == want / "ddflow-identity"
+
+
+def test_common_dir_asks_git_only_when_the_files_say_nothing(adopted, tmp_path):
+    from ddflow.infra import paths
+
+    sub = adopted / "pkg"
+    sub.mkdir()
+    assert paths.common_dir(sub, ask_git=False) is None
+    assert paths.common_dir(sub) == (adopted / ".git").resolve()
+    assert paths.common_dir(tmp_path / "nowhere") is None
+    assert paths.common_dir(tmp_path) is None
+
+
+def test_primary_checkout_ignores_a_separate_git_dir_and_an_unreadable_pointer(tmp_path):
+    import subprocess
+
+    from ddflow.infra import paths
+
+    sgd = tmp_path / "gitrepo" / ".git"
+    (tmp_path / "gitrepo" / "ddflow").mkdir(parents=True)
+    (tmp_path / "gitrepo" / "ddflow" / "__init__.py").write_text("")
+    work = tmp_path / "work"
+    subprocess.run(["git", "init", "-q", f"--separate-git-dir={sgd}", str(work)], check=True)
+    # a gitdir with no commondir is its own common dir, but it is no linked worktree
+    assert paths.common_dir(work, ask_git=False) == sgd.resolve()
+    assert paths.primary_checkout(work) is None
+    for junk in (b"gitdir: foo\x00bar\n", b"gitdir: \xff\xfe\n", b"not a pointer\n"):
+        (work / ".git").write_bytes(junk)
+        assert paths.primary_checkout(work) is None  # and no exception
+    (work / ".git").write_bytes(b"gitdir: foo\x00bar\n")
+    assert paths.common_dir(work, ask_git=False) is None
+
+
+def test_a_dangling_or_empty_git_pointer_is_no_repository(tmp_path):
+    from ddflow.infra import paths
+
+    work = tmp_path / "wt"
+    work.mkdir()
+    for line in (f"gitdir: {tmp_path / 'gone'}\n", "gitdir:\n", "gitdir:   \n"):
+        (work / ".git").write_text(line)
+        assert paths.common_dir(work, ask_git=False) is None, line
+        assert paths.primary_checkout(work) is None
