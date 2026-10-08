@@ -4175,3 +4175,4 @@
 {"agent":"U2","data":{"at":1791499121.1935608,"holder":"U2"},"id":"e9357e2ccc96ec4faffa03e3f","kind":"lease.renewed","lamport":45130,"schema":1,"subject":"B-uni-compat-release-gate","ts":"2026-10-08T22:38:41.296542Z"}
 {"agent":"U2","data":{"at":1791499167.3190858,"holder":"U2"},"id":"e12a89e0af1256d750baf0823","kind":"lease.renewed","lamport":45142,"schema":1,"subject":"B-uni-compat-release-gate","ts":"2026-10-08T22:39:27.428016Z"}
 {"agent":"U2","data":{"at":1791499168.6646929,"holder":"U2"},"id":"e619c20c267afa07be50c3e00","kind":"lease.renewed","lamport":45143,"schema":1,"subject":"B-uni-compat-release-gate","ts":"2026-10-08T22:39:28.770960Z"}
+{"agent":"U2","data":{"at":1791499244.9124408,"holder":"U2"},"id":"eb528bde34a16337a70e83631","kind":"lease.renewed","lamport":45160,"schema":1,"subject":"B-uni-compat-release-gate","ts":"2026-10-08T22:40:45.009653Z"}
