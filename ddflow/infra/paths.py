@@ -59,11 +59,10 @@ def primary_checkout(tree: Path) -> Path | None:
     names its `commondir`) rather than by running git: this is asked while writing a
     hook, in whatever environment that happens.
     """
-    if not (Path(tree) / ".git").is_file():
-        return None
-    common = common_dir(tree, ask_git=False)
-    if common is None:
-        return None
+    pointer = _pointer(tree)
+    if pointer is None or pointer[1] is None:
+        return None  # no `.git` file, or a gitdir with no commondir: not a linked worktree
+    common = pointer[1]
     # A bare or `--separate-git-dir` common dir has no checkout beside it: its parent
     # is just a directory, and one holding an unrelated `ddflow/` is not a primary.
     if common.name != ".git":
@@ -72,6 +71,26 @@ def primary_checkout(tree: Path) -> Path | None:
     if primary == Path(tree).resolve() or not (primary / "ddflow" / "__init__.py").is_file():
         return None
     return primary
+
+
+def _pointer(path: Path | str) -> tuple[Path, Path | None] | None:
+    """(gitdir, commondir or None) from the `.git` FILE of a linked worktree or submodule at
+    ``path``; None when there is no such file, or it is unreadable (a non-UTF-8 or NUL byte
+    in a path git wrote is "not a worktree", never a crash while writing a hook)."""
+    try:
+        line = (Path(path) / ".git").read_bytes().decode("utf-8", "surrogateescape").strip()
+        if not line.startswith("gitdir:"):
+            return None
+        gitdir = (Path(path) / line[len("gitdir:") :].strip()).resolve()
+    except (OSError, ValueError):
+        return None
+    try:
+        raw = (gitdir / "commondir").read_bytes().decode("utf-8", "surrogateescape")
+        return gitdir, (gitdir / raw.strip()).resolve()
+    except FileNotFoundError:
+        return gitdir, None  # a separate git dir or a submodule: its own common dir
+    except (OSError, ValueError):
+        return None
 
 
 def common_dir(path: Path | str, *, ask_git: bool = True) -> Path | None:
@@ -90,17 +109,9 @@ def common_dir(path: Path | str, *, ask_git: bool = True) -> Path | None:
     git = Path(path) / ".git"
     if git.is_dir():
         return git.resolve()
-    try:
-        line = git.read_bytes().decode("utf-8", "surrogateescape").strip()
-    except OSError:
-        line = ""
-    if line.startswith("gitdir:"):
-        gitdir = (Path(path) / line[len("gitdir:") :].strip()).resolve()
-        try:
-            raw = (gitdir / "commondir").read_bytes().decode("utf-8", "surrogateescape")
-            return (gitdir / raw.strip()).resolve()
-        except OSError:
-            return gitdir
+    pointer = _pointer(path)
+    if pointer is not None:
+        return pointer[1] or pointer[0]
     if not ask_git:
         return None
     r = G.run(str(path), "rev-parse", "--git-common-dir", timeout=G.PROBE_TIMEOUT)
