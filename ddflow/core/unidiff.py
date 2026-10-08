@@ -1,0 +1,149 @@
+"""The one reader of a unified diff's file headers (D-unify: one meaning per git query).
+
+Three modules used to read ``diff --git`` / ``---`` / ``+++`` / ``rename`` lines their own
+way (the review chunker, the doc-sync reader, the worktree coverage check). They now share
+these primitives, so a path git quotes, a name holding a space and a rename mean the same
+thing everywhere.
+
+A header line cannot always be split into its two paths (``diff --git a/x b/y z b/y z``),
+so a file's paths are read from the ``---``/``+++``/``rename`` lines, which name ONE path
+each, and only from the ``diff --git`` line when a file has none (a mode change, a binary
+file). Lines past a file's first ``@@`` are content and never headers.
+"""
+
+from __future__ import annotations
+
+import codecs
+import re
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+
+def unquote(raw: str) -> str:
+    """A diff header path. git C-quotes a name holding a quote, backslash, control character
+    (or any non-ASCII byte, under the default ``core.quotePath``); undo that rather than
+    miss the file. A name git left unquoted is returned as it is. Bytes that are not UTF-8
+    come back as surrogate escapes, the way ``os.fsdecode`` spells them."""
+    if len(raw) > 1 and raw[0] == raw[-1] == '"':
+        try:
+            return codecs.escape_decode(raw[1:-1].encode("utf-8", "surrogateescape"))[0].decode(
+                "utf-8", "surrogateescape"
+            )
+        except ValueError:
+            return raw[1:-1]
+    return raw
+
+
+def header_path(line: str, prefix: str) -> str | None:
+    """The path on a ``--- ``/``+++ `` line, minus ``prefix`` (``a/``/``b/``) when it has
+    it; None for ``/dev/null`` (a file added or deleted)."""
+    rest = line[4:].rstrip("\n").rstrip("\t")
+    if rest == "/dev/null":
+        return None
+    rest = unquote(rest)
+    return rest[len(prefix) :] if rest.startswith(prefix) else rest
+
+
+@dataclass(frozen=True)
+class FileDiff:
+    """One ``diff --git`` section's file."""
+
+    header: str  #: the ``diff --git`` line
+    old: str | None  #: the path before the change; None for an added file
+    new: str | None  #: the path after it; None for a deleted file
+
+    @property
+    def path(self) -> str:
+        """The file the section changes: where it ends up, else where it was."""
+        return self.new or self.old or ""
+
+    @property
+    def paths(self) -> tuple[str, ...]:
+        """Every path the section names (both sides of a rename), each once."""
+        return tuple(dict.fromkeys(p for p in (self.old, self.new) if p))
+
+
+#: The two sides of a diff: before and after.
+SIDES = ("old", "new")
+_QUOTED = r'"(?:[^"\\]|\\.)*"'
+
+
+def _from_header_line(head: str) -> tuple[str | None, str | None]:
+    """(old, new) from a ``diff --git`` line alone, for a section with no ``---``/``+++``/
+    ``rename`` lines. A name holding a space is not quoted, so the line is split only where
+    that is unambiguous: two quoted names, one quoted and one plain, the same name twice
+    (``a/X b/X``, or ``X X`` under ``diff.noprefix``), or a single `` b/`` boundary."""
+    pair = head[len("diff --git ") :]
+    quoted = re.findall(_QUOTED, pair)
+    if len(quoted) == len(SIDES):
+        return header_path(f"--- {quoted[0]}", "a/"), header_path(f"+++ {quoted[1]}", "b/")
+    if len(quoted) == 1:
+        rest = pair.replace(quoted[0], "", 1).strip()
+        if pair.startswith('"'):
+            return header_path(f"--- {quoted[0]}", "a/"), header_path(f"+++ {rest}", "b/")
+        return header_path(f"--- {rest}", "a/"), header_path(f"+++ {quoted[0]}", "b/")
+    half = len(pair) // 2
+    if len(pair) % 2 == 1 and pair[half] == " ":
+        left, right = pair[:half], pair[half + 1 :]
+        if left.startswith("a/") and right.startswith("b/") and left[2:] == right[2:]:
+            return left[2:], left[2:]
+        if left == right:
+            return left, left
+    cuts = [m.start() for m in re.finditer(" b/", pair)]
+    if pair.startswith("a/") and len(cuts) == 1:
+        return pair[2 : cuts[0]], pair[cuts[0] + 3 :]
+    return None, pair
+
+
+def _markers(rest: list[str]) -> dict[str, str | None]:
+    """The path-bearing lines of one section's header (everything before its first ``@@``):
+    ``old``/``new`` from ``---``/``+++``, ``from``/``to`` from rename and copy lines."""
+    got: dict[str, str | None] = {}
+    for line in rest:
+        if line.startswith("@@"):
+            break
+        for lead, key, read in (
+            ("--- ", "old", lambda x: header_path(x, "a/")),
+            ("+++ ", "new", lambda x: header_path(x, "b/")),
+            ("rename from ", "from", lambda x: unquote(x[12:].rstrip("\t"))),
+            ("copy from ", "from", lambda x: unquote(x[10:].rstrip("\t"))),
+            ("rename to ", "to", lambda x: unquote(x[10:].rstrip("\t"))),
+            ("copy to ", "to", lambda x: unquote(x[8:].rstrip("\t"))),
+        ):
+            if line.startswith(lead):
+                got[key] = read(line)
+    return got
+
+
+def parse_section(section: str) -> FileDiff:
+    """The `FileDiff` of one ``diff --git`` section (its header line first)."""
+    head, *rest = section.split("\n")
+    header = [ln for ln in rest if not ln.startswith("@@")]
+    # Even a header-only section (binary file, mode change) says whether it adds or deletes.
+    added = any(ln.startswith("new file mode") for ln in header)
+    deleted = any(ln.startswith("deleted file mode") for ln in header)
+    got = _markers(rest)
+    if not got:
+        old, new = _from_header_line(head)
+    else:
+        # A pure rename has no ---/+++ lines; an added/deleted file has one /dev/null side.
+        old = got.get("old") or got.get("from") or (None if added else got.get("new"))
+        new = got.get("new") or got.get("to") or (None if deleted else old)
+    return FileDiff(head, None if added else old, None if deleted else new)
+
+
+def sections(diff: str) -> Iterator[str]:
+    """Each ``diff --git`` section of ``diff`` as text."""
+    for part in re.split(r"(?m)^(?=diff --git )", diff):
+        if part.startswith("diff --git "):
+            yield part
+
+
+def files(diff: str) -> list[FileDiff]:
+    """Every file ``diff`` changes, in order."""
+    return [parse_section(s) for s in sections(diff)]
+
+
+def headers(diff: str) -> list[str]:
+    """Every ``diff --git`` line of ``diff``."""
+    return re.findall(r"(?m)^diff --git .*$", diff)
