@@ -22,7 +22,6 @@ from .reservations import (
     _claim_blocker,
     _clears_on_release,
     _in_motion,
-    _reservation_hold,
 )
 
 #: How long `wait` blocks when the caller does not say. Long enough to outlast most
@@ -144,21 +143,19 @@ def _judge_any(
     from ...core.schedule import plan
 
     others = {i: lz for i, lz in live.items() if lz.holder != me}
-    # The same offer `next` makes: what is reserved for a waiter in line is not ready.
-    hold = _reservation_hold(repo, st, cfg, me, now) if repo is not None else None
-    from ...services.flowstate import limit_for
-
-    # The same limit `next` plans with, so a waiter waits on the offer `next` would make.
-    parallel = None
-    if repo is not None:
+    if repo is None:
+        p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
+    else:
         from ...infra.log import EventLog
+        from .planning import plan_for
 
-        # The log, read lazily as `next` reads it, so the rates are re-read here too.
-        def events():
-            return EventLog(repo, me, log_cfg=cfg.log).read_all()
-
-        parallel = limit_for(repo, cfg, st, events)
-    p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me, hold=hold, parallel=parallel)
+        # The same offer `next` makes: what is reserved for a waiter in line is not ready,
+        # under the limit `next` plans with. The log is read lazily, as `next` reads it,
+        # so the rates are re-read here too.
+        wlog = EventLog(repo, me, log_cfg=cfg.log)
+        p = plan_for(
+            repo, wlog, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me, now=now
+        )
     out: dict[str, Any] = {
         "why": "",
         "waiting_on": [],

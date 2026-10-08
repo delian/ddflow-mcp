@@ -22,6 +22,7 @@ from typing import Any
 from ..config import family_for
 from ..core import clock
 from ..core import outcome as O
+from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
@@ -588,11 +589,10 @@ class _ReplyFile:
     same time, must not truncate the file an earlier record's digest refers to."""
 
     def __init__(self, repo: Path, item: str, gate: str, reviewer: str) -> None:
-        import re
         import threading
 
         run = clock.run_stamp()
-        who = re.sub(r"[^A-Za-z0-9._-]", "_", reviewer)
+        who = safe_filename(reviewer, repl="_")
         self.repo = repo
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
         self._lock = threading.Lock()

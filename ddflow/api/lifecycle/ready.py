@@ -12,7 +12,8 @@ from ...core import progress as PR
 from ...core.model import REVIEW
 from ...core.plain import plain
 from .._base import _load
-from .reservations import WAITABLE, _reservation_hold
+from .planning import plan_for
+from .reservations import WAITABLE
 
 #: What `next` offers when nobody says otherwise. TASKS, because a phase is an umbrella
 #: and "work on P1" is not an instruction anyone can act on.
@@ -35,7 +36,7 @@ def next_(
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     ``phase`` names no item (`_unknown_phase`)."""
-    from ...core.schedule import critical_path, plan
+    from ...core.schedule import critical_path
 
     log, cfg, st = _load(repo, agent)
     unknown = _unknown_phase(st, phase)
@@ -78,17 +79,7 @@ def next_(
         if rep.changes:
             log, cfg, st = _load(repo, agent)
     me = cfg.agent.id or log.agent_id
-    from ...services.flowstate import limit_for
-
-    p = plan(
-        st,
-        cfg,
-        kind=kind,
-        phase=phase,
-        agent=me,
-        hold=_reservation_hold(repo, st, cfg, me),
-        parallel=limit_for(repo, cfg, st, log.read_all),
-    )
+    p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me)
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
