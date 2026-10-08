@@ -71,8 +71,10 @@ class Waiver:
         )
 
 
-def validate(w: Waiver) -> list[str]:
-    """Why ``w`` is not a waiver ddflow will honour, one sentence each; [] when it is."""
+def validate(w: Waiver, today: date | None = None) -> list[str]:
+    """Why ``w`` is not a waiver ddflow will honour, one sentence each; [] when it is.
+    With ``today``, a grant dated after it is refused too: the 90 days count from the
+    grant, so a future-dated one would stretch a waiver far past 90 days from now."""
     out = []
     if not w.id:
         out.append("a waiver needs an id")
@@ -92,7 +94,9 @@ def validate(w: Waiver) -> list[str]:
     except ValueError:
         out.append(f"expires {w.expires!r} is not a date (YYYY-MM-DD)")
         return out
-    if expires < granted:
+    if today is not None and granted > today:
+        out.append(f"granted {w.granted} is in the future (today is {today.isoformat()})")
+    elif expires < granted:
         out.append(f"expires {w.expires} is before it was granted ({w.granted})")
     elif expires > granted + timedelta(days=MAX_DAYS):
         out.append(
@@ -141,7 +145,7 @@ def apply(
     """``results`` with every finding an ACTIVE, valid waiver covers moved to ``waived``.
     A result whose findings are all covered becomes ``waived``; one partly covered stays
     ``fail`` for the rest. Waivers that are expired, unapproved or invalid cover nothing."""
-    usable = [w for w in waivers if not validate(w) and status(w, today, approved) == ACTIVE]
+    usable = [w for w in waivers if not validate(w, today) and status(w, today, approved) == ACTIVE]
     out = []
     for res in results:
         if res.status != FAIL:
