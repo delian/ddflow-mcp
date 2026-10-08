@@ -197,13 +197,13 @@ def _measure(t: TreeState, wt: W.Worktree) -> str:
     Unknown is never clean: a tree git could not read, or whose commits could not be
     counted, is not "fully merged" however empty it looks (B028b11b4cb).
     """
-    dirty, ahead = W.dirty(wt), W.ahead(wt)
-    t.ahead = max(0, ahead)
-    t.behind = max(0, W.behind(wt))
-    if W.unreadable(dirty):
-        return dirty[0][len(W.UNREADABLE) :] or "git status failed"
-    t.dirty_files = len(dirty)
-    return "" if ahead >= 0 else f"cannot count commits ahead of {wt.base}"
+    tw = W.tree_work(wt.path, wt.base, behind=True)
+    t.ahead = max(0, tw.ahead)
+    t.behind = max(0, tw.behind)
+    if not tw.readable:
+        return f"git status failed: {tw.msg}"
+    t.dirty_files = len(tw.dirty)
+    return "" if tw.ahead >= 0 else f"cannot count commits ahead of {wt.base}"
 
 
 def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: str) -> None:
