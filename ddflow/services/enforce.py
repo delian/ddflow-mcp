@@ -48,11 +48,23 @@ from ..core.schedule import is_shared, shared_globs
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra import worktree as W
-from ..infra.fsio import replace_text
+from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from ..infra.log import EventLog
+from .backups import make_backup
 from .install_info import running_from_source
 
+#: The line every ddflow git hook has carried since the first. Kept INSIDE the stamped
+#: region (below) so an older ddflow, which knows only this line, still sees the hook as
+#: its own; a hook written before the region existed is recognised by it alone.
 HOOK_MARKER = "# DDFLOW-HOOK v1 — managed by `ddflow hooks install`"
+
+
+def hook_region(name: str) -> Managed:
+    """The region a git hook's text is: version, format level and body digest on its begin
+    line (fsio.Managed, the grammar every managed file shares), so a hook an older ddflow
+    wrote, a newer one wrote or a person edited are told apart, not just "has the marker"."""
+    return Managed(f"hooks/{name}", open="#", close="")
+
 
 #: How many offending paths the refusal lists before summarising. Enough to see the
 #: shape of the problem (one stray file vs a whole directory) without burying the
@@ -199,14 +211,29 @@ def _over_framework(repo: Path, hook: Path, name: str) -> str:
     )
 
 
+def _hook_file(name: str, template: str, invocation: str) -> tuple[str, str]:
+    """(the shebang line, the region body) of a hook: the template with its marker line
+    kept as the body's first line."""
+    shebang, _, body = template.format(marker=HOOK_MARKER, invocation=invocation).partition("\n")
+    return shebang, body
+
+
 def _install_one(
     repo: Path, d: Path, name: str, template: str, invocation: str, force: bool
 ) -> str:
     hook = d / name
-    text = template.format(marker=HOOK_MARKER, invocation=invocation)
+    shebang, body = _hook_file(name, template, invocation)
+    region = hook_region(name)
+    text = shebang + "\n" + region.render(body)
     if hook.exists():
         existing = hook.read_text("utf-8", errors="replace")
-        if HOOK_MARKER in existing:
+        try:
+            state = region.state(existing)
+        except RegionError as exc:
+            return f"REFUSED: {hook} has broken ddflow markers ({exc}); fix them by hand, or re-run with --force"
+        if state != "absent":
+            return _refresh(repo, hook, name, region, existing, state, body)
+        if HOOK_MARKER in existing:  # written before the region existed: wholly ours
             replace_text(hook, text)
             _chmod_x(hook)
             return f"updated the ddflow {name} hook at {hook}"
@@ -225,6 +252,24 @@ def _install_one(
     replace_text(hook, text)
     _chmod_x(hook)
     return f"installed the ddflow {name} hook at {hook}"
+
+
+def _refresh(
+    repo: Path, hook: Path, name: str, region: Managed, existing: str, state: str, body: str
+) -> str:
+    """Rewrite the region of a hook that has one. Whatever sits outside it stays byte for
+    byte; a region a NEWER ddflow wrote is not downgraded (D-compat 2); one a person
+    edited is copied to `.ddflow/backups/` first, as `adopt --refresh-docs` does."""
+    try:
+        new = region.splice(existing, body)
+    except NewerContent as exc:
+        return f"REFUSED: {hook}: {exc}"
+    saved = ""
+    if state == "edited":
+        saved = f"; it had been edited by hand, the original is in {make_backup(repo, [hook], '', '', name=f'{clock.compact_at()}-hooks-edited')}"
+    replace_text(hook, new)
+    _chmod_x(hook)
+    return f"updated the ddflow {name} hook at {hook}{saved}"
 
 
 def install(repo: Path, *, force: bool = False) -> str:
@@ -306,11 +351,21 @@ def uninstall(repo: Path) -> str:
         hook = d / name
         if not hook.exists():
             continue
-        if HOOK_MARKER not in hook.read_text("utf-8", errors="replace"):
+        text = hook.read_text("utf-8", errors="replace")
+        if HOOK_MARKER not in text:
             out.append(f"REFUSED: {hook} is not managed by ddflow; leaving it alone")
             continue
-        hook.unlink()
-        out.append(f"removed {hook}")
+        try:
+            rest = hook_region(name).remove(text)
+        except RegionError:  # broken markers: nothing here says what is ours to cut
+            out.append(f"REFUSED: {hook} has broken ddflow markers; leaving it alone")
+            continue
+        if rest == text or rest.strip() in ("", "#!/bin/sh"):  # no region: wholly ddflow's
+            hook.unlink()
+            out.append(f"removed {hook}")
+        else:  # a person's own lines share the file: only the region goes
+            replace_text(hook, rest)
+            out.append(f"removed the ddflow {name} hook from {hook}; the lines around it stay")
     return "\n".join(out) or "no ddflow hook installed"
 
 
