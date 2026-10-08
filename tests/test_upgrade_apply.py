@@ -677,3 +677,8 @@ def test_an_action_naming_two_items_belongs_to_the_one_written() -> None:
     assert UA._owner("added AGENTS.md to read: in .aider.conf.yml", items) == ".aider.conf.yml"
     assert UA._owner("updated the managed block in AGENTS.md", items) == "AGENTS.md"
     assert UA._owner("nothing about either", items) == ""
+    twins = [{"path": "docs/ddflow/drivers/deltas/replit.md"}, {"path": "replit.md"}]
+    assert UA._owner("wrote docs/ddflow/drivers/deltas/replit.md", twins) == twins[0]["path"]
+    assert UA._owner("updated the managed block in replit.md", twins) == "replit.md"
+    kept = "wrote docs/x/a.md (your edits are kept in a.md.local-edits)"
+    assert UA._owner(kept, [{"path": "docs/x/a.md"}]) == "docs/x/a.md"
