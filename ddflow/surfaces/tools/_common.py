@@ -40,7 +40,8 @@ def _wait_timeout(a: dict[str, Any]) -> float:
     """`timeout` as given (0 included -- it means "ask, do not sleep"), else the MCP
     default; never above the cap."""
     t = a.get("timeout")
-    return min(float(MCP_WAIT_DEFAULT_S if t is None else t), float(MCP_WAIT_MAX_S))
+    # Capped BEFORE the float: a JSON integer past a double's range would raise in float().
+    return float(min(MCP_WAIT_DEFAULT_S if t is None else t, MCP_WAIT_MAX_S))
 
 
 def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:

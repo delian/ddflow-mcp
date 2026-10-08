@@ -150,3 +150,9 @@ def test_the_tool_table_does_not_pull_in_the_api():
     code = "import sys, ddflow.surfaces.tools._common; print('ddflow.api' in sys.modules)"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.stdout.strip() == "False", out.stderr
+
+
+def test_an_mcp_timeout_beyond_a_double_is_capped_not_raised():
+    assert MC._wait_timeout({"timeout": 10**400}) == MC.MCP_WAIT_MAX_S
+    assert MC._wait_timeout({"timeout": 12}) == 12.0
+    assert MC._wait_timeout({}) == MC.MCP_WAIT_DEFAULT_S
