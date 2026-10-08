@@ -3565,3 +3565,6 @@
 {"agent":"U2","data":{"at":1791467967.963646,"holder":"U2"},"id":"e730e7a214d5dfe72bed86f52","kind":"lease.renewed","lamport":41389,"schema":1,"subject":"B-uni-compat-migrations.2-wire","ts":"2026-10-08T13:59:28.059846Z"}
 {"agent":"U2","data":{"at":1791468054.626069,"holder":"U2"},"id":"e2cdbd2e674cf090517801e7f","kind":"lease.renewed","lamport":41395,"schema":1,"subject":"B-uni-compat-migrations.2-wire","ts":"2026-10-08T14:00:54.715761Z"}
 {"agent":"U2","data":{"at":1791468091.5768769,"holder":"U2"},"id":"ef110ea062ce6cc7547b16f43","kind":"lease.renewed","lamport":41406,"schema":1,"subject":"B-uni-compat-migrations.2-wire","ts":"2026-10-08T14:01:31.667087Z"}
+{"agent":"U2","data":{"at":1791468215.5362587,"holder":"U2"},"id":"e0c66153012b1fcff763d2a46","kind":"lease.renewed","lamport":41474,"schema":1,"subject":"B-uni-compat-migrations.2-wire","ts":"2026-10-08T14:03:35.643197Z"}
+{"agent":"U2","data":{"at":1791468339.0530024,"holder":"U2"},"id":"eacabff53092d9d47ee3ea5f5","kind":"lease.renewed","lamport":41501,"schema":1,"subject":"B-uni-compat-migrations.2-wire","ts":"2026-10-08T14:05:39.157970Z"}
+{"agent":"U2","data":{"at":1791468355.4026816,"holder":"U2"},"id":"e4f38b1254e9e76b9635a886c","kind":"lease.renewed","lamport":41503,"schema":1,"subject":"B-uni-compat-migrations.2-wire","ts":"2026-10-08T14:05:55.508234Z"}
