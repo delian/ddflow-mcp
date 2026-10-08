@@ -35,6 +35,7 @@ from . import session_view as SV
 from . import viewers as V
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
+from .searchcore.hit import FuncSource, gather, register
 from .searchcore.hit import Hit as Doc
 from .searchcore.rank import tfidf
 from .searchcore.regexsafe import (  # noqa: F401 -- re-exported: the old import path
@@ -135,13 +136,31 @@ def _log_docs(events: list, kinds: set[str]) -> list[Doc]:
     return out
 
 
+@dataclass(frozen=True)
+class Ctx:
+    """What the sources of one request read: the folded state, the events and the config."""
+
+    st: State
+    events: list
+    cfg: Config
+
+
+# The sources, in the order their rows are listed before ranking.
+register(
+    FuncSource(
+        "records",
+        tuple(sorted(_RECORD_SOURCES)),
+        lambda c, kinds: _item_docs(c.st, c.cfg, kinds) + _record_docs(c.st, c.cfg, kinds),
+    )
+)
+register(
+    FuncSource("sessions", ("session", "prompt"), lambda c, kinds: _session_docs(c.events, kinds))
+)
+register(FuncSource("log", ("log",), lambda c, kinds: _log_docs(c.events, kinds)))
+
+
 def _docs(st: State, events: list, cfg: Config, kinds: set[str]) -> list[Doc]:
-    out = _item_docs(st, cfg, kinds) + _record_docs(st, cfg, kinds)
-    if kinds & {"session", "prompt"}:
-        out += _session_docs(events, kinds)
-    if "log" in kinds:
-        out += _log_docs(events, kinds)
-    return out
+    return gather(Ctx(st, events, cfg), kinds)
 
 
 # ---------------------------------------------------------------- snippets
