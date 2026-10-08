@@ -3314,13 +3314,32 @@
     'ddflow_upgrade': '''
       {
        "name": "ddflow_upgrade",
-       "description": "What upgrading this project to the running ddflow would change, by category: data repairs, config (new knobs, changed defaults; an operator-set value needs their confirmation), instructions (drifted driver docs and rules, hand-edited flagged), hooks, MCP launch, opt-in features. Writes nothing. Exit 0 up to date; 1 the plan has items.",
+       "description": "What upgrading this project to the running ddflow would change, by category (repairs, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given: then it does the plan after saving originals to .ddflow/backups, returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. Plan exit: 0 up to date, 1 items.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "plan": {
           "type": "boolean",
-          "description": "Dry run (the default). false is refused: no apply mode yet."
+          "description": "Dry run (default); false applies all."
+         },
+         "apply": {
+          "type": "string",
+          "description": "Categories to apply: all, or a comma list."
+         },
+         "confirm": {
+          "type": "array",
+          "description": "With apply: keys the operator accepts (needs reason).",
+          "items": {
+           "type": "string"
+          }
+         },
+         "reason": {
+          "type": "string",
+          "description": "Why they accept it."
+         },
+         "backup": {
+          "type": "string",
+          "description": "local or none."
          },
          "as_agent": {
           "type": "string",

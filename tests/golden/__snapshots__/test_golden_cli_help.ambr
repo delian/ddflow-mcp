@@ -2106,11 +2106,20 @@
 # ---
 # name: test_help[ddflow upgrade]
   '''
-  usage: ddflow upgrade [-h] [--plan]
+  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE]
   
   options:
-    -h, --help  show this help message and exit
-    --plan      print the plan (the default, and the only mode so far; nothing is written)
+    -h, --help            show this help message and exit
+    --plan                print the plan (the default: nothing is written)
+    --apply [CATEGORIES]  do what the plan lists, after saving what it will rewrite to
+                          .ddflow/backups/: all (the default), or a comma list of repairs, config,
+                          instructions, hooks, mcp, features. Exit 0 done, 1 a step failed, 2 a step
+                          could not run, 3 an item needs --confirm
+    --confirm KEY         with --apply: accept the change to this knob, file or repair that the
+                          operator set or wrote (repeatable; needs --reason, which is recorded)
+    --reason REASON       with --confirm: why the operator accepts it
+    --backup MODE         with --apply: where the originals go (local, none); default
+                          [upgrade].backup
   
   '''
 # ---
@@ -2349,7 +2358,7 @@
       render              regenerate the human-readable views
       config              print every knob, its value and its source
       upgrade             what upgrading this project to the running ddflow would change (the plan;
-                          writes nothing; exit 0 up to date, 1 pending)
+                          writes nothing; exit 0 up to date, 1 pending), or --apply it
       export              documents generated from the log: list, print, enable, disable, --diff,
                           --check, --update
       bisect              find which earlier test file makes a test fail only in full-suite order

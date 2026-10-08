@@ -217,7 +217,7 @@ the same implementation, so neither drifts from the other.
 | **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
-| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items | `ddflow_upgrade` |
+| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--confirm KEY ... --reason WHY]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`) |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
@@ -3728,7 +3728,7 @@ with a note by a ddflow that predates them:
 |---|---|---|
 | `ddflow.seen` | once per (agent, version), on that agent's first write after a version change | `version`, install kind (`installed` or `source-tree`) |
 | `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version, session, the reason |
-| `upgrade.applied` | when an upgrade is applied (the apply step is a later task) | from, to, categories, backup |
+| `upgrade.applied` | when `ddflow upgrade --apply` applied or acknowledged something | from, to, categories, backup, items, confirmed, config_changes, summary |
 | `repair.applied` | when a versioned data repair is applied (below) | repair id, since, version, the settled findings' keys and details |
 
 The fold keeps the **highest** version stamped (`State.ddflow_versions`; `ddflow status
@@ -3829,8 +3829,44 @@ lint does nothing.
 
 In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every change in
 a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
-The upgrade plan (B-upgrade.3-plan, still to come) reads it to tell a project what its
-upgrade will change.
+The upgrade plan reads it to tell a project what its upgrade will change.
+
+### Applying an upgrade
+
+`ddflow upgrade` (or `--plan`) only reads. `ddflow upgrade --apply` does what the plan lists
+(MCP: `ddflow_upgrade` with `apply`; `plan: false` applies everything), by category:
+`--apply` or `--apply all`, or a comma list of `repairs`, `config`, `instructions`, `hooks`,
+`mcp`, `features`. It prints the plan that is left, and exits 0 when everything chosen was
+applied or acknowledged, 1 when a step failed, 2 when one could not run (never read as
+done), 3 while an item waits for the operator. Before it rewrites any file it copies the
+originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, never shared;
+`--backup none` or `[upgrade].backup = "none"` skips it) with a `manifest.json` of what was
+there, and prints the backup and `git diff` to review the change. What each category does:
+
+- **repairs**: the pending data repairs (new corrective events, never an edit of the log);
+  one only the operator may decide waits for `--confirm <repair id>`.
+- **config**: a changed default for a knob the project never set takes effect by itself, so
+  applying it only *acknowledges* it, lists it with `ddflow config --set KNOB OLD` to pin
+  the old behaviour, and records it. A value anyone set (in a config layer, via `ddflow
+  config`) is never changed without the operator: `--apply` refuses it (exit 3, naming the
+  flag) unless `--confirm KNOB --reason "..."` is given, then sets the new default, or
+  removes a knob the schema dropped; a value set by the environment is left to its owner.
+- **instructions**: driver docs, rules blocks and native rules are refreshed as `ddflow adopt
+  --refresh-docs` does; a hand edit inside a stamped region is kept in `<file>.local-edits`,
+  a copy from before the stamp that may have been edited needs `--confirm <path>`, and a
+  file a newer ddflow wrote is left alone.
+- **hooks** and **mcp**: the missing or dangling hook, and the MCP entry that launches a
+  ddflow that is gone, are reinstalled.
+- **features** are acknowledged: they are opt-in and the plan prints the command that
+  enables each.
+
+Applying is idempotent: a second `--apply` finds nothing, writes no backup and no event. One
+`upgrade.applied` event records what was applied, who confirmed what and why, the changed
+defaults and the backup, so `ddflow replay` and `ddflow history` explain the upgrade. The
+project's version moves up to the running ddflow only when every `config` and `features`
+item was applied, acknowledged or confirmed; a partial apply, or one with a refused item,
+leaves them in the plan. An apply that is cut short leaves the backup and a plan that can
+be run again, because every step is idempotent.
 
 Two such kinds describe how records relate (decision D-no-duplicates). Add events
 (`task.added`, `phase.added`, `bug.found`, `lesson.recorded`, `research.recorded`,
@@ -4656,7 +4692,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=7f0f7c51cb58 -->
+<!-- ddflow:begin README/tools sha=5501e13c4cd5 -->
 <details><summary>All 111 MCP tools: 32 in the `core` tier, 46 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -4770,7 +4806,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_rebuild` | all | Re-derive the search index from the event log. |
 | When something is wrong | `ddflow_recover` | standard | Find work left behind by a crashed agent: expired leases, orphaned worktrees, items stuck running. |
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
-| When something is wrong | `ddflow_upgrade` | all | What upgrading this project to the running ddflow would change, by category: data repairs, config (new… |
+| When something is wrong | `ddflow_upgrade` | all | What upgrading this project to the running ddflow would change, by category (repairs, config, instructions… |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
 
 </details>

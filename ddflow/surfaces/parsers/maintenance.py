@@ -45,13 +45,38 @@ def register(s: argparse._SubParsersAction) -> None:
     up = s.add_parser(
         "upgrade",
         help="what upgrading this project to the running ddflow would change "
-        "(the plan; writes nothing; exit 0 up to date, 1 pending)",
+        "(the plan; writes nothing; exit 0 up to date, 1 pending), or --apply it",
     )
     up.add_argument(
         "--plan",
         action="store_true",
-        default=True,
-        help="print the plan (the default, and the only mode so far; nothing is written)",
+        default=False,
+        help="print the plan (the default: nothing is written)",
+    )
+    up.add_argument(
+        "--apply",
+        nargs="?",
+        const="all",
+        default=None,
+        metavar="CATEGORIES",
+        help="do what the plan lists, after saving what it will rewrite to .ddflow/backups/: "
+        "all (the default), or a comma list of repairs, config, instructions, hooks, mcp, "
+        "features. Exit 0 done, 1 a step failed, 2 a step could not run, 3 an item needs "
+        "--confirm",
+    )
+    up.add_argument(
+        "--confirm",
+        action="append",
+        metavar="KEY",
+        help="with --apply: accept the change to this knob, file or repair that the operator "
+        "set or wrote (repeatable; needs --reason, which is recorded)",
+    )
+    up.add_argument("--reason", default="", help="with --confirm: why the operator accepts it")
+    up.add_argument(
+        "--backup",
+        default="",
+        metavar="MODE",
+        help="with --apply: where the originals go (local, none); default [upgrade].backup",
     )
     up.set_defaults(fn=cmd_upgrade)
 
