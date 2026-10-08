@@ -3254,3 +3254,4 @@
 {"agent":"U3","data":{"at":1791445309.4273615,"holder":"U3"},"id":"ecba29e0a59ae3ca8e037321f","kind":"lease.renewed","lamport":39016,"schema":1,"subject":"fix-B5deba76d04","ts":"2026-10-08T07:41:49.597912Z"}
 {"agent":"U3","data":{"at":1791445408.9184425,"holder":"U3"},"id":"eef62a64837f99de3d7b71035","kind":"lease.renewed","lamport":39021,"schema":1,"subject":"fix-B5deba76d04","ts":"2026-10-08T07:43:29.024078Z"}
 {"agent":"U3","data":{"at":1791445533.2317522,"holder":"U3"},"id":"e564ca1af672a036b9ce4f20e","kind":"lease.renewed","lamport":39044,"schema":1,"subject":"fix-B5deba76d04","ts":"2026-10-08T07:45:33.327877Z"}
+{"agent":"U3","data":{"gate":"unit_tests"},"id":"e432c3e5f279574269f120b50","kind":"gate.started","lamport":39054,"schema":1,"subject":"fix-B5deba76d04","ts":"2026-10-08T07:46:49.260483Z"}
