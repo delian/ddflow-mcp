@@ -25,7 +25,6 @@ from __future__ import annotations
 import contextlib
 import errno
 import functools
-import hashlib
 import json
 import os
 import re
@@ -40,6 +39,7 @@ from typing import Any
 
 from .. import FORMAT_LEVEL
 from ..config import Config
+from ..core import digest as D
 from ..core import textsim
 from ..core.model import State, fold
 from ..infra.log import EventLog, _flock
@@ -62,7 +62,7 @@ def code_fingerprint() -> str:
     the on-disk FORMAT_LEVEL. A change to any of them is a different index, so nobody has
     to remember to bump a constant, and two checkouts running different code each keep their
     own index instead of rebuilding each other's (D-compat)."""
-    h = hashlib.sha256(f"{SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
+    h = D.hasher(f"{SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
     here = Path(__file__).resolve()
     core = here.parent.parent / "core"
     for f in sorted([*core.rglob("*.py"), here]):
