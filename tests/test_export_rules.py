@@ -16,6 +16,8 @@ LAN = ".".join(("192", "168", "7", "41"))  # built, so no private host is commit
 
 def _repo(root: Path, order: str = "forward", with_extras: bool = True) -> query.Query:
     log = EventLog(root, "a1")
+    # a log written before the write-time redaction (bug B5deba76d04): export redacts it
+    log._redact_data = lambda kind, data: data  # type: ignore[method-assign]
     evs = [
         (
             "decision.recorded",
