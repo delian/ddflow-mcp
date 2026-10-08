@@ -21,6 +21,8 @@ its sites module by module (every pattern counter, and complexity) keeps a direc
 sites of `ddflow.services.enforce` lowers -- and declares in its globs -- only
 `<counter>/ddflow.services.enforce.toml`, so lanes working in different modules never
 touch the same file. A module with no sites has no file (a file reaching zero is deleted).
+A counter whose last module reaches zero has no directory at all (git tracks no empty
+directory), so absence means no baselines.
 `<counter>.toml` holds the number of the other counters (`unreferenced_functions.toml`
 also the functions kept unreferenced on purpose), and `importlinter-<contract>.toml` one
 contract's `ignore_imports` allowlist, which this module joins back into the contract
