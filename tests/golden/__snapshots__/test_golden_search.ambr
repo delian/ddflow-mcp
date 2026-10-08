@@ -1,9 +1,9 @@
 # serializer version: 1
 # name: test_rule_search[rule bad regex]
   tuple(
-    2,
+    3,
     '''
-      No rules found matching '('
+      regex does not compile: missing ), unterminated subpattern at position 0
   
     ''',
   )

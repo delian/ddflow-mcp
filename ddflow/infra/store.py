@@ -43,6 +43,7 @@ from ..config import Config
 from ..core import digest as D
 from ..core import textsim
 from ..core.model import State, fold
+from ..core.rank import bm25
 from ..core.textcut import clip
 from ..infra.log import EventLog, _flock
 
@@ -577,20 +578,20 @@ class Store:
                     out = [dict(r) for r in full]
                     out.sort(key=lambda r: scores.get(r["id"], 0.0))
                     return out
-            # `>=`, matching the FTS5 tokenizer above. The two disagreed by one, so
-            # searching "db" found a lesson on the machine whose SQLite has FTS5 and
-            # found nothing on the machine whose SQLite does not — the same query,
-            # two answers, decided by a build flag nobody sets deliberately.
-            terms = _like_terms(query)
-            if not terms:
+            # The fallback ranks with the same BM25 the search core uses (`core/rank`)
+            # over the same normalised words (`textsim.tokens`: stemmed, like FTS5's porter
+            # tokenizer), not a substring LIKE that returned the first rows it met. A term
+            # is usable at the same minimum length FTS5 uses: both take it from
+            # `textsim.words(..., min_len=MIN_TERM_CHARS)`.
+            if not _like_terms(query):
                 return []
-            where = " or ".join(f"{c} like ?" for c in cols for _ in terms)
-            args = [f"%{t}%" for _ in cols for t in terms]
-            # bandit B608: `where` is built from the fixed `cols` names and `table` passed
-            # the `cols[table]` lookup; every VALUE is a bound `?`.
-            sql = f"select * from {table} where {where} limit ?"  # nosec B608
-            rows = con.execute(sql, (*args, limit)).fetchall()
-            return [dict(r) for r in rows]
+            qtoks = textsim.tokens(query)
+            # bandit B608: `table` passed the `cols[table]` lookup above; no value is interpolated.
+            rows = [dict(r) for r in con.execute(f"select * from {table}")]  # nosec B608
+            docs = [textsim.tokens(" ".join(str(r.get(c) or "") for c in cols)) for r in rows]
+            scores = bm25(docs, qtoks)
+            order = sorted(scores, key=lambda i: (-scores[i], str(rows[i].get("id", ""))))
+            return [rows[i] for i in order[:limit]]
 
     def query(self, sql: str, args: tuple = ()) -> list[dict[str, Any]]:
         with closing(self.connect()) as con:
