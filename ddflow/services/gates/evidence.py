@@ -50,8 +50,9 @@ def _untracked_listing(cwd: Path) -> list[str] | None:
 
 
 def _untracked_paths(cwd: Path) -> list[str]:
-    """`_untracked_listing`, empty when git could not list them (callers that cannot tell
-    the two apart; the fingerprint and `diff_stat` can, and do)."""
+    """`_untracked_listing`, empty when git could not list them: for the callers that only
+    count (`diff_stat` reports zeros when git cannot answer). The fingerprint tells the two
+    apart (`_untracked_digest`)."""
     return _untracked_listing(cwd) or []
 
 

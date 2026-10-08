@@ -200,3 +200,20 @@ def test_a_port_whose_unmerged_paths_are_unknown_is_not_applied(monkeypatch):
     out: dict = {}
     ports._cherry_pick(Path("."), "I", src, out)
     assert out["status"] == ports.FAILED and "could not list" in out["reason"]
+
+
+def test_a_forward_merge_whose_unmerged_paths_are_unknown_is_aborted_not_called_clean(monkeypatch):
+    src = SimpleNamespace(id="S", port_of="", landed_after="b", merged_sha="b")
+    cfg = SimpleNamespace(flow=SimpleNamespace(integration="direct", remote="origin"))
+    calls: list[tuple] = []
+
+    def fake_git(tree, *args, **kw):
+        calls.append(args)
+        return G.GitResult(0, "", "")
+
+    monkeypatch.setattr(ports.FS, "target", lambda *a, **k: "main")
+    monkeypatch.setattr(ports.W, "git", fake_git)
+    monkeypatch.setattr(ports.GIT, "unmerged", lambda *a, **k: None)
+    out: dict = {}
+    ports._forward_merge(Path("."), cfg, None, Path("."), "I", src, out)
+    assert out["status"] == ports.FAILED and ("merge", "--abort") in calls
