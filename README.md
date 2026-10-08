@@ -2684,8 +2684,8 @@ looked and said no"* and *"nobody has looked yet"* are different states, and an 
 sitting in the second forever is how a checkpoint becomes a silent stall. `--reject`
 requires `--reason`.
 
-**There is deliberately no MCP tool for this**, and `tests/test_mcp_parity.py` records
-the exemption with that reason. A human checkpoint reachable from the MCP surface is not
+**There is deliberately no MCP tool for this**, and `ddflow/surfaces/exemptions.py`
+records the exemption (a field of the command) with that reason. A human checkpoint reachable from the MCP surface is not
 a human checkpoint — it is a second `gate record` with a longer name. `gate skip` is
 refused too: *"the operator does not need to approve this"* is not the agent's call.
 
@@ -4620,15 +4620,16 @@ exactly one. The parity ratchets read the whole registry, so they never depend o
 
 The flag ratchet derives its own input from the parser rather than a hand-written list —
 its first version carried eleven tools and was blind to `remove --force` for exactly
-that reason. Omissions are allowed, but each must be an entry in `FLAG_EXEMPTIONS` with
-its reason, so "we chose not to expose this" and "nobody noticed" stop looking alike.
+that reason. Omissions are allowed, but each must be a `flag_exempt` field on a command in
+`ddflow/surfaces/exemptions.py` with its reason, so "we chose not to expose this" and "nobody noticed" stop looking alike.
 
 A fourth pins something subtler: **whether a tool returns JSON or prose is a decision,
 not an accident.** Some tools deliberately return prose — `brief`, `gate status` and
 `replay` exist to hand the model an *instruction* or a narrative, and JSON-encoding a
 paragraph so the client can decode it again helps nobody. But `decision add` returned
 JSON while `task add` returned prose for no reason either could state. Each prose tool
-now carries its justification in `PROSE_TOOLS`.
+now carries its justification as the `prose_reason` of its declaration in
+`ddflow/surfaces/exemptions.py`.
 
 ---
 
