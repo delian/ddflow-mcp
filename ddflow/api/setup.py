@@ -22,6 +22,7 @@ from typing import Any
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..services import backups as BK
 from ..services import upgrade_apply as UA
 from ..services import upgrade_plan as UP
 from ._base import _load
@@ -983,6 +984,8 @@ def hooks(
 UPGRADE_PAYLOAD = ("running", "project_version", "up_to_date", "total", "categories")
 #: ... and of an apply, which adds what it did (`applied`) to the plan that is left.
 UPGRADE_APPLY_PAYLOAD = (*UPGRADE_PAYLOAD, "applied")
+#: ... and of a restore, which adds what it put back (`restored`).
+UPGRADE_RESTORE_PAYLOAD = (*UPGRADE_PAYLOAD, "restored")
 _APPLIED_FIELDS = (
     "from",
     "to",
@@ -1006,6 +1009,7 @@ def upgrade(
     confirm: Sequence[str] = (),
     reason: str = "",
     backup: str = "",
+    restore: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """What upgrading this project to the running ddflow would change (the plan, written
@@ -1021,6 +1025,10 @@ def upgrade(
     each by key, ``reason`` says why; both recorded), 1 when a step failed, 2 when one could
     not run. The body is the same on the CLI's `--json` and over MCP.
     """
+    if restore:
+        if apply or plan is not None or confirm:
+            return O.refused("upgrade", "--restore stands alone: choose it or the plan or --apply")
+        return _upgrade_restore(repo, restore, agent)
     if apply and plan is True:
         return O.refused("upgrade", "choose the plan or --apply, not both")
     if apply or plan is False:
@@ -1066,6 +1074,22 @@ def _upgrade_apply(
     left = "Up to date." if data["up_to_date"] else f"{data['total']} item(s) remain in the plan."
     data["text"] = f"{done['text']}\n{left}".strip()
     return O.Outcome(kind="upgrade", data=data, exit=done["exit"], reason=_apply_reason(done))
+
+
+def _upgrade_restore(repo: Path, name: str, agent: str) -> O.Outcome:
+    """Put back what a local backup or a snapshot holds (``name``, or ``latest``)."""
+    try:
+        done = BK.restore(repo, name)
+    except (LookupError, BK.SnapshotRefused, OSError, ValueError) as exc:
+        return O.failed("upgrade", str(exc))
+    log, cfg, st = _load(repo, agent)
+    data = UP.build(repo, log, cfg, st)
+    data["restored"] = done
+    lines = [f"restored from {done['kind']} {done['name']}:"]
+    lines += [f"  {p}" for p in done["restored"]] + [f"  removed {p}" for p in done["removed"]]
+    lines.append(f"what was there is saved in {done['saved']}")
+    data["text"] = "\n".join(lines)
+    return O.ok("upgrade", **data)
 
 
 def _apply_reason(done: dict[str, Any]) -> str:
