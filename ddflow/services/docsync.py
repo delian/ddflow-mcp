@@ -29,13 +29,12 @@ re-matching whole lines here, never by trusting `-o`.
 
 from __future__ import annotations
 
-import codecs
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from ..core import globs
+from ..core import globs, unidiff
 from ..infra import git as G
 
 #: An identifier-shaped token. The lookbehind refuses a backslash so the `\n` of
@@ -94,22 +93,9 @@ def is_doc(path: str, doc_globs: list[str]) -> bool:
     return any(globs.match(path, g) for g in doc_globs)
 
 
-def _unquote(raw: str) -> str:
-    """A diff header path. git C-quotes a name holding a quote, backslash or control
-    character even with `core.quotepath=false`; undo that rather than miss the file."""
-    if len(raw) > 1 and raw[0] == raw[-1] == '"':
-        return codecs.escape_decode(raw[1:-1].encode("latin-1", "backslashreplace"))[0].decode(
-            "utf-8", "surrogateescape"
-        )
-    return raw
-
-
-def _header_path(line: str, prefix: str) -> str | None:
-    rest = line[4:].rstrip("\n")
-    if rest == "/dev/null":
-        return None
-    rest = _unquote(rest)
-    return rest[len(prefix) :] if rest.startswith(prefix) else rest
+#: The diff-header readers now live in `core.unidiff`; kept under these names for callers.
+_unquote = unidiff.unquote
+_header_path = unidiff.header_path
 
 
 def _stem_tokens(path: str | None) -> set[str]:
