@@ -13,6 +13,7 @@ from ...core.plain import plain
 from ...core.schedule import stale_package_globs
 from ...core.tier import unknown_tier_notes
 from ...infra import worktree as W
+from ...services import compat_refs as CR
 from ...services import repairs as RP
 from ...views.markdown import may_hold_work
 from .._base import _load
@@ -249,7 +250,20 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
-def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
+def _stale_reference_findings(
+    repo: Path, vocabulary: Any, problems: list[str], notes: list[str]
+) -> None:
+    """Commands and tools the project's own files name that this ddflow has renamed or does
+    not have (`services.compat_refs`). The surface hands in the `Vocabulary`: the command
+    table is its, and without one (a caller with no surface) the check is not made."""
+    if vocabulary is None:
+        return
+    found, extra = CR.report(CR.scan(repo, vocabulary))
+    problems += found
+    notes += extra
+
+
+def doctor(repo: Path, *, agent: str = "", vocabulary: Any = None) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
     Gathers from six sources — the log's own integrity, the dependency graph, the
@@ -416,6 +430,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         (problems if severe else notes).append(line)
 
     _launcher_findings(repo, problems, notes)
+    _stale_reference_findings(repo, vocabulary, problems, notes)
     notes += _driver_drift_notes(repo)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
