@@ -98,6 +98,19 @@ class CountPass:
     count: int  # completed work of that unit
 
 
+def count_every(cfg: Config) -> dict[str, int]:
+    """Each count pass's period, from its `[cadence]` knob. Spelt out so the knobs stay
+    readable by the dead-knob scan (`getattr(c, knob)` hid them from it)."""
+    c = cfg.cadence
+    return {
+        "integration_tests": c.integration_tests_every_tasks,
+        "dedupe_sweep": c.dedupe_sweep_every_tasks,
+        "architecture_review": c.architecture_review_every_phases,
+        "mutation_tests": c.mutation_tests_every_phases,
+        "lessons_pass": c.lessons_pass_every_phases,
+    }
+
+
 def count_passes(st: State, cfg: Config) -> list[CountPass]:
     """Every count-based `[cadence]` pass with its period and the completions so far."""
     tasks, phases = done_counts(st)
@@ -277,7 +290,7 @@ def from_cadence(cfg: Config) -> tuple[list[Schedule], list[str]]:
     REPLACES the count pass of its name, as `count_due` is told to -- but one malformed
     entry makes `ddflow cadence` refuse the whole list and leaves every count pass in
     force (`phase_overdue`), so no calendar job is shown then and the entry is reported."""
-    c = cfg.cadence
+    every = count_every(cfg)
     errors: list[str] = []
     try:
         days = calendar(cfg)
@@ -288,8 +301,8 @@ def from_cadence(cfg: Config) -> tuple[list[Schedule], list[str]]:
         Schedule(
             id=name,
             title=f"{name} ([cadence].{knob})",
-            cadence={unit: getattr(c, knob)},
-            enabled=getattr(c, knob) > 0,
+            cadence={unit: every[name]},
+            enabled=every[name] > 0,
         )
         for name, knob, unit in COUNT_PASSES
         if name not in days
