@@ -24,8 +24,11 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import functools
+import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -35,12 +38,39 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from .. import FORMAT_LEVEL
 from ..config import Config
 from ..core import textsim
 from ..core.model import State, fold
 from ..infra.log import EventLog, _flock
 
 SCHEMA = 10
+
+#: How long an index built by OTHER code (a different fingerprint, or the pre-fingerprint
+#: `index.db`) is kept after its last write before a rebuild garbage-collects it. Worktrees
+#: on different ddflow versions each keep their own index meanwhile (D-compat).
+STALE_INDEX_DAYS = 7.0
+
+#: Every file a fingerprinted index (or an earlier one) can leave beside it.
+_INDEX_FILE = re.compile(r"^index\.db(-[0-9a-f]{16})?(-wal|-shm|-lock|-rebuilding\..*)?$")
+
+
+@functools.lru_cache(maxsize=1)
+def code_fingerprint() -> str:
+    """What built an index, in 16 hex digits: the source of the fold and of the projection
+    (everything under `ddflow/core/` and this module), SCHEMA, the similarity VERSION and
+    the on-disk FORMAT_LEVEL. A change to any of them is a different index, so nobody has
+    to remember to bump a constant, and two checkouts running different code each keep their
+    own index instead of rebuilding each other's (D-compat)."""
+    h = hashlib.sha256(f"{SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
+    here = Path(__file__).resolve()
+    core = here.parent.parent / "core"
+    for f in sorted([*core.rglob("*.py"), here]):
+        h.update(f.relative_to(here.parent.parent).as_posix().encode())
+        with contextlib.suppress(OSError):
+            h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -91,7 +121,9 @@ class Store:
     def __init__(self, root: Path, cfg: Config | None = None) -> None:
         self.root = Path(root)
         self.cfg = cfg or Config.load(root)
-        self.path = self.root / ".ddflow" / "index.db"
+        # One index per code fingerprint: `index.db-<fingerprint>` (covered by the
+        # `index.db-*` line every adopted project's `.ddflow/.gitignore` already has).
+        self.path = self.root / ".ddflow" / f"index.db-{code_fingerprint()}"
         self.fts = _has_fts5() and self.cfg.lessons.search_backend == "fts5"
 
     def _ensure_dir(self) -> None:
@@ -393,7 +425,24 @@ class Store:
             tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
             self.path.with_name(self.path.name + suf).unlink(missing_ok=True)
         tmp.replace(self.path)
+        self._collect_stale_indexes()
         return state
+
+    def _collect_stale_indexes(self) -> list[Path]:
+        """Delete the indexes of OTHER code untouched for `STALE_INDEX_DAYS`. Best effort,
+        and never this fingerprint's own files: an index another checkout is still using is
+        written (so touched) by its rebuilds, and a missed one only costs a rebuild."""
+        gone: list[Path] = []
+        mine = self.path.name
+        cutoff = time.time() - STALE_INDEX_DAYS * 86400
+        for f in self.path.parent.glob("index.db*"):
+            if f.name.startswith(mine) or not _INDEX_FILE.match(f.name):
+                continue
+            with contextlib.suppress(OSError):
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    gone.append(f)
+        return gone
 
     def ensure(self, log: EventLog) -> State:
         """The folded state, with the index made current on the way when it is behind.

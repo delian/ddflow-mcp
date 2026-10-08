@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import bisect
 import contextlib
+import functools
 import getpass
 import itertools
 import json
@@ -81,6 +82,10 @@ SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
 #: git-ignored directory. Never merged and never committed: it is a CACHE of the log,
 #: and the log stays the only source of truth.
 SNAPSHOT_FILE = "read-snapshot.bin"
+#: How long a snapshot of OTHER code (another version or parser) is kept before the next
+#: write garbage-collects it. One snapshot per fingerprint (D-compat): worktrees on
+#: different ddflow versions stop overwriting each other's.
+SNAPSHOT_STALE_DAYS = 7.0
 SNAPSHOT_FORMAT = 1
 #: A snapshot stores each event as a tuple in `Event`'s own field order, derived from the
 #: dataclass so the writer, the reader and the header cannot disagree about the layout.
@@ -338,6 +343,7 @@ def _digest(data: bytes) -> str:
     return D.content_digest(data)
 
 
+@functools.lru_cache(maxsize=1)
 def _parser_stamp() -> str:
     """A fingerprint of the code that turns a line into an Event.
 
@@ -1213,7 +1219,23 @@ class EventLog:
 
     # -- on-disk snapshot (B166) ----------------------------------------------------
     def _snapshot_path(self) -> Path:
-        return self.dir.parent / "local" / SNAPSHOT_FILE
+        """`read-snapshot-<fingerprint>.bin`: the fingerprint is the running version and the
+        parser stamp, so code that cannot read another's snapshot never shares its file."""
+        stem = SNAPSHOT_FILE.removesuffix(".bin")
+        key = D.content_digest(f"{running_version()}/{_parser_stamp()}".encode())[:16]
+        return self.dir.parent / "local" / f"{stem}-{key}.bin"
+
+    def _collect_stale_snapshots(self, mine: Path) -> None:
+        """Remove the snapshots of other code untouched for `SNAPSHOT_STALE_DAYS`, and the
+        pre-fingerprint `read-snapshot.bin` once it is that old. Best effort."""
+        stem = SNAPSHOT_FILE.removesuffix(".bin")
+        cutoff = time.time() - SNAPSHOT_STALE_DAYS * 86400
+        for f in mine.parent.glob(f"{stem}*.bin"):
+            if f == mine or not re.fullmatch(rf"{re.escape(stem)}(-[0-9a-f]{{16}})?\.bin", f.name):
+                continue
+            with contextlib.suppress(OSError):
+                if f.is_file() and f.stat().st_mtime < cutoff:
+                    f.unlink()
 
     def _snapshot_enabled(self) -> bool:
         # A log built only to read someone else's repository (`cache_writes=False`) neither
@@ -1361,6 +1383,7 @@ class EventLog:
             # A cache: never torn for a reader, but no fsync -- a crash costs a cold read.
             fsio.atomic_write(target, json.dumps(meta).encode() + b"\n" + payload, fsync=False)
             _SNAP_COVERED[self.dir] = total
+            self._collect_stale_snapshots(target)
         except (OSError, ValueError):
             pass
 
