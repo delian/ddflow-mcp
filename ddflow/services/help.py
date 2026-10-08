@@ -25,6 +25,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
+from .overlay import OverlayError, OverlayLoader
 from .prompts import Template, TemplateError, builtin_dir, render
 
 #: topic -> the one line the index prints beside it. The keys ARE the valid topics;
@@ -191,14 +192,19 @@ def _page(name: str, repo: Path | None) -> Template:
     name had to be a known topic -- and two copies of a file-resolution rule is how the
     override silently stops working for one of them.
     """
-    if repo:
-        local = Path(repo) / ".ddflow" / "prompts" / "help" / f"{name}.md"
-        if local.is_file():
-            return Template(name, local.read_text("utf-8"), "project", local)
-    path = help_dir() / f"{name}.md"
-    if not path.is_file():
-        raise TemplateError(f"shipped help page {name}.md is missing from the package")
-    return Template(name, path.read_text("utf-8"), "builtin", path)
+    try:
+        got = _loader().resolve(name, repo)
+    except OverlayError as exc:
+        raise TemplateError(str(exc)) from exc
+    return Template(name, got.text, got.source, got.path)
+
+
+def _loader() -> OverlayLoader:
+    """The overlay of the shipped help pages (D-unify, B-uni-overlay.4):
+    ``.ddflow/prompts/help/<name>.md`` over the package default."""
+    return OverlayLoader(
+        "help page", shipped_dir=help_dir(), project_subdir="prompts/help", suffix=".md"
+    )
 
 
 def resolve_topic(name: str, repo: Path | None = None) -> Template:
