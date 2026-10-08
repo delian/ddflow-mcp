@@ -250,3 +250,16 @@ def settle(a, c, out: Outcome) -> int | None:
         c.out(msg, out.body())
         return 0
     return None
+
+
+def finish(a, c, out: Outcome) -> int | None:
+    """`settle`, and -- for an add that failed or was refused outright -- the reason on stderr
+    and its exit code. ``None`` when the add went through and the command reports it as before:
+    the three lines every add command opened its report with."""
+    settled = settle(a, c, out)
+    if settled is not None:
+        return settled
+    if out.exit:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    return None
