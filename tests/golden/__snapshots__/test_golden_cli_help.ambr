@@ -598,11 +598,12 @@
 # ---
 # name: test_help[ddflow gate list]
   '''
-  usage: ddflow gate list [-h] [--refuted]
+  usage: ddflow gate list [-h] [--refuted] [--since SINCE]
   
   options:
-    -h, --help  show this help message and exit
-    --refuted   list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check
+    -h, --help     show this help message and exit
+    --refuted      list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check
+    --since SINCE  with --refuted: only passes recorded at or after this ISO date or timestamp
   
   '''
 # ---

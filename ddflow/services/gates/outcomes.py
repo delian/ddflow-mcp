@@ -117,10 +117,13 @@ def _pass_mark(it, gate: str) -> str:
     return ""
 
 
-def refuted_passes(state: State, item_ids: Iterable[str] | None = None) -> list[dict[str, Any]]:
+def refuted_passes(
+    state: State, item_ids: Iterable[str] | None = None, since: str = ""
+) -> list[dict[str, Any]]:
     """Every gate recorded passed ON REFUTATION, for the operator's spot-check (D-unify 5):
     one row per (item, gate) with the flag's own counts and rounds. ``item_ids`` narrows it
-    to those items; removed items are skipped. Ordered by item id, then gate name."""
+    to those items; removed items are skipped. ``since`` (an ISO date or timestamp prefix)
+    keeps only the passes recorded at or after it. Ordered by item id, then gate name."""
     wanted = None if item_ids is None else set(item_ids)
     rows: list[dict[str, Any]] = []
     for it in sorted(state.items.values(), key=lambda i: i.id):
@@ -128,9 +131,17 @@ def refuted_passes(state: State, item_ids: Iterable[str] | None = None) -> list[
             continue
         for gate in sorted(it.gates):
             flag = on_refutation(it, gate)
-            if flag is not None:
+            at = it.gates[gate].at
+            if flag is not None and at >= since:
                 rows.append(
-                    {"item": it.id, "title": it.title, "state": it.state, "gate": gate, **flag}
+                    {
+                        "item": it.id,
+                        "title": it.title,
+                        "state": it.state,
+                        "gate": gate,
+                        "at": at,
+                        **flag,
+                    }
                 )
     return rows
 

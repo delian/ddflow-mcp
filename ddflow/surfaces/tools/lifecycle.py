@@ -150,15 +150,19 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_gate_list": {
         "description": (
-            "The gates this project defines; with refuted=true, every gate recorded passed ON "
-            "REFUTATION (its findings refuted with probes rather than a clean re-review), for "
-            "the operator's spot-check."
+            "The gates this project defines; with refuted=true, every gate passed ON "
+            "REFUTATION, to spot-check."
         ),
         "properties": {
-            "refuted": ("boolean", "List the gates passed on refutation instead.", False)
+            "refuted": ("boolean", "List the gates passed on refutation instead.", False),
+            "since": (
+                "string",
+                "With refuted: since this ISO date.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().gate_list(
-            repo, refuted=bool(a.get("refuted")), agent=agent
+            repo, refuted=bool(a.get("refuted")), since=str(a.get("since") or ""), agent=agent
         ),
         "payload": "text",
         "text": True,

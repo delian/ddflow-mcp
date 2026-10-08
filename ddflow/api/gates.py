@@ -132,13 +132,16 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 
-def list_gates(repo: Path, *, refuted: bool = False, agent: str = "") -> O.Outcome:
+def list_gates(repo: Path, *, refuted: bool = False, since: str = "", agent: str = "") -> O.Outcome:
     """The gates this project defines; with ``refuted``, the ones recorded passed ON
     REFUTATION instead (D-unify 5), for the operator to spot-check: every (item, gate)
-    whose last finding was settled by a triage rather than a clean re-review."""
+    whose last finding was settled by a triage rather than a clean re-review. ``since``
+    (an ISO date or timestamp) keeps those recorded at or after it."""
     _log, cfg, st = _load(repo, agent)
+    if since and not refuted:
+        return O.failed("gate.list", "--since narrows --refuted; give both")
     if refuted:
-        rows = G.refuted_passes(st)
+        rows = G.refuted_passes(st, since=since)
         lines = [G.refuted_line(r) + f"  [{r['state']}] {r['title']}" for r in rows]
         return O.ok(
             "gate.list",
