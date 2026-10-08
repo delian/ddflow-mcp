@@ -239,3 +239,95 @@ def test_managed_reads_a_huge_fmt_without_crashing():
     assert M.stamp(t).fmt > 10**6 and M.state(t) == "newer"
     with pytest.raises(NewerContent):
         M.splice(t, "y\n")
+
+
+# --- B-uni-compat-artifacts.5-views: generated views, the gitignore, drift wording ------
+
+
+def test_a_view_is_stamped_with_a_body_digest_and_no_version():
+    from ddflow.views import markdown as MD
+
+    text = MD.stamp_view(MD.GENERATED + "\n\n# Work queue\n")
+    first = text.splitlines()[0]
+    assert first.startswith(MD.GENERATED_PREFIX) and "body-sha256=" in first
+    assert "ddflow=" not in first and "fmt=" not in first  # level 1 adds nothing
+    head, body = MD.split_view(text)
+    assert head is not None and head.fmt == 1 and body == "\n# Work queue\n"
+    assert MD.view_difference(text, text) == ""
+
+
+def test_a_higher_format_level_is_written_as_fmt():
+    from ddflow.views import markdown as MD
+
+    text = MD.stamp_view(MD.GENERATED + "\nbody\n", fmt=2)
+    assert " fmt=2 -->" in text.splitlines()[0]
+    assert MD.split_view(text)[0].fmt == 2
+
+
+def test_view_freshness_compares_body_and_state_not_the_first_line():
+    from ddflow.views import markdown as MD
+
+    want = MD.stamp_view(MD.GENERATED + "\nsame\n")
+    assert MD.view_difference(MD.GENERATED + "\nsame\n", want) == ""  # unstamped, same body
+    assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nsame\n", fmt=1), want) == ""
+    assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nother\n"), want) == "stale"
+    assert MD.view_difference(want.replace("same", "hand"), want) == "edited"
+    assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nsame\n", fmt=2), want) == "newer"
+
+
+def test_rendering_does_not_downgrade_a_view_a_newer_format_wrote(tmp_path):
+    from ddflow.config import Config
+    from ddflow.core.model import State
+    from ddflow.infra.fsio import NewerContent
+    from ddflow.views import markdown as MD
+
+    d = tmp_path / "docs" / "ddflow"
+    d.mkdir(parents=True)
+    (d / "QUEUE.md").write_text(MD.stamp_view(MD.GENERATED + "\nfrom the future\n", fmt=2))
+    with pytest.raises(NewerContent) as e:
+        MD.write_views(tmp_path, State(), Config())
+    assert "format level 2" in str(e.value)
+    assert not (d / "LESSONS.md").exists()  # nothing was written
+    assert "from the future" in (d / "QUEUE.md").read_text()
+
+
+def test_the_ddflow_gitignore_is_a_region_that_keeps_a_persons_lines(tmp_path):
+    from ddflow.services import adopt as AD
+
+    gi = tmp_path / ".gitignore"
+    assert AD.write_ddflow_gitignore(gi) is True
+    text = gi.read_text()
+    assert AD.GITIGNORE_REGION.state(text) == "current"
+    assert AD.GITIGNORE_REGION._region().body(text) == AD.DDFLOW_GITIGNORE
+    assert AD.write_ddflow_gitignore(gi) is False  # nothing differs: no write
+    # a release alone changes no byte: an older stamp over the same body is left alone
+    older = text.replace("ddflow=" + AD.GITIGNORE_REGION.stamp(text).version, "ddflow=0.0.1")
+    gi.write_text(older + "mine/\n")
+    assert AD.write_ddflow_gitignore(gi) is False
+    assert gi.read_text() == older + "mine/\n"
+    # a changed body is rewritten, the person's line stays
+    gi.write_text(older.replace("local/", "locl/") + "mine/\n")
+    assert AD.write_ddflow_gitignore(gi) is True
+    assert "mine/\n" in gi.read_text() and "\nlocal/\n" in gi.read_text()
+
+
+def test_the_whole_file_gitignore_of_an_earlier_ddflow_becomes_the_region(tmp_path):
+    from ddflow.services import adopt as AD
+
+    gi = tmp_path / ".gitignore"
+    gi.write_text(AD.DDFLOW_GITIGNORE)
+    assert AD.write_ddflow_gitignore(gi) is True
+    assert AD.GITIGNORE_REGION.owns(gi.read_text())
+
+
+def test_a_rules_difference_says_what_it_is():
+    from ddflow.services import adopt as AD
+
+    def line(**kw):
+        return AD.RulesState("AGENTS.md", AD.STALE, **kw).render()
+
+    assert "newer format level" in line(newer=True, stamped=True)
+    assert "edited by hand" in line(edited=True, stamped=True)
+    assert "older version" in line(stamped=True)
+    unstamped = line()
+    assert "older version" not in unstamped and "no version stamp" in unstamped
