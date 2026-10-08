@@ -103,3 +103,22 @@ def test_upgrade_lists_and_rewrites_a_deprecated_name_in_a_managed_region(
     text = (project / "AGENTS.md").read_text()
     assert f"mine: `ddflow {OLD}`" in text, "the project's own text is not touched"
     assert "Run `ddflow claim T1`" in text and f"ddflow {OLD} T1" not in text, text
+
+
+def test_a_failed_registration_is_retried_by_the_next_api_call(monkeypatch) -> None:
+    from ddflow.surfaces.tools import _common
+
+    calls: list[int] = []
+
+    def boom(parser=None, tools=None) -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("transient")
+
+    monkeypatch.setattr(AR, "provide_upgrade_vocabulary", boom)
+    monkeypatch.setitem(_common._upgrade_vocabulary, "provided", False)
+    with pytest.raises(RuntimeError):
+        _common._api()
+    assert _common._upgrade_vocabulary["provided"] is False
+    _common._api()
+    assert len(calls) == 2 and _common._upgrade_vocabulary["provided"] is True
