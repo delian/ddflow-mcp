@@ -8,7 +8,6 @@ decision-specific glob matcher or tokenizer is left behind.
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -96,6 +95,18 @@ def test_a_bare_string_is_one_pattern_not_its_characters() -> None:
         fileformat.parse(text.replace('"*.py"', "[1]"), RULE)
 
 
+def test_enforcement_is_carried_by_the_file_not_dropped() -> None:
+    text = 'id = "D-b"\ntitle = "t"\nenforcement = "block"\n\nbody'
+    rec = fileformat.parse(text, DECISION)
+    assert rec.enforcement == "block" and 'enforcement = "block"' in fileformat.render(
+        rec, DECISION
+    )
+    assert (
+        fileformat.parse(text.replace('enforcement = "block"\n', ""), DECISION).enforcement
+        == "warn"
+    )
+
+
 def test_a_decision_file_uses_the_same_schema() -> None:
     rec = GuidanceRecord(
         id="D-sqlite",
@@ -141,6 +152,31 @@ def test_a_decision_id_only_has_to_exist() -> None:
     rec = GuidanceRecord(id="", kind="decision", title="t")
     assert lint(rec, DECISION) == ["Invalid decision id '': must not be empty"]
     assert is_valid_rule_id("r-a-b1") and not is_valid_rule_id("r-A") and not is_valid_rule_id("a")
+
+
+def test_listing_rules_skips_a_file_that_is_not_one_and_creates_the_directory(tmp_path) -> None:
+    store = RulesStorage(tmp_path)
+    assert store.list() == [] and store.rules_dir.is_dir()
+    (store.rules_dir / "r-bad.toml").write_text('title = "x"\n\nb')
+    store.add(Rule(id="r-ok", title="t", content="c"))
+    assert [r.id for r in store.list()] == ["r-ok"]
+
+
+def test_a_shipped_record_counts_as_existing_for_a_new_one(tmp_path: Path) -> None:
+    files = GuidanceFiles(tmp_path, RULE)
+    shipped = files.loader.shipped_path("r-acl")
+    shipped.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shipped.write_text(
+            fileformat.render(_rec("r-acl", body="t", level="project", provenance=_stamps()), RULE)
+        )
+        assert files.read("r-acl").title == "r-acl"
+        with pytest.raises(ValueError, match="already exists"):
+            files.write(_rec("r-acl", provenance=_stamps()), new=True)
+    finally:
+        shipped.unlink()
+        if not any(shipped.parent.iterdir()):
+            shipped.parent.rmdir()
 
 
 def test_editing_a_rule_keeps_the_keys_a_person_put_in_the_file(tmp_path: Path) -> None:
@@ -197,6 +233,10 @@ def test_guidance_with_no_restriction_applies_always() -> None:
     (hit,) = resolve([_rec()], globs=["a.py"])
     assert hit.reason == "always"
     assert [h.reason for h in resolve([_rec()])] == ["always"]
+
+
+def test_guidance_that_sets_no_dimension_reports_always() -> None:
+    assert Scope().always and [h.reason for h in resolve([_rec(scope=Scope())])] == ["always"]
 
 
 def test_globs_gates_and_categories_each_restrict_and_together_all_must_hold() -> None:
@@ -311,12 +351,28 @@ def _cfg(**over):
     ],
 )
 def test_limits_say_what_they_were_broken_by(rec, cfg, existing, message) -> None:
-    assert over_limit(rec, RULE.limits(cfg), existing) == message
+    assert over_limit(rec, RULE.limits(cfg), lambda: existing) == message
+
+
+def test_the_count_is_read_only_when_the_other_limits_hold() -> None:
+    def boom() -> int:
+        raise AssertionError("counted the records for a refusal that does not need it")
+
+    lim = RULE.limits(_cfg())
+    assert "max_size_bytes" in over_limit(_rec(body="x" * 11, level="project"), lim, boom)
+    assert "scopes_allowed" in over_limit(_rec(level="task"), lim, boom)
+
+
+def test_no_allowed_scopes_means_none_is_allowed_as_it_always_did() -> None:
+    """An empty ``scopes_allowed`` refuses every scope (the tag list is the one where empty
+    means anything goes); the config default lists three, so a project never meets it."""
+    msg = over_limit(_rec(level="project"), RULE.limits(_cfg(scopes_allowed=[])), lambda: 0)
+    assert msg == "scope 'project' is not in rules.scopes_allowed []"
 
 
 def test_a_kind_with_no_config_section_has_no_limits() -> None:
     assert DECISION.limits(_cfg()) is None
-    assert over_limit(_rec(body="x" * 10**6), None, 10**6) == ""
+    assert over_limit(_rec(body="x" * 10**6), None, lambda: 10**6) == ""
 
 
 # -- similarity ---------------------------------------------------------------------------
@@ -339,6 +395,9 @@ def test_similar_compares_titles_for_title_only_guidance_and_orders_by_score() -
     assert [(s.record.id, s.score) for s in got] == [("a", 1.0), ("c", 0.75)]
     assert got[0].overlap == ["come", "first", "tests"]
     assert similarity.similar([a], "x y z w", title="", threshold=0.5) == []
+    # best first whatever the order given: the lower score listed first still comes second
+    flipped = similarity.similar([c, b, a], "", title="tests come first", threshold=0.5)
+    assert [s.record.id for s in flipped] == ["a", "c"]
 
 
 # -- the ratchet --------------------------------------------------------------------------
@@ -359,14 +418,6 @@ _FORBIDDEN = {
 
 @pytest.mark.parametrize("path", sorted(_FORBIDDEN))
 def test_no_rule_or_decision_specific_matcher_or_tokenizer_remains(path) -> None:
-    tree = ast.parse((ROOT / path).read_text("utf-8"))
-    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-    names |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
-    names |= {
-        a.name
-        for n in ast.walk(tree)
-        if isinstance(n, (ast.Import, ast.ImportFrom))
-        for a in n.names
-    }
-    names |= {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
-    assert not names & set(_FORBIDDEN[path]), (path, names & set(_FORBIDDEN[path]))
+    source = (ROOT / path).read_text("utf-8")
+    left = [w for w in _FORBIDDEN[path] if re.search(rf"\b{re.escape(w)}\b", source)]
+    assert not left, (path, left)

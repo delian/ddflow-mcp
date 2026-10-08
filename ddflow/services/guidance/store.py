@@ -56,18 +56,21 @@ class GuidanceFiles:
     def path(self, rid: str) -> Path:
         return self.loader.project_path(self.repo, rid)
 
+    def exists(self, rid: str) -> bool:
+        """Whether a record has a file: the project's own, or a shipped one beneath it."""
+        return self.path(rid).is_file() or self.loader.shipped_path(rid).is_file()
+
     def read(self, rid: str) -> GuidanceRecord:
         """The record in ``<id>.toml``; FileNotFoundError when the file does not exist."""
-        path = self.path(rid)
-        if not (path.is_file() or self.loader.shipped_path(rid).is_file()):
-            raise FileNotFoundError(f"{self.spec.label} {rid} not found at {path}")
+        if not self.exists(rid):
+            raise FileNotFoundError(f"{self.spec.label} {rid} not found at {self.path(rid)}")
         return fileformat.parse(self.loader.resolve(rid, self.repo).text, self.spec)
 
     def write(self, rec: GuidanceRecord, *, new: bool = False) -> None:
         """Write ``rec`` to its file; ``new`` refuses to replace one that exists."""
         self.ensure_dir()
         path = self.path(rec.id)
-        if new and path.exists():
+        if new and (path.exists() or self.exists(rec.id)):
             raise ValueError(f"{self.spec.label} {rec.id} already exists at {path}")
         replace_text(path, fileformat.render(rec, self.spec))
 
