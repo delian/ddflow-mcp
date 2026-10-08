@@ -1377,18 +1377,19 @@
           What happens when a ddflow OLDER than the one that last worked on this
           project's log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse`
           (default): the write is refused with exit 3 and the message `Upgrade ddflow-
-          mcp to >= X`; reads always work; an agent that cannot upgrade asks the user
-          and, only if the user insists, reruns with `--allow-older-version --reason
-          "..."` (CLI) or the `allow_older_version` argument (MCP), which records a
-          `skew.overridden` event for THAT session and marks its events as written by
-          an older version. `warn`: write anyway and say so on stderr. `off`: no
-          check. The older version still stamps itself, so the log records that it
-          wrote. Only a ddflow that ships this guard can refuse: releases before it
-          cannot. An unrecognised value in a config file is warned about, reported by
-          `doctor` and falls back to 'refuse', the strictest (an older ddflow's write
-          is refused); `config --set`, `ddflow_configure` and the environment refuse
-          it, and so does loading ddflow's own source tree, where the file and the
-          code are one commit.
+          mcp to >= X` (an installed ddflow; a source checkout is told to merge main,
+          naming the version); reads always work; an agent that cannot upgrade asks
+          the user and, only if the user insists, reruns with `--allow-older-version
+          --reason "..."` (CLI) or the `allow_older_version` argument (MCP), which
+          records a `skew.overridden` event for THAT session and marks its events as
+          written by an older version. `warn`: write anyway and say so on stderr.
+          `off`: no check. The older version still stamps itself, so the log records
+          that it wrote. Only a ddflow that ships this guard can refuse: releases
+          before it cannot. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'refuse', the strictest (an older
+          ddflow's write is refused); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
       upgrade.backup = 'local'   [default]
           Where `ddflow upgrade --apply` saves the files it is about to rewrite
           (decision D-upgrade-backups). `local` (default): a copy under
