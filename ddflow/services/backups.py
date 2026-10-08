@@ -96,7 +96,7 @@ def prune(repo: Path, keep: int) -> list[str]:
         dirs = [p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file()]
     except OSError:  # unreadable or gone meanwhile: nothing to prune, and nothing to fail over
         return []
-    sidecars = {p: m["snapshot"] for p in dirs if (m := _manifest(p)) and "snapshot" in m}
+    sidecars = {p: _sidecar_tag(p) for p in dirs if _is_sidecar(p)}
     ours = sorted(p for p in dirs if p not in sidecars)
     doomed = ours[: max(0, len(ours) - keep)]
     tags = git.run(Path(repo), "tag", "--list", f"{SNAPSHOT_PREFIX}*")
@@ -115,6 +115,8 @@ def prune(repo: Path, keep: int) -> list[str]:
 
 #: Tags a snapshot makes: `ddflow-upgrade-snapshot/<stamp>-<from>-to-<to>`.
 SNAPSHOT_PREFIX = "ddflow-upgrade-snapshot/"
+#: The local copy of what git cannot hold is named like its tag with this on the end.
+SIDECAR_SUFFIX = "-outside-git"
 
 
 class SnapshotRefused(RuntimeError):
@@ -154,6 +156,13 @@ def _require_clean(repo: Path) -> None:
         )
 
 
+def _lresolve(path: Path | str) -> Path:
+    """``path`` with its directory resolved but the last name kept: a symlink stays itself
+    (git holds the link, not what it points at)."""
+    p = Path(path)
+    return p.parent.resolve() / p.name
+
+
 def _classify(
     repo: Path, files: Collection[Path]
 ) -> tuple[list[str], list[str], list[str], list[Path]]:
@@ -163,7 +172,7 @@ def _classify(
     created: list[str] = []
     untracked: list[str] = []
     elsewhere: list[Path] = []
-    for f in dict.fromkeys(Path(x).resolve() for x in files):
+    for f in dict.fromkeys(_lresolve(x) for x in files):
         try:
             rel = f.relative_to(repo).as_posix()
         except ValueError:
@@ -226,7 +235,20 @@ def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Sna
     # as ITS sidecar: `restore` of the tag puts it back too, and it is not a restore point of
     # its own. The tag name is fixed now so the two share it.
     tag = f"{SNAPSHOT_PREFIX}{backup_name(frm, to)}"
-    local = str(make_backup(repo, elsewhere, frm, to, extra={"snapshot": tag})) if elsewhere else ""
+    local = (
+        str(
+            make_backup(
+                repo,
+                elsewhere,
+                frm,
+                to,
+                name=tag.removeprefix(SNAPSHOT_PREFIX) + SIDECAR_SUFFIX,
+                extra={"snapshot": tag},
+            )
+        )
+        if elsewhere
+        else ""
+    )
     try:
         head = _commit_and_tag(repo, tag, untracked, {"held": held, "created": created})
     except SnapshotRefused:
@@ -242,6 +264,19 @@ def snapshots(repo: Path) -> list[str]:
     return sorted(out.out.splitlines()) if out.ok else []
 
 
+def _sidecar_tag(directory: Path) -> str:
+    """The tag a sidecar belongs to: its manifest's, else its name's."""
+    m = _manifest(directory) or {}
+    return str(m.get("snapshot") or SNAPSHOT_PREFIX + directory.name.removesuffix(SIDECAR_SUFFIX))
+
+
+def _is_sidecar(directory: Path) -> bool:
+    """A snapshot's sidecar: by its name, or its manifest's `snapshot` key -- so one whose
+    manifest cannot be read is still known for what it is."""
+    m = _manifest(directory)
+    return directory.name.endswith(SIDECAR_SUFFIX) or (m is not None and "snapshot" in m)
+
+
 def _manifest(directory: Path) -> dict[str, Any] | None:
     try:
         data = json.loads((directory / MANIFEST).read_text("utf-8"))
@@ -255,17 +290,16 @@ def local_backups(repo: Path) -> list[str]:
     root = Path(repo) / BACKUPS
     if not root.is_dir():
         return []
-    found = ((p, _manifest(p)) for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
     # a manifest that cannot be read is still a backup (restoring it will say why not)
-    return sorted(p.name for p, m in found if m is None or "snapshot" not in m)
+    found = (p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+    return sorted(p.name for p in found if not _is_sidecar(p))
 
 
 def _sidecar(repo: Path, tag: str) -> Path | None:
     """The local copy of what git could not hold for snapshot ``tag``, if there is one."""
     root = Path(repo) / BACKUPS
     for p in sorted(root.iterdir()) if root.is_dir() else []:
-        m = _manifest(p) if p.is_dir() else None
-        if m is not None and m.get("snapshot") == tag:
+        if p.is_dir() and _is_sidecar(p) and _sidecar_tag(p) == tag:
             return p
     return None
 
@@ -306,8 +340,10 @@ def _abs(repo: Path, shown: str) -> Path:
 
 
 def _restore_local(repo: Path, directory: Path, *, safety: bool = True) -> dict[str, Any]:
-    manifest = json.loads((directory / MANIFEST).read_text("utf-8"))
-    entries = manifest.get("files", [])
+    manifest = _manifest(directory)
+    if manifest is None or not isinstance(manifest.get("files"), list):
+        raise LookupError(f"the manifest of backup {directory.name!r} cannot be read")
+    entries = manifest["files"]
     targets = [_abs(repo, e["path"]) for e in entries]
     saved = (
         make_backup(repo, targets, "", "", name=f"{clock.compact_at()}-restore-of-{directory.name}")
