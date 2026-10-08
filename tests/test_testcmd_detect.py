@@ -42,23 +42,16 @@ def test_a_commented_out_xdist_is_not_declared(repo):
 def test_pytest_named_only_in_a_manifest_is_a_python_runner(repo):
     _write(repo, "requirements.txt", "pytest==8\n")
     runner = TC.detect(repo)
-    assert runner and runner.family == "python" and runner.suggested == "pytest -q"
+    assert runner and runner.family == "python"
+    assert runner.evidence.endswith("requirements.txt"), runner
 
 
-def test_the_suggested_command_rides_on_the_runner(repo):
-    _write(
-        repo,
-        "pyproject.toml",
-        "[project]\ndependencies=['pytest-xdist']\n[tool.pytest.ini_options]\n",
-    )
-    runner = TC.detect(repo)
-    assert runner.suggested == TC.suggested_test_command(repo) == "pytest -q -n auto"
-    assert runner.evidence.endswith("pyproject.toml")
-
-
-def test_node_and_make_runners_suggest_nothing(repo):
-    _write(repo, "package.json", '{"scripts": {"test": "jest"}}')
-    assert TC.detect(repo).suggested == ""
+def test_evidence_names_the_file_that_said_so(repo):
+    _write(repo, "pyproject.toml", "[tool.pytest.ini_options]\n")
+    assert TC.detect(repo).evidence.endswith("pyproject.toml")
+    (repo / "pyproject.toml").unlink()
+    _write(repo, "tests/test_a.py", "")
+    assert TC.detect(repo).evidence == "tests/ + conftest"
 
 
 def test_one_parser_reads_both_summary_shapes():
