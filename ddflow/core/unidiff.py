@@ -63,13 +63,23 @@ class FileDiff:
         return tuple(dict.fromkeys(p for p in (self.old, self.new) if p))
 
 
+_QUOTED = r'"(?:[^"\\]|\\.)*"'
+
+
 def _from_header_line(head: str) -> tuple[str | None, str | None]:
+    """(old, new) from a ``diff --git`` line alone, for a section with no ``---``/``+++``/
+    ``rename`` lines. A name holding a space is not quoted, so the line is split only where
+    that is unambiguous: two quoted names, one quoted and one plain, the same name twice
+    (``a/X b/X``, or ``X X`` under ``diff.noprefix``), or a single `` b/`` boundary."""
     pair = head[len("diff --git ") :]
-    quoted = re.findall(r'"(?:[^"\\]|\\.)*"', pair)
-    if quoted:
-        old = header_path(f"--- {quoted[0]}", "a/") if len(quoted) > 1 else None
-        return old, header_path(f"+++ {quoted[-1]}", "b/")
-    # "a/X b/X", or "X X" under diff.noprefix: two halves naming the same file.
+    quoted = re.findall(_QUOTED, pair)
+    if len(quoted) == 2:
+        return header_path(f"--- {quoted[0]}", "a/"), header_path(f"+++ {quoted[1]}", "b/")
+    if len(quoted) == 1:
+        rest = pair.replace(quoted[0], "", 1).strip()
+        if pair.startswith('"'):
+            return header_path(f"--- {quoted[0]}", "a/"), header_path(f"+++ {rest}", "b/")
+        return header_path(f"--- {rest}", "a/"), header_path(f"+++ {quoted[0]}", "b/")
     half = len(pair) // 2
     if len(pair) % 2 == 1 and pair[half] == " ":
         left, right = pair[:half], pair[half + 1 :]
@@ -77,6 +87,9 @@ def _from_header_line(head: str) -> tuple[str | None, str | None]:
             return left[2:], left[2:]
         if left == right:
             return left, left
+    cuts = [m.start() for m in re.finditer(" b/", pair)]
+    if pair.startswith("a/") and len(cuts) == 1:
+        return pair[2 : cuts[0]], pair[cuts[0] + 3 :]
     return None, pair
 
 
@@ -132,8 +145,3 @@ def files(diff: str) -> list[FileDiff]:
 def headers(diff: str) -> list[str]:
     """Every ``diff --git`` line of ``diff``."""
     return re.findall(r"(?m)^diff --git .*$", diff)
-
-
-def touched_paths(diff: str) -> set[str]:
-    """Every path any file section of ``diff`` names (both sides of a rename)."""
-    return {p for f in files(diff) for p in f.paths}
