@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ...core.schedule import plan
-from ...services.flowstate import limit_for
+from ...services import flowstate as FL
 from .reservations import _reservation_hold
 
 if TYPE_CHECKING:
@@ -61,5 +61,5 @@ def plan_for(
         now=now,
         agent=me,
         hold=_reservation_hold(repo, st, cfg, me, now),
-        parallel=limit_for(repo, cfg, st, log.read_all if events is None else events),
+        parallel=FL.limit_for(repo, cfg, st, log.read_all if events is None else events),
     )
