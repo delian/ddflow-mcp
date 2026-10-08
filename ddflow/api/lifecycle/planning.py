@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 #: Why a caller asks (``plan_for(purpose=...)``).
 #: ``offer``: the offer an agent acts on (`next`, `wait`). ``view``: a report of that same
-#: offer (`status`, `brief`, `workflow_state`) -- the same answer, so a report never calls
+#: offer (`brief`, `workflow_state`; `status` follows) -- the same answer, so a report never calls
 #: ready what `next` withholds. ``structure``: the queue's shape only (`doctor`'s cycles
 #: and blockers), with no reservations and no parallelism limit.
 PURPOSES: tuple[str, ...] = ("offer", "view", "structure")
