@@ -127,6 +127,40 @@ def overlay_array(
     return out
 
 
+def skipped_fields(
+    paths: Iterable[Path],
+    table: str,
+    cls: type,
+    *,
+    array: bool = False,
+    key: str = "name",
+    fallback_key: str = "",
+) -> list[tuple[str, list[str]]]:
+    """`(where, fields)` for each `[table.<id>]` block (or `[[table]]` entry, ``array``) in
+    ``paths`` carrying fields ``cls`` does not have: what `overlay_table` / `overlay_array`
+    skip (and warn about) for a file a newer ddflow wrote. Read-only and quiet, so a
+    report (`ddflow doctor`) can list them for every table, not only on stderr."""
+    known = set(cls.__dataclass_fields__)
+    out: list[tuple[str, list[str]]] = []
+    for path in paths:
+        if not Path(path).is_file():
+            continue
+        data = tomllib.loads(Path(path).read_text("utf-8"))
+        found = data.get(table)
+        # The wrong container (`[[gate]]` for `[gate.x]`) is not this report's to explain:
+        # the loaders say so; skip it rather than fail the report.
+        if array and isinstance(found, list):
+            for n, raw in enumerate(found, 1):
+                if isinstance(raw, dict) and (extra := sorted(set(raw) - known)):
+                    ident = raw.get(key) or (raw.get(fallback_key) if fallback_key else "")
+                    out.append((f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}", extra))
+        elif not array and isinstance(found, dict):
+            for name, raw in found.items():
+                if isinstance(raw, dict) and (extra := sorted(set(raw) - known)):
+                    out.append((f"[{table}.{name}] in {path}", extra))
+    return out
+
+
 def config_paths(root: Path, own: str) -> tuple[Path, ...]:
     """The files every configurable surface here reads, in precedence order (later wins).
 

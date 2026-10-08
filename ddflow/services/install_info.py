@@ -20,6 +20,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+from ..config_sections import _compat as CV
+from ..core import version as V
 from ..infra import git as G
 from ..infra import paths as _paths
 from ..infra import proc as P
@@ -48,8 +50,7 @@ class InstallInfo:
 def running_from_source(root: Path | None = None) -> bool:
     """True when this package -- or the tree at `root`, when given -- lives in a
     checkout rather than in site-packages."""
-    here = Path(root).resolve() if root is not None else Path(__file__).resolve()
-    return not any(part in ("site-packages", "dist-packages") for part in here.parts)
+    return CV.is_source_tree(root)
 
 
 def own_distribution(root: Path | None = None):
@@ -185,9 +186,7 @@ def _version(dist) -> str:
                 return str(dist.version)
         except Exception:
             pass
-    import ddflow
-
-    return str(getattr(ddflow, "__version__", "unknown"))
+    return V.running() or "unknown"
 
 
 def install_info(root: Path | None = None) -> InstallInfo:
@@ -218,6 +217,13 @@ def install_info(root: Path | None = None) -> InstallInfo:
     )
 
 
+def upgrade_advice(highest: str = "", install: InstallInfo | None = None) -> str:
+    """What to do about a ddflow older than the data it met, fitted to how THIS one is
+    installed (`core.version.upgrade_advice`): a source tree merges main, an index install
+    upgrades its package. ``highest`` is the version needed, "" when unknown."""
+    return CV.upgrade_advice(highest, (install or install_info()).kind)
+
+
 __all__ = [
     "DIST_NAME",
     "KINDS",
@@ -228,4 +234,5 @@ __all__ = [
     "normalise_path",
     "own_distribution",
     "running_from_source",
+    "upgrade_advice",
 ]

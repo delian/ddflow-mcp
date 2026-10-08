@@ -5031,6 +5031,29 @@ value of a known one (exit 3, naming the key) outright, before writing. A map or
 refuses a non-string element instead of casting it (`null` is not the string `"None"`).
 A test asserts every knob carries documentation, so the reference cannot rot.
 
+**Config across versions (D-compat).** An older ddflow changes the keys it knows and keeps the
+rest of the file untouched. `ddflow config --set`, `--append-toml` and `ddflow_configure`
+judge the keys they WRITE strictly (an unknown one is a typo, exit 1) and everything else the
+file already holds the way a load does, so a section, knob or enumerated value a newer
+release wrote passes through byte-identical instead of refusing every edit. A checked list or
+table whose set of members grows (`[dedupe].kinds`, `[agent].routers`,
+`[enforce].trailer_waivers`) ignores a member this version does not know, applies the rest
+and says so (`ddflow doctor` lists each; if nothing usable is left the value below stays);
+the environment and the write paths still refuse such a member. An optional top-level
+`format = N` (a positive integer; none means 1) declares the config format: a file whose
+format is newer than this ddflow understands (`CONFIG_FORMAT`, now 1) is read, as far as it is
+understood, but every write to it is refused (exit 3) with the way to upgrade, because an
+edit could lose what the newer one wrote; the format changes only when a section's shape
+does, never for an added knob. A knob declares a changed default with
+`knob(default_changed_in=, default_was=)` (shown in `config --explain`; a value anyone set
+is never changed by it, D-upgrade-config-changes). Where a note tells you to catch up, the
+advice fits how ddflow is installed (`ddflow doctor`, the skew refusal and the startup
+warning): a source checkout merges main, an index install upgrades `ddflow-mcp`
+(`uv tool upgrade`, `pipx upgrade`, `pip install -U` or `uvx --refresh`), a VCS or
+directory install reinstalls from its source. `ddflow doctor` also lists the fields an older
+ddflow skipped in `[gate.*]`, `[[reviewer]]`, `[[companion]]` and `[[macro]]`, not only on
+stderr.
+
 ### All knobs
 
 The table is generated from the knob declarations themselves (`uv run python -m

@@ -35,9 +35,16 @@ import re
 import tomllib
 from pathlib import Path
 
-from ..config import RENAMED, Config, InvalidValue, parallel_range_problems
+from ..config import (
+    CONFIG_FORMAT,
+    RENAMED,
+    Config,
+    InvalidValue,
+    parallel_range_problems,
+)
 from ..infra import fsio
 from ..infra import tomlcfg as TC
+from . import install_info as II
 from . import reviewer_trust as RT
 from .review import Reviewer
 
@@ -204,6 +211,13 @@ def _key_parts(k: str) -> list[str]:
 
 class KeyRefused(str):
     """A key refused under D-plain-keys: the caller answers exit 3 (refused), not 1."""
+
+
+class FormatRefused(ValueError):
+    """A write to a config file whose `format` is newer than this ddflow understands, from a
+    writer that raises (`append_block`): exit 3, refused (`core.outcome.exit_for`)."""
+
+    exit_code = 3
 
 
 _BARE = re.compile(r"[A-Za-z0-9_-]+")
@@ -437,6 +451,51 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
         return set()
 
 
+def _written_keys(pairs: list[tuple[str, str]]) -> set[str]:
+    """The dotted keys an edit writes, each under its CURRENT spelling: what `Config.check`
+    judges strictly, so a key the file already holds that this version does not know is left
+    alone (D-compat 2)."""
+    return {".".join(_key_parts(RENAMED[k][0] if k in RENAMED else k)) for k, _v in pairs}
+
+
+def _appended_keys(data: dict) -> set[str]:
+    """The dotted keys an appended TOML document writes (a table's keys, one level down; an
+    `[export.<doc>]` table's keys, two), as `Config.check` takes `written`."""
+    out: set[str] = set()
+    for sec, values in data.items():
+        out.add(sec)
+        if not isinstance(values, dict):
+            continue
+        for knob, v in values.items():
+            out.add(f"{sec}.{knob}")
+            if isinstance(v, dict):
+                out |= {f"{sec}.{knob}.{k}" for k in v}
+    return out
+
+
+def format_problem(text: str, path: Path) -> str:
+    """Why this file may not be WRITTEN by this ddflow, or "": its `format = N` is newer than
+    the config format this code understands (`CONFIG_FORMAT`), so an edit could rewrite a
+    section's newer shape (D-compat 2: refused only on a direct conflict). Reading is never
+    refused. Exit 3, with advice fitted to how this ddflow is installed."""
+    try:
+        fmt = tomllib.loads(text).get("format", 1) if text.strip() else 1
+    except tomllib.TOMLDecodeError:
+        # A file that does not parse is not a licence to write it: read the declaration
+        # off the top of the text, before the first table.
+        top = re.split(r"(?m)^\s*\[", text, maxsplit=1)[0]
+        m = re.search(r"(?m)^\s*format\s*=\s*(\d+)\s*(?:#.*)?$", top)
+        fmt = int(m.group(1)) if m else 1
+    if isinstance(fmt, bool) or not isinstance(fmt, int) or fmt <= CONFIG_FORMAT:
+        return ""
+    advice = II.upgrade_advice()
+    return KeyRefused(
+        f"refusing to write {path}: it is config format {fmt}, and this ddflow understands "
+        f"format {CONFIG_FORMAT}; an edit could lose what a newer ddflow wrote. "
+        f"{advice[:1].upper()}{advice[1:]}"
+    )
+
+
 def _apply_edits(text: str, pairs: list[tuple[str, str]]) -> tuple[str, str]:
     """``text`` with every ``(dotted, value)`` set in turn, and what stopped it, if
     anything: (new text, "") or (text so far, the refusal)."""
@@ -535,6 +594,8 @@ def _write_config(
         ensure_local_dir(repo)
     with TC.locked(path):
         text = path.read_text("utf-8") if path.exists() else ""
+        if refused := format_problem(text, path):
+            return refused, text
         text_before = text
         before = _workflow_problems(repo, text, local=local) if check_workflow else set()
         human_before = _guarded_human_gates(repo, text, local=local)
@@ -543,7 +604,7 @@ def _write_config(
             return failure, text
         try:
             result = tomllib.loads(text)
-            Config.check(result)
+            Config.check(result, written=_written_keys(pairs))
         except InvalidValue as exc:  # a known knob, a value it cannot take: refused
             return KeyRefused(f"that edit would break the config: {exc}"), text
         except (tomllib.TOMLDecodeError, ValueError) as exc:
@@ -624,10 +685,12 @@ def _append_config(
         path.parent.mkdir(parents=True, exist_ok=True)
     with TC.locked(path):
         prev = path.read_text("utf-8") if path.exists() else ""
+        if refused := format_problem(prev, path):
+            return refused, Path()
         merged = (prev.rstrip() + "\n\n" if prev.strip() else "") + toml_text.strip() + "\n"
         try:
             result = tomllib.loads(merged)
-            Config.check(result)
+            Config.check(result, written=_appended_keys(data))
             _check_reviewer_fields(data, path)
         except InvalidValue as exc:
             return KeyRefused(f"appending this would break the config: {exc}"), Path()
@@ -696,6 +759,9 @@ def append_block(
     recommends services but never ships someone's configuration to every clone.
     `own` names the dedicated local file (`reviewers.toml`); the shared target is
     always `.ddflow/config.toml`, the one committed file a project is configured in.
+
+    Raises `FormatRefused` (exit 3) when the file's `format` is newer than this ddflow
+    understands, and `RT.ReviewerRefused` for an agent's command reviewer.
     """
     if shared:
         path = config_file(repo)
@@ -707,6 +773,8 @@ def append_block(
 
     with TC.locked(path):
         prev = path.read_text("utf-8") if path.exists() else ""
+        if refused := format_problem(prev, path):
+            raise FormatRefused(refused)
         merged = fsio.APPEND.splice(prev, block.rstrip() + "\n")
         # Parsed before it replaces anything: a block that does not parse would leave
         # a config no later command can load, and the reader's error would blame a file
