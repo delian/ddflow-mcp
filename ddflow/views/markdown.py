@@ -28,6 +28,7 @@ from ..core import provenance as PV
 from ..core.digest import content_digest
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
 from ..core.schedule import Plan, critical_path
+from ..core.textcut import clip
 from ..core.tier import tier_of
 from ..infra.fsio import FORMAT_LEVEL, NewerContent, parse_level
 from ..services.redact_report import redactor
@@ -457,8 +458,7 @@ def _score(x: dict) -> str:
 
 
 def _clip(text: str, cap: int) -> str:
-    text = (text or "").strip()
-    return text if len(text) <= cap else text[: cap - 1].rstrip() + "…"
+    return clip((text or "").strip(), cap, keep=cap - 1, marker="…")
 
 
 def _ref(x: dict, key: str) -> str:

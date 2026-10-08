@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.textcut import clip
 from . import proc as P
 from .worktree import git
 
@@ -184,9 +185,9 @@ def _count(commits: Any) -> int:
 
 def _clip(parts: list[str]) -> str:
     text = "\n\n".join(p.strip() for p in parts if p and p.strip())
-    if len(text) > FEEDBACK_MAX:
-        text = text[: FEEDBACK_MAX - 40].rstrip() + "\n\n[... truncated; see the request]"
-    return text
+    return clip(
+        text, FEEDBACK_MAX, keep=FEEDBACK_MAX - 40, marker="\n\n[... truncated; see the request]"
+    )
 
 
 class Forge:

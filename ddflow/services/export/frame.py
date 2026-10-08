@@ -25,6 +25,7 @@ from ddflow import FORMAT_LEVEL
 
 from ...core.digest import content_digest
 from ...core.events import is_older
+from ...core.textcut import clip, clip_lines
 from ...infra.fsio import parse_level
 
 #: Second header line. Fixed text.
@@ -168,44 +169,12 @@ def truncate(body: str, max_bytes: int) -> str:
     caps (exit 3) instead. When even the first line
     does not fit, it is cut mid-line and the count includes it as not (fully) shown.
     """
-    body = normalize(body)
-    if max_bytes <= 0 or len(body.encode("utf-8")) <= max_bytes:
-        return body
-    lines = body.splitlines(keepends=True)
-
-    def footer(n: int) -> str:
-        return f"[truncated: {n} more; use --since/--limit]\n"
-
-    def size(text: str) -> int:
-        return len(text.encode("utf-8"))
-
-    # The largest prefix whose size PLUS its own footer fits the cap. The footer counts
-    # for every prefix, the empty one included, so the result never exceeds max_bytes
-    # (unless the footer alone does, which no sane cap allows). A shown part never ends
-    # on blank lines; dropping them grows the footer's count, so the fit is re-checked.
-    n, used, best = len(lines), 0, 0
-    for k, line in enumerate(lines, 1):
-        used += size(line)
-        if used + size(footer(n - k)) <= max_bytes:
-            best = k
-    shown = lines[:best]
-    while True:
-        while shown and not shown[-1].strip():
-            shown.pop()
-        if not shown or size("".join(shown)) + size(footer(n - len(shown))) <= max_bytes:
-            break
-        shown.pop()
-    if not shown:  # not even one whole line fits: cut the first on a character boundary
-        room = max_bytes - size(footer(n)) - 1
-        if room <= 0:  # the footer alone fills the cap: say so, add nothing else
-            return footer(n)
-        cut = lines[0].encode("utf-8")[:room].decode("utf-8", "ignore")
-        return cut.rstrip("\n") + "\n" + footer(n)  # the cut line counts as not shown
-    return "".join(shown) + footer(n - len(shown))
+    return clip_lines(
+        normalize(body), max_bytes, lambda n: f"[truncated: {n} more; use --since/--limit]\n"
+    )
 
 
 def one_line(s: str, limit: int = 140) -> str:
     """Collapse whitespace to single spaces and shorten at a word boundary with `` ...``.
     The shared helper for kinds that put free text on one list line."""
-    s = " ".join((s or "").split())
-    return s if len(s) <= limit else s[:limit].rsplit(" ", 1)[0] + " ..."
+    return clip(" ".join((s or "").split()), limit, marker=" ...", boundary="word", rstrip=False)
