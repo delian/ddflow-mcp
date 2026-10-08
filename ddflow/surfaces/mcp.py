@@ -381,6 +381,9 @@ class Server:
         #: harnesses it was written for (Claude Code, Cursor) actually drive.
         self.called_from = Path(called_from) if called_from else self.repo
         self.protocol = SUPPORTED_PROTOCOLS[0]
+        #: Old names (aliases) this connection has already been told are deprecated: said
+        #: once per session (D-compat).
+        self._notices = _REGISTRY.Notices()
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
         self.agent = agent
@@ -603,14 +606,18 @@ class Server:
             if ALLOW_OLDER in args:
                 args = dict(args)
                 allow_older = args.pop(ALLOW_OLDER)
-            spec = TOOLS.get(name)
+            name, spec, args, used, clash = _resolve_call(name, args)
             if spec is None:
                 return _ok(
                     mid,
                     _text(
-                        f"unknown tool {name!r}. Available: {', '.join(sorted(TOOLS))}", error=True
+                        f"unknown tool {name!r}. Available: {', '.join(sorted(TOOLS))}"
+                        + _REGISTRY.unknown_tool_hint(TOOLS, name),
+                        error=True,
                     ),
                 )
+            if clash:
+                return _ok(mid, _text(f"bad arguments: {clash}", error=True))
             missing = [
                 n for n, (_t, _d, req) in spec["properties"].items() if req and not args.get(n)
             ]
@@ -631,7 +638,10 @@ class Server:
                     mid,
                     _text(
                         f"unknown argument(s) for {name}: {', '.join(unknown)}. "
-                        f"Known: {', '.join(sorted(set(known) - set(spec.get('deprecated') or {})))}",
+                        f"Known: {', '.join(sorted(set(known) - set(spec.get('deprecated') or {})))}"
+                        + _REGISTRY.unknown_arg_hint(
+                            set(known) - set(spec.get("deprecated") or {}), unknown
+                        ),
                         error=True,
                     ),
                 )
@@ -747,6 +757,8 @@ class Server:
                     out["content"].append({"type": "text", "text": tiered})
                 if retired:
                     out["content"].append({"type": "text", "text": deprecation_note(name, retired)})
+                for alias in self._notices.fresh(used):
+                    out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
                 note = _obligation_footer(self)
                 if note:
                     out["content"].append({"type": "text", "text": note})
@@ -1287,6 +1299,28 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
             "Call `ddflow_brief` for the state of the queue, and `ddflow_prompts` to "
             "inspect the template configuration."
         )
+
+
+def _resolve_call(
+    name: str, args: dict[str, Any]
+) -> tuple[str, dict[str, Any] | None, dict[str, Any], list[_REGISTRY.Alias], str]:
+    """``(tool name, its spec, args, aliases used, a clash)`` for a ``tools/call``.
+
+    An old tool name and old argument names still work (D-compat): the call is the current
+    tool's, with the arguments under their current names. ``spec`` is None for a name that
+    is neither a tool nor an alias; ``clash`` is set when an argument was given under both
+    its current and its old name.
+    """
+    used: list[_REGISTRY.Alias] = []
+    spec = TOOLS.get(name)
+    if spec is None:
+        canonical, alias = _REGISTRY.resolve_tool(TOOLS, name)
+        if alias is None:
+            return name, None, args, used, ""
+        name, spec = canonical, TOOLS[canonical]
+        used.append(alias)
+    args, used_args, clash = _REGISTRY.rename_args(spec, args)
+    return name, spec, args, used + used_args, clash
 
 
 def deprecation_note(tool: str, retired: dict[str, str]) -> str:
