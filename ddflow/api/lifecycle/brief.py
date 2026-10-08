@@ -164,7 +164,9 @@ def brief(
         memories=live,
         held=held_ids,
         suggested=suggested,
-        reserve=approx_tokens(prepended) if prepended else 0,
+        # views/markdown.py still has its own estimate until it moves onto core.budget
+        # (B-uni-context-pack.2-pack): the same value, `max(1, len // 4)`.
+        reserve=render_md._approx_tokens(prepended) if prepended else 0,
         agent=log.agent_id,
     )
     if undecided:
