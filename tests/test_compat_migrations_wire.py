@@ -124,6 +124,8 @@ def test_backup_none_writes_no_copy(old: Path) -> None:
     MG.register(TOY)
     out = go(old, "migrations", backup="none")
     assert out["exit"] == 0 and out["backup"] == ""
+    assert [r["status"] for r in out["results"]] == ["applied"]
+    assert (old / FILE).read_text() == f"top\n{CURRENT}\nbody\n"
     assert not (old / ".ddflow" / "backups").exists() or not any(
         (old / ".ddflow" / "backups").rglob(FILE)
     )
@@ -147,3 +149,35 @@ def test_a_migration_that_fails_verification_is_failed_and_stays_in_the_plan(old
     out = go(old, "migrations")
     assert out["exit"] == 1 and out["results"][0]["status"] == "failed"
     assert [i["id"] for i in plan(old)["categories"]["migrations"]] == ["migration:toy-marker"]
+
+
+def test_a_file_the_runner_plans_beyond_the_plan_is_saved_too(old: Path) -> None:
+    """Earlier steps of a run can change what a migration finds: its extra file is backed up."""
+    other = old / "other.txt"
+    other.write_text(f"{LEGACY}\n")
+    state = {"calls": 0}
+
+    def plan_(ctx: MG.Context, found: list[MG.Finding]) -> list[MG.Change]:
+        state["calls"] += 1  # the plan lists FILE; the run (a later detect) also finds other.txt
+        return [MG.Change(FILE, "x")] + (
+            [MG.Change("other.txt", "y")] if state["calls"] > 1 else []
+        )
+
+    def apply_(ctx: MG.Context, found: list[MG.Finding]) -> list[MG.Corrective]:
+        for name in (FILE, "other.txt"):
+            p = ctx.repo / name
+            p.write_text(p.read_text().replace(LEGACY, CURRENT))
+        return []
+
+    def detect_(ctx: MG.Context) -> list[MG.Finding]:
+        return [
+            MG.Finding(n, n, n) for n in (FILE, "other.txt") if LEGACY in (ctx.repo / n).read_text()
+        ]
+
+    MG.register(replace(TOY, plan=plan_, apply=apply_, detect=detect_))
+    out = go(old, "migrations")
+    assert out["exit"] == 0, out
+    first = Path(out["backup"])
+    extra = [d for d in first.parent.iterdir() if d != first]
+    saved = [p.read_text() for d in [first, *extra] for p in d.rglob("other.txt")]
+    assert saved == [f"{LEGACY}\n"]
