@@ -69,16 +69,19 @@ def _unverified(root: Path) -> dict[str, list[str]]:
 
 
 def _project_files(root: Path) -> dict[str, bytes]:
-    """The project's own files, as bytes: not git's, not ddflow's (its log is appended to, its
-    index and backups come and go), and not `.gitignore`, which any ddflow command may extend."""
-    return {
-        p.relative_to(root).as_posix(): p.read_bytes()
-        for p in root.rglob("*")
-        if p.is_file()
-        and ".git" not in p.relative_to(root).parts
-        and p.relative_to(root).parts[0] != ".ddflow"
-        and p.name != ".gitignore"
-    } | {RULE_FILE: (root / RULE_FILE).read_bytes()}
+    """The project's own files, as bytes: not git's, not ddflow's runtime (its log is appended
+    to, its index and backups come and go), not `.gitignore`, which any ddflow command may
+    extend -- but the project's config and its rule files, which a migration must not touch."""
+    out: dict[str, bytes] = {}
+    for p in root.rglob("*"):
+        rel = p.relative_to(root)
+        if not p.is_file() or ".git" in rel.parts or p.name == ".gitignore":
+            continue
+        if rel.parts[0] == ".ddflow" and rel.as_posix() != ".ddflow/config.toml":
+            if rel.parts[1:2] != ("rules",):
+                continue
+        out[rel.as_posix()] = p.read_bytes()
+    return out
 
 
 def _events(root: Path) -> int:
@@ -112,8 +115,10 @@ def test_apply_migrations_makes_every_migration_verify(old: tuple[str, Path]) ->
     assert _unverified(root) == {}, "and every migration's verify is clean"
     _, _, st = _load(root, "fx-upgrader")
     assert "rule:r-from-the-old-release" in st.defs, "the rule is now a record in the log"
-    changed = {n for n, data in before.items() if _project_files(root).get(n) != data}
-    assert not changed, f"the migration only appends events; it also rewrote {sorted(changed)}"
+    after = _project_files(root)
+    changed = sorted(n for n in before.keys() & after.keys() if before[n] != after[n])
+    added, removed = sorted(after.keys() - before.keys()), sorted(before.keys() - after.keys())
+    assert (changed, added, removed) == ([], [], []), "the migration only appends events"
 
 
 def test_a_second_apply_is_a_no_op(old: tuple[str, Path]) -> None:
