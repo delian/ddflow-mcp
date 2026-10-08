@@ -150,17 +150,16 @@ jobs:
               # declared version -- and committing `release X.Y.Z` for a number PyPI holds
               # would put a false release on main before the upload failed. Checked here,
               # before any commit. A taken candidate moves on by patch.
-              level=patch
-              # exit 2 = no release yet (a patch); anything else is a failure, never a patch
-              base=$(uv run --frozen python scripts/release_impact.py base) || case $? in
-                2) base="" ;;
-                *) echo "::error::could not find the last release"; exit 1 ;;
-              esac
-              if [ -n "$base" ]; then
-                level=$(uv run --frozen python scripts/release_impact.py level --base "$base")
-              fi
+              # No release yet is a patch; any failure to read the impact stops the release
+              # rather than numbering it as a patch. The step is taken from the NEWER of the
+              # declared version and the last release (a `v*` tag publishes out of band).
+              level=$(uv run --frozen python scripts/release_impact.py level) || {
+                echo "::error::could not read the declared impact since the last release"; exit 1
+              }
               echo "declared impact since the last release asks for a $level bump"
-              next=$(uv run --frozen python scripts/release_impact.py next "$version" "$level")
+              next=$(uv run --frozen python scripts/release_impact.py candidate) || {
+                echo "::error::could not number the release"; exit 1
+              }
               taken=$(pypi "$next")
               for _ in $(seq 1 50); do
                 [ "$taken" = 404 ] && break

@@ -123,25 +123,29 @@ def test_a_breaking_change_is_a_patch_from_1_0_on(repo: Path) -> None:
     assert RI.level_since(None, repo) == "patch"
 
 
-def test_cutting_a_version_does_not_hide_a_breaking_entry_or_count_it_twice(repo: Path) -> None:
+def test_cutting_a_version_neither_recounts_a_released_entry_nor_loses_a_new_one(
+    repo: Path,
+) -> None:
     fragment(repo, "kept", "breaking")
     commit(repo, "release 0.1.5")  # `kept` was announced before this release
-    fragment(repo, "new", "breaking")
-    assert RI.level_since(None, repo) == "minor"
+    fragment(repo, "new", "additive")
+    assert RI.level_since(None, repo) == "patch", "a breaking entry before the release is not news"
+    base = repo / "ddflow" / "templates" / "upgrade"
     # `version cut` folds the fragments into a release block: the same entries, elsewhere
     folded = (
         MANIFEST
         + '\n[[release]]\nversion = "0.2.0"\ndate = "2026-10-08"\n\n'
         + _fragment("kept", "breaking").replace("[[change]]", "[[release.change]]")
-        + _fragment("new", "breaking").replace("[[change]]", "[[release.change]]")
+        + _fragment("new", "additive").replace("[[change]]", "[[release.change]]")
     )
-    path = repo / "ddflow" / "templates" / "upgrade"
-    (path / "changes.toml").write_text(folded)
-    for f in (path / "unreleased").glob("*.toml"):
+    (base / "changes.toml").write_text(folded)
+    for f in (base / "unreleased").glob("*.toml"):
         f.unlink()
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "cut 0.2.0")
-    assert RI.level_since(None, repo) == "minor", "still exactly the one new breaking entry"
+    assert RI.level_since(None, repo) == "patch", "folding `kept` must not make it news again"
+    fragment(repo, "later", "breaking")
+    assert RI.level_since(None, repo) == "minor", "a new breaking entry still counts after a cut"
     commit(repo, "release 0.2.0")
     assert RI.level_since(None, repo) == "patch", "nothing new since this release"
 
@@ -211,6 +215,34 @@ def test_the_command_line_numbers_a_version() -> None:
     assert bad.returncode == 1 and "unknown level" in bad.stderr
 
 
+def test_a_candidate_steps_from_the_newer_of_the_declared_version_and_the_last_release(
+    repo: Path,
+) -> None:
+    commit(repo, "release 0.1.5")
+    fragment(repo, "b", "breaking")
+    assert RI.candidate(repo) == "0.2.0"  # declared 0.1.5 == released 0.1.5: a minor step
+    git(repo, "tag", "v0.6.0")  # published out of band; main still declares 0.1.5
+    fragment(repo, "c", "breaking")
+    assert RI.candidate(repo) == "0.7.0", (
+        "the step is taken from the release the impact is measured from"
+    )
+    fragment(repo, "d", "additive")
+    declared(repo, "0.9.0")
+    assert RI.candidate(repo) == "0.10.0", "a declared version past the release is the start"
+
+
+def test_the_command_line_takes_its_base_by_either_spelling_and_fails_cleanly(repo: Path) -> None:
+    script = str(ROOT / "scripts" / "release_impact.py")
+    run = lambda *a: subprocess.run([sys.executable, script, *a], capture_output=True, text=True)  # noqa: E731
+    assert run("check", "--base").returncode == 2, "a missing value is bad usage, not a traceback"
+    assert "Traceback" not in run("check", "--base").stderr
+    nope = run("level", "--base=no-such-ref")
+    assert nope.returncode == 1 and "release_impact:" in nope.stderr
+    equals = run("level", "--base=HEAD")
+    spaced = run("level", "--base", "HEAD")
+    assert equals.returncode == spaced.returncode == 0 and equals.stdout == spaced.stdout
+
+
 def test_the_real_repository_has_a_level() -> None:
     assert RI.level_since() in ("patch", "minor")
 
@@ -222,8 +254,7 @@ def test_publish_bumps_by_the_declared_impact_not_always_by_patch() -> None:
     text = (ROOT / ".github" / "workflows" / "publish.yml").read_text()
     gate = text[text.index("  gate:") : text.index("  verify:")]
     assert "fetch-depth: 0" in gate, "the last release is found in history"
-    assert "release_impact.py base" in gate and "release_impact.py level" in gate
-    assert 'release_impact.py next "$version" "$level"' in gate
+    assert "release_impact.py level" in gate and "release_impact.py candidate" in gate
     assert "bumped $level and committed" in gate
     # a candidate PyPI already holds moves on by patch, through the same helper
     assert 'release_impact.py next "$next" patch' in gate
@@ -231,7 +262,7 @@ def test_publish_bumps_by_the_declared_impact_not_always_by_patch() -> None:
     assert 'c + 1}")\' "$next"' not in gate, "the hard-coded patch increment is gone"
     # a version published as declared must be a big enough step; a failing `base` is not a patch
     assert gate.count("declared_ok") >= 3 and "release_impact.py check" in gate
-    assert "could not find the last release" in gate
+    assert "could not read the declared impact" in gate
 
 
 def test_release_sh_checks_the_impact_and_the_surface_before_the_suite() -> None:
