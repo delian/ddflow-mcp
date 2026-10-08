@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -700,12 +701,19 @@ def driver_drift(
 
 
 def refresh_docs(
-    repo: Path, *, docs_dir: str = "docs/ddflow", package_dir: Path | None = None
+    repo: Path,
+    *,
+    docs_dir: str = "docs/ddflow",
+    package_dir: Path | None = None,
+    only: Collection[str] | None = None,
 ) -> list[str]:
     """Rewrite ONLY the agent-facing documents: the driver docs, the managed rules blocks
     and the adopted agents' native rules. Never the MCP launch, the hooks, the command
     files, `.gitignore`/`.gitattributes` or `.ddflow/` -- the parts of a plain `adopt` an
     operator may have tuned by hand and that a docs refresh has no business touching.
+
+    ``only`` limits the refresh to those repo-relative paths (the upgrade apply step
+    refreshes the files its plan listed and leaves a hand-edited one it must not touch).
 
     Refuses (ValueError) a project that was never adopted: a refresh must not adopt.
     """
@@ -724,6 +732,8 @@ def refresh_docs(
     actions: list[str] = []
     agents = adopted_agents(repo, docs_dir=docs_dir)
     for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
+        if only is not None and rel not in only:
+            continue
         if mine.read_bytes() == tmpl.read_bytes():
             actions.append(f"{rel} is current")
         else:
@@ -731,12 +741,14 @@ def refresh_docs(
             actions.append(f"wrote {rel}")
     section = project_section(docs_dir)
     for name in ("AGENTS.md", "CLAUDE.md"):
+        if only is not None and name not in only:
+            continue
         path = repo / name
         if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
             continue
         actions.append(_upsert_block(path, section))
     for key in agents:
-        if key in NATIVE_RULES:
+        if key in NATIVE_RULES and (only is None or NATIVE_RULES[key].path in only):
             actions.append(_write_native_rule(repo, key, docs_dir))
     return actions
 
