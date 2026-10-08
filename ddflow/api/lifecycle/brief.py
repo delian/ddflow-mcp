@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...core import clock
 from ...core import outcome as O
+from ...services import gates as G
 from ...services import leases as L
 from .._base import _load
 from .heartbeat import _waiters
@@ -31,6 +32,24 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
         + "\n\nFirst come, first served: the oldest gets the files the moment you let go. "
         "Claim when you are ready to edit; do not hold file globs while only gates, "
         "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
+    )
+
+
+_REFUTED_SHOWN = 5
+
+
+def _refuted_line(st) -> str:
+    """The gates of unfinished items passed on refutation (D-unify 5), or "": a pass the
+    operator may spot-check is not left for the agent to find out. Finished items are listed
+    by `ddflow gate list --refuted`, not repeated in every brief."""
+    rows = [r for r in G.refuted_passes(st) if r["state"] not in ("done", "abandoned")]
+    if not rows:
+        return ""
+    shown = ", ".join(f"{r['item']}.{r['gate']}" for r in rows[:_REFUTED_SHOWN])
+    more = f" (+{len(rows) - _REFUTED_SHOWN} more)" if len(rows) > _REFUTED_SHOWN else ""
+    return "\n" + (
+        f"Passed on refutation, not yet completed: {shown}{more}. Flagged for the operator's "
+        f"spot-check: `ddflow gate list --refuted`."
     )
 
 
@@ -168,6 +187,7 @@ def brief(
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
+    text += _refuted_line(st)
     if item and item in st.items:
         pr = st.items[item].pr
         if pr is not None and pr.review == "changes_requested" and pr.feedback:
