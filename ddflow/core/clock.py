@@ -21,6 +21,8 @@ go down (D-unify 4).
 
 from __future__ import annotations
 
+import math
+import re
 import secrets
 import time
 from datetime import UTC, date, datetime
@@ -145,6 +147,51 @@ def age_s(text: str, now: float | None = None, *, naive: Naive = "utc") -> float
     if then == float("inf"):
         return then
     return (time.time() if now is None else now) - then
+
+
+#: The longest one `ddflow wait` may block, whoever asks (CLI or MCP). The client -- not
+#: ddflow -- decides when a call has hung, so a longer ask is shortened and says so; the
+#: caller that wants more waits again, which also re-checks that waiting is still the right
+#: move. Here, in the leaf both surfaces may import (they reach services only through api).
+WAIT_MAX_S = 1800
+
+#: Seconds per unit in a duration text (`parse_duration`).
+DURATION_UNITS: dict[str, int] = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 7 * 86400}
+_DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)([smhdw]?)")
+
+
+def parse_duration(value: str | int | float, *, unit: str = "s") -> float:
+    """A length of time in seconds: a number (in ``unit``, ``s`` by default) or text such as
+    ``90``, ``30m``, ``1.5h`` or ``1h30m`` (units ``s m h d w``, largest first not
+    required, a bare number in a compound taking the default unit only when alone).
+
+    Raises ValueError for anything else -- negative, empty, a bool, an unknown unit --
+    so a typo is refused rather than read as zero."""
+    per = DURATION_UNITS.get(unit)
+    if per is None:
+        raise ValueError(f"unknown duration unit {unit!r}: use one of {', '.join(DURATION_UNITS)}")
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ValueError(f"a duration is a number or text such as 30m, not {value!r}")
+    if not isinstance(value, str):
+        try:
+            seconds = float(value) * per
+        except OverflowError:
+            seconds = math.inf  # an int beyond a float: refused below, as ``inf`` is
+        return _finite(seconds, value)
+    text = value.strip().lower().replace(" ", "")
+    parts = _DURATION_PART.findall(text)
+    if not text or "".join(n + u for n, u in parts) != text:
+        raise ValueError(f"{value!r} is not a duration: use e.g. 90, 30m, 1.5h or 1h30m")
+    if len(parts) > 1 and any(not u for _n, u in parts):
+        raise ValueError(f"{value!r}: every part of a compound duration needs a unit")
+    return _finite(sum(float(n) * (DURATION_UNITS[u] if u else per) for n, u in parts), value)
+
+
+def _finite(seconds: float, value: object) -> float:
+    """``seconds`` if it is a usable length of time; a ValueError naming ``value`` if not."""
+    if seconds < 0 or not math.isfinite(seconds):
+        raise ValueError(f"a duration cannot be {value!r}")
+    return seconds
 
 
 def parse_date(text: str) -> date:

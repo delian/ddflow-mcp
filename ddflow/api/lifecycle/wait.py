@@ -10,6 +10,7 @@ from typing import Any
 
 from ...core import globspec as GS
 from ...core import outcome as O
+from ...core.clock import WAIT_MAX_S
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
 from .._base import _load
@@ -29,6 +30,12 @@ from .reservations import (
 #: for an afternoon. A caller that wants longer asks again, which also re-checks that
 #: waiting is still the right move.
 DEFAULT_WAIT_TIMEOUT_S = 600
+
+
+def _note_cap(say, capped: bool) -> None:
+    """Tell the caller its wait was shortened to `WAIT_MAX_S`."""
+    if capped:
+        say(f"waiting at most {WAIT_MAX_S}s at a time; ask again to wait longer")
 
 
 def _judge_wait(
@@ -261,6 +268,8 @@ def wait(
     from ...services import waits as WT
 
     timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
+    capped = timeout > WAIT_MAX_S
+    timeout = min(timeout, float(WAIT_MAX_S))
     poll = WT.POLL_S if poll_s is None else float(poll_s)
     empty: dict[str, Any] = {
         "item": item,
@@ -316,6 +325,7 @@ def wait(
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
+    _note_cap(say, capped)
     started = time.monotonic()
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`

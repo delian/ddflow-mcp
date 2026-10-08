@@ -2724,7 +2724,9 @@ whole). A glob mangled by quoting is refused with the form every surface reads. 
 --globs` **replaces** the item's globs, and a claimed item's lease with them; the result
 names what it dropped, and `show` prints the lease's globs beside the item's. `--resources`
 works the same way. `ddflow wait --item X --globs ..` judges the claim you are about to make
-rather than the stored globs, so READY means that claim will not be refused.
+rather than the stored globs, so READY means that claim will not be refused. One `wait` blocks
+for at most 1800 seconds, on the CLI as over MCP: a longer `--timeout` is shortened (and says so
+on stderr), and you call again to wait longer.
 
 **Files every item touches** — a changelog, a research log, a regenerated config — would
 make every pair of items collide. Declare them, and many leases may hold them at once:
@@ -4116,6 +4118,12 @@ action = { job = "bug-audit" }     # the scheduled job whose template the item i
 enabled = true                     # a new trigger starts DISABLED until the operator says so
 tags = ["ci"]                      # added to the items it files
 ```
+
+`window`, `debounce` and `cooldown` are minutes (whole numbers). Each also has a seconds form,
+`window_s`, `debounce_s` and `cooldown_s`, matching every other `_s` knob in ddflow; it takes
+a number of seconds or a duration text (`90`, `30m`, `1h30m`; units `s m h d w`), and giving a
+knob and its `_s` form together is refused. `window_s = 1800` and `window = 30` are the same
+definition.
 
 Every evaluation that finds a condition met is an event: `trigger.fired` (with the items
 it filed, the key, the hop and the definition's digest) or `trigger.suppressed` with the
