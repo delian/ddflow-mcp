@@ -2107,7 +2107,7 @@
 # ---
 # name: test_help[ddflow upgrade]
   '''
-  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE]
+  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]]
   
   options:
     -h, --help            show this help message and exit
@@ -2119,7 +2119,12 @@
     --confirm KEY         with --apply: accept the change to this knob, file or repair that the
                           operator set or wrote (repeatable; needs --reason, which is recorded)
     --reason REASON       with --confirm: why the operator accepts it
-    --backup MODE         with --apply: where the originals go: local (default) or none
+    --backup MODE         with --apply: where the originals go: local (default), snapshot or none
+    --snapshot            with --apply: save the originals as a git snapshot (a tag on HEAD) instead
+                          of a local copy; the same as --backup snapshot
+    --restore [NAME]      put back what a local backup or a snapshot holds (NAME, or the newest when
+                          omitted), saving what it replaces; stands alone: not with --plan, --apply
+                          or --confirm
   
   '''
 # ---

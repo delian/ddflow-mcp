@@ -191,10 +191,18 @@ def cmd_upgrade(a, c: Ctx) -> int:
         confirm=getattr(a, "confirm", None) or (),
         reason=getattr(a, "reason", "") or "",
         backup=getattr(a, "backup", "") or "",
+        snapshot=bool(getattr(a, "snapshot", False)),
+        restore=getattr(a, "restore", None) or "",
         agent=c.requested_agent,
     )
     if c.json:
-        payload = A.UPGRADE_APPLY_PAYLOAD if "applied" in out.data else A.UPGRADE_PAYLOAD
+        payload = (
+            A.UPGRADE_RESTORE_PAYLOAD
+            if "restored" in out.data
+            else A.UPGRADE_APPLY_PAYLOAD
+            if "applied" in out.data
+            else A.UPGRADE_PAYLOAD
+        )
         emit_json(out.body(payload))
     elif out.data.get("text"):
         print(out.data["text"])
