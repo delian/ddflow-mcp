@@ -215,3 +215,19 @@ def test_a_fresh_detector_keeps_the_callers_hash_of_an_unreadable_file(tmp_path)
     fresh = C.ChangeDetector(tmp_path, hasher=lambda p: None)
     got, now = fresh.changes(stored)
     assert not got and now == stored and fresh.unreadable == ["a.md"]
+
+
+def test_a_change_that_lives_only_in_the_index_is_listed(repo):
+    """Mutant: `git diff <sha>` alone, which is work tree against the commit. A change
+    staged and then put back on disk, and an ignored file taken out of the index, differ
+    from the commit only in the index."""
+    _write(repo, ".gitignore", "cfg.local\n")
+    _write(repo, "cfg.local", "x\n")
+    _git(repo, "add", "-f", ".gitignore", "cfg.local")
+    _git(repo, "commit", "-qm", "ignored but tracked")
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, "a.py", "B\n")
+    _git(repo, "add", "a.py")
+    _write(repo, "a.py", "1\n")  # the work tree is back to the committed text
+    _git(repo, "rm", "--cached", "-q", "cfg.local")
+    assert C.changed_since(repo, base) == ["a.py", "cfg.local"]
