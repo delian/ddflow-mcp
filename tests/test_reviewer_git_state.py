@@ -89,3 +89,10 @@ def test_a_repository_the_tool_broke_is_a_change_not_a_pass():
     state = {"head": "a", "status": "b"}
     assert "unreadable" in git_state_change(state, None)
     assert git_state_change(None, state) == "" and git_state_change(state, state) == ""
+
+
+def test_git_state_sees_head_detached_at_the_same_commit(tmp_path):
+    repo = _repo_with_stash(tmp_path)
+    before = git_state(repo)
+    _git(repo, "checkout", "-q", "--detach")
+    assert git_state(repo) != before
