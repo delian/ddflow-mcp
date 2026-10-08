@@ -15,6 +15,7 @@ from ...core.tier import unknown_tier_notes
 from ...infra import worktree as W
 from ...services import configcompat as CC
 from ...services import repairs as RP
+from ...services.guidance import ruleview as RULEVIEW
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..refs import stale_references
@@ -297,8 +298,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
 
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
-    from ...services.guidance import ruleview as RULEVIEW
-
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     from ...infra import signals as SIG
 
