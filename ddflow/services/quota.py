@@ -31,7 +31,7 @@ import json
 import os
 import re
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -213,12 +213,18 @@ def store_path() -> Path:
     return Path(base) / "ddflow" / "quotas.json"
 
 
+_WINDOW_FIELDS = frozenset(f.name for f in fields(Window))
+
+
 def _from_dict(d: dict[str, Any]) -> Profile:
     return Profile(
         subject=d["subject"],
         unlimited=bool(d.get("unlimited", False)),
         unknown=bool(d.get("unknown", False)),
-        windows=tuple(Window(**w) for w in d.get("windows", [])),
+        windows=tuple(
+            Window(**{k: v for k, v in w.items() if k in _WINDOW_FIELDS})
+            for w in d.get("windows", [])
+        ),
         declared_by=d.get("declared_by", "agent"),
         at=d.get("at", ""),
         note=d.get("note", ""),
@@ -236,8 +242,12 @@ def load(path: Path | None = None) -> dict[str, Profile]:
         raise QuotaError(f"cannot read {path}: {exc}") from exc
     try:
         doc = json.loads(raw)
-        if doc.get("version") != STORE_VERSION:
-            raise QuotaError(f"{path}: unsupported version {doc.get('version')!r}")
+        version = doc.get("version")
+        # A NEWER store is read for the fields this version knows (D-compat): the rest is
+        # kept when this version writes. Refusing it would make a newer ddflow's quota
+        # file break every older one; only a version that is no version at all is refused.
+        if not isinstance(version, int) or isinstance(version, bool) or version < STORE_VERSION:
+            raise QuotaError(f"{path}: unsupported version {version!r}")
         out = {}
         for key, d in doc["profiles"].items():
             p = validate(_from_dict(d))
@@ -256,13 +266,38 @@ def load(path: Path | None = None) -> dict[str, Profile]:
         ) from exc
 
 
-def _dump(profiles: Iterable[Profile]) -> str:
+def _on_disk(path: Path) -> dict[str, Any]:
+    """The store as it is on disk, for what a newer ddflow put there; {} when absent or
+    unreadable (`load` has already refused an unreadable one before any write)."""
+    try:
+        doc = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _dump(profiles: Iterable[Profile], path: Path | None = None) -> str:
+    """The store text. With ``path``, keys this version does not know -- at the top and in
+    each profile -- and a newer ``version`` are carried over from what is on disk."""
+    old = _on_disk(path) if path is not None else {}
+    old_profiles = old.get("profiles") if isinstance(old.get("profiles"), dict) else {}
+    out: dict[str, Any] = {}
+    for p in sorted(profiles, key=lambda p: p.subject):
+        known = {k: v for k, v in p.to_dict().items() if k != "state"}
+        prev = old_profiles.get(p.subject)
+        extra = (
+            {k: v for k, v in prev.items() if k not in known and k != "state"}
+            if isinstance(prev, dict)
+            else {}
+        )
+        out[p.subject] = {**extra, **known}
+    version = old.get("version")
     doc = {
-        "version": STORE_VERSION,
-        "profiles": {
-            p.subject: {k: v for k, v in p.to_dict().items() if k != "state"}
-            for p in sorted(profiles, key=lambda p: p.subject)
-        },
+        **{k: v for k, v in old.items() if k not in ("version", "profiles")},
+        "version": version
+        if isinstance(version, int) and version > STORE_VERSION
+        else STORE_VERSION,
+        "profiles": out,
     }
     return json.dumps(doc, indent=2, sort_keys=True) + "\n"
 
@@ -283,7 +318,7 @@ def declare(profile: Profile, path: Path | None = None) -> tuple[Profile, Profil
                 f"cannot replace it -- ask the operator"
             )
         current[new.subject] = new
-        atomic_write(path, _dump(current.values()))
+        atomic_write(path, _dump(current.values(), path))
     return new, old
 
 
@@ -306,7 +341,7 @@ def forget(subject: str, by: str = "agent", path: Path | None = None) -> Profile
             )
         if old is not None:
             del current[subject]
-            atomic_write(path, _dump(current.values()))
+            atomic_write(path, _dump(current.values(), path))
     return old
 
 
