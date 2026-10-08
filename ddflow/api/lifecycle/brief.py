@@ -11,7 +11,6 @@ from ...core import clock
 from ...core import outcome as O
 from ...services import gates as G
 from ...services import leases as L
-from ...services.guidance.kinds import governing
 from .._base import _load
 from .heartbeat import _waiters
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
@@ -68,6 +67,7 @@ def brief(
     arrive without its having to suspect they exist.
     """
     from ...infra.store import Store
+    from ...services.guidance.kinds import governing
     from ...views import markdown as render_md
     from .planning import plan_for
 
