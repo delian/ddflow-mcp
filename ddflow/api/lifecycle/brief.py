@@ -11,6 +11,7 @@ from ...core import clock
 from ...core import outcome as O
 from ...services import gates as G
 from ...services import leases as L
+from ...services.guidance.kinds import governing
 from .._base import _load
 from .heartbeat import _waiters
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
@@ -66,7 +67,6 @@ def brief(
     Decisions reach the agent by GLOB rather than by search — the whole point is that they
     arrive without its having to suspect they exist.
     """
-    from ...core.schedule import conflicts
     from ...infra.store import Store
     from ...views import markdown as render_md
     from .planning import plan_for
@@ -117,12 +117,8 @@ def brief(
     decisions = []
     if item and item in st.items:
         target = st.items[item]
-        decisions = [
-            d
-            for d in st.decisions.values()
-            if d.live and d.globs and conflicts(target.globs, d.globs)
-        ]
-        decisions += [d for d in st.decisions.values() if d.live and not d.globs]
+        hits, wide = governing(st, target.globs)
+        decisions = hits + wide
 
     live = sorted(
         (m for m in st.memories.values() if m.live),
