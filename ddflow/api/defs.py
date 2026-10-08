@@ -161,8 +161,7 @@ def def_update(
     rec, refusal = _live(st, kind, rid, "def.updated")
     if refusal is not None:
         return refusal
-    fields = _logged(cfg, fields)
-    merged = {**rec.fields, **fields}
+    merged = _logged(cfg, {**rec.fields, **fields})
     merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
     digest = D.digest(merged)
     # None keeps the recorded provenance (under this author); a mapping replaces it.
