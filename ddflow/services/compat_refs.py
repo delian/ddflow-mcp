@@ -548,6 +548,12 @@ def rewrite(
     return done
 
 
+def resolve(repo: Path, rel: str) -> Path | None:
+    """The file a `Finding.path` names (a git hook is shown as ``<name> hook``); None when
+    that hook is gone."""
+    return _resolve(repo, rel)
+
+
 def _resolve(repo: Path, rel: str) -> Path | None:
     if rel.endswith(_HOOKS_SUFFIX):
         name = rel.removesuffix(_HOOKS_SUFFIX)
