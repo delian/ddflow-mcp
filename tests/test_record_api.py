@@ -349,3 +349,52 @@ def test_a_family_supplies_a_verb_of_its_own_and_the_rest_stay_generic(repo):
             verbs=("list",),
             ops={"add": own_list},
         )
+
+
+# -- findings of the reviews ---------------------------------------------------------------
+
+COUNTED = R.RecordKind(
+    name="counted",
+    def_kind="skill",
+    summary="",
+    fields=(
+        R.FieldSpec("title", required=True),
+        R.FieldSpec("count", "integer", required=True),
+        R.FieldSpec("live", "boolean", required=True),
+        R.FieldSpec("parts", "array", required=True),
+    ),
+    columns=("parts",),
+)
+
+
+def test_a_required_field_given_as_zero_false_or_an_empty_list_is_present(repo):
+    given = {"title": "t", "count": 0, "live": False, "parts": []}
+    assert R.record_add(repo, COUNTED, "c", given).exit == O.OK
+    for gone in ("count", "live", "parts", "title"):
+        short = {k: v for k, v in given.items() if k != gone}
+        out = R.record_add(repo, COUNTED, "d", short)
+        assert out.exit == O.FAIL and gone in out.reason, gone
+    assert R.record_add(repo, COUNTED, "d", {**given, "title": "  "}).exit == O.FAIL
+
+
+def test_revise_keeps_the_text_the_duplicate_check_and_search_read(repo, monkeypatch):
+    _add(repo, body="old words")
+    R.record_revise(repo, NOTE, "alpha", {"title": "fresh", "body": "brand new text"}, reason="r")
+    assert R.record_search(repo, NOTE, "brand new text").data["rows"][0]["id"] == "alpha"
+    from ddflow.api._base import _load
+
+    st = _load(repo)[2]
+    assert st.defs["skill:alpha"].fields["body"] == "brand new text"
+
+
+def test_exact_search_only_looks_at_the_first_characters_like_regex(repo):
+    _add(repo, "far", body="x" * R.MAX_SCAN + " needle")
+    assert R.record_search(repo, NOTE, "needle", mode="exact").exit == O.NOTHING
+    assert R.record_search(repo, NOTE, "needle", mode="regex").exit == O.NOTHING
+
+
+def test_an_array_in_a_row_is_cut_to_a_few_elements_and_counted(repo):
+    _add(repo, tags=[f"t{i}" for i in range(R.CELL_ITEMS + 30)])
+    tags = R.record_list(repo, NOTE).data["rows"][0]["tags"]
+    assert len(tags) == R.CELL_ITEMS + 1 and tags[-1] == "[+30 more]"
+    assert len(R.record_show(repo, NOTE, "alpha").data["fields"]["tags"]) == R.CELL_ITEMS + 30

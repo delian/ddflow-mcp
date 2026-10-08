@@ -52,6 +52,8 @@ DEFAULT_LIMIT = 25
 MAX_LIMIT = 1000
 #: Characters of one field kept in a list or search row.
 CELL_MAX = 120
+#: Elements of an array field kept in a list or search row (the rest is counted).
+CELL_ITEMS = 20
 #: History entries ``record_show`` returns (the newest).
 HISTORY_SHOWN = 20
 #: Characters of one record a regex or an exact search looks at (as `services.search`).
@@ -191,7 +193,10 @@ def _cell(value: Any) -> Any:
     if isinstance(value, str):
         return clip(" ".join(value.split()), CELL_MAX + len(_CUT), keep=CELL_MAX, marker=_CUT)
     if isinstance(value, list):
-        return [_cell(v) for v in value]
+        kept = [_cell(v) for v in value[:CELL_ITEMS]]
+        if len(value) > CELL_ITEMS:
+            kept.append(f"[+{len(value) - CELL_ITEMS} more]")
+        return kept
     return value
 
 
@@ -244,6 +249,13 @@ def _field_problem(spec: FieldSpec, value: Any) -> str:
     return ""
 
 
+def _absent(spec: FieldSpec, fields: Mapping[str, Any]) -> bool:
+    """Whether a required field is missing: not given, null, or an empty string. A zero, a
+    false and an empty list are values."""
+    value = fields.get(spec.name)
+    return value is None or (spec.type == "string" and not value.strip())
+
+
 def _checked(kind: RecordKind, fields: Mapping[str, Any], *, whole: bool) -> tuple[dict, str]:
     """``(fields as stored, "")`` or ``({}, why not)``. A whole record gets its defaults and
     must carry every required field; a partial one (an edit) only the ones it names, and a
@@ -264,7 +276,7 @@ def _checked(kind: RecordKind, fields: Mapping[str, Any], *, whole: bool) -> tup
         for spec in kind.fields:
             if spec.name not in out and spec.default is not None:
                 out[spec.name] = list(spec.default) if spec.type == "array" else spec.default
-        if missing := [s.name for s in kind.fields if s.required and not out.get(s.name)]:
+        if missing := [s.name for s in kind.fields if s.required and _absent(s, out)]:
             return {}, f"a {kind.name} needs {', '.join(missing)}"
     return out, ""
 
@@ -279,6 +291,11 @@ def _pre(kind: RecordKind, verb: str, repo: Path, **kw: Any) -> O.Outcome | None
         )
     fn = kind.ops.get(verb)
     return None if fn is None else fn(repo, kind, **kw)
+
+
+def _body(kind: RecordKind, fields: Mapping[str, Any]) -> str:
+    """The text the duplicate check reads beside the title."""
+    return _text(kind, {k: v for k, v in fields.items() if k != kind.title})
 
 
 def _text(kind: RecordKind, fields: Mapping[str, Any]) -> str:
@@ -386,7 +403,7 @@ def record_add(
         rid,
         stored,
         title=str(stored.get(kind.title, "")),
-        body=_text(kind, {k: v for k, v in stored.items() if k != kind.title}),
+        body=_body(kind, stored),
         answer=answer,
         agent=agent,
     )
@@ -464,6 +481,8 @@ def record_revise(
         rid,
         stored,
         source=prev.source,
+        title=str(stored.get(kind.title, "")),
+        body=_body(kind, stored),
         provenance={"revised": reason.strip()},
         agent=agent,
     )
@@ -480,7 +499,7 @@ def _scored(kind: RecordKind, recs: list[Any], query: str, mode: str) -> list[tu
         return [
             (1.0, r)
             for r, t in zip(recs, texts, strict=True)
-            if needle in " ".join(t.lower().split())
+            if needle in " ".join(t[:MAX_SCAN].lower().split())
         ]
     qtoks = textsim.tokens(query)
     if not qtoks:
