@@ -270,7 +270,7 @@ def run(sc: Scenario) -> None:
         sc.check("it created the queue directory", (sc.repo / ".ddflow").is_dir())
         sc.check(
             "it wrote the per-project instructions into AGENTS.md",
-            "DDFLOW:BEGIN" in (sc.repo / "AGENTS.md").read_text(),
+            "ddflow:begin rules/work-queue" in (sc.repo / "AGENTS.md").read_text(),
         )
         sc.check(
             "it installed the enforcement hook",
