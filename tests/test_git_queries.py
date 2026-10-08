@@ -294,3 +294,17 @@ def test_literal_files_refuses_an_exclude(forked):
 
     with pytest.raises(ValueError):
         G.files(forked, "all", exclude=(":(exclude)x",), literal=True)
+
+
+def test_diff_for_a_branch_whose_diff_fails_says_so(forked):
+    from types import SimpleNamespace
+
+    from ddflow.api import review as R
+
+    cfg = SimpleNamespace(worktree=SimpleNamespace(base_ref=""))
+    it = SimpleNamespace(worktree="", branch="", lease=None)
+    st = SimpleNamespace(items={"T1": it})
+    diff, how = R.diff_for(forked, cfg, st, "T1", base="main", branch="no-such-branch")
+    assert diff == "" and "could not be read" in how
+    diff, how = R.diff_for(forked, cfg, st, "T1", base="main", branch="work")
+    assert "committed.txt" in diff
