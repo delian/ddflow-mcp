@@ -198,3 +198,10 @@ def test_changed_since_counts_both_sides_of_a_rename(repo):
 def test_a_git_failure_is_unknown_never_unchanged(repo):
     assert C.changed_since(repo, "0" * 40) is None
     assert C.changed_since(repo / "docs" / "nope", "HEAD") is None
+
+
+def test_the_git_file_of_a_linked_worktree_is_not_content(tmp_path):
+    """Mutant: pruning `.git` only as a directory. A worktree or submodule has a `.git` FILE."""
+    _write(tmp_path, ".git", "gitdir: /elsewhere/.git/worktrees/x\n")
+    _write(tmp_path, "a.md", "1")
+    assert sorted(C.ChangeDetector(tmp_path).scan()) == ["a.md"]
