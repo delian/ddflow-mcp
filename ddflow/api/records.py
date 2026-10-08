@@ -271,6 +271,8 @@ def _checked(kind: RecordKind, fields: Mapping[str, Any], *, whole: bool) -> tup
             continue
         if problem := _field_problem(spec, value):
             return {}, problem
+        if spec.required and _absent(spec, {name: value}):
+            return {}, f"{name} is required: it cannot be blank"
         out[name] = list(value) if spec.type == "array" else value
     if whole:
         for spec in kind.fields:

@@ -395,3 +395,13 @@ def test_an_array_in_a_row_is_cut_to_a_few_elements_and_counted(repo):
     tags = R.record_list(repo, NOTE).data["rows"][0]["tags"]
     assert len(tags) == R.CELL_ITEMS + 1 and tags[-1] == "[+30 more]"
     assert len(R.record_show(repo, NOTE, "alpha").data["fields"]["tags"]) == R.CELL_ITEMS + 30
+
+
+def test_edit_cannot_blank_a_required_text_that_add_would_refuse(repo):
+    _add(repo)
+    for blank in ("", "   "):
+        out = R.record_edit(repo, NOTE, "alpha", {"title": blank})
+        assert out.exit == O.FAIL and "title" in out.reason, blank
+    assert R.record_show(repo, NOTE, "alpha").data["fields"]["title"] == "title of alpha"
+    R.record_edit(repo, NOTE, "alpha", {"body": "x"})
+    assert R.record_edit(repo, NOTE, "alpha", {"body": ""}).exit == O.OK  # optional: may be empty
