@@ -133,6 +133,7 @@ from .outcomes import (  # noqa: F401
 from .reviewers import (  # noqa: F401
     _BIG_UNTRACKED,
     _OURS,
+    _UNREADABLE,
     REVIEWER_GATES,
     _declared_family,
     _file_digest,
