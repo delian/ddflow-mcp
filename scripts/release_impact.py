@@ -12,13 +12,16 @@ inside a release block. This is the one place that turns those declarations into
                                                 since REF (default: the last release)
     release_impact.py next VERSION LEVEL        the version a release at LEVEL moves VERSION to
     release_impact.py candidate                 the version a release made now would be numbered
+                                                (the level it used is said on stderr)
     release_impact.py check [--base REF]        exit 1 when the declared __version__ is a smaller
                                                 step than the declared impact asks for
 
 "Gained since REF" is a comparison of the manifest at REF with the manifest now, ignoring the
 release an entry sits in: cutting a version moves fragments into a release block and must not
 make the same breaking entry count a second time (or never). The last release is the newest
-of the latest `release X.Y.Z` commit the publish workflow makes and the latest `v*` tag.
+of the latest `release X.Y.Z` commit the publish workflow makes, the latest `v*` tag and, for
+`candidate`, the commit that declared the published version (a hand release leaves no
+`release` commit).
 
 Stdlib only for `base` and `next` (`scripts/bump.sh` calls `next` with the system python); the
 manifest comparisons import `ddflow.services.upgrade_manifest`. It runs in CI before anything
@@ -232,7 +235,10 @@ def candidate(cwd: Path | None = None) -> tuple[str, str]:
     if base is None:
         return next_version(declared_version(cwd), PATCH), PATCH
     level = level_since(base[0], cwd)
-    return next_version(base[1], level), level
+    # Never below what is already declared and published: a tag of a maintenance line can be
+    # the newest ref in history and carry a LOWER version than main's.
+    start = max(base[1], declared_version(cwd), key=_vkey)
+    return next_version(start, level), level
 
 
 def check(ref: str | None = None, cwd: Path | None = None) -> tuple[bool, str]:

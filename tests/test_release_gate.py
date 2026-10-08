@@ -224,6 +224,17 @@ def test_a_candidate_steps_from_the_release_the_impact_was_measured_against(repo
     assert RI.candidate(repo) == ("0.7.0", "minor"), "the tag is the release it is measured from"
 
 
+def test_a_candidate_never_goes_below_the_declared_published_version(repo: Path) -> None:
+    commit(repo, "release 0.1.5")
+    declared(repo, "0.6.0")  # published by hand
+    commit(repo, "maintenance fix")
+    git(repo, "tag", "v0.5.1")  # a maintenance line's tag is newer in history, lower in number
+    assert RI.last_release(repo, published="0.6.0") == ("v0.5.1", "0.5.1")
+    assert RI.candidate(repo) == ("0.6.1", "patch"), "not 0.5.2: that would be a downgrade"
+    fragment(repo, "b", "breaking")
+    assert RI.candidate(repo) == ("0.7.0", "minor")
+
+
 def test_a_release_made_by_hand_is_the_base_even_without_a_release_commit(repo: Path) -> None:
     commit(repo, "release 0.1.5")
     fragment(repo, "b", "breaking")  # announced before the hand release below
