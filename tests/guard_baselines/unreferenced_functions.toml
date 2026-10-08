@@ -27,3 +27,7 @@ baseline = 5
 "ddflow/core/graph.py:transitive_reduction" = "B-rm-graph"
 # The upgrade manifest (B-upgrade.2-changes.1-manifest): the upgrade plan reads what changed
 # since a project's version; the release lint compares the running knobs with the replay.
+# Guidance enforcement (B-uni-guidance-enforce): the plumbing awaits P-decisions' callers,
+# which read waivers from the log and put review reminders in brief and doctor.
+"ddflow/services/guidance/waivers.py:approved_in" = "B-dec-waivers"
+"ddflow/services/guidance/review.py:reminders" = "B-dec-review"
