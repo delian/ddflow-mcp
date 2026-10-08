@@ -251,7 +251,9 @@ def test_a_burst_of_long_calls_is_capped_not_all_started(repo):
         _start(proc)
         ids = list(range(2, 3 + MAX_WORKERS))
         for rid in ids:
-            _send(proc, "tools/call", _call("ddflow_wait", item="P1.T1", timeout=300, poll=0.2), rid)
+            _send(
+                proc, "tools/call", _call("ddflow_wait", item="P1.T1", timeout=300, poll=0.2), rid
+            )
         busy = _frames(proc, {ids[-1]})
         assert [f["id"] for f in busy] == [ids[-1]], busy
         assert busy[0]["result"]["_meta"]["exit"] == 2
