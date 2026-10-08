@@ -45,6 +45,7 @@ from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
 from ..core.globs import overlap as globs_overlap
 from ..core.model import Lease, fold
+from ..core.outcome import FAIL, NOTHING, OK, Verdict
 from ..core.schedule import is_shared, shared_globs
 from ..infra import git as G
 from ..infra import proc as P
@@ -1297,7 +1298,7 @@ def environment_branch_commit(repo: Path, cfg: Config) -> str:
     )
 
 
-def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
+def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Verdict:
     """(exit_code, message). 0 allows the commit; 1 refuses it.
 
     Returns a *message*, not a print, so the same logic serves the hook, `doctor`, and
@@ -1307,19 +1308,19 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     env_mode = cfg.enforce.environment_commits
     env_msg = environment_branch_commit(repo, cfg) if env_mode != "off" else ""
     if env_msg and env_mode != "warn":
-        return 1, env_msg
+        return Verdict(FAIL, env_msg)
     code, msg = _check_lease(repo, cfg, agent=agent)
     if env_msg:
         msg = "\n\n".join(m for m in (env_msg + "\n\n(warning only)", msg) if m)
-    return code, msg
+    return Verdict(code, msg)
 
 
-def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]:
+def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     """The lease half of `check_commit`."""
     policy = getattr(cfg, "enforce", None)
     mode = getattr(policy, "commit_without_lease", "warn") if policy else "warn"
     if mode == "off":
-        return 0, ""
+        return Verdict(OK, "")
 
     staged = staged_paths(repo)
     if staged is None:
@@ -1329,7 +1330,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]
     paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
     paths = _merge_own_paths(_index_tree(repo), paths)
     if not paths:
-        return 0, ""
+        return Verdict(OK, "")
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     state = fold(log.read_all(), strict=False)
@@ -1354,7 +1355,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]
         p for p in paths if not is_shared(p, shared) and not any(path_in_glob(p, g) for g in mine)
     ]
     if not uncovered:
-        return 0, ""
+        return Verdict(OK, "")
 
     # A path another agent holds is the dangerous case and gets named separately: the
     # remedy is not "claim it", it is "stop".
@@ -1418,8 +1419,8 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]
     ]
     msg = "\n".join(lines)
     if mode == "warn":
-        return 0, msg + '\n\n(warning only; set the policy to "block" to refuse)'
-    return 1, msg
+        return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
+    return Verdict(FAIL, msg)
 
 
 def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | None:
@@ -1439,7 +1440,7 @@ def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | 
     return r.out_bytes if r.ok else None
 
 
-def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
+def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Verdict:
     """(exit_code, message) for B18: a staged generated view must be byte-identical to
     what the log regenerates now.
 
@@ -1469,7 +1470,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     cfg = cfg or Config.load(repo)
     mode = cfg.enforce.generated_views
     if mode == "off":
-        return 0, ""
+        return Verdict(OK, "")
     names = {name for name, _ in VIEWS}
     # Resolved once: the same tree for the listing, each staged view's bytes and the log.
     tree = _index_tree(repo)
@@ -1479,7 +1480,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     configured = {p for _d, p, _m in cfg.export.targets()}
     staged, exports = _staged_generated(repo, listed, names, tree, configured)
     if not staged and not exports:
-        return 0, ""
+        return Verdict(OK, "")
     noun = (
         "generated view or document"
         if staged and exports
@@ -1570,7 +1571,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
                 "    git add " + " ".join(shlex.quote(p) for p, _d, _w in bad),
             ]
     if not lines:
-        return 0, ""
+        return Verdict(OK, "")
     return _verdict(mode, lines)
 
 
@@ -1722,14 +1723,14 @@ def _wrong_exports(
     return "", bad
 
 
-def _verdict(mode: str, lines: list[str], knob: str = "generated_views") -> tuple[int, str]:
+def _verdict(mode: str, lines: list[str], knob: str = "generated_views") -> Verdict:
     msg = "\n".join([*lines, "", f'Policy is [enforce].{knob} = "{mode}" in .ddflow/config.toml.'])
     if mode == "warn":
-        return 0, msg + '\n\n(warning only; set the policy to "block" to refuse)'
-    return 1, msg
+        return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
+    return Verdict(FAIL, msg)
 
 
-def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
+def check_docs(repo: Path, cfg: Config | None = None) -> Verdict:
     """(exit_code, message) for B17: a commit that removes or renames an identifier, a
     file or a default must not leave a doc line naming the old one.
 
@@ -1742,7 +1743,7 @@ def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
     cfg = cfg or Config.load(repo)
     mode = cfg.enforce.stale_docs
     if mode == "off":
-        return 0, ""
+        return Verdict(OK, "")
     # The committing tree: the diff is this commit's, against that tree's own HEAD.
     from .shared_files import doc_exclude
 
@@ -1760,7 +1761,7 @@ def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
             "stale_docs",
         )
     if not hits:
-        return 0, ""
+        return Verdict(OK, "")
     names = sorted({h.name for h in hits})
     return _verdict(
         mode,
@@ -1924,9 +1925,7 @@ def _concludes_merge_of(here: Path, base: str) -> bool:
     return W.git(here, "merge-base", "--is-ancestor", base, head.out).ok
 
 
-def check_drift(
-    repo: Path, cfg: Config | None = None, *, here: Path | None = None
-) -> tuple[int, str]:
+def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = None) -> Verdict:
     """(exit_code, message) for B23: refuse a commit on a branch whose base changed the
     rules since it forked, and warn when it has fallen far behind.
 
@@ -1941,29 +1940,38 @@ def check_drift(
     cfg = cfg or Config.load(repo)
     e = cfg.enforce
     if e.stale_rules == "off" and e.behind == "off":
-        return 0, ""
+        return Verdict(OK, "")
     if e.behind != "off" and (not isinstance(e.max_behind, int) or e.max_behind < 1):
         # Refused, not read as "off": a 0 that quietly disabled the check would be the
         # silent-knob-drop class. Turning the check off is the policy knob's job. The
         # loader refuses it too; this catches a Config built in code.
-        return 1, (
-            f"ddflow: [enforce].max_behind = {e.max_behind!r} is invalid: it must be >= 1.\n"
-            'To stop the behind-count check, set [enforce].behind = "off" instead.'
+        return Verdict(
+            FAIL,
+            (
+                f"ddflow: [enforce].max_behind = {e.max_behind!r} is invalid: it must be >= 1.\n"
+                'To stop the behind-count check, set [enforce].behind = "off" instead.'
+            ),
         )
     here = here or _committing_tree(repo)
     if here is None:
-        return 0, (
-            "ddflow: could not tell which working tree this commit is in, so its drift "
-            "from the base branch was not checked.\n\n(warning only)"
+        return Verdict(
+            OK,
+            (
+                "ddflow: could not tell which working tree this commit is in, so its drift "
+                "from the base branch was not checked.\n\n(warning only)"
+            ),
         )
     d = drift(repo, here, cfg=cfg)
     if d.behind is None:
-        return 0, (
-            f"ddflow: could not tell whether this branch is behind `{d.base}`: {d.detail}\n"
-            "Its rulebooks were not compared, so this is NOT a pass.\n\n(warning only)"
+        return Verdict(
+            OK,
+            (
+                f"ddflow: could not tell whether this branch is behind `{d.base}`: {d.detail}\n"
+                "Its rulebooks were not compared, so this is NOT a pass.\n\n(warning only)"
+            ),
         )
     if d.behind == 0 or _concludes_merge_of(here, d.base):
-        return 0, ""
+        return Verdict(OK, "")
     code, parts = 0, []
     if d.rules and e.stale_rules != "off":
         c, m = _verdict(
@@ -1999,7 +2007,7 @@ def check_drift(
             "behind",
         )
         code, parts = max(code, c), [*parts, m]
-    return code, "\n\n".join(parts)
+    return Verdict(code, "\n\n".join(parts))
 
 
 def _rel(repo: Path, path: Path) -> str:
@@ -2085,7 +2093,7 @@ def _key(line: str) -> str:
     return line.split(":", 1)[0].strip().lstrip("#").strip()
 
 
-def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
+def check_forbidden_trailers(message: str, keys: list[str]) -> Verdict:
     """Refuse a message carrying any of `keys` as a `<key>:` line. `[enforce].forbidden_trailers`.
 
     A LINE scan, deliberately stricter than `check_item_trailer`'s use of git's parser:
@@ -2096,7 +2104,7 @@ def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
     """
     wanted = {k.strip().lower() for k in keys if k.strip()}
     if not wanted:
-        return 0, ""
+        return Verdict(OK, "")
     # A leading `#` does not make it a comment that git drops: `git commit -F` cleans up
     # with `whitespace`, which KEEPS `#` lines, so `#<key>: ...` landed in history
     # verbatim (rubber-duck on B-forbid-trailers). Refusing it in the editor route too,
@@ -2105,12 +2113,15 @@ def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
         {_key(ln) for ln in message.splitlines() if ":" in ln and _key(ln).lower() in wanted}
     )
     if not found:
-        return 0, ""
-    return 1, (
-        f"ddflow: this commit message carries {', '.join(f'`{k}:`' for k in found)}, which "
-        f"[enforce].forbidden_trailers refuses.\n\n"
-        f"Remove the line and commit again. Git runs this check for every agent and for "
-        f"`git commit -F`, the editor and merges alike."
+        return Verdict(OK, "")
+    return Verdict(
+        FAIL,
+        (
+            f"ddflow: this commit message carries {', '.join(f'`{k}:`' for k in found)}, which "
+            f"[enforce].forbidden_trailers refuses.\n\n"
+            f"Remove the line and commit again. Git runs this check for every agent and for "
+            f"`git commit -F`, the editor and merges alike."
+        ),
     )
 
 
@@ -2199,7 +2210,7 @@ def check_item_trailer(
     ids: Callable[[], set[str]],
     waivers: dict[str, list[str]] | None = None,
     merging: bool = False,
-) -> tuple[int, str]:
+) -> Verdict:
     """Require one of `keys` as a trailer naming a queue item (`Item: P1.T3`) in the
     commit MESSAGE. `(exit, message)`: 0 passes, 1 refuses, 2 could not check.
 
@@ -2226,14 +2237,17 @@ def check_item_trailer(
     paragraph, because git does not read it as a trailer there.
     """
     if merging:
-        return 0, ""
+        return Verdict(OK, "")
     canon = {k.lower(): k for k in keys}
     words = {k.lower(): list(v) for k, v in (waivers or {}).items()}
     trailers = _trailers(message)
     if trailers is None:
-        return 2, (
-            "ddflow: `git interpret-trailers --parse` failed, so this commit's item trailer "
-            "could not be checked. This is not a pass; check that `git` runs here."
+        return Verdict(
+            NOTHING,
+            (
+                "ddflow: `git interpret-trailers --parse` failed, so this commit's item trailer "
+                "could not be checked. This is not a pass; check that `git` runs here."
+            ),
         )
     # A key in `waivers` is accepted as well: the waiver map is what DECLARES a key that
     # marks a commit shipping no item, so `Phase-ships: none` satisfies the requirement
@@ -2252,12 +2266,15 @@ def check_item_trailer(
             f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`"
             for k in accepted
         )
-        return 1, (
-            f"ddflow: this commit has no {shown} trailer, and "
-            f"[enforce].require_item_trailer is on.\n\n"
-            f"Add a final line to the commit message, e.g.:\n"
-            f"    {accepted[0]}: {words.get(accepted[0].lower(), ['P1.T3'])[0]}\n\n"
-            f"It is what lets an audit match commits to queue items mechanically."
+        return Verdict(
+            FAIL,
+            (
+                f"ddflow: this commit has no {shown} trailer, and "
+                f"[enforce].require_item_trailer is on.\n\n"
+                f"Add a final line to the commit message, e.g.:\n"
+                f"    {accepted[0]}: {words.get(accepted[0].lower(), ['P1.T3'])[0]}\n\n"
+                f"It is what lets an audit match commits to queue items mechanically."
+            ),
         )
     bad: list[str] = []
     known: set[str] | None = None
@@ -2297,23 +2314,26 @@ def check_item_trailer(
             f"diagnoses the log."
         )
         if not bad:
-            return 2, why
+            return Verdict(NOTHING, why)
         bad.append("\n" + why)
     if not bad:
-        return 0, ""
-    return 1, (
-        "ddflow: this commit carries an item trailer that is not valid, and "
-        "[enforce].require_item_trailer is on:\n\n"
-        + "\n".join(bad)
-        + "\n\nThe trailer is what lets an audit match commits to queue items, so it must "
-        "carry the id of a phase or task that has not been removed (`ddflow show <id>` "
-        "checks one)."
-        + (
-            " A key that marks a commit shipping no item takes words instead of ids: "
-            "declare them in [enforce].trailer_waivers."
-            if unknown
-            else ""
-        )
-        + "\nFix the trailer and commit again; to fix one on a commit already made, "
-        "`git commit --amend`."
+        return Verdict(OK, "")
+    return Verdict(
+        FAIL,
+        (
+            "ddflow: this commit carries an item trailer that is not valid, and "
+            "[enforce].require_item_trailer is on:\n\n"
+            + "\n".join(bad)
+            + "\n\nThe trailer is what lets an audit match commits to queue items, so it must "
+            "carry the id of a phase or task that has not been removed (`ddflow show <id>` "
+            "checks one)."
+            + (
+                " A key that marks a commit shipping no item takes words instead of ids: "
+                "declare them in [enforce].trailer_waivers."
+                if unknown
+                else ""
+            )
+            + "\nFix the trailer and commit again; to fix one on a commit already made, "
+            "`git commit --amend`."
+        ),
     )

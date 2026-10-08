@@ -8,8 +8,9 @@ import tempfile
 import tomllib
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+from ...core.records import GateOutcome
 from ...infra import fsio
 from .. import cmdrunner
 from .defs import GateDef
@@ -331,7 +332,14 @@ def _account_for_drift(gdef: GateDef, cwd: Path, code: int, out: str, ev: dict[s
     return "failed"
 
 
-def classify_exit(gdef: GateDef, code: int, output: str) -> tuple[str, str]:
+class Classified(NamedTuple):
+    """A command gate's outcome and the reason for it ("" for a plain pass or fail)."""
+
+    outcome: GateOutcome
+    reason: str = ""
+
+
+def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     """`(outcome, reason)` for a command that RAN. The reason is "" for a plain pass/fail.
 
     The gate's declared exit codes and output patterns first, then the POSIX default.
@@ -339,25 +347,38 @@ def classify_exit(gdef: GateDef, code: int, output: str) -> tuple[str, str]:
     rule decides nothing, and guessing either way would be a verdict nobody gave.
     """
     if code in gdef.unavailable_exits:
-        return "unavailable", (
-            f"exit {code} is declared UNAVAILABLE for this gate (unavailable_exits): the "
-            f"tool could not do its job. NOT a failing check."
+        return Classified(
+            GateOutcome.UNAVAILABLE,
+            (
+                f"exit {code} is declared UNAVAILABLE for this gate (unavailable_exits): the "
+                f"tool could not do its job. NOT a failing check."
+            ),
         )
     if code in gdef.partial_exits:
-        return "partial", f"exit {code} is declared PARTIAL for this gate (partial_exits)"
+        return Classified(
+            GateOutcome.PARTIAL, f"exit {code} is declared PARTIAL for this gate (partial_exits)"
+        )
     if code != 0:
-        return "failed", ""
+        return Classified(GateOutcome.FAILED, "")
     try:
         if gdef.fail_output and re.search(gdef.fail_output, output, re.M):
-            return "failed", f"exit 0, but the output matches fail_output /{gdef.fail_output}/"
+            return Classified(
+                GateOutcome.FAILED,
+                f"exit 0, but the output matches fail_output /{gdef.fail_output}/",
+            )
         if gdef.require_output and not re.search(gdef.require_output, output, re.M):
-            return "unavailable", (
-                f"exit 0, but the output lacks require_output /{gdef.require_output}/: the "
-                f"tool did not demonstrably do its job. NOT a pass."
+            return Classified(
+                GateOutcome.UNAVAILABLE,
+                (
+                    f"exit 0, but the output lacks require_output /{gdef.require_output}/: the "
+                    f"tool did not demonstrably do its job. NOT a pass."
+                ),
             )
     except re.error as exc:
-        return "unavailable", f"gate {gdef.id!r} has an invalid output pattern ({exc})"
-    return "passed", ""
+        return Classified(
+            GateOutcome.UNAVAILABLE, f"gate {gdef.id!r} has an invalid output pattern ({exc})"
+        )
+    return Classified(GateOutcome.PASSED, "")
 
 
 #: The executable pre-flight and the shell-word list moved to the one CommandRunner; these

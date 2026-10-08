@@ -278,3 +278,43 @@ def test_the_exit_literal_scan_sees_every_spelling(line: str, tmp_path: Path, mo
     (pkg / "mod.py").write_text(line + "\n")
     monkeypatch.setattr(sys.modules[__name__], "PKG", pkg)
     assert _exit_literals() == ["mod.py:1"]
+
+
+# -- services return a named verdict, not a bare (int, str) -----------------------------
+
+
+def test_verdict_is_a_tuple_with_named_parts() -> None:
+    from ddflow.core.outcome import FAIL, Verdict
+
+    v = Verdict(FAIL, "why")
+    assert v == (1, "why") and (v.exit, v.message) == (1, "why")
+    assert Verdict(0) == (0, "")
+    code, msg = v
+    assert (code, msg) == (1, "why")
+
+
+def test_enforce_checks_return_verdicts(repo: Path) -> None:
+    from ddflow.services import enforce as E
+
+    for got in (
+        E.check_commit(repo),
+        E.check_views(repo),
+        E.check_docs(repo),
+        E.check_forbidden_trailers("s\n", []),
+    ):
+        assert type(got).__name__ == "Verdict" and got.exit in (0, 1, 2, 3)
+
+
+def test_enforce_names_its_exit_codes() -> None:
+    """No `return 1, msg`: a check's exit comes from core/outcome, so 2 cannot be typed as 0."""
+    text = (PKG / "services" / "enforce.py").read_text()
+    assert not re.findall(r"^\s*return [0-3], ", text, re.M)
+    assert "tuple[int, str]" not in text.replace("tuple[int, str] | None", "")
+
+
+def test_classify_exit_returns_gate_outcomes() -> None:
+    from ddflow.core.records import GateOutcome
+    from ddflow.services.gates import GateDef, classify_exit
+
+    got = classify_exit(GateDef(id="g"), 0, "")
+    assert got == ("passed", "") and got.outcome is GateOutcome.PASSED
