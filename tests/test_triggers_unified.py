@@ -256,10 +256,8 @@ def test_due_all_matches_the_old_hand_written_composition_over_the_grid(tmp_path
         old += CA.lessons_cadence(st, cfg)
         old += CA.export_cadence(tmp_path, cfg)
         old += SV.calendar_due(st, days, T0)
-        # the calendar evaluator reads the real clock; pin it by comparing the stable parts
-        got = CA.due_all(CA.DueContext(tmp_path, cfg, st, days))
-        assert [d["cadence"] for d in got] == [d["cadence"] for d in old], (tasks, phases, result)
-        assert [d for d in got if d["unit"] != "days"] == [d for d in old if d["unit"] != "days"]
+        got = CA.due_all(CA.DueContext(tmp_path, cfg, st, days, T0))
+        assert got == old, (tasks, phases, result)
 
 
 def test_a_new_evaluator_registers_by_name_and_is_listed_last(monkeypatch, tmp_path):
