@@ -309,3 +309,16 @@ def test_hooks_install_claude_over_a_newer_entry_exits_3(repo):
     code, out, err = run_cli(repo, "hooks", "install", "--claude")
     assert code == 3, out + err
     assert "upgrade ddflow to >= " in out + err
+
+
+def test_hooks_install_over_a_newer_commit_msg_hook_exits_3(repo):
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    E.install(repo)
+    hook = _hook(repo, "commit-msg")
+    hook.write_text(hook.read_text().replace(" fmt=1 ", " fmt=99 ", 1))
+    _hook(repo).unlink()  # pre-commit reinstalls at this level; commit-msg is refused
+    code, out, err = run_cli(repo, "hooks", "install")
+    assert code == 3, out + err
+    assert "upgrade ddflow to >= " in out + err

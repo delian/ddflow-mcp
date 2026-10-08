@@ -896,9 +896,10 @@ def _installed_hooks(E: Any, repo: Path, msg: str) -> O.Outcome:
     a hook a NEWER ddflow wrote is exit 3 (upgrade), any other REFUSED is a failure, the
     rest succeeded."""
     installed = E.installed(repo)
+    if E.NEWER_HINT in msg:  # the commit-msg hook's too: install() relabels it NOT INSTALLED
+        return O.refused("hooks", msg, message=msg, installed=installed)
     if msg.startswith("REFUSED"):
-        make = O.refused if E.NEWER_HINT in msg else O.failed
-        return make("hooks", msg, message=msg, installed=installed)
+        return O.failed("hooks", msg, message=msg, installed=installed)
     return O.ok("hooks", message=msg, installed=installed)
 
 
