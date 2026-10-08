@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from ddflow.infra.paths import templates_dir
+from ddflow.services import help as H
 from ddflow.services import overlay as O
 from ddflow.services import prompts as P
 from ddflow.services.export import registry as R
@@ -273,3 +274,61 @@ def test_export_eject_refusals_keep_their_exit_codes_and_words(tmp_path):
     with pytest.raises(T.ExportError) as e:
         T.eject(tmp_path, kind)
     assert e.value.code == 2 and "could not read" in str(e.value)
+
+
+# -- B-uni-overlay.4: help pages and workflow commands resolve on the loader ----------------
+
+
+def _old_page(base, sub, name, repo, label):
+    """The resolution `help._page` and `prompts.resolve_command` had before the loader."""
+    if repo:
+        local = repo / ".ddflow" / "prompts" / sub / f"{name}.md"
+        if local.is_file():
+            return ("project", local.read_text("utf-8"), local)
+    path = base / f"{name}.md"
+    assert path.is_file(), label
+    return ("builtin", path.read_text("utf-8"), path)
+
+
+@pytest.mark.parametrize("topic", sorted(H.TOPICS))
+def test_help_pages_resolve_as_before(topic, tmp_path):
+    for repo in (None, tmp_path):
+        got = H.resolve_topic(topic, repo)
+        assert (got.source, got.text, got.path) == _old_page(
+            H.help_dir(), "help", topic, repo, topic
+        )
+    (tmp_path / ".ddflow/prompts/help").mkdir(parents=True)
+    (tmp_path / ".ddflow/prompts/help" / f"{topic}.md").write_text("mine\n")
+    got = H.resolve_topic(topic, tmp_path)
+    assert (got.source, got.text) == ("project", "mine\n")
+
+
+@pytest.mark.parametrize("name", sorted(P.COMMANDS))
+def test_workflow_commands_resolve_as_before(name, tmp_path):
+    for repo in (None, tmp_path):
+        got = P.resolve_command(name, repo)
+        want = _old_page(P.command_dir(), "commands", name, repo, name)
+        assert (got.source, got.text, got.path, got.kind) == (*want, "command")
+    (tmp_path / ".ddflow/prompts/commands").mkdir(parents=True)
+    (tmp_path / ".ddflow/prompts/commands" / f"{name}.md").write_text("mine\n")
+    assert P.resolve_command(name, tmp_path).source == "project"
+
+
+def test_a_missing_shipped_help_page_or_command_keeps_its_sentence(tmp_path, monkeypatch):
+    monkeypatch.setattr(H, "help_dir", lambda: tmp_path / "none")
+    with pytest.raises(
+        P.TemplateError, match=r"^shipped help page cli\.md is missing from the package$"
+    ):
+        H._page("cli", None)
+    monkeypatch.setattr(P, "command_dir", lambda: tmp_path / "none")
+    with pytest.raises(P.TemplateError, match=r"^shipped command implement\.md is missing"):
+        P.resolve_command("implement", None)
+
+
+def test_an_undecodable_override_is_a_template_error_naming_the_file(tmp_path):
+    """Was a raw UnicodeDecodeError traceback; `prompts.resolve` already answered this way
+    (B-uni-overlay.2)."""
+    (tmp_path / ".ddflow/prompts/help").mkdir(parents=True)
+    (tmp_path / ".ddflow/prompts/help/cli.md").write_bytes(b"\xff\xfe")
+    with pytest.raises(P.TemplateError, match=r"could not read .*cli\.md"):
+        H.resolve_topic("cli", tmp_path)

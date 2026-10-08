@@ -141,7 +141,9 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
             "set_by": "" if not operator_set else source,
             "why": c.why,
             "effect": c.effect,
-            "action": OPERATOR if operator_set else (NOTE if kind == "knob_added" else AGENT),
+            "action": OPERATOR
+            if operator_set or (kind != "knob_added" and cfg.upgrade.config_changes == "operator")
+            else (NOTE if kind == "knob_added" else AGENT),
         }
         if kind == "knob_added":
             item["summary"] = f"new knob {key} (default {_short(new)}): {c.why}".rstrip(": ")
