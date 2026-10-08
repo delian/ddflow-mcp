@@ -137,6 +137,9 @@ class Ref:
     status: str = OK
     replacement: str = ""
     renamed: Renamed | None = None
+    #: Where each word of a command starts, so a rewrite replaces the words themselves and
+    #: keeps what stands between them (``gate  --force record``).
+    cols: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -206,7 +209,8 @@ def _command_at(line: str, at: int, vocab: Vocabulary) -> Ref | None:
         return None
     names = tuple(w for w, _ in words)
     status, replacement, renamed = vocab.resolve_command(names)
-    return Ref("command", " ".join(names), words[0][1], status, replacement, renamed)
+    cols = tuple(col for _, col in words)
+    return Ref("command", " ".join(names), words[0][1], status, replacement, renamed, cols)
 
 
 def refs_in(line: str, vocab: Vocabulary, *, code: bool) -> Iterator[Ref]:
@@ -427,9 +431,16 @@ def report(findings: Iterable[Finding]) -> tuple[list[str], list[str]]:
 
 
 def _apply_line(line: str, refs: list[Finding]) -> str:
+    """``line`` with each reference's deprecated words replaced, rightmost first so the
+    columns of the others stay true. Words keep what stood between them."""
     for f in sorted(refs, key=lambda f: -f.ref.start):
         r = f.ref
-        if line[r.start : r.start + len(r.text)] == r.text:
+        old, new = r.text.split(), r.replacement.split()
+        if r.kind == "command" and len(old) == len(new) == len(r.cols):
+            for col, was, now in reversed(list(zip(r.cols, old, new, strict=True))):
+                if was != now and line[col : col + len(was)] == was:
+                    line = line[:col] + now + line[col + len(was) :]
+        elif line[r.start : r.start + len(r.text)] == r.text:
             line = line[: r.start] + r.replacement + line[r.start + len(r.text) :]
     return line
 
