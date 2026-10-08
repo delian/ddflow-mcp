@@ -218,3 +218,32 @@ def test_forgetting_a_subject_of_a_newer_store_removes_it_and_keeps_the_rest(quo
     Q.forget("agent:h/a", "operator", quotas)
     doc = json.loads(quotas.read_text())
     assert doc["profiles"] == {} and doc["future_top"] == {"x": 1} and doc["version"] == 7
+
+
+def test_a_snapshot_in_use_is_touched(repo, monkeypatch):
+    log = L.EventLog(repo / ".ddflow" / "events")
+    path = log._snapshot_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"not a snapshot\n")
+    ago = time.time() - (L.SNAPSHOT_STALE_DAYS + 1) * 86400
+    os.utime(path, (ago, ago))
+    monkeypatch.setattr(L.EventLog, "_snapshot_enabled", lambda self: True)
+    log._load_snapshot()  # unreadable header: not touched
+    assert path.stat().st_mtime < time.time() - 86400
+    head = {
+        "format": L.SNAPSHOT_FORMAT,
+        "version": L.running_version(),
+        "fields": list(L._EVENT_FIELDS),
+        "parser": L._parser_stamp(),
+        "size": 2,
+        "sha256": L.D.content_digest(b"{}"),
+    }
+    import marshal
+
+    payload = marshal.dumps({})
+    head["size"], head["sha256"] = len(payload), L.D.content_digest(payload)
+    path.write_bytes(json.dumps(head).encode() + b"\n" + payload)
+    os.utime(path, (ago, ago))
+    L._SNAPSHOTS.pop(log.dir, None)
+    log._load_snapshot()
+    assert time.time() - path.stat().st_mtime < 60

@@ -86,6 +86,8 @@ SNAPSHOT_FILE = "read-snapshot.bin"
 #: write garbage-collects it. One snapshot per fingerprint (D-compat): worktrees on
 #: different ddflow versions stop overwriting each other's.
 SNAPSHOT_STALE_DAYS = 7.0
+#: A snapshot in use is touched at most this often (see `_touch_snapshot`).
+SNAPSHOT_TOUCH_S = 86400.0
 SNAPSHOT_FORMAT = 1
 #: A snapshot stores each event as a tuple in `Event`'s own field order, derived from the
 #: dataclass so the writer, the reader and the header cannot disagree about the layout.
@@ -1225,6 +1227,15 @@ class EventLog:
         key = D.content_digest(f"{running_version()}/{_parser_stamp()}".encode())[:16]
         return self.dir.parent / "local" / f"{stem}-{key}.bin"
 
+    def _touch_snapshot(self) -> None:
+        """Mark the snapshot as used (at most daily): reads never write it, so without this its
+        mtime says when it was written and a sibling checkout on other code would collect a
+        long-lived reader's snapshot as abandoned."""
+        path = self._snapshot_path()
+        with contextlib.suppress(OSError):
+            if time.time() - path.stat().st_mtime > SNAPSHOT_TOUCH_S:
+                os.utime(path)
+
     def _collect_stale_snapshots(self, mine: Path) -> None:
         """Remove the snapshots of other code untouched for `SNAPSHOT_STALE_DAYS`, and the
         pre-fingerprint `read-snapshot.bin` once it is that old. Best effort."""
@@ -1285,6 +1296,7 @@ class EventLog:
                 return entries
             # Only reached after the file's own sha256, size, ddflow version and parser
             # fingerprint matched (above): local machine state, never merged or fetched.
+            self._touch_snapshot()
             body = marshal.loads(payload)  # nosec B302
             order = body.pop("\0order", None)
             for name, (consumed, digest, skipped, tuples) in body.items():
