@@ -217,3 +217,41 @@ def test_a_disk_failure_while_saving_is_a_failure_not_a_snapshot_refusal(
     out = go(old, "hooks", backup="snapshot")
 
     assert out["exit"] == 1 and "[failed]" in out["text"] and "[refused]" not in out["text"]
+
+
+def test_what_git_cannot_hold_is_a_sidecar_that_the_tag_restore_puts_back(old: Path) -> None:
+    hook = old / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexec /nonexistent/ddflow hooks check-commit\n# ddflow-managed\n")
+    hook.chmod(0o755)
+    snap = BK.make_snapshot(old, [hook, old / DRIVER], "a", "b")
+
+    assert snap.local and snap.held == (DRIVER,)
+    assert BK.local_backups(old) == [], "a sidecar is not a restore point of its own"
+    assert BK.newest(old) == snap.tag
+    hook.write_text("changed\n")
+    (old / DRIVER).write_text("changed\n")
+
+    done = BK.restore(old, snap.tag)
+
+    assert hook.read_text().startswith("#!/bin/sh") and hook.stat().st_mode & 0o111
+    assert (old / DRIVER).read_text() != "changed\n"
+    assert set(done["restored"]) >= {DRIVER, ".git/hooks/pre-commit"}
+
+
+def test_backup_keep_also_bounds_snapshot_runs_and_restores(old: Path) -> None:
+    assert run_cli(old, "config", "--set", "upgrade.backup_keep", "1")[0] == 0
+    git(old, "add", "-A")
+    git(old, "commit", "-qm", "knob")
+    for n in range(3):
+        BK.make_backup(old, [old / DRIVER], "a", str(n))
+    assert len(BK.local_backups(old)) == 3
+
+    A.upgrade(old, restore="latest", agent="upgrader")
+
+    assert len(BK.local_backups(old)) == 1
+
+
+def test_the_backup_modes_the_service_accepts_are_the_knob_choices() -> None:
+    from ddflow.config import KNOB_CHOICES
+
+    assert UA.BACKUP_MODES == KNOB_CHOICES["upgrade.backup"]
