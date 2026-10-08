@@ -150,7 +150,11 @@ def period_days(value: Any) -> float | None:
     due (bug B1c68fe5e9c)."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    return float(value) if math.isfinite(value) and value > 0 else None
+    try:
+        days = float(value)
+    except OverflowError:  # an integer too large for a float (TOML integers are unbounded)
+        return None
+    return days if math.isfinite(days) and days > 0 else None
 
 
 def calendar(cfg) -> dict[str, float]:

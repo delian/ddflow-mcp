@@ -191,6 +191,18 @@ def test_the_calendar_engine_without_a_clock_uses_the_current_time():
     assert SV.calendar_due(just_now, {"x": 1.0}) == []
 
 
+def test_a_huge_integer_period_is_a_refusal_not_a_crash_in_a_schedule_file(tmp_path):
+    """Bug B51ee2f69f1: tomllib reads an arbitrary-precision integer, and float() of it raised
+    OverflowError out of `definitions()`, taking `schedule list` down with one bad file."""
+    (tmp_path / ".ddflow" / "schedules").mkdir(parents=True)
+    (tmp_path / ".ddflow" / "schedules" / "big.toml").write_text(
+        f'title = "Big"\nprompt = "p"\n[cadence]\nevery_days = {10**400}\n'
+    )
+    defs = SV.definitions(tmp_path, Config(), State())
+    assert "big" not in defs.jobs
+    assert any("every_days must be a number of days above 0" in e for e in defs.errors), defs.errors
+
+
 def test_the_operations_wrapper_and_the_schedule_engine_agree():
     from ddflow.api.operations import _calendar_due
 
@@ -199,12 +211,19 @@ def test_the_operations_wrapper_and_the_schedule_engine_agree():
     st = _calendar_state({"bug_hunt": ["2026-09-01T00:00:00Z"]})
     now = T0 + 8 * 86_400
     assert _calendar_due(st, cfg, now=now) == SV.calendar_due(st, SV.calendar(cfg), now)
+    # an explicit calendar overrides the config's, and nothing falls due that it does not name
+    assert _calendar_due(st, cfg, now=now, calendar={"other": 1.0}) == SV.calendar_due(
+        st, {"other": 1.0}, now
+    )
+    assert [d["cadence"] for d in _calendar_due(st, cfg, now=now, calendar={"other": 1.0})] == [
+        "other"
+    ]
 
 
 def test_one_predicate_decides_what_a_period_in_days_is():
     """`[cadence] every_days` (a `name=days` string) and a schedule's `cadence.every_days` (a
     JSON number) accept exactly the same periods: finite, above zero, not a bool."""
-    for bad in (0, -1, math.nan, math.inf, -math.inf, 1e309, True, None, "3"):
+    for bad in (0, -1, math.nan, math.inf, -math.inf, 1e309, 10**400, True, None, "3"):
         assert SV.period_days(bad) is None, bad
         assert SV.normalize({"cadence": {"every_days": bad}}, partial=True)[1], bad
     for text in ("0", "-1", "nan", "inf", "1e309", "x", ""):
