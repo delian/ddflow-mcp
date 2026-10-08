@@ -180,8 +180,13 @@ def run(
             continue
         # Read, decide and append under the log's lock: two agents migrating at once must
         # not both apply the same step.
-        with log.transaction():
-            outcome = _run_one(m, context(repo, log, cfg), backup)
+        try:
+            with log.transaction():
+                outcome = _run_one(m, context(repo, log, cfg), backup)
+        except (OSError, ValueError) as exc:
+            # A detector that raises: this migration is `failed`, and the ones that already
+            # ran keep their outcomes -- the loop goes on.
+            outcome = Outcome(m.id, FAILED, f"{type(exc).__name__}: {exc}")
         if outcome:
             out.append(outcome)
     return out
