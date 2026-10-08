@@ -149,6 +149,12 @@ def age_s(text: str, now: float | None = None, *, naive: Naive = "utc") -> float
     return (time.time() if now is None else now) - then
 
 
+#: The longest one `ddflow wait` may block, whoever asks (CLI or MCP). The client -- not
+#: ddflow -- decides when a call has hung, so a longer ask is shortened and says so; the
+#: caller that wants more waits again, which also re-checks that waiting is still the right
+#: move. Here, in the leaf both surfaces may import (they reach services only through api).
+WAIT_MAX_S = 1800
+
 #: Seconds per unit in a duration text (`parse_duration`).
 DURATION_UNITS: dict[str, int] = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 7 * 86400}
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)([smhdw]?)")

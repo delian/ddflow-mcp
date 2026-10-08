@@ -10,9 +10,9 @@ from typing import Any
 
 from ...core import globspec as GS
 from ...core import outcome as O
+from ...core.clock import WAIT_MAX_S
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
-from ...services.waits import MAX_WAIT_S as WAIT_MAX_S
 from .._base import _load
 from ._common import _require
 from .ready import DEFAULT_NEXT_KIND
