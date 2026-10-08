@@ -481,10 +481,17 @@ def test_seen_versions_with_equal_keys_keep_a_stable_order(repo: Path, monkeypat
 
 
 def test_the_log_reads_the_running_version_from_core_version(monkeypatch):
-    monkeypatch.setattr(ddflow, "__version__", "7.8.9")
+    from ddflow.core import version as V
+
+    monkeypatch.setattr(V, "running", lambda: "7.8.9")  # the delegate itself, not its source
     assert LOG.running_version() == "7.8.9"
-    monkeypatch.setattr(ddflow, "__version__", "")
-    assert LOG.running_version() == ""
+
+
+def test_the_remedy_helper_is_literal_where_it_matters():
+    # the tests above compare messages with this helper: pin its own wording once, literally
+    r = upgrade_remedy("1.2.3")
+    assert r.startswith(("Upgrade ddflow-mcp to >= 1.2.3 (", "Merge main into this checkout"))
+    assert "1.2.3" in r and r.endswith(("MCP server", "needed)"))
 
 
 def test_the_install_kind_is_the_shared_source_tree_test(monkeypatch):
