@@ -1871,3 +1871,6 @@
 {"agent":"U5","data":{"at":1791468265.9023647,"holder":"U5"},"id":"ecd7e50ed38542d5c3c7164ae","kind":"lease.renewed","lamport":41492,"schema":1,"subject":"B-uni-compat-json.3-tag","ts":"2026-10-08T14:04:26.009168Z"}
 {"agent":"U5","data":{"at":1791468269.4833858,"holder":"U5"},"id":"ed262b06da946eae7e0b6078e","kind":"lease.renewed","lamport":41493,"schema":1,"subject":"B-uni-compat-json.3-tag","ts":"2026-10-08T14:04:29.587910Z"}
 {"agent":"U5","data":{"at":1791468393.4830308,"holder":"U5"},"id":"e3f7f267f887fe75263b0e023","kind":"lease.renewed","lamport":41512,"schema":1,"subject":"B-uni-compat-json.3-tag","ts":"2026-10-08T14:06:33.584737Z"}
+{"agent":"U5","data":{"at":1791468518.8164475,"holder":"U5"},"id":"e0bb18b8deda5ff13b37f496c","kind":"lease.renewed","lamport":41530,"schema":1,"subject":"B-uni-compat-json.3-tag","ts":"2026-10-08T14:08:38.915464Z"}
+{"agent":"U5","data":{"at":1791468566.6247807,"holder":"U5"},"id":"ee07b01ef55ee699b3d5e8fbc","kind":"lease.renewed","lamport":41533,"schema":1,"subject":"B-uni-compat-json.3-tag","ts":"2026-10-08T14:09:26.722824Z"}
+{"agent":"U5","data":{"at":1791468642.5367754,"holder":"U5"},"id":"e448fd8d9c66e605f398f44ca","kind":"lease.renewed","lamport":41538,"schema":1,"subject":"B-uni-compat-json.3-tag","ts":"2026-10-08T14:10:42.640096Z"}
