@@ -148,6 +148,22 @@ TOOLS: dict[str, dict[str, Any]] = {
         "text": True,
         "kind": "gate.status",
     },
+    "ddflow_gate_list": {
+        "description": (
+            "The gates this project defines; with refuted=true, every gate recorded passed ON "
+            "REFUTATION (its findings refuted with probes rather than a clean re-review), for "
+            "the operator's spot-check."
+        ),
+        "properties": {
+            "refuted": ("boolean", "List the gates passed on refutation instead.", False)
+        },
+        "api": lambda repo, a, agent: _api().gate_list(
+            repo, refuted=bool(a.get("refuted")), agent=agent
+        ),
+        "payload": "text",
+        "text": True,
+        "kind": "gate.list",
+    },
     "ddflow_gate_run": {
         "description": (
             "Execute a command gate (tests, linters) and record the result "
@@ -313,6 +329,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "bugs_closed",
             "umbrellas_completed",
             "umbrella_refused",
+            "passed_on_refutation",
         ),
     },
     "ddflow_merge": {

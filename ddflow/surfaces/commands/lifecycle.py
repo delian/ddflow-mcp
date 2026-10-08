@@ -272,6 +272,7 @@ def cmd_complete(a, c: Ctx) -> int:
         + (f" as {a.sha}" if a.sha else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
         + _waiting(out.data.get("woke", []), "woke:")
+        + _refuted_text(out.data)
         + (f"\n{out.data['progress']}" if out.data.get("progress") else ""),
         out.body(
             (
@@ -287,6 +288,7 @@ def cmd_complete(a, c: Ctx) -> int:
                     k
                     for k in (
                         "export_refresh",
+                        "passed_on_refutation",
                         "progress",
                         "umbrellas_completed",
                         "umbrella_refused",
@@ -297,6 +299,13 @@ def cmd_complete(a, c: Ctx) -> int:
         ),
     )
     return OK
+
+
+def _refuted_text(data: dict) -> str:
+    """The completion's gates passed on refutation (D-unify 5), one line each."""
+    return "".join(
+        f"\nPASSED ON REFUTATION: {line}" for line in data.get("passed_on_refutation", [])
+    )
 
 
 def cmd_abandon(a, c: Ctx) -> int:
