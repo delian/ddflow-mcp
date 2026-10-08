@@ -424,9 +424,10 @@ canonical = _digest.canonical
 
 
 def canonical_digest(obj: Any, *, size: int = 12) -> str:
-    """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id, and a
-    definition record's content digest (`core.defs`). One hash for both, so the same
-    content always reads as the same digest."""
+    """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id. A
+    definition's content digest (`core.defs.digest`) is the same hash of the fields with
+    their redaction markers normalized; this spelling, unnormalized, is
+    `core.defs.legacy_digest` (what records written before that carry)."""
     return _digest.of_obj(obj, size=size)
 
 

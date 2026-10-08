@@ -39,6 +39,10 @@ def test_every_marker_spelling_is_one_token(marker):
     assert D.normalize_markers(f"key: {marker} here") == f"key: {D.REDACTED} here"
 
 
+def test_the_redactor_and_the_digests_read_one_marker_grammar():
+    assert R._MARKER is D.MARKER
+
+
 def test_the_markers_the_redactor_writes_are_all_normalized():
     for kind in ("secret", "host", "home", "ip", "name"):
         assert D.normalize_markers(R._marker(kind)) == D.REDACTED
@@ -63,8 +67,16 @@ def test_the_text_digest_agrees_across_redaction_profiles_case_and_whitespace():
     assert a != textsim.digest("token leaks", "the key is [REDACTED] see host elsewhere")
 
 
-def test_a_changed_text_digest_makes_the_index_re_derive():
-    assert textsim.VERSION >= 2  # the digest changed: a stored index is stale
+def test_an_index_built_before_the_digest_changed_is_stale(repo, log, cfg, monkeypatch):
+    from ddflow.infra.store import Store
+
+    log.append("phase.added", "P1", {"title": "p"})
+    st = Store(repo, cfg)
+    with monkeypatch.context() as m:
+        m.setattr(textsim, "VERSION", textsim.VERSION - 1)  # an index of the previous digest
+        st.rebuild(log)
+        assert not st.stale(log)
+    assert st.stale(log)  # the running code's digest differs: the index re-derives
 
 
 # -- the definition digest -------------------------------------------------------------
