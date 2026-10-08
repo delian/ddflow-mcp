@@ -23,12 +23,13 @@ from ...core import clock
 from ...core.events import Event
 from ...core.graph import closure
 from ...core.model import Bug, Item, State, fold
+from ...core.outcome import NOTHING, REFUSED
 
 T = TypeVar("T")
 
 #: Exit codes (the CLI maps these; the library only raises).
-EXIT_UNAVAILABLE = 2  # could not run: the log or git could not be read
-EXIT_REFUSED = 3  # refused: bad filter, unsafe path, hand-edited file, ...
+EXIT_UNAVAILABLE = NOTHING  # could not run: the log or git could not be read
+EXIT_REFUSED = REFUSED  # refused: bad filter, unsafe path, hand-edited file, ...
 
 
 class ExportError(Exception):
