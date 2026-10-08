@@ -193,3 +193,14 @@ def test_unavailable_after_apply_is_failed_not_unavailable(old: Path) -> None:
     M.register(replace(TOY, verify=verify))
     out = M.run(old, EventLog(old, "migrator"), Config.load(old))
     assert out[0].status == "failed" and "could not be confirmed" in out[0].detail
+
+
+def test_unavailable_before_apply_writes_is_unavailable(old: Path) -> None:
+    def apply(ctx: M.Context, found: list[M.Finding]) -> list[M.Corrective]:
+        raise M.Unavailable("git missing")
+
+    M.register(replace(TOY, apply=apply))
+    before = (old / "notes.txt").read_bytes()
+    out = M.run(old, EventLog(old, "migrator"), Config.load(old))
+    assert [o.status for o in out] == ["unavailable"] and "git missing" in out[0].detail
+    assert (old / "notes.txt").read_bytes() == before
