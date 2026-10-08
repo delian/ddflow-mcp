@@ -45,6 +45,7 @@ from ..core.globs import match as glob_match
 from ..core.ids import free
 from ..core.model import DONE, OPEN
 from ..core.schedule import is_external
+from ..core.slug import slug as _slug
 from ..infra import git as G
 from ..infra.log import EventLog
 
@@ -752,12 +753,6 @@ class ImportPlan:
         for f in self.found:
             out[f.kind] = out.get(f.kind, 0) + 1
         return out
-
-
-def _slug(text: str, limit: int = 48) -> str:
-    s = re.sub(r"[^\w\s-]", "", text.lower()).strip()
-    s = re.sub(r"[\s_-]+", "-", s)
-    return s[:limit].strip("-") or "item"
 
 
 def _files(repo: Path, globs: tuple[str, ...]) -> list[Path]:
