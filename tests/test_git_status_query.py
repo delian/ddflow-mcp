@@ -273,8 +273,19 @@ def test_onboard_status_separates_work_from_ignored_and_skips_caches(work):
     assert onboard._status(work / "nope")[0] is False
 
 
-def test_a_snapshot_backup_refuses_a_tree_git_cannot_read(tmp_path):
+def test_a_snapshot_backup_refuses_a_tree_whose_status_git_cannot_read(work, monkeypatch):
     from ddflow.services import backups
 
+    _commit(work, **{"a.txt": "a\n"})
+    backups._require_clean(work)  # a clean tree passes
+    monkeypatch.setattr(backups.git, "status", lambda *a, **k: None)
     with pytest.raises(backups.SnapshotRefused):
-        backups._require_clean(tmp_path)
+        backups._require_clean(work)
+
+
+def test_a_status_may_run_as_long_as_any_other_git_call():
+    """Mutant: the listing timeout (60 s) on a call that used to get the git default (300 s)."""
+    import inspect
+
+    for fn in (G.status_run, G.status):
+        assert inspect.signature(fn).parameters["timeout"].default == G.GIT_TIMEOUT

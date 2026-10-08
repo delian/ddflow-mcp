@@ -37,8 +37,6 @@ from .jobs import alive
 _LOCK_PID = re.compile(r"\bpid[ =:]*(\d+)\b", re.I)
 #: How many unmerged commits/subjects the report quotes before summarising.
 _EXAMPLES = 3
-#: Porcelain v1 puts the status letters and a space in front of the path.
-_XY_WIDTH = 3
 #: Directory names that are disposable caches. The prompt says a worktree is unmerged
 #: by "anything beyond caches", and nearly every tree here has a `.venv` or a
 #: `__pycache__`; anything untracked or ignored that is NOT one of these is work.
