@@ -180,6 +180,7 @@ def test_the_cli_names_the_suites_to_rerun_and_json_carries_the_same_body(repo):
     assert "Read what you delete" in stdout
     code, stdout, _ = run_cli(repo, "--json", "pins", "RULES.md")
     body = json.loads(stdout)
+    assert body.pop("schema") == "pins@1"
     assert body == pins(repo, "RULES.md").body()
 
 
