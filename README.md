@@ -1299,7 +1299,7 @@ silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, 
 counts such gates (`refuted_passes` in `--json`), the brief names those of unfinished
 items, `complete` prints a `PASSED ON REFUTATION:` line for each (`refuted_passes` in its result), and `ddflow gate list --refuted` (MCP `ddflow_gate_list` with
 `refuted=true`) lists every one for the operator to spot-check. Without `--refuted`, `gate
-list` lists the gates the project defines. A finding still without a verdict holds the gate where it is,
+list` lists the gates the project defines. A gate whose findings were ALL confirmed (and fixed), none refuted, is recorded `passed` too but is not flagged: `gate status` shows `-- findings fixed` and `gate list --refuted` leaves it out; a mix of refuted and confirmed is flagged with both counts. A finding still without a verdict holds the gate where it is,
 and the triage output says so: settle it, or ask the operator for one more round
 (`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
 never passed this way; a re-review settles it.
@@ -4656,8 +4656,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=77dfc076969f -->
-<details><summary>All 110 MCP tools: 32 in the `core` tier, 45 more in `standard`, 33 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=7f0f7c51cb58 -->
+<details><summary>All 111 MCP tools: 32 in the `core` tier, 46 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -4707,6 +4707,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
+| Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate recorded passed ON REFUTATION (its findings… |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
 | Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
 | Gates and review | `ddflow_gate_skip` | core | Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. |
@@ -5259,6 +5260,17 @@ part that matters.
   next `pre-commit install` would discard the edit): it advises a `repo: local` hook in
   `.pre-commit-config.yaml` (`ddflow precommit` proposes it), says nothing needs installing
   when the framework already runs ddflow's check, and `--force` replaces the generated hook.
+* **Hooks say which ddflow wrote them.** A git hook, a Claude/Gemini hook command and the
+  frozen-files block `onboard` adds to `.pre-commit-config.yaml` are each a stamped
+  region (`# ddflow:begin hooks/pre-commit ddflow=<version> fmt=<level> sha=<digest>` ...
+  `# ddflow:end ...`; the Claude/Gemini command carries its markers as shell comments).
+  `hooks install` refreshes the region and keeps every line around it; an older ddflow
+  refuses (`upgrade ddflow to >= X`) to rewrite one a newer format level wrote, and a region
+  you edited by hand is copied to `.ddflow/backups/` first. A git hook written before the stamp
+  (it carries only the `# DDFLOW-HOOK v1` line, which the region keeps for older ddflow
+  versions) is still ddflow's and, as it always was, is replaced whole (lines you added to
+  one are not kept; add them after upgrading). `hooks uninstall` removes the
+  region and leaves your own lines.
 * **Hooks find ddflow when they run, and fail open.** The git hooks and the Claude/Gemini
   hook commands record the launcher that installed them, but try it only first: if that
   script or interpreter no longer exists or is no longer executable (a deleted venv, an uninstalled tool, a removed

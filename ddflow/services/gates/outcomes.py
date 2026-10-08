@@ -106,6 +106,17 @@ def on_refutation(it, gate: str) -> dict[str, Any] | None:
     return flag if isinstance(flag, dict) else None
 
 
+def _pass_mark(it, gate: str) -> str:
+    """The suffix a gate's triage line carries: its flagged pass on refutation, or a pass
+    on findings that were all confirmed and fixed (B1396d7bd55), else nothing."""
+    if on_refutation(it, gate):
+        return " -- PASSED ON REFUTATION"
+    rec = it.gates.get(gate)
+    if rec is not None and rec.outcome == "passed" and (rec.evidence or {}).get("findings_fixed"):
+        return " -- findings fixed"
+    return ""
+
+
 def refuted_passes(state: State, item_ids: Iterable[str] | None = None) -> list[dict[str, Any]]:
     """Every gate recorded passed ON REFUTATION, for the operator's spot-check (D-unify 5):
     one row per (item, gate) with the flag's own counts and rounds. ``item_ids`` narrows it
@@ -165,9 +176,7 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         rows=rows,
         silent=[g for g, o in rows if not o],
         triage={
-            g: triage_line(c) + (" -- PASSED ON REFUTATION" if on_refutation(it, g) else "")
-            for g, _o in rows
-            if (c := triage_counts(it, g))
+            g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))
         },
         rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
     )

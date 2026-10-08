@@ -71,8 +71,23 @@ def _expected_files() -> dict[str, dict]:
     }
 
 
+def _unstamped(command: str) -> str:
+    """The command line inside the stamped region every ddflow hook command is written as
+    (B-uni-compat-artifacts.4): the stamp is asserted here, the pins below are about the line."""
+    lines = command.rstrip("\n").split("\n")
+    assert lines[0].startswith("# ddflow:begin hooks/") and " fmt=" in lines[0], command
+    assert lines[-1].startswith("# ddflow:end hooks/"), command
+    return "\n".join(lines[1:-1])
+
+
 def _read(repo: Path, rel: str) -> dict:
-    return json.loads((repo / rel).read_text("utf-8"))
+    data = json.loads((repo / rel).read_text("utf-8"))
+    for groups in data.get("hooks", {}).values():
+        for group in groups:
+            for hook in group["hooks"]:
+                if "# ddflow:begin" in hook["command"]:
+                    hook["command"] = _unstamped(hook["command"])
+    return data
 
 
 def test_install_writes_the_pinned_commands_events_and_matchers(repo: Path) -> None:
