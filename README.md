@@ -1273,8 +1273,12 @@ ddflow review T1 --gate critic --force --reason "..."   # one more round; the re
 the `review triage` that gives the gate's LAST finding a verdict records the gate `passed`
 itself: the review's own evidence and reviewer, plus `passed_on_refutation` (how many
 findings were refuted and confirmed, and the rounds used). The pass is flagged, never
-silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, so the
-operator can spot-check it. A finding still without a verdict holds the gate where it is,
+silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, `status`
+counts such gates (`passed_on_refutation` in `--json`), the brief names those of unfinished
+items, `complete` prints a `PASSED ON REFUTATION:` line for each (`passed_on_refutation`
+in its result), and `ddflow gate list --refuted` (MCP `ddflow_gate_list` with
+`refuted=true`) lists every one for the operator to spot-check. Without `--refuted`, `gate
+list` lists the gates the project defines. A finding still without a verdict holds the gate where it is,
 and the triage output says so: settle it, or ask the operator for one more round
 (`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
 never passed this way; a re-review settles it.
@@ -4593,16 +4597,16 @@ previous one turned out to be too shallow:
 
 A fourth ratchet bounds the cost of that surface: the whole tool list is sent to the model
 on every session, so `tests/test_mcp_tool_budget.py` fails if the compact `tools/list`
-exceeds its byte budget (about 91 KB for 92 tools, down from 119 KB) or if the shared
+exceeds its byte budget (about 95 KB for 111 tools, down from 119 KB) or if the shared
 `as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
 Their full text lives once, in `ddflow_identify` and the handshake instructions.
 
-**Tool tiers.** A client that loads every tool schema up front still pays that ~91 KB, so
+**Tool tiers.** A client that loads every tool schema up front still pays that ~95 KB, so
 `[mcp].tools = "core" | "standard" | "all"` (env `DDFLOW_MCP_TOOLS`; default `all`) chooses
-which tools `tools/list` advertises: `core` is 32 tools, 38 KB (the daily loop: brief, next,
+which tools `tools/list` advertises: `core` is 32 tools, 34 KB (the daily loop: brief, next,
 claim, heartbeat, gates, complete, merge, status, show, recall, bugs, lessons, decisions,
 sessions, identify, task add/update, wait, review, help, pr sync, similar, setup), `standard`
-is 64 tools, 66 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
+is 78 tools, 70 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
 before. It is a start-time choice and only about what is listed: a tool outside the tier is
 **still callable by name**, `ddflow_help` and the connection instructions say what the tier
 hides and how to widen it, and `listChanged` stays false, so change the knob and restart the
@@ -4644,6 +4648,7 @@ ddflow heartbeat <id>           renew a lease
 ddflow release <id>             give it up
 
 ddflow gate status <id>         pipeline position + the next gate's instruction
+ddflow gate list [--refuted]    the defined gates; --refuted: every gate passed on refutation (spot-check)
 ddflow gate run <id> <gate>     execute a command gate, record its evidence
 ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model, --reviewer-model, --reviewed-sha)
 ddflow gate skip <id> <gate>    skip, with a mandatory reason

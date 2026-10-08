@@ -11,6 +11,7 @@ from ...core.events import version_key
 from ...core.model import fold
 from ...core.plain import plain
 from ...infra.log import EventLog
+from ...services import gates as G
 from ...views.markdown import may_hold_work
 from .._base import _load
 
@@ -198,6 +199,13 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         ]
     if st.skipped_kinds:
         data["skipped_kinds"] = dict(st.skipped_kinds)
+    flagged = G.refuted_passes(st)
+    if flagged:  # D-unify 5: a pass on refutation is always visible; absent when there is none
+        data["passed_on_refutation"] = {
+            "gates": len(flagged),
+            "items": len({r["item"] for r in flagged}),
+            "list": "ddflow gate list --refuted",
+        }
     if st.highest_version:
         # Which ddflow versions have worked on this log, and the highest (the version stamp).
         data["ddflow_version"] = {
@@ -228,6 +236,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "decisions": len(live_decisions),
         "lessons": len(st.lessons),
         "open_bugs": len(open_bugs),
+        "refuted": len(flagged),
     }
     return O.ok("status", **data)
 
