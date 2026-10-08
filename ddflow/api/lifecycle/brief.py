@@ -66,9 +66,10 @@ def brief(
     Decisions reach the agent by GLOB rather than by search — the whole point is that they
     arrive without its having to suspect they exist.
     """
-    from ...core.schedule import conflicts, plan
+    from ...core.schedule import conflicts
     from ...infra.store import Store
     from ...views import markdown as render_md
+    from .planning import plan_for
 
     log, cfg, _ = _load(repo, agent)
     store = Store(repo, cfg)
@@ -76,15 +77,7 @@ def brief(
     unknown = _unknown_phase(st, phase)
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")
-    from ...services.flowstate import limit_for
-
-    p = plan(
-        st,
-        cfg,
-        phase=phase,
-        agent=cfg.agent.id or log.agent_id,
-        parallel=limit_for(repo, cfg, st, log.read_all),
-    )
+    p = plan_for(repo, log, cfg, st, purpose="view", phase=phase)
     # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
     # ready item was headed "Current" for an agent that had just claimed another one --
     # it is the queue's pick, not the agent's work. Most recent claim first.

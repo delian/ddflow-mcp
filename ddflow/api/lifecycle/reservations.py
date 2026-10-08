@@ -201,8 +201,7 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
     files, and only when it is older than the claimant -- a strict order, so it cannot
     deadlock, and two waiters on disjoint files never see each other.
     """
-    from ...core import flow as CF
-    from ...core.schedule import conflicts, shared_globs
+    from ...core.admission import glob_conflict
     from ...services import waits as WT
 
     if cfg.lease.waiter_reservation_s <= 0:
@@ -212,7 +211,6 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
     except (OSError, ValueError, TypeError):
         return None  # advisory: an unreadable registry is no queue
     mine = next(((w.since, w.agent) for w in waiters if w.agent == me and w.item == it.id), None)
-    shared = shared_globs(cfg)
     for w in waiters:  # oldest first
         if (
             w.agent == me
@@ -226,10 +224,10 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
             continue
         if w.item in live:
             continue  # someone holds its item: the lease and glob checks speak for it
-        if w.item != it.id and not conflicts(globs, list(target.globs), shared):
-            continue
-        if CF.line_key(st, target, cfg) != CF.line_key(st, it, cfg):
-            continue
+        if w.item != it.id and not glob_conflict(
+            st, cfg, it, globs, against="offered", others=[target]
+        ):
+            continue  # no overlap, or a different release line (a different branch)
         # Reservation-aware too: a waiter held back by an even older one reserves nothing.
         # Terminates: asked as `w.agent`, only waiters OLDER than `w` stand ahead of it.
         if _claim_blocker(st, cfg, target, w.agent, live, now, repo=repo) is not None:
