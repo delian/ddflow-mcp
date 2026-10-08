@@ -10,7 +10,7 @@ from typing import Any
 from ...config import Config
 from ...core.digest import content_digest
 from ...core.model import State
-from ...infra import git as _git
+from ...infra import git as GIT
 from .defs import DEFAULT_GATES, GateDef
 
 
@@ -212,11 +212,11 @@ def git_state(where: Path | str) -> dict[str, str] | None:
     }
     state: dict[str, str] = {}
     for name, args in parts.items():
-        r = _git.run(where, *args, binary=True)
+        r = GIT.run(where, *args, binary=True)
         if not r.ok:
             return None
         state[name] = content_digest(r.out_bytes or b"", length=16)
-    state["untracked"] = _untracked_digest(where)
+    state["untracked"] = _untracked_content_digest(where)
     return state
 
 
@@ -224,10 +224,10 @@ def git_state(where: Path | str) -> dict[str, str] | None:
 _BIG_UNTRACKED = 256 << 20
 
 
-def _untracked_digest(where: Path | str) -> str:
+def _untracked_content_digest(where: Path | str) -> str:
     """A digest of the untracked (not ignored) files' CONTENTS: ``status`` lists their
     paths only and ``diff HEAD`` omits them, so a tool rewriting one would pass unseen."""
-    r = _git.run(
+    r = GIT.run(
         where, "ls-files", "--others", "--exclude-standard", "-z", "--", ".", _OURS, binary=True
     )
     names = r.paths() if r.ok else None
