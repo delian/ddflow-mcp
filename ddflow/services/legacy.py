@@ -33,7 +33,7 @@ from typing import Any
 from ..core.digest import hasher
 from ..infra.fsio import repo_rel
 from ..infra.tomlcfg import atomic_write, basic_string
-from .adopt import BEGIN, END, NATIVE_RULES, Refused
+from .adopt import NATIVE_RULES, Refused, block_marker
 from .enforce import UnreadableYaml, read_precommit_yaml
 
 #: Where the onboarding prompt looks for instructions that write an imported surface.
@@ -221,11 +221,9 @@ def scan(repo: Path, imported: Iterable[str], *, extra: Iterable[str] = ()) -> l
         text = path.read_text("utf-8", errors="replace")
         inside = False
         for number, line in enumerate(text.splitlines(), 1):
-            if BEGIN in line:
-                inside = True
-                continue
-            if END in line:
-                inside = False
+            marker = block_marker(line)
+            if marker:
+                inside = marker == "begin"
                 continue
             if inside:
                 continue

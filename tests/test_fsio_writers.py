@@ -26,11 +26,11 @@ def _tmp_leftovers(d: Path) -> list[str]:
 def test_the_managed_block_is_written_through_a_symlinked_rulebook(tmp_path):
     (tmp_path / "AGENTS.md").write_text("# Project\n\nown text\n")
     os.symlink("AGENTS.md", tmp_path / "CLAUDE.md")
-    section = f"{A.BEGIN}\nddflow block\n{A.END}"
+    section = A.BLOCK.render("ddflow block\n").strip()
     assert A._upsert_block(tmp_path / "CLAUDE.md", section) == "appended to CLAUDE.md"
     assert (tmp_path / "CLAUDE.md").is_symlink()
     assert (tmp_path / "AGENTS.md").read_text() == f"# Project\n\nown text\n\n{section}\n"
-    assert A._upsert_block(tmp_path / "CLAUDE.md", section.replace("ddflow", "new")) == (
+    assert A._upsert_block(tmp_path / "CLAUDE.md", A.BLOCK.render("new block\n").strip()) == (
         "updated the managed block in CLAUDE.md"
     )
     assert "new block" in (tmp_path / "AGENTS.md").read_text()

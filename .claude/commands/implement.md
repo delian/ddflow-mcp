@@ -2,8 +2,7 @@
 description: Drive the ddflow queue to completion, unattended — every gate, merged and completed, via /loop
 argument-hint: "[phase or task id] [guidance]"
 ---
-<!-- DDFLOW:MANAGED — `ddflow adopt` rewrites this file; delete this line to keep your own -->
-
+<!-- ddflow:begin commands/implement ddflow=0.2.0 fmt=1 sha=1bdea05cae69 -->
 Run `/loop` with no interval (self-paced) on this prompt, verbatim:
 
 > Drive this project's ddflow queue with the ddflow `implement` workflow command. Fetch it
@@ -16,3 +15,4 @@ Run `/loop` with no interval (self-paced) on this prompt, verbatim:
 
 The same command is also this server's MCP prompt, `/mcp__ddflow__implement`, for a single
 supervised pass without `/loop`.
+<!-- ddflow:end commands/implement -->

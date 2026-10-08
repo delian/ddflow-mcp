@@ -1245,17 +1245,22 @@ def setup(
             actions = refresh_docs(tree, docs_dir=plan.docs)
         except ValueError as exc:
             return O.failed("setup", str(exc), actions=[], agents=[], text="")
-        out = O.ok(
-            "setup",
-            actions=actions,
-            agents=adopted_agents(tree, docs_dir=plan.docs),
-            tree=str(tree),
-            refresh_docs=True,
-            companions_ready=[],
-            companions_absent=[],
-            text="",
-        )
+        from ..services.adopt import Refused
         from ..views import human as _human
+
+        data = {
+            "actions": actions,
+            "agents": adopted_agents(tree, docs_dir=plan.docs),
+            "tree": str(tree),
+            "refresh_docs": True,
+            "companions_ready": [],
+            "companions_absent": [],
+            "text": "",
+        }
+        refused = [a for a in actions if isinstance(a, Refused)]
+        # A file a NEWER ddflow wrote is refused (exit 3, "upgrade ddflow to >= X"); the
+        # rest was still refreshed, so the actions are reported in full.
+        out = O.refused("setup", "; ".join(refused), **data) if refused else O.ok("setup", **data)
 
         out.data["text"] = _human.render(out)
         return out

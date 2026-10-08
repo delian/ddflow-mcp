@@ -413,7 +413,9 @@ def test_toml_remove_keeps_comments_and_reports_whether_the_key_was_there() -> N
 def test_two_backups_in_one_clock_tick_get_their_own_directories(
     old: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(UA, "backup_name", lambda frm, to: "same-tick")
+    from ddflow.services import backups as BK
+
+    monkeypatch.setattr(BK, "backup_name", lambda frm, to: "same-tick")
     f = old / DRIVER
 
     first = UA.make_backup(old, [f], "", "9.9.9")

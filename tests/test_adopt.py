@@ -104,7 +104,7 @@ def test_cursor_gets_an_always_applied_project_rule(repo):
     body = text.split("---", 2)[2].strip()
     agents_md = (repo / "AGENTS.md").read_text()
     assert body.splitlines()[0] in agents_md
-    assert "DDFLOW:BEGIN" not in text, "the managed marker leaked into the .mdc"
+    assert "ddflow:begin" not in text, "the managed marker leaked into the .mdc"
 
 
 def test_adopt_is_idempotent(repo):
@@ -112,7 +112,7 @@ def test_adopt_is_idempotent(repo):
     first = (repo / "AGENTS.md").read_text()
     run_cli(repo, "adopt", "--agents", "claude,cursor")
     assert (repo / "AGENTS.md").read_text() == first
-    assert first.count("DDFLOW:BEGIN") == 1
+    assert first.count("ddflow:begin rules/work-queue") == 1
 
 
 def test_adopt_preserves_existing_mcp_servers(repo):
@@ -131,7 +131,7 @@ def test_adopt_keeps_the_users_own_prose(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     text = (repo / "AGENTS.md").read_text()
     assert "My own notes that must survive." in text
-    assert "DDFLOW:BEGIN" in text
+    assert "ddflow:begin rules/work-queue" in text
 
 
 def test_the_project_instruction_block_stays_short(repo):
@@ -139,7 +139,7 @@ def test_the_project_instruction_block_stays_short(repo):
     and a long second copy of that is a copy that drifts from the one actually read."""
     run_cli(repo, "adopt", "--agents", "claude")
     text = (repo / "AGENTS.md").read_text()
-    block = text.split("DDFLOW:BEGIN")[1].split("DDFLOW:END")[0]
+    block = text.split("ddflow:begin rules/work-queue")[1].split("ddflow:end rules/work-queue")[0]
     words = len(block.split())
     assert words < 400, f"the managed block has grown to {words} words"
     for must in ("ddflow_brief", "Claim before you edit", "unavailable", "Exit codes"):

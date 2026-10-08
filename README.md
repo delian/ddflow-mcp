@@ -533,9 +533,16 @@ files pinned by commit and sha256).
 
 ### What goes in AGENTS.md / CLAUDE.md
 
-`ddflow adopt` writes it as a managed block between `<!-- DDFLOW:BEGIN -->` and
-`<!-- DDFLOW:END -->`. Your own prose around it is preserved; re-running updates only
-what is inside. If you write it by hand, four things have to be in it:
+`ddflow adopt` writes it as a managed block between `<!-- ddflow:begin rules/work-queue
+ddflow=V fmt=N sha=H -->` and `<!-- ddflow:end rules/work-queue -->` (the version that wrote it,
+its format level and a digest of the body, so an older, newer or hand-edited block is told
+apart). Your own prose around it is preserved; re-running updates only what is inside. A block
+under the `DDFLOW:BEGIN`/`DDFLOW:END` markers older ddflow wrote is read as before and moved to
+the new ones the next time it is written; a block a newer ddflow wrote is refused (exit 3,
+"upgrade ddflow to >= X") instead of rewritten, and `ddflow adopt --refresh-docs` copies the
+files it is about to rewrite to `.ddflow/backups/` first. The `/implement` command file is a
+region of the same kind (`commands/implement`); delete its begin line to keep your own. If you
+write it by hand, four things have to be in it:
 
 1. **Start every session with `ddflow_brief`** (or `ddflow brief` in a shell).
 2. **Claim before you edit** — `ddflow_next` → `ddflow_claim` → work in the worktree
@@ -1603,7 +1610,7 @@ the agent chooses to follow it*. A rule that binds only when the model feels lik
 file is not an enforced rule.
 
 That means several copies of one text, and the answer is that **a check owns them**: one
-generator, a managed `DDFLOW:BEGIN`/`END` block in each, and `ddflow doctor` comparing every
+generator, a managed `ddflow:begin rules/work-queue` block in each, and `ddflow doctor` comparing every
 copy against the generator. Five kinds of break are reported and each fails `doctor`:
 
 ```console

@@ -76,7 +76,7 @@ def test_a_command_file_deleted_in_the_worktree_is_judged_there(repo):
     (tree / ".claude" / "commands" / "implement.md").unlink()
     p = _ddflow(tree, "adopt", "--agents", "claude", "--launch", "python")
     assert p.returncode == 0, p.stderr
-    assert "DDFLOW:MANAGED" in (tree / ".claude/commands/implement.md").read_text()
+    assert "ddflow:begin commands/implement" in (tree / ".claude/commands/implement.md").read_text()
     assert (repo / ".claude/commands/implement.md").read_text() == "the project's own\n"
 
 
