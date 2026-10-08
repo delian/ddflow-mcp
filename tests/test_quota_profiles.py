@@ -138,9 +138,10 @@ def test_a_corrupt_store_is_a_failure_never_no_quotas(repo, user_config):
     assert user_config.read_text() == "{not json", "a failed declare must not rewrite the store"
 
 
-def test_an_unknown_store_version_is_refused(repo, user_config):
+def test_a_store_with_no_usable_version_is_refused(repo, user_config):
+    """A NEWER version is read for what this one knows (tests/test_compat_derived.py)."""
     user_config.parent.mkdir(parents=True)
-    user_config.write_text(json.dumps({"version": 99, "profiles": {}}))
+    user_config.write_text(json.dumps({"version": "next", "profiles": {}}))
     assert A.quota_list(repo).exit == FAIL
 
 

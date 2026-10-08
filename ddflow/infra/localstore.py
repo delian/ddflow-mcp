@@ -145,18 +145,34 @@ class LocalStore:
 
     # -- documents ---------------------------------------------------------------------
 
-    def read(self, name: str, *, schema: int = 1, default: Any = None) -> Any:
+    def read(
+        self, name: str, *, schema: int = 1, default: Any = None, derived: bool = False
+    ) -> Any:
         """The value of the document `name`. Missing: `default` (only then). A document of a NEWER
         schema than `schema` raises `fsio.NewerContent` (it holds what this code cannot
-        interpret); one that cannot be read raises `StoreUnreadable`."""
-        doc = self._load(name, schema)
+        interpret); one that cannot be read raises `StoreUnreadable`.
+
+        ``derived=True`` marks a document that can be rebuilt from something else (a cache,
+        a queue of work that will be found again): one written by a NEWER schema is IGNORED,
+        read as missing, and replaced by the next write, instead of refused (D-compat). User
+        data (a quota, a decision) is never derived: it keeps the refusal."""
+        doc = self._load(name, schema, derived)
         return default if doc is None else doc.data
 
-    def write(self, name: str, data: Any, *, schema: int = 1, mode: int | None = None) -> None:
+    def write(
+        self,
+        name: str,
+        data: Any,
+        *,
+        schema: int = 1,
+        mode: int | None = None,
+        derived: bool = False,
+    ) -> None:
         """Replace the document `name` with `data` (atomically, under its lock). Refuses to
-        replace a document of a newer schema; keeps the envelope keys it does not know."""
+        replace a document of a newer schema (a ``derived`` one is replaced); keeps the
+        envelope keys it does not know."""
         with self.lock(name):
-            self._store(name, data, schema, mode)
+            self._store(name, data, schema, mode, derived=derived)
 
     def update(
         self,
@@ -166,16 +182,18 @@ class LocalStore:
         schema: int = 1,
         default: Any = None,
         mode: int | None = None,
+        derived: bool = False,
     ) -> Any:
         """Read-modify-write under the lock: `fn(current or default)` is the new value,
-        which is returned. Two agents updating at once both land."""
+        which is returned. Two agents updating at once both land. A ``derived`` document of
+        a newer schema is started afresh from ``default``."""
         with self.lock(name):
-            doc = self._load(name, schema)
+            doc = self._load(name, schema, derived)
             new = fn(default if doc is None else doc.data)
-            self._store(name, new, schema, mode, doc)
+            self._store(name, new, schema, mode, doc, derived=derived)
             return new
 
-    def _load(self, name: str, schema: int) -> Doc | None:
+    def _load(self, name: str, schema: int, derived: bool = False) -> Doc | None:
         path = self.path(name)
         try:
             text = path.read_text("utf-8")
@@ -196,6 +214,8 @@ class LocalStore:
         if not isinstance(found, int) or isinstance(found, bool):
             raise StoreUnreadable(path, f"schema {found!r} is not a number")
         if found > schema:
+            if derived:
+                return None  # a newer writer's cache: not ours to read, rebuilt on write
             fmt = raw.get("fmt")
             raise fsio.NewerContent(
                 str(path),
@@ -206,9 +226,16 @@ class LocalStore:
         return Doc(raw.get("data"), found, extra)
 
     def _store(
-        self, name: str, data: Any, schema: int, mode: int | None, known: Doc | None = None
+        self,
+        name: str,
+        data: Any,
+        schema: int,
+        mode: int | None,
+        known: Doc | None = None,
+        *,
+        derived: bool = False,
     ) -> None:
-        doc = known if known is not None else self._load(name, schema)  # raises on newer
+        doc = known if known is not None else self._load(name, schema, derived)  # raises on newer
         body: dict[str, Any] = {
             "schema": schema,
             "ddflow": __version__,
@@ -233,12 +260,13 @@ class LocalStore:
             lambda cur: [*_as_list(cur), item][-capacity:],
             schema=schema,
             default=[],
+            derived=True,  # a signal ring is re-sampled, never user data
         )
         return list(out)
 
     def ring(self, name: str, *, schema: int = 1) -> list[Any]:
         """The records of the ring `name`, oldest first."""
-        return list(_as_list(self.read(name, schema=schema, default=[])))
+        return list(_as_list(self.read(name, schema=schema, default=[], derived=True)))
 
     # -- the coalescing queue ----------------------------------------------------------
 
@@ -262,11 +290,11 @@ class LocalStore:
             }
             return q
 
-        return int(self.update(name, put, schema=schema, default={})[key]["count"])
+        return int(self.update(name, put, schema=schema, default={}, derived=True)[key]["count"])
 
     def queue_pending(self, name: str, *, schema: int = 1) -> dict[str, dict[str, Any]]:
         """Everything waiting, due or not, oldest first."""
-        q = self.read(name, schema=schema, default={})
+        q = self.read(name, schema=schema, default={}, derived=True)
         items = q.items() if isinstance(q, dict) else ()
         return dict(sorted(items, key=lambda kv: (kv[1].get("first_at", 0), kv[0])))
 
@@ -290,7 +318,7 @@ class LocalStore:
                     del q[key]
             return q
 
-        self.update(name, take, schema=schema, default={})
+        self.update(name, take, schema=schema, default={}, derived=True)
         return taken
 
     # -- housekeeping ------------------------------------------------------------------

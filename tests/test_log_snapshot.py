@@ -257,7 +257,7 @@ def test_an_unreadable_snapshot_location_does_not_break_the_read(repo):
     log = _log(repo)
     local = log.dir.parent / "local"
     local.mkdir(parents=True, exist_ok=True)
-    (local / L.SNAPSHOT_FILE).mkdir()  # a directory where the file should be
+    log._snapshot_path().mkdir()  # a directory where the file should be
     _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
     assert len(log.read_all()) == N
     clear_parse_cache()
