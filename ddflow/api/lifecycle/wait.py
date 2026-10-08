@@ -30,6 +30,17 @@ from .reservations import (
 #: waiting is still the right move.
 DEFAULT_WAIT_TIMEOUT_S = 600
 
+#: The longest one wait may block, whoever asks (CLI or MCP). The client -- not ddflow --
+#: decides when a call has hung, so a longer ask is shortened and says so; the caller that
+#: wants more waits again, which also re-checks that waiting is still the right move.
+WAIT_MAX_S = 1800
+
+
+def _note_cap(say, capped: bool) -> None:
+    """Tell the caller its wait was shortened to `WAIT_MAX_S`."""
+    if capped:
+        say(f"waiting at most {WAIT_MAX_S}s at a time; ask again to wait longer")
+
 
 def _judge_wait(
     st,
@@ -261,6 +272,8 @@ def wait(
     from ...services import waits as WT
 
     timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
+    capped = timeout > WAIT_MAX_S
+    timeout = min(timeout, float(WAIT_MAX_S))
     poll = WT.POLL_S if poll_s is None else float(poll_s)
     empty: dict[str, Any] = {
         "item": item,
@@ -285,6 +298,7 @@ def wait(
             return O.Outcome("wait", {**empty, **found.data}, found.exit, found.reason)
     me = cfg.agent.id or log.agent_id
     say = on_progress or (lambda _msg: None)
+    _note_cap(say, capped)
 
     def result(v: dict[str, Any], waited: float, freed: list[str]) -> O.Outcome:
         data = {
