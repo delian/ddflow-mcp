@@ -242,6 +242,11 @@ def test_every_cli_command_is_named_by_the_tool_that_serves_it():
     assert not unnamed, f"CLI commands whose --json schema name no tool carries: {unnamed}"
 
 
+def test_a_flag_after_the_terminator_selects_nothing():
+    assert R.command_for_path(("import",), {}, {}, ["import", "--verify"]) == "import_verify"
+    assert R.command_for_path(("import",), {}, {}, ["import", "--", "--verify"]) == "import"
+
+
 def test_parsed_path_resolves_an_alias_to_its_command():
     from ddflow.surfaces.cli import build_parser
 
