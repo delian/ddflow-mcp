@@ -25,6 +25,7 @@ from typing import TypeVar
 
 from ..config import Config
 from ..core.model import fold
+from ..infra import git as G
 from ..infra import worktree as W
 from ..infra.log import EventLog, effective_agent_id
 from . import cleanup as C
@@ -98,29 +99,15 @@ def _status(path: Path) -> tuple[bool, list[str], list[str]]:
     holding a `.env` or a hand-edited local file is exactly the tree that must not be
     removed (rubber_duck on f0d27314). A status that could not run is NOT clean.
     """
-    r = W.git(path, "status", "--porcelain", "-z", "--ignored=matching")
-    if not r.ok:
+    entries = G.status(path, ignored="matching")
+    if entries is None:
         return False, [], []
     work: list[str] = []
     ignored: list[str] = []
-    fields = r.out.split("\0")
-    index = 0
-    while index < len(fields):
-        entry = fields[index]
-        index += 1
-        if not entry.strip():
+    for e in entries:
+        if _is_cache(e.path):
             continue
-        code = entry[:2]
-        name = entry[_XY_WIDTH:].strip() if len(entry) > _XY_WIDTH else ""
-        if not name:
-            continue
-        if "R" in code or "C" in code:
-            index += 1  # -z: a rename/copy carries its source as the next field
-        if code == "!!":
-            if not _is_cache(name):
-                ignored.append(name)
-        elif not _is_cache(name):
-            work.append(name)
+        (ignored if e.ignored else work).append(e.path)
     return True, work, ignored
 
 

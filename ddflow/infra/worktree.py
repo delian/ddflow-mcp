@@ -36,6 +36,7 @@ from ..infra import git as G
 #: The one git runner lives in `infra.git`; these names stay importable from here.
 git = G.run
 git_paths = G.git_paths
+status = G.status
 GitError = G.GitError
 GitResult = G.GitResult
 
