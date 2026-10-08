@@ -3969,8 +3969,9 @@ it says: a `def.recorded` (`via = write`, `source` the file) for a new or re-add
 when the content changed (a re-save that only moves `updated` is no change), a `def.retired` for a
 removed one; an `extends` answer records the longer text. The add-time duplicate check stays the
 rule's own (against rules and every other kind), so the record is written without a second one. If the
-log cannot take the record (a lock timeout), the rule file stays and the result carries `unrecorded`;
-`ddflow upgrade` records it.
+log cannot take the record (a lock timeout), the rule file stays and the result carries `unrecorded`
+(`--json` and the MCP body; the CLI also warns on stderr); `ddflow upgrade` records it. A removal whose
+retirement failed says the log still holds the rule.
 
 ### Applying an upgrade
 

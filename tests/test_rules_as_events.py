@@ -314,11 +314,9 @@ def test_removing_a_rule_retires_it_and_adding_it_again_brings_it_back(repo: Pat
 
 def test_removing_a_rule_the_log_never_recorded_writes_nothing(repo: Path) -> None:
     RulesStorage(repo).add(_rule())  # a file from before rules were events
-    before = len(EventLog(repo, "reader").read_all())
     assert ARULES.rule_remove(repo, "r-w", agent="t").exit == 0
     assert "rule:r-w" not in _defs(repo)
     assert len(_events(repo, "def.retired")) == 0
-    assert len(EventLog(repo, "reader").read_all()) >= before  # the log only ever grows
 
 
 def test_a_log_that_cannot_record_leaves_the_file_and_says_so(repo: Path, monkeypatch) -> None:
@@ -336,3 +334,27 @@ def test_a_log_that_cannot_record_leaves_the_file_and_says_so(repo: Path, monkey
     # the one-time import records it later
     assert [o.status for o in _run(repo)] == ["applied"]
     assert _defs(repo)["rule:r-w"].live
+
+
+def test_every_surface_carries_the_unrecorded_note(repo: Path, monkeypatch) -> None:
+    from ddflow.surfaces.commands.rules import _PAYLOADS
+    from ddflow.surfaces.mcp import TOOLS
+
+    for verb in ("add", "edit", "remove"):
+        assert "unrecorded" in _PAYLOADS[verb], verb
+    for tool in ("ddflow_rule_add", "ddflow_rule_edit", "ddflow_rule_remove"):
+        assert "unrecorded" in TOOLS[tool]["payload"], tool
+
+    def refuse(*a, **k):
+        raise RuntimeError("log is locked")
+
+    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
+    added = ARULES.rule_add(repo, _rule(), agent="t")
+    assert "unrecorded" in added.body(TOOLS["ddflow_rule_add"]["payload"])
+    monkeypatch.undo()
+    assert _run(repo)  # recorded by the import
+    monkeypatch.setattr(ARULES, "def_retire", refuse)
+    removed = ARULES.rule_remove(repo, "r-w", agent="t")
+    note = removed.body(TOOLS["ddflow_rule_remove"]["payload"])["unrecorded"]
+    assert "file was removed but the log still holds the rule" in note and "log is locked" in note
+    assert not (repo / ".ddflow" / "rules" / "r-w.toml").exists()

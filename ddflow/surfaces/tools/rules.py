@@ -83,6 +83,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "extended_kind",
             "relation",
             "dedupe_unavailable",
+            "unrecorded",
         ),
     },
     "ddflow_rule_list": {
@@ -193,7 +194,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 else {}
             ),
         ),
-        "payload": ("id", "candidates", "related", "options", "dedupe_unavailable"),
+        "payload": ("id", "candidates", "related", "options", "dedupe_unavailable", "unrecorded"),
     },
     "ddflow_rule_remove": {
         "description": (
@@ -205,11 +206,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "reason": ("string", "", False),
         },
         "deprecated": {"reason": "a removal takes no reason and leaves no record"},
-        "api": lambda repo, a, agent: _api().rule_remove(
-            repo,
-            a["id"],
-        ),
-        "payload": ("id",),
+        "api": lambda repo, a, agent: _api().rule_remove(repo, a["id"], agent=agent),
+        "payload": ("id", "unrecorded"),
     },
     "ddflow_rule_show": {
         "description": (
