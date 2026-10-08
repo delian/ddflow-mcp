@@ -327,3 +327,15 @@ def test_installing_a_renamed_hook_twice_adds_nothing(tmp_path):
         CH.install_spec(tmp_path, renamed)
     data = json.loads((tmp_path / CH.CLAUDE_SETTINGS).read_text())
     assert sum(len(g["hooks"]) for g in data["hooks"]["SessionStart"]) == 1
+
+
+def test_rewrite_keeps_what_stands_between_the_words_of_a_command(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    path = tmp_path / "AGENTS.md"
+    path.write_text(
+        _managed_md("rules/work-queue", "Run `ddflow  doc  show` or `ddflow doc --long show`.\n")
+    )
+    C.rewrite(tmp_path, VOCAB, C.scan(tmp_path, VOCAB))
+    text = path.read_text()
+    assert "`ddflow  docs  show`" in text and "`ddflow docs --long show`" in text
+    assert Managed("rules/work-queue").state(text) == "current"
