@@ -85,3 +85,20 @@ def test_a_stale_registration_is_pruned_even_when_the_tree_was_deleted_by_the_bo
         assert s.path is not None
         shutil.rmtree(s.path)  # the body removed the directory itself
     assert _registered(repo) == [str(repo)]
+
+
+def test_a_registration_whose_remove_failed_is_still_pruned(repo, monkeypatch):
+    """A `remove` that fails (a lock, a transient error) must not leave the entry behind:
+    the directory is deleted first so the prune after it can drop the registration."""
+    real = W.git
+
+    def refuse_remove(root, *args, **kw):
+        if args[:2] == ("worktree", "remove"):
+            return W.GitResult(1, "", "refused", attempted=True)
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(W, "git", refuse_remove)
+    with W.scratch_tree(repo, "side") as s:
+        assert s.path is not None
+    monkeypatch.setattr(W, "git", real)
+    assert _registered(repo) == [str(repo)]

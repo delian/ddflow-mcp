@@ -85,8 +85,10 @@ def scratch_tree(
     finally:
         if add.ok:
             git(root, "worktree", "remove", "--force", str(tmp))
-        git(root, "worktree", "prune")
+        # Delete the directory BEFORE pruning: prune only drops registrations whose tree is
+        # already gone, so after a failed `remove` it would keep the very entry we clean up.
         shutil.rmtree(tmp, ignore_errors=True)
+        git(root, "worktree", "prune")
 
 
 def _ignore_inside(repo: Path, wt_root: Path) -> None:
