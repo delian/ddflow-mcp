@@ -305,12 +305,12 @@ def test_the_name_check_itself_refuses_a_trailing_newline(repo):
     *Raised THEORETICAL by the cross-family critic on 031313a; refuted as reachable,
     confirmed as a property of the pattern.*
     """
-    from ddflow.surfaces.mcp import _VALID_AGENT
+    from ddflow.core.agentname import is_valid
 
-    assert not _VALID_AGENT.fullmatch("reviewer\n")
-    assert not _VALID_AGENT.fullmatch("rev\niewer")
-    assert not _VALID_AGENT.fullmatch("../escape")
-    assert _VALID_AGENT.fullmatch("reviewer-2")
+    assert not is_valid("reviewer\n")
+    assert not is_valid("rev\niewer")
+    assert not is_valid("../escape")
+    assert is_valid("reviewer-2")
 
 
 def test_whitespace_around_a_name_is_still_forgiven_not_refused(repo):
