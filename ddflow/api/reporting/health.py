@@ -13,6 +13,7 @@ from ...core.plain import plain
 from ...core.schedule import stale_package_globs
 from ...core.tier import unknown_tier_notes
 from ...infra import worktree as W
+from ...services import configcompat as CC
 from ...services import repairs as RP
 from ...views.markdown import may_hold_work
 from .._base import _load
@@ -316,13 +317,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # A KNOWN knob with a value this code does not know is an INVALID VALUE, not an
     # unknown key (Bf3566bbacd) -- asked of the config's bookkeeping, never of the entry's
     # text, which holds the user's own spelling (roborev on 183bcf03 and eb6a482d).
-    bad_values = cfg.invalid_value_indices()
-    problems += [
-        f"{'invalid value for' if i in bad_values else 'unknown config key'} "
-        f"{k} in .ddflow/config.toml: a typo, or written by a newer ddflow than this "
-        "checkout runs (merge main)"
-        for i, k in enumerate(cfg.unknown_knobs)
-    ]
+    CC.report(repo, cfg, problems, notes)
     # Events this code has no handler for: the fold skipped them (B168), so every number
     # below is computed WITHOUT them. A note, as an unknown config knob is named but the
     # old code keeps working -- the remedy is the same: bring in the newer ddflow.

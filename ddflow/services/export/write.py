@@ -52,6 +52,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from ...core.version import running as running_version
 from ...infra import tomlcfg
 from ...infra.fsio import NewerContent
 from . import frame as F
@@ -388,9 +389,7 @@ def append_entries(
     """
     path, rel = safe_target(repo, target)
     if not version:
-        import ddflow
-
-        version = str(ddflow.__version__)
+        version = running_version()
     with tomlcfg.locked(_lock_path(repo)):
         path, rel = safe_target(repo, target)
         old = _read(path)

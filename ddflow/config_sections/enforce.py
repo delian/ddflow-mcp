@@ -33,6 +33,17 @@ def _waivers_problem(v: Any) -> str:
     return ""
 
 
+def _waivers_members(v: Any) -> tuple[Any, list[str]]:
+    """`[enforce].trailer_waivers` from a file: the keys whose entry this ddflow accepts, and a
+    note for each other (a vocabulary shape a newer release defines)."""
+    if not isinstance(v, dict):
+        return v, []
+    keep = {k: w for k, w in v.items() if not _waivers_problem({k: w})}
+    return keep, [
+        f"ignored trailer waiver {k!r} (not a shape this ddflow knows)" for k in v if k not in keep
+    ]
+
+
 @declare("enforce")
 @dataclass
 class EnforceConfig:
@@ -66,6 +77,7 @@ class EnforceConfig:
         factory=dict,
         doc='Trailer keys that mark a commit shipping NO item, each with the only words its value may take: `{ "Phase-ships" = ["none", "filing", "recon", "evidence", "followup"] }`. A trailer whose key is here AND in item_trailer_keys passes only with one of its words (`Phase-ships: bogus` is refused, listing them); every other item_trailer_keys trailer must carry an item id. A key here satisfies require_item_trailer whether or not item_trailer_keys also lists it. Empty by default: every accepted key names an item. Set it with the TOML inline table, `ddflow config --set enforce.trailer_waivers \'{ "Phase-ships" = ["none"] }\'`; JSON is the environment\'s form only: DDFLOW_ENFORCE_TRAILER_WAIVERS=\'{"Phase-ships": ["none"]}\'.',
         check=_waivers_problem,
+        members=_waivers_members,
     )
     #: block | warn | off
     generated_views: str = knob(

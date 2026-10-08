@@ -29,7 +29,7 @@ from collections.abc import Callable
 from dataclasses import MISSING, dataclass, field, fields
 from typing import Any
 
-from ._compat import MIN_REMOVED_IN, check_rename
+from ._compat import MIN_REMOVED_IN, check_rename, version_tuple
 
 # --------------------------------------------------------------------------------------
 # Knob documentation lives beside the knob, in this dict, keyed "section.knob".
@@ -62,6 +62,16 @@ class Knob:
     #: The release that renamed it, and the earliest release the old key may stop working.
     since: str = ""
     removed_in: str = MIN_REMOVED_IN
+    #: For a checked list or table whose set of members grows with releases: given a config
+    #: FILE's value, ``(the value without the members this version does not know, what was
+    #: dropped)``. Dropped members are noted, not refused (D-compat 2); the write paths and
+    #: the environment still refuse them.
+    members: Callable[[Any], tuple[Any, list[str]]] | None = None
+    #: The release that changed this knob's DEFAULT, and the default before it. A value
+    #: anyone set is never changed by the move (D-upgrade-config-changes): this is the
+    #: declaration `config --explain` shows.
+    default_changed_in: str = ""
+    default_was: Any = None
 
 
 #: Every knob declared through `knob()`, by "section.knob", in declaration order.
@@ -72,7 +82,7 @@ DECLARED_IN: dict[str, str] = {}
 RENAMED: dict[str, tuple[str, str, str]] = {}
 
 
-def knob(
+def knob(  # noqa: PLR0913 -- one keyword per declaration facet; the call sites read as a table
     default: Any = MISSING,
     *,
     doc: str,
@@ -84,9 +94,17 @@ def knob(
     renamed_from: tuple[str, ...] | list[str] = (),
     since: str = "",
     removed_in: str = MIN_REMOVED_IN,
+    members: Callable[[Any], tuple[Any, list[str]]] | None = None,
+    default_changed_in: str = "",
+    default_was: Any = MISSING,
 ) -> Any:
     """A dataclass field that carries its knob declaration (see the module docstring).
     `factory` for a mutable default (a list or dict), as `field(default_factory=...)`."""
+    if default_changed_in:
+        version_tuple(default_changed_in)
+        if default_was is MISSING:
+            raise ValueError("default_changed_in needs default_was: the default before the change")
+        doc = f"{doc} (Default changed in {default_changed_in}; it was {default_was!r}.)"
     if choices and strictest is None:
         raise ValueError("an enum knob (choices) must name its strictest fallback")
     if strictest is not None and strictest[0] not in choices:
@@ -108,6 +126,9 @@ def knob(
             tuple(renamed_from),
             since,
             removed_in,
+            members,
+            default_changed_in,
+            None if default_was is MISSING else default_was,
         )
     }
     if factory is not MISSING:
