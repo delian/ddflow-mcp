@@ -38,7 +38,6 @@ import re
 import select
 import shutil
 import signal
-import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -312,12 +311,12 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
             timeout=DETECT_TIMEOUT_S,
             check=False,
         )
-    except subprocess.TimeoutExpired:
+    except P.TimeoutExpired:
         return None, (
             f"`{' '.join(c.detect)}` did not answer within {DETECT_TIMEOUT_S}s — could "
             f"not tell. Not the same as absent: re-run, or check it by hand."
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, P.SubprocessError) as exc:
         return None, f"the probe could not be run at all ({exc}) — could not tell"
     if p.returncode != 0:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
@@ -400,7 +399,7 @@ def _describe_answer(msg: dict) -> tuple[str, dict]:
     return f"answered initialize ({who or 'no serverInfo'})", server
 
 
-def _exit_info(proc: subprocess.Popen) -> os.waitid_result | None:
+def _exit_info(proc: P.Popen) -> os.waitid_result | None:
     """The direct child's exit record, or None while it runs. WITHOUT reaping it
     (`poll`/`wait` would).
 
@@ -414,7 +413,7 @@ def _exit_info(proc: subprocess.Popen) -> os.waitid_result | None:
         return None
 
 
-def _await_exit(proc: subprocess.Popen, grace_s: float) -> os.waitid_result | None:
+def _await_exit(proc: P.Popen, grace_s: float) -> os.waitid_result | None:
     """The child's exit record once it is visible, or None if it is still alive after
     `grace_s`. A pipe's EOF can be read before the process that closed it is waitable: the
     descriptors close during interpreter shutdown, a moment ahead of the exit, so a single
@@ -439,19 +438,17 @@ def _exit_how(info: os.waitid_result | None) -> str:
     return f"exited ({info.si_status})"
 
 
-def _stop(proc: subprocess.Popen) -> None:
+def _stop(proc: P.Popen) -> None:
     """End the launched server and EVERYTHING it started (an `npx` wrapper has children).
 
     SIGTERM to the process group, a short grace for the direct child, then SIGKILL to the
     group unconditionally -- the direct child exiting says nothing about a grandchild that
     ignores SIGTERM -- and only then reap the leader.
     """
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(proc.pid, signal.SIGTERM)
+    P.kill_group(proc, signal.SIGTERM)
     _await_exit(proc, 3.0)
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(proc.pid, signal.SIGKILL)
-    with contextlib.suppress(subprocess.TimeoutExpired):
+    P.kill_group(proc)
+    with contextlib.suppress(P.TimeoutExpired):
         proc.wait(timeout=5)
 
 
