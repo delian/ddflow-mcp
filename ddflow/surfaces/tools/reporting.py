@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...core.budget import RECALL_MAX_CHARS
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -129,7 +130,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             a.get("query", "") or "",
             sources=a.get("sources", "") or "",
             limit=int(a.get("limit") or 3),
-            max_chars=int(a.get("max_chars") or 4000),
+            max_chars=int(a.get("max_chars") or RECALL_MAX_CHARS),
             agent=agent,
         ),
         "payload": "results",

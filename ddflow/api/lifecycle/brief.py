@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...core import clock
 from ...core import outcome as O
+from ...core.budget import Budget, approx_tokens
 from ...services import gates as G
 from ...services import leases as L
 from .._base import _load
@@ -134,7 +135,7 @@ def brief(
         )
         # The block is prepended to a budgeted brief: it may take at most half of it, so a
         # small `brief_max_tokens` still leaves the head of the brief itself.
-        cap = cfg.session.brief_max_tokens * 4 // 2
+        cap = Budget(cfg.session.brief_max_tokens, "tokens").chars // 2
         if len(reports_block) > cap:
             reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
     from ...core import progress as PR
@@ -163,6 +164,8 @@ def brief(
         memories=live,
         held=held_ids,
         suggested=suggested,
+        # views/markdown.py still has its own estimate until it moves onto core.budget
+        # (B-uni-context-pack.2-pack): the same value, `max(1, len // 4)`.
         reserve=render_md._approx_tokens(prepended) if prepended else 0,
         agent=log.agent_id,
     )
@@ -196,5 +199,5 @@ def brief(
         suggested=suggested,
         held=held_ids,
         ready=[i.id for i in p.ready],
-        approx_tokens=len(text) // 4,
+        approx_tokens=approx_tokens(text),
     )

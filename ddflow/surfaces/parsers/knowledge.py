@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 
+from ...core.budget import RECALL_MAX_CHARS
 from ...core.model import LINK_RELATIONS
 from .. import dedupe_flags
 from ..commands.decisions import cmd_decision
@@ -63,7 +64,7 @@ def register(s: argparse._SubParsersAction) -> None:
         default="",
         help="comma-separated subset: decisions,lessons,memories,research,bugs,items,prompts",
     )
-    rc.add_argument("--max-chars", type=int, default=4000)
+    rc.add_argument("--max-chars", type=int, default=RECALL_MAX_CHARS)
     rc.set_defaults(fn=cmd_recall)
 
     sm = s.add_parser(
