@@ -1,3 +1,4 @@
+<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.0 fmt=1 sha=5942a35e0678 -->
 # Delta: Claude Code
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -39,3 +40,4 @@ Register the MCP server in `.mcp.json`:
     "command": "python3", "args": ["-m", "ddflow", "--repo", ".", "mcp"],
     "env": { "PYTHONPATH": "vendor/ddflow" } } } }
 ```
+<!-- ddflow:end drivers/deltas/claude-code -->

@@ -970,6 +970,26 @@
        }
       }
     ''',
+    'ddflow_gate_list': '''
+      {
+       "name": "ddflow_gate_list",
+       "description": "The gates this project defines; with refuted=true, every gate recorded passed ON REFUTATION (its findings refuted with probes rather than a clean re-review), for the operator's spot-check.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "refuted": {
+          "type": "boolean",
+          "description": "List the gates passed on refutation instead."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_gate_record': '''
       {
        "name": "ddflow_gate_record",
@@ -3662,6 +3682,7 @@
     'ddflow_external_sync',
     'ddflow_flow_choose',
     'ddflow_flow_show',
+    'ddflow_gate_list',
     'ddflow_gate_record',
     'ddflow_gate_run',
     'ddflow_gate_skip',

@@ -73,6 +73,7 @@ from .flow import (
     version_show,
 )
 from .gates import Evidence as GateEvidence
+from .gates import list_gates as gate_list
 from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
@@ -247,6 +248,7 @@ __all__ = [
     "external_sync",
     "flow_choose",
     "flow_show",
+    "gate_list",
     "gate_record",
     "gate_run",
     "gate_status",

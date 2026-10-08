@@ -27,6 +27,15 @@ def _gate_status(a, c: Ctx) -> int:
     return OK
 
 
+def _gate_list(a, c: Ctx) -> int:
+    out = A.list_gates(c.repo, refuted=a.refuted, agent=c.requested_agent)
+    if c.json:
+        print(json.dumps(out.body(("refuted", "count", "passes", "gates")), indent=2, default=str))
+        return OK
+    print(out.data["text"])
+    return OK
+
+
 def _gate_verify(a, c: Ctx) -> int:
     """`gate verify` — can this gate go red at all?
 
@@ -111,6 +120,8 @@ def cmd_gate(a, c: Ctx) -> int:
     if a.gate_cmd == "status":
         return _gate_status(a, c)
     # BEFORE the pipeline-order check, deliberately — see `api.gates.verify`.
+    if a.gate_cmd == "list":
+        return _gate_list(a, c)
     if a.gate_cmd == "verify":
         return _gate_verify(a, c)
     if a.gate_cmd == "run":

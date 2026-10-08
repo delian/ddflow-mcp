@@ -271,3 +271,42 @@ def test_adopt_refuses_a_file_with_reversed_legacy_markers_and_changes_nothing(r
 
     assert code == 3 and "reversed" in out + err
     assert path.read_text() == reversed_
+
+
+def test_refresh_docs_keeps_a_hand_edited_driver_doc_in_local_edits(repo: Path) -> None:
+    _adopted(repo)
+    driver = repo / "docs/ddflow/drivers/implement-phase.md"
+    edited = driver.read_text().replace("Claim before you edit", "Claim when you like")
+    driver.write_text(edited)
+
+    code, out, _ = run_cli(repo, "adopt", "--refresh-docs")
+
+    assert code == 0 and "your edits are kept in implement-phase.md.local-edits" in out, out
+    assert (driver.parent / "implement-phase.md.local-edits").read_text() == edited
+    assert "Claim when you like" not in driver.read_text()
+
+
+def test_a_second_local_edit_does_not_overwrite_the_first(repo: Path) -> None:
+    _adopted(repo)
+    driver = repo / "docs/ddflow/drivers/implement-phase.md"
+    for note in ("first", "second"):
+        driver.write_text(driver.read_text().replace("Claim before you edit", f"Claim {note}"))
+        assert run_cli(repo, "adopt", "--refresh-docs")[0] == 0
+    kept = sorted(p.name for p in driver.parent.glob("implement-phase.md.local-edits*"))
+    assert kept == ["implement-phase.md.local-edits", "implement-phase.md.local-edits.2"]
+    assert "Claim first" in (driver.parent / kept[0]).read_text()
+    assert "Claim second" in (driver.parent / kept[1]).read_text()
+
+
+def test_a_plain_adopt_over_a_pre_header_driver_saves_the_original(repo: Path) -> None:
+    _adopted(repo)
+    driver = repo / "docs/ddflow/drivers/implement-phase.md"
+    driver.write_text("# my own driver, written before headers\n")
+
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+
+    assert code == 0 and "saved the originals in" in out, out
+    (saved,) = _backups(repo)
+    kept = saved / "files" / "in" / "docs/ddflow/drivers/implement-phase.md"
+    assert kept.read_text() == "# my own driver, written before headers\n"
+    assert "before headers" in out
