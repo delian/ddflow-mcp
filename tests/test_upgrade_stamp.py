@@ -24,7 +24,8 @@ from ddflow.core.events import (
     version_key,
 )
 from ddflow.core.model import fold
-from ddflow.infra.log import EventLog
+from ddflow.infra import log as LOG
+from ddflow.infra.log import EventLog, upgrade_remedy
 from ddflow.services import install_info as II
 
 FIXTURE = Path(__file__).parent / "fixtures" / "upgrade" / "log-0.1.3.jsonl"
@@ -185,9 +186,7 @@ def test_an_older_ddflow_is_refused_its_first_write_naming_the_version(older_tha
     with pytest.raises(SkewRefused) as exc:
         log.append("phase.added", "P1", {"title": "p"})
     msg = str(exc.value)
-    assert "upgrade ddflow-mcp to >= 99.0.0" in msg.lower().replace(
-        "upgrade ddflow-mcp", "upgrade ddflow-mcp"
-    )
+    assert upgrade_remedy("99.0.0") in msg
     assert "--allow-older-version" in msg and "ask the user" in msg
     # Nothing was written, not even a stamp, and reads are untouched.
     assert not (older_than_log / ".ddflow" / "events" / "me.jsonl").exists()
@@ -197,7 +196,7 @@ def test_an_older_ddflow_is_refused_its_first_write_naming_the_version(older_tha
 def test_the_cli_refuses_a_write_with_exit_3_and_still_reads(older_than_log: Path):
     code, out, err = run_cli(older_than_log, "phase", "add", "P1", "--title", "p")
     assert code == 3, (out, err)
-    assert "Upgrade ddflow-mcp to >= 99.0.0" in err
+    assert upgrade_remedy("99.0.0") in err
     assert run_cli(older_than_log, "status")[0] == 0
     assert run_cli(older_than_log, "history")[0] in (0, 2)
 
@@ -318,7 +317,7 @@ def _mcp(repo: Path, name: str, args: dict):
 def test_mcp_refuses_with_exit_3_then_accepts_the_override_argument(older_than_log: Path):
     res = _mcp(older_than_log, "ddflow_phase_add", {"id": "P1", "title": "p", "as_agent": "me"})
     assert res["_meta"]["exit"] == 3, res
-    assert "Upgrade ddflow-mcp to >= 99.0.0" in res["content"][0]["text"]
+    assert upgrade_remedy("99.0.0") in res["content"][0]["text"]
     res = _mcp(
         older_than_log,
         "ddflow_phase_add",
@@ -476,3 +475,51 @@ def test_seen_versions_with_equal_keys_keep_a_stable_order(repo: Path, monkeypat
     assert run_cli(repo, "init")[0] == 0
     _code, out, _err = run_cli(repo, "--json", "status")
     assert json.loads(out)["ddflow_version"]["seen"] == ["0.2", "0.2.0"]
+
+
+# -- B-uni-log-version: the log joins the one version reader and the shared advice --------
+
+
+def test_the_log_reads_the_running_version_from_core_version(monkeypatch):
+    from ddflow.core import version as V
+
+    monkeypatch.setattr(V, "running", lambda: "7.8.9")  # the delegate itself, not its source
+    assert LOG.running_version() == "7.8.9"
+
+
+def test_the_remedy_helper_is_literal_where_it_matters():
+    # the tests above compare messages with this helper: pin its own wording once, literally
+    r = upgrade_remedy("1.2.3")
+    assert r.startswith(("Upgrade ddflow-mcp to >= 1.2.3 (", "Merge main into this checkout"))
+    assert "1.2.3" in r and r.endswith(("MCP server", "needed)"))
+
+
+def test_the_install_kind_is_the_shared_source_tree_test(monkeypatch):
+    from ddflow.config_sections import _compat as CV
+
+    monkeypatch.setattr(CV, "is_source_tree", lambda path=None: True)
+    assert LOG.install_kind() == "source-tree"
+    monkeypatch.setattr(CV, "is_source_tree", lambda path=None: False)
+    assert LOG.install_kind() == "installed"
+
+
+def test_the_skew_remedy_fits_how_ddflow_is_installed(monkeypatch):
+    monkeypatch.setattr(LOG, "install_kind", lambda: "installed")
+    installed = LOG.skew_message("0.1.0", "0.2.0", "bob")
+    assert "Upgrade ddflow-mcp to >= 0.2.0 (" in installed and "Merge main" not in installed
+    assert "restart the MCP server and retry" in installed
+    monkeypatch.setattr(LOG, "install_kind", lambda: "source-tree")
+    source = LOG.skew_message("0.1.0", "0.2.0", "bob")
+    assert "Merge main into this checkout" in source and "(ddflow >= 0.2.0 is needed)" in source
+    assert "Upgrade ddflow-mcp" not in source
+    # the wording the docs and the driver pin does not move with the install kind
+    for msg in (installed, source):
+        assert msg.startswith("REFUSED: this project's log has been worked on by ddflow 0.2.0")
+        assert '--allow-older-version --reason "<why>"' in msg and "allow_older_version" in msg
+        assert "covers this session only" in msg
+
+
+def test_a_capability_refusal_carries_the_same_remedy(monkeypatch):
+    monkeypatch.setattr(LOG, "install_kind", lambda: "installed")
+    msg = LOG.capability_message("x", "9.9.9", "bug.found", "0.2.0")
+    assert "Upgrade ddflow-mcp to >= 9.9.9 (" in msg and "everything else proceeds" in msg

@@ -3814,8 +3814,14 @@ predates the stamp: an old log with no stamp reads clean and is stamped on its n
 ```text
 REFUSED: this project's log has been worked on by ddflow 0.2.0 (stamped by alice), and
 this ddflow is 0.1.9, which is older: writing now could drop or misread what the newer
-one recorded. Upgrade ddflow-mcp to >= 0.2.0 and retry ...
+one recorded. Upgrade ddflow-mcp to >= 0.2.0 (`uv tool upgrade ddflow-mcp`, ...), then
+restart the MCP server and retry ...
 ```
+
+The remedy fits how this ddflow is installed (`config_sections._compat.upgrade_advice`): an
+installed ddflow is told to upgrade its package, a source checkout to merge main into it
+(`Merge main into this checkout ..., then restart the MCP server (ddflow >= 0.2.0 is needed)
+and retry`). The rest of the message does not change.
 
 Reads are always allowed. The agent upgrades or asks the user; only if the user insists
 does it rerun with an explicit override: `--allow-older-version --reason "<why>"` on any

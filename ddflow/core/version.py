@@ -1,8 +1,7 @@
 """Which ddflow is running (B-uni-compat-config).
 
-The reader of the running version: `services/install_info`, the export registry and the
-export writer use it. (`infra/log.running_version` is the one copy left, to delegate here
-when that file is free of another lane's claim.) The source-tree test and the upgrade advice
+The reader of the running version: `services/install_info`, the export registry, the
+export writer and `infra/log.running_version` use it. The source-tree test and the upgrade advice
 live in `config_sections/_compat` (the bottom layer, which `config` itself may import), and
 `services/install_info` fits the advice to how ddflow is installed.
 
