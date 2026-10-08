@@ -21,8 +21,9 @@ from typing import Any
 
 from ..core import outcome as O
 from ..core.plain import plain
+from ..services.cadence import DueContext, due_all
 from ..services.schedule import calendar as schedule_calendar
-from ..services.schedule import calendar_due, count_unit, done_counts
+from ..services.schedule import count_unit, done_counts
 from ._base import _load
 
 
@@ -60,27 +61,13 @@ def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
     return O.ok("cleanup", **data)
 
 
-def _calendar_due(
-    st, cfg, now: float | None = None, calendar: dict[str, float] | None = None
-) -> list[dict[str, Any]]:
-    """Calendar cadences not recorded as run within their period -- or ever
-    (`services.schedule.calendar_due`, the one calendar evaluator)."""
-    return calendar_due(st, schedule_calendar(cfg) if calendar is None else calendar, now)
-
-
 def due_cadences(
     repo: Path, cfg, st, *, calendar: dict[str, float] | None = None
 ) -> list[dict[str, Any]]:
     """Every periodic pass that is due now, derived from the log, for `cadence`. (`complete
     <phase>` asks only `services.cadence.phase_overdue`, the phase-counted subset.)"""
-    from ..services.cadence import count_due, export_cadence, lessons_cadence
-
     calendar = schedule_calendar(cfg) if calendar is None else calendar
-    due = count_due(st, cfg, replaced=set(calendar))
-    due += lessons_cadence(st, cfg)
-    due += export_cadence(repo, cfg)
-    due += _calendar_due(st, cfg, calendar=calendar)
-    return due
+    return due_all(DueContext(repo, cfg, st, calendar))
 
 
 def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.Outcome:

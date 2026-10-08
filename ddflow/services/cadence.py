@@ -13,10 +13,16 @@ is the layer check doing exactly what it is for.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from ..config import Config
+from ..core.model import State
 from .schedule import (
     calendar,
+    calendar_due,
     count_at_last_run,
     count_passes,
 )
@@ -147,3 +153,56 @@ def export_cadence(repo, cfg) -> list[dict[str, Any]]:
             "unit": "stale selected document(s); `ddflow export <doc> --update`",
         }
     ]
+
+
+# -- the due evaluators ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DueContext:
+    """What a due evaluator reads: the project, its config, the folded log and the calendar
+    entries (`schedule.calendar`: name -> days) parsed once for all of them."""
+
+    repo: Path
+    cfg: Config
+    st: State
+    calendar: Mapping[str, float]
+    #: The time the calendar entries are judged at (epoch seconds); None is the current time.
+    now: float | None = None
+
+
+#: A due evaluator: the passes that are due now, as `{cadence, since, every, unit}` rows.
+Evaluator = Callable[[DueContext], list[dict[str, Any]]]
+_EVALUATORS: dict[str, Evaluator] = {}
+
+
+def register_due(name: str, evaluate: Evaluator) -> Evaluator:
+    """Add a due evaluator under ``name``. `due_all` runs them in registration order, so a
+    cadence that falls due by its own rule registers here instead of being called by hand
+    from `ddflow cadence`. Refused (ValueError) for a name already registered."""
+    if name in _EVALUATORS:
+        raise ValueError(f"a due evaluator named {name!r} is already registered")
+    _EVALUATORS[name] = evaluate
+    return evaluate
+
+
+def evaluators() -> dict[str, Evaluator]:
+    """The registered due evaluators, in the order `due_all` runs them."""
+    return dict(_EVALUATORS)
+
+
+def due_all(ctx: DueContext) -> list[dict[str, Any]]:
+    """Every periodic pass that is due now: each registered evaluator's rows, in order."""
+    due: list[dict[str, Any]] = []
+    for evaluate in _EVALUATORS.values():
+        due += evaluate(ctx)
+    return due
+
+
+# The built-ins, in the order `ddflow cadence` has always listed them: the count-based passes
+# (a calendar entry of the same name replaces one), lessons growth, stale exports, then the
+# calendar entries.
+register_due("count", lambda c: count_due(c.st, c.cfg, replaced=set(c.calendar)))
+register_due("lessons", lambda c: lessons_cadence(c.st, c.cfg))
+register_due("export", lambda c: export_cadence(c.repo, c.cfg))
+register_due("calendar", lambda c: calendar_due(c.st, c.calendar, c.now))
