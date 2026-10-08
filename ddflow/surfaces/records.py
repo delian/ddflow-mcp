@@ -315,13 +315,13 @@ def _human(kind: R.RecordKind, verb: str, out: O.Outcome) -> str:
             )
         return "\n".join(lines)
     if verb == "show":
-        head = f"{data['id']}  [{data['status']}]"
+        head = f"{data.get('id', '')}  [{data.get('status', '')}]"
         body = [f"  {k}: {v}" for k, v in (data.get("fields") or {}).items()]
         hist = [
             f"  {h.get('at', '')}  {h.get('event', '')}  {h.get('by', '')}"
             for h in data.get("history", [])
         ]
-        more = data["history_total"] - len(data.get("history", []))
+        more = data.get("history_total", 0) - len(data.get("history", []))
         tail = [f"  ... {more} earlier entries"] if more > 0 else []
         return "\n".join([head, *body, "history:", *tail, *hist])
     return f"{_DONE[verb]} {kind.name} {data.get('id', '')}"
@@ -361,7 +361,7 @@ def _handler(kind: R.RecordKind, verb: str) -> Callable[[argparse.Namespace, Ctx
             args = _args_of(a, kind, verb)
             if verb != "add":
                 return _emit(c, kind, verb, dispatch(c.repo, kind, args, agent))
-            given = [n for n in _ANSWER_CLI[:-1] if getattr(a, n, None)]
+            given = [n for n in _ANSWER_CLI if getattr(a, n, None)]
             if len(given) > 1:
                 raise ValueError(f"answer one of {', '.join(given)}, not several")
             out = dedupe_flags.run(

@@ -283,8 +283,9 @@ def test_the_duplicate_flags_are_the_shared_ones(cli, repo, monkeypatch):
 
 
 def test_more_than_one_answer_flag_is_refused(cli):
-    code, _out, err = cli("note", "add", "a", "--title", "t", "--new", "--extends", "x")
-    assert code == O.FAIL and "not several" in err
+    for pair in (("--new", "--extends", "x"), ("--new", "--check"), ("--related", "x", "--check")):
+        code, _out, err = cli("note", "add", "a", "--title", "t", *pair)
+        assert code == O.FAIL and "not several" in err, pair
 
 
 # -- the tool ---------------------------------------------------------------------------------
@@ -356,3 +357,31 @@ def test_the_old_group_word_still_works_and_says_so():
         )
         == {}
     )
+
+
+def test_the_tool_and_the_cli_carry_an_answer_that_points_at_a_record(repo, cli):
+    """The target is a record the duplicate check knows (a decision here); a definition is not."""
+    assert run_cli(repo, "init")[0] == 0
+    assert (
+        run_cli(repo, "decision", "add", "--id", "D-base", "--title", "base", "--decision", "base")[
+            0
+        ]
+        == 0
+    )
+    call = _tool().tool_entry()["api"]
+    out = call(
+        repo, {"verb": "add", "id": "kin", "title": "kin", "relation": "related:D-base"}, "ag"
+    )
+    assert out.exit == O.OK and out.data.get("related") == "D-base"
+    out = call(
+        repo, {"verb": "add", "id": "kin2", "title": "kin2", "relation": "extends:ghost"}, "ag"
+    )
+    assert out.exit != O.OK and "ghost" in out.reason
+    assert cli("note", "add", "kin3", "--title", "kin3", "--related", "D-base")[0] == O.OK
+    assert cli("note", "add", "kin4", "--title", "kin4", "--related", "ghost")[0] != O.OK
+
+
+def test_show_renders_an_outcome_a_family_supplied_itself(repo):
+    own = O.ok("quota.show", id="q", fields={"a": 1})
+    text = S._human(NOTE, "show", own)
+    assert text.startswith("q  []") and "a: 1" in text
