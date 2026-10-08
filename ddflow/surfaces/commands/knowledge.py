@@ -603,6 +603,11 @@ def _history_line(ev) -> str:
         detail = f"as {d['sha'][:8]}"
     elif ev.kind == "ddflow.seen":
         detail = f"{d.get('version', '?')} ({d.get('install', '?')})"
+    elif ev.kind == "upgrade.applied":
+        detail = (
+            f"{d.get('from') or 'unstamped'} -> {d.get('to', '?')}: "
+            f"{', '.join(d.get('categories') or [])}"
+        )
     elif ev.kind == "skew.overridden":
         detail = (
             f"{d.get('running', '?')} on a {d.get('log_version', '?')} log: {d.get('reason', '')}"

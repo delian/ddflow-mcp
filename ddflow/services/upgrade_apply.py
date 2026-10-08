@@ -9,10 +9,11 @@ category at a time, and records it:
    (an operator-set knob, a hand-edited file, a repair only the operator decides) is
    REFUSED unless its key was passed in ``confirm`` with a reason; a note (a new opt-in
    feature, a new knob) is acknowledged and writes nothing;
-3. before ANY write, every file the applied items will touch is copied to
+3. before ANY file is rewritten, every file the applied items will rewrite is copied to
    `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored) with a `manifest.json`
    saying what was there, so a half-done apply leaves the originals and a plan that can be
-   run again;
+   run again (the event log is append-only: repairs and the upgrade record add lines, so
+   there is no original of it to keep);
 4. one `upgrade.applied` event (from, to, categories, backup, the items, who confirmed what)
    is appended, so replay explains the upgrade.
 
@@ -298,7 +299,8 @@ def apply(
     ``refused``/``failed`` counts, ``backup`` (the directory, "" when nothing was written),
     ``from``/``to``, ``noop`` and the ``text`` for a person. ``exit`` is 0 when everything
     chosen was applied, acknowledged or already fine, 1 when an applier failed, 3 when an
-    item waits for the operator's confirmation. Raises ValueError for an unknown category,
+    item waits for the operator's confirmation, 2 when a step could not run (a repair whose
+    detector was unavailable). Raises ValueError for an unknown category,
     ``config_changes`` or ``backup`` value."""
     repo = Path(repo)
     if backup not in BACKUP_MODES:
@@ -319,7 +321,8 @@ def apply(
             backup_dir = str(make_backup(repo, files, frm, to))
         except OSError as exc:
             detail = f"no backup could be written ({exc}); nothing was changed"
-            return _finish(results + [_rec(i, FAILED, detail) for i in todo], "", frm, to, [], {})
+            failed = results + [_rec(i, FAILED, detail) for i in todo]
+            return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
     results += _execute(repo, log, cfg, todo, agent)
     ok = {r["id"] for r in results if r["status"] in (APPLIED, ACKNOWLEDGED)}
@@ -470,9 +473,14 @@ def _finish(
     cats: list[str],
     reasons: dict[str, str],
 ) -> dict[str, Any]:
-    counts = {s: sum(1 for r in results if r["status"] == s) for s in (REFUSED, FAILED)}
+    counts = {
+        s: sum(1 for r in results if r["status"] == s) for s in (REFUSED, FAILED, UNAVAILABLE)
+    }
     changed = [r for r in results if r["status"] in (APPLIED, ACKNOWLEDGED)]
-    exit_code = 1 if counts[FAILED] else (3 if counts[REFUSED] else 0)
+    # A step that could not run is never read as done: 2 is "could not run", not 0.
+    exit_code = (
+        1 if counts[FAILED] else (3 if counts[REFUSED] else (2 if counts[UNAVAILABLE] else 0))
+    )
     lines = []
     if not results:
         lines.append("Up to date: nothing to apply.")
@@ -489,6 +497,7 @@ def _finish(
         "applied": len(changed),
         "refused": counts[REFUSED],
         "failed": counts[FAILED],
+        "unavailable": counts[UNAVAILABLE],
         "backup": backup_dir,
         "confirmed": reasons,
         "noop": not results,
