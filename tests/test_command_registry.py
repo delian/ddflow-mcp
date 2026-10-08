@@ -247,6 +247,101 @@ def test_a_positional_parameter_is_required_on_both_surfaces():
         root.parse_args(["x"])
 
 
+# -- shapes the migration needed ---------------------------------------------------------
+
+
+def test_an_optional_positional_is_optional_on_both_surfaces():
+    cmd = Command(
+        path=("x",),
+        tool="ddflow_x",
+        params=(
+            Param("verb", positional=True, nargs="?", choices=("add",), cli_only=True),
+            Param("session", positional=True, nargs="?", default=""),
+        ),
+    )
+    assert "required" not in cmd.input_schema()
+    root = _root()
+    add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
+    ns = root.parse_args(["x"])
+    assert (ns.verb, ns.session) == (None, "")
+    assert root.parse_args(["x", "add", "S"]).session == "S"
+    with pytest.raises(ValueError, match="nargs is for a positional"):
+        Param("p", nargs="?")
+
+
+def test_a_tool_may_require_what_the_flag_does_not():
+    """`session note --text` is read from stdin when absent; the tool has no stdin."""
+    cmd = Command(path=("x",), tool="ddflow_x", params=(Param("text", tool_required=True),))
+    assert cmd.input_schema()["required"] == ["text"]
+    assert cmd.properties()["text"][2] is True
+    root = _root()
+    add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
+    assert root.parse_args(["x"]).text is None
+
+
+def test_exclusive_parameters_share_one_group_and_metavar_is_kept():
+    cmd = Command(
+        path=("x",),
+        params=(
+            Param("new", type="boolean", exclusive="one"),
+            Param("extends", default="", metavar="ID", exclusive="one"),
+            Param("other"),
+        ),
+    )
+    root = _root()
+    add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
+    assert root.parse_args(["x", "--extends", "A"]).extends == "A"
+    with pytest.raises(SystemExit):
+        root.parse_args(["x", "--new", "--extends", "A"])
+    sub = next(a for a in root._actions if isinstance(a, argparse._SubParsersAction)).choices["x"]
+    assert "[--new | --extends ID]" in " ".join(sub.format_usage().split())
+
+
+def test_tool_order_is_the_order_of_the_schema_not_of_the_help():
+    cmd = Command(
+        path=("x",),
+        tool="ddflow_x",
+        params=(Param("a"), Param("b"), Param("only_cli", cli_only=True), Param("c")),
+        tool_order=("c", "a", "b"),
+    )
+    assert list(cmd.properties()) == ["c", "a", "b"]
+    assert list(cmd.input_schema()["properties"])[:3] == ["c", "a", "b"]
+    root = _root()
+    add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
+    sub = next(a for a in root._actions if isinstance(a, argparse._SubParsersAction)).choices["x"]
+    assert [a.dest for a in sub._actions][1:] == ["a", "b", "only_cli", "c"]
+    with pytest.raises(ValueError, match="tool_order must name each tool parameter once"):
+        Command(path=("x",), tool="t", params=(Param("a"), Param("b")), tool_order=("a",))
+
+
+def test_defaults_ride_on_the_parse_and_handlers_may_be_supplied_apart():
+    def fn(a, c): ...
+
+    cmd = Command(path=("grp", "list"), defaults={"list_kind": "task"})
+    root = _root()
+    add_commands(
+        root.add_subparsers(dest="cmd", required=True), [cmd], handlers={("grp", "list"): fn}
+    )
+    ns = root.parse_args(["grp", "list"])
+    assert (ns.list_kind, ns.fn) == ("task", fn)
+
+
+def test_a_group_is_listed_only_when_it_has_help_and_an_existing_group_is_joined():
+    root = _root()
+    subs = root.add_subparsers(dest="cmd", required=True)
+    add_commands(
+        subs,
+        [Command(path=("quiet", "one")), Command(path=("loud", "one"))],
+        groups={"loud": "has a line"},
+    )
+    help_ = root.format_help()
+    assert "has a line" in help_ and "quiet" in help_.split("{")[1]  # in the choices...
+    assert [c.dest for c in subs._choices_actions] == ["loud"]  # ...but only `loud` has a row
+    add_commands(subs, [Command(path=("quiet", "two"))])  # joins the group made before
+    assert root.parse_args(["quiet", "two"]).quiet_cmd == "two"
+    assert root.parse_args(["quiet", "one"]).quiet_cmd == "one"
+
+
 # -- the parity exemptions are fields --------------------------------------------------
 
 

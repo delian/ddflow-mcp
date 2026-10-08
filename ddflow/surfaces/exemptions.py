@@ -13,8 +13,12 @@ Each entry carries its reason; the ratchet is that the list may only shrink.
 
 from __future__ import annotations
 
+from .commands import viewers_lists as _lists
+from .commands import viewers_search as _search
+from .commands import viewers_sessions as _sessions
 from .declared.answer import ANSWER_FLAG_EXEMPT
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
+from .declared.records import COMMANDS as _RECORDS
 from .registry import (
     Command,
     covering_tools,
@@ -85,10 +89,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         reason="invoked BY the Claude Code SessionStart hook to put the brief into a new session; over MCP that is ddflow_brief",
     ),
     Command(
-        path=("session", "adopt-orphans"),
-        reason="a one-off backfill an operator runs after ddflow doctor names id-less prompts; agents record with ddflow_session_prompt, which never lacks a session now",
-    ),
-    Command(
         path=("hooks", "pre-compact"),
         reason="invoked by Claude Code's own PreCompact hook with its JSON on stdin; an agent never calls it, and the record it writes is a session note (ddflow_session_note)",
     ),
@@ -124,14 +124,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(path=("adopt",), reason="covered by ddflow_setup", via=("ddflow_setup",)),
     Command(path=("init",), reason="covered by ddflow_setup", via=("ddflow_setup",)),
-    Command(path=("task", "list"), via=("ddflow_list", "task")),
-    Command(path=("phase", "list"), via=("ddflow_list", "phase")),
-    Command(path=("bug", "list"), via=("ddflow_list", "bug")),
-    Command(path=("lesson", "list"), via=("ddflow_list", "lesson")),
-    Command(path=("session", "list"), via=("ddflow_list", "session")),
-    Command(path=("session", "show"), via=("ddflow_list", "session")),
-    Command(path=("search",), via=("ddflow_list", "search")),
-    Command(path=("bug", "reopen"), via=("ddflow_bug_invalid", "reopen")),
     Command(
         path=(),
         tool="ddflow_ci",
@@ -209,16 +201,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=(),
         tool="ddflow_task_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
-    ),
-    Command(
-        path=(),
-        tool="ddflow_bug_found",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
-    ),
-    Command(
-        path=(),
-        tool="ddflow_research_add",
         flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
@@ -323,7 +305,14 @@ EXEMPTIONS: tuple[Command, ...] = (
 
 #: Every declaration about the two surfaces' differences: these, and those a migrated command
 #: carries itself (D-unify 4: a command moved onto the registry moves its exemption with it).
-DECLARATIONS: tuple[Command, ...] = (*EXEMPTIONS, *_KNOWLEDGE)
+DECLARATIONS: tuple[Command, ...] = (
+    *EXEMPTIONS,
+    *_KNOWLEDGE,
+    *_RECORDS,
+    *_lists.COMMANDS,
+    *_sessions.COMMANDS,
+    _search.COMMAND,
+)
 
 #: The tables `tests/test_mcp_parity.py` checks the surfaces against, derived once.
 EXEMPT_PATHS = exempt_paths(DECLARATIONS)

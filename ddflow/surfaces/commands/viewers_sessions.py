@@ -8,25 +8,9 @@ from ...api import view_read
 from ...core import clock
 from ...services import session_view as V
 from ..context import NOTHING, OK, REFUSED, Ctx
+from ..registry import Command, Param
 from ..render import emit_json
 from .viewers_search import view_head
-
-
-def add_session_view_parsers(sub) -> None:
-    """Register `list` and `show` on the `session` subparsers."""
-    ls = sub.add_parser("list", help="sessions, newest first: agent, span, items, prompts, state")
-    ls.add_argument("--state", default="", help="open or ended")
-    ls.add_argument(
-        "--owner",
-        default="",
-        help="only sessions of this agent (not --agent, which is who YOU are)",
-    )
-    ls.add_argument("--since", default="", help="ISO date or timestamp: last activity at or after")
-    ls.add_argument("--limit", type=int, default=V.DEFAULT_LIMIT)
-    ls.set_defaults(fn=cmd_session_list)
-    sh = sub.add_parser("show", help="one session: every prompt and note in order, redacted")
-    sh.add_argument("id")
-    sh.set_defaults(fn=cmd_session_show)
 
 
 def _day(ts: str) -> str:
@@ -82,3 +66,31 @@ def cmd_session_show(a, c: Ctx) -> int:
     if d["summary"]:
         print(f"\nsummary: {d['summary']}")
     return OK
+
+
+#: `session list` and `session show`: the CLI half of `ddflow_list` for sessions.
+COMMANDS = (
+    Command(
+        path=("session", "list"),
+        summary="sessions, newest first: agent, span, items, prompts, state",
+        params=(
+            Param("state", default="", help="open or ended"),
+            Param(
+                "owner",
+                default="",
+                help="only sessions of this agent (not --agent, which is who YOU are)",
+            ),
+            Param("since", default="", help="ISO date or timestamp: last activity at or after"),
+            Param("limit", type="integer", default=V.DEFAULT_LIMIT),
+        ),
+        handler=cmd_session_list,
+        via=("ddflow_list", "session"),
+    ),
+    Command(
+        path=("session", "show"),
+        summary="one session: every prompt and note in order, redacted",
+        params=(Param("id", positional=True),),
+        handler=cmd_session_show,
+        via=("ddflow_list", "session"),
+    ),
+)
