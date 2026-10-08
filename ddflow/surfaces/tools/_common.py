@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...core.clock import WAIT_MAX_S
+from ..vocabulary import sources
 
 
 def _AGENT_KEYS() -> list[str]:
@@ -126,11 +127,20 @@ def _bug_reopen(repo, a: dict[str, Any], *, agent: str):
     return bug_reopen(repo, a["id"], reason=a.get("reason", "") or "", agent=agent)
 
 
+#: Whether this process has handed the tool table to `ddflow_upgrade` yet.
+_upgrade_vocabulary = {"provided": False}
+
+
 def _api():
     """Imported lazily: `surfaces` may reach `api`, and doing it at call time keeps the
     module import graph flat for anything that only wants the tool table."""
     from ... import api
 
+    if not _upgrade_vocabulary["provided"]:
+        # The MCP server's side of what the CLI registers at import: the tool table, which
+        # `ddflow_upgrade` judges names by. Here, not at import, to keep the table api-free.
+        _upgrade_vocabulary["provided"] = True
+        api.refs.provide_upgrade_vocabulary(None, sources()[1])
     return api
 
 
