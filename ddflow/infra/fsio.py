@@ -559,7 +559,7 @@ class Managed:
         gap: str = "\n",
     ) -> str:
         """`text` with the region replaced by `body` stamped for this ddflow (appended when
-        absent), everything outside it byte for byte. A region a newer ddflow wrote is
+        absent), everything outside it byte for byte. A region written at a newer FORMAT LEVEL is
         NOT rewritten: NewerContent. At the same level the attributes this version does
         not know are carried over."""
         state = self.state(text, version=version, fmt=fmt)
