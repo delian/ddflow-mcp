@@ -11,6 +11,7 @@ inside a repeat that can run more than `MAX_BRANCH_REPS` times, or more than
 from __future__ import annotations
 
 import re
+from re import _parser as sre_parse  # type: ignore[attr-defined]
 
 MAX_PATTERN = 200
 MAX_OPEN_REPEATS = 2
@@ -63,10 +64,6 @@ def check_regex(pattern: str, *, ignore_case: bool = True) -> re.Pattern[str]:
     """Compile `pattern` if it is safe to run; otherwise raise SearchError saying why."""
     if len(pattern) > MAX_PATTERN:
         raise SearchError(f"regex refused: longer than {MAX_PATTERN} characters")
-    try:
-        from re import _parser as sre_parse  # type: ignore[attr-defined]
-    except ImportError:  # pragma: no cover - Python < 3.11
-        import sre_parse  # type: ignore[no-redef]
     try:
         tree = sre_parse.parse(pattern)
         rx = re.compile(pattern, re.IGNORECASE if ignore_case else 0)

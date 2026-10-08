@@ -7,7 +7,7 @@ Pure functions over token lists, so any source ranks the same way. FTS5's own BM
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 
 from ...core import textsim
 
@@ -56,8 +56,3 @@ def rrf(rankings: Iterable[Sequence[str]], k: int = RRF_K) -> dict[str, float]:
         for rank, ident in enumerate(ranking, start=1):
             fused[ident] = fused.get(ident, 0.0) + 1.0 / (k + rank)
     return fused
-
-
-def best_first(scores: Mapping[str, float]) -> list[str]:
-    """Ids by descending score, ties by id so a run is repeatable."""
-    return sorted(scores, key=lambda i: (-scores[i], i))
