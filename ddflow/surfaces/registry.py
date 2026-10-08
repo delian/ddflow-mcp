@@ -788,6 +788,7 @@ def result_schemas(
     --schemas`` prints it).
     """
     table: dict[str, dict[str, Any]] = {}
+    optional = tuple(optional)  # read once per tool below
     for tool, spec in tools.items():
         payload, text = spec.get("payload", ""), spec.get("text", False)
         command = command_name(tool)
@@ -800,7 +801,7 @@ def result_schemas(
             row["payload"] = payload
         elif isinstance(payload, tuple):
             row["payload"] = list(payload)
-        extra = tuple(optional) if isinstance(payload, tuple) else ()
+        extra = optional if isinstance(payload, tuple) else ()
         row["output_schema"] = output_schema(command, payload, text=text, extra=extra)
         row["array_schema"] = array_schema(command, payload)
         table[tool] = row
