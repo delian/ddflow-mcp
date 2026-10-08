@@ -65,19 +65,31 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_upgrade": {
         "description": (
-            "What upgrading this project to the running ddflow would change, by category: data repairs, config (new knobs, changed defaults; an operator-set value needs their confirmation), instructions (drifted driver docs and rules, hand-edited flagged), hooks, MCP launch, opt-in features. Writes nothing. Exit 0 up to date; 1 the plan has items."
+            "What upgrading this project to the running ddflow would change, by category (repairs, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it does the plan after saving originals to .ddflow/backups, returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. Plan exit: 0 up to date, 1 items."
         ),
         "properties": {
-            "plan": (
-                "boolean",
-                "Dry run (the default). false is refused: no apply mode yet.",
-                False,
-            ),
+            "plan": ("boolean", "Dry run (default); false applies all.", False),
+            "apply": ("string", "Categories to apply: all, or a comma list.", False),
+            "confirm": ("array", "With apply: keys the operator accepts (needs reason).", False),
+            "reason": ("string", "Why they accept it.", False),
+            "backup": ("string", "local or none.", False),
         },
         "api": lambda repo, a, agent: _api().upgrade(
-            repo, plan=a.get("plan", True) is not False, agent=agent
+            repo,
+            plan=a.get("plan") if isinstance(a.get("plan"), bool) else None,
+            apply=str(a.get("apply") or ""),
+            confirm=[str(x) for x in (a.get("confirm") or [])],
+            reason=str(a.get("reason") or ""),
+            backup=str(a.get("backup") or ""),
+            agent=agent,
         ),
-        "payload": ("running", "project_version", "up_to_date", "total", "categories"),
+        # The plan's fields; an apply also carries what it did (`applied`), so the body is
+        # the same parsed value as the CLI's `--json` in either mode.
+        "payload": lambda a: (
+            _api().setup.UPGRADE_APPLY_PAYLOAD
+            if (a.get("apply") or a.get("plan") is False)
+            else _api().setup.UPGRADE_PAYLOAD
+        ),
     },
     "ddflow_doctor": {
         "description": (

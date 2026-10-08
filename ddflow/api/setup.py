@@ -15,12 +15,14 @@ load-bearing as anything in the pipeline:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..services import upgrade_apply as UA
 from ..services import upgrade_plan as UP
 from ._base import _load
 
@@ -979,22 +981,50 @@ def hooks(
 
 #: The wire fields of the plan: the body of `ddflow upgrade --json` and of `ddflow_upgrade`.
 UPGRADE_PAYLOAD = ("running", "project_version", "up_to_date", "total", "categories")
+#: ... and of an apply, which adds what it did (`applied`) to the plan that is left.
+UPGRADE_APPLY_PAYLOAD = (*UPGRADE_PAYLOAD, "applied")
+_APPLIED_FIELDS = (
+    "from",
+    "to",
+    "categories",
+    "results",
+    "applied",
+    "refused",
+    "failed",
+    "unavailable",
+    "backup",
+    "confirmed",
+    "noop",
+)
 
 
-def upgrade(repo: Path, *, plan: bool = True, agent: str = "") -> O.Outcome:
-    """What upgrading this project to the running ddflow would change: the plan, written
-    nowhere (`services.upgrade_plan`).
+def upgrade(
+    repo: Path,
+    *,
+    plan: bool | None = None,
+    apply: str = "",
+    confirm: Sequence[str] = (),
+    reason: str = "",
+    backup: str = "",
+    agent: str = "",
+) -> O.Outcome:
+    """What upgrading this project to the running ddflow would change (the plan, written
+    nowhere), or -- with ``apply`` -- doing it (`services.upgrade_apply`).
 
-    Exit 0 when the project is up to date; exit 1 while the plan has anything in it, the
-    way a diff exits: the plan is the finding, and an agent checking "is there work"
-    needs no parsing. The body is the same plan on the CLI's `--json` and over MCP.
+    The plan exits 0 when the project is up to date and 1 while it has anything in it, the
+    way a diff exits: the plan is the finding, and an agent checking "is there work" needs
+    no parsing. ``plan`` is None when the caller said nothing (the plan), True to ask for
+    it explicitly (refused together with ``apply``) and False for an apply of everything.
+    An apply takes ``apply`` as the categories (a comma list, or ``all``), backs up what it will rewrite first, and returns the
+    plan that is LEFT with an ``applied`` report: exit 0 when everything chosen was applied
+    or acknowledged, 3 while an item waits for the operator's confirmation (``confirm`` names
+    each by key, ``reason`` says why; both recorded), 1 when a step failed, 2 when one could
+    not run. The body is the same on the CLI's `--json` and over MCP.
     """
-    if not plan:
-        return O.refused(
-            "upgrade",
-            "this ddflow only plans an upgrade: applying one is not available yet "
-            "(call with plan=true, the default)",
-        )
+    if apply and plan is True:
+        return O.refused("upgrade", "choose the plan or --apply, not both")
+    if apply or plan is False:
+        return _upgrade_apply(repo, apply or "all", confirm, reason, backup, agent)
     log, cfg, st = _load(repo, agent)
     data = UP.build(repo, log, cfg, st)
     data["text"] = UP.render(data)
@@ -1006,6 +1036,52 @@ def upgrade(repo: Path, *, plan: bool = True, agent: str = "") -> O.Outcome:
         exit=O.FAIL,
         reason=f"{data['total']} upgrade item(s) pending",
     )
+
+
+def _upgrade_apply(
+    repo: Path, categories: str, confirm: Sequence[str], reason: str, backup: str, agent: str
+) -> O.Outcome:
+    keys = [c.strip() for c in confirm if c and c.strip()]
+    if keys and not reason.strip():
+        return O.refused(
+            "upgrade", "--confirm names what the operator accepts and needs --reason: say why"
+        )
+    log, cfg, st = _load(repo, agent)
+    up = getattr(cfg, "upgrade", None)
+    try:
+        done = UA.apply(
+            repo,
+            log,
+            cfg,
+            st,
+            categories=categories,
+            confirm=dict.fromkeys(keys, reason.strip()),
+            config_changes=getattr(up, "config_changes", "agent"),
+            backup=backup or getattr(up, "backup", "local"),
+            agent=agent,
+        )
+    except ValueError as exc:
+        return O.failed("upgrade", str(exc))
+    log, cfg, st = _load(repo, agent)  # the plan that is left, judged on what is on disk now
+    data = UP.build(repo, log, cfg, st)
+    data["applied"] = {k: done[k] for k in _APPLIED_FIELDS}
+    left = "Up to date." if data["up_to_date"] else f"{data['total']} item(s) remain in the plan."
+    data["text"] = f"{done['text']}\n{left}".strip()
+    return O.Outcome(kind="upgrade", data=data, exit=done["exit"], reason=_apply_reason(done))
+
+
+def _apply_reason(done: dict[str, Any]) -> str:
+    """Why an apply did not exit 0, in one line ("" when it did)."""
+    if done["failed"]:
+        return f"{done['failed']} upgrade step(s) failed"
+    if done["refused"]:
+        return (
+            f"{done['refused']} upgrade item(s) need the operator's confirmation: "
+            f"ddflow upgrade --apply --confirm KEY --reason WHY"
+        )
+    if done["unavailable"]:
+        return f"{done['unavailable']} upgrade step(s) could not run"
+    return ""
 
 
 def _prompts_get(P, repo: Path, name: str, pairs: list[str], problems: list[str]) -> O.Outcome:
