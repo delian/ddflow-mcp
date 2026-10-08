@@ -31,3 +31,6 @@ baseline = 5
 # which read waivers from the log and put review reminders in brief and doctor.
 "ddflow/services/guidance/waivers.py:approved_in" = "B-dec-waivers"
 "ddflow/services/guidance/review.py:reminders" = "B-dec-review"
+# The record surface (B-uni-record-surface.2-surface): a family moves onto it by calling this
+# with its RecordKind; B-rules-cli is the first to.
+"ddflow/surfaces/records.py:add_record_commands" = "B-rules-cli"
