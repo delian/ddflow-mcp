@@ -20,16 +20,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-from ...config import Config
-from ...core.events import Event
-from ...core.model import State, fold
-from ...infra.log import EventLog
-
-#: An event a migration asks to append: `(kind, subject, data)`.
-Corrective = tuple[str, str, dict[str, Any]]
+from ..repairs.base import Context, Corrective, Unavailable, context
 
 #: Who may apply a migration, as for a repair: `agent` unasked, `operator` only when named
 #: (it rewrites something a person may have written).
@@ -51,11 +44,6 @@ KINDS = frozenset(
 )
 
 
-class Unavailable(Exception):
-    """A step could not run (an unreadable file, no git). Reported as `unavailable`, never as
-    "nothing to migrate": a check that did not run must not read as clean."""
-
-
 @dataclass(frozen=True)
 class Finding:
     #: Stable across runs for the same thing to migrate.
@@ -73,21 +61,6 @@ class Change:
 
     path: str
     action: str
-
-
-@dataclass
-class Context:
-    repo: Path
-    log: EventLog
-    cfg: Config
-    events: list[Event]
-    st: State
-
-
-def context(repo: Path, log: EventLog, cfg: Config) -> Context:
-    """A fresh read of the log: a migration applied earlier in the same run is visible."""
-    events = log.read_all()
-    return Context(Path(repo), log, cfg, events, fold(events, strict=False))
 
 
 @dataclass(frozen=True)
@@ -119,3 +92,6 @@ class Migration:
             "action": self.action,
             "consent": self.consent,
         }
+
+
+__all__ = ["Context", "Corrective", "Unavailable", "context"]
