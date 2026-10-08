@@ -361,8 +361,9 @@ def _settings_findings(repo: Path, rel: str, vocab: Vocabulary) -> list[Finding]
     except ValueError:
         return []
     out: list[Finding] = []
+    seen: dict[str, int] = {}  # the same command twice in a file: each at its own line
     for command in _hook_commands(data):
-        line = _line_of(text, command)
+        line, seen[command] = _line_of(text, command, seen.get(command, 0))
         found = _text_findings(rel, command, "settings hook", vocab, code=True)
         # a hook ddflow wrote carries its stamped region; any other hook is the person's
         owned = bool(_owned_spans(command))
@@ -382,16 +383,18 @@ def _hook_commands(data: object) -> Iterator[str]:
                     yield h["command"]
 
 
-def _line_of(text: str, command: str) -> int:
-    """The line of a hook command in its settings file: the whole string when it is found
-    exactly as written, else its first line (which another hook's may begin with)."""
+def _line_of(text: str, command: str, after: int = 0) -> tuple[int, int]:
+    """``(line, where the match ends)`` of a hook command in its settings file, searching
+    from ``after``: the whole string when it is found as written, else its first line
+    (which another hook's may begin with)."""
     for ascii_only in (True, False):
-        at = text.find(json.dumps(command, ensure_ascii=ascii_only))
+        quoted = json.dumps(command, ensure_ascii=ascii_only)
+        at = text.find(quoted, after)
         if at >= 0:
-            return text.count("\n", 0, at) + 1
+            return text.count("\n", 0, at) + 1, at + len(quoted)
     key = json.dumps(command.splitlines()[0] if command else "")[1:-1][:60]
-    at = text.find(key) if key else -1
-    return text.count("\n", 0, at) + 1 if at >= 0 else 1
+    at = text.find(key, after) if key else -1
+    return (text.count("\n", 0, at) + 1, at + len(key)) if at >= 0 else (1, after)
 
 
 def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
@@ -548,13 +551,14 @@ def _rewrite_settings(text: str, vocab: Vocabulary) -> str:
 
 
 def _swap_json_string(text: str, old: str, new: str) -> str:
-    """``text`` with the JSON string ``old`` replaced by ``new``, spelled as the file spells
-    it (escaped or not); unchanged when ``old`` is not there exactly once."""
+    """``text`` with every JSON string ``old`` replaced by ``new``, spelled as the file spells
+    it (escaped or not): the same command listed under two events is the same stale text.
+    Unchanged when ``old`` is not there."""
     for ascii_only in (True, False):
         was, now = (
             json.dumps(old, ensure_ascii=ascii_only),
             json.dumps(new, ensure_ascii=ascii_only),
         )
-        if text.count(was) == 1:
-            return text.replace(was, now, 1)
+        if was in text:
+            return text.replace(was, now)
     return text
