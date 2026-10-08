@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import re
+import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -194,3 +197,84 @@ def test_gate_status_render_draws_the_shared_marks() -> None:
         "[ ]",
     ]
     assert isinstance(s, GateStatus)
+
+
+# -- exit codes: one home ---------------------------------------------------------------
+
+#: Modules still defining an exit code as an int literal (the ratchet only goes down);
+#: `core/outcome.py` is the home.
+EXIT_NAME = re.compile(r"^(OK|FAIL|FAILED|NOTHING|REFUSED|UNAVAILABLE|EXIT_[A-Z_]+)$")
+
+
+def _is_int(node: ast.AST | None) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, int)
+
+
+def _pairs(target: ast.AST, value: ast.AST | None) -> Iterator[tuple[ast.AST, ast.AST | None]]:
+    """Each (name, value) an assignment binds, tuples unpacked pairwise."""
+    if isinstance(target, ast.Tuple) and isinstance(value, ast.Tuple):
+        for t, v in zip(target.elts, value.elts, strict=False):
+            yield from _pairs(t, v)
+    elif isinstance(target, ast.Tuple):
+        for t in target.elts:
+            yield from _pairs(t, None)
+    else:
+        yield target, value
+
+
+def _exit_literals() -> list[str]:
+    sites = []
+    for path in sorted(PKG.rglob("*.py")):
+        rel = path.relative_to(PKG).as_posix()
+        if rel == "core/outcome.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Assign):
+                pairs = [pr for t in node.targets for pr in _pairs(t, node.value)]
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                pairs = [(node.target, node.value)]
+            else:
+                continue
+            if any(
+                isinstance(t, ast.Name) and EXIT_NAME.match(t.id) and _is_int(v) for t, v in pairs
+            ):
+                sites.append(f"{rel}:{node.lineno}")
+    return sites
+
+
+#: export/write.py's EXIT_STALE (awaiting its slice) and review.py's REVIEWED/ERROR/
+#: UNAVAILABLE/PARTIAL, a result vocabulary of its own that shares four small ints.
+OLD_EXIT_LITERALS = 2
+
+
+def test_exit_codes_are_defined_once() -> None:
+    sites = _exit_literals()
+    assert len(sites) <= OLD_EXIT_LITERALS, f"import from ddflow.core.outcome instead: {sites}"
+
+
+def test_the_reexported_exit_names_are_the_outcome_values() -> None:
+    from ddflow.core import outcome as O
+    from ddflow.services import upstream_delivery as U
+    from ddflow.services.export import query
+    from ddflow.surfaces import context
+
+    assert (context.OK, context.FAIL, context.NOTHING, context.REFUSED) == (0, 1, 2, 3)
+    assert (context.OK, context.FAIL, context.NOTHING, context.REFUSED) == (
+        O.OK,
+        O.FAIL,
+        O.NOTHING,
+        O.REFUSED,
+    )
+    assert (query.EXIT_UNAVAILABLE, query.EXIT_REFUSED) == (2, 3)
+    assert (U.OK, U.FAILED, U.UNAVAILABLE, U.REFUSED) == (0, 1, 2, 3)
+
+
+@pytest.mark.parametrize(
+    "line", ["EXIT_FOO: int = 5", "OK, X = 0, 'x'", "UNAVAILABLE = 2", "A, REFUSED = 'a', 3"]
+)
+def test_the_exit_literal_scan_sees_every_spelling(line: str, tmp_path: Path, monkeypatch) -> None:
+    pkg = tmp_path / "ddflow"
+    pkg.mkdir()
+    (pkg / "mod.py").write_text(line + "\n")
+    monkeypatch.setattr(sys.modules[__name__], "PKG", pkg)
+    assert _exit_literals() == ["mod.py:1"]

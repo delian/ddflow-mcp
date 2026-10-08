@@ -24,13 +24,17 @@ from typing import Any
 from ..config import Config
 from ..core.ids import auto_id
 from ..core.model import fold
+from ..core.outcome import (  # noqa: F401  (the commands import these from here)
+    FAIL,
+    NOTHING,
+    OK,
+    REFUSED,
+)
 from ..core.plain import plain
 from ..infra import worktree as W
 from ..infra.log import EventLog, resolve_agent_id
 from ..infra.store import Store
 from ..services import gates as G
-
-OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Splitting into one piece is a rename, not a split.
 _MIN_SPLIT_PARTS = 2

@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 from urllib.parse import quote
 
+from ..core.outcome import FAIL, NOTHING, OK, REFUSED
 from ..infra import fsio
 from ..infra import upstream_gh as gh
 from .bugreport import Bundle
@@ -37,7 +38,7 @@ from .redact_report import redactor
 URL_MAX = 8000
 REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.][A-Za-z0-9_.-]*")
 
-OK, FAILED, UNAVAILABLE, REFUSED = 0, 1, 2, 3
+FAILED, UNAVAILABLE = FAIL, NOTHING
 
 
 @runtime_checkable
