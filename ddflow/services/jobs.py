@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import os
 import re
-import socket
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..core.model import Job
+from ..infra import hostinfo as H
 from ..infra import proc as P
 
 #: The line the launch wrapper appends when the job's command exits, so a job that
@@ -53,7 +53,7 @@ _STARTTIME = 19
 
 
 def host() -> str:
-    return socket.gethostname()
+    return H.hostname()
 
 
 def _stat(pid: int) -> str | None:
@@ -132,7 +132,7 @@ def status(job: Job) -> Status:
             f"ended, exit {job.exit_code}" if job.exit_code is not None else "ended",
             job.exit_code,
         )
-    if job.host and job.host != host():
+    if not H.same_host(job.host):
         return Status("elsewhere", f"on host {job.host}; cannot be checked from here")
     if job.pid and alive(job.pid):
         if job.proc_start and proc_start(job.pid) not in ("", job.proc_start):

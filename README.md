@@ -217,7 +217,7 @@ the same implementation, so neither drifts from the other.
 | **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
-| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, migrations (registered breaking-change migrations and the files each would rewrite), config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--confirm KEY ... --reason WHY]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`) |
+| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, migrations (registered breaking-change migrations and the files each would rewrite), config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--snapshot] [--confirm KEY ... --reason WHY]`; **undo it:** `ddflow upgrade --restore [NAME]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`, `snapshot`, `restore`) |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
@@ -3991,7 +3991,7 @@ naming `ddflow rule sync`; and `ddflow replay --out DIR` writes `rules/<id>.toml
 applied or acknowledged, 1 when a step failed, 2 when one could not run (never read as
 done), 3 while an item waits for the operator. Before it rewrites any file it copies the
 originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, never shared;
-`--backup none` or `[upgrade].backup = "none"` skips it, `[upgrade].backup_keep` (default 10) is how many are
+`--backup none` or `[upgrade].backup = "none"` skips it, `--backup snapshot` (or `--snapshot`) keeps it in git, `[upgrade].backup_keep` (default 10) is how many are
 kept) with a `manifest.json` of what was
 there, and prints the backup and `git diff` to review the change.
 
@@ -4005,6 +4005,13 @@ for one run). Both are explained here so you can choose:
 | cost | disk; nothing in your history | a tag and, for untracked files, one commit; needs git, and a clean working tree (the snapshot is what HEAD holds) |
 | stops when | the backup cannot be written (a failure, exit 1) | there is no git, no commit, or uncommitted changes to tracked files: exit 3 and nothing is changed, with the reason |
 | undo | copy the files back from `<backup>/files/in/` (`manifest.json` lists them) | `git checkout <tag> -- <file>` (the upgrade's changes stay uncommitted until you commit them; once committed, `git revert` that commit) |
+
+`--snapshot` is `--backup snapshot` for one run (with `--apply`; MCP: `snapshot: true`); naming
+another `--backup` mode beside it is refused (exit 3). **Undo:** `ddflow upgrade --restore [NAME]`
+(MCP: `restore`) puts back the named local backup or snapshot, or the newest when NAME is
+omitted, and saves what it replaces first; it stands alone, so combining it with any other
+option except the global `--json` (`--plan`, `--apply`, `--confirm`, `--reason`, `--backup`, `--snapshot`)
+is refused (exit 3). `--json` carries a `restored` object.
 
 A snapshot cannot hold a file git ignores or one outside the project (the git hooks): those
 still get a local copy, named in the output. `--backup none` (or `[upgrade].backup = "none"`)

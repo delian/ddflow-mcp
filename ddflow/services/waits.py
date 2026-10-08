@@ -31,7 +31,6 @@ import contextlib
 import json
 import math
 import os
-import socket
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -40,6 +39,7 @@ from ..core import clock
 from ..core.digest import content_digest
 from ..core.slug import safe_filename
 from ..infra import fsio
+from ..infra import hostinfo as H
 from ..infra.tomlcfg import atomic_write
 from .jobs import alive, proc_start
 
@@ -92,7 +92,7 @@ class Waiter:
             return False
         if self.woken:
             return bool(self.until)  # no process to fall back on: only a deadline lapses it
-        if self.host and self.host != socket.gethostname():
+        if not H.same_host(self.host):
             # Another machine sharing the checkout (NFS). Its pid means nothing here, so
             # the deadline is the only evidence -- and it has not passed.
             return True
@@ -147,7 +147,7 @@ def register(repo: Path, w: Waiter) -> Waiter:
     w.pid = w.pid or os.getpid()
     if not w.pid_start:
         w.pid_start = proc_start(w.pid)
-    w.host = w.host or socket.gethostname()
+    w.host = w.host or H.hostname()
     w.since = w.since or time.time()
     if not w.path:
         safe = safe_filename(w.agent, repl="_", unicode=True)
@@ -240,7 +240,7 @@ def queue(
         asks=1,
         path=str(path),
     )
-    w.host = socket.gethostname()
+    w.host = H.hostname()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent.parent)
