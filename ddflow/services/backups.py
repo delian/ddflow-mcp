@@ -64,19 +64,24 @@ def make_backup(
     else:
         raise OSError(f"{root}: too many backups named {name}")
     entries: list[dict[str, Any]] = []
-    for f in dict.fromkeys(Path(x).resolve() for x in files):
+    for f in dict.fromkeys(_lresolve(x) for x in files):
         try:
             shown = f.relative_to(repo).as_posix()
             stored = f"{INSIDE}/{shown}"
         except ValueError:
             shown = f.as_posix()
             stored = f"{OUTSIDE}/{shown.lstrip('/')}"
-        existed = f.is_file()
-        if existed:
+        entry: dict[str, Any] = {"path": shown, "stored": "", "existed": os.path.lexists(f)}
+        if f.is_symlink():  # the link itself, not what it points at
+            entry["link"] = os.readlink(f)
+        elif f.is_file():
             target = dest / FILES / stored
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, target)
-        entries.append({"path": shown, "stored": stored if existed else "", "existed": existed})
+            entry["stored"] = stored
+        else:
+            entry["existed"] = False
+        entries.append(entry)
     manifest = {"from": frm, "to": to, "mode": "local", **(extra or {}), "files": entries}
     replace_text(dest / MANIFEST, json.dumps(manifest, indent=2) + "\n")
     return dest
@@ -354,7 +359,13 @@ def _restore_local(repo: Path, directory: Path, *, safety: bool = True) -> dict[
     removed: list[str] = []
     for e in entries:
         target = _abs(repo, e["path"])
-        if e.get("existed") and e.get("stored"):
+        if e.get("link"):  # it was a symlink: recreate the link, never write through it
+            if os.path.lexists(target):
+                target.unlink()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(e["link"], target)
+            restored.append(e["path"])
+        elif e.get("existed") and e.get("stored"):
             copy = directory / FILES / e["stored"]
             atomic_write(target, copy.read_bytes(), mode=stat.S_IMODE(copy.stat().st_mode))
             restored.append(e["path"])
@@ -377,7 +388,13 @@ def _restore_snapshot(repo: Path, tag: str) -> dict[str, Any]:
     note = json.loads(shown.out)
     held, created = list(note.get("held", [])), list(note.get("created", []))
     side = _sidecar(repo, tag)  # the files git could not hold
-    side_files = (_manifest(side) or {}).get("files", []) if side is not None else []
+    side_files: list[dict[str, Any]] = []
+    if side is not None:
+        # Judged before anything is changed: a damaged sidecar refuses the whole restore.
+        side_manifest = _manifest(side)
+        if side_manifest is None or not isinstance(side_manifest.get("files"), list):
+            raise LookupError(f"the manifest of backup {side.name!r} cannot be read")
+        side_files = side_manifest["files"]
     saved = make_backup(
         repo,
         [repo / p for p in (*held, *created)] + [_abs(repo, e["path"]) for e in side_files],
