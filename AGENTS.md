@@ -1,6 +1,6 @@
 # ddflow
 
-<!-- DDFLOW:BEGIN (managed — edits inside this block are overwritten) -->
+<!-- ddflow:begin rules/work-queue ddflow=0.2.0 fmt=1 sha=f60922c1c1f6 -->
 ## Work queue — ddflow
 
 Work in this project is a queue of **phases** containing **tasks**, with declared
@@ -43,4 +43,4 @@ when they decline, record that gate `unavailable` rather than passing it unaided
 refused. Never treat `2` as `0`.
 
 Full driver: [`docs/ddflow/drivers/implement-phase.md`](docs/ddflow/drivers/implement-phase.md) · per-agent notes: `docs/ddflow/drivers/deltas/`
-<!-- DDFLOW:END -->
+<!-- ddflow:end rules/work-queue -->

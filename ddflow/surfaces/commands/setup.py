@@ -447,9 +447,11 @@ def cmd_adopt(a, c: Ctx) -> int:
         out.data["text"],
         out.body(("actions", "agents", "companions_ready", "companions_absent")),
     )
-    if out.exit == FAIL:
+    if (
+        out.exit != OK
+    ):  # a failure (1) or a refusal (3): the rest was written, the exit says not done
         print(out.reason, file=sys.stderr)
-        return FAIL
+        return out.exit
     return OK
 
 

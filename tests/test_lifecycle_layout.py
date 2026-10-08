@@ -15,6 +15,10 @@ from pathlib import Path
 from ddflow.api import lifecycle as LC
 from ddflow.services import leases
 
+#: What this checks, read by `ddflow tests --item` (B2a1eaa259e): a change under one of
+#: these paths selects this test, even where nothing it imports changed.
+GOVERNS = ("ddflow/api/lifecycle/**",)
+
 #: What `api/lifecycle.py` exposed before the split -- the names no caller may lose.
 PUBLIC = [
     "DEFAULT_CHECK_RECOVERY",
