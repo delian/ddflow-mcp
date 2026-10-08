@@ -422,3 +422,275 @@ def redact_argv(
             after_flag = out[-1] in known and "=" not in out[-1]
             out.append("<value>" if after_flag else "<arg>")
     return out
+
+
+# -- the committed log: which fields of which event kind are free text (D-unify 6) ----------
+
+#: Event kind -> the `data` fields that hold free text. `EventLog._write` runs these through
+#: the `log` profile, so a secret, a LAN address, the machine's hostname or a home path in a
+#: gate's output tail, a bug summary or a lesson is never committed (bug B5deba76d04).
+#: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
+#: its keys. These are the fields that are text even where their name is a known lookup name.
+LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "approval.granted": ("note",),
+    "bug.fixed": ("lesson", "changelog", "regression_verify"),
+    "bug.found": ("summary", "title"),
+    "bug.invalid": ("evidence", "reason"),
+    "bug.reopened": ("reason",),
+    "cadence.ran": ("evidence", "result"),
+    "ci.result": ("checks",),
+    "decision.recorded": (
+        "alternatives",
+        "consequences",
+        "context",
+        "decision",
+        "title",
+        "sources",
+    ),
+    "decision.superseded": ("reason",),
+    "def.merged": ("reason",),
+    "def.recorded": ("fields",),
+    "def.retired": ("reason",),
+    "def.superseded": ("reason",),
+    "def.updated": ("fields",),
+    "flow.chosen": ("reason", "value"),
+    "gate.failed": ("evidence", "reason"),
+    "gate.partial": ("evidence", "reason"),
+    "gate.passed": ("evidence", "reason"),
+    "gate.skipped": ("evidence", "reason"),
+    "gate.unavailable": ("evidence", "reason"),
+    "item.abandoned": ("reason",),
+    "item.blocked": ("reason",),
+    "item.completed": ("changelog", "evidence"),
+    "item.reopened": ("reason", "claims"),
+    "item.unblocked": ("note",),
+    "job.ended": ("note",),
+    "lease.acquired": ("note",),
+    "job.started": ("command",),
+    "lease.expired": ("reason",),
+    "lease.released": ("note", "reason"),
+    "lesson.recorded": ("how", "pattern", "rule", "summary", "title", "why", "sites"),
+    "memory.forgotten": ("reason",),
+    "memory.recorded": ("text", "source"),
+    "phase.added": ("body", "title", "line"),
+    "phase.updated": ("body", "title"),
+    "pr.synced": ("feedback",),
+    "record.extended": ("text",),
+    "research.recorded": (
+        "claim",
+        "falsifier",
+        "mechanism",
+        "probe",
+        "probe_output",
+        "question",
+        "sources",
+    ),
+    "review.triaged": ("title", "probe"),
+    "schedule.defined": ("title",),
+    "schedule.removed": ("reason",),
+    "session.ended": ("summary",),
+    "session.note": ("text", "source"),
+    "session.prompt": ("text",),
+    "session.started": ("cwd",),
+    "skew.overridden": ("reason",),
+    "task.added": ("body", "title", "line"),
+    "task.removed": ("reason",),
+    "task.updated": ("body", "title"),
+    "trigger.evaluated": ("errors",),
+    "trigger.suppressed": ("detail", "reason"),
+}
+
+#: Field NAMES that are ids, digests, shas, paths or numbers something looks up by, in every
+#: kind: written as given. The default is the other way round -- a field not listed here (or in
+#: `LOG_VERBATIM_FIELDS`) is redacted, so a field the vocabulary does not know of (a `--note` on a
+#: claim, a `--reason` on a link, a review's feedback) cannot be committed as typed.
+LOG_VERBATIM_NAMES = frozenset(
+    {
+        "base", "branch", "digest", "duplicate_of", "extends", "fix_task", "fixes", "globs",
+        "hash", "head", "id", "ids", "needs", "number", "parent", "path", "paths", "related",
+        "resources", "sha", "subject", "supersedes", "tags", "tree", "url", "v", "worktree",
+    }
+)  # fmt: skip
+
+#: (kind, field) pairs that are looked up, compared or opened, though their name is not in
+#: `LOG_VERBATIM_NAMES`, each with why.
+#: Field names that are free text in every kind (the dedupe verdict quotes candidates).
+LOG_TEXT_NAMES = frozenset({"dedupe"})
+
+LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("approval.granted", "token_hash"): "a hash that is compared",
+    ("approval.used", "token_hash"): "a hash that is compared",
+    ("worktree.merged", "branch_head"): "a sha",
+    ("worktree.merged", "outside_globs"): "globs",
+    ("schedule.defined", "scope_globs"): "globs",
+    ("pr.synced", "head_sha"): "a sha",
+    ("pr.synced", "merge_sha"): "a sha",
+    ("approval.granted", "user"): "a user id",
+    ("backmerge.recorded", "into"): "a branch name",
+    ("bug.found", "key"): "a dedupe key",
+    ("bug.found", "scope"): "a scope word",
+    ("bug.found", "severity"): "a severity word",
+    ("ci.result", "status"): "a status word",
+    ("ddflow.seen", "version"): "a version",
+    ("decision.recorded", "item"): "an item id",
+    ("decision.recorded", "status"): "a status word",
+    ("def.merged", "source"): "an origin id or path",
+    ("def.recorded", "source"): "an origin id or path",
+    ("def.retired", "source"): "an origin id or path",
+    ("def.superseded", "source"): "an origin id or path",
+    ("def.updated", "source"): "an origin id or path",
+    ("export.disabled", "document"): "a document name",
+    ("export.enabled", "document"): "a document name",
+    ("export.enabled", "mode"): "a mode word",
+    ("flow.chosen", "knob"): "a config key",
+    ("flow.chosen", "user"): "a user id",
+    ("gate.failed", "gate"): "a gate name",
+    ("gate.failed", "kind"): "a kind word",
+    ("gate.out_of_order", "gate"): "a gate name",
+    ("gate.out_of_order", "policy"): "a policy word",
+    ("gate.partial", "gate"): "a gate name",
+    ("gate.passed", "gate"): "a gate name",
+    ("gate.passed", "kind"): "a kind word",
+    ("gate.skipped", "gate"): "a gate name",
+    ("gate.unavailable", "gate"): "a gate name",
+    ("job.started", "host"): "a machine id compared for liveness",
+    ("job.started", "item"): "an item id",
+    ("job.started", "log"): "a path that is opened",
+    ("job.started", "proc_start"): "a process start stamp",
+    ("lease.acquired", "holder"): "an agent id",
+    ("lease.acquired", "kind"): "a kind word",
+    ("lease.expired", "holder"): "an agent id",
+    ("lease.released", "by"): "an agent id",
+    ("lease.released", "event"): "an event id",
+    ("lease.released", "holder"): "an agent id",
+    ("link.recorded", "relation"): "a relation word",
+    ("link.recorded", "target"): "an id",
+    ("phase.added", "source"): "an origin id or path",
+    ("pr.synced", "kind"): "a kind word",
+    ("pr.synced", "queue_state"): "a state word",
+    ("pr.synced", "state"): "a state word",
+    ("research.recorded", "verdict"): "a verdict word",
+    ("review.triaged", "severity"): "a severity word",
+    ("review.triaged", "verdict"): "a verdict word",
+    ("reviewer.configured", "user"): "a user id",
+    ("session.note", "item"): "an item id",
+    ("session.started", "tool"): "a harness name",
+    ("skew.overridden", "session"): "a session id",
+    ("task.added", "port_from"): "an id",
+    ("task.added", "port_of"): "an id",
+    ("task.added", "port_strategy"): "a strategy word",
+    ("task.added", "source"): "an origin id or path",
+    ("trigger.fired", "items"): "item ids",
+    ("trigger.fired", "job"): "a job id",
+    ("trigger.fired", "key"): "a dedupe key",
+    ("trigger.suppressed", "key"): "a dedupe key",
+    ("approval.granted", "host"): "a machine id compared by liveness",
+    ("backmerge.recorded", "forge"): "a forge name",
+    ("bug.found", "item"): "an item id",
+    ("ci.result", "stage"): "a stage word",
+    ("ddflow.seen", "install"): "an install kind",
+    ("decision.recorded", "decided_by"): "an agent id",
+    ("decision.superseded", "by"): "an agent id",
+    ("def.merged", "kind"): "a kind word",
+    ("def.recorded", "kind"): "a kind word",
+    ("def.retired", "kind"): "a kind word",
+    ("def.superseded", "kind"): "a kind word",
+    ("def.updated", "kind"): "a kind word",
+    ("deploy.recorded", "env"): "an environment name",
+    ("export.disabled", "by"): "an agent id",
+    ("export.enabled", "by"): "an agent id",
+    ("flow.chosen", "by"): "an agent id",
+    ("gate.failed", "by"): "an agent id",
+    ("gate.out_of_order", "ahead"): "gate names",
+    ("gate.partial", "by"): "an agent id",
+    ("gate.passed", "by"): "an agent id",
+    ("gate.skipped", "by"): "an agent id",
+    ("gate.started", "gate"): "a gate name",
+    ("gate.unavailable", "by"): "an agent id",
+    ("item.abandoned", "kind"): "a kind word",
+    ("item.blocked", "kind"): "a kind word",
+    ("item.completed", "kind"): "a kind word",
+    ("item.resolved", "kind"): "a kind word",
+    ("item.unblocked", "kind"): "a kind word",
+    ("job.started", "cwd"): "a directory that is opened",
+    ("lease.acquired", "agent"): "an agent id",
+    ("lease.expired", "event"): "an event id",
+    ("lease.released", "agent"): "an agent id",
+    ("lease.renewed", "holder"): "an agent id",
+    ("lesson.recorded", "seen_in"): "item ids",
+    ("link.recorded", "by"): "an agent id",
+    ("memory.recorded", "origin_at"): "a timestamp",
+    ("phase.added", "kind"): "a kind word",
+    ("pr.synced", "forge"): "a forge name",
+    ("record.extended", "relation"): "a relation word",
+    ("research.recorded", "item"): "an item id",
+    ("review.triaged", "gate"): "a gate name",
+    ("reviewer.configured", "kind"): "a kind word",
+    ("session.note", "at"): "a timestamp",
+    ("session.prompt", "item"): "an item id",
+    ("session.started", "model"): "a model id",
+    ("skew.overridden", "log_version"): "a version",
+    ("task.added", "kind"): "a kind word",
+    ("trigger.evaluated", "triggers"): "trigger ids",
+    ("trigger.fired", "events"): "event ids",
+    ("trigger.suppressed", "events"): "event ids",
+    ("bug.fixed", "regression_verified"): "an outcome word",
+    ("bug.reopened", "was"): "a state word",
+    ("item.unblocked", "was"): "a state word",
+    ("gate.partial", "outcome"): "an outcome word",
+    ("pr.synced", "checks"): "a status word",
+    ("record.extended", "who"): "an agent id",
+    ("research.recorded", "budget"): "a tier word",
+    ("review.triaged", "location"): "file:line, a lookup",
+    ("schedule.defined", "cadence"): "numbers and cron words",
+    ("skew.overridden", "running"): "a version",
+    ("worktree.merged", "landed_after"): "a sha",
+    ("bug.fixed", "regression_test"): "a test id",
+    ("def.superseded", "successor"): "an id",
+    ("def.merged", "successor"): "an id",
+    ("item.completed", "ledger"): "files, tests and counts",
+    ("item.resolved", "claim"): "re-applied by the fold: a lease with its worktree and event ids",
+    (
+        "item.resolved",
+        "definition",
+    ): "re-applied by the fold; its text was redacted when first written",
+    ("schedule.defined", "concurrency_group"): "a group id",
+    ("pr.synced", "queue"): "a queue state word",
+    ("worktree.merged", "landed_before"): "a sha",
+    ("trigger.evaluated", "now"): "a timestamp",
+    ("bug.fixed", "regression_tests"): "test ids",
+    ("item.completed", "overridden"): "gate names",
+    ("item.resolved", "keep"): "an id",
+    ("pr.synced", "review"): "a review state word",
+    ("def.merged", "provenance"): "ids of origin",
+    ("def.recorded", "provenance"): "ids of origin",
+    ("def.retired", "provenance"): "ids of origin",
+    ("def.superseded", "provenance"): "ids of origin",
+    ("def.updated", "provenance"): "ids of origin",
+}
+
+
+def redact_leaves(value: object, redactor: Redactor) -> object:
+    """``value`` with every string leaf redacted, whatever its key: the keys of a text field
+    come from data (gate names, `def` fields), and nothing looks a leaf up in the log."""
+    if isinstance(value, str):
+        return redactor.text(value).text
+    if isinstance(value, Mapping):
+        return {k: redact_leaves(v, redactor) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_leaves(v, redactor) for v in value]
+    return value
+
+
+def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
+    """``data`` of an event of ``kind`` with its text redacted (a new dict).
+
+    The declared text fields (`LOG_TEXT_FIELDS`) are redacted; so is every field that is not
+    a known lookup (`LOG_VERBATIM_NAMES`, `LOG_VERBATIM_FIELDS`): unknown is not text-free."""
+    text = LOG_TEXT_FIELDS.get(kind, ())
+    return {
+        k: v
+        if k not in text and (k in LOG_VERBATIM_NAMES or (kind, k) in LOG_VERBATIM_FIELDS)
+        else redact_leaves(v, redactor)
+        for k, v in data.items()
+    }

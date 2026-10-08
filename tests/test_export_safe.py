@@ -24,6 +24,8 @@ KEY = "sk-" + "a1b2c3d4e5f6a7b8c9d0e1f2"
 
 def _log(root: Path) -> None:
     log = EventLog(root, "agent-one")
+    # a log written before the write-time redaction (bug B5deba76d04): export redacts it
+    log._redact_data = lambda kind, data: data  # type: ignore[method-assign]
     log.append("phase.added", "P1", {"title": "Phase one"})
     log.append("decision.recorded", "D-lan", {"title": f"Review host is {LAN}", "decision": "x"})
     log.append("bug.found", "B-h", {"summary": f"build fails on {HOST} with {KEY}", "item": "P1"})

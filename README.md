@@ -3486,7 +3486,13 @@ scrub at read time is a scrub that `git show` walks straight past.
 One shared `Redactor` (`core/redact.py`) serves the log, the views, the exports, upstream reports, each a
 named profile (`redact_argv` gives the shape of a command line). The log profile is the full one: besides secrets (which keep their
 surrounding words, `api_key: [REDACTED]`) it removes private addresses and hosts, this machine's hostname, home-directory paths,
-emails, and (once the `[upstream]` section exists) its `redact_extra` names from every NEW prompt and note. Events already written are
+emails, and (once the `[upstream]` section exists) its `redact_extra` names from the free text of every NEW event, not only prompts and notes:
+`EventLog` applies it where every write passes: every string of an event's data is redacted unless it is a known lookup
+(`core.redact.LOG_VERBATIM_NAMES`: ids, digests, shas, paths, globs; `LOG_VERBATIM_FIELDS`: a few per-kind pairs, each with its reason), so
+gate evidence and output tails, bug summaries, lessons, decisions, task bodies, reasons, notes and a field the vocabulary has never heard
+of are all redacted. `LOG_TEXT_FIELDS` names the fields that are text even where their name is a lookup name. A new event kind must be classified or `tests/test_log_redaction_all_kinds.py` fails; a new
+field of a known kind that is a lookup must be added to those tables when the event-kind snapshot is regenerated, or it is redacted. A definition's digest (`def.recorded`) is of the redacted fields it
+stores. Events already written are
 not rewritten.
 
 ---

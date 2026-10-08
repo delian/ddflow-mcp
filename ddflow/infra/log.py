@@ -32,8 +32,9 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, TypeVar
 
-from ..config import LogConfig
+from ..config import Config, LogConfig, SessionConfig
 from ..core import digest as D
+from ..core import redact as R
 from ..core import upcasters as UP
 from ..core.events import (
     OLDER_MARK,
@@ -762,6 +763,7 @@ class EventLog:
         # next question about whether `.ddflow` existed answered yes about itself.
         # The directory is created on the first append instead.
         self._lamport = 0
+        self._redactor: Any = None
         self.skipped_lines = 0
 
     @property
@@ -928,6 +930,9 @@ class EventLog:
         # the version stamp and the skew override call this directly. Absent at version 1,
         # so the bytes written are unchanged until a kind's shape changes.
         data = UP.stamp(kind, data)
+        # The log is committed: free text goes through the `log` redaction profile HERE,
+        # where every write passes, declared per kind (D-unify 6, bug B5deba76d04).
+        data = self._redact_data(kind, data)
         # Re-read inside the lock: another agent may have advanced the clock.
         high = self._highest_lamport()
         for e in observed:
@@ -961,6 +966,43 @@ class EventLog:
         finally:
             os.close(fd)
         return ev
+
+    def _redact_data(self, kind: str, data: dict[str, Any]) -> dict[str, Any]:
+        """``data`` with the free-text fields of ``kind`` redacted (`core.redact.LOG_TEXT_FIELDS`).
+
+        The redactor is built on first need from the project's session patterns and the
+        machine's own hostname and home. An unreadable config falls back to the built-in
+        patterns; a bad pattern still raises, since this is a security control."""
+        red = self._redactor
+        if red is None:
+            names: list[str] = []
+            cached = True
+            try:
+                cfg = Config.load(self.root)
+                patterns = [*cfg.session.redact_patterns, *cfg.session.redact_extra]
+                # `[upstream].redact_extra`, once that section exists (`names_for`)
+                up = getattr(cfg, "upstream", None)
+                names = [str(n) for n in (getattr(up, "redact_extra", None) or [])]
+            except Exception:
+                # an unreadable config: the built-in patterns for THIS write, and the config is
+                # read again on the next one, so a fixed config is not shadowed by the fallback
+                patterns, cached = [*SessionConfig().redact_patterns], False
+            try:
+                host = socket.gethostname()
+            except OSError:
+                host = ""
+            # the `log` profile's machine-local inputs, as `services.redact_report.redactor`
+            # resolves them: this machine's hostname and $HOME, no repo root
+            red = R.Redactor(
+                "log",
+                secret_patterns=patterns,
+                names=names,
+                hostname=host,
+                home=os.path.expanduser("~"),
+            )
+            if cached:
+                self._redactor = red
+        return R.redact_event_data(kind, data, red)
 
     # -- the version stamp and the skew guard -----------------------------------------
     def _all_events(self) -> Iterator[Event]:
