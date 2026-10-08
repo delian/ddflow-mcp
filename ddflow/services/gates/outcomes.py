@@ -127,20 +127,14 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         raise KeyError(item_id)
     gates = pipeline_for(it, cfg)
     rows = [(g, it.gate_outcome(g)) for g in gates]
-    done = [g for g, o in rows if o in ("passed", "skipped")]
+    required = set(cfg.gates.required)
+    settled = {g: it.gate_satisfied(g, g in required) for g in gates}
+    done = [g for g in gates if settled[g]]
     blocked = [g for g, o in rows if o == "failed"]
     unavail = [g for g, o in rows if o in ("unavailable", "partial")]
     skipped = [g for g, o in rows if o == "skipped"]
-    current = ""
-    for g, o in rows:
-        if o not in ("passed", "skipped"):
-            current = g
-            break
-    required = set(cfg.gates.required)
-    complete = (
-        all(o == "passed" or (o == "skipped" and g not in required) for g, o in rows)
-        and not blocked
-    )
+    current = next((g for g in gates if not settled[g]), "")
+    complete = all(settled.values())
     return GateStatus(
         item=item_id,
         pipeline=gates,
