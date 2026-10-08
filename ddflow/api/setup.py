@@ -998,6 +998,7 @@ def upgrade(
     confirm: Sequence[str] = (),
     reason: str = "",
     backup: str = "",
+    snapshot: bool = False,
     restore: str = "",
     agent: str = "",
 ) -> O.Outcome:
@@ -1015,9 +1016,16 @@ def upgrade(
     not run. The body is the same on the CLI's `--json` and over MCP.
     """
     if restore:
-        if apply or plan is not None or confirm:
+        if apply or plan is not None or confirm or backup or snapshot:
             return O.refused("upgrade", "--restore stands alone: choose it or the plan or --apply")
         return _upgrade_restore(repo, restore, agent)
+    if snapshot:
+        # `snapshot` is `backup="snapshot"` for one run; naming another mode too is a contradiction.
+        if backup and backup != "snapshot":
+            return O.refused("upgrade", f"--snapshot and --backup {backup} disagree: choose one")
+        if not (apply or plan is False):
+            return O.refused("upgrade", "--snapshot saves the originals of an --apply: add --apply")
+        backup = "snapshot"
     if apply and plan is True:
         return O.refused("upgrade", "choose the plan or --apply, not both")
     if apply or plan is False:

@@ -3318,7 +3318,7 @@
     'ddflow_upgrade': '''
       {
        "name": "ddflow_upgrade",
-       "description": "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it does the plan after saving originals to .ddflow/backups, returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. Plan exit: 0 up to date, 1 items.",
+       "description": "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`), returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. `restore` undoes an apply. Plan exit: 0 up to date, 1 items.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -3343,7 +3343,15 @@
          },
          "backup": {
           "type": "string",
-          "description": "local or none."
+          "description": "local, snapshot or none."
+         },
+         "snapshot": {
+          "type": "boolean",
+          "description": "apply: git snapshot backup."
+         },
+         "restore": {
+          "type": "string",
+          "description": "Undo: backup name or latest; alone."
          },
          "as_agent": {
           "type": "string",
