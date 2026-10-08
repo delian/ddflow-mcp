@@ -40,7 +40,8 @@ def _vocabulary() -> Vocabulary | None:
 def _rewritable(ctx: Context) -> tuple[Vocabulary | None, list[tuple[str, Ref]]]:
     """``(vocabulary, [(key, reference)])`` for the deprecated names in ddflow's own regions.
     The key is the path, the name and which occurrence of it in that file: stable when lines
-    above it come and go, so a later scan finds the same reference under the same key."""
+    WITHOUT that name come and go above it. A line that itself names it shifts the ordinals;
+    the runner's fresh detect after the apply then reports what was left, so it is not silent."""
     vocab = _vocabulary()
     if vocab is None:
         return None, []

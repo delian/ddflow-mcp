@@ -115,3 +115,14 @@ def test_plan_and_apply_act_only_on_what_was_detected(old: Path) -> None:
     m.apply(_ctx(old), found)
     assert "Run `ddflow docs show`, then ddflow_next." in agents.read_text()
     assert other.read_text() == _managed("Run `ddflow doc show` later.\n")
+
+
+def test_every_occurrence_of_a_name_in_a_file_is_found_and_rewritten(old: Path) -> None:
+    (old / "AGENTS.md").write_text(
+        _managed("Run `ddflow doc show` once.\nand `ddflow doc show` twice.\n")
+    )
+    (got,) = [p for p in M.pending(_ctx(old)) if p.migration.id == ID]
+    assert [f.key for f in got.findings] == ["AGENTS.md:doc show#1", "AGENTS.md:doc show#2"]
+    out = M.run(old, EventLog(old, "migrator"), Config.load(old), [ID])
+    assert [o.status for o in out] == ["applied"]
+    assert (old / "AGENTS.md").read_text().count("ddflow docs show") == 2
