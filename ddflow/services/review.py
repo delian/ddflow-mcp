@@ -705,7 +705,7 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     # head of `FOO=bar` and reported a false UNAVAILABLE; it had no builtin allowlist;
     # and it let `shlex.split`'s ValueError on an unbalanced quote escape a function
     # whose entire contract is to turn every way of not-reviewing into a reported one.
-    missing = _missing_executable(cmd)
+    missing = _missing_executable(cmd, {**os.environ, **rev.env}.get("PATH"))
     if missing:
         return "", (
             f"executable {missing!r} is not on PATH -- the reviewer could not run. "
