@@ -337,12 +337,10 @@ def cmd_research(a, c: Ctx) -> int:
             agent=c.requested_agent,
         ),
     )
-    settled = D.settle(a, c, out)
-    if settled is not None:
-        return settled
-    if out.exit != OK:  # a failure, or a refused re-add of a taken id (exit 3)
-        print(out.reason, file=sys.stderr)
-        return out.exit
+    # A failure, or a refused re-add of a taken id (exit 3), is reported by `finish`.
+    done = D.finish(a, c, out)
+    if done is not None:
+        return done
     c.out(
         f"research {out.data['id']} recorded ({out.data['verdict']})",
         out.body(("id", "verdict")),
@@ -369,12 +367,9 @@ def cmd_bug(a, c: Ctx) -> int:
                 agent=c.requested_agent,
             ),
         )
-        settled = D.settle(a, c, out)
-        if settled is not None:
-            return settled
-        if out.exit:
-            print(out.reason, file=sys.stderr)
-            return out.exit
+        done = D.finish(a, c, out)
+        if done is not None:
+            return done
         closed = out.data.get("resolution", "")
         note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
         offer = out.data.get("offer", "")
