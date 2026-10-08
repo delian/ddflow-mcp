@@ -138,6 +138,9 @@ def _detect(ctx: Context, m: Migration) -> Pending:
         changes = m.plan(ctx, findings) if findings else []
     except Unavailable as exc:
         return Pending(m, unavailable=str(exc) or "the detector could not run")
+    except (OSError, ValueError) as exc:
+        # A detector that raises did not run: the plan still shows every other migration.
+        return Pending(m, unavailable=f"{type(exc).__name__}: {exc}")
     return Pending(m, findings, changes)
 
 

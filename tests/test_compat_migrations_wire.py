@@ -181,3 +181,19 @@ def test_a_file_the_runner_plans_beyond_the_plan_is_saved_too(old: Path) -> None
     extra = [d for d in first.parent.iterdir() if d != first]
     saved = [p.read_text() for d in [first, *extra] for p in d.rglob("other.txt")]
     assert saved == [f"{LEGACY}\n"]
+
+
+def test_a_raising_detector_does_not_break_the_plan_or_the_other_migrations(old: Path) -> None:
+    def boom(ctx: MG.Context) -> list[MG.Finding]:
+        raise OSError("unreadable")
+
+    MG.register(TOY)
+    MG.register(replace(TOY, id="z-boom", detect=boom))
+    items = plan(old)["categories"]["migrations"]
+    assert [(i["id"], i["unavailable"]) for i in items] == [
+        ("migration:toy-marker", ""),
+        ("migration:z-boom", "OSError: unreadable"),
+    ]
+    out = go(old, "migrations")
+    assert out["exit"] == 2 and CURRENT in (old / FILE).read_text()
+    assert sorted(r["status"] for r in out["results"]) == ["applied", "unavailable"]
