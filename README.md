@@ -717,7 +717,8 @@ MCP launch, hooks or command files -- and refuses a project that was never adopt
 **Stale references.** A file the project holds can name a command or tool that a release
 renamed: a settings hook, a git hook, `.pre-commit-config.yaml`, a driver doc, an AGENTS.md or
 CLAUDE.md block, a slash command, an ejected prompt, a macro. `ddflow doctor` (and
-`ddflow_doctor`) resolves every `ddflow <command>` (in backticks, a fenced block or a
+`ddflow_doctor`; an MCP server has no command parser loaded, so it checks tool names and
+the CLI's `doctor` checks both) resolves every `ddflow <command>` (in backticks, a fenced block or a
 command line; prose is not read) and `ddflow_<tool>` they name against this ddflow: *ok*,
 *deprecated* (an alias, with the replacement) or *unknown*, each with `file:line`. A
 deprecated name, or an unknown one in the project's own text, is a note; an unknown name in a

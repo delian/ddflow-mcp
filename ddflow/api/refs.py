@@ -8,7 +8,8 @@ surface needs only `ddflow.api` for it (D-unify layering).
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 from ..services.compat_refs import (  # noqa: F401  -- the types a surface names
@@ -74,3 +75,28 @@ def vocabulary(
         command_aliases=command_aliases,
         tool_aliases=tool_aliases,
     )
+
+
+def stale_references(
+    repo: Path,
+    parser: Callable[[], argparse.ArgumentParser] | None,
+    tools: Mapping[str, Mapping[str, Any]] | None,
+) -> tuple[list[str], list[str]]:
+    """``(problems, notes)`` for `doctor`: the stale references in the project's files.
+
+    What a surface has loaded is what it can check: with the tool table the tool names, and
+    with the CLI parser the command words too. With neither there is nothing to check
+    against and nothing is reported."""
+    if parser is None and tools is None:
+        return [], []
+    commands, command_aliases = command_names(parser()) if parser is not None else (frozenset(), {})
+    names, tool_aliases = tool_names(tools) if tools is not None else (frozenset(), {})
+    vocab = Vocabulary(
+        commands=commands,
+        tools=names,
+        command_aliases=command_aliases,
+        tool_aliases=tool_aliases,
+        check_commands=parser is not None,
+        check_tools=tools is not None,
+    )
+    return report(scan(repo, vocab))
