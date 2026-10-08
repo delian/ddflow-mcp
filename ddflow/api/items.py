@@ -312,7 +312,6 @@ def _line_frozen(st, it) -> str:
     by review. And an item already forked has a branch built on its old line's base;
     merging it into another line carries that base's history along.
     """
-    from ..core.model import ABANDONED, DONE
 
     ports = [o.id for o in st.items.values() if o.port_from == it.id and not o.removed]
     if it.port_from or ports:
@@ -321,7 +320,7 @@ def _line_frozen(st, it) -> str:
             f"its lines were fixed when the port was planned. Abandon and re-file it with "
             f"the lines you want."
         )
-    if it.worktree or it.branch or it.state in (DONE, ABANDONED) or it.lease:
+    if it.worktree or it.branch or it.terminal or it.lease:
         return (
             f"{it.id} already has a branch forked from its current line's base; moving it "
             f"would merge that history into another line. Abandon and re-file it on the "
@@ -749,7 +748,6 @@ def split(
     the work that was planned and the work that happened, which is exactly what
     `ddflow replay` needs to reconstruct the project.
     """
-    from ..core.model import ABANDONED, DONE
     from ..services import leases as L
 
     log, cfg, st = _load(repo, agent)
@@ -760,7 +758,7 @@ def split(
     bad = GS.problem(GS.parse(globs))
     if bad:
         return O.failed("task.split", bad, id=item, created=[])
-    if it.state in (DONE, ABANDONED):
+    if it.terminal:
         return O.refused(
             "task.split",
             f"{item} is already {it.state}; splitting finished work would reopen it. "

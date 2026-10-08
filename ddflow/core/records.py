@@ -6,11 +6,13 @@ events; `ddflow.core.model` re-exports every name here."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from typing import Any
 
 from .defs import DefRecord
 from .events import version_key
 from .graph import closure
+from .outcome import FAIL, NOTHING, OK
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
 # events about it. A state field that can be set directly is a field that can drift
@@ -22,10 +24,65 @@ OPEN, RUNNING, BLOCKED, DONE, ABANDONED = "open", "running", "blocked", "done", 
 #: interrupted work to `next`, and every parked review would be offered to a second agent.
 REVIEW = "review"
 
-#: The single source for gate outcomes. Everything that validates, renders or maps an
-#: outcome imports from here. Previously this tuple existed and nothing referenced it,
-#: while five scattered literals did the real work -- so adding a sixth outcome meant
-#: finding all five. A dead constant that LOOKS canonical is worse than none at all.
+
+#: The single source for gate outcomes: everything that validates, renders or maps an
+#: outcome imports from here.
+class GateOutcome(StrEnum):
+    """What a gate was recorded with: the one vocabulary, and the one definition of
+    whether an outcome is enough.
+
+    ``unavailable`` is a first-class outcome beside pass and fail. A reviewer that could
+    not run is not a reviewer that found nothing."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    UNAVAILABLE = "unavailable"
+    PARTIAL = "partial"
+    SKIPPED = "skipped"
+
+    def satisfies(self, required: bool) -> bool:
+        """Nothing is left to do for the gate: it passed, or it was skipped and is not
+        required. The ONE definition of a settled gate -- the pipeline view, the brief,
+        the completion check and the record check each used to spell their own, and a
+        skipped required gate read as done in two of them and blocking in the others."""
+        return self is GateOutcome.PASSED or (self is GateOutcome.SKIPPED and not required)
+
+    @property
+    def mark(self) -> str:
+        """The single-character mark the board and the gate status view draw."""
+        return _MARKS[self]
+
+    @property
+    def exit(self) -> int:
+        """The exit a command gate with this outcome ends with. `unavailable` and
+        `partial` are NOTHING: the gate could not report, which is neither a pass nor
+        a failure of the work."""
+        return _EXITS[self]
+
+    @classmethod
+    def settled(cls, outcome: str, required: bool) -> bool:
+        """`satisfies` for a recorded string: an empty or unknown outcome never does."""
+        try:
+            return cls(outcome).satisfies(required)
+        except ValueError:
+            return False
+
+
+_MARKS = {
+    GateOutcome.PASSED: "x",
+    GateOutcome.FAILED: "!",
+    GateOutcome.UNAVAILABLE: "?",
+    GateOutcome.PARTIAL: "~",
+    GateOutcome.SKIPPED: "-",
+}
+_EXITS = {
+    GateOutcome.PASSED: OK,
+    GateOutcome.SKIPPED: OK,
+    GateOutcome.FAILED: FAIL,
+    GateOutcome.UNAVAILABLE: NOTHING,
+    GateOutcome.PARTIAL: NOTHING,
+}
+
 #: The outcomes a gate can be RECORDED with. `started` is deliberately absent: it is an
 #: event kind in the `gate.` namespace, not an outcome, and anything that accepts it as
 #: one lets a caller record a gate as having begun and never finished.
@@ -34,17 +91,11 @@ REVIEW = "review"
 #: `gate.out_of_order` lives there too and is neither. A consumer matching the PREFIX
 #: counted that as a gate run, which is how adding one event kind silently changed a
 #: metric two modules away.
-GATE_OUTCOMES: tuple[str, ...] = ("passed", "failed", "unavailable", "partial", "skipped")
+GATE_OUTCOMES: tuple[str, ...] = tuple(o.value for o in GateOutcome)
 
-#: Outcome -> single-character mark, used by both the board and the gate status view.
-OUTCOME_MARK: dict[str, str] = {
-    "passed": "x",
-    "failed": "!",
-    "unavailable": "?",
-    "partial": "~",
-    "skipped": "-",
-    "": " ",
-}
+#: Outcome -> single-character mark, used by both the board and the gate status view
+#: ("" -- no outcome yet -- is a blank).
+OUTCOME_MARK: dict[str, str] = {**{o.value: o.mark for o in GateOutcome}, "": " "}
 
 
 @dataclass
@@ -65,7 +116,7 @@ class GateRecord:
 
     @property
     def is_blocking_failure(self) -> bool:
-        return self.outcome in ("failed",)
+        return self.outcome == GateOutcome.FAILED
 
 
 #: A claim's TTL when its event carries none -- the shipped `[lease] ttl_s`.
@@ -281,9 +332,18 @@ class Item:
     #: against the entry. Unbounded: see `_displace`.
     displaced: list[dict[str, Any]] = field(default_factory=list)
 
+    @property
+    def terminal(self) -> bool:
+        """Finished with: done or abandoned. The one test for "nothing more to do here"."""
+        return self.state in (DONE, ABANDONED)
+
     def gate_outcome(self, gate: str) -> str:
         rec = self.gates.get(gate)
         return rec.outcome if rec else ""
+
+    def gate_satisfied(self, gate: str, required: bool) -> bool:
+        """Is nothing left to do for ``gate``? See `GateOutcome.satisfies`."""
+        return GateOutcome.settled(self.gate_outcome(gate), required)
 
     def contest_summary(self) -> str:
         """What is contested about this item, naming the rivals; "" when nothing is.
@@ -929,12 +989,18 @@ class State:
 
         return [self.items[n] for n in closure(item_id, parent) if n != item_id]
 
+    def live_items(self) -> list[Item]:
+        """Every item that has not been removed, in definition order."""
+        return [i for i in self.items.values() if not i.removed]
+
+    def live_by_id(self) -> dict[str, Item]:
+        """`live_items` keyed by id: what the graph walks (`find_cycles`) take."""
+        return {i.id: i for i in self.live_items()}
+
     def open_descendants(self, item_id: str) -> list[Item]:
         """Descendants that are neither done nor abandoned — what blocks completion."""
         return [
-            self.items[i]
-            for i in sorted(self.descendants(item_id))
-            if self.items[i].state not in (DONE, ABANDONED)
+            self.items[i] for i in sorted(self.descendants(item_id)) if not self.items[i].terminal
         ]
 
     def active_leases(self, now: float, grace_s: int = 0) -> dict[str, Lease]:

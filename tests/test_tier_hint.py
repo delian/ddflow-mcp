@@ -77,12 +77,11 @@ def test_driver_and_readme_say_advisory():
 
 
 def test_unknown_tier_notes_skip_removed_and_finished_items():
-    from types import SimpleNamespace as NS
-
+    from ddflow.core.model import Item
     from ddflow.core.tier import unknown_tier_notes
 
-    mk = lambda i, **kw: NS(id=i, tags=["tier:foo"], state="open", removed=False, **kw)  # noqa: E731
-    notes = unknown_tier_notes(
-        [mk("live"), NS(id="gone", tags=["tier:foo"], state="open", removed=True)]
-    )
+    def mk(i, **kw):
+        return Item(id=i, kind="task", tags=["tier:foo"], **kw)
+
+    notes = unknown_tier_notes([mk("live"), mk("gone", removed=True), mk("done", state="done")])
     assert [n.split(":")[0] for n in notes] == ["live"]

@@ -32,7 +32,7 @@ def _fix_task_after(st, cfg, bug) -> str:
         if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t, cfg)
     ]
     for it in mine:
-        if it.state not in (DONE, ABANDONED):
+        if not it.terminal:
             return it.id
     # Then a finished one: DONE before ABANDONED, so a fix that landed is the one named.
     return next((it.id for st_ in (DONE, ABANDONED) for it in mine if it.state == st_), "")

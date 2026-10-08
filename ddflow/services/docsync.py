@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 from ..core import globs
-from ..infra import proc as P
+from ..infra import git as G
 
 #: An identifier-shaped token. The lookbehind refuses a backslash so the `\n` of
 #: `"\nBlocked"` does not make `nBlocked` a camelCase name -- the replay's main noise.
@@ -217,15 +217,15 @@ def _grep(repo, patterns: list[str], pathspec: list[str]) -> list[tuple[str, int
     """
     rows: list[tuple[str, int, str]] = []
     for i in range(0, len(patterns), _BATCH):
-        argv = ["git", "-C", str(repo), "grep", "--cached", "-z", "-n", "-I", "-w", "-F"]
+        argv = ["grep", "--cached", "-z", "-n", "-I", "-w", "-F"]
         for pat in patterns[i : i + _BATCH]:
             argv += ["-e", pat]
-        r = P.run([*argv, "--", *pathspec], capture_output=True, timeout=120)
-        if r.returncode == 1:
+        r = G.run(repo, *argv, "--", *pathspec, binary=True, timeout=120)
+        if r.code == 1:
             continue
-        if r.returncode != 0:
+        if not r.ok:
             return None
-        for raw in r.stdout.split(b"\n"):
+        for raw in (r.out_bytes or b"").split(b"\n"):
             parts = raw.split(b"\0", 2)
             if len(parts) == _GREP_FIELDS:
                 rows.append(
@@ -235,26 +235,23 @@ def _grep(repo, patterns: list[str], pathspec: list[str]) -> list[tuple[str, int
 
 
 def _tracked_tokens(repo) -> set[str] | None:
-    r = P.run(
-        ["git", "-C", str(repo), "ls-files", "-z", "--cached"], capture_output=True, timeout=60
-    )
-    if r.returncode != 0:
+    names = G.git_paths(repo, "ls-files", "--cached")
+    if names is None:
         return None
-    return set(TOKEN.findall(os.fsdecode(r.stdout).replace("\0", "\n")))
+    return set(TOKEN.findall("\n".join(names)))
 
 
 def staged_diff(repo) -> str | None:
-    r = P.run(
-        [
-            "git", "-C", str(repo), "-c", "core.quotepath=false", "diff", "--cached",
-            "-U0", "-M", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/",
-        ],
-        capture_output=True,
+    r = G.run(
+        repo,
+        *("-c", "core.quotepath=false", "diff", "--cached", "-U0", "-M", "--no-color"),
+        *("--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"),
+        binary=True,
         timeout=120,
-    )  # fmt: skip
-    if r.returncode != 0:
+    )
+    if not r.ok:
         return None
-    return r.stdout.decode("utf-8", "surrogateescape")
+    return (r.out_bytes or b"").decode("utf-8", "surrogateescape")
 
 
 def stale_mentions(

@@ -15,14 +15,19 @@ The import rules (layers, surfaces through api, one home each for subprocess, te
 fcntl, hashlib and the optional extras) live in `.importlinter` and are checked by
 import-linter here; their allowlists are ratchets of the same kind.
 
-Every baseline is a file of its own under tests/guard_baselines/: `<counter>.toml` holds
-one counter's number (`unreferenced_functions.toml` also the functions kept unreferenced
-on purpose), and `importlinter-<contract>.toml` one contract's `ignore_imports`
-allowlist, which this module joins back into the contract before import-linter runs. So
-a task that lowers one counter, or shrinks one contract's allowlist, edits -- and
-declares in its globs -- only that file: lanes lowering different counters never touch
-the same file, and this module changes only when a guard is added or what it measures
-changes.
+Every baseline is a file of its own under tests/guard_baselines/. A counter that finds
+its sites module by module (every pattern counter, and complexity) keeps a directory,
+`<counter>/<dotted module>.toml`, holding that module's number: a task that removes the
+sites of `ddflow.services.enforce` lowers -- and declares in its globs -- only
+`<counter>/ddflow.services.enforce.toml`, so lanes working in different modules never
+touch the same file. A module with no sites has no file (a file reaching zero is deleted).
+A counter whose last module reaches zero has no directory at all (git tracks no empty
+directory), so absence means no baselines.
+`<counter>.toml` holds the number of the other counters (`unreferenced_functions.toml`
+also the functions kept unreferenced on purpose), and `importlinter-<contract>.toml` one
+contract's `ignore_imports` allowlist, which this module joins back into the contract
+before import-linter runs. This module changes only when a guard is added or what it
+measures changes.
 
 Counted on the source with `ast`, never by running anything, so the guard is the same on
 every platform and takes seconds. Complexity is radon's grade; duplicate code is pylint's
@@ -66,7 +71,8 @@ HOMES: dict[str, frozenset[str]] = {
     "time_parse": frozenset({"ddflow.core.clock"}),
 }
 
-#: Every counter test_ratchet holds; each has its baseline in BASELINES/<counter>.toml.
+#: Every counter test_ratchet holds; each has its baseline in BASELINES/<counter>.toml, or
+#: -- for the PER_MODULE ones -- in BASELINES/<counter>/<dotted module>.toml.
 COUNTERS: tuple[str, ...] = (
     *HOMES,
     "deferred_imports",
@@ -74,6 +80,11 @@ COUNTERS: tuple[str, ...] = (
     "duplicate_code_clusters",
     "unreferenced_functions",
 )
+
+#: The counters whose sites sit in one module each, so their baseline is one file per
+#: module. (A duplicate-code cluster spans modules and an unreferenced function list is
+#: short: those two keep a single file.)
+PER_MODULE: tuple[str, ...] = (*HOMES, "deferred_imports", "complexity_d_or_worse")
 
 #: Pinned so the count means the same thing on every machine: no rc file is read, no
 #: stats are persisted under the home directory, and six lines is the smallest cluster.
@@ -367,6 +378,41 @@ def _baseline_path(name: str) -> Path:
     return BASELINES / f"{name}.toml"
 
 
+def _module_baseline_path(kind: str, module: str) -> Path:
+    return BASELINES / kind / f"{module}.toml"
+
+
+def _module_of(site: str) -> str:
+    """The dotted module a counted site (`ddflow/x/y.py:12 ...`) is in."""
+    return _dotted(ROOT / site.split(":", 1)[0])
+
+
+def _by_module(sites: list[str]) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for site in sites:
+        out.setdefault(_module_of(site), []).append(site)
+    return out
+
+
+def _module_baselines(kind: str) -> dict[str, int]:
+    """{module: baseline} from `<kind>/*.toml`; a module with no file has none."""
+    out: dict[str, int] = {}
+    directory = BASELINES / kind  # absent once its last module reached zero: git keeps no empty dir
+    for path in sorted(directory.glob("*.toml")) if directory.is_dir() else ():
+        rel = path.relative_to(ROOT)
+        data = tomllib.loads(path.read_text("utf-8"))
+        assert set(data) == {"baseline"}, (
+            f"{rel} holds {sorted(data)}; it must hold exactly baseline"
+        )
+        value = data["baseline"]
+        assert type(value) is int and value > 0, (
+            f"{rel}: baseline must be a count above zero, not {value!r} "
+            "(a module with no sites has no file: delete it)"
+        )
+        out[path.stem] = value
+    return out
+
+
 def _read_baseline(name: str, keys: set[str]) -> dict:
     """The baseline file `name`, which must hold exactly `keys` (a misspelt key would
     otherwise read as a missing baseline, or be ignored)."""
@@ -401,17 +447,56 @@ def _allowlist(contract: str) -> list[str]:
     return entries
 
 
+def _hint(kind: str) -> str:
+    return (
+        "P-unify is retiring; use the shared interface"
+        + (f" ({', '.join(sorted(HOMES[kind]))})" if kind in HOMES else "")
+        + " instead."
+    )
+
+
+def _ratchet_problems(
+    kind: str, sites: list[str], baselines: dict[str, int]
+) -> tuple[list[str], list[str]]:
+    """(above, below): what a module-by-module comparison finds wrong, as messages."""
+    found = _by_module(sites)
+    above: list[str] = []
+    below: list[str] = []
+    for module in sorted(found.keys() | baselines.keys()):
+        count, baseline = len(found.get(module, ())), baselines.get(module, 0)
+        path = _module_baseline_path(kind, module).relative_to(ROOT)
+        if count > baseline:
+            above.append(
+                f"{kind}: {count} sites in {module}, the baseline is {baseline}. New code used "
+                f"a pattern {_hint(kind)} Every current site there:\n  "
+                + "\n  ".join(found[module])
+            )
+        elif count < baseline:
+            below.append(
+                f"{kind}: {count} sites in {module}, below the baseline of {baseline}. Good -- "
+                + (
+                    f"now delete {path} in this same change, so the sites cannot grow back."
+                    if not count
+                    else f"now lower it: set baseline = {count} in {path} in this same change, "
+                    "so the sites cannot grow back."
+                )
+            )
+    return above, below
+
+
 @pytest.mark.parametrize("kind", sorted(COUNTERS))
 def test_ratchet(kind: str) -> None:
-    baseline = _baseline(kind)
     sites = _measure(kind)
+    if kind in PER_MODULE:
+        above, below = _ratchet_problems(kind, sites, _module_baselines(kind))
+        assert not above, "\n".join(above)
+        assert not below, "\n".join(below)
+        return
+    baseline = _baseline(kind)
     count = len(sites)
     assert count <= baseline, (
         f"{kind}: {count} sites, the baseline is {baseline}. New code used a pattern "
-        f"P-unify is retiring; use the shared interface"
-        + (f" ({', '.join(sorted(HOMES[kind]))})" if kind in HOMES else "")
-        + " instead. Every current site:\n  "
-        + "\n  ".join(sites)
+        f"{_hint(kind)} Every current site:\n  " + "\n  ".join(sites)
     )
     assert count >= baseline, (
         f"{kind}: {count} sites, below the baseline of {baseline}. Good -- now lower it: "
@@ -609,19 +694,77 @@ def test_the_unreferenced_census_counts_what_it_says() -> None:
 
 
 def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> None:
-    """One file per guard: each counter and each `.importlinter` contract has its baseline
+    """One file per guard (a directory of files, one per module, for the PER_MODULE
+    counters): each counter and each `.importlinter` contract has its baseline
     file, holding exactly its keys; `.importlinter` itself lists no allowlist (two homes
     for one list would drift); and no other file is there -- one left behind by a renamed
     or removed guard would be read by nothing while looking like it still guarded."""
     contracts = _contracts()
-    expected = {f"{k}.toml" for k in COUNTERS} | {f"importlinter-{c}.toml" for c in contracts}
+    # A per-module counter's directory exists while some module still has sites.
+    expected = {f"{k}.toml" for k in COUNTERS if k not in PER_MODULE} | {
+        f"importlinter-{c}.toml" for c in contracts
+    }
     present = {p.name for p in BASELINES.iterdir() if not p.name.startswith(".")}
-    assert present == expected, (
-        f"missing: {sorted(expected - present)}; read by no guard: {sorted(present - expected)}"
+    assert present - set(PER_MODULE) == expected, (
+        f"missing: {sorted(expected - present)}; "
+        f"read by no guard: {sorted(present - expected - set(PER_MODULE))}"
     )
+    modules = {_dotted(p) for p in _modules()}
     for kind in COUNTERS:
-        _baseline(kind)
+        if kind in PER_MODULE:
+            stray = sorted(set(_module_baselines(kind)) - modules)
+            assert not stray, f"{kind}: a baseline file for a module that does not exist: {stray}"
+        else:
+            _baseline(kind)
     _kept_unreferenced()
     for contract, section in contracts.items():
         _allowlist(contract)
         assert "ignore_imports" not in section, _two_homes(contract)
+
+
+def test_a_per_module_ratchet_compares_each_module_with_its_own_file() -> None:
+    """The comparison itself: above fails naming the module and its sites, below names the
+    file to lower or delete, a module with no file has a baseline of zero, and a module
+    that stays at its number passes."""
+    sites = ["ddflow/services/a.py:3", "ddflow/services/a.py:9", "ddflow/infra/b.py:1"]
+    above, below = _ratchet_problems("deferred_imports", sites, {"ddflow.services.a": 2})
+    assert not below
+    assert len(above) == 1 and "1 sites in ddflow.infra.b, the baseline is 0" in above[0]
+    assert "ddflow/infra/b.py:1" in above[0]
+
+    above, below = _ratchet_problems(
+        "deferred_imports", sites[:1], {"ddflow.services.a": 2, "ddflow.core.gone": 1}
+    )
+    assert not above
+    assert any("set baseline = 1" in m and "ddflow.services.a.toml" in m for m in below)
+    assert any("delete" in m and "ddflow.core.gone.toml" in m for m in below)
+
+    assert _ratchet_problems(
+        "deferred_imports", sites, {"ddflow.services.a": 2, "ddflow.infra.b": 1}
+    ) == ([], [])
+
+
+def test_every_per_module_baseline_is_a_positive_count_in_its_own_file(
+    tmp_path, monkeypatch
+) -> None:
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "BASELINES", tmp_path / "guard_baselines")
+    (tmp_path / "guard_baselines" / "git_argv").mkdir(parents=True)
+    (tmp_path / "guard_baselines" / "git_argv" / "ddflow.services.a.toml").write_text(
+        "baseline = 2\n"
+    )
+    assert _module_baselines("git_argv") == {"ddflow.services.a": 2}
+    (tmp_path / "guard_baselines" / "git_argv" / "ddflow.services.b.toml").write_text(
+        "baseline = 0\n"
+    )
+    with pytest.raises(AssertionError, match="delete it"):
+        _module_baselines("git_argv")
+
+
+def test_a_counter_whose_last_module_reached_zero_has_no_directory(tmp_path, monkeypatch) -> None:
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "BASELINES", tmp_path / "guard_baselines")
+    (tmp_path / "guard_baselines").mkdir()
+    assert _module_baselines("fcntl") == {}

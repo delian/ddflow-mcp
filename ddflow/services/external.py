@@ -35,9 +35,7 @@ def repos(cfg: Config, root: Path) -> dict[str, Path]:
 
 def referenced(state: State) -> set[str]:
     """Every external dependency a live item declares."""
-    return {
-        dep for it in state.items.values() if not it.removed for dep in it.needs if is_external(dep)
-    }
+    return {dep for it in state.live_items() for dep in it.needs if is_external(dep)}
 
 
 @dataclass

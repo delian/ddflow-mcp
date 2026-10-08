@@ -1,0 +1,4 @@
+# Ratchet `complexity_d_or_worse` for ddflow.services.verifypack (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+baseline = 1
