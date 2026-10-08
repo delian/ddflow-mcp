@@ -421,3 +421,17 @@ def test_no_rule_or_decision_specific_matcher_or_tokenizer_remains(path) -> None
     source = (ROOT / path).read_text("utf-8")
     left = [w for w in _FORBIDDEN[path] if re.search(rf"\b{re.escape(w)}\b", source)]
     assert not left, (path, left)
+
+
+# -- bug Bc956cae0e0: a refusal by a [rules] limit said "added rule" and not why -----------
+
+
+def test_a_rule_refused_by_a_limit_says_why_and_does_not_say_added(repo) -> None:
+    from conftest import run_cli
+
+    code, out, err = run_cli(
+        repo, "rule", "add", "--id", "r-x", "--title", "t", "--content", "c", "--scope", "nope"
+    )
+    assert code == 3
+    assert "added" not in out and "scope 'nope' is not in rules.scopes_allowed" in err
+    assert not (repo / ".ddflow" / "rules" / "r-x.toml").exists()
