@@ -231,8 +231,12 @@ def test_handler_is_attached():
 
 def test_a_positional_parameter_is_required_on_both_surfaces():
     """Review finding: argparse refuses a missing positional; the schema must agree."""
-    cmd = Command(path=("x",), tool="ddflow_x", params=(Param("file", positional=True),))
-    assert cmd.input_schema()["required"] == ["file"]
+    cmd = Command(
+        path=("x",),
+        tool="ddflow_x",
+        params=(Param("file", positional=True), Param("other", positional=True, default="y")),
+    )
+    assert cmd.input_schema()["required"] == ["file", "other"]
     root = _root()
     add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
     with pytest.raises(SystemExit):
