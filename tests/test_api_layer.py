@@ -483,6 +483,9 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     """
     import json as _json
 
+    # A real `ddflow mcp` runs through cli.main, which registers the command table `doctor`
+    # checks references against (Bc782b6c724); an in-process server needs the import too.
+    import ddflow.surfaces.cli  # noqa: F401
     from ddflow.surfaces.mcp import Server
 
     run_cli(repo, "init")
@@ -574,7 +577,11 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     from ddflow.surfaces.mcp_bound import BOUNDS
 
     if tool in BOUNDS:
+        # MCP tags the bounded body; the bound itself works on the untagged one
+        tag = from_cli.pop("schema", None) if isinstance(from_cli, dict) else None
         from_cli = BOUNDS[tool](from_cli, arguments)[0]
+        if tag and isinstance(from_cli, dict):
+            from_cli = {"schema": tag, **from_cli}
     assert _surfaces_agree(tool, from_mcp, from_cli), (
         f"{tool}: the surfaces disagree\nCLI: {from_cli}\nMCP: {from_mcp}"
     )
@@ -695,7 +702,9 @@ def test_recording_a_decision_over_mcp_records_it(repo):
     assert reply["result"]["isError"] is False, reply
     text = reply["result"]["content"][0]["text"]
     body = _json.loads(text[text.index("{") :])
-    assert set(body) == {"id"}, f"the wire body was {body}, not {{'id': ...}}"
+    assert set(body) == {"schema", "id"}, (
+        f"the wire body was {body}, not {{'schema': ..., 'id': ...}}"
+    )
 
     _code, out, _ = run_cli(repo, "--json", "decision", "list")
     rows = _json.loads(out)

@@ -18,12 +18,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ..core.bookkeeping import QUEUE_STATE
 from ..core.digest import content_digest
 from ..core.events import Event
 from ..core.model import Item, fold
 
 MAX_FILES = 100
-_BOOKKEEPING = (".ddflow/events/", ".ddflow/local/", ".ddflow/index.db")
 _TEST = re.compile(
     r"(^|/)(tests?|spec)/|(^|/)test_[^/]*$|_test\.[a-z]+$|\.(test|spec)\.[cm]?[jt]sx?$"
 )
@@ -58,7 +58,7 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
     # The queue's own bookkeeping (event shards, the derived index, machine-local state)
     # rides along in almost every landing and is not the work. Config, rules and prompts
     # under `.ddflow/` ARE deliverables a task may own, so they stay.
-    files = sorted({f for f in listed if f.strip() and not f.startswith(_BOOKKEEPING)})
+    files = sorted({f for f in listed if f.strip() and not f.startswith(QUEUE_STATE)})
     facts.update(
         files_known=True,
         files_total=len(files),

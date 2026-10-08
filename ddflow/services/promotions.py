@@ -19,7 +19,9 @@ from typing import Any
 
 from ..config import Config
 from ..core import flow as F
+from ..core.bookkeeping import EVENTS_EXCLUDE
 from ..core.model import DONE, Item, State
+from ..infra import git as GIT
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import flow as FS
@@ -42,10 +44,7 @@ def _ahead(repo: Path, cfg: Config, frm: str, to: str) -> int:
         return -1
     # A commit of the event log alone (`[log].commit_events`, Bcd3512c891) is not work
     # to promote: only commits that touch something outside .ddflow/events count.
-    r = W.git(
-        repo, "rev-list", "--count", "--no-merges", f"{b}..{a}", "--", ".",
-        ":(exclude).ddflow/events",
-    )  # fmt: skip
+    r = W.git(repo, "rev-list", "--count", "--no-merges", f"{b}..{a}", "--", ".", *EVENTS_EXCLUDE)
     return int(r.out) if r.ok and r.out.isdigit() else -1
 
 
@@ -183,12 +182,12 @@ def apply(repo: Path, cfg: Config, tree: Path, it: Item) -> dict[str, Any]:
         f"promote {it.promote_from} to {it.promote_to}\n\nItem: {it.id}",
         source,
     )
-    conflicts = [
-        ln
-        for ln in W.git(tree, "diff", "--name-only", "--diff-filter=U").out.splitlines()
-        if ln.strip()
-    ]
-    if conflicts:
+    conflicts = GIT.unmerged(tree)
+    if conflicts is None:
+        # Unknown is not "no conflicts": the merge may be half done, and "clean" would hide it.
+        W.git(tree, "merge", "--abort")
+        out.update(status="failed", reason=f"git could not list the paths of {source}'s merge")
+    elif conflicts:
         out.update(status="conflict", files=conflicts)
     elif not r.ok:
         W.git(tree, "merge", "--abort")

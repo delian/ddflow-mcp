@@ -57,6 +57,7 @@ from pathlib import Path  # noqa: F401
 from typing import Any  # noqa: F401
 
 from ...config import Config, _is_code_tree  # noqa: F401
+from ...core.bookkeeping import STATE_EXCLUDE, is_state  # noqa: F401
 from ...core.digest import content_digest, hasher  # noqa: F401
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
 from ...infra import fsio  # noqa: F401
@@ -79,6 +80,7 @@ from .evidence import (  # noqa: F401
     FINGERPRINT_EXCLUDE,
     LEGACY_CLEAN,
     MAX_UNTRACKED_HASHED,
+    UNLISTED,
     TreeEntries,
     _blob_id,
     _git_z,
@@ -86,6 +88,7 @@ from .evidence import (  # noqa: F401
     _index_entries,
     _ours,
     _untracked_digest,
+    _untracked_listing,
     _untracked_paths,
     _working_entry,
     commit_source_tree,
