@@ -922,9 +922,61 @@ def test_config_changes_operator_with_a_confirm_applies_it(old: Path) -> None:
         "the operator accepted the new defaults",
     )
 
-    assert code in (0, 3), out
     assert "[acknowledged] knob_changed:worktree.root" in out
+    assert "[applied] knob_changed:worktree.max_parallel" in out
     assert "[refused] knob_changed:worktree.root" not in out
+    assert "[refused] knob_changed:worktree.max_parallel" not in out
+    assert code == 0, out
+    # a knob at its default is acknowledged, never written out as if the operator had chosen it
+    assert "worktree.root" not in (old / ".ddflow" / "config.toml").read_text()
+
+
+def test_the_plan_marks_unset_knob_changes_as_the_operators_only_under_operator(old: Path) -> None:
+    def action(key: str) -> str:
+        return next(i["action"] for i in plan(old)["categories"]["config"] if i["key"] == key)
+
+    assert action("worktree.root") == UP.AGENT
+    set_knob(old, "upgrade.config_changes", "ask")
+    assert action("worktree.root") == UP.AGENT, "ask: the agent asks, the plan is unchanged"
+    set_knob(old, "upgrade.config_changes", "operator")
+    assert action("worktree.root") == UP.OPERATOR
+    # a new knob is only news, whatever the policy
+    assert action("dedupe.min_words") == UP.NOTE
+
+
+def test_a_prune_that_could_not_remove_a_backup_does_not_claim_it_did(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from ddflow.services import backups as BK
+
+    root = tmp_path / ".ddflow" / "backups"
+    for name in ("20260101T000000Z-a", "20260102T000000Z-b"):
+        (root / name).mkdir(parents=True)
+        (root / name / BK.MANIFEST).write_text("{}")
+    monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)  # the removal is refused
+
+    assert BK.prune(tmp_path, 1) == []
+
+
+def test_a_prune_that_cannot_read_the_directory_is_not_an_apply_failure(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import backups as BK
+
+    real = Path.iterdir
+
+    def deny(self: Path):
+        if self.name == "backups":
+            raise PermissionError("denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "iterdir", deny)
+
+    assert BK.prune(old, 1) == []
+    code, out, _ = cli(old, "upgrade", "--apply", "hooks")
+    assert code == 0 and "[applied] hooks:missing" in out
 
 
 def test_a_bad_backup_value_still_makes_the_backup(old: Path) -> None:
