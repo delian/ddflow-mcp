@@ -84,8 +84,8 @@ def glob_conflict(
 
     ``against="live"``: the live leases ``live`` (item id -> lease), skipping ``it``'s own
     and any held by ``holder`` (one author cannot collide with itself).
-    ``against="offered"``: the items ``others`` (offered in one plan, or the item a waiter
-    is queued for).
+    ``against="offered"``: the items ``others`` (already offered in one plan, or the item a
+    waiter is queued for), skipping ``it`` itself should it be among them.
 
     Items on different release lines are different branches: `src/x.py` on 2.x and on 3.x
     cannot collide, and refusing it would serialise every port behind its fix.
@@ -105,7 +105,7 @@ def glob_conflict(
                 return Clash(other_id, pairs[0], lease)
         return None
     for other in others:
-        if line_key(state, other, cfg) != mine:
+        if other.id == it.id or line_key(state, other, cfg) != mine:
             continue
         pairs = conflicts(globs, list(other.globs), shared)
         if pairs:

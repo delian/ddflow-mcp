@@ -161,6 +161,16 @@ def test_glob_conflict_offered_checks_the_items_given(log, cfg):
     )
 
 
+def test_glob_conflict_offered_does_not_collide_an_item_with_itself(log, cfg):
+    _scenario(log)
+    state = fold(log.read_all())
+    t2, t4 = state.items["T2"], state.items["T4"]
+    assert (
+        admission.glob_conflict(state, cfg, t2, list(t2.globs), against="offered", others=[t2, t4])
+        is None
+    )
+
+
 def test_shared_globs_overlap_nothing(log, cfg):
     cfg.lease.shared_globs = ["CHANGELOG.md"]
     log.append("task.added", "A", {"globs": ["CHANGELOG.md", "x/**"]})
