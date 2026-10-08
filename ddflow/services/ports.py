@@ -98,6 +98,8 @@ def _cherry_pick(tree: Path, item_id: str, src, out: dict[str, Any]) -> None:
     r = W.apply_3way(tree, patch.out + "\n")
     conflicts = GIT.unmerged(tree)
     if conflicts is None:
+        # The tree is left as the apply made it, for the agent to inspect: a reset here
+        # could discard a conflict the listing failed to show.
         out.update(status=FAILED, reason=_UNMERGED_UNKNOWN)
         return
     if conflicts:
@@ -137,6 +139,7 @@ def _forward_merge(
     conflicts = GIT.unmerged(tree)
     landed = src.landed_after or src.merged_sha
     if conflicts is None:
+        W.git(tree, "merge", "--abort")  # as the failed-merge branch below, and promotions
         out.update(status=FAILED, reason=_UNMERGED_UNKNOWN)
     elif conflicts:
         out.update(status=CONFLICT, files=conflicts)
