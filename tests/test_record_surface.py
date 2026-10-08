@@ -20,7 +20,6 @@ from ddflow.surfaces.context import Ctx
 from ddflow.surfaces.registry import (
     AS_AGENT,
     SuggestingParser,
-    add_commands,
     exempt_paths,
     routed_paths,
     used_aliases,
@@ -51,12 +50,7 @@ def _parser(kind=NOTE):
     p.add_argument("--agent", default="")
     p.add_argument("--json", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
-    add_commands(
-        sub,
-        S.record_commands(kind),
-        groups=S.record_groups(kind),
-        group_aliases=S.record_group_aliases(kind, "0.1.17"),
-    )
+    S.add_record_commands(sub, kind, since="0.1.17")
     return p
 
 
@@ -349,9 +343,9 @@ def test_the_old_group_word_still_works_and_says_so():
     assert a.fn is p.parse_args(["note", "list"]).fn  # the alias reaches the same handler
     used = used_aliases(p, a, ["notes", "list"])
     assert [u.old for u in used] == ["notes"] and used[0].new == "note"
-    assert S.record_group_aliases(R.KINDS["rule"], "0.1.17")["rule"][0].old == "rules"
+    assert S._group_aliases(R.KINDS["rule"], "0.1.17")["rule"][0].old == "rules"
     assert (
-        S.record_group_aliases(
+        S._group_aliases(
             R.RecordKind(name="y", def_kind="skill", summary="", fields=(R.FieldSpec("title"),)),
             "0.1.17",
         )
