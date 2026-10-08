@@ -106,7 +106,8 @@ def _routers_members(v: Any) -> tuple[Any, list[str]]:
     shaped = [k for k, m in v.items() if isinstance(m, dict)]
     kept = {k: ([] if k in shaped else m) for k, m in v.items()}
     return kept, [
-        f"router {k!r} (a shape not known here, so its families are unknown)" for k in shaped
+        f"kept router {k!r} with unknown families (a shape this ddflow does not know)"
+        for k in shaped
     ]
 
 
