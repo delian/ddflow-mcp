@@ -118,6 +118,12 @@ def test_the_leaf_exemptions_are_real_and_reasoned():
         assert len(reason) > 20, f"{path}: the exemption needs a real reason"
 
 
+def test_the_routed_leaves_are_real():
+    live = set(cli_leaves())
+    stale = [p for p in LEAF_VIA if p not in live]
+    assert not stale, f"routes declared for subcommands that no longer exist: {stale}"
+
+
 def test_the_leaf_detector_can_fail():
     assert not leaf_covered(("definitely", "not", "a", "tool"))
 
