@@ -175,7 +175,7 @@ def test_reviewers_add_refuses_an_unknown_preset_and_an_agent_command_reviewer(r
     assert out.exit == 0, out.reason
 
 
-def test_a_name_given_wins_over_the_preset_and_a_newer_format_is_a_refusal(repo):
+def test_an_explicit_name_labels_the_reviewer_and_a_newer_format_is_a_refusal(repo):
     out = AR.reviewers_add(repo, preset="claude-cli", name="mine", person=True)
     assert out.exit == 0, out.reason
     names = [r["name"] for r in tomllib.loads(open(out.data["path"]).read())["reviewer"]]
