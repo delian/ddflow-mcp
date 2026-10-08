@@ -121,8 +121,13 @@ def _key(path: str) -> str:
     return str(Path(path).resolve()) if path else ""
 
 
-def _protected(root: Path, cfg: Config, state: State, now: float | None = None) -> _Protected:
+def _protected(
+    root: Path, cfg: Config, state: State, now: float | None = None, *, ignore: str = ""
+) -> _Protected:
     """What ``recover`` already treats as not-ours: live leases and adopted trees.
+
+    ``ignore`` is an item whose own lease does not count: the item whose tree the caller is
+    disposing of holds it, and "held by the item being merged" is not a reason to keep it.
 
     Matched by PATH as well as branch. The item index below is by branch, but an adopted
     tree sits on whatever branch the harness chose, and a lease records the tree it was
@@ -131,6 +136,8 @@ def _protected(root: Path, cfg: Config, state: State, now: float | None = None) 
     now = time.time() if now is None else now
     p = _Protected()
     for iid, lease in state.active_leases(now, cfg.lease.grace_s).items():
+        if iid == ignore:
+            continue
         it = state.items.get(iid)
         who = f"{iid} (held by {lease.holder or 'unknown'})"
         for stored in (lease.worktree, it.worktree if it else ""):
@@ -162,6 +169,75 @@ def record_removed(log: EventLog, root: Path, path: str) -> None:
     for it in fold(log.read_all(), strict=False).items.values():
         if it.worktree and _key(str(W.load_path(root, it.worktree))) == gone:
             record_item_removed(log, it)
+
+
+@dataclass(frozen=True)
+class Disposal:
+    """What `dispose_tree` did: ``outcome`` is "removed", "refused" (the tree is someone's:
+    ``kind`` says whose, "held" or "adopted") or "failed" (git said no, or the tree holds
+    work and was not forced); ``why`` is the sentence for the one who asked. A removal that
+    worked but could not delete the branch has ``branch_left`` set to git's answer."""
+
+    outcome: str
+    why: str = ""
+    kind: str = ""
+    branch_left: str = ""
+    had_branch: bool = False
+
+    @property
+    def removed(self) -> bool:
+        return self.outcome == "removed"
+
+
+def dispose_tree(
+    repo: Path,
+    cfg: Config,
+    log: EventLog | None,
+    wt: W.Worktree,
+    *,
+    item: Item | None = None,
+    forced_by: str = "",
+) -> Disposal:
+    """THE removal of a worktree (B-uni-tree-lifecycle): merge, the PR flow, cleanup and
+    onboarding all end here, so every one is guarded, serialised with the claims and logged.
+
+    * **Under the log's lock, with the leases re-read**: a tree a LIVE lease holds, or an
+      adopted one, is refused (``item``'s own lease -- the caller holds it -- does not count).
+      A claim appended between a survey and this call is seen, or waits and then finds no tree.
+    * **Guarded by git**: without ``forced_by``, `W.remove` refuses a tree with uncommitted
+      files, unmerged commits, or one it could not measure. ``forced_by`` is the caller's
+      PROOF that removing whatever the tree holds is safe (the PR head merged on the forge;
+      an inspection that found nothing beyond caches): it makes the removal forced, and the
+      caller measured the tree itself.
+    * **Logged**: a removal that worked appends `worktree.removed` -- for ``item`` when given,
+      else for every item whose recorded tree is this path (B5e83fb22cb).
+
+    ``log`` None is a project that keeps no event log: no lock, no guard, nothing to record.
+    """
+    root = W.repo_root(repo)
+    with log.transaction() if log else contextlib.nullcontext():
+        if log is not None:
+            guard = _protected(
+                root, cfg, fold(log.read_all(), strict=False), ignore=item.id if item else ""
+            )
+            kind, reason = guard.why(str(wt.path), wt.branch)
+            if kind:
+                return Disposal("refused", reason, kind)
+        had_branch = bool(wt.branch) and W.branch_exists(root, wt.branch)
+        r = W.remove(repo, cfg, wt, force=bool(forced_by))
+        if not r.ok:
+            return Disposal("failed", (r.err or r.out).strip() or f"git exit {r.code}")
+        if log is not None:
+            if item is not None:
+                record_item_removed(log, item)
+            else:
+                record_removed(log, root, str(wt.path))
+    if had_branch and W.branch_exists(root, wt.branch):
+        rb = W.git(root, "branch", "-d", wt.branch)
+        if not rb.ok:
+            left = (rb.err or rb.out).strip() or f"git exit {rb.code}"
+            return Disposal("removed", branch_left=left, had_branch=True)
+    return Disposal("removed", had_branch=had_branch)
 
 
 def our_prefixes(cfg: Config) -> list[str]:
@@ -358,18 +434,15 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
                 continue
             t.action = "remove"
         if t.action == "remove":
-            with unless_claimed() as guard:
-                if kept(t, guard):
-                    continue
-                wt = W.Worktree(
-                    item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base
-                )
-                r = W.remove(repo, cfg, wt)
-                if r.ok:
-                    record_removed(log, root, t.path)
+            wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
+            d = dispose_tree(repo, cfg, log, wt)
+            if d.outcome == "refused":
+                t.action, t.kind, t.done = "", d.kind, d.why
+                done.append(f"kept {t.name}: {d.kind} since the survey")
+                continue
             done.append(
-                f"{'removed' if r.ok else 'kept'} worktree {t.name}"
-                + ("" if r.ok else f": {(r.err or r.out).splitlines()[0][:120]}")
+                f"{'removed' if d.removed else 'kept'} worktree {t.name}"
+                + ("" if d.removed else f": {d.why.splitlines()[0][:120]}")
             )
     for t in plan.stale_branches:
         if t.action == "delete_branch":
