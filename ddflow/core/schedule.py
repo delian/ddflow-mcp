@@ -32,12 +32,7 @@ from .admission import Clash, conflicts, glob_conflict, is_shared, shared_globs 
 from .flow import FEATURE, branch_kind, stack_base, unknown_line
 from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
 from .globs import overlap as globs_overlap  # noqa: F401  (re-exported)
-from .globs import regex as _glob_regex
 from .graph import closure, find_cycles, longest_chains
-
-
-def _gitattributes_re(pattern: str):  # kept until services/shared_files moves to core.globs
-    return _glob_regex(pattern, True)
 
 
 @dataclass
