@@ -18,17 +18,21 @@ What must happen next, in order:
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 
 from harness import Scenario
 
-#: The lease TTL the scenario runs under: short, so expiry is observable inside a test.
-TTL_S = 8
-#: How many times the "still claimed" checks are re-observed when the machine was too
-#: slow to finish them inside one lease (B11e64b1e8c).
-LIVE_ATTEMPTS = 6
+#: The lease TTL the scenario runs under: short, so a crash is real by the time the
+#: scenario looks for it.
+TTL_S = 2
+#: The grace the "still claimed" checks run under. Grace is read from the config at
+#: every check, not stored in the lease, so a lease inside TTL + grace is live however
+#: long a slow machine takes to start the check -- the old 8 s lease with no grace made
+#: every check a race against the clock, and at load average 100-300 one process
+#: outlived it (B11e64b1e8c, Bb070dd642d, B06a0a99c0e). Expiry is then made to happen
+#: by setting the grace to 0, which is monotone: a slow machine only makes it later.
+LIVE_GRACE_S = 3600
 
 SCAFFOLD = {
     "README.md": "# feedparse\n",
@@ -38,42 +42,32 @@ SCAFFOLD = {
 }
 
 
-def _while_live(sc: Scenario, check, holder: str = "delta"):
-    """Run ``check`` inside ``holder``'s live lease (DELTA's unless said) and return what
-    it returned.
+def _lease_config(sc: Scenario, grace_s: int) -> None:
+    sc.write(
+        ".ddflow/config.toml",
+        f"""
+        [lease]
+        ttl_s = {TTL_S}
+        grace_s = {grace_s}
+        heartbeat_s = 1
 
-    Judged against the LEASE'S OWN CLOCK, not a margin: the check counts only when it
-    FINISHED before the lease that the holder's last heartbeat started could expire -- an
-    upper bound on when it looked. At load average 100-190 one process could outlive an
-    8 s lease, and the scenario failed on a correct answer (B11e64b1e8c, after
-    Bdc7fe4dbbb widened the margin once). So a check that ran too late is re-observed
-    after a fresh heartbeat; a wrong answer inside the window still fails. One check per
-    window: two in a row would put the second one's start beyond the bound.
-    """
-    for attempt in range(1, LIVE_ATTEMPTS + 1):
-        sc.ddflow("heartbeat", "P1.T1", agent=holder)  # the holder's last one
-        # Read BEFORE the check, so nothing the check does can move the bound. Defensive:
-        # neither a refused claim nor a read-only recover renews the lease today.
-        lease = sc.jddflow("show", "P1.T1")["lease"]
-        sc.check(
-            f"the live lease is {holder.upper()}'s", lease["holder"] == holder, json.dumps(lease)
-        )
-        renewed = lease["renewed_at"]
-        result = check()
-        done = time.time()
-        if done - renewed < TTL_S:
-            return result
-        sc.note(
-            f"attempt {attempt}: the check finished {done - renewed:.1f}s after the "
-            f"heartbeat, past the {TTL_S}s lease, so it did not observe the live window; "
-            "heartbeat again and re-observe"
-        )
-    sc.check(
-        f"the live window was observed within {LIVE_ATTEMPTS} attempts",
-        False,
-        f"every attempt outlived the {TTL_S}s lease (load average {os.getloadavg()})",
+        [gates]
+        # keep the demo focused on recovery
+        required = ["implement", "merge"]
+    """,
     )
-    raise AssertionError("unreachable: a failed check raises")
+
+
+def _while_live(sc: Scenario, check, holder: str = "delta"):
+    """Run ``check`` while ``holder``'s lease is live and return what it returned.
+
+    Live by construction, not by a margin: the scenario's grace (`LIVE_GRACE_S`) keeps
+    the lease inside TTL + grace for as long as the check takes, so the check needs no
+    clock, no heartbeat and no retry. Only the holder is asserted.
+    """
+    lease = sc.jddflow("show", "P1.T1")["lease"]
+    sc.check(f"the live lease is {holder.upper()}'s", lease["holder"] == holder, json.dumps(lease))
+    return check()
 
 
 def run(sc: Scenario) -> None:
@@ -87,19 +81,7 @@ def run(sc: Scenario) -> None:
     # checkout dirty, which `ddflow merge` refuses.
     sc.git("add", "-A")
     sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "ddflow: adopt")
-    sc.write(
-        ".ddflow/config.toml",
-        f"""
-        [lease]
-        ttl_s = {TTL_S}
-        grace_s = 0
-        heartbeat_s = 1
-
-        [gates]
-        # keep the demo focused on recovery
-        required = ["implement", "merge"]
-    """,
-    )
+    _lease_config(sc, LIVE_GRACE_S)
     sc.ddflow("phase", "add", "P1", "--title", "Parsing")
     sc.ddflow(
         "task",
@@ -159,20 +141,22 @@ def run(sc: Scenario) -> None:
         and (wt / "feedparse/rss_dates.py").exists(),
     )
 
-    sc.step("DELTA heartbeats one last time, then is killed — no release, nothing")
+    sc.step("DELTA is killed — no release, nothing")
     sc.note(
         "Simulated exactly as a real kill would leave things: the process simply "
-        "stops. No cleanup code runs, because in a real crash none does. Each check "
-        "below is one observation of the lease a fresh DELTA heartbeat starts: the "
-        "heartbeats printed below are the demo re-establishing that live window, not "
-        "DELTA surviving the crash."
+        "stops. No cleanup code runs, because in a real crash none does. The lease is "
+        "kept live for the checks below by the config's grace, not by DELTA."
     )
 
     sc.step("Immediately after the crash, the item is still CLAIMED")
     code, _, err = _while_live(
         sc, lambda: sc.ddflow("claim", "P1.T1", agent="epsilon", expect=None)
     )
-    sc.check("another agent is refused while the lease is still live", code == 3, err)
+    sc.check(
+        "another agent is refused while the lease is still live",
+        code == 3 and "is held by delta" in err,
+        err,
+    )
     code = _while_live(sc, lambda: sc.ddflow("recover", expect=None))[0]
     sc.check("recover reports nothing yet — a dead agent looks like a slow one", code == 2)
     sc.note(
@@ -180,9 +164,10 @@ def run(sc: Scenario) -> None:
         "agents end up in one worktree."
     )
 
-    sc.step("Wait for the lease to expire, then run recovery")
-    # Poll rather than sleep a fixed time: expiry is wall-clock, and how long the steps
-    # above took varies with the machine's load.
+    sc.step("The lease runs out, then run recovery")
+    # Grace 0: DELTA's lease is now judged by its own 2 s TTL alone. Polled rather than
+    # assumed, because expiry is wall-clock; a slow machine only makes it later.
+    _lease_config(sc, 0)
     deadline = time.monotonic() + TTL_S + 120
     while sc.ddflow("recover", expect=None)[0] != 0 and time.monotonic() < deadline:
         time.sleep(0.5)
@@ -238,6 +223,7 @@ def run(sc: Scenario) -> None:
     sc.step("The operator salvages, then releases — now the item returns to the pool")
     sc.commit_in(wt, "P1.T1: salvaged date normalisation")
     sc.ddflow("release", "P1.T1", "--note", "salvaged 1 file, 2 commits kept")
+    _lease_config(sc, LIVE_GRACE_S)  # EPSILON's claim is live for the checks that follow
     sc.ddflow("claim", "P1.T1", agent="epsilon", expect=0)
     sc.check(
         "EPSILON adopted the EXISTING worktree rather than making a second one",
@@ -253,8 +239,9 @@ def run(sc: Scenario) -> None:
     sc.check("T2 stayed available throughout the whole incident", "P1.T2" in ready, str(ready))
 
     sc.step("The event log tells the full story of the incident")
-    # Inside EPSILON's live lease (8 s): under load the steps since its claim outlived it,
-    # and doctor rightly reported the expired lease as a problem (bug Bfb0e454b49).
+    # Inside EPSILON's live lease (its grace keeps it live): under load the steps since its
+    # claim outlived a bare TTL, and doctor rightly reported the expired lease as a
+    # problem (bug Bfb0e454b49).
     code, out, err = _while_live(sc, lambda: sc.ddflow("doctor", expect=None), holder="epsilon")
     sc.check("doctor exits 0 inside the live lease", code == 0, out + err)
     sc.check(
