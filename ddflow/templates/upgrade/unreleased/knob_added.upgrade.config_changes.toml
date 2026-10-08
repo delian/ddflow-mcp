@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.config_changes"
+new = '"agent"'
+why = "Who may apply an upgrade's config change (D-upgrade-config-changes): agent (default; a value anyone set still needs --confirm), ask or operator (every change waits for --confirm)."
+impact = "additive"
