@@ -272,7 +272,7 @@ def test_a_rewritten_settings_file_keeps_every_other_byte(tmp_path):
     path = tmp_path / ".claude" / "settings.json"
     path.parent.mkdir()
     raw = (
-        '{\n    "model": "caf\u00e9",\n  "hooks": {"SessionStart": [{"hooks": '
+        '{\n    "model": "caf\\u00e9",\n  "hooks": {"SessionStart": [{"hooks": '
         '[{"type": "command", "command": ' + json.dumps(ours) + "}]}]},\n"
         '        "note": "keep   me"}\n'
     )
