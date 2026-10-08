@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import functools
 import json
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -35,12 +37,51 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ddflow import FORMAT_LEVEL, __version__
+
 from ..config import Config
+from ..core import digest as D
 from ..core import textsim
 from ..core.model import State, fold
 from ..infra.log import EventLog, _flock
 
 SCHEMA = 10
+
+#: How long an index built by OTHER code (a different fingerprint, or the pre-fingerprint
+#: `index.db`) is kept after its last write before a rebuild garbage-collects it. Worktrees
+#: on different ddflow versions each keep their own index meanwhile (D-compat).
+STALE_INDEX_DAYS = 7.0
+#: An index in use is touched at most this often, so its mtime means "last used", not "last
+#: rebuilt", and `STALE_INDEX_DAYS` of silence really is disuse.
+INDEX_TOUCH_S = 86400.0
+#: Fewer source files than this found under `ddflow/core/` means there is no source tree.
+MIN_FINGERPRINT_SOURCES = 3
+
+#: Every file a fingerprinted index (or an earlier one) can leave beside it.
+_INDEX_FILE = re.compile(r"^index\.db(-[0-9a-f]{16})?(-wal|-shm|-lock|-rebuilding\..*)?$")
+
+
+@functools.lru_cache(maxsize=1)
+def code_fingerprint() -> str:
+    """What built an index, in 16 hex digits: the source of the fold and of the projection
+    (everything under `ddflow/core/` and this module), SCHEMA, the similarity VERSION and
+    the on-disk FORMAT_LEVEL. A change to any of them is a different index, so nobody has
+    to remember to bump a constant, and two checkouts running different code each keep their
+    own index instead of rebuilding each other's (D-compat)."""
+    h = D.hasher(f"{SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
+    here = Path(__file__).resolve()
+    core = here.parent.parent / "core"
+    sources = sorted([*core.rglob("*.py"), here])
+    for f in sources:
+        h.update(f.relative_to(here.parent.parent).as_posix().encode())
+        with contextlib.suppress(OSError):
+            h.update(f.read_bytes())
+    if len(sources) < MIN_FINGERPRINT_SOURCES:
+        # No source tree to read (a zipped or bytecode-only install): the release stands in
+        # for the code rather than the fingerprint silently becoming a constant.
+        h.update(__version__.encode())
+    return h.hexdigest()[:16]
+
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -91,7 +132,9 @@ class Store:
     def __init__(self, root: Path, cfg: Config | None = None) -> None:
         self.root = Path(root)
         self.cfg = cfg or Config.load(root)
-        self.path = self.root / ".ddflow" / "index.db"
+        # One index per code fingerprint: `index.db-<fingerprint>` (covered by the
+        # `index.db-*` line every adopted project's `.ddflow/.gitignore` already has).
+        self.path = self.root / ".ddflow" / f"index.db-{code_fingerprint()}"
         self.fts = _has_fts5() and self.cfg.lessons.search_backend == "fts5"
 
     def _ensure_dir(self) -> None:
@@ -198,11 +241,22 @@ class Store:
         # decide whether `read_all()` was needed, which is the shape of the problem
         # rather than a solution to it.
         mark = log.mark()
-        return (
+        behind = (
             row.get("lamport") != str(mark.lamport)
             or row.get("bytes") != str(mark.bytes)
             or row.get("shards") != str(mark.count)
         )
+        if not behind:
+            self._touch_if_old()
+        return behind
+
+    def _touch_if_old(self) -> None:
+        """Mark the index as used: reads never write the file, so without this its mtime says
+        when it was BUILT, and `_collect_stale_indexes` of another checkout would take a
+        long-lived reader's index for an abandoned one."""
+        with contextlib.suppress(OSError):
+            if time.time() - self.path.stat().st_mtime > INDEX_TOUCH_S:
+                os.utime(self.path)
 
     # -- projection -----------------------------------------------------------------
     @property
@@ -262,7 +316,12 @@ class Store:
         # advisory (an older ddflow never takes it, and a filesystem may not honour it),
         # and a live rebuild's temp must never be unlinked under it. Each file is aged by
         # its own mtime; a rebuild runs at ~12k events/s, so the hour is far beyond one.
-        for pattern in (f"{self.path.name}-rebuilding*", f"{self.path.stem}.rebuilding*"):
+        for pattern in (
+            f"{self.path.name}-rebuilding*",
+            f"{self.path.stem}.rebuilding*",
+            "index.db-rebuilding*",  # an index named before fingerprints, and its fixed-name
+            "index.rebuilding*",  # predecessor
+        ):
             for old in self.path.parent.glob(pattern):
                 with contextlib.suppress(OSError):
                     if time.time() - old.stat().st_mtime > REBUILD_TEMP_MAX_AGE_S:
@@ -393,7 +452,24 @@ class Store:
             tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
             self.path.with_name(self.path.name + suf).unlink(missing_ok=True)
         tmp.replace(self.path)
+        self._collect_stale_indexes()
         return state
+
+    def _collect_stale_indexes(self) -> list[Path]:
+        """Delete the indexes of OTHER code untouched for `STALE_INDEX_DAYS`. Best effort,
+        and never this fingerprint's own files: an index in use is touched by `stale()` at least
+        daily, and a mistaken removal only costs that checkout a rebuild."""
+        gone: list[Path] = []
+        mine = self.path.name
+        cutoff = time.time() - STALE_INDEX_DAYS * 86400
+        for f in self.path.parent.glob("index.db*"):
+            if f.name.startswith(mine) or not _INDEX_FILE.match(f.name):
+                continue
+            with contextlib.suppress(OSError):
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    gone.append(f)
+        return gone
 
     def ensure(self, log: EventLog) -> State:
         """The folded state, with the index made current on the way when it is behind.

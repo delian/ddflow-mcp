@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import onboard_run
 from ...api.onboard import STAGES
 from ..context import Ctx
+from ..render import emit_json
 
 
 def add_onboard_parser(sub) -> None:
@@ -54,7 +54,7 @@ def cmd_onboard(a, c: Ctx) -> int:
         # what the apply DID, not only the offer it came from (roborev on c61278a4).
         text = f"{text}\n{acted}"
     if c.json:
-        print(json.dumps(out.body(""), indent=2, default=str))
+        emit_json(out.body(""))
     elif out.exit in (1, 3):
         print(text, file=sys.stderr)
     else:

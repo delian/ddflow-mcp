@@ -110,7 +110,7 @@ def _commands(data: Any) -> list[str]:
 
 def check_settings(repo: Path) -> list[Dangling]:
     """ddflow's own hook commands in `.claude/settings.json` and `.gemini/settings.json`."""
-    from .claudehooks import HOOKS
+    from .claudehooks import HOOKS, _ours
 
     # Every hook ddflow installs, the pre-compact one included (B4af8a88294): the table
     # is the list, so a hook added to it is checked here without anyone remembering to.
@@ -123,7 +123,7 @@ def check_settings(repo: Path) -> list[Dangling]:
         if isinstance(data, Unreadable):
             continue
         for cmd in _commands(data):
-            if any(m in cmd for m in ours):
+            if any(_ours({"command": cmd}, m) for m in ours):
                 fix = "ddflow hooks install --claude" + (" --gemini" if "gemini" in rel else "")
                 if d := check_command(f"the hook command in {rel}", cmd, fix, rel):
                     out.append(d)

@@ -45,6 +45,8 @@ from .context import (
 from .parsers import REGISTER_ORDER
 from .parsers._common import GLOBS_HELP, _Globs, _positive_int  # noqa: F401
 from .registry import Notices, SuggestingParser, used_aliases
+from .tools import TOOLS
+from .vocabulary import provide
 
 
 def cmd_item_update(a, c: Ctx) -> int:
@@ -320,6 +322,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 #: The aliases this process has already said are deprecated (one CLI process is one session).
 _NOTICES = Notices()
+
+
+# What the stale-reference scan (`doctor`) checks names against: this parser and the tool table.
+provide(parser=build_parser, tools=TOOLS)
 
 
 def main(argv: list[str] | None = None) -> int:

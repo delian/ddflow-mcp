@@ -28,6 +28,7 @@ from ...services import gates as G  # noqa: F401
 from ...services import repairs as RP  # noqa: F401
 from ...views.markdown import may_hold_work  # noqa: F401
 from .._base import _load  # noqa: F401
+from ..refs import stale_references  # noqa: F401
 from .health import (  # noqa: F401
     _DOCTOR_PAIR_CAP,
     _DOCTOR_SWEEP_MAX,
