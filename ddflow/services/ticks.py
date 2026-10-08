@@ -29,6 +29,7 @@ What the primitive promises, and the tests pin:
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import importlib
 import json
 import threading
@@ -56,6 +57,11 @@ DEFERRED = "deferred"
 LOCKED = "locked"
 UNAVAILABLE = "unavailable"
 STATUSES = (RAN, CUT, FAILED, DEFERRED, LOCKED, UNAVAILABLE)
+
+
+class TickUnavailable(Exception):
+    """Raised by a tick that could not do its work at all (an unwritable directory, a tool
+    that is absent): recorded as `unavailable`, never as a run that went fine."""
 
 
 @dataclass
@@ -169,7 +175,8 @@ def _write(path: Path, ticks: dict[str, dict[str, Any]]) -> None:
 
 def status(repo: Path | str) -> list[dict[str, Any]]:
     """What each registered tick last did on this machine: for a doctor line or a person.
-    A tick that has never run reports ``status: never``."""
+    A tick that has never run reports ``status: never``; one with no interval (`every_s == 0`:
+    asked on every pass, recorded only when it fails or is cut) reports ``every-pass``."""
     rows = _read(_dir(repo) / STATE)
     out = []
     for t in registered():
@@ -180,7 +187,7 @@ def status(repo: Path | str) -> list[dict[str, Any]]:
                 "every_s": t.every_s,
                 "budget_s": t.budget_s,
                 "last_at": last.get("last_at"),
-                "status": last.get("status", "never"),
+                "status": last.get("status", "every-pass" if t.every_s == 0 else "never"),
                 "detail": last.get("detail", ""),
                 "took_s": last.get("took_s", 0.0),
                 "cut": int(last.get("cut", 0)),
@@ -250,9 +257,14 @@ def _call(t: Tick, ctx: TickCtx, wait_s: float) -> tuple[str, str]:
             run.done.set()
 
     worker = threading.Thread(target=work, name=f"tick:{t.name}", daemon=True)
-    worker.start()
+    try:
+        worker.start()
+    except RuntimeError as exc:  # no thread to be had on this host
+        return FAILED, f"RuntimeError: {exc}"
     if not run.done.wait(max(0.0, wait_s)):
         return CUT, f"still running after {wait_s:g}s; the command went on without it"
+    if isinstance(run.error, TickUnavailable):
+        return UNAVAILABLE, str(run.error)
     if run.error is not None:
         return FAILED, f"{type(run.error).__name__}: {run.error}"
     return RAN, run.note or ""
@@ -281,13 +293,48 @@ def run_due(
         return [TickResult("*", FAILED, f"{type(exc).__name__}: {exc}")]
 
 
-def _applies(t: Tick, ctx: TickCtx) -> bool:
+def _applies(t: Tick, ctx: TickCtx) -> tuple[bool, str]:
+    """`(applies, why not could be told)`: a predicate that raises is a tick that could not
+    be judged, which is not the same as one that does not apply."""
     if t.enabled is None:
-        return True
+        return True, ""
     try:
-        return bool(t.enabled(ctx))
-    except Exception:
-        return False
+        return bool(t.enabled(ctx)), ""
+    except Exception as exc:
+        return False, f"its enabled check failed: {type(exc).__name__}: {exc}"
+
+
+def _split_due(
+    ticks: list[Tick], ctx: TickCtx, rows: dict[str, dict[str, Any]], now: float
+) -> tuple[list[Tick], list[TickResult]]:
+    """`(ticks due, results for ticks that could not be judged)`."""
+    due: list[Tick] = []
+    unjudged: list[TickResult] = []
+    for t in ticks:
+        applies, why = _applies(t, ctx)
+        if why:
+            unjudged.append(TickResult(t.name, FAILED, why))
+        elif applies and _due(t, rows.get(t.name, {}), now):
+            due.append(t)
+    return due, unjudged
+
+
+def _run_one(t: Tick, ctx: TickCtx, path: Path, budget_left: float) -> TickResult:
+    """Run ``t`` inside its budget (and what is left of the pass's) and record the outcome."""
+    budget = min(t.budget_s, budget_left)
+    begun = ctx.mono()
+    # Its own context: a tick that was cut keeps seeing ITS deadline (expired) while the
+    # pass moves on to the next tick's.
+    tctx = dataclasses.replace(ctx, deadline=begun + budget)
+    status_, detail = _call(t, tctx, budget)
+    result = TickResult(t.name, status_, detail, ctx.mono() - begun)
+    # A tick with `every_s == 0` has its own throttle (it is asked on every pass), so it is
+    # recorded only when it fails or is cut -- the state file is not rewritten on every
+    # command -- which a doctor line must be able to show.
+    if t.every_s > 0 or status_ != RAN:
+        with contextlib.suppress(OSError, fsio.LockTimeout):
+            _record(path, t, result)
+    return result
 
 
 def _run_due(
@@ -296,42 +343,31 @@ def _run_due(
     if not (Path(ctx.repo) / ".ddflow").is_dir():
         return []
     path = _dir(ctx.repo) / STATE
-    fsio.ensure_ignored_dir(_dir(ctx.repo))
     now = clock()
-    rows = _read(path)
-    due = [t for t in ticks if _applies(t, ctx) and _due(t, rows.get(t.name, {}), now)]
-    if not due:
+    due, results = _split_due(ticks, ctx, _read(path), now)
+    if not due and not results:
         return []
+    fsio.ensure_ignored_dir(_dir(ctx.repo))  # only now that something will be written
     started = ctx.mono()
-    results: list[TickResult] = []
-    # A tick with `every_s == 0` has its own throttle (it is asked on every pass), so it is
-    # neither claimed nor recorded -- the state file is not rewritten on every command --
-    # unless it fails or is cut, which a doctor line must be able to show.
     stateful_due = [t for t in due if t.every_s > 0]
     claimed = {t.name for t in _claim(path, stateful_due, now)} if stateful_due else set()
-    for t in due:
-        stateful = t.every_s > 0
-        if stateful and t.name not in claimed:
-            continue  # another command won it
-        left = pass_budget_s - (ctx.mono() - started)
-        if left <= 0:
-            # Not run, so not recorded as run: the next command takes it.
-            if stateful:
-                with contextlib.suppress(OSError, fsio.LockTimeout):
-                    _release(path, t)
-            results.append(TickResult(t.name, DEFERRED, "the pass budget was spent"))
-            continue
-        budget = min(t.budget_s, left)
-        begun = ctx.mono()
-        ctx.deadline = begun + budget
-        status_, detail = _call(t, ctx, budget)
-        took = ctx.mono() - begun
-        ctx.deadline = None
-        result = TickResult(t.name, status_, detail, took)
-        if stateful or status_ != RAN:
+    pending = set(claimed)  # claimed and not yet run: handed back if this pass is cut short
+    by_name = {t.name: t for t in due}
+    try:
+        for t in due:
+            if t.every_s > 0 and t.name not in claimed:
+                continue  # another command won it
+            left = pass_budget_s - (ctx.mono() - started)
+            if left <= 0:
+                # Not run, so not recorded as run: handed back below, the next command takes it.
+                results.append(TickResult(t.name, DEFERRED, "the pass budget was spent"))
+                continue
+            pending.discard(t.name)
+            results.append(_run_one(t, ctx, path, left))
+    finally:
+        for name in sorted(pending):  # an abort (KeyboardInterrupt, ...) must not strand a claim
             with contextlib.suppress(OSError, fsio.LockTimeout):
-                _record(path, t, result)
-        results.append(result)
+                _release(path, by_name[name])
     return results
 
 
@@ -362,6 +398,8 @@ def flow_sample(ctx: TickCtx) -> str | None:
     flowstate = importlib.import_module("ddflow.services.flowstate")
     fctx = flowstate.FlowCtx(repo=Path(ctx.repo), cfg=ctx.cfg, state=ctx.state, events=ctx.events)
     result = flowstate.sample_if_due(fctx, signals.HostSignals(ctx.repo))
+    if result.unavailable:
+        raise TickUnavailable(result.reason)
     return None if result.written else (result.reason or None)
 
 
