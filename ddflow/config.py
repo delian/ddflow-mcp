@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
-from .config_sections._docs import KNOB_DOCS, declared_tables
+from .config_sections._docs import KNOB_DOCS, RENAMED, declared_tables
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
     AgentConfig,
@@ -267,6 +267,10 @@ class Config:
                 cfg._apply(tomllib.loads(local.read_text("utf-8")), "local")
 
         envdata: dict[str, dict[str, Any]] = {}
+        for old in RENAMED:  # an old key's variable still works (D-compat); the new one wins
+            osec, _, oknob = old.partition(".")
+            if (key := f"DDFLOW_{osec.upper()}_{oknob.upper()}") in env:
+                envdata.setdefault(osec, {})[oknob] = env[key]
         for sec in cfg._sections():
             for f in fields(getattr(cfg, sec)):
                 key = f"DDFLOW_{sec.upper()}_{f.name.upper()}"
@@ -322,6 +326,7 @@ class Config:
         # lenient=False where the file and the code are the same tree's.
         if lenient is None:
             lenient = source in ("file", "local")
+        data = _migrate_renamed(data, source)
         for sec, values in data.items():
             if sec in self._FOREIGN_TABLES:
                 continue
@@ -477,6 +482,46 @@ class Config:
                     )
                 )
         return rows
+
+
+#: Old keys already warned about in this process (`_migrate_renamed`).
+_WARNED_RENAMED: set[str] = set()
+
+
+def _migrate_renamed(data: dict[str, Any], source: str) -> dict[str, Any]:
+    """``data`` with every renamed knob (`RENAMED`, D-compat) under its CURRENT key.
+
+    The old key is still read, with one warning on stderr per process; when both are set the
+    new key wins, as the more recent spelling. ``source="check"`` (a write being validated)
+    stays quiet: the write path migrates the file itself (`services/configwrite`).
+    """
+    hits = [
+        old
+        for old in RENAMED
+        if isinstance(sec := data.get(old.partition(".")[0]), dict) and old.partition(".")[2] in sec
+    ]
+    if not hits:
+        return data
+    out = {k: dict(v) if isinstance(v, dict) else v for k, v in data.items()}
+    for old in hits:
+        new, since, removed_in = RENAMED[old]
+        osec, _, oknob = old.partition(".")
+        nsec, _, nknob = new.partition(".")
+        value = out[osec].pop(oknob)
+        if not out[osec] and osec not in Config.__dataclass_fields__:
+            del out[osec]  # the old section held nothing else: do not call it unknown
+        target = out.setdefault(nsec, {})
+        if isinstance(target, dict):
+            target.setdefault(nknob, value)
+        if source != "check" and old not in _WARNED_RENAMED:
+            _WARNED_RENAMED.add(old)
+            print(
+                f"ddflow: warning: config key '{old}' is deprecated since {since}; use "
+                f"'{new}' (the old key is read until {removed_in}; the next config write "
+                "moves it).",
+                file=sys.stderr,
+            )
+    return out
 
 
 #: The checkout this code was imported from: `<tree>/ddflow/config.py` -> `<tree>`. For an
