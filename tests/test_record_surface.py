@@ -6,6 +6,7 @@ tool entry from the generated `Command`s and drive them the way a user and an ag
 
 from __future__ import annotations
 
+import argparse
 import dataclasses
 import json
 
@@ -142,12 +143,48 @@ def test_a_kind_offering_fewer_verbs_generates_fewer_commands():
         S.dispatch(".", ro, {"verb": "add", "id": "a"})
 
 
-def test_the_help_of_a_verb_names_its_flags():
-    text = _parser().parse_args  # parser builds: help renders for every command
-    for verb in R.VERBS:
+def test_the_help_of_a_verb_names_its_flags(capsys):
+    expected = {
+        "add": ("--title", "--tags", "--weight", "--pinned", "--no-pinned", "--extends", "--check"),
+        "list": ("--where", "--all", "--limit"),
+        "remove": ("--reason",),
+        "search": ("--mode", "--where"),
+    }
+    for verb, flags in expected.items():
         with pytest.raises(SystemExit) as stop:
-            text(["note", verb, "--help"])
-        assert stop.value.code == 0
+            _parser().parse_args(["note", verb, "--help"])
+        shown = capsys.readouterr().out
+        assert stop.value.code == 0 and all(f in shown for f in flags), (verb, shown)
+
+
+def test_the_answer_flags_are_those_of_dedupe_flags_with_the_same_help():
+    from ddflow.surfaces import dedupe_flags
+
+    shared = argparse.ArgumentParser()
+    dedupe_flags.add_flags(shared)
+    theirs = {a.dest: (a.option_strings, a.help) for a in shared._actions if a.dest != "help"}
+    add = next(c for c in S.record_commands(NOTE) if c.path == ("note", "add"))
+    mine = {}
+    for p in add.params:
+        if p.cli_only:
+            mine[p.name] = ([p.option], p.help)
+    assert mine == theirs
+
+
+def test_a_reason_for_a_missing_remove_reason_names_the_record(repo):
+    out = _tool().tool_entry()["api"](repo, {"verb": "remove", "id": "x"}, "ag")
+    assert out.exit == O.FAIL and "retiring a note" in out.reason and "definition" not in out.reason
+
+
+def test_a_field_may_not_be_called_as_agent():
+    bad = R.RecordKind(
+        name="x",
+        def_kind="skill",
+        summary="s",
+        fields=(R.FieldSpec("title"), R.FieldSpec("as_agent")),
+    )
+    with pytest.raises(ValueError, match="as_agent"):
+        S.record_commands(bad)
 
 
 # -- the CLI, end to end ---------------------------------------------------------------------
@@ -301,7 +338,7 @@ def test_an_argument_the_verb_does_not_take_is_refused_by_name(repo):
 def test_the_old_group_word_still_works_and_says_so():
     p = _parser()
     a = p.parse_args(["notes", "list"])
-    assert a.fn is p.parse_args(["note", "list"]).fn or callable(a.fn)
+    assert a.fn is p.parse_args(["note", "list"]).fn  # the alias reaches the same handler
     used = used_aliases(p, a, ["notes", "list"])
     assert [u.old for u in used] == ["notes"] and used[0].new == "note"
     assert S.record_group_aliases(R.KINDS["rule"], "0.1.17")["rule"][0].old == "rules"

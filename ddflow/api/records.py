@@ -413,10 +413,15 @@ def record_add(
 
 
 def _named(kind: RecordKind, rid: str, reason: str) -> str:
-    """``reason`` (worded by `api.defs` for the storage kind) in the record's own name: a
-    ``note`` filed as a ``skill`` definition says note, and ``revise`` brings one back."""
+    """``reason`` (worded by `api.defs` for a definition of the storage kind) in the record's
+    own name: a ``note`` filed as a ``skill`` definition says note, and ``revise`` brings
+    one back."""
     dk, name = kind.def_kind, kind.name
-    swaps = [("record it again to bring it back", "revise it to bring it back")]
+    swaps = [
+        ("record it again to bring it back", "revise it to bring it back"),
+        ("retiring a definition", f"retiring a {name}"),
+        ("definition id", f"{name} id"),
+    ]
     if dk != name:
         swaps = [
             (f"{dk} definition", name),
