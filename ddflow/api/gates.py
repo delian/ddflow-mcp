@@ -26,6 +26,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core import outcome as O
 from ..core.model import GateOutcome
 from ..core.plain import plain
@@ -141,10 +142,15 @@ def list_gates(repo: Path, *, refuted: bool = False, since: str = "", agent: str
     if since and not refuted:
         return O.failed("gate.list", "--since narrows --refuted; give both")
     if refuted:
-        try:
-            rows = G.refuted_passes(st, since=since)
-        except ValueError:
-            return O.failed("gate.list", f"--since {since!r} is not an ISO date or timestamp")
+        rows = G.refuted_passes(st)
+        if since:
+            # Instants, not strings: `+02:00`, `Z` and a bare date (midnight UTC) all compare
+            # as the times they are.
+            try:
+                floor = clock.parse_ts(since).timestamp()
+            except (ValueError, TypeError):
+                return O.failed("gate.list", f"--since {since!r} is not an ISO date or timestamp")
+            rows = [r for r in rows if clock.epoch(r["at"], default=-1.0) >= floor]
         lines = [G.refuted_line(r) + f"  [{r['state']}] {r['title']}" for r in rows]
         return O.ok(
             "gate.list",

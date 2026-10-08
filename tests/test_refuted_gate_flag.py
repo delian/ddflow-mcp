@@ -61,13 +61,13 @@ def test_the_mcp_tool_takes_since(repo, tmp_path):
     assert tool["api"](repo, {"refuted": True, "since": "2999-01-01"}, "").data["count"] == 0
 
 
-def test_since_compares_instants_not_strings():
+def test_since_compares_instants_not_strings(monkeypatch):
     """The reviewer's case: a time with an offset, or a Z, is the same instant however it
     is spelled; a raw string compare kept or dropped the wrong passes."""
     from types import SimpleNamespace as NS
 
+    from ddflow.api import gates as api_gates
     from ddflow.core.records import GateRecord
-    from ddflow.services.gates import outcomes
 
     rec = GateRecord(
         "critic",
@@ -76,9 +76,10 @@ def test_since_compares_instants_not_strings():
         evidence={"passed_on_refutation": {"refuted": 1, "confirmed": 0, "rounds": 2}},
     )
     st = NS(items={"T": NS(id="T", title="t", state="done", removed=False, gates={"critic": rec})})
+    monkeypatch.setattr(api_gates, "_load", lambda repo, agent: (None, None, st))
 
     def n(since):
-        return len(outcomes.refuted_passes(st, since=since))
+        return api_gates.list_gates(None, refuted=True, since=since).data["count"]
 
     assert n("2024-01-02T11:00:00+02:00") == 1  # 09:00Z: before the pass (strings: dropped)
     assert n("2024-01-02T10:00:00+00:00") == 1  # the same instant: included (strings: '+' < 'Z')
@@ -86,8 +87,6 @@ def test_since_compares_instants_not_strings():
     assert n("2024-01-02T11:00:01+01:00") == 0  # 10:00:01Z
     assert n("2024-01-02") == 1 and n("2024-01-03") == 0
     assert n("") == 1
-    with pytest.raises(ValueError):
-        n("yesterday")
 
 
 def test_an_unparseable_since_is_refused_with_a_reason(repo, tmp_path):

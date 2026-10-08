@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config
-from ...core import clock
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra.log import EventLog
 from .defs import GateDef, pipeline_for
@@ -118,16 +117,11 @@ def _pass_mark(it, gate: str) -> str:
     return ""
 
 
-def refuted_passes(
-    state: State, item_ids: Iterable[str] | None = None, since: str = ""
-) -> list[dict[str, Any]]:
+def refuted_passes(state: State, item_ids: Iterable[str] | None = None) -> list[dict[str, Any]]:
     """Every gate recorded passed ON REFUTATION, for the operator's spot-check (D-unify 5):
     one row per (item, gate) with the flag's own counts and rounds. ``item_ids`` narrows it
-    to those items; removed items are skipped. ``since`` (an ISO date or timestamp, any
-    offset; a bare date is midnight UTC) keeps only the passes recorded at or after that
-    instant, compared as times, not strings; ValueError when it is not a time. Ordered by
-    item id, then gate name."""
-    floor = clock.parse_ts(since).timestamp() if since else None
+    to those items; removed items are skipped. Each row carries ``at``, when the pass
+    was recorded. Ordered by item id, then gate name."""
     wanted = None if item_ids is None else set(item_ids)
     rows: list[dict[str, Any]] = []
     for it in sorted(state.items.values(), key=lambda i: i.id):
@@ -136,7 +130,7 @@ def refuted_passes(
         for gate in sorted(it.gates):
             flag = on_refutation(it, gate)
             at = it.gates[gate].at
-            if flag is not None and (floor is None or clock.epoch(at, default=-1.0) >= floor):
+            if flag is not None:
                 rows.append(
                     {
                         "item": it.id,
