@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from ddflow.config import Config
+from ddflow.core import agentname
 from ddflow.infra import harness_identity
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog
@@ -236,13 +237,13 @@ def test_a_harness_declaration_names_the_cli_agent_unless_flag_or_env_is_given(
     ["a", "alpha", "A.b_c-9", "x" * 64],
 )
 def test_mcp_accepts_these_agent_names(name):
-    assert mcp._VALID_AGENT.fullmatch(name)
+    assert agentname.is_valid(name)
     assert harness_identity._NAME.fullmatch(name)
 
 
 @pytest.mark.parametrize("name", ["", "x" * 65, "a b", "a/b", "a\n", "é", "a:b"])
 def test_mcp_refuses_these_agent_names(name):
-    assert not mcp._VALID_AGENT.fullmatch(name)
+    assert not agentname.is_valid(name)
     assert not harness_identity._NAME.fullmatch(name)
 
 
@@ -334,9 +335,7 @@ def test_export_is_agent_follows_agent_marker_except_over_mcp(monkeypatch):
 
 
 def test_every_surface_shares_the_one_agent_name_pattern():
-    from ddflow.core import agentname
-
-    assert mcp._VALID_AGENT is agentname.AGENT_NAME
+    assert not hasattr(mcp, "_VALID_AGENT"), "the surface asks core.agentname, not a copy"
     assert harness_identity._NAME is agentname.AGENT_NAME
     assert agentname.is_valid("A.b_c-9") and not agentname.is_valid("a\n")
     assert agentname.refusal("a b") == (
@@ -372,3 +371,23 @@ def test_common_dir_asks_git_only_when_the_files_say_nothing(adopted, tmp_path):
     assert paths.common_dir(sub) == (adopted / ".git").resolve()
     assert paths.common_dir(tmp_path / "nowhere") is None
     assert paths.common_dir(tmp_path) is None
+
+
+def test_primary_checkout_ignores_a_separate_git_dir_and_an_unreadable_pointer(tmp_path):
+    import subprocess
+
+    from ddflow.infra import paths
+
+    sgd = tmp_path / "gitrepo" / ".git"
+    (tmp_path / "gitrepo" / "ddflow").mkdir(parents=True)
+    (tmp_path / "gitrepo" / "ddflow" / "__init__.py").write_text("")
+    work = tmp_path / "work"
+    subprocess.run(["git", "init", "-q", f"--separate-git-dir={sgd}", str(work)], check=True)
+    # a gitdir with no commondir is its own common dir, but it is no linked worktree
+    assert paths.common_dir(work, ask_git=False) == sgd.resolve()
+    assert paths.primary_checkout(work) is None
+    for junk in (b"gitdir: foo\x00bar\n", b"gitdir: \xff\xfe\n", b"not a pointer\n"):
+        (work / ".git").write_bytes(junk)
+        assert paths.primary_checkout(work) is None  # and no exception
+    (work / ".git").write_bytes(b"gitdir: foo\x00bar\n")
+    assert paths.common_dir(work, ask_git=False) is None

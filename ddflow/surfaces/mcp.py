@@ -338,10 +338,6 @@ def _outcome_result(
     return result
 
 
-#: What a declared agent name may contain: one rule for every surface (core/agentname.py).
-_VALID_AGENT = AN.AGENT_NAME
-
-
 def _default_agent(repo: Path) -> tuple[str, str]:
     """(identity, where it came from) for a connection that declared none.
 
