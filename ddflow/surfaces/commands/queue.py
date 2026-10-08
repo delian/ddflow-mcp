@@ -33,12 +33,9 @@ def cmd_phase_add(a, c: Ctx) -> int:
             agent=c.requested_agent,
         ),
     )
-    settled = D.settle(a, c, out)
-    if settled is not None:
-        return settled
-    if out.exit != OK:
-        print(out.reason, file=sys.stderr)
-        return out.exit
+    done = D.finish(a, c, out)
+    if done is not None:
+        return done
     c.out(f"phase {a.id} added", out.body(("id",)))
     return out.exit
 
@@ -66,12 +63,9 @@ def cmd_task_add(a, c: Ctx) -> int:
             agent=c.requested_agent,
         ),
     )
-    settled = D.settle(a, c, out)
-    if settled is not None:
-        return settled
-    if out.exit != OK:
-        print(out.reason, file=sys.stderr)
-        return out.exit
+    done = D.finish(a, c, out)
+    if done is not None:
+        return done
     released = ""
     if out.data["released_parent_lease"]:
         released = (

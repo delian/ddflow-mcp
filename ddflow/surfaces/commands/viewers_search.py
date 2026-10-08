@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 
+from ...api import view_read
 from ...services import search as S
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..render import emit_json
@@ -44,51 +45,50 @@ def register(s) -> None:
     p.set_defaults(fn=cmd_search)
 
 
-def cmd_search(a, c: Ctx) -> int:
-    mode = "exact" if a.exact else "regex" if a.regex else "ranked"
-    try:
-        res = S.search(
-            c.store.ensure(c.log),
-            c.log.read_all(),
-            c.cfg,
-            a.query,
-            S.Filters(a.kind, a.state, a.phase, a.owner, a.since),
-            mode=mode,
-            limit=a.limit,
-        )
-    except S.SearchError as exc:
-        print(str(exc), file=sys.stderr)
+def view_head(c: Ctx, out) -> int | None:
+    """What `search` and `session list` do first with a `view_read` answer: a refusal is
+    its reason on stderr, and --json is the body whole with the answer's own exit.
+    None when the human rendering goes on."""
+    if out.exit == REFUSED:
+        print(out.reason, file=sys.stderr)
         return REFUSED
     if c.json:
-        body = {
-            "record_kind": "search",
-            "query": res.query,
-            "mode": res.mode,
-            "rows": res.rows,
-            "total": res.total,
-            "shown": len(res.rows),
-            "limit": res.limit,
-            "truncated": res.truncated,
-            "searched": res.searched,
-            "filters": {("owner" if k == "agent" else k): v for k, v in res.filters.items()},
-            "note": res.note,
-        }
-        emit_json(body)
-        return OK if res.rows else NOTHING
-    if not res.rows:
-        which = f" under {res.filters}" if res.filters else ""
-        what = "No matches" if not res.note else "No matches yet"
-        print(f"{what} for {res.query!r} ({res.mode}){which}; searched {res.searched} records.")
-        if res.note:
-            print(res.note)
+        emit_json(out.data)
+        return out.exit  # ok with rows, nothing without
+    return None
+
+
+def cmd_search(a, c: Ctx) -> int:
+    mode = "exact" if a.exact else "regex" if a.regex else "ranked"
+    out = view_read(
+        c.repo,
+        "search",
+        query=a.query,
+        mode=mode,
+        sources=a.kind,
+        state=a.state,
+        phase=a.phase,
+        owner=a.owner,
+        since=a.since,
+        limit=a.limit,
+    )
+    if (done := view_head(c, out)) is not None:
+        return done
+    d = out.data
+    if not d["rows"]:
+        which = f" under {d['filters']}" if d["filters"] else ""
+        what = "No matches" if not d["note"] else "No matches yet"
+        print(f"{what} for {d['query']!r} ({d['mode']}){which}; searched {d['searched']} records.")
+        if d["note"]:
+            print(d["note"])
         return NOTHING
-    for r in res.rows:
+    for r in d["rows"]:
         print(
             f"  {r['kind']:<9} {r['id']:<22.22s} {r['state']:<12.12s} {r['date'][:10]:<10}  "
             f"{r['snippet']}"
         )
-    if res.truncated:
-        print(f"\n(showing {len(res.rows)} of {res.total}; raise --limit, at most {S.MAX_LIMIT})")
-    if res.note:
-        print(f"\n({res.note})")
+    if d["truncated"]:
+        print(f"\n(showing {len(d['rows'])} of {d['total']}; raise --limit, at most {S.MAX_LIMIT})")
+    if d["note"]:
+        print(f"\n({d['note']})")
     return OK
