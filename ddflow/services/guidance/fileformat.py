@@ -101,7 +101,9 @@ def render(rec: GuidanceRecord, spec: KindSpec) -> str:
         lines.append(f"globs = {_toml_value(list(rec.scope.globs))}")
     if spec.stamped:
         for key in ("created", "updated"):
-            lines.append(f"{key} = {_toml_value(_stamp(rec.provenance[key]))}")
+            lines.append(
+                f"{key} = {_toml_value(_stamp(rec.provenance.get(key) or clock.now_utc()))}"
+            )
     # Written only when set, so a file that never used them stays byte-for-byte what it was.
     optional: list[tuple[str, Any, Any]] = [
         ("categories", list(rec.scope.categories), []),

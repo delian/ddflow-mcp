@@ -44,19 +44,34 @@ class Scope:
 
 
 @dataclass(frozen=True)
+class Limits:
+    """The project's caps on one kind of guidance (``[rules]`` for rules)."""
+
+    section: str  # the config section that holds them: the name in a refusal
+    max_items: int
+    max_size_bytes: int
+    scopes_allowed: list[str]
+    tags_allowed: list[str]
+
+
+def no_limits(_cfg: Any) -> Limits | None:
+    return None
+
+
+@dataclass(frozen=True)
 class KindSpec:
     """What one kind of guidance adds to the shared record.
 
     ``extras`` names the kind's own fields and their defaults (a decision's context,
     consequences and alternatives; a rule's nothing): they live in `GuidanceRecord.ext`,
-    are written to the authored file by name and read back from it. ``section`` is the
-    config section holding the kind's limits ("" for a kind with none).
+    are written to the authored file by name and read back from it. ``limits`` reads the
+    kind's `Limits` from the config (None for a kind with none).
     """
 
     kind: str
     label: str  # "Rule": the noun that opens a message about the kind
     directory: str  # under .ddflow/: the authored files
-    section: str = ""
+    limits: Callable[[Any], Limits | None] = field(default=no_limits, compare=False)
     #: The level a record applies at unless it says otherwise ("project" for a rule).
     default_level: str = ""
     #: Whether a record of the kind carries created/updated stamps in its file.

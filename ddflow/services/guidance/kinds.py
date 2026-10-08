@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import re
 
+from ...config import Config
 from ...core.model import State
 from ...core.records import Decision
-from .record import ACCEPTED, GuidanceRecord, KindSpec, Scope
+from .record import ACCEPTED, GuidanceRecord, KindSpec, Limits, Scope
 from .resolve import ALWAYS, GLOBS, resolve
 
 _RULE_ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
@@ -21,11 +22,17 @@ def is_valid_rule_id(rule_id: str) -> bool:
     return rule_id.startswith("r-") and bool(_RULE_ID.fullmatch(rule_id[2:]))
 
 
+def rule_limits(cfg: Config) -> Limits:
+    """The ``[rules]`` caps."""
+    r = cfg.rules
+    return Limits("rules", r.max_rules, r.max_size_bytes, r.scopes_allowed, r.tags_allowed)
+
+
 RULE = KindSpec(
     kind="rule",
     label="Rule",
     directory="rules",
-    section="rules",
+    limits=rule_limits,
     default_level="project",
     stamped=True,
     valid_id=is_valid_rule_id,
