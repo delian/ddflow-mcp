@@ -1295,8 +1295,11 @@ ddflow review T1 --gate critic --force --reason "..."   # one more round; the re
 the `review triage` that gives the gate's LAST finding a verdict records the gate `passed`
 itself: the review's own evidence and reviewer, plus `passed_on_refutation` (how many
 findings were refuted and confirmed, and the rounds used). The pass is flagged, never
-silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, so the
-operator can spot-check it. A finding still without a verdict holds the gate where it is,
+silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, `status`
+counts such gates (`refuted_passes` in `--json`), the brief names those of unfinished
+items, `complete` prints a `PASSED ON REFUTATION:` line for each (`refuted_passes` in its result), and `ddflow gate list --refuted` (MCP `ddflow_gate_list` with
+`refuted=true`) lists every one for the operator to spot-check. Without `--refuted`, `gate
+list` lists the gates the project defines. A finding still without a verdict holds the gate where it is,
 and the triage output says so: settle it, or ask the operator for one more round
 (`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
 never passed this way; a re-review settles it.
@@ -4793,6 +4796,7 @@ ddflow heartbeat <id>           renew a lease
 ddflow release <id>             give it up
 
 ddflow gate status <id>         pipeline position + the next gate's instruction
+ddflow gate list [--refuted]    the defined gates; --refuted: every gate passed on refutation (spot-check)
 ddflow gate run <id> <gate>     execute a command gate, record its evidence
 ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model, --reviewer-model, --reviewed-sha)
 ddflow gate skip <id> <gate>    skip, with a mandatory reason

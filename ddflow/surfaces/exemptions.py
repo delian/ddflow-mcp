@@ -319,6 +319,12 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
+        tool="ddflow_gate_list",
+        prose=True,
+        prose_reason="one row per gate (or per gate passed on refutation), meant to be read as lines",
+    ),
+    Command(
+        path=(),
         tool="ddflow_replay",
         prose=True,
         prose_reason="the reconstruction narrative; the whole output is the deliverable",
