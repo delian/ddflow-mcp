@@ -576,7 +576,7 @@ class Server:
             if not isinstance(want, str):
                 return self.agent, "", args, f"{AS_AGENT} must be a string"
             want = want.strip()
-            if want and not _VALID_AGENT.fullmatch(want):
+            if want and not AN.is_valid(want):
                 return self.agent, "", args, AN.refusal(want)
             if want:
                 return want, want, args, ""
@@ -769,7 +769,7 @@ class Server:
                 # A name that is not usable as a log shard filename is refused HERE,
                 # where the agent can read the reason and retry, rather than at the
                 # first write -- by which point the caller believes it is identified.
-                if want and not _VALID_AGENT.fullmatch(want):
+                if want and not AN.is_valid(want):
                     return _ok(mid, _text(AN.refusal(want), error=True))
                 self.agent = want
                 # The same agent's shell commands take it too (Bfad021e8d9).
@@ -948,7 +948,7 @@ def _meta_agent(params: dict[str, Any]) -> tuple[str, str]:
     be used, "" when it can)."""
     meta = params.get("_meta")
     want = meta.get(META_AGENT, "") if isinstance(meta, dict) else ""
-    if isinstance(want, str) and (not want.strip() or _VALID_AGENT.fullmatch(want.strip())):
+    if isinstance(want, str) and (not want.strip() or AN.is_valid(want.strip())):
         return want.strip(), ""
     return "", (f"_meta {META_AGENT!r} = {want!r} is not a usable agent name: {AN.USABLE}")
 
