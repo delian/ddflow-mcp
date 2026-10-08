@@ -183,6 +183,10 @@ class StampFacts:
     #: The highest `format_level` any `ddflow.seen` stamp carries, 0 when none does (a stamp
     #: from before the field says nothing about format).
     highest_format: int = 0
+    #: The version and agent of the stamp that carries `highest_format` ("" when none does):
+    #: who to name, and what to upgrade to, when it is the format that is ahead.
+    format_version: str = ""
+    format_by: str = ""
     #: Only the format level is behind: the running version is not older than the log's
     #: highest stamp (a branch that changed a format without a version bump).
     format_skewed: bool = False
@@ -216,7 +220,7 @@ def stamp_facts(
     -- or a newer stamp -- is therefore refused again, which is the point of "session-scoped,
     not per command"."""
     highest, highest_by, seen_by_me = "", "", False
-    highest_format = 0
+    highest_format, format_version, format_by = 0, "", ""
     started: dict[str, tuple[int, str]] = {}
     ended: set[str] = set()
     overrides: list[Event] = []
@@ -232,7 +236,13 @@ def stamp_facts(
             # (key, text): two spellings of one version resolve the same way in any order.
             if (version_key(v), v) > (version_key(highest), highest):
                 highest, highest_by = v, e.agent
-            highest_format = max(highest_format, _format_of(e.data))
+            level = _format_of(e.data)
+            if (level, version_key(v), v) > (
+                highest_format,
+                version_key(format_version),
+                format_version,
+            ):
+                highest_format, format_version, format_by = level, v, e.agent
             if e.agent == agent and v == version:
                 seen_by_me = (
                     seen_by_me or format_level is None or _format_of(e.data) == format_level
@@ -252,7 +262,14 @@ def stamp_facts(
             d.get("session", "") == session
             and d.get("running") == version
             and d.get("log_version") == highest
-            and d.get("log_format", 0) == (highest_format if format_skewed else 0)
+            # An override recorded against a format covers exactly that format, whatever this
+            # ddflow's own level is now; one recorded without a format covers a log whose
+            # format is not ahead of this ddflow.
+            and (
+                d.get("log_format", 0) == highest_format
+                if d.get("log_format")
+                else not format_skewed
+            )
             # An override made with no session open ends when the agent opens or ends one.
             and (session or e.lamport > last_session_event)
         ):
@@ -266,6 +283,8 @@ def stamp_facts(
         session=session,
         skewed=version_skewed or format_skewed,
         highest_format=highest_format,
+        format_version=format_version,
+        format_by=format_by,
         format_skewed=format_skewed and not version_skewed,
     )
 
