@@ -425,12 +425,7 @@ def test_a_reason_names_the_record_kind_not_the_kind_it_is_stored_as(repo):
 
 
 def test_a_reason_is_rewritten_around_the_id_never_inside_it(repo):
-    for rid in (
-        "definition",
-        "definitions-v2",
-        "record it again to bring it back",
-        "skill definition",
-    ):
+    for rid in ("definition", "definitions-v2", "skill", "retired-by", "it-back"):
         assert R.record_edit(repo, NOTE, rid, {"body": "x"}).reason == f"no note {rid!r}"
         _add(repo, rid)
         R.record_remove(repo, NOTE, rid, reason="done")
