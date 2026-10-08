@@ -806,3 +806,56 @@ def result_schemas(
         row["array_schema"] = array_schema(command, payload)
         table[tool] = row
     return table
+
+
+def tag_body(body: Any, command: str) -> Any:
+    """``body`` with its ``schema`` key placed first when it is an object; any other body
+    (an array, text, a scalar, null) comes back unchanged. A refusal body keeps `refusal`
+    as its first key (`mcp._refusal_body`: the block a machine reads first, fixed in
+    c5c7d9f) and the tag follows it. A body already carrying the key keeps its own value:
+    the tag never overwrites a field."""
+    if not isinstance(body, dict) or not command or SCHEMA_KEY in body:
+        return body
+    tag = {SCHEMA_KEY: schema_tag(command)}
+    if next(iter(body), None) == REFUSAL_KEY:
+        rest = {k: v for k, v in body.items() if k != REFUSAL_KEY}
+        return {REFUSAL_KEY: body[REFUSAL_KEY], **tag, **rest}
+    return {**tag, **body}
+
+
+def parsed_path(parser: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[str, ...]:
+    """The command words a parsed command line went through, aliases resolved to the
+    command they name: ``("gate", "record")``."""
+    words: list[str] = []
+    node = parser
+    while True:
+        sub = next((a for a in node._actions if isinstance(a, argparse._SubParsersAction)), None)
+        typed = getattr(args, sub.dest, None) if sub is not None else None
+        if sub is None or typed is None or typed not in sub.choices:
+            return tuple(words)
+        target = sub.choices[typed]
+        words.append(next((n for n, p in sub.choices.items() if p is target), typed))
+        node = target
+
+
+#: CLI commands whose words are not the name of the tool that serves them and which no
+#: `via` declares: ``ddflow research`` (no verb) files what ``ddflow_research_add`` files.
+CLI_COMMAND_NAMES: dict[tuple[str, ...], str] = {("research",): "research_add"}
+
+
+def command_for_path(
+    path: tuple[str, ...],
+    routed: Mapping[tuple[str, ...], tuple[str, str]],
+    covering: Mapping[str, tuple[str, ...]],
+) -> str:
+    """The schema name of a CLI command: the name of the MCP tool that serves it, so the two
+    surfaces tag one result alike. ``routed`` maps a path a selector serves to its tool
+    (``task list`` -> ``ddflow_list``), ``covering`` a one-word command a differently named
+    tool covers (``init`` -> ``ddflow_setup``); anything else is its words joined by ``_``."""
+    if path in CLI_COMMAND_NAMES:
+        return CLI_COMMAND_NAMES[path]
+    if path in routed:
+        return command_name(routed[path][0])
+    if len(path) == 1 and path[0] in covering:
+        return command_name(covering[path[0]][0])
+    return "_".join(path).replace("-", "_")

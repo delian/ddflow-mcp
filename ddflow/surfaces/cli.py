@@ -41,10 +41,17 @@ from .context import (
     _csv,
     _require_item,
 )
+from .exemptions import COVERING_TOOLS, ROUTED_PATHS
 from .parsers import REGISTER_ORDER
 from .parsers._common import GLOBS_HELP, _Globs, _positive_int  # noqa: F401
-from .registry import Notices, SuggestingParser, used_aliases
-from .render import emit_json
+from .registry import (
+    Notices,
+    SuggestingParser,
+    command_for_path,
+    parsed_path,
+    used_aliases,
+)
+from .render import emit_json, set_command
 from .tools import TOOLS
 from .vocabulary import provide
 
@@ -337,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
     # `--json` output stays parseable.
     for alias in _NOTICES.fresh(used_aliases(parser, args, args._argv)):
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
+    # The schema every object body of this run is tagged with (D-compat-json-views).
+    set_command(command_for_path(parsed_path(parser, args), ROUTED_PATHS, COVERING_TOOLS))
     try:
         ctx = Ctx(args)
         if getattr(args, "allow_older", False):
