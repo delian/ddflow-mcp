@@ -40,6 +40,7 @@ from urllib.parse import unquote
 
 from ..config import EnforceConfig
 from ..core.digest import content_digest
+from ..core.slug import github_anchor
 from ..infra import git as G
 from .docsync import glob_regex
 
@@ -305,14 +306,7 @@ def _project_commands(root) -> list[str]:
 # headings
 
 
-def slugify(heading: str) -> str:
-    """GitHub's anchor for a heading: markup stripped, lower-cased, punctuation dropped
-    (hyphens and underscores kept), each space a hyphen."""
-    h = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", heading)
-    h = re.sub(r"<[^>]+>", "", h)
-    h = re.sub(r"[`*~]", "", h).strip().lower()
-    h = re.sub(r"[^\w\- ]", "", h)
-    return h.replace(" ", "-")
+slugify = github_anchor  # kept under its old name for callers and tests
 
 
 class _Headings:

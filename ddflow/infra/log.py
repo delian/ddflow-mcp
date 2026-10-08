@@ -52,6 +52,7 @@ from ..core.events import (
     utcnow,
 )
 from ..core.model import known_kinds
+from ..core.slug import safe_filename
 from . import fsio
 from . import git as G
 
@@ -788,7 +789,7 @@ class EventLog:
     # -- shard paths ---------------------------------------------------------------
     @property
     def shard(self) -> Path:
-        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in self.agent_id)
+        safe = safe_filename(self.agent_id, repl="_", unicode=True)
         return self.dir / f"{safe}.jsonl"
 
     def shards(self) -> list[Path]:
