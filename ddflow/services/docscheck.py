@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from urllib.parse import unquote
 
 from ..config import EnforceConfig
+from ..core.bookkeeping import is_state
 from ..core.digest import content_digest
 from ..core.slug import github_anchor
 from ..infra import git as G
@@ -187,7 +188,7 @@ def check_docs(
         docs = [p for p in files if is_doc(p) and not any(r.fullmatch(p) for r in exclude)]
     docs = sorted(p for p in set(docs) if p not in skip and not _is_export_file(root, p))
     corpus = _Corpus.build(
-        root, [p for p in files if not is_doc(p) and p not in docs and not p.startswith(".ddflow/")]
+        root, [p for p in files if not is_doc(p) and p not in docs and not is_state(p)]
     )
     cmds = set(_project_commands(root) if commands is None else commands)
     ignore = [glob_regex(g) for g in ignore_paths]
@@ -232,10 +233,9 @@ def check_docs(
 def _tree(root) -> list[str]:
     """Tracked files plus untracked-but-not-ignored ones: a doc written alongside the file
     it links to is checked before either is committed."""
-    r = G.run(root, "ls-files", "--cached", "--others", "--exclude-standard", z=True)
-    names = r.paths()
+    names = G.files(root, "all")
     if names is None:
-        raise OSError(f"git ls-files failed in {root}: {r.err[:200]}")
+        raise OSError(f"git ls-files failed in {root}")
     return sorted({n for n in names if (root / n).is_file()})
 
 

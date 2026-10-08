@@ -303,12 +303,12 @@ def dirty(wt: Worktree, *, untracked: bool = True) -> list[str]:
     it answers one line starting with `UNREADABLE`, so every caller that asks "anything
     uncommitted?" keeps the tree, and `unreadable` tells the two apart (B028b11b4cb).
     """
-    args = ["status", "--porcelain"] + ([] if untracked else ["--untracked-files=no"])
-    r = git(wt.path, *args)
-    if not r.ok:
+    r = G.status_run(wt.path, untracked="normal" if untracked else "no")
+    entries = G.parse_status(r)
+    if entries is None:
         why = (r.err or r.out).strip().splitlines() or [f"exit {r.code}"]
         return [f"{UNREADABLE}git status failed: {why[0]}"]
-    return [ln for ln in r.out.splitlines() if ln.strip()]
+    return [e.line() for e in entries]
 
 
 #: The prefix of the one line `dirty` answers for a tree git could not read. No porcelain
@@ -500,7 +500,7 @@ def merging(tree: Path) -> bool | None:
     """
     if git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok:
         return True
-    unmerged = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
+    unmerged = G.unmerged(tree)
     return None if unmerged is None else bool(unmerged)
 
 
@@ -517,7 +517,7 @@ def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
     this call began is aborted: one already in progress is someone's, and git refuses
     to start another over it anyway.
     """
-    conflicts = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
+    conflicts = G.unmerged(tree)
     aborted = git(tree, "merge", "--abort")
     if not aborted.ok:  # a --squash conflict has no MERGE_HEAD for --abort to find
         aborted = git(tree, "reset", "--merge")
@@ -659,7 +659,7 @@ def _diff_text(tree: Path, *args: str) -> str:
 def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
     """Paths in ``tree`` git does not track and does not ignore, sorted -- read with `-z`,
     so a non-ASCII name is the file's own name (B7ab10b58f2)."""
-    listed = git_paths(tree, "ls-files", "--others", "--exclude-standard") or []
+    listed = G.files(tree, "untracked") or []
     return sorted(p for p in listed if p.strip() and not p.startswith(exclude))
 
 
@@ -699,24 +699,12 @@ def diff_covers_everything(
 
 
 def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
-    """Every path `git status` reports as changed, read with `-z`: unstripped (the first
-    record keeps its leading status column), a rename as BOTH its paths rather than an
-    `a -> b` line, and a non-ASCII name unquoted (B7ab10b58f2)."""
-    records = git_paths(tree, "status", "--porcelain")
-    if records is None:
+    """Every path `git status` reports as changed: a rename as BOTH its paths rather than
+    an `a -> b` line, and a non-ASCII name unquoted (B7ab10b58f2)."""
+    entries = G.status(tree)
+    if entries is None:
         return None
-    out: list[str] = []
-    i = 0
-    while i < len(records):
-        rec = records[i]
-        i += 1
-        xy, path = rec[:2], rec[3:]
-        if "R" in xy or "C" in xy:  # `-z` puts the source path in the next record
-            if i < len(records):
-                out.append(records[i])
-            i += 1
-        if not (ignore_untracked and xy == "??"):
-            out.append(path)
+    out = [p for e in entries if not (ignore_untracked and e.untracked) for p in reversed(e.paths)]
     return [p for p in out if p]
 
 
