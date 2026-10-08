@@ -203,21 +203,17 @@ def test_a_huge_integer_period_is_a_refusal_not_a_crash_in_a_schedule_file(tmp_p
     assert any("every_days must be a number of days above 0" in e for e in defs.errors), defs.errors
 
 
-def test_the_operations_wrapper_and_the_schedule_engine_agree():
-    from ddflow.api.operations import _calendar_due
+def test_due_cadences_reads_the_calendar_from_config_or_takes_an_explicit_one(tmp_path):
+    from ddflow.api.operations import due_cadences
 
     cfg = Config()
     cfg.cadence.every_days = ["bug_hunt=7"]
-    st = _calendar_state({"bug_hunt": ["2026-09-01T00:00:00Z"]})
-    now = T0 + 8 * 86_400
-    assert _calendar_due(st, cfg, now=now) == SV.calendar_due(st, SV.calendar(cfg), now)
-    # an explicit calendar overrides the config's, and nothing falls due that it does not name
-    assert _calendar_due(st, cfg, now=now, calendar={"other": 1.0}) == SV.calendar_due(
-        st, {"other": 1.0}, now
-    )
-    assert [d["cadence"] for d in _calendar_due(st, cfg, now=now, calendar={"other": 1.0})] == [
-        "other"
-    ]
+    st = _calendar_state({})
+    assert [d["cadence"] for d in due_cadences(tmp_path, cfg, st)] == ["bug_hunt"]
+    # an explicit calendar overrides the config's, and nothing calendar-based falls due that it
+    # does not name
+    got = due_cadences(tmp_path, cfg, st, calendar={"other": 1.0})
+    assert [d["cadence"] for d in got if d["unit"] == "days"] == ["other"]
 
 
 def test_one_predicate_decides_what_a_period_in_days_is():
@@ -240,3 +236,46 @@ def test_one_predicate_decides_what_a_period_in_days_is():
     cfg = Config()
     cfg.cadence.every_days = ["a=3", "b=0.25"]
     assert SV.calendar(cfg) == {"a": 3.0, "b": 0.25}
+
+
+# -- the evaluator registry (B-uni-triggers.3-evaluator-registry) ---------------------------
+
+
+def test_the_registry_runs_the_four_builtins_in_the_order_cadence_always_listed_them():
+    assert list(CA.evaluators()) == ["count", "lessons", "export", "calendar"]
+
+
+def test_due_all_matches_the_old_hand_written_composition_over_the_grid(tmp_path):
+    cfg = Config()
+    cfg.cadence.every_days = ["dedupe_sweep=7", "bug_hunt=2"]
+    days = SV.calendar(cfg)
+    for tasks, phases, result, _replaced in GRID:
+        runs = {n: result for n, _k, _u in SV.COUNT_PASSES} if result else {}
+        st = _state(tasks, phases, runs)
+        old = CA.count_due(st, cfg, replaced=set(days))
+        old += CA.lessons_cadence(st, cfg)
+        old += CA.export_cadence(tmp_path, cfg)
+        old += SV.calendar_due(st, days, T0)
+        # the calendar evaluator reads the real clock; pin it by comparing the stable parts
+        got = CA.due_all(CA.DueContext(tmp_path, cfg, st, days))
+        assert [d["cadence"] for d in got] == [d["cadence"] for d in old], (tasks, phases, result)
+        assert [d for d in got if d["unit"] != "days"] == [d for d in old if d["unit"] != "days"]
+
+
+def test_a_new_evaluator_registers_by_name_and_is_listed_last(monkeypatch, tmp_path):
+    monkeypatch.setattr(CA, "_EVALUATORS", dict(CA._EVALUATORS))
+    seen = []
+
+    def mine(ctx):
+        seen.append(ctx.repo)
+        return [{"cadence": "mine", "since": 1, "every": 1, "unit": "x"}]
+
+    CA.register_due("mine", mine)
+    got = CA.due_all(CA.DueContext(tmp_path, Config(), _state(0, 0, {}), {}))
+    assert got[-1]["cadence"] == "mine" and seen == [tmp_path]
+    try:
+        CA.register_due("mine", mine)
+    except ValueError as exc:
+        assert "already registered" in str(exc)
+    else:
+        raise AssertionError("a duplicate name was accepted")
