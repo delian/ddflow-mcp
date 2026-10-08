@@ -339,8 +339,9 @@ def relevant_tests(
 ) -> O.Outcome:
     """B16: the tests the current change reaches, and a PARALLEL command to run them.
 
-    Fast feedback while working, never a pass: the unit_tests gate still runs the whole
-    suite, because a targeted run hides standing breakage. Exit 2 when no test reaches
+    Fast feedback while working, never a pass. With ``item`` it also says which mode the
+    unit_tests gate would use right now (D-gate-economy 1) and why: the selection once the
+    item's ci passed on this very tree, else the whole suite. Exit 2 when no test reaches
     the change. The tree is the item's worktree when ``item`` names one, else ``where``
     (the caller's own checkout), else the repo; the base is the item's, else the
     configured base ref, else the default branch.
@@ -368,6 +369,15 @@ def relevant_tests(
     gate = load_gates(repo, cfg).get("unit_tests")
     full = gate.command if gate else ""
     files = [t.path for t in sel.tests]
+    gate_scope: dict[str, Any] = {}
+    if item and gate is not None:
+        sc = TS.unit_tests_scope(cfg, st, st.items[item], full, tree)
+        gate_scope = {
+            "scope": sc.scope,
+            "why": sc.why,
+            "tests": [{"path": t.path, "reason": t.reason} for t in sc.tests],
+            "command": sc.command,
+        }
     data: dict[str, Any] = {
         "tree": str(tree),
         "base": base,
@@ -377,12 +387,13 @@ def relevant_tests(
         "full_suite": full,
         "advice": parallel_test_advice(full, tree) if full else "",
         "unparsed": sel.unparsed,
+        "unit_tests_gate": gate_scope,
     }
     if not files:
         return O.nothing(
             "tests",
             f"No test reaches the {len(sel.changed)} changed file(s) since {base}. That is "
-            "not a pass: the unit_tests gate still runs the whole suite.",
+            "not a pass: with no test to select, the unit_tests gate runs the whole suite.",
             **data,
         )
     return O.ok("tests", **data)
