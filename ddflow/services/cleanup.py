@@ -319,6 +319,41 @@ def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: st
         t.done = f"fully merged into {base} — safe to remove"
 
 
+def _claimed_by(root: Path, state: State) -> tuple[dict[str, Item], dict[str, Item]]:
+    """The queue's side of "who owns this tree": items by branch and by normalised path."""
+    by_branch = {it.branch: it for it in state.items.values() if it.branch}
+    by_path = {
+        _key(str(W.load_path(root, it.worktree))): it for it in state.items.values() if it.worktree
+    }
+    return by_branch, by_path
+
+
+def our_trees(root: Path, cfg: Config) -> Iterator[tuple[str, str]]:
+    """``(path, branch)`` of every linked worktree on one of ddflow's branches: THE test for
+    "is this tree ddflow's" that the survey and doctor share. The primary checkout is never
+    one."""
+    prefixes = our_prefixes(cfg)
+    for entry in W.list_worktrees(root):
+        path = entry.get("worktree", "")
+        branch = entry.get("branch", "").replace("refs/heads/", "")
+        if not path or Path(path).resolve() == root.resolve():
+            continue
+        if _ours(branch, prefixes):
+            yield path, branch
+
+
+def unclaimed_trees(repo: Path, cfg: Config, state: State) -> list[str]:
+    """Paths of our worktrees that no item claims, by branch or by normalised path. The
+    tree-side orphan detector, without the git measuring ``survey`` does."""
+    root = W.repo_root(repo)
+    by_branch, by_path = _claimed_by(root, state)
+    return [
+        path
+        for path, branch in our_trees(root, cfg)
+        if not (by_branch.get(branch) or by_path.get(_key(path)))
+    ]
+
+
 def survey(repo: Path, cfg: Config, state: State) -> Plan:
     """Classify every ddflow worktree and branch. Reads only; changes nothing."""
     root = W.repo_root(repo)
@@ -326,20 +361,10 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     prefixes = our_prefixes(cfg)
     plan = Plan()
     guard = _protected(root, cfg, state)
-
-    by_branch = {it.branch: it for it in state.items.values() if it.branch}
-    by_path = {
-        _key(str(W.load_path(root, it.worktree))): it for it in state.items.values() if it.worktree
-    }
+    by_branch, by_path = _claimed_by(root, state)
     seen_branches: set[str] = set()
 
-    for entry in W.list_worktrees(root):
-        path = entry.get("worktree", "")
-        branch = entry.get("branch", "").replace("refs/heads/", "")
-        if not path or Path(path).resolve() == root.resolve():
-            continue
-        if not _ours(branch, prefixes):
-            continue
+    for path, branch in our_trees(root, cfg):
         seen_branches.add(branch)
         t = TreeState(name=Path(path).name, path=path, branch=branch)
         item = by_branch.get(branch) or by_path.get(_key(path))
