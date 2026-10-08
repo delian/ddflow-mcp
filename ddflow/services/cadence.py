@@ -167,6 +167,8 @@ class DueContext:
     cfg: Config
     st: State
     calendar: Mapping[str, float]
+    #: The time the calendar entries are judged at (epoch seconds); None is the current time.
+    now: float | None = None
 
 
 #: A due evaluator: the passes that are due now, as `{cadence, since, every, unit}` rows.
@@ -203,4 +205,4 @@ def due_all(ctx: DueContext) -> list[dict[str, Any]]:
 register_due("count", lambda c: count_due(c.st, c.cfg, replaced=set(c.calendar)))
 register_due("lessons", lambda c: lessons_cadence(c.st, c.cfg))
 register_due("export", lambda c: export_cadence(c.repo, c.cfg))
-register_due("calendar", lambda c: calendar_due(c.st, c.calendar))
+register_due("calendar", lambda c: calendar_due(c.st, c.calendar, c.now))
