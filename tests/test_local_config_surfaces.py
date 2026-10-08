@@ -89,7 +89,7 @@ def test_the_local_dir_ignores_itself_without_init(repo):
     """A project whose `.ddflow/.gitignore` predates `local/`, or never ran init, must
     still not commit what a local writer is about to put there."""
     (repo / ".ddflow").mkdir()
-    from ddflow.services.configwrite import append_block
+    from conftest import add_block as append_block
 
     path = append_block(repo, '[[reviewer]]\nname = "m"\nmodel = "x"\n', own="reviewers.toml")
     assert path == repo / ".ddflow" / "local" / "reviewers.toml"
@@ -255,7 +255,7 @@ def test_a_local_edit_that_keeps_the_human_gate_is_allowed(repo):
 
 def test_a_local_dry_run_never_leaves_an_unignored_local_dir(repo):
     """The lock file of a dry run creates `.ddflow/local/`; it must ignore itself."""
-    from ddflow.services.configwrite import _write_config
+    from conftest import write_config as _write_config
 
     (repo / ".ddflow").mkdir()
     err, text = _write_config(repo, [("lease.ttl_s", "5")], dry_run=True, local=True)

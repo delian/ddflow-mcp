@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import (
@@ -50,7 +51,7 @@ from .review import Reviewer
 
 #: The git-ignored machine-local layer (decision D-no-own-services-local-dir). Read
 #: LAST by `Config.load` and `tomlcfg.config_paths`, so what is written here wins.
-LOCAL_DIR = Path(".ddflow") / "local"
+LOCAL_DIR = TC.LOCAL_DIR
 
 
 def config_file(repo: Path, *, local: bool = False, own: str = "config.toml") -> Path:
@@ -60,8 +61,7 @@ def config_file(repo: Path, *, local: bool = False, own: str = "config.toml") ->
     own path is how a reviewer endpoint ended up in the committed config while the
     reader looked for it under `local/` (bug B-reviewers-write-committed).
     """
-    base = Path(repo) / (LOCAL_DIR if local else Path(".ddflow"))
-    return base / own
+    return TC.layer_path(repo, "local" if local else "file", own)
 
 
 def ensure_local_dir(repo: Path) -> Path:
@@ -157,18 +157,6 @@ def _range_refusal(problems: set[tuple[str, str]]) -> str:
     )
 
 
-def _toml_literal(value: str) -> str:
-    """A TOML literal for `value`, quoting it unless it already is one (`tomlcfg.literal`)."""
-    return TC.literal(value)
-
-
-def _toml_upsert(text: str, dotted: str, literal: str) -> str:
-    """Set one `<section>.<key>` in TOML text, in place, preserving comments
-    (`tomlcfg.upsert`, tomlkit). Pure, and takes TEXT rather than a path, so several edits
-    compose into one write."""
-    return TC.upsert(text, dotted, literal)
-
-
 def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str]:
     """The workflow problems a given config TEXT would have. Never raises.
 
@@ -211,13 +199,6 @@ def _key_parts(k: str) -> list[str]:
 
 class KeyRefused(str):
     """A key refused under D-plain-keys: the caller answers exit 3 (refused), not 1."""
-
-
-class FormatRefused(ValueError):
-    """A write to a config file whose `format` is newer than this ddflow understands, from a
-    writer that raises (`append_block`): exit 3, refused (`core.outcome.exit_for`)."""
-
-    exit_code = 3
 
 
 _BARE = re.compile(r"[A-Za-z0-9_-]+")
@@ -496,7 +477,81 @@ def format_problem(text: str, path: Path) -> str:
     )
 
 
-def _apply_edits(text: str, pairs: list[tuple[str, str]]) -> tuple[str, str]:
+class Spelled(str):
+    """A value as a PERSON typed it (`config --set key 5`): written as the TOML literal it
+    spells when it is one (a number, a boolean, an array, an inline table), else quoted.
+    Any other value is typed: a `str` is always a string (`--command 5` is the text "5"),
+    and a list, bool or number is written as such (`tomlcfg.value`)."""
+
+
+def _literal(value: object) -> str:
+    return TC.literal(value) if isinstance(value, Spelled) else TC.value(value)
+
+
+@dataclass(frozen=True)
+class SetPairs:
+    """Set each `<section>.<key>` in turn, in place: comments and layout stay."""
+
+    pairs: tuple[tuple[str, object], ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "pairs", tuple((k, v) for k, v in self.pairs))
+
+
+@dataclass(frozen=True)
+class AppendText:
+    """Append a TOML document to the layer's `config.toml`."""
+
+    text: str
+
+
+@dataclass(frozen=True)
+class Block:
+    """Append a hand-built block (a `[[reviewer]]`). In the local layer it goes to ``own``,
+    the dedicated machine-local file (`reviewers.toml`); the committed layer's target is
+    always `.ddflow/config.toml`, the one committed file a project is configured in."""
+
+    text: str
+    own: str = ""
+
+
+Edit = SetPairs | AppendText | Block
+
+
+@dataclass(frozen=True)
+class Guards:
+    """Which optional judgements an edit is held to. The key, human-gate, format, schema,
+    range and gate-table guards are not optional."""
+
+    #: Refuse an edit that leaves the workflow incoherent (`workflow.check`).
+    workflow: bool = True
+
+
+DEFAULT_GUARDS = Guards()
+
+
+@dataclass
+class EditResult:
+    """What `apply_edit` did. ``error`` is empty on success and then nothing was refused;
+    a `KeyRefused` is a refusal (exit 3), a `ReviewerRefusal` an agent's refused reviewer (the
+    caller picks its exit), any other string a failure. ``text`` is the file's text (as it would be, on a dry run);
+    ``path`` the file written."""
+
+    error: str = ""
+    text: str = ""
+    path: Path = field(default_factory=Path)
+    #: `merge=union` lines added to `.gitattributes` by a committed write.
+    attributes_added: list[str] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return not self.error
+
+
+class ReviewerRefusal(str):
+    """A refusal by the reviewer-trust guard (D-reviewer-trust): an agent's command reviewer."""
+
+
+def _apply_edits(text: str, pairs: tuple[tuple[str, object], ...]) -> tuple[str, str]:
     """``text`` with every ``(dotted, value)`` set in turn, and what stopped it, if
     anything: (new text, "") or (text so far, the refusal)."""
     for dotted, value in pairs:
@@ -506,7 +561,7 @@ def _apply_edits(text: str, pairs: list[tuple[str, str]]) -> tuple[str, str]:
             # A renamed knob is written under its CURRENT key (D-compat); the old spelling
             # still works as an argument.
             key = RENAMED[dotted][0] if dotted in RENAMED else dotted
-            text = _toml_upsert(text, key, _toml_literal(value))
+            text = TC.upsert(text, key, _literal(value))
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return text, f"that edit would break the config: {exc}"
     # The next write moves what the file still holds under an old key (D-compat).
@@ -519,209 +574,58 @@ def _apply_edits(text: str, pairs: list[tuple[str, str]]) -> tuple[str, str]:
     return text, ""
 
 
-def _write_config(
-    repo: Path,
-    pairs: list[tuple[str, str]],
-    *,
-    dry_run: bool = False,
-    check_workflow: bool = True,
-    local: bool = False,
-    person: bool = False,
-    agent: str = "",
-) -> tuple[str, str]:
-    """Apply every `(dotted, value)` edit, validate ONCE, write ONCE, under a lock.
+def _key_refusal(pairs: tuple[tuple[str, object], ...]) -> str:
+    """Why these `--set` keys are refused before anything is read, or "".
 
-    Returns `(error, new_text)`; a non-empty error means nothing was written. The order
-    is the whole point -- compose, check the RESULT, then replace the file atomically --
-    because a writer that validates the state it is replacing has checked nothing, and
-    a truncating write interrupted halfway leaves an empty config that loads as "no
-    overrides at all" without saying so.
-
-    Two validations, not one. `Config.check` is the SCHEMA: is every section and knob
-    real. `workflow.check` is the MEANING: does the result hang together. Without the
-    second, `workflow gate X --required` (with no pipeline) exited 0 having created the
-    exact inert requirement that `ddflow workflow` then reports as a problem -- the
-    writer manufacturing a defect its own reader diagnoses.
-
-    Only NEW problems are refused. Refusing on any problem at all would mean a config
-    already broken could never be repaired by the tool that reports it broken.
-
-    `local=True` writes the git-ignored `.ddflow/local/config.toml` instead: this
-    machine's endpoints, hosts and sizing, which must never reach the committed file.
-    The same guards apply, judged on the committed config with the local one over it.
+    `gate.<id>.human` is not editable from here, and this is the one knob that is
+    special. Everything else in the file is a preference; that flag decides whether a
+    checkpoint belongs to the operator, and `ddflow_configure` is on the MCP surface. Two
+    calls -- flip it false, then `ddflow_gate_record` -- cleared a human gate with no
+    shell involved. Declaring the gate in `.ddflow/gates.toml` is the supported way, and
+    no tool writes that file. Normalised, so whitespace and quoting cannot walk past the
+    guard: `TC.upsert` strips the segments, so `" gate.x.human"` and `gate.x."human"`
+    reach the same TOML key as the bare form and are refused the same way.
     """
-    import tomllib
-
-    # `gate.<id>.human` is not editable from here, and this is the one knob that is
-    # special. Everything else in this file is a preference; that flag decides whether
-    # a checkpoint belongs to the operator, and `ddflow_configure` is on the MCP
-    # surface. Two calls -- flip it false, then `ddflow_gate_record` -- cleared a human
-    # gate with no shell involved, which made the docstring claim that the ordinary
-    # path is closed simply untrue. Declaring the gate in `.ddflow/gates.toml` is the
-    # supported way, and that file is not writable from any tool.
-    # Normalised, so whitespace and quoting cannot walk past the guard: `_toml_upsert`
-    # strips the segments, so `" gate.x.human"` and `gate.x."human"` reach the same TOML
-    # key as the bare form and must be refused the same way.
+    keyed = [(k, str(v)) for k, v in pairs]
+    # The key itself first: plain keyboard keys only (D-plain-keys), exit 3 -- so the exit
+    # code says "not a plain key" whatever field the key names.
+    problem = next((plain_key_problem(k) for k, _v in keyed if plain_key_problem(k)), "")
+    problem = problem or _gate_key_problem(keyed)
+    if problem:
+        return problem
     blocked = [
         k
-        for k, _v in pairs
+        for k, _v in keyed
         if (pp := _key_parts(k))
         and len(pp) >= _GATE_KEY_PARTS
         and pp[0] == "gate"
         and pp[-1] == "human"
     ]
-    # The key itself first: plain keyboard keys only (D-plain-keys), exit 3 -- so the exit
-    # code says "not a plain key" whatever field the key names.
-    problem = next((plain_key_problem(k) for k, _v in pairs if plain_key_problem(k)), "")
-    problem = problem or _gate_key_problem(pairs)
-    if problem:
-        return problem, ""
     if blocked:
-        return (
-            f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
-            f"checkpoint is the operator's decision, not a configurable preference. "
-            f"Set `human` in .ddflow/gates.toml, which no tool writes.",
-            "",
-        )
-
-    from . import workflow as WF
-
-    path = config_file(repo, local=local)
-    if local:
-        # Even for a dry run: the lock below creates the directory anyway, and a
-        # `local/` that exists without its own `*` ignore is one `git add` from
-        # committing whatever lands there next.
-        ensure_local_dir(repo)
-    with TC.locked(path):
-        text = path.read_text("utf-8") if path.exists() else ""
-        if refused := format_problem(text, path):
-            return refused, text
-        text_before = text
-        before = _workflow_problems(repo, text, local=local) if check_workflow else set()
-        human_before = _guarded_human_gates(repo, text, local=local)
-        text, failure = _apply_edits(text, pairs)
-        if failure:
-            return failure, text
-        try:
-            result = tomllib.loads(text)
-            Config.check(result, written=_written_keys(pairs))
-        except InvalidValue as exc:  # a known knob, a value it cannot take: refused
-            return KeyRefused(f"that edit would break the config: {exc}"), text
-        except (tomllib.TOMLDecodeError, ValueError) as exc:
-            return f"that edit would break the config: {exc}", text
-        if new_range := _new_range_problems(repo, text_before, text, local):
-            return KeyRefused(_range_refusal(new_range)), text
-        # `gate` is a foreign table to Config.check, so a gate block is judged here, on the
-        # parsed result: `gate.a.b.command` (however spelled -- quoted, escaped) wrote
-        # `[gate.a.b]`, exit 0, and every later command refused to load it (B72b8adba30).
-        # Only NEW problems: an existing one must not stop the edit that repairs it.
-        new = _gate_table_problems(result) - _gate_table_problems(_parsed(text_before))
-        if new:
-            return "; ".join(sorted(_render_gate_problem(*p) for p in new)), text
-        # Refusing the FLAG was not enough. `workflow drop <human-gate>` took the
-        # checkpoint out of the pipeline, exit 0, and `workflow pipeline task <list
-        # without it>` does the same by omission — two ways to delete the operator's
-        # approval step without ever touching `human`. Checked on the RESULT, at the
-        # choke point, because a guard in one branch is a guard the other branch does
-        # not have, which is how the first version of this shipped.
-        removed = sorted(human_before - _guarded_human_gates(repo, text, local=local))
-        if removed:
-            return (
-                f"that edit would remove the human-approval gate(s) "
-                f"{', '.join(removed)} from the pipeline. Whether the operator's "
-                f"approval step exists is not a configurable preference — edit "
-                f".ddflow/gates.toml, which no tool writes.",
-                text,
-            )
-        if check_workflow:
-            introduced = sorted(_workflow_problems(repo, text, local=local) - before)
-            if introduced:
-                return (
-                    "that edit would leave the workflow incoherent:\n  "
-                    + "\n  ".join(introduced)
-                    + f"\nNothing was written. ({WF.PROBLEM} findings are refused at "
-                    f"the point of writing; `ddflow workflow` reports any that are "
-                    f"already there.)",
-                    text,
-                )
-        if not dry_run:
-            try:
-                _write_reviewed(repo, path, text, person=person, agent=agent)
-            except RT.ReviewerRefused as exc:
-                return str(exc), text
-    return "", text
+        return _human_refusal("edit", blocked)
+    return ""
 
 
-def _append_config(
-    repo: Path, toml_text: str, *, local: bool = False, person: bool = False, agent: str = ""
-) -> tuple[str, Path]:
-    """Append a TOML block to the committed or the local config. `(error, path)`.
+def _human_refusal(verb: str, blocked: list[str]) -> str:
+    return (
+        f"refusing to {verb} {', '.join(blocked)}: whether a gate is a human "
+        f"checkpoint is the operator's decision, not a configurable preference. "
+        f"Set `human` in .ddflow/gates.toml, which no tool writes."
+    )
 
-    Validated against the MERGED text before anything is written, and held to the same
-    human-gate rule as `_write_config`: the local file is read after the committed
-    `gates.toml`, so an appended `[gates] task_pipeline` there could otherwise drop the
-    operator's checkpoint on this machine with nothing in any diff to show it.
-    """
-    import tomllib
 
+def _text_refusal(text: str) -> str:
+    """Why TOML text to append is refused before anything is read, or ""."""
     try:
-        data = tomllib.loads(toml_text)
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
-        return f"not valid TOML: {exc}", Path()
+        return f"not valid TOML: {exc}"
     # Plain keyboard keys only (D-plain-keys), exactly as `--set` judges them: exit 3.
-    if problem := appended_key_problem(toml_text):
-        return problem, Path()
+    if problem := appended_key_problem(text):
+        return problem
     if blocked := _human_cleared(data):
-        return (
-            f"refusing to append {', '.join(blocked)}: whether a gate is a human "
-            f"checkpoint is the operator's decision, not a configurable preference. "
-            f"Set `human` in .ddflow/gates.toml, which no tool writes.",
-            Path(),
-        )
-    path = config_file(repo, local=local)
-    if local:
-        ensure_local_dir(repo)
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    with TC.locked(path):
-        prev = path.read_text("utf-8") if path.exists() else ""
-        if refused := format_problem(prev, path):
-            return refused, Path()
-        merged = (prev.rstrip() + "\n\n" if prev.strip() else "") + toml_text.strip() + "\n"
-        try:
-            result = tomllib.loads(merged)
-            Config.check(result, written=_appended_keys(data))
-            _check_reviewer_fields(data, path)
-        except InvalidValue as exc:
-            return KeyRefused(f"appending this would break the config: {exc}"), Path()
-        except (tomllib.TOMLDecodeError, ValueError) as exc:
-            return f"appending this would break the config: {exc}", Path()
-        if new_range := _new_range_problems(repo, prev, merged, local):
-            return KeyRefused(_range_refusal(new_range)), Path()
-        # `[gate.a.b]` is bare in every segment, so the plain-key check passes it -- and
-        # it nests a table every later command refuses to load. Judged as `_write_config`
-        # judges `--set`: only NEW gate-table problems (roborev on a1c614f4).
-        if new := _gate_table_problems(result) - _gate_table_problems(_parsed(prev)):
-            said = sorted(_render_gate_problem(*p) for p in new)
-            # Every problem at once, as `--set` says them; a key refusal keeps exit 3.
-            refused = any(isinstance(m, KeyRefused) for m in said)
-            return (KeyRefused if refused else str)("; ".join(said)), Path()
-        removed = sorted(
-            _guarded_human_gates(repo, prev, local=local)
-            - _guarded_human_gates(repo, merged, local=local)
-        )
-        if removed:
-            return (
-                f"appending this would remove the human-approval gate(s) "
-                f"{', '.join(removed)} from the pipeline. Edit .ddflow/gates.toml, "
-                f"which no tool writes.",
-                Path(),
-            )
-        try:
-            _write_reviewed(repo, path, merged, person=person, agent=agent)
-        except RT.ReviewerRefused as exc:
-            return str(exc), Path()
-    return "", path
+        return _human_refusal("append", blocked)
+    return ""
 
 
 def _check_reviewer_fields(data: dict, path: Path) -> None:
@@ -742,61 +646,190 @@ def _check_reviewer_fields(data: dict, path: Path) -> None:
         TC._check(raw, set(Reviewer.__dataclass_fields__), f"[[reviewer]] #{n} of {path}")
 
 
-def append_block(
+def _compose(prev: str, edit: Edit) -> tuple[str, str]:
+    """`(the file's text with ``edit`` applied, the refusal or "")`."""
+    if isinstance(edit, SetPairs):
+        return _apply_edits(prev, edit.pairs)
+    if isinstance(edit, Block):
+        return fsio.APPEND.splice(prev, edit.text.rstrip() + "\n"), ""
+    return (prev.rstrip() + "\n\n" if prev.strip() else "") + edit.text.strip() + "\n", ""
+
+
+def _schema_problem(edit: Edit, text: str, path: Path) -> str:
+    """Why the RESULT is not a loadable config (`Config.check`, strict for what the edit
+    writes), or "". A `KeyRefused` for a known knob with a value it cannot take."""
+    said = "that edit" if isinstance(edit, SetPairs) else "appending this"
+    try:
+        result = tomllib.loads(text)
+        if isinstance(edit, SetPairs):
+            Config.check(result, written=_written_keys(edit.pairs))
+        else:
+            data = tomllib.loads(edit.text)
+            Config.check(result, written=_appended_keys(data))
+            _check_reviewer_fields(data, path)
+    except InvalidValue as exc:  # a known knob, a value it cannot take: refused
+        return KeyRefused(f"{said} would break the config: {exc}")
+    except (tomllib.TOMLDecodeError, ValueError) as exc:
+        return f"{said} would break the config: {exc}"
+    return ""
+
+
+def _human_removed(repo: Path, edit: Edit, prev: str, text: str, layer: str) -> str:
+    """The refusal for an edit that REMOVES a human-approval gate from a pipeline, or "".
+
+    Refusing the FLAG was not enough. `workflow drop <human-gate>` took the checkpoint out
+    of the pipeline, exit 0, and `workflow pipeline task <list without it>` does the same
+    by omission, and the local file is read after the committed `gates.toml`, so an
+    appended `[gates] task_pipeline` there could drop it on this machine with nothing in
+    any diff to show it. Checked on the RESULT, for every kind of edit, at the choke point.
+    """
+    local = layer == "local"
+    removed = sorted(
+        _guarded_human_gates(repo, prev, local=local)
+        - _guarded_human_gates(repo, text, local=local)
+    )
+    if not removed:
+        return ""
+    if isinstance(edit, SetPairs):
+        return (
+            f"that edit would remove the human-approval gate(s) "
+            f"{', '.join(removed)} from the pipeline. Whether the operator's "
+            f"approval step exists is not a configurable preference — edit "
+            f".ddflow/gates.toml, which no tool writes."
+        )
+    return (
+        f"appending this would remove the human-approval gate(s) "
+        f"{', '.join(removed)} from the pipeline. Edit .ddflow/gates.toml, "
+        f"which no tool writes."
+    )
+
+
+def _gate_problem(prev: str, text: str) -> str:
+    """The NEW `[gate.*]` table problems of a result, or "". `gate` is a foreign table to
+    `Config.check`, so a gate block is judged here, on the parsed result: `gate.a.b.command`
+    (however spelled) wrote `[gate.a.b]`, exit 0, and every later command refused to load
+    it (B72b8adba30). Only NEW problems: an existing one must not stop the edit that
+    repairs it."""
+    new = _gate_table_problems(_parsed(text)) - _gate_table_problems(_parsed(prev))
+    if not new:
+        return ""
+    said = sorted(_render_gate_problem(*p) for p in new)
+    # Every problem at once; a key refusal keeps exit 3.
+    return (KeyRefused if any(isinstance(m, KeyRefused) for m in said) else str)("; ".join(said))
+
+
+def _workflow_refusal(repo: Path, before: set[str], text: str, layer: str) -> str:
+    """The refusal for problems an edit INTRODUCES into the workflow (`workflow.check`), or "".
+
+    `workflow.check` is the MEANING; `Config.check` the SCHEMA. Without it
+    `workflow gate X --required` (with no pipeline) exited 0 having created the exact inert
+    requirement `ddflow workflow` then reports as a problem. Only NEW problems are
+    refused, so a config already broken can still be repaired by the tool that reports it."""
+    from . import workflow as WF
+
+    introduced = sorted(_workflow_problems(repo, text, local=layer == "local") - before)
+    if not introduced:
+        return ""
+    return (
+        "that edit would leave the workflow incoherent:\n  "
+        + "\n  ".join(introduced)
+        + f"\nNothing was written. ({WF.PROBLEM} findings are refused at "
+        f"the point of writing; `ddflow workflow` reports any that are "
+        f"already there.)"
+    )
+
+
+def _result_problem(
+    repo: Path, edit: Edit, layer: str, path: Path, prev: str, text: str, guards: Guards
+) -> str:
+    """Why the composed ``text`` may not replace ``prev`` in ``path``, or "".
+
+    The order is the whole point: judge the RESULT, never the state being replaced -- a
+    writer that validates what is on disk has checked nothing. The same judgements for
+    every kind of edit; a dedicated file (`reviewers.toml`) carries no config, so only its
+    syntax and its reviewer blocks are judged.
+    """
+    if path.name != "config.toml":
+        try:
+            tomllib.loads(text)
+            _check_reviewer_fields(_parsed(edit.text) if isinstance(edit, Block) else {}, path)
+        except tomllib.TOMLDecodeError as exc:
+            return f"refusing to write {path}: the result is not valid TOML: {exc}"
+        except ValueError as exc:
+            return str(exc)
+        return ""
+    local = layer == "local"
+    before = _workflow_problems(repo, prev, local=local) if guards.workflow else set()
+    if problem := _schema_problem(edit, text, path):
+        return problem
+    if new_range := _new_range_problems(repo, prev, text, local):
+        return KeyRefused(_range_refusal(new_range))
+    return (
+        _gate_problem(prev, text)
+        or _human_removed(repo, edit, prev, text, layer)
+        or (_workflow_refusal(repo, before, text, layer) if guards.workflow else "")
+    )
+
+
+def apply_edit(
     repo: Path,
-    block: str,
+    edit: Edit,
     *,
-    shared: bool = False,
-    own: str = "",
+    layer: str = "file",
+    guards: Guards = DEFAULT_GUARDS,
+    dry_run: bool = False,
     person: bool = False,
     agent: str = "",
-) -> Path:
-    """Append a hand-built block (a `[[reviewer]]`) to the local layer, or the committed
-    config when `shared`. Returns the path written.
+) -> EditResult:
+    """The one way ddflow changes a config file: ``edit`` applied to ``layer``'s file.
 
-    Local by DEFAULT: what these writers carry -- an endpoint, a model of a private
-    deployment, an API-key variable's name -- is one operator's setup, and ddflow
-    recommends services but never ships someone's configuration to every clone.
-    `own` names the dedicated local file (`reviewers.toml`); the shared target is
-    always `.ddflow/config.toml`, the one committed file a project is configured in.
+    ``layer`` is `"file"` (the committed `.ddflow/config.toml`, which every clone gets) or
+    `"local"` (the git-ignored `.ddflow/local/config.toml`: this machine's endpoints, hosts
+    and sizing, which must never reach the committed file). The same guards apply to
+    both, judged on the committed config with the local one over it.
 
-    Raises `FormatRefused` (exit 3) when the file's `format` is newer than this ddflow
-    understands, and `RT.ReviewerRefused` for an agent's command reviewer.
+    Compose every edit, judge the RESULT once, then replace the file atomically under a
+    lock; a truncating write interrupted halfway would leave an empty config that loads as
+    "no overrides at all" without saying so. Nothing is written when anything is refused
+    (``EditResult.error``) or on ``dry_run``. A committed write also brings
+    `.gitattributes` up to date with `[lease] append_only_globs`.
+
+    Whether the writer is ``person`` or an ``agent`` decides what the reviewer-trust guard
+    allows (decision D-reviewer-trust).
     """
-    if shared:
-        path = config_file(repo)
-        path.parent.mkdir(parents=True, exist_ok=True)
-    else:
+    repo = Path(repo)
+    refusal = _key_refusal(edit.pairs) if isinstance(edit, SetPairs) else _text_refusal(edit.text)
+    if refusal:
+        return EditResult(refusal)
+    own = edit.own if isinstance(edit, Block) and layer == "local" and edit.own else "config.toml"
+    path = TC.layer_path(repo, layer, own)
+    if layer == "local":
+        # Even for a dry run: the lock below creates the directory anyway, and a `local/`
+        # that exists without its own `*` ignore is one `git add` from committing whatever
+        # lands there next.
         ensure_local_dir(repo)
-        path = config_file(repo, local=True, own=own or "config.toml")
-    import tomllib
-
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
     with TC.locked(path):
         prev = path.read_text("utf-8") if path.exists() else ""
         if refused := format_problem(prev, path):
-            raise FormatRefused(refused)
-        merged = fsio.APPEND.splice(prev, block.rstrip() + "\n")
-        # Parsed before it replaces anything: a block that does not parse would leave
-        # a config no later command can load, and the reader's error would blame a file
-        # the operator never edited.
-        try:
-            tomllib.loads(merged)
-        except tomllib.TOMLDecodeError as exc:
-            raise ValueError(
-                f"refusing to write {path}: the result is not valid TOML: {exc}"
-            ) from exc
-        _check_reviewer_fields(tomllib.loads(block), path)
-        # Raises RT.ReviewerRefused (a ValueError) for an agent's command reviewer.
-        _write_reviewed(repo, path, merged, person=person, agent=agent)
-    return path
+            return EditResult(refused, prev)
+        text, failure = _compose(prev, edit)
+        failure = failure or _result_problem(repo, edit, layer, path, prev, text, guards)
+        if failure:
+            return EditResult(failure, text)
+        if not dry_run:
+            try:
+                # The one place a tool writes config: under the reviewer-trust guard. An
+                # agent's `kind = "command"` reviewer is undone and refused, and any
+                # reviewer whose identity a tool created or changed is recorded, to count
+                # only after a person approves it.
+                RT.write(repo, path, text, person=person, agent=agent)
+            except RT.ReviewerRefused as exc:
+                return EditResult(ReviewerRefusal(str(exc)), text)
+    added: list[str] = []
+    if layer == "file" and own == "config.toml" and not dry_run:
+        from . import shared_files as SF
 
-
-def _write_reviewed(repo: Path, path: Path, text: str, *, person: bool, agent: str) -> None:
-    """The one place a tool writes config: under the reviewer-trust guard.
-
-    Every writer here goes through it, so no surface can add a reviewer the guard does
-    not see (decision D-reviewer-trust): an agent's `kind = "command"` reviewer is undone
-    and refused, and any reviewer whose identity a tool created or changed is recorded
-    as `reviewer.configured`, to count only after a person approves it.
-    """
-    RT.write(repo, path, text, person=person, agent=agent)
+        added = SF.sync_attributes(repo)
+    return EditResult("", text, path, added)

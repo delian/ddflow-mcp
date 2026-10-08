@@ -18,7 +18,6 @@ protection of D-export. Nothing here prints; ``api.export`` wraps these into Out
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -53,18 +52,14 @@ def _locked(st: State, doc: str) -> dict[str, Any] | None:
 
 
 def _write_selection(
-    repo: Path, pairs: list[tuple[str, str]], *, local: bool, agent: str
-) -> list[tuple[str, str]]:
-    from ..configwrite import _write_config
+    repo: Path, pairs: list[tuple[str, object]], *, local: bool, agent: str
+) -> list[tuple[str, object]]:
+    from ..configwrite import SetPairs, apply_edit
 
-    err, _text = _write_config(repo, pairs, local=local, agent=agent)
-    if err:
-        raise ExportError(f"could not edit the selection: {err}", EXIT_UNAVAILABLE)
+    res = apply_edit(repo, SetPairs(pairs), layer="local" if local else "file", agent=agent)
+    if res.error:
+        raise ExportError(f"could not edit the selection: {res.error}", EXIT_UNAVAILABLE)
     return pairs
-
-
-def _documents_literal(docs: list[str]) -> str:
-    return json.dumps(docs)
 
 
 def enable(
@@ -122,9 +117,9 @@ def enable(
     if unchanged:
         result["message"] = f"{doc} is already enabled -> {spec.path}"
         return result
-    pairs: list[tuple[str, str]] = []
+    pairs: list[tuple[str, object]] = []
     if doc not in selected:
-        pairs.append(("export.documents", _documents_literal([*selected, doc])))
+        pairs.append(("export.documents", [*selected, doc]))
     if path and path != current.path:
         pairs.append((f"export.{doc}.path", path))
     if mode and mode != current.mode:
@@ -189,7 +184,7 @@ def disable(
     if was:
         _write_selection(
             repo,
-            [("export.documents", _documents_literal([d for d in selected if d != doc]))],
+            [("export.documents", [d for d in selected if d != doc])],
             local=local,
             agent=requested_agent,
         )
