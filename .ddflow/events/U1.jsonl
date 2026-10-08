@@ -2936,3 +2936,9 @@
 {"agent":"U1","data":{"at":1791467520.6605296,"holder":"U1"},"id":"edee568c44f5c2a0bd4255a95","kind":"lease.renewed","lamport":41349,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T13:52:00.786780Z"}
 {"agent":"U1","data":{"at":1791467534.6148815,"holder":"U1"},"id":"e7386e0e0b8b0c545503511f8","kind":"lease.renewed","lamport":41352,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T13:52:14.718258Z"}
 {"agent":"U1","data":{"at":1791467659.7308817,"holder":"U1"},"id":"e345149efaa7cfadeadab6863","kind":"lease.renewed","lamport":41360,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T13:54:19.831518Z"}
+{"agent":"U1","data":{"at":1791467785.442862,"holder":"U1"},"id":"eff9ffe2adbd0b72157dc8939","kind":"lease.renewed","lamport":41373,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T13:56:25.544129Z"}
+{"agent":"U1","data":{"at":1791467821.5850663,"holder":"U1"},"id":"e9d799719be6ecf9ce49c0c1a","kind":"lease.renewed","lamport":41375,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T13:57:01.688160Z"}
+{"agent":"U1","data":{"at":1791467909.9800744,"holder":"U1"},"id":"eac9390219fef6faff4ad7db7","kind":"lease.renewed","lamport":41385,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T13:58:30.068221Z"}
+{"agent":"U1","data":{"at":1791468033.6815908,"holder":"U1"},"id":"ebed6ae9c6aa429803578a79c","kind":"lease.renewed","lamport":41394,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T14:00:33.770517Z"}
+{"agent":"U1","data":{"at":1791468122.367656,"holder":"U1"},"id":"ed75c4bd7836f8381677f8f8f","kind":"lease.renewed","lamport":41428,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T14:02:02.462632Z"}
+{"agent":"U1","data":{"at":1791468157.2152243,"holder":"U1"},"id":"e41870408f25d1452ffa11210","kind":"lease.renewed","lamport":41455,"schema":1,"subject":"B-uni-refuted-gates","ts":"2026-10-08T14:02:37.304219Z"}
