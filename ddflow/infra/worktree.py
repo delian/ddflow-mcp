@@ -405,7 +405,8 @@ class TreeWork:
     one measurement they read, and each reads the view it always did:
 
     * ``dirty``: the porcelain lines of every uncommitted change git counts (ignored files
-      excluded, caches INCLUDED) -- what `dirty` answers;
+      excluded, caches INCLUDED) -- what `dirty` answers for a tree it could read; EMPTY when
+      ``readable`` is False, which is not "clean": read ``readable`` first;
     * ``work``: the paths of those changes beyond caches; ``ignored``: the ignored paths
       beyond caches -- `git worktree remove` deletes ignored files without complaint, so a
       tree holding a `.env` is not clean;
