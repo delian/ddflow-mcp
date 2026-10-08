@@ -211,3 +211,10 @@ def test_an_index_in_use_is_touched_so_it_is_not_taken_for_abandoned(log, repo, 
     os.utime(st.path, (ago, ago))
     assert not st.stale(log)  # a reader asks, finds it current ...
     assert time.time() - st.path.stat().st_mtime < 60  # ... and marks it used
+
+
+def test_forgetting_a_subject_of_a_newer_store_removes_it_and_keeps_the_rest(quotas):
+    quotas.write_text(json.dumps(_future_doc()))
+    Q.forget("agent:h/a", "operator", quotas)
+    doc = json.loads(quotas.read_text())
+    assert doc["profiles"] == {} and doc["future_top"] == {"x": 1} and doc["version"] == 7
