@@ -41,7 +41,9 @@ from ..core import clock
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
 from ..core.slug import safe_filename
+from ..infra.fsio import replace_text
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
+from .guidance import ruleview as RV
 from .redact_report import redactor
 
 
@@ -746,4 +748,10 @@ def bundle(
     for name, text in render_views(state, cfg).items():
         (out_dir / name).write_text(text, "utf-8")
         written.append(out_dir / name)
+    # The rule files are a view of the rule definitions (D-unify 7): rebuilt from the log.
+    for rid in RV.live_rule_ids(state):
+        target = out_dir / "rules" / f"{rid}.toml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        replace_text(target, RV.render(state, rid))
+        written.append(target)
     return written

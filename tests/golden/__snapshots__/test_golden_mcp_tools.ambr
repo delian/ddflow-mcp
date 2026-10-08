@@ -2887,6 +2887,22 @@
        }
       }
     ''',
+    'ddflow_rule_sync': '''
+      {
+       "name": "ddflow_rule_sync",
+       "description": "Sync rule files with the log: record hand edits and new files, restore missing ones.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_session_end': '''
       {
        "name": "ddflow_session_end",
@@ -3772,6 +3788,7 @@
     'ddflow_rule_remove',
     'ddflow_rule_search',
     'ddflow_rule_show',
+    'ddflow_rule_sync',
     'ddflow_session_end',
     'ddflow_session_note',
     'ddflow_session_prompt',
