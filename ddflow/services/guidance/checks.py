@@ -164,8 +164,8 @@ def run_check(rec: GuidanceRecord, index: int, ctx: CheckContext) -> CheckResult
     evaluator = _KINDS.get(kind)
     if evaluator is None:
         return _unavailable(rec, cid, kind, f"no check kind {kind!r} is registered here")
-    scoped = CheckContext(ctx.repo, in_scope(rec, ctx.paths), ctx.diff)
     try:
+        scoped = CheckContext(ctx.repo, in_scope(rec, ctx.paths), ctx.diff)
         found = evaluator(check, scoped)
     except Unavailable as exc:
         return _unavailable(rec, cid, kind, str(exc) or "the check could not run")

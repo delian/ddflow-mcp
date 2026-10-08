@@ -305,24 +305,56 @@ def test_a_waiver_digest_cannot_be_forged_by_moving_a_newline_between_fields():
     a = _waiver(globs=("src/**", "x"))
     b = _waiver(globs=("src/**\nx",))
     assert a.digest != b.digest
-    w1 = _waiver(reason="why\n2026-11-01", expires="2026-11-01", granted="2026-10-08")
+    # the reason/expires/granted boundary: these two join to the same text with newlines
+    w1 = _waiver(reason="why\n2026-11-01", expires="2026-10-20", granted="2026-10-08")
     w2 = _waiver(
         reason="why",
         expires="2026-11-01",
-        granted="2026-10-08",
+        granted="2026-10-20",
         globs=("2026-10-08", "src/legacy/**"),
     )
+    assert "\n".join(
+        [w1.id, w1.record, w1.check, w1.reason, w1.expires, w1.granted, *w1.globs]
+    ) == "\n".join([w2.id, w2.record, w2.check, w2.reason, w2.expires, w2.granted, *w2.globs])
     assert w1.digest != w2.digest
 
 
-def test_a_result_digest_sees_which_findings_a_waiver_covered(kinds):
+def test_a_result_digest_sees_which_waiver_covered_a_finding(kinds):
+    """Two waivers covering the SAME finding leave the same live findings; only the waiver
+    ids differ, and a cache keyed by the digest must not conflate them (critic)."""
     CK.register("flag", _flag_all)
     rec = _rec(checks=[{"kind": "flag"}])
     [res] = CK.run_record(rec, _ctx("a.py", "b.py"))
     approved = lambda _w: True  # noqa: E731
-    a = WV.apply([res], [_waiver(globs=("a.py",))], today=TODAY, approved=approved)[0]
-    b = WV.apply([res], [_waiver(id="w2", globs=("b.py",))], today=TODAY, approved=approved)[0]
-    assert a.status == b.status == CK.FAIL and a.digest != b.digest
+    a = WV.apply([res], [_waiver(id="w1", globs=("a.py",))], today=TODAY, approved=approved)[0]
+    b = WV.apply([res], [_waiver(id="w2", globs=("a.py",))], today=TODAY, approved=approved)[0]
+    assert a.findings == b.findings and a.waived == b.waived and a.status == b.status == CK.FAIL
+    assert a.waivers == ("w1",) and b.waivers == ("w2",) and a.digest != b.digest
+
+
+def test_a_future_dated_grant_cannot_stretch_a_waiver_past_ninety_days(kinds):
+    """The cap counted from the author-supplied grant date, so granted=2099 with a 90-day
+    window was `valid` and active for decades (rubber_duck)."""
+    w = _waiver(granted="2099-01-01", expires="2099-04-01")
+    assert WV.validate(w) == []  # dates alone are consistent
+    assert "in the future" in WV.validate(w, TODAY)[0]
+    CK.register("flag", _flag_all)
+    res = CK.run_record(_rec(checks=[{"kind": "flag"}]), _ctx("src/legacy/a.py"))
+    got = WV.apply(res, [w], today=TODAY, approved=lambda _w: True)
+    assert [r.status for r in got] == [CK.FAIL]
+
+
+def test_a_scope_that_cannot_be_matched_makes_the_check_unavailable_not_an_exception(kinds):
+    CK.register("flag", _flag_all)
+
+    class Bad:
+        def __iter__(self):
+            raise ValueError("empty pattern")
+
+    rec = _rec(checks=[{"kind": "flag"}])
+    object.__setattr__(rec.scope, "globs", Bad())
+    [res] = CK.run_record(rec, _ctx("a.py"))
+    assert res.status == CK.UNAVAILABLE and "ValueError: empty pattern" in res.reason
 
 
 def test_the_verdict_cannot_lose_a_blocking_record_it_was_not_handed(kinds):
