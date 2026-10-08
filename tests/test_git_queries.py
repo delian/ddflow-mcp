@@ -25,6 +25,10 @@ def repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def _touched(diff: str) -> set[str]:
+    return {p for f in unidiff.files(diff) for p in f.paths}
+
+
 def _diff(repo: Path) -> str:
     return W.capture_diff(repo, None, include_untracked=True)
 
@@ -73,7 +77,7 @@ def test_a_quoted_name_is_read_back_as_the_files_own_name(repo):
     _git(repo, "commit", "-qm", "base")
     (repo / name).write_text("2\n")
     diff = _diff(repo)
-    assert unidiff.touched_paths(diff) == {name}
+    assert _touched(diff) == {name}
     assert W.diff_covers_everything(repo, diff) == (True, [])
 
 
@@ -89,7 +93,7 @@ def test_content_lines_that_look_like_headers_are_not_headers():
         "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1 +1 @@\n"
         "--- a/evil\n+++ b/evil\n"
     )
-    assert unidiff.touched_paths(diff) == {"f"}
+    assert _touched(diff) == {"f"}
 
 
 def test_a_binary_add_and_delete_say_which_side_is_missing():
@@ -141,3 +145,13 @@ def test_lossy_names_cover_only_as_many_changed_files_as_the_diff_shows(repo):
     first = next(unidiff.sections(full))
     ok, missing = W.diff_covers_everything(repo, first)
     assert not ok and len(missing) == 1
+
+
+def test_header_only_sections_with_two_different_names_split_at_the_boundary():
+    """Mutant: the final `return None, pair`. A `--no-index` binary diff names two files."""
+    plain = "diff --git a/old.bin b/new.bin\nindex 0..1\nBinary files a/old.bin and b/new.bin differ\n"
+    one_quoted = 'diff --git a/old.txt "b/n\\303\\266.bin"\nBinary files differ\n'
+    both = 'diff --git "a/\\303\\266 x" "b/\\303\\266 y"\nBinary files differ\n'
+    assert [f.paths for f in unidiff.files(plain)] == [("old.bin", "new.bin")]
+    assert [f.paths for f in unidiff.files(one_quoted)] == [("old.txt", "n\u00f6.bin")]
+    assert [f.paths for f in unidiff.files(both)] == [("\u00f6 x", "\u00f6 y")]
