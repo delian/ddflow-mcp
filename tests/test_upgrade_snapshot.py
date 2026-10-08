@@ -411,3 +411,78 @@ def test_a_symlink_is_backed_up_and_restored_as_a_link(old: Path) -> None:
 
     assert link.is_symlink() and os.readlink(link) == "real.txt"
     assert real.read_text() == "data\n", "the target was never written through"
+
+
+# -- B-upgrade.4-apply.3b-wire: the CLI flags and the MCP arguments ---------------------------
+
+
+def test_cli_snapshot_and_restore_round_trip(old: Path) -> None:
+    before = (old / DRIVER).read_bytes()
+    code, out, err = run_cli(old, "upgrade", "--apply", "instructions", "--snapshot")
+    assert code == 0, (out, err)
+    (tag,) = tags(old)
+    assert tag in out and (old / DRIVER).read_bytes() != before
+
+    code, out, err = run_cli(old, "upgrade", "--restore")
+    assert code == 0, (out, err)
+    assert out.startswith("restored from snapshot") and (old / DRIVER).read_bytes() == before
+    code, out, _ = run_cli(old, "--json", "upgrade", "--restore", tag)
+    body = json.loads(out)
+    assert code == 0 and body["restored"]["name"] == tag and "applied" not in body
+
+
+def test_cli_snapshot_needs_apply_and_does_not_contradict_backup(old: Path) -> None:
+    code, _out, err = run_cli(old, "upgrade", "--snapshot")
+    assert code == 3 and "--apply" in err
+    code, _out, err = run_cli(old, "upgrade", "--apply", "hooks", "--snapshot", "--backup", "none")
+    assert code == 3 and "disagree" in err
+    assert tags(old) == []
+    code, _out, err = run_cli(old, "upgrade", "--restore", "--snapshot")
+    assert code == 3 and "stands alone" in err
+    code, _out, err = run_cli(old, "upgrade", "--restore", "--apply", "hooks")
+    assert code == 3 and "stands alone" in err
+    for extra in (
+        ("--backup", "none"),
+        ("--backup", "snapshot"),
+        ("--reason", "why"),
+        ("--plan",),
+        ("--confirm", "K", "--reason", "why"),
+    ):
+        code, _out, err = run_cli(old, "upgrade", "--restore", *extra)
+        assert code == 3 and "stands alone" in err, extra
+    assert tags(old) == []
+
+
+def test_the_mcp_tool_carries_snapshot_and_restore(old: Path) -> None:
+    from ddflow.surfaces.tools import maintenance as M
+
+    spec = M.TOOLS["ddflow_upgrade"]
+    assert {"snapshot", "restore", "backup"} <= set(spec["properties"])
+    before = (old / DRIVER).read_bytes()
+    out = spec["api"](old, {"apply": "instructions", "snapshot": True}, "upgrader")
+    assert out.exit == 0 and len(tags(old)) == 1
+    assert (old / DRIVER).read_bytes() != before, "the apply changed the file"
+    done = spec["api"](old, {"restore": "latest"}, "upgrader")
+    assert done.exit == 0 and (old / DRIVER).read_bytes() == before
+    payload = spec["payload"]({"restore": "latest"})
+    assert "restored" in payload and "applied" not in payload
+    assert "applied" in spec["payload"]({"apply": "hooks"})
+
+
+def test_the_mcp_tool_refuses_what_the_cli_refuses(old: Path) -> None:
+    from ddflow.surfaces.tools import maintenance as M
+
+    api = M.TOOLS["ddflow_upgrade"]["api"]
+    for args in (
+        {"restore": "latest", "snapshot": True},
+        {"restore": "latest", "apply": "hooks"},
+        {"restore": "latest", "backup": "none"},
+        {"restore": "latest", "reason": "why"},
+        {"restore": "latest", "plan": True},
+        {"restore": "latest", "confirm": ["K"], "reason": "why"},
+        {"snapshot": True},
+        {"apply": "hooks", "snapshot": True, "backup": "none"},
+    ):
+        out = api(old, args, "upgrader")
+        assert out.exit == 3, (args, out.exit, out.reason)
+    assert tags(old) == []

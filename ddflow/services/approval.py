@@ -25,12 +25,12 @@ from __future__ import annotations
 import getpass
 import os
 import secrets
-import socket
 from dataclasses import dataclass
 from typing import Any
 
 from ..core.digest import content_digest
 from ..core.model import fold
+from ..infra import hostinfo as H
 
 #: Environment variables an agent harness sets in the shells it runs, so a command it
 #: runs is known not to come from a person at their own terminal. Only the ones known
@@ -128,7 +128,7 @@ def grant(
         raise ApprovalRefused(refusal(why))
     if not subject or not digest:
         raise ApprovalRefused("an approval needs a subject and the digest of what it approves")
-    actor = Actor(user=os_user(), host=socket.gethostname().split(".")[0])
+    actor = Actor(user=os_user(), host=H.short_host())
     token = secrets.token_urlsafe(18) if single_use else ""
     data: dict[str, Any] = {
         **(extra or {}),

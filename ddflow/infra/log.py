@@ -26,7 +26,6 @@ import operator
 import os
 import re
 import secrets
-import socket
 import sys
 import time
 from collections.abc import Callable, Iterable, Iterator
@@ -66,6 +65,7 @@ from ..core.model import known_kinds
 from ..core.slug import safe_filename
 from . import fsio
 from . import git as G
+from . import hostinfo as H
 
 __all__ = [
     "PROVENANCE_KINDS",
@@ -559,7 +559,7 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
 def bare_agent_id(fallback_root: Path | str | None = None) -> str:
     """The derived id WITHOUT this clone's suffix: `{host}-{tree}`, which is what every
     derived id was before B190, and so the holder of any lease claimed before it."""
-    host = _host()
+    host = H.short_host()
     root = str(fallback_root or "")
     name = ""
     here = _toplevel(os.getcwd())
@@ -578,10 +578,6 @@ def bare_agent_id(fallback_root: Path | str | None = None) -> str:
     return f"{host}-{name}"
 
 
-def _host() -> str:
-    return socket.gethostname().split(".")[0]
-
-
 def tree_agent_ids(tree: Path | str, root: Path | str) -> set[str]:
     """The identities an agent standing in the linked worktree ``tree`` of the clone at
     ``root`` derives for itself: `{host}-{tree name}`, bare and with this clone's suffix.
@@ -590,7 +586,7 @@ def tree_agent_ids(tree: Path | str, root: Path | str) -> set[str]:
     so a command can tell whether the tree it was run from is some other identity's
     working tree. Never creates the suffix: an unadopted project has none to compare.
     """
-    bare = f"{_host()}-{Path(tree).name}"
+    bare = f"{H.short_host()}-{Path(tree).name}"
     path = Path(root) / CLONE_ID_FILE
     try:
         suffix = path.read_text("utf-8").strip()
@@ -1060,10 +1056,7 @@ class EventLog:
                 # an unreadable config: the built-in patterns for THIS write, and the config is
                 # read again on the next one, so a fixed config is not shadowed by the fallback
                 patterns, cached = [*SessionConfig().redact_patterns], False
-            try:
-                host = socket.gethostname()
-            except OSError:
-                host = ""
+            host = H.hostname()
             # the `log` profile's machine-local inputs, as `services.redact_report.redactor`
             # resolves them: this machine's hostname and $HOME, no repo root
             red = R.Redactor(

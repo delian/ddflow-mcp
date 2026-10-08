@@ -22,10 +22,16 @@ added; nothing is written twice.
 
 from __future__ import annotations
 
+import re
+import tomllib
 from pathlib import Path
 
 from ..config import Config
 from ..config_sections._layers import layer_path
+from ..core.admission import is_shared
+from ..core.globs import regex
+from ..infra import git as G
+from ..infra import proc as P
 
 
 def export_targets(cfg: Config, *, generated_only: bool = False) -> list[str]:
@@ -67,7 +73,6 @@ def _probe_paths(repo: Path, glob: str) -> list[str]:
     sample is not enough: a driver the project set on `docs/README.md` says nothing about
     `docs/guide.md` under the same `docs/*.md` (review findings).
     """
-    from ..core.schedule import is_shared
 
     if not any(ch in glob for ch in "*?["):
         return [glob]
@@ -79,8 +84,6 @@ def _git_z(repo: Path, *args: str) -> list[str] | None:
     """`infra.git.git_paths` -- `-z`, read as bytes, so a non-ASCII path comes back as the file
     is named, not C-quoted (B9c56de9d58) -- and None when git could not run or did not
     answer in time, never an exception out of doctor or a config write."""
-    from ..infra import git as G
-    from ..infra import proc as P
 
     return G.git_paths(repo, *args, timeout=P.TIMEOUTS["probe"])
 
@@ -167,7 +170,6 @@ def _witness(pattern: str) -> str:
     (a `*` matches `**`); a plain `x` was matched by a narrower `docs/x*` (review
     findings). The stand-in is matched only by wildcards -- including a NEGATED class
     (`[!x]`), which is why `_relation` treats containment both ways as ambiguous."""
-    import re
 
     w = re.sub(r"\[[^]]*\]", "\x01", pattern)
     return w.replace("**", "\x01/\x01").replace("*", "\x01").replace("?", "\x01")
@@ -176,7 +178,6 @@ def _witness(pattern: str) -> str:
 def _inside(a: str, b: str) -> bool:
     """Is every file pattern ``a`` names also named by ``b``? (Judged on a witness of
     ``a``: exact for literals; for wildcards, a path only another wildcard matches.)"""
-    from ..core.schedule import is_shared
 
     return a == b or is_shared(_witness(a), [b])
 
@@ -224,7 +225,6 @@ def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
     existing union line after a narrower one -- what 08af811 wrote -- is moved, not
     duplicated; one already in place is left alone.
     """
-    from ..core.schedule import is_shared
 
     path = Path(repo) / ".gitattributes"
     rows = path.read_text("utf-8").splitlines() if path.exists() else []
@@ -275,7 +275,6 @@ def committed_append_only(repo: Path) -> list[str]:
     `.gitattributes` is tracked and reaches every clone; a glob declared in the
     git-ignored local layer is one machine's choice and must not write a rule for all.
     """
-    import tomllib
 
     p = layer_path(repo, "file")
     try:
@@ -326,15 +325,12 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
     parallel merge of it will conflict until someone regenerates it.
     """
-    import re
-
-    from ..core.schedule import _gitattributes_re
 
     problems: list[str] = []
     notes: list[str] = []
     for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
         try:
-            _gitattributes_re(g)
+            regex(g, True)
         except re.error as exc:
             # `is_shared` treats it as matching only itself rather than crash a claim;
             # this is where that is said out loud.

@@ -23,9 +23,11 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # (~0.7 KB): one tool with one optional argument; main sat at 93,4xx.
 # 95_000 (raised, B-gate-econ-review-refutation.2-surfaces): ddflow_gate_list is the MCP face of
 # `ddflow gate list [--refuted]` (~0.5 KB): one tool, one optional argument; the list measures 94,598 bytes with it.
-# 95_500 (raised, B-uni-rules-import.4-view): ddflow_rule_sync is the MCP face of `ddflow rule sync`
-# (~0.3 KB): one tool, no arguments; the list measures 95,2xx bytes with it.
-TOOLS_LIST_BUDGET = 95_500
+# 95_300 (raised, B-upgrade.4-apply.3b-wire): ddflow_upgrade gains `snapshot` and `restore`
+# and a longer description (~0.3 KB in all); the list measures 95,2xx with them.
+# 95_700 (raised, B-uni-rules-import.4-view): ddflow_rule_sync is the MCP face of `ddflow rule sync`
+# (~0.3 KB): one tool, no arguments.
+TOOLS_LIST_BUDGET = 95_700
 SHARED_DESCRIPTION_MAX = 200
 
 
