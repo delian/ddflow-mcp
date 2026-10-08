@@ -348,3 +348,14 @@ def test_a_staged_newer_view_gets_no_regenerate_remedy(tmp_path):
     text = "\n".join(lines)
     assert "newer format level" in text and "upgrade ddflow first" in text
     assert "git add" not in text and "ddflow render" not in text
+
+
+def test_a_gitignore_with_broken_markers_keeps_a_persons_lines(tmp_path):
+    from ddflow.services import adopt as AD
+
+    gi = tmp_path / ".gitignore"
+    AD.write_ddflow_gitignore(gi)
+    gi.write_text(gi.read_text().replace("# ddflow:end gitignore", "# mangled") + "secrets/\n")
+    assert AD.write_ddflow_gitignore(gi) is True
+    text = gi.read_text()
+    assert "secrets/\n" in text and AD.GITIGNORE_REGION.state(text) == "current"

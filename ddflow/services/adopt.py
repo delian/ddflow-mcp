@@ -717,11 +717,23 @@ def write_ddflow_gitignore(gi: Path) -> bool:
         try:
             body = GITIGNORE_REGION._region().body(have)
         except RegionError:
-            body = None
-            have = None  # broken markers: nothing to keep that can be told from damage
+            # Broken markers: drop the stray marker lines and write a fresh region after what
+            # is left, so a line a person added outside it survives.
+            kept = [
+                ln for ln in have.splitlines(keepends=True) if "ddflow:begin gitignore" not in ln
+            ]
+            kept = [ln for ln in kept if "ddflow:end gitignore" not in ln]
+            text = "".join(kept)
+            replace_text(
+                gi,
+                text
+                + ("" if text.endswith("\n") or not text else "\n")
+                + GITIGNORE_REGION.render(DDFLOW_GITIGNORE),
+            )
+            return True
         if body == DDFLOW_GITIGNORE:
             return False
-        if have is not None and body is not None:
+        if body is not None:
             try:
                 replace_text(gi, GITIGNORE_REGION.splice(have, DDFLOW_GITIGNORE))
             except NewerContent:
