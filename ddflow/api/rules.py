@@ -19,6 +19,7 @@ from ..services.guidance.kinds import RULE
 from ..services.guidance.limits import lint, over_limit
 from ..services.guidance.similarity import similar
 from ..services.rules import Rule, RulesStorage
+from ..services.searchcore import SearchError, check_regex
 from ._base import _load
 
 DEFAULT_RULE_PRIORITY = 50
@@ -814,9 +815,16 @@ def rule_search(
     Returns:
         Outcome with ranked list of matching rules
     """
-    import re
-
     storage = RulesStorage(repo)
+
+    rx = None
+    if regex and not exact:
+        try:
+            # The one regex safety check every search shares: a pattern that could take
+            # exponential time, or does not compile, is refused with the reason.
+            rx = check_regex(query)
+        except SearchError as exc:
+            return O.refused("rule.search", str(exc), query=query)
 
     try:
         rules = storage.list(tag=tag, scope=scope)
@@ -834,13 +842,9 @@ def rule_search(
                 # Exact phrase match
                 if query_lower in combined:
                     score = 1.0
-            elif regex:
-                # Regex match
-                try:
-                    if re.search(query, combined, re.IGNORECASE):
-                        score = 0.8
-                except re.error:
-                    continue
+            elif rx is not None:
+                if rx.search(combined):
+                    score = 0.8
             # Default: substring match with fallback to similarity scoring
             # First check for substring match (higher score)
             elif query_lower in combined:

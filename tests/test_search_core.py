@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -107,3 +109,101 @@ def test_search_sources_are_registered_and_cover_every_kind_in_order():
     covered = {k for src in registered() for k in src.kinds}
     assert set(S.SOURCES) <= covered
     assert {k for src in registered() if src.name in names for k in src.kinds} == set(S.SOURCES)
+
+
+def _rule(repo, rid="r-style", content="small functions"):
+    run_cli(repo, "init")
+    code, _o, err = run_cli(
+        repo, "rule", "add", "--id", rid, "--title", "Keep it short", "--content", content, "--new"
+    )
+    assert code == 0, err
+
+
+def test_rule_search_regex_refuses_what_search_regex_refuses(repo):
+    """B1778d8ab14: `rule search --regex` handed the raw pattern to `re`, so a catastrophic
+    pattern ran unguarded and an uncompilable one read as 'No rules found'."""
+    _rule(repo)
+    for pattern in ("(a+)+b", r"(a)\1", "("):
+        code, _out, err = run_cli(repo, "rule", "search", "--regex", pattern)
+        assert code == 3, (pattern, code, err)
+        assert "regex" in err, (pattern, err)
+    code, out, _ = run_cli(repo, "rule", "search", "--regex", "small|short")
+    assert code == 0 and "r-style" in out
+
+
+@pytest.mark.timeout(60)
+def test_rule_search_regex_cannot_hang_on_a_catastrophic_pattern(repo):
+    _rule(repo, content="a" * 3000 + "!")
+    import time
+
+    t = time.monotonic()
+    code, _out, _err = run_cli(repo, "rule", "search", "--regex", "(a+)+$")
+    assert code == 3 and time.monotonic() - t < 20
+
+
+def _lessons(log):
+    log.append("lesson.recorded", "L1", {"title": "recovering from errors", "rule": "keep going"})
+    log.append("lesson.recorded", "L2", {"title": "worktree per claim", "rule": "always claim"})
+    log.append(
+        "lesson.recorded",
+        "L3",
+        {"title": "claim the worktree before editing", "rule": "claim claim claim worktree"},
+    )
+    log.append("lesson.recorded", "L4", {"title": "unrelated", "rule": "nothing to see"})
+
+
+def test_the_like_fallback_ranks_best_first_and_honours_the_limit(repo, log):
+    """The fallback used to return the first rows a substring LIKE met; it now ranks with
+    the shared BM25 over stemmed words, as FTS5 does."""
+    from ddflow.config import Config
+    from ddflow.infra.store import Store
+
+    _lessons(log)
+    cfg = Config.load()
+    cfg.lessons.search_backend = "like"
+    st = Store(repo, cfg)
+    st.rebuild(log)
+    got = [r["id"] for r in st.search("lessons", "claim worktree", 5)]
+    assert got[0] == "L3" and set(got) == {"L2", "L3"}
+    assert [r["id"] for r in st.search("lessons", "claim worktree", 1)] == ["L3"]
+    assert st.search("lessons", "x", 5) == []  # too short to be a term, as for FTS5
+    # stop words are kept, as FTS5 keeps them: L3's title has "the"
+    assert [r["id"] for r in st.search("lessons", "the", 5)] == ["L3"]
+    assert st.search("lessons", "recover errors", 5)[0]["id"] == "L1"  # recovering~recover
+    assert st.search("lessons", "zzzqqq", 5) == []
+
+
+def test_both_backends_put_the_same_lesson_first(repo, log):
+    from ddflow.config import Config
+    from ddflow.infra.store import Store, _has_fts5
+
+    if not _has_fts5():
+        pytest.skip("this SQLite has no FTS5: only the like fallback exists here")
+
+    _lessons(log)
+    first = {}
+    for backend in ("fts5", "like"):
+        cfg = Config.load()
+        cfg.lessons.search_backend = backend
+        st = Store(repo, cfg)
+        st.rebuild(log)
+        first[backend] = st.search("lessons", "claim worktree", 5)[0]["id"]
+    assert first["fts5"] == first["like"] == "L3"
+
+
+def test_rule_search_regex_stays_case_insensitive(repo):
+    _rule(repo)
+    code, out, _ = run_cli(repo, "rule", "search", "--regex", "SMALL")
+    assert code == 0 and "r-style" in out
+
+
+def test_the_like_fallback_returns_only_rows_that_share_a_term(repo, log):
+    from ddflow.config import Config
+    from ddflow.infra.store import Store
+
+    _lessons(log)
+    cfg = Config.load()
+    cfg.lessons.search_backend = "like"
+    st = Store(repo, cfg)
+    st.rebuild(log)
+    assert [r["id"] for r in st.search("lessons", "unrelated", 20)] == ["L4"]
