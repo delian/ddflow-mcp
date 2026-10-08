@@ -204,9 +204,10 @@ def detect(root: Path) -> Runner | None:
     package = root / "package.json"
     if package.is_file():
         try:
-            scripts = json.loads(file_text(package)).get("scripts") or {}
+            manifest = json.loads(file_text(package))
         except json.JSONDecodeError:
-            scripts = {}
+            manifest = {}
+        scripts = manifest.get("scripts") or {} if isinstance(manifest, dict) else {}
         if isinstance(scripts, dict) and scripts.get("test"):
             return Runner("node", "npm test --silent", str(package))
     makefile = root / "Makefile"
