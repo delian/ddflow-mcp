@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import records as R
 from ..vocabulary import sources
 from ._common import _api
 
@@ -227,28 +228,5 @@ TOOLS: dict[str, dict[str, Any]] = {
         # standing in, not the primary the server was started on.
         "wants_called_from": True,
     },
-    "ddflow_session_prompt": {
-        "description": (
-            "Record the operator's prompt verbatim. This is what makes the project "
-            "reconstructible from the log alone if everything else is lost. Secrets are "
-            "redacted before anything touches disk. Call it once per operator turn."
-        ),
-        "properties": {
-            "session": (
-                "string",
-                "Session id; omit for the latest open.",
-                False,
-            ),
-            "text": ("string", "The prompt, verbatim.", True),
-            "item": ("string", "Item it concerns.", False),
-        },
-        "api": lambda repo, a, agent: _api().session_prompt(
-            repo,
-            a.get("session", "") or "",
-            a.get("text", "") or "",
-            item=a.get("item", "") or "",
-            agent=agent,
-        ),
-        "payload": ("redactions", "session", "how"),
-    },
+    "ddflow_session_prompt": R.BY_TOOL["ddflow_session_prompt"].tool_entry(),
 }
