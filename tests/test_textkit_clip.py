@@ -71,9 +71,23 @@ def test_bugreport_cut(s, n, old):
     assert BR._cut(s, n) == old
 
 
+def _tail_expected(s, n):
+    """The recorded tail, except that one starting inside a redaction mark now starts after
+    it. Worked out from the input with a regex, not with the code under test."""
+    if len(s) <= n:
+        return s
+    start = len(s) - n
+    for m in re.finditer(r"\[REDACTED:[^\]]*\]", s):
+        if m.start() < start < m.end():
+            start = m.end()
+    return "[...]\n" + s[start:]
+
+
 @pytest.mark.parametrize("s,n,old", GOLDEN["bug_tail"])
 def test_bugreport_tail(s, n, old):
-    assert BR._tail(s, n) == old
+    assert BR._tail(s, n) == _tail_expected(s, n)
+    if "[REDACTED:" not in s:
+        assert BR._tail(s, n) == old
 
 
 @pytest.mark.parametrize("parts,old", GOLDEN["forge_clip"])
@@ -115,6 +129,10 @@ def test_a_cut_never_ends_inside_a_redaction_mark_at_any_site():
         MD._clip(text, 160),
         FG._clip([text * 30]),
         ST.summarise_row("items", {"id": "I", "title": "t", "body": text}, 160)[1],
+        BR._tail(text, 100),
+        SE._snippet(text, (150, 160)),
+        SE._snippet(text, (120, 125)),
+        FR.truncate("y" * 5 + text, 160),
     ):
         for m in re.finditer(r"\[REDACTED:", got):
             assert "]" in got[m.start() :], got[m.start() :]
@@ -164,3 +182,17 @@ def test_window_marks_each_open_side():
     assert T.window("0123456789", 3, 4) == "…3456…"
     assert T.window("0123456789", 6, 4) == "…6789"
     assert T.window("012", 0, 4) == "012"
+
+
+def test_window_and_tail_do_not_start_or_end_inside_a_mark():
+    text = "a" * 20 + "[REDACTED:secret]" + "b" * 20
+    # window ends inside the mark: it stops before it
+    assert T.window(text, 0, 30) == "a" * 20 + "…"
+    # window starts inside the mark: it begins after the closing bracket
+    first = T.window(text, 25, 20)
+    assert first.startswith("…bbb") and "ACTED" not in first
+    # a tail that would start inside the mark starts after it
+    assert T.clip(text, 22, side="tail", marker=">") == ">" + "b" * 20
+    # a line clip whose first line is cut mid-mark stops before the mark
+    out = T.clip_lines(text + "\n", 40, lambda n: f"[+{n}]\n")
+    assert "[REDACTED:" not in out or "]" in out[out.rfind("[REDACTED:") :]

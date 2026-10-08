@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-#: The start of a redaction mark (`core.redact`): `[REDACTED:<kind>]`. A cut never leaves
-#: the mark half written.
+#: The start of a redaction mark (`core.redact`): `[REDACTED:<kind>]`. A cut never keeps a
+#: half-written mark from here on; a cut inside these ten characters themselves ("[REDA")
+#: keeps the fragment, as the clipper this came from always did.
 MARK_START = "[REDACTED:"
 
 
@@ -34,6 +35,16 @@ def whole_marks(head: str) -> str:
     if start != -1 and "]" not in head[start:]:
         return head[:start]
     return head
+
+
+def _after_mark(text: str, start: int) -> int:
+    """``start``, moved past the end of the redaction mark it falls inside (the first ``]``
+    after it); ``start`` itself when it falls inside none, or the mark never closes."""
+    mark = text.rfind(MARK_START, 0, start)
+    if mark == -1 or "]" in text[mark:start]:
+        return start
+    close = text.find("]", start)
+    return close + 1 if close != -1 else start
 
 
 def clip(
@@ -56,7 +67,8 @@ def clip(
     the start and puts ``marker`` after it; ``side="tail"`` keeps the end and puts
     ``marker`` before it. ``boundary="word"`` backs the head up to the last space (a
     head with no space is kept whole); ``rstrip`` trims the cut head's trailing whitespace
-    before the marker. A head never ends inside a ``[REDACTED:...]`` mark.
+    before the marker. A head never ends inside a ``[REDACTED:...]`` mark, and a tail never
+    starts inside one (it begins after the mark's ``]``).
     """
     size = len(text.encode("utf-8")) if unit == "bytes" else len(text)
     if size <= limit:
@@ -67,6 +79,8 @@ def clip(
             tail = text.encode("utf-8")[-budget:].decode("utf-8", "ignore") if budget > 0 else ""
         else:
             tail = text[-budget:] if budget > 0 else ""
+        if tail and unit != "bytes":
+            tail = text[_after_mark(text, len(text) - len(tail)) :]
         return marker + tail
     head = whole_marks(_head(text, budget, unit))
     if boundary == "word":
@@ -78,12 +92,11 @@ def clip(
 
 def window(text: str, start: int, width: int, marker: str = "…") -> str:
     """``width`` characters of ``text`` from ``start``, with ``marker`` on each side that
-    has more text beyond it (a snippet around a hit)."""
-    return (
-        (marker if start else "")
-        + text[start : start + width]
-        + (marker if start + width < len(text) else "")
-    )
+    has more text beyond it (a snippet around a hit). The window neither starts nor ends
+    inside a redaction mark."""
+    first = _after_mark(text, start)
+    body = whole_marks(text[first : start + width]) if first < start + width else ""
+    return (marker if first else "") + body + (marker if start + width < len(text) else "")
 
 
 def clip_lines(text: str, max_bytes: int, footer: Callable[[int], str]) -> str:
@@ -121,6 +134,6 @@ def clip_lines(text: str, max_bytes: int, footer: Callable[[int], str]) -> str:
         room = max_bytes - size(footer(n)) - 1
         if room <= 0:
             return footer(n)
-        cut = _head(lines[0], room, "bytes")
+        cut = whole_marks(_head(lines[0], room, "bytes"))
         return cut.rstrip("\n") + "\n" + footer(n)
     return "".join(shown) + footer(n - len(shown))
