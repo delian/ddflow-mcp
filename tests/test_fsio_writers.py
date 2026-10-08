@@ -61,7 +61,9 @@ def test_a_ddflow_hook_is_rewritten_through_a_link_and_stays_executable(tmp_path
     )
     assert msg.startswith("updated the ddflow pre-commit hook")
     assert (hooks / "pre-commit").is_symlink()
-    assert impl.read_text() == f"#!/bin/sh\n{E.HOOK_MARKER}\nrun\n"
+    written = impl.read_text()
+    assert written.startswith("#!/bin/sh\n# ddflow:begin hooks/pre-commit ddflow=")
+    assert f"\n{E.HOOK_MARKER}\nrun\n# ddflow:end hooks/pre-commit\n" in written
     assert impl.stat().st_mode & stat.S_IXUSR
     assert _tmp_leftovers(tmp_path) == []
 

@@ -51,12 +51,15 @@ from ...core.model import (
 from ...core.plain import plain  # noqa: F401
 from ...core.schedule import needs_tree  # noqa: F401
 from ...infra import worktree as W  # noqa: F401
+from ...services import gates as G  # noqa: F401
 from ...services import leases as L  # noqa: F401
 from .._base import _load  # noqa: F401
 from ._common import (  # noqa: F401
     _require,
 )
 from .brief import (  # noqa: F401
+    _REFUTED_SHOWN,
+    _refuted_line,
     _waiting_on_you,
     brief,
 )
@@ -83,6 +86,7 @@ from .claim import (  # noqa: F401
 from .complete import (  # noqa: F401
     _abandon_refused,
     _complete_umbrellas_above,
+    _refuted_extra,
     _session_model,
     _umbrella_children,
     abandon,

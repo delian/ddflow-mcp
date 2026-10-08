@@ -27,7 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..infra.fsio import Unreadable, read_json
+from ..infra.fsio import Managed, NewerContent, RegionError, Unreadable, read_json
+from .enforce import backup_edited
 
 #: What identifies OUR hook among the operator's: the subcommand it runs. Matched as a
 #: substring of the command, because the interpreter path in front of it varies.
@@ -159,6 +160,11 @@ class SettingsError(ValueError):
     """The settings file exists and is not a JSON object; nothing was written."""
 
 
+class NewerSettings(SettingsError):
+    """A hook entry a NEWER ddflow wrote: not downgraded (D-compat 2), a refusal (exit 3,
+    "upgrade ddflow to >= X") rather than a failure."""
+
+
 def _read(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -194,7 +200,17 @@ def _hooks_of(group: Any, path: Path) -> list[Any]:
 
 
 def _ours(hook: Any, marker: str = MARKER) -> bool:
+    """Whether a settings entry is ddflow's: its command runs the subcommand `marker`
+    names. Matched in the command LINE, which a stamped command (`_region`) still holds,
+    so entries written before the stamp, and by an older ddflow, are ours too."""
     return isinstance(hook, dict) and marker in str(hook.get("command", ""))
+
+
+def _region(marker: str) -> Managed:
+    """The stamped region a hook command is written as (fsio.Managed, `hooks/<name>`): a
+    shell comment above and below the command line, so the entry says which ddflow wrote
+    it and an older one cannot downgrade it. A shell ignores the comments."""
+    return Managed(marker.replace(" ", "/"), open="#", close="")
 
 
 def _groups(data: dict[str, Any], event: str = "SessionStart") -> list[Any]:
@@ -254,15 +270,28 @@ def install(
     groups = hooks.setdefault(event, [])
     if not isinstance(groups, list):
         raise SettingsError(f"{path}: `hooks.{event}` is not a list; not touching it")
-    entry = {"type": "command", "command": command}
+    region = _region(marker)
+    entry = {"type": "command", "command": region.render(command)}
     for g in groups:
         for i, h in enumerate(_hooks_of(g, path)):
             if _ours(h, marker):
-                if h == entry:
+                have = str(h.get("command", ""))
+                try:
+                    owned = region.owns(have)
+                    wanted = region.splice(have, command) if owned else entry["command"]
+                    edited = owned and region.state(have) == "edited"
+                except NewerContent as exc:
+                    raise NewerSettings(f"{path}: the ddflow {event} hook: {exc}") from exc
+                except RegionError as exc:
+                    raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
+                if wanted == have and h.get("type") == "command":
                     return f"the ddflow {event} hook is already in {path}"
-                g["hooks"][i] = entry
+                saved = ""
+                if edited:
+                    saved = backup_edited(repo, path, "command")
+                g["hooks"][i] = {**h, "type": "command", "command": wanted}
                 _write(path, data)
-                return f"updated the ddflow {event} hook in {path}"
+                return f"updated the ddflow {event} hook in {path}{saved}"
     groups.append({"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]})
     _write(path, data)
     if not purpose:
