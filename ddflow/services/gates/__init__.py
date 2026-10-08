@@ -114,6 +114,8 @@ from .outcomes import (  # noqa: F401
     approve,
     on_refutation,
     record,
+    refuted_line,
+    refuted_passes,
     rounds_line,
     stale_evidence,
     stale_evidence_detail,

@@ -104,6 +104,8 @@ def _recorded_line(r) -> list[str]:
         extras.append(f"{r['lessons']} lesson(s)")
     if r["open_bugs"]:
         extras.append(f"{r['open_bugs']} OPEN bug(s)")
+    if r.get("refuted"):
+        extras.append(f"{r['refuted']} gate(s) passed on refutation (`ddflow gate list --refuted`)")
     return ["", "Recorded: " + " · ".join(extras)] if extras else []
 
 
