@@ -102,3 +102,22 @@ def test_a_binary_add_and_delete_say_which_side_is_missing():
     added, gone = unidiff.files(diff)
     assert (added.old, added.new) == (None, "add.bin")
     assert (gone.old, gone.new) == ("gone.bin", None)
+
+
+def test_two_non_utf8_names_are_not_confused_when_the_diff_drops_one(repo):
+    """Mutant: comparing names through U+FFFD alone. `a\\xe9` and `a\\x80` both become
+    `a\\ufffd` there; the default C-quoted octal spelling keeps them apart."""
+    import os
+
+    one, two = os.fsdecode(b"a\xe9"), os.fsdecode(b"a\x80")
+    for name in (one, two):
+        (repo / name).write_text("1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    for name in (one, two):
+        (repo / name).write_text("2\n")
+    full = _diff(repo)
+    assert W.diff_covers_everything(repo, full) == (True, [])
+    only_one = "".join(s for s in unidiff.sections(full) if "\\351" in s.split("\n")[0])
+    assert only_one
+    assert W.diff_covers_everything(repo, only_one) == (False, [two])
