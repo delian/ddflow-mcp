@@ -1130,6 +1130,10 @@ def _upsert_block(path: Path, section: str) -> str:
         except NewerContent as exc:
             return Refused(f"REFUSED {path.name}: {exc}")
         return f"updated the managed block in {path.name}"
+    if LEGACY_BEGIN in existing and LEGACY_END in existing and not has_legacy_block(existing):
+        return Refused(
+            f"SKIPPED {path.name}: the legacy block markers are reversed; fix them and re-run adopt"
+        )
     if has_legacy_block(existing):
         head = existing[: existing.index(LEGACY_BEGIN)]
         tail = existing[existing.index(LEGACY_END) + len(LEGACY_END) :]
