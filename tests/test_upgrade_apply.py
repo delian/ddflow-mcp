@@ -625,6 +625,25 @@ def test_a_native_block_surface_written_by_a_newer_ddflow_is_a_note(old: Path) -
         )
     )
 
-    state = next(r for r in AD.rules_status(old) if r.path == AD.NATIVE_RULES[key].path)
+    rel = AD.NATIVE_RULES[key].path
+    state = next(r for r in AD.rules_status(old) if r.path == rel)
+    item = next(i for i in plan(old)["categories"]["instructions"] if i["path"] == rel)
 
     assert state.newer and state.stamped
+    assert item["provenance"] == "newer" and item["action"] == UP.NOTE
+    out = go(old, "instructions")
+    assert "Claim v2" in path.read_text() and f"instructions:{rel}" not in ids(out, "applied")
+
+
+def test_a_rules_file_that_is_not_utf8_is_skipped_and_left_whole(old: Path) -> None:
+    from ddflow.services import adopt as AD
+
+    _adopted_old(old)
+    agents = old / "AGENTS.md"
+    raw = b"# caf\xe9 notes\n"
+    agents.write_bytes(raw)
+
+    actions = AD.refresh_docs(old, only=["AGENTS.md"], backup=False)
+
+    assert any(isinstance(a, AD.Refused) and "not UTF-8" in a for a in actions)
+    assert agents.read_bytes() == raw
