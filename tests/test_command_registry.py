@@ -13,7 +13,9 @@ import argparse
 import pytest
 
 from ddflow.api import lifecycle as A_LIFECYCLE
+from ddflow.surfaces import registry as R
 from ddflow.surfaces.cli import build_parser
+from ddflow.surfaces.exemptions import EXEMPTIONS
 from ddflow.surfaces.mcp import TOOLS, Server
 from ddflow.surfaces.parsers._common import GLOBS_HELP, _Globs
 from ddflow.surfaces.registry import (
@@ -243,3 +245,40 @@ def test_a_positional_parameter_is_required_on_both_surfaces():
     add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
     with pytest.raises(SystemExit):
         root.parse_args(["x"])
+
+
+# -- the parity exemptions are fields --------------------------------------------------
+
+
+def test_exemption_derivations():
+    cmds = (
+        Command(path=("mcp",), reason="r" * 30),
+        Command(path=("init",), reason="r" * 30, via=("ddflow_setup",)),
+        Command(path=("task", "list"), via=("ddflow_list", "task")),
+        Command(path=("search",), reason="r" * 30, via=("ddflow_list", "search")),
+        Command(path=(), tool="ddflow_ci", flag_exempt={"--sha": "why"}),
+        Command(path=(), tool="ddflow_brief", prose=True, prose_reason="text"),
+    )
+    assert set(R.exempt_paths(cmds)) == {("mcp",), ("init",)}
+    assert R.routed_paths(cmds) == {
+        ("task", "list"): ("ddflow_list", "task"),
+        ("search",): ("ddflow_list", "search"),
+    }
+    assert R.covering_tools(cmds) == {"init": ("ddflow_setup",)}
+    assert R.declared_words(cmds) == {"mcp"}
+    assert R.flag_exemptions(cmds) == {("ddflow_ci", "--sha"): "why"}
+    assert R.prose_reasons(cmds) == {"ddflow_brief": "text"}
+    with pytest.raises(ValueError):
+        Command(path=("x",), via=("a", "b", "c"))
+
+
+def test_every_declared_exemption_is_well_formed():
+    paths = [c.path for c in EXEMPTIONS if c.path]
+    assert len(paths) == len(set(paths)), "a command is declared twice"
+    for c in EXEMPTIONS:
+        if c.prose:
+            assert len(c.prose_reason) > 20, f"{c.tool}: a prose tool needs its reason"
+        for flag, reason in c.flag_exempt.items():
+            assert flag.startswith("--") and reason, (c.tool, flag)
+        if c.path and not (c.reason or c.via):
+            raise AssertionError(f"{c.path}: neither a reason nor a route")
