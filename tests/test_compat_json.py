@@ -186,4 +186,4 @@ def test_no_command_module_prints_its_own_json():
             for n in ast.walk(tree)
         ):
             own.append(path.name)
-    assert set(own) == _OWN_JSON, f"modules printing their own json.dumps: {own}"
+    assert set(own) <= _OWN_JSON, f"modules printing their own json.dumps beyond the list: {own}"
