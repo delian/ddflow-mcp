@@ -227,8 +227,22 @@ def test_a_client_that_goes_away_does_not_lose_the_run(repo):
         _stop(proc)
 
 
+def _until(check, timeout_s: float = DEADLINE_S):
+    """Poll `check()` until it is truthy or the deadline; the last value either way."""
+    end = time.monotonic() + timeout_s
+    value = check()
+    while not value and time.monotonic() < end:
+        time.sleep(0.05)
+        value = check()
+    return value
+
+
 def test_a_burst_of_long_calls_is_capped_not_all_started(repo):
-    """Each worker is a whole interpreter: past `MAX_WORKERS` a call is answered busy."""
+    """Each worker is a whole interpreter: past `MAX_WORKERS` a call is answered busy.
+
+    B306fd11bc8: the workers' own `ddflow_wait` timeout used to run out before a late
+    check counted them. The waits now outlast the check, and the worker count is polled
+    to the cap rather than read once."""
     from ddflow.surfaces.mcp import MAX_WORKERS
 
     _held(repo)
@@ -237,10 +251,13 @@ def test_a_burst_of_long_calls_is_capped_not_all_started(repo):
         _start(proc)
         ids = list(range(2, 3 + MAX_WORKERS))
         for rid in ids:
-            _send(proc, "tools/call", _call("ddflow_wait", item="P1.T1", timeout=20, poll=0.2), rid)
-        busy = _frames(proc, {ids[-1]}, timeout_s=15)
+            _send(
+                proc, "tools/call", _call("ddflow_wait", item="P1.T1", timeout=300, poll=0.2), rid
+            )
+        busy = _frames(proc, {ids[-1]})
         assert [f["id"] for f in busy] == [ids[-1]], busy
         assert busy[0]["result"]["_meta"]["exit"] == 2
+        assert _until(lambda: len(_workers(proc.pid)) >= MAX_WORKERS), _workers(proc.pid)
         assert len(_workers(proc.pid)) == MAX_WORKERS
         run_cli(repo, "--agent", "holder", "release", "P1.T1")
         assert {f["id"] for f in _frames(proc, set(ids[:-1]))} == set(ids[:-1])
