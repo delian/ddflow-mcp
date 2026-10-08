@@ -2,7 +2,7 @@
 
 A source says how to enumerate its rows -- id, kind, state, date, owner, phase and the text
 that is matched -- and the engine ranks, filters and cuts them the same way for every source
-(D-unify 3: `ddflow search --source ...` is the one search; `recall` is its budgeted view).
+(D-unify 3: `ddflow search` is the one search, selecting sources with `--kind`; `recall` is its budgeted view).
 """
 
 from __future__ import annotations
