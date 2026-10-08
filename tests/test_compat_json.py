@@ -256,6 +256,7 @@ def test_a_flag_selects_the_tool_argparse_resolved_it_to():
     assert name("import") == "import"
     assert name("doctor", "--upgrade") == "upgrade"
     assert name("companions", "--verify") == "companions_verify"
+    assert name("companions", "list", "--verify") == "companions_verify"
 
 
 def test_parsed_path_is_what_argparse_took():
