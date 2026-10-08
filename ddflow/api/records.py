@@ -481,8 +481,6 @@ def record_revise(
         rid,
         stored,
         source=prev.source,
-        title=str(stored.get(kind.title, "")),
-        body=_body(kind, stored),
         provenance={"revised": reason.strip()},
         agent=agent,
     )
