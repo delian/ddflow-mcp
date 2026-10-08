@@ -4459,7 +4459,7 @@ Five states are detected — `current`, `stale` (drifted from what this version 
 
 - **From a shell**, the operator is right there: `ddflow adopt --refresh-docs` rewrites
   the block (plain `ddflow adopt` does too, and also rewrites MCP launches). It
-  replaces only what is between the `DDFLOW:BEGIN`/`DDFLOW:END` markers and leaves the rest
+  replaces only what is between the `ddflow:begin`/`ddflow:end rules/work-queue` markers and leaves the rest
   of your file alone, and re-running it is a no-op. `ddflow init` **reports** the problem
   and does not write — writing prose into your `AGENTS.md` is not what `init` was asked to
   do.
