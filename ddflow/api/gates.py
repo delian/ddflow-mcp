@@ -141,7 +141,10 @@ def list_gates(repo: Path, *, refuted: bool = False, since: str = "", agent: str
     if since and not refuted:
         return O.failed("gate.list", "--since narrows --refuted; give both")
     if refuted:
-        rows = G.refuted_passes(st, since=since)
+        try:
+            rows = G.refuted_passes(st, since=since)
+        except ValueError:
+            return O.failed("gate.list", f"--since {since!r} is not an ISO date or timestamp")
         lines = [G.refuted_line(r) + f"  [{r['state']}] {r['title']}" for r in rows]
         return O.ok(
             "gate.list",
