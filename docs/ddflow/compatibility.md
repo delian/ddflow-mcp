@@ -91,4 +91,4 @@ What checks this contract, and which tasks complete it:
 | unknown config, events and regions are preserved; only direct conflicts are refused | B-uni-compat-config, B-uni-compat-events, B-uni-compat-artifacts |
 | every `--json` and MCP result names its schema version | B-uni-compat-json |
 | surface snapshots (help tree, `tools/list`, JSON schemas, `config --explain`, event kinds) compared with the previous release | B-uni-compat-tests |
-| the release's bump level comes from the declared impact in the upgrade manifest (`scripts/release_impact.py`, read by `publish.yml`), and an undeclared surface change or a too-small version step refuses the release (`scripts/release.sh`) | `tests/test_release_gate.py` |
+| the release's bump level comes from the declared impact in the upgrade manifest (`scripts/release_impact.py`, read by `publish.yml`), and an undeclared surface change or a too-small version step refuses the release (`scripts/release.sh`) | B-uni-compat-release-gate: `tests/test_release_gate.py` |
