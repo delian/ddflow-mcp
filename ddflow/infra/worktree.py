@@ -73,7 +73,8 @@ def scratch_tree(
     ``detach`` checks out the commit, not the branch ``ref`` names (git allows a branch in
     one tree only). Yields a `Scratch` whose ``path`` is None when git refused, so the
     caller words its own failure from ``add``. Nothing is left behind: the tree is removed
-    (forced), pruned, and its directory deleted whatever the body did.
+    (forced), its directory deleted and the registry pruned, in that order, whatever the
+    body did.
     """
     root = Path(root)
     tmp = Path(tempfile.mkdtemp(prefix=prefix, dir=under))
