@@ -126,6 +126,10 @@ def declare(section: str) -> Callable[[type], type]:
             key = f"{section}.{f.name}"
             if key in KNOB_DOCS or key in DECLARED:
                 raise ValueError(f"knob {key} is declared twice")
+            if key in RENAMED:  # the order sections are declared in must not matter
+                raise ValueError(
+                    f"{key} is renamed_from of {RENAMED[key][0]} but is also a live key"
+                )
             KNOB_DOCS[key] = meta.doc
             DECLARED[key] = meta
             DECLARED_IN[key] = cls.__module__

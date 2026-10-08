@@ -190,9 +190,12 @@ def test_main_says_so_once_on_stderr(monkeypatch, capsys):
     )
     monkeypatch.setattr(cli, "build_parser", lambda: _parser(cmd))
     monkeypatch.setattr(cli, "Ctx", lambda a: None)
+    monkeypatch.setattr(cli, "_NOTICES", R.Notices())
     assert cli.main(["display", "I1"]) == 0
     err = capsys.readouterr().err
     assert ran == ["I1"] and err.count("deprecated") == 1 and "'display'" in err
+    assert cli.main(["display", "I2"]) == 0  # the same alias again: said once
+    assert ran == ["I1", "I2"] and "deprecated" not in capsys.readouterr().err
     assert cli.main(["show", "I1"]) == 0
     assert "deprecated" not in capsys.readouterr().err
 
@@ -406,3 +409,90 @@ def test_no_declared_old_key_is_also_a_live_knob():
     for old, (new, since, removed_in) in RENAMED.items():
         assert old not in live and new in live
         check_rename(old, since, removed_in)
+
+
+# -- the review's findings, each pinned ---------------------------------------------------
+
+
+def test_an_option_value_is_not_suggested_a_command(capsys):
+    cmd = Command(
+        path=("search",),
+        params=(Param("mode", choices=("table", "json")),),
+        handler=lambda a, c: 0,
+    )
+    root = _parser(cmd)
+    with pytest.raises(SystemExit):
+        root.parse_args(["search", "--mode", "sear"])
+    assert "Did you mean" not in capsys.readouterr().err
+
+
+def test_a_flag_alias_declared_above_the_command_is_noticed():
+    root = SuggestingParser(prog="ddflow")
+    root.add_argument("--verbose", action="store_true")
+    root._option_string_actions["--old-verbose"] = root._actions[-1]
+    root._compat_flags = {"--old-verbose": Alias("flag", "--old-verbose", "--verbose", SINCE)}
+    add_commands(root.add_subparsers(dest="cmd", required=True), [_show()])
+    typed = ["--old-verbose", "show", "I1"]
+    assert [a.old for a in R.used_aliases(root, root.parse_args(typed), typed)] == ["--old-verbose"]
+
+
+def test_a_positional_cannot_carry_a_flag_alias():
+    with pytest.raises(ValueError, match="positional"):
+        Param("file", positional=True, aliases=("-f",), deprecated_since=SINCE)
+
+
+def test_an_alias_cannot_shadow_another_parameter():
+    with pytest.raises(ValueError, match="alias"):
+        Command(
+            path=("x",),
+            params=(Param("source"), Param("sources", aliases=("source",), deprecated_since=SINCE)),
+        )
+    with pytest.raises(ValueError, match="alias"):
+        Command(
+            path=(),
+            tool="t",
+            params=(
+                Param("a", aliases=("old",), deprecated_since=SINCE),
+                Param("b", aliases=("old",), deprecated_since=SINCE),
+            ),
+        )
+
+
+def test_removed_in_and_replacement_reach_the_alias():
+    cmd = Command(
+        path=("rules",),
+        tool="ddflow_rules",
+        params=(Param("n", aliases=("count",), deprecated_since="0.2.0", removed_in="2.0"),),
+        aliases=("rule",),
+        tool_aliases=("ddflow_rule",),
+        deprecated_since="0.2.0",
+        removed_in="1.5",
+        replacement="rules --list",
+    )
+    (tool,) = cmd.tool_alias_list()
+    assert (tool.new, tool.removed_in, tool.since) == ("rules --list", "1.5", "0.2.0")
+    assert cmd.tool_entry()["arg_aliases"]["count"].removed_in == "2.0"
+    assert "1.5" in tool.notice() and "rules --list" in tool.notice()
+
+
+def test_every_hint_is_found_for_a_one_shot_known_list():
+    hint = R.unknown_arg_hint((n for n in ("source", "format")), ["sorce", "fromat"])
+    assert "'source' (for 'sorce')" in hint and "'format' (for 'fromat')" in hint
+
+
+def test_a_live_key_declared_after_its_old_name_is_refused(monkeypatch):
+    from ddflow.config_sections import _docs
+
+    monkeypatch.setitem(_docs.RENAMED, "zz.old", ("zz.new", SINCE, "1.0"))
+    monkeypatch.setattr(_docs, "KNOB_DOCS", dict(_docs.KNOB_DOCS))
+    monkeypatch.setattr(_docs, "DECLARED", dict(_docs.DECLARED))
+    monkeypatch.setattr(_docs, "DECLARED_IN", dict(_docs.DECLARED_IN))
+
+    from dataclasses import dataclass
+
+    @dataclass
+    class Late:
+        old: int = knob(1, doc="d")
+
+    with pytest.raises(ValueError, match="also a live key"):
+        _docs.declare("zz")(Late)
