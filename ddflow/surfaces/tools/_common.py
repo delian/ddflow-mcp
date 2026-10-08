@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...api.lifecycle.wait import WAIT_MAX_S
+from ...services.waits import MAX_WAIT_S
 
 
 def _AGENT_KEYS() -> list[str]:
@@ -33,7 +33,7 @@ def _AGENT_KEYS() -> list[str]:
 #: Capped for the same reason, at the cap the CLI's wait has too; an agent that wants longer
 #: calls again.
 MCP_WAIT_DEFAULT_S = 300
-MCP_WAIT_MAX_S = WAIT_MAX_S  # one cap for both surfaces: api.lifecycle.wait
+MCP_WAIT_MAX_S = MAX_WAIT_S  # one cap for both surfaces: services.waits
 
 
 def _wait_timeout(a: dict[str, Any]) -> float:

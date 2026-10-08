@@ -43,7 +43,7 @@ def test_a_bare_number_takes_the_unit_asked_for():
 @pytest.mark.parametrize(
     "bad",
     ["", " ", "m", "-5", "5x", "1h30", "1h 30", "5 min", "abc", "1..5s", True, None, -1, float("nan"),
-     float("inf"), [30]],
+     float("inf"), [30], 10**400, "9" * 400],
 )  # fmt: skip
 def test_anything_else_is_refused_not_read_as_zero(bad):
     with pytest.raises(ValueError):
@@ -128,3 +128,25 @@ def test_a_wait_within_the_cap_says_nothing_about_it(repo):
     seen: list[str] = []
     W.wait(repo, item="", timeout_s=0, poll_s=1, on_progress=seen.append)
     assert not any("ask again" in m for m in seen)
+
+
+def test_a_huge_alias_is_reported_not_raised(tmp_path):
+    t, errors = TR.build("t", _spec(window_s=10**400))
+    assert t is None
+    assert any("window_s" in e for e in errors)
+
+
+def test_the_cap_notice_is_only_given_to_a_caller_that_will_wait(repo):
+    seen: list[str] = []
+    out = W.wait(repo, item="", timeout_s=10**6, poll_s=1, on_progress=seen.append)
+    assert out.exit == 2  # nothing to wait for: it answers at once
+    assert not any("ask again" in m for m in seen), seen
+
+
+def test_the_tool_table_does_not_pull_in_the_api():
+    import subprocess
+    import sys
+
+    code = "import sys, ddflow.surfaces.tools._common; print('ddflow.api' in sys.modules)"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.stdout.strip() == "False", out.stderr

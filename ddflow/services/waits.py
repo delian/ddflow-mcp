@@ -55,6 +55,11 @@ POLL_S = 2.0
 #: its own deadline.
 RECHECK_S = 30.0
 
+#: The longest one wait may block, whoever asks (CLI or MCP). The client -- not ddflow --
+#: decides when a call has hung, so a longer ask is shortened and says so; the caller that
+#: wants more waits again, which also re-checks that waiting is still the right move.
+MAX_WAIT_S = 1800
+
 
 @dataclass
 class Waiter:

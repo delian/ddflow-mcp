@@ -167,16 +167,25 @@ def parse_duration(value: str | int | float, *, unit: str = "s") -> float:
     if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         raise ValueError(f"a duration is a number or text such as 30m, not {value!r}")
     if not isinstance(value, str):
-        if value < 0 or not math.isfinite(value):
-            raise ValueError(f"a duration cannot be {value!r}")
-        return float(value) * per
+        try:
+            seconds = float(value) * per
+        except OverflowError:
+            seconds = math.inf  # an int beyond a float: refused below, as ``inf`` is
+        return _finite(seconds, value)
     text = value.strip().lower().replace(" ", "")
     parts = _DURATION_PART.findall(text)
     if not text or "".join(n + u for n, u in parts) != text:
         raise ValueError(f"{value!r} is not a duration: use e.g. 90, 30m, 1.5h or 1h30m")
     if len(parts) > 1 and any(not u for _n, u in parts):
         raise ValueError(f"{value!r}: every part of a compound duration needs a unit")
-    return sum(float(n) * (DURATION_UNITS[u] if u else per) for n, u in parts)
+    return _finite(sum(float(n) * (DURATION_UNITS[u] if u else per) for n, u in parts), value)
+
+
+def _finite(seconds: float, value: object) -> float:
+    """``seconds`` if it is a usable length of time; a ValueError naming ``value`` if not."""
+    if seconds < 0 or not math.isfinite(seconds):
+        raise ValueError(f"a duration cannot be {value!r}")
+    return seconds
 
 
 def parse_date(text: str) -> date:
