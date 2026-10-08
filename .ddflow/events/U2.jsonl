@@ -3296,3 +3296,4 @@
 {"agent":"U2","data":{"at":1791452311.6883302,"holder":"U2"},"id":"e553a08b083010fda517926d0","kind":"lease.renewed","lamport":39735,"schema":1,"subject":"B-upgrade.4-apply.1c-knobs","ts":"2026-10-08T09:38:31.788326Z"}
 {"agent":"U2","data":{"at":1791452400.652398,"holder":"U2"},"id":"eed5f64703899a8a85d72ca2d","kind":"lease.renewed","lamport":39752,"schema":1,"subject":"B-upgrade.4-apply.1c-knobs","ts":"2026-10-08T09:40:00.743856Z"}
 {"agent":"U2","data":{"at":1791452435.0525084,"holder":"U2"},"id":"eaacf4a7683071fc4b14dbadb","kind":"lease.renewed","lamport":39757,"schema":1,"subject":"B-upgrade.4-apply.1c-knobs","ts":"2026-10-08T09:40:35.150507Z"}
+{"agent":"U2","data":{"at":1791452558.18593,"holder":"U2"},"id":"e006b1c3b955c98421c80af11","kind":"lease.renewed","lamport":39774,"schema":1,"subject":"B-upgrade.4-apply.1c-knobs","ts":"2026-10-08T09:42:38.282446Z"}
