@@ -339,3 +339,78 @@ def test_rewrite_keeps_what_stands_between_the_words_of_a_command(tmp_path):
     text = path.read_text()
     assert "`ddflow  docs  show`" in text and "`ddflow docs --long show`" in text
     assert Managed("rules/work-queue").state(text) == "current"
+
+
+def test_a_quoted_value_of_a_global_option_is_skipped_whole():
+    assert _refs('entry: ddflow --repo "my repo" gate bogus', code=True) == [
+        ("gate bogus", "unknown", "")
+    ]
+    assert _refs("x: ddflow --reason 'stale refs' doc show", code=True) == [
+        ("doc show", "deprecated", "docs show")
+    ]
+
+
+def test_a_hook_is_located_by_its_whole_command_not_a_prefix_another_shares(tmp_path):
+    first = Managed("hooks/session-start-extra", open="#", close="").render("ddflow next\n")
+    second = Managed("hooks/session-start", open="#", close="").render("ddflow doc show\n")
+    path = tmp_path / ".claude" / "settings.json"
+    path.parent.mkdir()
+    path.write_text(
+        json.dumps(
+            {"hooks": {"SessionStart": [{"hooks": [{"command": first}, {"command": second}]}]}},
+            indent=2,
+        )
+        + "\n"
+    )
+    (f,) = C.scan(tmp_path, VOCAB)
+    assert (
+        f.line
+        == path.read_text()
+        .splitlines()
+        .index(next(x for x in path.read_text().splitlines() if "session-start " in x))
+        + 1
+    )
+
+
+def test_a_stale_launcher_in_a_renamed_hook_is_still_reported(tmp_path, monkeypatch):
+    from ddflow.services import launchers as L
+
+    spec = CH.HookSpec(**{**CH.spec("claude", "session-start").__dict__, "run": "start-session"})
+    CH.install_spec(tmp_path, spec)
+    path = tmp_path / CH.CLAUDE_SETTINGS
+    data = json.loads(path.read_text())
+    cmd = data["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    data["hooks"]["SessionStart"][0]["hooks"][0]["command"] = cmd.replace(
+        'if [ -x "', 'if [ -x "/gone/'
+    )
+    path.write_text(json.dumps(data))
+    seen = []
+    monkeypatch.setattr(L, "check_command", lambda where, command, fix, path="": seen.append(where))
+    L.check_settings(tmp_path)
+    assert seen, "a hook whose command text no longer says `hooks session-start` was skipped"
+
+
+def test_installing_a_renamed_spec_over_an_unstamped_entry_leaves_one_stamped_hook(tmp_path):
+    spec = CH.spec("claude", "session-start")
+    renamed = CH.HookSpec(**{**spec.__dict__, "run": "start-session"})
+    path = tmp_path / CH.CLAUDE_SETTINGS
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [
+                        {"hooks": [{"type": "command", "command": "ddflow hooks session-start"}]}
+                    ]
+                }
+            }
+        )
+    )
+    CH.install_spec(tmp_path, renamed)
+    cmds = [
+        h["command"]
+        for g in json.loads(path.read_text())["hooks"]["SessionStart"]
+        for h in g["hooks"]
+    ]
+    assert len(cmds) == 1 and "hooks start-session" in cmds[0]
+    assert Managed("hooks/session-start", open="#", close="").owns(cmds[0])
