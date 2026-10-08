@@ -101,12 +101,18 @@ def _config_files(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
     return [both[1] if src.startswith("local") else both[0]]
 
 
+def _writes_config(item: dict[str, Any]) -> bool:
+    """Does applying this config item change a file? Only a value somebody SET does: a knob
+    at its shipped default takes the new default by itself, even when the policy makes the
+    operator confirm it, and writing it out would pin it as if they had chosen it."""
+    return item["action"] == UP.OPERATOR and bool(item.get("set_by"))
+
+
 def touched(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
     """The files applying ``item`` may change (the ones a backup must hold)."""
     cat = item["category"]
     if cat == "config":
-        needs_write = item["action"] == UP.OPERATOR
-        return _config_files(repo, cfg, item) if needs_write else []
+        return _config_files(repo, cfg, item) if _writes_config(item) else []
     if cat == "instructions":
         return [_abs(repo, item["path"])]
     out = [_abs(repo, p) for p in item.get("paths", [])]
@@ -142,7 +148,7 @@ def _value_text(value: Any) -> str:
 def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
     key, kind = item["key"], item["change"]
     src = cfg.sources.get(key, "default")
-    if item["action"] != UP.OPERATOR:
+    if not _writes_config(item):
         return ACKNOWLEDGED, (
             f"{key}: the new default applies on its own"
             + (

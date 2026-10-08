@@ -78,9 +78,13 @@ def prune(repo: Path, keep: int) -> list[str]:
     root = Path(repo) / BACKUPS
     if keep <= 0 or not root.is_dir():
         return []
-    ours = sorted(p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+    try:
+        ours = sorted(p for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+    except OSError:  # unreadable or gone meanwhile: nothing to prune, and nothing to fail over
+        return []
     removed: list[str] = []
     for old in ours[: max(0, len(ours) - keep)]:
         shutil.rmtree(old, ignore_errors=True)
-        removed.append(old.name)
+        if not old.exists():  # a removal that was refused is not a removal
+            removed.append(old.name)
     return removed
