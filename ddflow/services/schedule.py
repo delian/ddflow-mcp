@@ -28,7 +28,6 @@ from ..config import Config
 from ..core import fieldcheck as FC
 from ..core import schedule as CS
 from ..core.model import SCHEDULE_FIELDS, Schedule, State
-from .cadence import calendar
 from .tomldir import load_toml_dir
 
 #: Where a project keeps its job files.
@@ -39,7 +38,8 @@ CADENCE_KEYS = ("every_days", "every_tasks", "every_phases")
 MODES = ("report", "fix")
 MISSED = ("skip", "once")
 BUDGET_KEYS = ("max_items", "max_bugs", "max_turns")
-#: The count-based `[cadence]` passes, as `count_due` reads them: name -> (knob, cadence key).
+#: The count-based `[cadence]` passes: name -> (knob, cadence key). The ONE table; `count_due`,
+#: the job view and `rates.cadence_rates` all read it through `count_passes`.
 COUNT_PASSES: tuple[tuple[str, str, str], ...] = (
     ("integration_tests", "integration_tests_every_tasks", "every_tasks"),
     ("dedupe_sweep", "dedupe_sweep_every_tasks", "every_tasks"),
@@ -47,6 +47,8 @@ COUNT_PASSES: tuple[tuple[str, str, str], ...] = (
     ("mutation_tests", "mutation_tests_every_phases", "every_phases"),
     ("lessons_pass", "lessons_pass_every_phases", "every_phases"),
 )
+#: What a count pass counts, by its cadence key.
+COUNT_UNITS = {"every_tasks": "tasks", "every_phases": "phases"}
 #: `Defined.source` of a recorded definition and of a `[cadence]` pass; a file's is
 #: "file:<path>".
 SOURCE_LOG, SOURCE_CADENCE = "log", "cadence"
@@ -75,6 +77,89 @@ class Definitions:
     #: Problems that keep a source or a job out of `jobs`, or make the graph unusable:
     #: a malformed file, an unknown field, a needs cycle, a needs naming no job.
     errors: list[str] = field(default_factory=list)
+
+
+# -- the count evaluator ---------------------------------------------------------------------
+
+
+def done_counts(st: State) -> tuple[int, int]:
+    """(completed tasks, completed phases): the work a count pass measures."""
+    done = [i.kind for i in st.items.values() if i.state == "done"]
+    return done.count("task"), done.count("phase")
+
+
+@dataclass(frozen=True)
+class CountPass:
+    """A count pass as the evaluator reads it: its knob's value and what it counts."""
+
+    name: str
+    every: int
+    unit: str  # "tasks" | "phases"
+    count: int  # completed work of that unit
+
+
+def count_every(cfg: Config) -> dict[str, int]:
+    """Each count pass's period, from its `[cadence]` knob. Spelt out so the knobs stay
+    readable by the dead-knob scan (`getattr(c, knob)` hid them from it)."""
+    c = cfg.cadence
+    return {
+        "integration_tests": c.integration_tests_every_tasks,
+        "dedupe_sweep": c.dedupe_sweep_every_tasks,
+        "architecture_review": c.architecture_review_every_phases,
+        "mutation_tests": c.mutation_tests_every_phases,
+        "lessons_pass": c.lessons_pass_every_phases,
+    }
+
+
+def count_passes(st: State, cfg: Config) -> list[CountPass]:
+    """Every count-based `[cadence]` pass with its period and the completions so far."""
+    tasks, phases = done_counts(st)
+    out = []
+    for name, knob, key in COUNT_PASSES:
+        unit = COUNT_UNITS[key]
+        out.append(
+            CountPass(name, getattr(cfg.cadence, knob), unit, tasks if unit == "tasks" else phases)
+        )
+    return out
+
+
+def count_unit(name: str) -> str:
+    """What the count pass `name` counts, "tasks" or "phases"; "" for a name that is not one."""
+    return next((COUNT_UNITS[key] for n, _knob, key in COUNT_PASSES if n == name), "")
+
+
+def count_at_last_run(st: State, name: str) -> int:
+    """The completion count the LAST `cadence.ran` of `name` recorded. A malformed or
+    absent `result` reads as 0 -- treating an unparseable record as "it never ran" errs
+    toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one)."""
+    runs = st.cadences.get(name, [])
+    try:
+        return int(runs[-1].get("result", "0") or 0) if runs else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def calendar(cfg) -> dict[str, float]:
+    """`[cadence] every_days` as name -> days. Raises ValueError naming the knob for an
+    entry that is not `name=<positive number>`: one typo raised a bare float() error,
+    and an entry without `=` was DROPPED -- a weekly pass never reported due, and
+    nothing said the knob was ignored (roborev 830)."""
+    out: dict[str, float] = {}
+    for spec in cfg.cadence.every_days:
+        name, sep, days = spec.partition("=")
+        try:
+            value = float(days) if sep and name.strip() else 0.0
+        except ValueError:
+            value = 0.0
+        # Not `value <= 0`: nan and inf (also "1e309") pass that, and a period no elapsed
+        # time reaches is a pass that silently never falls due (bug B1c68fe5e9c).
+        if not (math.isfinite(value) and value > 0):
+            raise ValueError(
+                f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
+                f'number of days (e.g. "bug_hunt=7")'
+            )
+        out[name.strip()] = value
+    return out
 
 
 # -- one definition ------------------------------------------------------------------------
@@ -205,7 +290,7 @@ def from_cadence(cfg: Config) -> tuple[list[Schedule], list[str]]:
     REPLACES the count pass of its name, as `count_due` is told to -- but one malformed
     entry makes `ddflow cadence` refuse the whole list and leaves every count pass in
     force (`phase_overdue`), so no calendar job is shown then and the entry is reported."""
-    c = cfg.cadence
+    every = count_every(cfg)
     errors: list[str] = []
     try:
         days = calendar(cfg)
@@ -216,8 +301,8 @@ def from_cadence(cfg: Config) -> tuple[list[Schedule], list[str]]:
         Schedule(
             id=name,
             title=f"{name} ([cadence].{knob})",
-            cadence={unit: getattr(c, knob)},
-            enabled=getattr(c, knob) > 0,
+            cadence={unit: every[name]},
+            enabled=every[name] > 0,
         )
         for name, knob, unit in COUNT_PASSES
         if name not in days
