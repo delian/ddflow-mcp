@@ -24,8 +24,8 @@ from typing import TypeVar
 
 from ..config import Config
 from ..infra import worktree as W
-from ..infra.log import EventLog, effective_agent_id
 from . import cleanup as C
+from . import identity as ID
 from .jobs import alive
 
 #: How a `git worktree lock --reason ...` names the process that owns it. The reason is
@@ -298,12 +298,7 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -
     # never carry action "remove". In an adopted project, under the log lock with the
     # leases re-read -- what `cleanup` does -- and recorded (B5e83fb22cb): `dispose_tree`.
     log = (
-        EventLog(
-            repo,
-            effective_agent_id(repo, cfg, agent),  # --agent, DDFLOW_AGENT, [agent].id
-            log_cfg=cfg.log,
-            lock_timeout_s=cfg.lease.acquire_timeout_s,
-        )
+        ID.open_log(repo, cfg, agent)[0]  # --agent, DDFLOW_AGENT, [agent].id
         if (repo / ".ddflow" / "events").is_dir()
         else None
     )
