@@ -34,8 +34,9 @@ TEXT_KINDS = sorted(k for k in KINDS if k in R.LOG_TEXT_FIELDS)
 
 
 def test_every_kind_is_declared() -> None:
-    declared = set(R.LOG_TEXT_FIELDS) | set(R.LOG_NO_TEXT)
-    assert not (set(R.LOG_TEXT_FIELDS) & set(R.LOG_NO_TEXT))
+    declared = set(R.LOG_TEXT_FIELDS) | set(R.LOG_NO_TEXT) | set(R.LOG_ALL_TEXT)
+    classes = [set(R.LOG_TEXT_FIELDS), set(R.LOG_NO_TEXT), set(R.LOG_ALL_TEXT)]
+    assert sum(len(c) for c in classes) == len(declared), "a kind is in two classes"
     assert set(KINDS) <= declared, f"undeclared kinds: {sorted(set(KINDS) - declared)}"
     assert declared <= set(KINDS), f"declared but unknown: {sorted(declared - set(KINDS))}"
 
@@ -170,3 +171,15 @@ def test_a_leaf_under_a_lookup_looking_key_is_still_redacted() -> None:
     flat = json.dumps(out)
     assert SECRET not in flat and "/home/zedd/work" not in flat
     assert out["evidence"]["worktree"] == "/home/zedd/w"  # a path that is opened stays
+
+
+@pytest.mark.parametrize("kind", sorted(R.LOG_ALL_TEXT))
+def test_an_opaque_kind_is_redacted_whole(kind: str, tmp_path: Path, monkeypatch) -> None:
+    """`external.observed` titles and `port.applied` git errors are free text the fixture
+    does not describe (roborev on the first commit)."""
+    monkeypatch.setenv("HOME", "/home/zedd")
+    log = EventLog(tmp_path, "T")
+    log.stamp = False
+    log.append(kind, "s", {"title": PROBE, "reason": PROBE})
+    shard = "".join(p.read_text() for p in (tmp_path / ".ddflow" / "events").glob("*.jsonl"))
+    assert SECRET not in shard and "/home/zedd" not in shard
