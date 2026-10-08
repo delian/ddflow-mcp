@@ -255,3 +255,30 @@ def test_the_backup_modes_the_service_accepts_are_the_knob_choices() -> None:
     from ddflow.config import KNOB_CHOICES
 
     assert UA.BACKUP_MODES == KNOB_CHOICES["upgrade.backup"]
+
+
+def test_prune_never_evicts_the_sidecar_of_a_tag_that_still_exists(old: Path) -> None:
+    hook = old / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\n# ddflow-managed\n")
+    snap = BK.make_snapshot(old, [hook], "a", "b")
+    for n in range(3):
+        BK.make_backup(old, [old / DRIVER], "a", f"later{n}")
+
+    removed = BK.prune(old, 1)
+
+    assert Path(snap.local).is_dir(), "the tag still exists, so does its sidecar"
+    assert Path(snap.local).name not in removed and len(removed) == 2
+    git(old, "tag", "-d", snap.tag)
+    assert Path(snap.local).name in BK.prune(old, 1), "with the tag gone the sidecar goes too"
+
+
+def test_a_backup_with_a_damaged_manifest_is_listed_and_restoring_it_says_why_not(
+    old: Path,
+) -> None:
+    dest = BK.make_backup(old, [old / DRIVER], "a", "b")
+    (dest / BK.MANIFEST).write_text("{not json")
+
+    assert BK.local_backups(old) == [dest.name]
+    with pytest.raises(ValueError):
+        BK.restore(old, "latest")
+    assert A.upgrade(old, restore="latest", agent="upgrader").exit == 1
