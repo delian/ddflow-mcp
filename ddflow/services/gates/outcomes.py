@@ -176,9 +176,7 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         rows=rows,
         silent=[g for g, o in rows if not o],
         triage={
-            g: triage_line(c) + _pass_mark(it, g)
-            for g, _o in rows
-            if (c := triage_counts(it, g))
+            g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))
         },
         rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
     )
