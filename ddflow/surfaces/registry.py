@@ -903,7 +903,8 @@ def command_for_path(
     surfaces tag one result alike. ``routed`` maps a path a selector serves to its tool
     (``task list`` -> ``ddflow_list``), ``covering`` a one-word command a differently named
     tool covers (``init`` -> ``ddflow_setup``); anything else is its words joined by ``_``."""
-    typed = set(argv)
+    words = list(argv)
+    typed = set(words[: words.index("--")] if "--" in words else words)  # past `--` is data
     for (where, flag), name in CLI_FLAG_COMMANDS.items():
         if where == path and flag in typed:
             return name
