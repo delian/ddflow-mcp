@@ -110,7 +110,6 @@ def test_the_removal_is_written_as_the_declared_agent(repo):
 
 # -- dispose_tree: the one removal (B-uni-tree-lifecycle.3-dispose) ----------------------------
 
-import re  # noqa: E402
 import subprocess  # noqa: E402
 
 from ddflow.config import Config  # noqa: E402
@@ -190,13 +189,54 @@ def test_dispose_without_a_log_removes_and_records_nothing(repo):
     assert d.removed and not tree.exists() and _removed_events(repo) == []
 
 
+def _removal_callers(root: Path) -> list[str]:
+    """The modules that CALL `infra.worktree.remove`, under whatever name they bound it:
+    the module under an alias (`W`, `worktree`, ...) or the function imported by name."""
+    import ast
+
+    found = []
+    for path in sorted(root.rglob("*.py")):
+        if path.name == "worktree.py":
+            continue
+        tree = ast.parse(path.read_text())
+        modules: set[str] = set()  # names bound to the worktree module
+        funcs: set[str] = set()  # names bound to its `remove`
+        for n in ast.walk(tree):
+            if isinstance(n, ast.ImportFrom):
+                for a in n.names:
+                    if (n.module or "").endswith("infra") and a.name == "worktree":
+                        modules.add(a.asname or a.name)
+                    elif (n.module or "").endswith("infra.worktree") and a.name == "remove":
+                        funcs.add(a.asname or a.name)
+            elif isinstance(n, ast.Import):
+                for a in n.names:
+                    if a.name.endswith("infra.worktree"):
+                        modules.add(a.asname or a.name)
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Call):
+                continue
+            f = n.func
+            if isinstance(f, ast.Attribute) and f.attr == "remove":
+                base = ast.unparse(f.value)
+                if base in modules:
+                    found.append(str(path.relative_to(root)))
+            elif isinstance(f, ast.Name) and f.id in funcs:
+                found.append(str(path.relative_to(root)))
+    return sorted(set(found))
+
+
 def test_nothing_but_dispose_removes_a_worktree():
     """Merge, the PR flow, cleanup and onboarding all end in `cleanup.dispose_tree`; a new
     caller of `worktree.remove` would be an unguarded, unlogged fifth path."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    callers = sorted(
-        str(p.relative_to(root))
-        for p in root.rglob("*.py")
-        if p.name != "worktree.py" and re.search(r"\bW\.remove\(|worktree\.remove\(", p.read_text())
-    )
-    assert callers == ["services/cleanup.py"], callers
+    assert _removal_callers(root) == ["services/cleanup.py"]
+
+
+def test_the_removal_scan_sees_every_way_to_call_it(tmp_path):
+    (tmp_path / "a.py").write_text("from ..infra import worktree as X\nX.remove(1)\n")
+    (tmp_path / "b.py").write_text("from ..infra.worktree import remove as rm\nrm(1)\n")
+    (tmp_path / "c.py").write_text("from ..infra.worktree import remove\nremove(1)\n")
+    (tmp_path / "d.py").write_text("import ddflow.infra.worktree as w\nw.remove(1)\n")
+    (tmp_path / "e.py").write_text("from ..infra import worktree as W\nW.list_worktrees(1)\n")
+    (tmp_path / "f.py").write_text("items = []\nitems.remove(1)\n")
+    assert _removal_callers(tmp_path) == ["a.py", "b.py", "c.py", "d.py"]
