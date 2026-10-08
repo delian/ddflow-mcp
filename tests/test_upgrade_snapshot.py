@@ -441,7 +441,13 @@ def test_cli_snapshot_needs_apply_and_does_not_contradict_backup(old: Path) -> N
     assert code == 3 and "stands alone" in err
     code, _out, err = run_cli(old, "upgrade", "--restore", "--apply", "hooks")
     assert code == 3 and "stands alone" in err
-    for extra in (("--backup", "none"), ("--backup", "snapshot"), ("--reason", "why")):
+    for extra in (
+        ("--backup", "none"),
+        ("--backup", "snapshot"),
+        ("--reason", "why"),
+        ("--plan",),
+        ("--confirm", "K", "--reason", "why"),
+    ):
         code, _out, err = run_cli(old, "upgrade", "--restore", *extra)
         assert code == 3 and "stands alone" in err, extra
     assert tags(old) == []
@@ -472,6 +478,8 @@ def test_the_mcp_tool_refuses_what_the_cli_refuses(old: Path) -> None:
         {"restore": "latest", "apply": "hooks"},
         {"restore": "latest", "backup": "none"},
         {"restore": "latest", "reason": "why"},
+        {"restore": "latest", "plan": True},
+        {"restore": "latest", "confirm": ["K"], "reason": "why"},
         {"snapshot": True},
         {"apply": "hooks", "snapshot": True, "backup": "none"},
     ):
