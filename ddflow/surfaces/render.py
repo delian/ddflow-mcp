@@ -14,7 +14,7 @@ Standard library only (and the registry): the surfaces may import it.
 from __future__ import annotations
 
 import json
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import Any, TextIO
 
 from .registry import tag_body
@@ -24,9 +24,15 @@ from .registry import tag_body
 _COMMAND: ContextVar[str] = ContextVar("ddflow_command", default="")
 
 
-def set_command(name: str) -> None:
-    """Name the command whose bodies `emit_json` now tags."""
-    _COMMAND.set(name)
+def set_command(name: str) -> Token[str]:
+    """Name the command whose bodies `emit_json` now tags. The token puts the previous name
+    back (`reset_command`): a run that ends must not tag what is printed after it."""
+    return _COMMAND.set(name)
+
+
+def reset_command(token: Token[str]) -> None:
+    """Undo the `set_command` that returned ``token``."""
+    _COMMAND.reset(token)
 
 
 def dumps(data: Any) -> str:

@@ -1803,12 +1803,23 @@
   
   '''
 # ---
+# name: test_help[ddflow rule sync]
+  '''
+  usage: ddflow rule sync [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow rule]
   '''
-  usage: ddflow rule [-h] {add,edit,list,search,show,remove} ...
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove,sync} ...
   
   positional arguments:
-    {add,edit,list,search,show,remove}
+    {add,edit,list,search,show,remove,sync}
+      sync                record hand-edited rule files in the log; write the files the log has and
+                          the disk lacks
   
   options:
     -h, --help            show this help message and exit
@@ -2532,6 +2543,7 @@
     'ddflow rule remove',
     'ddflow rule search',
     'ddflow rule show',
+    'ddflow rule sync',
     'ddflow search',
     'ddflow session',
     'ddflow session adopt-orphans',

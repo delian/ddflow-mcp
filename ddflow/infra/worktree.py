@@ -903,6 +903,11 @@ def load_path(repo: Path, stored: str) -> Path:
     return p if p.is_absolute() else (Path(repo).resolve() / p).resolve()
 
 
+def branch_exists(repo: Path | str, name: str) -> bool:
+    """Is there a local branch ``name``?"""
+    return git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}").ok
+
+
 def branches(repo: Path, prefix: str = "") -> list[str]:
     """Local branches, optionally filtered to a prefix."""
     r = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/")

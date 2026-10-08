@@ -2212,6 +2212,35 @@
   },
   "array_schema": null
  },
+ "ddflow_rule_sync": {
+  "command": "rule_sync",
+  "schema": "rule_sync@1",
+  "shape": "object",
+  "payload": [
+   "recorded",
+   "updated",
+   "restored",
+   "failed"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_sync@1"
+    },
+    "recorded": {},
+    "updated": {},
+    "restored": {},
+    "failed": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_rule_show": {
   "command": "rule_show",
   "schema": "rule_show@1",

@@ -377,6 +377,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_promote_status": (["promote", "status"], {}),
     "ddflow_rule_list": (["rule", "list"], {}),
     "ddflow_rule_search": (["rule", "search", "test"], {"query": "test"}),
+    "ddflow_rule_sync": (["rule", "sync"], {}),
     "ddflow_rule_show": (["rule", "show", "r-test"], {"id": "r-test"}),
 }
 
