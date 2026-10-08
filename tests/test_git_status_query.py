@@ -225,3 +225,87 @@ def test_diff_stat_counts_untracked_files(work):
     (work / "café.txt").write_text("c\n")
     stat = EV.diff_stat(work)
     assert stat["untracked"] == 2 and stat["files"] == 2 and stat["insertions"] == 3
+
+
+# -- the remaining porcelain readers ---------------------------------------------------
+
+
+def test_ignored_files_are_listed_only_when_asked(work):
+    _commit(work, **{".gitignore": "junk\n", "a.txt": "a\n"})
+    (work / "junk").write_text("j\n")
+    assert G.status(work) == []
+    got = G.status(work, ignored="matching")
+    assert [(e.path, e.ignored) for e in got] == [("junk", True)]
+
+
+def test_event_shards_with_changes_are_named_exactly(work):
+    from ddflow.services import eventcommit
+
+    ev = work / ".ddflow" / "events"
+    ev.mkdir(parents=True)
+    (ev / "a.jsonl").write_text("1\n")
+    _commit(work, **{"x.txt": "x\n"})
+    (ev / "a.jsonl").write_text("1\n2\n")  # modified: " M", the first entry's leading space
+    (ev / "café b.jsonl").write_text("3\n")
+    (ev / "note.txt").write_text("n\n")
+    assert eventcommit.uncommitted_shards(work) == [
+        ".ddflow/events/a.jsonl",
+        ".ddflow/events/café b.jsonl",
+    ]
+
+
+def test_event_shards_are_unknown_when_git_cannot_say(tmp_path):
+    from ddflow.services import eventcommit
+
+    assert eventcommit.uncommitted_shards(tmp_path) is None
+
+
+def test_onboard_status_separates_work_from_ignored_and_skips_caches(work):
+    from ddflow.services import onboard
+
+    _commit(work, **{".gitignore": "keep.env\n__pycache__/\n", "a.txt": "a\n"})
+    (work / "a.txt").write_text("b\n")
+    (work / "keep.env").write_text("secret\n")
+    (work / "__pycache__").mkdir()
+    (work / "__pycache__" / "m.pyc").write_text("c\n")
+    readable, wk, ignored = onboard._status(work)
+    assert readable and wk == ["a.txt"] and ignored == ["keep.env"]
+    assert onboard._status(work / "nope")[0] is False
+
+
+def test_a_snapshot_backup_refuses_a_tree_whose_status_git_cannot_read(work, monkeypatch):
+    from ddflow.services import backups
+
+    _commit(work, **{"a.txt": "a\n"})
+    backups._require_clean(work)  # a clean tree passes
+    monkeypatch.setattr(backups.git, "status", lambda *a, **k: None)
+    with pytest.raises(backups.SnapshotRefused):
+        backups._require_clean(work)
+
+
+def test_a_status_may_run_as_long_as_any_other_git_call():
+    """Mutant: the listing timeout (60 s) on a call that used to get the git default (300 s)."""
+    import inspect
+
+    for fn in (G.status_run, G.status):
+        assert inspect.signature(fn).parameters["timeout"].default == G.GIT_TIMEOUT
+
+
+def test_ignored_matching_names_the_ignored_file_not_its_directory(work):
+    """Mutant: `--ignored` without `=matching` (git then reports `dir/`, hiding which file)."""
+    _commit(work, **{".gitignore": "*.log\n", "a.txt": "a\n"})
+    (work / "dir").mkdir()
+    (work / "dir" / "a.log").write_text("l\n")
+    assert [e.path for e in G.status(work, ignored="matching")] == ["dir/a.log"]
+    assert [e.path for e in G.status(work, ignored="traditional")] == ["dir/"]
+
+
+def test_a_pathspec_that_looks_like_an_option_is_a_path(work):
+    """Mutant: dropping the `--` before the pathspec (version_files and setup rely on it)."""
+    _commit(work, **{"a.txt": "a\n"})
+    (work / "-uno").write_text("x\n")
+    (work / "b.txt").write_text("y\n")
+    assert [e.path for e in G.status(work, "-uno")] == ["-uno"]
+    assert [e.path for e in G.status(work, "a.txt")] == []
+    assert G.parse_status(G.status_run(work, "-uno"))[0].path == "-uno"
+    assert W.status is G.status

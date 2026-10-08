@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..infra import git as G
 from ..infra import worktree as W
 
 EVENTS = ".ddflow/events"
@@ -26,18 +27,10 @@ def uncommitted_shards(repo: Path) -> list[str] | None:
     could not tell, which is not the same as "all committed".
 
     `-z`, so a path git would C-quote (a space, a non-ASCII byte) is read as it is."""
-    r = W.git(repo, "status", "--porcelain", "-z", "--untracked-files=all", "--", EVENTS)
-    if not r.ok:
+    entries = G.status(repo, EVENTS, untracked="all")
+    if entries is None:
         return None
-    return sorted(p for p in map(_path_of, r.out.split("\0")) if p.endswith(".jsonl"))
-
-
-def _path_of(entry: str) -> str:
-    """The path of one `status --porcelain -z` entry ("XY path"). `W.git` strips its
-    output, which drops the leading space of a first entry such as " M path"."""
-    if entry[2:3] == " ":
-        return entry[3:]
-    return entry[2:] if entry[1:2] == " " else ""
+    return sorted(e.path for e in entries if e.path.endswith(".jsonl"))
 
 
 def _busy(repo: Path) -> str:

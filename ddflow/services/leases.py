@@ -32,6 +32,7 @@ from ..core import schedule
 from ..core.admission import glob_conflict
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
+from ..infra import git as G
 from ..infra import worktree as W
 from ..infra.log import EventLog
 
@@ -832,8 +833,9 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
         return
     base = cfg.worktree.base_ref or W.default_branch(repo)
     probe = W.Worktree(item=rec.item, path=wt, branch=rec.branch, base=base)
-    status = W.git(wt, "status", "--porcelain")
-    rec.dirty_files = len([ln for ln in status.out.splitlines() if ln.strip()]) if status.ok else -1
+    status = G.status_run(wt)
+    entries = G.parse_status(status)
+    rec.dirty_files = len(entries) if entries is not None else -1
     rec.unmerged_commits = W.ahead(probe)
     if rec.dirty_files < 0 or rec.unmerged_commits < 0:
         rec.salvageable = None

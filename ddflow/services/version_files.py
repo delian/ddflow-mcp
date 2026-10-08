@@ -128,10 +128,11 @@ def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: 
         tree = tmp
     try:
         paths = list(prep.edits)
-        dirty = W.git(tree, "status", "--porcelain", "--", *paths)
-        if not dirty.ok:
+        dirty = GIT.status_run(tree, *paths)
+        entries = GIT.parse_status(dirty)
+        if entries is None:
             raise VersionFileError(f"git status failed: {dirty.err}", unavailable=True)
-        if dirty.out.strip():
+        if entries:
             raise VersionFileError(
                 f"{', '.join(paths)} has uncommitted changes; refusing to commit them into "
                 f"the release (commit or discard them)"
