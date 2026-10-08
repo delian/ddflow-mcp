@@ -45,9 +45,6 @@ AGENT = "agent"
 OPERATOR = "needs operator confirmation"
 NOTE = "note"
 
-#: Said after a remedy that is the apply step, which this ddflow does not have yet.
-NOT_YET = " (not available yet: this ddflow only plans)"
-
 _SHOWN = 8  #: findings quoted per repair in the text
 
 
@@ -160,9 +157,9 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
         else:
             item["summary"] = f"knob {key} was removed; this project's config still sets it"
         item["fix"] = (
-            f"ddflow upgrade --apply --confirm {key} --reason '<why>'{NOT_YET}"
+            f"ddflow upgrade --apply --confirm {key} --reason '<why>'"
             if operator_set
-            else f"ddflow upgrade --apply{NOT_YET}"
+            else "ddflow upgrade --apply"
         )
         items.append(item)
     return items
@@ -202,7 +199,7 @@ def repair_items(repo: Path, log: Any, cfg: Config) -> list[dict[str, Any]]:
                 "finding_count": n,
                 "unavailable": p.unavailable,
                 "action": OPERATOR if r.consent == RP.OPERATOR else AGENT,
-                "fix": f"ddflow upgrade --apply{NOT_YET}",
+                "fix": "ddflow upgrade --apply",
             }
         )
     return out
@@ -255,6 +252,7 @@ def hook_items(repo: Path) -> list[dict[str, Any]]:
                 "id": f"hooks:dangling:{d.where}",
                 "summary": d.render(),
                 "missing": list(d.missing),
+                "paths": [d.path] if d.path else [],
                 "action": AGENT,
                 "fix": d.fix,
             }
@@ -282,6 +280,7 @@ def hook_items(repo: Path) -> list[dict[str, Any]]:
                     "category": "hooks",
                     "id": f"hooks:missing:{h.agent}:{h.name}",
                     "summary": f"{h.agent} {h.event} hook is not installed: {h.purpose}",
+                    "paths": [h.file],
                     "action": AGENT,
                     "fix": f"ddflow hooks install {h.flag}",
                 }
@@ -296,6 +295,7 @@ def mcp_items(repo: Path) -> list[dict[str, Any]]:
             "id": f"mcp:dangling:{d.where}",
             "summary": d.render(),
             "missing": list(d.missing),
+            "paths": [d.path] if d.path else [],
             "action": AGENT,
             "fix": d.fix,
         }
