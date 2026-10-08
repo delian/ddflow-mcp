@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...core.digest import content_digest, hasher
 from ...core.model import State
+from ...infra import git as GIT
 from .defs import DEFAULT_GATES, GateDef
 
 
@@ -183,3 +186,118 @@ def reviewer_independence(
         f"independent evidence."
         + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
     )
+
+
+#: ddflow's own state (the event log its heartbeats append to, run logs) changes while a
+#: reviewer runs in a checkout that holds it; it is not the tool's doing.
+_OURS = ":(exclude).ddflow"
+
+
+def git_state(where: Path | str) -> dict[str, str] | None:
+    """What a reviewer tool must leave as it found it: HEAD, the index and working
+    tree, and the stash list (bug B5ce30dd94d).
+
+    The stash list is shared by every worktree of the repository, so a reviewer that
+    runs ``git stash apply|pop`` rewrites the working tree of whoever ran it and
+    consumes another lane's work. Each part is a digest, so the evidence stays small.
+    None when git could not answer: "could not tell" is not "unchanged"."""
+    parts = {
+        "head": ("rev-parse", "HEAD"),
+        # The branch HEAD is on (or "HEAD" when detached): a checkout of the same commit
+        # moves it without moving the sha.
+        "ref": ("rev-parse", "--symbolic-full-name", "HEAD"),
+        "status": ("status", "--porcelain=v2", "--untracked-files=all", "--", ".", _OURS),
+        "diff": ("diff", "HEAD", "--binary", "--", ".", _OURS),
+        "stash": ("stash", "list", "--format=%H %gs"),
+    }
+    # From the repository top, whatever directory the reviewer was started in: a pathspec
+    # of `.` would narrow every query to that directory.
+    top = GIT.run(where, "rev-parse", "--show-toplevel")
+    if not top.ok or not top.out:
+        return None
+    where = Path(top.out)
+    state: dict[str, str] = {}
+    for name, args in parts.items():
+        r = GIT.run(where, *args, binary=True)
+        if not r.ok:
+            return None
+        state[name] = content_digest(r.out_bytes or b"", length=16)
+    state["untracked"] = _untracked_content_digest(where)
+    return state
+
+
+#: A file larger than this is digested by its size and mtime, not its bytes.
+_BIG_UNTRACKED = 256 << 20
+
+
+def _file_digest(path: Path) -> str:
+    """A file's content digest, read in pieces: an artifact may be hundreds of MiB."""
+    h = hasher()
+    with path.open("rb") as fh:
+        while piece := fh.read(1 << 20):
+            h.update(piece)
+    return h.hexdigest()[:16]
+
+
+def _untracked_content_digest(where: Path | str) -> str:
+    """A digest of the untracked (not ignored) files' CONTENTS: ``status`` lists their
+    paths only and ``diff HEAD`` omits them, so a tool rewriting one would pass unseen."""
+    r = GIT.run(
+        where, "ls-files", "--others", "--exclude-standard", "-z", "--", ".", _OURS, binary=True
+    )
+    names = r.paths() if r.ok else None
+    if names is None:
+        return "unreadable"
+    h = []
+    for name in sorted(names):
+        path = Path(where) / name
+        try:
+            st = path.lstat()
+            if path.is_symlink() or st.st_size > _BIG_UNTRACKED:
+                h.append(f"{name}:{st.st_size}:{st.st_mtime_ns}")
+            else:
+                h.append(f"{name}:{_file_digest(path)}")
+        except OSError:
+            h.append(f"{name}:gone")
+    return content_digest("\n".join(h), length=16)
+
+
+def git_state_change(before: dict[str, str] | None, after: dict[str, str] | None) -> str:
+    """ "" when the state is as it was (or could not be compared), else a sentence naming
+    which parts changed. A state that was readable before and is not now is a change:
+    the tool broke the repository. Only an unreadable START cannot be compared."""
+    if before is None or before == after:
+        return ""
+    if after is None:
+        changed = "unreadable afterwards"
+    else:
+        changed = ", ".join(k for k in before if before[k] != after.get(k))
+    return (
+        f"the reviewer tool changed git state ({changed}) -- a review must leave HEAD, "
+        f"the index, the working tree and the stash list as it found them (e.g. `git stash "
+        f"apply` or `pop`). This is NOT a clean review; nothing was restored, so check "
+        f"the tree and `git stash list` before going on, and run the reviewer against a "
+        f"clean throwaway worktree of the reviewed sha."
+    )
+
+
+def run_watching_git(
+    gdef: GateDef, cwd: Path, run: Callable[[], tuple[str, dict[str, Any]]]
+) -> tuple[str, dict[str, Any]]:
+    """``run()`` -- a command gate's execution -- with a reviewer gate's git state checked
+    around it. A reviewer tool (roborev, kilo) that moved HEAD, the index, the working
+    tree or the stash list reviewed nothing trustworthy: the gate is ``unavailable`` and
+    the evidence says what moved. Nothing is restored -- ddflow cannot prove which change
+    was the tool's. Any other gate is run as it is (a test suite may write the tree)."""
+    watch = is_reviewer_gate(gdef.id, gdef) and gdef.is_command_gate and cwd.exists()
+    before = git_state(cwd) if watch else None
+    outcome, ev = run()
+    after = git_state(cwd) if watch else None
+    moved = git_state_change(before, after)
+    if moved:
+        return "unavailable", {
+            **ev,
+            "reason": moved,
+            "git_state_changed": {"before": before, "after": after},
+        }
+    return outcome, ev

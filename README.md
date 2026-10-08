@@ -2540,6 +2540,15 @@ commit (main, another branch, an unknown sha, or a symbolic ref such as `HEAD`, 
 a different commit in each checkout) is refused with exit 3. An item with no branch to
 compare against records the sha with a note.
 
+**A reviewer tool must leave git as it found it.** `ddflow gate run` on a reviewer gate
+(`standards`, or any `different_family` gate with a command) and a `kind = "command"`
+reviewer compare HEAD, the index, the working tree and the stash list before and after the
+tool runs. The stash list is shared by every worktree, so a tool that ran `git stash apply`
+or `pop` (kilo under roborev did) rewrote someone's tree. If anything moved, the gate is
+`unavailable` (never passed), the evidence carries `git_state_changed` with both digests,
+and nothing is restored: check the tree and `git stash list` yourself. A `roborev review
+<sha>` you run by hand is outside this check; run it against a clean throwaway worktree.
+
 **The reviewer recorded is the one roborev ran.** roborev runs its `backup_agent` when the
 requested agent fails, so a job enqueued as `agent: kilo` can be reviewed by `claude-code`
 (`roborev show N`: "by claude-code"). With `--reviewed-sha` on a reviewer gate, ddflow asks
