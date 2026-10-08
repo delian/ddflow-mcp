@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import run_cli
 
 from ddflow.api._base import _load
 from ddflow.config import Config
@@ -541,3 +542,54 @@ def test_a_missing_rules_file_is_summarised_as_missing_not_as_an_edit(old: Path)
 
     assert item["provenance"] == "missing" and item["action"] == UP.AGENT
     assert "hand-edited" not in item["summary"] and ".local-edits" not in item["summary"]
+
+
+def test_a_rules_block_a_newer_ddflow_wrote_is_a_note_and_never_counted_as_applied(
+    old: Path,
+) -> None:
+    import re
+
+    from ddflow import FORMAT_LEVEL
+
+    _adopted_old(old)
+    agents = old / "AGENTS.md"
+    newer = re.sub(r"fmt=\d+", f"fmt={FORMAT_LEVEL + 1}", agents.read_text(), count=1)
+    agents.write_text(newer.replace("Claim before you edit", "Claim v2"))
+    item = next(i for i in plan(old)["categories"]["instructions"] if i["path"] == "AGENTS.md")
+    assert item["provenance"] == "newer" and item["action"] == UP.NOTE
+
+    out = go(old, "instructions")
+
+    assert "Claim v2" in agents.read_text()
+    assert "instructions:AGENTS.md" not in ids(out, "applied")
+
+
+def test_a_refusal_from_the_refresh_is_reported_refused_not_applied(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import adopt as AD
+
+    _adopted_old(old)
+    (old / "AGENTS.md").write_text("# mine\n")  # no block: the plan lists it
+    monkeypatch.setattr(
+        AD, "refresh_docs", lambda *a, **k: [AD.Refused("REFUSED AGENTS.md: a newer format")]
+    )
+
+    out = go(old, "instructions")
+
+    assert "instructions:AGENTS.md" in ids(out, "refused") and out["exit"] == 3
+    assert out["applied"] == 0 or "instructions:AGENTS.md" not in ids(out, "applied")
+
+
+def test_the_plan_promises_local_edits_only_where_the_writer_keeps_them(old: Path) -> None:
+    from ddflow.services import adopt as AD
+
+    assert run_cli(old, "adopt", "--agents", "cursor")[0] == 0
+    mdc = old / AD.NATIVE_RULES["cursor"].path
+    mdc.write_text(mdc.read_text().replace("alwaysApply: true", "alwaysApply: false"))
+
+    item = next(
+        i for i in plan(old)["categories"]["instructions"] if i["path"] == str(mdc.relative_to(old))
+    )
+
+    assert ".local-edits" not in item["summary"]
