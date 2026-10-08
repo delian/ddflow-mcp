@@ -240,9 +240,9 @@ def _until(check, timeout_s: float = DEADLINE_S):
 def test_a_burst_of_long_calls_is_capped_not_all_started(repo):
     """Each worker is a whole interpreter: past `MAX_WORKERS` a call is answered busy.
 
-    B306fd11bc8: nothing here may depend on how fast a worker starts. A fork that has
-    not yet exec'd shows the parent's command line, so the worker count is polled to the
-    cap, not read once; and the waits outlast any plausible startup under load."""
+    B306fd11bc8: the workers' own `ddflow_wait` timeout used to run out before a late
+    check counted them. The waits now outlast the check, and the worker count is polled
+    to the cap rather than read once."""
     from ddflow.surfaces.mcp import MAX_WORKERS
 
     _held(repo)
