@@ -9,6 +9,7 @@ never shared), each file at its project-relative path -- one outside the project
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import stat
 from collections.abc import Collection
@@ -138,15 +139,7 @@ def _in_git(repo: Path, rel: str) -> bool:
     return not git.run(repo, "check-ignore", "-q", "--", rel).ok
 
 
-def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Snapshot:
-    """Tag the state before an upgrade, so a revert or `ddflow upgrade --restore` undoes it.
-
-    Refused (`SnapshotRefused`) without git or on a tree with uncommitted changes to tracked
-    files: the snapshot is what HEAD holds, and a dirty tree would not be in it. Affected files
-    git does not track yet are committed first ("ddflow: snapshot before upgrade"); files it
-    cannot hold -- ignored ones, and the git hooks, which live outside the tree -- go to a
-    local backup beside it, named in `Snapshot.local`."""
-    repo = Path(repo).resolve()
+def _require_clean(repo: Path) -> None:
     if not git.run(repo, "rev-parse", "--is-inside-work-tree").ok:
         raise SnapshotRefused(
             "a snapshot backup needs a git repository, and this is not one; "
@@ -159,6 +152,13 @@ def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Sna
             "one has uncommitted changes to tracked files: commit or stash them, or use "
             "[upgrade].backup = local (or --backup local)"
         )
+
+
+def _classify(
+    repo: Path, files: Collection[Path]
+) -> tuple[list[str], list[str], list[str], list[Path]]:
+    """`(held, created, untracked, elsewhere)`: project paths git holds, paths that do not
+    exist yet, held paths git does not track, and files git cannot hold."""
     held: list[str] = []
     created: list[str] = []
     untracked: list[str] = []
@@ -169,7 +169,7 @@ def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Sna
         except ValueError:
             elsewhere.append(f)
             continue
-        if not f.is_file():
+        if not os.path.lexists(f):  # a dangling link exists; only a missing path is "created"
             created.append(rel)
         elif rel.startswith(".git/") or not _in_git(repo, rel):
             elsewhere.append(f)
@@ -177,27 +177,63 @@ def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Sna
             held.append(rel)
             if not git.run(repo, "ls-files", "--error-unmatch", "--", rel).ok:
                 untracked.append(rel)
-    if untracked:
-        add = git.run(repo, "add", "--", *untracked)
-        done = git.run(
-            repo, "commit", "-q", "-m", "ddflow: snapshot before upgrade", "--", *untracked
-        )
-        if not (add.ok and done.ok):
-            raise SnapshotRefused(f"git could not commit the snapshot: {(done.err or add.err)}")
-    head = git.run(repo, "rev-parse", "HEAD")
-    if not head.ok:
-        raise SnapshotRefused(
-            "a snapshot backup needs a commit to point at (the repository has none yet)"
-        )
+    return held, created, untracked, elsewhere
+
+
+def _commit_and_tag(repo: Path, tag: str, untracked: list[str], note: dict[str, Any]) -> str:
+    """Commit the untracked affected files (if any) and tag HEAD; HEAD's id. Anything that
+    fails leaves nothing behind: our commit is undone, an add is unstaged."""
+    committed = False
+    try:
+        if untracked:
+            add = git.run(repo, "add", "--", *untracked)
+            done = git.run(
+                repo, "commit", "-q", "-m", "ddflow: snapshot before upgrade", "--", *untracked
+            )
+            if not (add.ok and done.ok):
+                raise SnapshotRefused(f"git could not commit the snapshot: {done.err or add.err}")
+            committed = True
+        head = git.run(repo, "rev-parse", "HEAD")
+        if not head.ok:
+            raise SnapshotRefused(
+                "a snapshot backup needs a commit to point at (the repository has none yet)"
+            )
+        made = git.run(repo, "tag", "-a", tag, "-m", json.dumps(note, indent=1), head.out)
+        if not made.ok:
+            raise SnapshotRefused(f"git could not tag the snapshot: {made.text()}")
+    except SnapshotRefused:
+        if committed:
+            git.run(repo, "reset", "-q", "--soft", "HEAD^")
+        if untracked:
+            git.run(repo, "reset", "-q", "--", *untracked)
+        raise
+    return head.out
+
+
+def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Snapshot:
+    """Tag the state before an upgrade, so `git checkout <tag> -- <file>` or `ddflow upgrade
+    --restore` undoes it.
+
+    Refused (`SnapshotRefused`) without git or on a tree with uncommitted changes to tracked
+    files: the snapshot is what HEAD holds, and a dirty tree would not be in it. Affected files
+    git does not track yet are committed first ("ddflow: snapshot before upgrade"); files it
+    cannot hold -- ignored ones, and the git hooks, which live outside the tree -- go to a
+    local backup beside it, named in `Snapshot.local`. A refusal leaves nothing behind."""
+    repo = Path(repo).resolve()
+    _require_clean(repo)
+    held, created, untracked, elsewhere = _classify(repo, files)
+    # What git cannot hold goes beside the tag first (it touches no repository state), marked
+    # as ITS sidecar: `restore` of the tag puts it back too, and it is not a restore point of
+    # its own. The tag name is fixed now so the two share it.
     tag = f"{SNAPSHOT_PREFIX}{backup_name(frm, to)}"
-    note = json.dumps({"held": held, "created": created}, indent=1)
-    made = git.run(repo, "tag", "-a", tag, "-m", note, head.out)
-    if not made.ok:
-        raise SnapshotRefused(f"git could not tag the snapshot: {made.text()}")
-    # What git cannot hold goes beside the tag, marked as ITS sidecar: `restore` of the tag
-    # puts it back too, and it is not a restore point of its own.
     local = str(make_backup(repo, elsewhere, frm, to, extra={"snapshot": tag})) if elsewhere else ""
-    return Snapshot(tag, head.out, tuple(held), tuple(created), local)
+    try:
+        head = _commit_and_tag(repo, tag, untracked, {"held": held, "created": created})
+    except SnapshotRefused:
+        if local:  # the sidecar of a tag that never existed
+            shutil.rmtree(local, ignore_errors=True)
+        raise
+    return Snapshot(tag, head, tuple(held), tuple(created), local)
 
 
 def snapshots(repo: Path) -> list[str]:
@@ -286,7 +322,7 @@ def _restore_local(repo: Path, directory: Path, *, safety: bool = True) -> dict[
             copy = directory / FILES / e["stored"]
             atomic_write(target, copy.read_bytes(), mode=stat.S_IMODE(copy.stat().st_mode))
             restored.append(e["path"])
-        elif target.exists():  # the upgrade created it: before it, there was nothing
+        elif os.path.lexists(target):  # the upgrade created it: before it, there was nothing
             target.unlink()
             removed.append(e["path"])
     return {
@@ -319,7 +355,7 @@ def _restore_snapshot(repo: Path, tag: str) -> dict[str, Any]:
             raise SnapshotRefused(f"git could not restore the snapshot: {out.text()}")
     removed = []
     for rel in created:
-        if (repo / rel).exists():
+        if os.path.lexists(repo / rel):
             (repo / rel).unlink()
             removed.append(rel)
     if side is not None:

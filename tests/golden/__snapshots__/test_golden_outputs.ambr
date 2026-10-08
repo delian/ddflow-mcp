@@ -1397,16 +1397,16 @@
           machine only; pruned to `backup_keep`. `snapshot`: a git-tracked backup
           instead -- a tag `ddflow-upgrade-snapshot/<stamp>-<from>-to-<to>` on HEAD
           (after committing any affected file git did not track yet), shared when
-          pushed, durable, undone with `git revert` or `ddflow upgrade --restore`;
-          refused (exit 3) with the reason on a tree with uncommitted changes or
-          without git, and files git cannot hold (ignored ones, the git hooks) still
-          get a local copy. `none`: no copy (the files are in git, or you do not want
-          them). `ddflow upgrade --apply --backup MODE` overrides it for one run. An
-          unrecognised value in a config file is warned about, reported by `doctor`
-          and falls back to 'local', the strictest (a bad value still makes the
-          backup); `config --set`, `ddflow_configure` and the environment refuse it,
-          and so does loading ddflow's own source tree, where the file and the code
-          are one commit.
+          pushed, durable, undone with `git checkout <tag> -- <file>` or `ddflow
+          upgrade --restore`; refused (exit 3) with the reason on a tree with
+          uncommitted changes or without git, and files git cannot hold (ignored ones,
+          the git hooks) still get a local copy. `none`: no copy (the files are in
+          git, or you do not want them). `ddflow upgrade --apply --backup MODE`
+          overrides it for one run. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'local', the strictest (a bad
+          value still makes the backup); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
       upgrade.backup_keep = 10   [default]
           How many local upgrade backups (`.ddflow/backups/`) are kept: after an apply
           writes a new one, the oldest beyond this many are removed. 0 keeps every
