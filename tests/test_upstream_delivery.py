@@ -358,3 +358,14 @@ def test_failure_messages_fall_back_to_the_defaults_on_a_broken_config(tmp_path,
     monkeypatch.setattr(D, "write_report", broken)
     out = D.prepare(root, _bundle(), REPO)
     assert out.status == "failed" and HOME not in out.reason and ADDR not in out.reason
+
+
+def test_a_pattern_that_does_not_compile_falls_back_to_the_profile(tmp_path, monkeypatch):
+    root = _project_with_redaction(tmp_path, '[session]\nredact_extra = ["(unclosed"]\n')
+
+    def broken(root, bundle):
+        raise OSError(f"cannot write {HOME}/x for {ADDR}")
+
+    monkeypatch.setattr(D, "write_report", broken)
+    out = D.prepare(root, _bundle(), REPO)
+    assert out.status == "failed" and HOME not in out.reason and ADDR not in out.reason
