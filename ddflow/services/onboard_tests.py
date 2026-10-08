@@ -17,21 +17,20 @@ command that could not run is `ran=False`, never a passing baseline.
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import shutil
 import tempfile
 import time
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..infra import proc as P
 from ..infra import worktree as W
+from .gates import testcmd as TC
+from .gates.testcmd import Runner
 
-#: `2 passed, 1 failed in 3.41s` and friends; the tool's own summary vocabulary.
-_COUNT = re.compile(r"(\d+) (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b")
+detect_runner = TC.detect  # the one implementation lives in gates/testcmd
+
 _FAILING = re.compile(r"^(FAILED|ERROR) (\S+)")
 #: How much raw output the report keeps for the operator to look at.
 _TAIL = 2000
@@ -39,16 +38,6 @@ _TAIL = 2000
 _KNOWN = 50
 #: The shell's own "command not found" exit code.
 _NOT_FOUND = 127
-
-
-@dataclass(frozen=True)
-class Runner:
-    """How this project runs its tests, and where that was read from."""
-
-    family: str  #: python | node | make
-    command: str  #: base command WITHOUT a worker count
-    evidence: str  #: the file that said so
-    workers: str = ""  #: e.g. "-n 12", when parallelism applies and is declared
 
 
 @dataclass
@@ -93,72 +82,6 @@ class Report:
     notes: list[str] = field(default_factory=list)
 
 
-def _declares_xdist(text: str) -> bool:
-    """Is pytest-xdist a declared dependency? A substring test counts a comment
-    (`# no xdist here`) as a plugin that is not installed (roborev on 72ee825)."""
-    try:
-        data = tomllib.loads(text)
-    except tomllib.TOMLDecodeError:
-        return "pytest-xdist" in text
-    deps: list[str] = []
-
-    def collect(values):
-        if isinstance(values, (list, tuple)):
-            deps.extend(v for v in values if isinstance(v, str))
-
-    project = data.get("project") if isinstance(data.get("project"), dict) else {}
-    collect(project.get("dependencies"))
-    for group in (project.get("optional-dependencies") or {}).values():
-        collect(group)
-    for group in (data.get("dependency-groups") or {}).values():
-        collect(group)
-    return any("pytest-xdist" in dep for dep in deps)
-
-
-def _text(path: Path) -> str:
-    return path.read_text("utf-8", errors="replace") if path.is_file() else ""
-
-
-def detect_runner(repo: Path) -> Runner | None:
-    """How this project runs its tests, from its own files; None when nothing says.
-
-    The evidence path is part of the answer: the operator is being asked to trust a
-    command, and a command with no file behind it is a guess.
-    """
-    repo = Path(repo)
-    pyproject = repo / "pyproject.toml"
-    text = _text(pyproject)
-    pythonish = (
-        "[tool.pytest.ini_options]" in text
-        or (repo / "pytest.ini").is_file()
-        or (repo / "tox.ini").is_file()
-        or (repo / "conftest.py").is_file()
-        or ((repo / "tests").is_dir() and any((repo / "tests").glob("test_*.py")))
-    )
-    if pythonish:
-        uvproject = (repo / "uv.lock").is_file()
-        evidence = str(pyproject) if "[tool.pytest.ini_options]" in text else "tests/ + conftest"
-        workers = ""
-        if _declares_xdist(text):
-            # Several agents run this gate at once, so a count that saturates the box is
-            # the wrong answer (`auto` included); a quarter of the cores leaves room.
-            workers = f"-n {max(2, (os.cpu_count() or 4) // 4)}"
-        base = "uv run pytest" if uvproject else "python -m pytest"
-        return Runner("python", base, evidence, workers)
-    package = repo / "package.json"
-    if package.is_file():
-        try:
-            scripts = json.loads(_text(package)).get("scripts") or {}
-        except json.JSONDecodeError:
-            scripts = {}
-        if isinstance(scripts, dict) and scripts.get("test"):
-            return Runner("node", "npm test --silent", str(package))
-    makefile = repo / "Makefile"
-    if re.search(r"^test:", _text(makefile), re.M):
-        return Runner("make", "make test", str(makefile))
-    return None
-
-
 def baseline(repo: Path, command: str, *, timeout: int = P.TIMEOUTS["suite_baseline"]) -> Baseline:
     """Run `command` in a DETACHED worktree of the default branch and measure it.
 
@@ -186,7 +109,7 @@ def baseline(repo: Path, command: str, *, timeout: int = P.TIMEOUTS["suite_basel
             # A command that could not be found measured NOTHING; "exit 127" is not a
             # baseline (critic on 215407bb).
             return Baseline(command, False, 127, "the command could not be found (exit 127)")
-        summary = _summary(out)
+        summary = TC.last_count_line(out)
         if code != 0 and not summary:
             # A non-zero exit with nothing a baseline recognises is a run that could not
             # be MEASURED (the runner may not exist on the default branch at all), not a
@@ -197,9 +120,7 @@ def baseline(repo: Path, command: str, *, timeout: int = P.TIMEOUTS["suite_basel
                 code,
                 f"the command failed with no test counts (exit {code}); the runner may not exist on {W.default_branch(repo)}",
             )
-        counts: dict[str, int] = {}
-        for match in _COUNT.finditer(summary):
-            counts[match.group(2).rstrip("s")] = int(match.group(1))
+        counts = TC.counts_of(summary)
         failing = [m.group(2) for line in out.splitlines() if (m := _FAILING.match(line))]
         return Baseline(
             command, True, code, summary or f"exit {code}", counts, failing, seconds, out[-_TAIL:]
@@ -221,13 +142,6 @@ def _run_bounded(command: str, cwd: Path, timeout: int) -> tuple[int | None, str
     return (None if r.timed_out or r.could_not_run else r.code), r.out
 
 
-def _summary(out: str) -> str:
-    for line in reversed(out.splitlines()):
-        if _COUNT.search(line):
-            return line.strip()
-    return ""
-
-
 def live_test(repo: Path) -> Proposal | None:
     """The smallest real run of the project's own entry point, or None when unsure.
 
@@ -239,7 +153,7 @@ def live_test(repo: Path) -> Proposal | None:
     uvproject = (repo / "uv.lock").is_file()
     runner = "uv run " if uvproject else ""
     pyproject = repo / "pyproject.toml"
-    text = _text(pyproject)
+    text = TC.file_text(pyproject)
     scripts = re.search(r"^\[project\.scripts\]\s*$", text, re.M)
     if scripts:
         for line in text[scripts.end() :].splitlines():
@@ -269,7 +183,7 @@ def live_test(repo: Path) -> Proposal | None:
 
 def propose(repo: Path, *, timeout: int = P.TIMEOUTS["suite_baseline"]) -> Report:
     """Detect, measure and propose -- everything the operator is asked to confirm."""
-    runner = detect_runner(repo)
+    runner = TC.detect(repo)
     if runner is None:
         return Report(
             None,
