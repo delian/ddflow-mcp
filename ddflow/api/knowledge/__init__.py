@@ -33,6 +33,7 @@ from ...config import Config, csv_list  # noqa: F401
 from ...core import globspec as GS  # noqa: F401
 from ...core import ids as IDS  # noqa: F401
 from ...core import outcome as O  # noqa: F401
+from ...core.budget import RECALL_MAX_CHARS  # noqa: F401
 from ...core.events import parse_changelog  # noqa: F401
 from ...core.model import LINK_RELATIONS, fold  # noqa: F401
 from .._base import _load  # noqa: F401
