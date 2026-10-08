@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..core.admission import is_shared
 from ..core.model import State
-from ..core.schedule import is_shared
 from . import changes as CH
 from . import gates as G
 
