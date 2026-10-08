@@ -118,7 +118,9 @@ def test_apply_migrations_makes_every_migration_verify(old: tuple[str, Path]) ->
     after = _project_files(root)
     changed = sorted(n for n in before.keys() & after.keys() if before[n] != after[n])
     added, removed = sorted(after.keys() - before.keys()), sorted(before.keys() - after.keys())
-    assert (changed, added, removed) == ([], [], []), "the migration only appends events"
+    assert (changed, added, removed) == ([], [], []), (
+        f"the migration only appends events: changed={changed} added={added} removed={removed}"
+    )
 
 
 def test_a_second_apply_is_a_no_op(old: tuple[str, Path]) -> None:
@@ -146,3 +148,24 @@ def test_the_whole_apply_fails_nothing_and_leaves_the_migrations_verified(
     fold(EventLog(root, cache_writes=False).read_all(), strict=True)  # still folds strictly
     code, out, err = run_cli(root, "status", agent="fx-upgrader")
     assert code in (0, 2) and "Traceback" not in err and out.strip(), (code, out, err)
+
+
+def test_the_snapshot_helper_keeps_what_a_migration_must_not_touch(tmp_path: Path) -> None:
+    """The guard above is only as good as its filter: pin what it includes and excludes."""
+    for rel in (
+        "README.md",
+        "src/a.py",
+        ".ddflow/config.toml",
+        ".ddflow/rules/r-x.toml",
+        ".ddflow/events/x.jsonl",
+        ".ddflow/backups/b/manifest.json",
+        ".ddflow/.gitignore",
+        ".gitignore",
+        ".git/HEAD",
+    ):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x")
+    (tmp_path / RULE_FILE).write_text(RULE)
+    assert sorted(_project_files(tmp_path)) == sorted(
+        ["README.md", "src/a.py", ".ddflow/config.toml", ".ddflow/rules/r-x.toml", RULE_FILE]
+    )
