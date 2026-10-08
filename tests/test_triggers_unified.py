@@ -8,8 +8,11 @@ of inputs (L-Bf72f9fb741: pin every definition in one table before unifying them
 from __future__ import annotations
 
 import itertools
+import math
+import time
 
 from ddflow.config import Config
+from ddflow.core import clock
 from ddflow.core.model import Item, State
 from ddflow.services import cadence as CA
 from ddflow.services import rates as RT
@@ -127,3 +130,94 @@ def test_the_recorded_count_of_a_run_follows_the_one_table(repo):
     assert ran == {"integration_tests": "1", "architecture_review": "0"}
     assert SV.count_unit("integration_tests") == "tasks"
     assert SV.count_unit("bug_hunt") == ""
+
+
+# -- the calendar engine (B-uni-triggers.2-calendar-engine) -----------------------------------
+
+
+def _oracle_calendar_due(st, days, now):
+    """`api.operations._calendar_due` before the calendar evaluator moved into `schedule`."""
+    due = []
+    for name, period in days.items():
+        runs = st.cadences.get(name, [])
+        last = max((clock.epoch(r["at"], naive="local") for r in runs), default=0.0)
+        age_days = (now - last) / 86400 if last else None
+        if age_days is None or age_days >= period:
+            due.append(
+                {
+                    "cadence": name,
+                    "since": "never"
+                    if age_days is None
+                    else clock.fmt_age(now - last, "days", places=1),
+                    "every": period,
+                    "unit": "days",
+                }
+            )
+    return due
+
+
+T0 = clock.epoch("2026-09-01T00:00:00Z")
+DAYS = {"bug_hunt": 7.0, "half": 0.5, "tiny": 0.001, "month": 30.0}
+RUNS = (
+    {},  # nothing ever ran
+    {"bug_hunt": ["2026-09-01T00:00:00Z"]},
+    {
+        "bug_hunt": ["2026-09-01T00:00:00Z", "2026-08-01T00:00:00Z"]
+    },  # newest by timestamp, not order
+    {"bug_hunt": ["2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z"]},
+    {"half": ["2026-09-01T12:00:00Z"], "month": ["2026-08-02T00:00:00Z"]},
+    {"bug_hunt": ["not a time"]},  # an unreadable stamp reads as never ran
+)
+OFFSETS_S = (0, 60, 43_200, 86_400, 6 * 86_400, 7 * 86_400, 8 * 86_400, 29 * 86_400, 31 * 86_400)
+
+
+def _calendar_state(runs):
+    st = State()
+    for name, stamps in runs.items():
+        st.cadences[name] = [{"at": at, "result": "0"} for at in stamps]
+    return st
+
+
+def test_the_calendar_engine_matches_the_old_calendar_due_over_the_whole_grid():
+    for runs, offset in itertools.product(RUNS, OFFSETS_S):
+        st, now = _calendar_state(runs), T0 + offset
+        assert SV.calendar_due(st, DAYS, now) == _oracle_calendar_due(st, DAYS, now), (runs, offset)
+
+
+def test_the_calendar_engine_without_a_clock_uses_the_current_time():
+    (row,) = SV.calendar_due(_calendar_state({}), {"x": 1.0})
+    assert row == {"cadence": "x", "since": "never", "every": 1.0, "unit": "days"}
+    just_now = _calendar_state({"x": [clock.iso_at(time.time(), timespec="seconds")]})
+    assert SV.calendar_due(just_now, {"x": 1.0}) == []
+
+
+def test_the_operations_wrapper_and_the_schedule_engine_agree():
+    from ddflow.api.operations import _calendar_due
+
+    cfg = Config()
+    cfg.cadence.every_days = ["bug_hunt=7"]
+    st = _calendar_state({"bug_hunt": ["2026-09-01T00:00:00Z"]})
+    now = T0 + 8 * 86_400
+    assert _calendar_due(st, cfg, now=now) == SV.calendar_due(st, SV.calendar(cfg), now)
+
+
+def test_one_predicate_decides_what_a_period_in_days_is():
+    """`[cadence] every_days` (a `name=days` string) and a schedule's `cadence.every_days` (a
+    JSON number) accept exactly the same periods: finite, above zero, not a bool."""
+    for bad in (0, -1, math.nan, math.inf, -math.inf, 1e309, True, None, "3"):
+        assert SV.period_days(bad) is None, bad
+        assert SV.normalize({"cadence": {"every_days": bad}}, partial=True)[1], bad
+    for text in ("0", "-1", "nan", "inf", "1e309", "x", ""):
+        cfg = Config()
+        cfg.cadence.every_days = [f"x={text}"]
+        try:
+            SV.calendar(cfg)
+        except ValueError:
+            continue
+        raise AssertionError(f"calendar accepted {text!r}")
+    for good in (1, 0.5, 7, 1e-9):
+        assert SV.period_days(good) == float(good)
+        assert SV.normalize({"cadence": {"every_days": good}}, partial=True)[1] == []
+    cfg = Config()
+    cfg.cadence.every_days = ["a=3", "b=0.25"]
+    assert SV.calendar(cfg) == {"a": 3.0, "b": 0.25}

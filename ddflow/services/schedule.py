@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import math
 import re
+import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import clock
 from ..core import fieldcheck as FC
 from ..core import schedule as CS
 from ..core.model import SCHEDULE_FIELDS, Schedule, State
@@ -139,6 +142,17 @@ def count_at_last_run(st: State, name: str) -> int:
         return 0
 
 
+def period_days(value: Any) -> float | None:
+    """A calendar period in days, or None when ``value`` is not one: a number (not a bool)
+    that is finite and above zero. The ONE test, for a `[cadence] every_days` entry and a
+    schedule's `cadence.every_days` alike -- not `value <= 0`: nan and inf (also "1e309")
+    pass that, and a period no elapsed time reaches is a pass that silently never falls
+    due (bug B1c68fe5e9c)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(value) and value > 0 else None
+
+
 def calendar(cfg) -> dict[str, float]:
     """`[cadence] every_days` as name -> days. Raises ValueError naming the knob for an
     entry that is not `name=<positive number>`: one typo raised a bare float() error,
@@ -148,18 +162,53 @@ def calendar(cfg) -> dict[str, float]:
     for spec in cfg.cadence.every_days:
         name, sep, days = spec.partition("=")
         try:
-            value = float(days) if sep and name.strip() else 0.0
+            number: float = float(days) if sep and name.strip() else 0.0
         except ValueError:
-            value = 0.0
-        # Not `value <= 0`: nan and inf (also "1e309") pass that, and a period no elapsed
-        # time reaches is a pass that silently never falls due (bug B1c68fe5e9c).
-        if not (math.isfinite(value) and value > 0):
+            number = 0.0
+        value = period_days(number)
+        if value is None:
             raise ValueError(
                 f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
                 f'number of days (e.g. "bug_hunt=7")'
             )
         out[name.strip()] = value
     return out
+
+
+# -- the calendar evaluator ------------------------------------------------------------------
+
+
+def last_run_epoch(st: State, name: str) -> float:
+    """When ``name`` last ran, 0.0 if it never did. The NEWEST run by its own timestamp, not
+    the last in fold order: the log is ordered by Lamport clock, and two machines' runs can
+    fold older-last (rubber-duck). An unreadable stamp reads as never."""
+    return max(
+        (clock.epoch(r["at"], naive="local") for r in st.cadences.get(name, [])), default=0.0
+    )
+
+
+def calendar_due(
+    st: State, days: Mapping[str, float], now: float | None = None
+) -> list[dict[str, Any]]:
+    """Calendar passes (name -> period in days) not recorded as run within their period --
+    or ever, so a weekly pass that has never run is due now rather than silently never."""
+    now = time.time() if now is None else now
+    due = []
+    for name, period in days.items():
+        last = last_run_epoch(st, name)
+        age_days = (now - last) / 86400 if last else None
+        if age_days is None or age_days >= period:
+            due.append(
+                {
+                    "cadence": name,
+                    "since": "never"
+                    if age_days is None
+                    else clock.fmt_age(now - last, "days", places=1),
+                    "every": period,
+                    "unit": "days",
+                }
+            )
+    return due
 
 
 # -- one definition ------------------------------------------------------------------------
@@ -225,8 +274,7 @@ def _cadence(v: Any, errors: list[str]) -> dict[str, Any]:
         return {}
     key, n = next(iter(v.items()))
     if key == "every_days":
-        ok = isinstance(n, int | float) and not isinstance(n, bool) and math.isfinite(n) and n > 0
-        if not ok:
+        if period_days(n) is None:
             errors.append(f"cadence.every_days must be a number of days above 0, got {n!r}")
             return {}
         return {key: n}
