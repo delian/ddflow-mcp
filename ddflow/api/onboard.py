@@ -18,6 +18,7 @@ from ..services import onboard as ON
 from ..services import onboard_tests as OT
 from ..services import onboard_verify as OV
 from ..services.adopt import Refused
+from ..services.enforce import NEWER_HINT
 from ._base import _load
 
 #: The stages in the prompt's own order; the CLI choices and MCP enum come from here.
@@ -133,7 +134,9 @@ def legacy(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.
         # freeze() can REFUSE to arm the ratchet (a malformed marker block, YAML that
         # will not parse, a foreign generated test). That is a failure, not a success
         # line to mix into the actions (roborev on c61278a4).
-        return O.failed(
+        # ... unless the refusal is a block a NEWER ddflow wrote: exit 3, upgrade (D-compat 2).
+        kind = O.refused if any(NEWER_HINT in a for a in refused_actions) else O.failed
+        return kind(
             "onboard.legacy", "; ".join(refused_actions), **data, actions=actions, refused=refused
         )
     return O.ok("onboard.legacy", **data, actions=actions, refused=refused)

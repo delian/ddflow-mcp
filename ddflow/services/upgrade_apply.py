@@ -175,6 +175,8 @@ def _apply_hook(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
         _, _, agent, name = iid.split(":", 3)
         try:
             msg = CH.install_spec(repo, CH.spec(agent, name))
+        except CH.NewerSettings as exc:  # a newer ddflow's entry: upgrade, not a failure
+            return REFUSED, str(exc)
         except (CH.SettingsError, KeyError) as exc:
             return FAILED, str(exc)
         return APPLIED, msg
@@ -188,10 +190,14 @@ def _apply_hook(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
             try:
                 if CH.state_spec(repo, h)[0]:
                     done.append(CH.install_spec(repo, h))
+            except CH.NewerSettings as exc:
+                return REFUSED, str(exc)
             except CH.SettingsError as exc:
                 return FAILED, str(exc)
         return (APPLIED, "; ".join(done)) if done else (FAILED, f"no ddflow hook found in {rel}")
     msg = E.install(repo)
+    if E.NEWER_HINT in msg:  # the commit-msg hook's too: install() relabels it NOT INSTALLED
+        return REFUSED, msg
     if "REFUSED" in msg or "NOT INSTALLED" in msg:
         return FAILED, msg
     return APPLIED, msg

@@ -16,9 +16,13 @@ both depend on it.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Mapping
+import difflib
+import re
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+
+from ..config_sections._compat import MIN_REMOVED_IN, check_rename
 
 #: The per-CALL identity override every tool but `ddflow_identify` accepts (see mcp.py).
 AS_AGENT = "as_agent"
@@ -33,6 +37,183 @@ _UNSET: Any = object()
 GROUP_DEPTH = 2
 #: `via` is a tool, optionally with the selector value.
 MAX_VIA = 2
+
+
+# -- aliases and deprecations (D-compat) ---------------------------------------------
+
+#: What an old name is, in a notice: a CLI command (group), a CLI flag, an MCP tool, a tool argument.
+KINDS = ("command", "flag", "tool", "argument")
+
+_WORD = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
+
+
+@dataclass(frozen=True)
+class Alias:
+    """An old name that still works: what it was, what replaced it, and since when.
+
+    Calling by it works; the first use in a session says so in one line (`Notices`); it is
+    hidden from ``--help`` and ``tools/list`` and is never removed before 1.0 (`removed_in`
+    is checked wherever one is declared).
+    """
+
+    kind: str
+    old: str
+    new: str
+    since: str
+    removed_in: str = MIN_REMOVED_IN
+
+    def __post_init__(self) -> None:
+        if self.kind not in KINDS:
+            raise ValueError(f"alias {self.old!r}: kind {self.kind!r} not in {KINDS}")
+        if not self.old or self.old == self.new:
+            raise ValueError(f"alias {self.old!r} must differ from {self.new!r}")
+        check_rename(f"{self.kind} {self.old!r}", self.since, self.removed_in)
+
+    def notice(self) -> str:
+        """The one line a caller reads. No prefix: the CLI adds ``ddflow: ``, MCP ``note: ``."""
+        return (
+            f"{self.kind} '{self.old}' is deprecated since {self.since}; use '{self.new}' "
+            f"(the old name keeps working until {self.removed_in})."
+        )
+
+
+class Notices:
+    """Which aliases a session has already been told about: once each (D-compat)."""
+
+    def __init__(self) -> None:
+        self._seen: set[Alias] = set()
+
+    def fresh(self, aliases: Iterable[Alias]) -> list[Alias]:
+        """The aliases among ``aliases`` not reported before, now marked reported."""
+        out: list[Alias] = []
+        for a in aliases:
+            if a not in self._seen:
+                self._seen.add(a)
+                out.append(a)
+        return out
+
+
+def closest(name: str, candidates: Iterable[str]) -> str:
+    """The candidate nearest to ``name`` for a 'did you mean', or "" when none is near."""
+    near = difflib.get_close_matches(name, sorted(set(candidates)), n=1, cutoff=0.6)
+    return near[0] if near else ""
+
+
+def _did_you_mean(name: str, candidates: Iterable[str]) -> str:
+    near = closest(name, candidates)
+    return f" Did you mean '{near}'?" if near else ""
+
+
+def _check_aliases(what: str, aliases: tuple[str, ...], own: str, since: str, removed: str) -> None:
+    if not aliases:
+        return
+    check_rename(what, since, removed)
+    if len(set(aliases)) != len(aliases) or own in aliases:
+        raise ValueError(f"{what}: aliases must be distinct and differ from {own!r}")
+    if bad := [a for a in aliases if not _WORD.fullmatch(a.lstrip("-"))]:
+        raise ValueError(f"{what}: {bad[0]!r} is not a usable alias")
+
+
+class AliasChoices(dict):
+    """A subparsers' ``choices`` that can also answer to hidden alias names.
+
+    Lookup (``in``, ``[]``, ``get``) finds an alias; iteration, ``keys``, ``items`` and
+    ``len`` do not show it, so ``--help``, usage lines, error messages and every walk over a
+    parser list the canonical commands only. The alias maps to the SAME parser.
+    """
+
+    def __init__(self, *a: Any, **kw: Any) -> None:
+        super().__init__(*a, **kw)
+        self.hidden: dict[str, argparse.ArgumentParser] = {}
+
+    def __missing__(self, key: str) -> argparse.ArgumentParser:
+        return self.hidden[key]
+
+    def __contains__(self, key: object) -> bool:
+        return super().__contains__(key) or key in self.hidden
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self[key] if key in self else default
+
+
+def _alias_table(subparsers: argparse._SubParsersAction) -> AliasChoices:
+    """``subparsers.choices`` as an `AliasChoices`, replacing the plain dict on first use."""
+    if not isinstance(subparsers.choices, AliasChoices):
+        both = AliasChoices(subparsers._name_parser_map)
+        subparsers._name_parser_map = both
+        subparsers.choices = both
+    return subparsers.choices  # type: ignore[return-value]
+
+
+def add_command_alias(
+    subparsers: argparse._SubParsersAction,
+    parser: argparse.ArgumentParser,
+    word: str,
+    alias: Alias,
+) -> None:
+    """Make the one word ``word`` reach ``parser`` under ``subparsers``, hidden; ``alias``
+    is what a caller who typed it is told."""
+    table = _alias_table(subparsers)
+    if word in table:
+        raise ValueError(f"alias {word!r} is already a command or alias here")
+    table.hidden[word] = parser
+    if not hasattr(subparsers, "_compat"):
+        subparsers._compat = {}  # type: ignore[attr-defined]
+    subparsers._compat[word] = alias  # type: ignore[attr-defined]
+
+
+def _hide_from_abbreviation(parser: argparse.ArgumentParser) -> None:
+    """Keep ``parser``'s old flags out of argparse's prefix matching: `--do` matched both
+    `--docs` and its old name `--doc` (the same action) and was refused as ambiguous. The old
+    flag still matches EXACTLY; only an abbreviation of it is not offered."""
+    matches = parser._get_option_tuples
+
+    def visible(option_string: str) -> list[Any]:
+        found = matches(option_string)
+        if option_string[:2] != option_string[:1] * 2:
+            return found  # `-dv`: a short option with its value attached is not an abbreviation
+        old = parser._compat_flags  # type: ignore[attr-defined]
+        return [m for m in found if m[1] not in old]
+
+    parser._get_option_tuples = visible  # type: ignore[method-assign]
+
+
+class SuggestingParser(argparse.ArgumentParser):
+    """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it."""
+
+    def error(self, message: str) -> Any:
+        for a in self._actions:
+            # only the command word: another option's bad value is not a command name
+            if isinstance(a, argparse._SubParsersAction) and (
+                m := re.match(rf"argument {re.escape(a.dest)}: invalid choice: '([^']*)'", message)
+            ):
+                message += _did_you_mean(m.group(1), list(a.choices))
+        super().error(message)
+
+
+def used_aliases(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, argv: Iterable[str] = ()
+) -> list[Alias]:
+    """The aliases a parsed command line went through: the command words typed (from the
+    namespace the subparsers filled) and the flags typed (from ``argv``, up to ``--``)."""
+    out: list[Alias] = []
+    node = parser
+    flags: dict[str, Alias] = dict(getattr(node, "_compat_flags", {}))
+    while True:
+        sub = next((a for a in node._actions if isinstance(a, argparse._SubParsersAction)), None)
+        typed = getattr(args, sub.dest, None) if sub is not None else None
+        if sub is None or typed is None or typed not in sub.choices:
+            break
+        if hit := getattr(sub, "_compat", {}).get(typed):
+            out.append(hit)
+        node = sub.choices[typed]
+        flags.update(getattr(node, "_compat_flags", {}))
+    for token in argv:
+        if token == "--":
+            break
+        if (hit := flags.get(token.split("=", 1)[0])) and hit not in out:
+            out.append(hit)
+    return out
 
 
 @dataclass(frozen=True)
@@ -64,8 +245,26 @@ class Param:
     #: Not offered on the MCP surface / on the CLI.
     cli_only: bool = False
     mcp_only: bool = False
+    #: Earlier names that still work (D-compat): as a tool argument, and as the CLI flag
+    #: ``--name`` spelled the way `option` is (a name starting with ``-`` is a CLI-only flag
+    #: spelling taken as written). Hidden from help and the schema; needs ``deprecated_since``.
+    aliases: tuple[str, ...] = ()
+    deprecated_since: str = ""
+    removed_in: str = MIN_REMOVED_IN
+    #: What an old name should be replaced by when that is not simply this parameter; shown
+    #: verbatim in the notice (spell a flag's as the flag, ``--name``).
+    replacement: str = ""
 
     def __post_init__(self) -> None:
+        if self.positional and any(a.startswith("-") for a in self.aliases):
+            raise ValueError(f"param {self.name!r}: a positional has no flag to alias")
+        _check_aliases(
+            f"param {self.name!r}",
+            self.aliases,
+            self.name,
+            self.deprecated_since,
+            self.removed_in,
+        )
         if self.type not in TYPES:
             raise ValueError(f"param {self.name!r}: type {self.type!r} not in {TYPES}")
         if self.repeat and self.type != "array":
@@ -81,6 +280,31 @@ class Param:
     @property
     def option(self) -> str:
         return self.flag or "--" + self.name.replace("_", "-")
+
+    def arg_aliases(self) -> dict[str, Alias]:
+        """Old tool-argument names -> the `Alias` that says so (those a flag spelling is not)."""
+        return {
+            a: Alias(
+                "argument", a, self.replacement or self.name, self.deprecated_since, self.removed_in
+            )
+            for a in self.aliases
+            if not a.startswith("-")
+        }
+
+    def flag_aliases(self) -> dict[str, Alias]:
+        """Old CLI option strings -> their `Alias`, each spelled as argparse is given it."""
+        if self.positional:
+            return {}
+        return {
+            (a if a.startswith("-") else "--" + a.replace("_", "-")): Alias(
+                "flag",
+                a if a.startswith("-") else "--" + a.replace("_", "-"),
+                self.replacement or self.option,
+                self.deprecated_since,
+                self.removed_in,
+            )
+            for a in self.aliases
+        }
 
     def schema(self) -> dict[str, Any]:
         """The JSON Schema (2020-12) property for this parameter. Key order is the order
@@ -121,7 +345,17 @@ class Param:
             kwargs["choices"] = list(self.choices)
         if self.default is not _UNSET:
             kwargs["default"] = self.default
-        parser.add_argument(*args, **kwargs)
+        action = parser.add_argument(*args, **kwargs)
+        # An old flag is the SAME action under another option string: parsing finds it,
+        # `--help` (which prints the action's own strings) does not.
+        for option, alias in self.flag_aliases().items():
+            if option in parser._option_string_actions:
+                raise ValueError(f"alias {option} of {self.name!r} is already an option")
+            parser._option_string_actions[option] = action
+            if not hasattr(parser, "_compat_flags"):
+                parser._compat_flags = {}  # type: ignore[attr-defined]
+                _hide_from_abbreviation(parser)
+            parser._compat_flags[option] = alias  # type: ignore[attr-defined]
 
     def spec(self) -> tuple[str, str, bool]:
         """The ``(json_type, description, required)`` tuple the MCP engine's tool table holds."""
@@ -196,11 +430,45 @@ class Command:
     flag_exempt: Mapping[str, str] = field(default_factory=dict)
     #: Why the body is text and not JSON (required of every ``prose`` tool).
     prose_reason: str = ""
+    #: Earlier names that still work (D-compat): ``aliases`` are old spellings of the LAST
+    #: word of ``path`` (a renamed group is `add_commands`' ``group_aliases``), ``tool_aliases``
+    #: old MCP tool names. Both are hidden from ``--help`` and ``tools/list``, always
+    #: callable, and need ``deprecated_since``.
+    aliases: tuple[str, ...] = ()
+    tool_aliases: tuple[str, ...] = ()
+    deprecated_since: str = ""
+    removed_in: str = MIN_REMOVED_IN
+    #: What an old name should be replaced by when that is not simply this command.
+    replacement: str = ""
 
     def __post_init__(self) -> None:
+        _check_aliases(
+            f"{'/'.join(self.path) or self.tool}",
+            self.aliases,
+            self.path[-1] if self.path else "",
+            self.deprecated_since,
+            self.removed_in,
+        )
+        _check_aliases(
+            f"tool {self.tool}",
+            self.tool_aliases,
+            self.tool,
+            self.deprecated_since,
+            self.removed_in,
+        )
+        if self.aliases and not self.path:
+            raise ValueError(f"{self.tool}: CLI aliases need a CLI path")
+        if self.tool_aliases and not self.tool:
+            raise ValueError(f"{'/'.join(self.path)}: tool aliases need a tool")
         names = [p.name for p in self.params]
         if len(set(names)) != len(names):
             raise ValueError(f"{'/'.join(self.path)}: duplicate parameter names")
+        spelled = names + [a for p in self.params for a in p.aliases]
+        if len(set(spelled)) != len(spelled):
+            raise ValueError(
+                f"{'/'.join(self.path) or self.tool}: a parameter alias is also another "
+                "parameter's name or alias"
+            )
         if not self.path and not self.tool:
             raise ValueError("a command needs a CLI path or an MCP tool name")
         if len(self.via) > MAX_VIA:
@@ -250,7 +518,18 @@ class Command:
             entry["identify"] = True
         if self.deprecated:
             entry["deprecated"] = dict(self.deprecated)
+        if aliases := self.tool_alias_list():
+            entry["aliases"] = aliases
+        if arg_aliases := {a: al for p in self.mcp_params for a, al in p.arg_aliases().items()}:
+            entry["arg_aliases"] = arg_aliases
         return entry
+
+    def tool_alias_list(self) -> tuple[Alias, ...]:
+        """The old names of this command's MCP tool, as `Alias`es."""
+        return tuple(
+            Alias("tool", a, self.replacement or self.tool, self.deprecated_since, self.removed_in)
+            for a in self.tool_aliases
+        )
 
     def add_to(self, subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
         """Add this command's subparser to ``subparsers`` (the parent group's)."""
@@ -262,6 +541,20 @@ class Command:
             p.add_to(sub)
         if self.handler is not None:
             sub.set_defaults(fn=self.handler)
+        for word in self.aliases:
+            old = " ".join((*self.path[:-1], word))
+            add_command_alias(
+                subparsers,
+                sub,
+                word,
+                Alias(
+                    "command",
+                    old,
+                    self.replacement or " ".join(self.path),
+                    self.deprecated_since,
+                    self.removed_in,
+                ),
+            )
         return sub
 
 
@@ -270,14 +563,17 @@ def add_commands(
     commands: tuple[Command, ...] | list[Command],
     *,
     groups: Mapping[str, str] | None = None,
+    group_aliases: Mapping[str, tuple[Alias, ...]] | None = None,
 ) -> None:
     """Register ``commands`` on the root ``subparsers``, in order.
 
     A command whose path is longer than one word goes under a group parser, created on
     first use with the one-line help ``groups`` gives it. Only paths of one or two words
-    exist today.
+    exist today. ``group_aliases`` maps a group to the old names of the whole group
+    (``{"docs": (Alias("command", "doc", "docs", "0.1.17"),)}``): hidden, always callable.
     """
     made: dict[str, argparse._SubParsersAction] = {}
+    parsers: dict[str, argparse.ArgumentParser] = {}
     for cmd in commands:
         if not cmd.path:
             continue
@@ -289,8 +585,62 @@ def add_commands(
         group = cmd.path[0]
         if group not in made:
             gp = subparsers.add_parser(group, help=(groups or {}).get(group, ""))
+            parsers[group] = gp
             made[group] = gp.add_subparsers(dest=f"{group}_cmd", required=True)
         cmd.add_to(made[group])
+    for group, aliases in (group_aliases or {}).items():
+        if group not in made:
+            raise ValueError(f"group alias for {group!r}, which no command declares")
+        for alias in aliases:
+            add_command_alias(subparsers, parsers[group], alias.old, alias)
+
+
+# -- the MCP side of aliases ----------------------------------------------------------
+
+
+def resolve_tool(tools: Mapping[str, Mapping[str, Any]], name: str) -> tuple[str, Alias | None]:
+    """``(tool name, the alias used)``: ``name`` itself when it is a tool, the tool an alias
+    names otherwise, and ``("", None)`` for a name that is neither."""
+    if name in tools:
+        return name, None
+    for tool, spec in tools.items():
+        for alias in spec.get("aliases", ()):
+            if alias.old == name:
+                return tool, alias
+    return "", None
+
+
+def unknown_tool_hint(tools: Mapping[str, Any], name: str) -> str:
+    """`` Did you mean 'ddflow_x'?`` for a tool call naming nothing, or ""."""
+    return _did_you_mean(name, tools)
+
+
+def rename_args(
+    spec: Mapping[str, Any], args: Mapping[str, Any]
+) -> tuple[dict[str, Any], list[Alias], str]:
+    """``(args under their current names, the aliases used, an error or "")``.
+
+    An argument spelled with an old name is moved to the current one; giving both is an
+    error (which one is meant?).
+    """
+    out = dict(args)
+    used: list[Alias] = []
+    for old, alias in (spec.get("arg_aliases") or {}).items():
+        if old not in out:
+            continue
+        if alias.new in out:
+            return out, used, f"both '{alias.new}' and its deprecated name '{old}' were given"
+        out[alias.new] = out.pop(old)
+        used.append(alias)
+    return out, used, ""
+
+
+def unknown_arg_hint(known: Iterable[str], unknown: Iterable[str]) -> str:
+    """`` Did you mean 'a' (for 'b')?`` for the unknown arguments that have a near name."""
+    known = list(known)  # read once per unknown name
+    pairs = [(u, closest(u, known)) for u in unknown]
+    said = [f"'{near}' (for '{u}')" for u, near in pairs if near]
+    return f" Did you mean {', '.join(said)}?" if said else ""
 
 
 # -- what the declarations say, derived (the parity test reads these) -----------------

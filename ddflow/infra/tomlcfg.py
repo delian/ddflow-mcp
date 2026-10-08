@@ -36,7 +36,7 @@ import json
 import re
 import sys
 import tomllib
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -239,6 +239,52 @@ def remove(text: str, dotted: str) -> tuple[str, bool]:
         return text, False
     del table[key.strip()]
     return tomlkit.dumps(doc), True
+
+
+def _drop_if_empty(text: str, dotted: str) -> str:
+    """``text`` without the table ``dotted`` (``a`` or ``a.b``) when it is there and empty."""
+    tomlkit = _tomlkit()
+    doc = tomlkit.parse(text)
+    parts = [p.strip() for p in dotted.split(".")]
+    parent: Any = doc
+    for part in parts[:-1]:
+        parent = parent.get(part) if isinstance(parent, dict) else None
+    table = parent.get(parts[-1]) if isinstance(parent, dict) else None
+    if not isinstance(table, dict) or table:
+        return text
+    del parent[parts[-1]]
+    return tomlkit.dumps(doc)
+
+
+def move_keys(
+    text: str, moves: Mapping[str, str], *, live: Iterable[str] = ()
+) -> tuple[str, list[str]]:
+    """``(text with each old ``<section>.<key>`` of ``moves`` moved to its new key, the old
+    keys that were there)``: comments and layout kept (`remove`, `upsert`). The value moves
+    as written; a new key already present stays as it is (the more recent spelling wins),
+    and the old one is dropped. An old table left empty is dropped too unless it is one of
+    the ``live`` section names. Raises ``tomllib.TOMLDecodeError`` when ``text`` is not TOML."""
+    keep = set(live)
+    moved: list[str] = []
+    for old, new in moves.items():
+        osec, _, okey = old.rpartition(".")
+        table: Any = _tomlkit().parse(text) if osec else None
+        for part in [p.strip() for p in osec.split(".")] if osec else []:
+            table = table.get(part) if isinstance(table, dict) else None
+        if not isinstance(table, dict) or okey not in table:
+            continue
+        literal_text = table[okey].as_string().strip()
+        text, _ = remove(text, old)
+        if osec not in keep:
+            text = _drop_if_empty(text, osec)
+        nsec, _, nkey = new.rpartition(".")
+        have: Any = tomllib.loads(text)
+        for part in nsec.split("."):
+            have = have.get(part) if isinstance(have, dict) else None
+        if not (isinstance(have, dict) and nkey in have):
+            text = upsert(text, new, literal_text)
+        moved.append(old)
+    return text, moved
 
 
 def upsert(text: str, dotted: str, literal_text: str) -> str:
