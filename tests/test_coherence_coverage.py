@@ -130,6 +130,7 @@ EXEMPT: dict[str, str] = {
             "export.disabled",
             "export.acknowledged",
             "ddflow.seen",
+            "ddflow.capabilities",
             "skew.overridden",
             "upgrade.applied",
         ),

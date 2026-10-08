@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .events import (
+    CAPABILITIES_KIND,
     OLDER_MARK,
     REPAIR_APPLIED_KIND,
     SCHEMA_VERSION,
@@ -138,6 +139,7 @@ from .handlers.links import (  # noqa: F401
 from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,
+    _h_ddflow_capabilities,
     _h_ddflow_seen,
     _h_repair_applied,
     _h_session_ended,
@@ -282,6 +284,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     # first writer: api/defs.py (record / update / retire / supersede / merge)
     **DEF_HANDLERS,
     SEEN_KIND: _h_ddflow_seen,
+    # first writer: infra/log.py (the write that first uses a capability)
+    CAPABILITIES_KIND: _h_ddflow_capabilities,
     SKEW_OVERRIDDEN_KIND: _h_skew_overridden,
     UPGRADE_APPLIED_KIND: _h_upgrade_applied,
     # first writer: services/repairs apply

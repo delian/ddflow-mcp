@@ -89,7 +89,8 @@ def test_first_write_stamps_the_version_once_per_agent_and_version(repo: Path):
     assert seen[0].data["install"]
     # The stamp precedes the event that caused it.
     order = [e.kind for e in log.read_all()]
-    assert order[:2] == ["ddflow.seen", "phase.added"]
+    # stamp, then the capability the write uses, then the write itself
+    assert order[:3] == ["ddflow.seen", "ddflow.capabilities", "phase.added"]
     # A second agent stamps its own first write, and a new process of the same agent does not.
     EventLog(repo, "a2").append("phase.added", "P3", {"title": "p"})
     EventLog(repo, "a1").append("phase.added", "P4", {"title": "p"})
