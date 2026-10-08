@@ -349,3 +349,27 @@ def test_a_removal_the_log_cannot_retire_says_the_log_still_holds_the_rule(
     assert "log is locked" in out.reason
     assert not (repo / ".ddflow" / "rules" / "r-w.toml").exists()
     assert _defs(repo)["rule:r-w"].live
+
+
+def test_the_mcp_tools_show_an_unrecorded_write_as_an_error(repo: Path, monkeypatch) -> None:
+    from ddflow.surfaces.mcp import Server
+
+    def call(name: str, args: dict):
+        return Server(repo).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args},
+            }
+        )["result"]
+
+    def refuse(*a, **k):
+        raise RuntimeError("log is locked")
+
+    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
+    res = call("ddflow_rule_add", {"id": "r-mcp", "title": "T", "content": "Body of the rule."})
+    assert res.get("isError") and res["_meta"]["exit"] == 1, res
+    text = res["content"][0]["text"]
+    assert "not recorded in the log" in text and "log is locked" in text
+    assert (repo / ".ddflow" / "rules" / "r-mcp.toml").exists()
