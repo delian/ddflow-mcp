@@ -217,7 +217,7 @@ the same implementation, so neither drifts from the other.
 | **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
-| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--confirm KEY ... --reason WHY]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`) |
+| **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, migrations (registered breaking-change migrations and the files each would rewrite), config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--confirm KEY ... --reason WHY]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`) |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
@@ -3876,12 +3876,28 @@ In code, `ddflow.services.upgrade_manifest.changes_since("0.1.9")` returns every
 a newer release, oldest first; `replay()` gives the knobs and event kinds a release has.
 The upgrade plan reads it to tell a project what its upgrade will change.
 
+### Migrations: breaking changes P-unify makes to what a project holds
+
+A release that changes a file format, a marker grammar or a reference registers a
+**migration** (`ddflow/services/migrations/`, decision D-compat) instead of rewriting
+things ad hoc. A migration declares `since_version`, `format_level` (the `FORMAT_LEVEL` its
+result belongs to), the artifact kinds it touches (`log`, `config`, `rules`, `docs`,
+`hooks`, `references`, `local`) and four functions: `detect` (pure; nothing once migrated),
+`plan` (the dry run: each file it would rewrite), `apply` (files only through `infra.fsio`;
+any log change is a corrective event, never an edit of a line) and `verify`. The runner backs
+up the planned files first, applies, appends the events, then re-detects and verifies: a
+migration whose result does not check out is `failed`, never `applied`, and one that could
+not run is `unavailable`. `ddflow upgrade --plan` lists the pending ones under *migrations*,
+each with `would: <file>: <change>` lines; `ddflow upgrade --apply migrations` runs them. An
+operator-consent migration waits for `--confirm <migration id> --reason WHY`. A second run
+finds nothing and writes nothing.
+
 ### Applying an upgrade
 
 `ddflow upgrade` (or `--plan`) only reads. `ddflow upgrade --apply` does what the plan lists
 (MCP: `ddflow_upgrade` with `apply`; `plan: false` applies everything), by category:
-`--apply` or `--apply all`, or a comma list of `repairs`, `config`, `instructions`, `hooks`,
-`mcp`, `features`. It prints the plan that is left, and exits 0 when everything chosen was
+`--apply` or `--apply all`, or a comma list of `repairs`, `migrations`, `config`, `instructions`,
+`hooks`, `mcp`, `features`. It prints the plan that is left, and exits 0 when everything chosen was
 applied or acknowledged, 1 when a step failed, 2 when one could not run (never read as
 done), 3 while an item waits for the operator. Before it rewrites any file it copies the
 originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, never shared;
@@ -3906,6 +3922,8 @@ skips saving. What each category does:
 
 - **repairs**: the pending data repairs (new corrective events, never an edit of the log);
   one only the operator may decide waits for `--confirm <repair id>`.
+- **migrations**: the pending registered migrations (see above), the files they rewrite saved
+  first with the rest; each is recorded in `upgrade.applied` as `migration:<id>`.
 - **config** (`[upgrade].config_changes`: `agent` (default), `ask` or `operator`; the last two
   make every change wait for `--confirm`): a changed default for a knob the project never set takes effect by itself, so
   applying it only *acknowledges* it, lists it with `ddflow config --set KNOB OLD` to pin

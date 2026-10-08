@@ -138,6 +138,9 @@ def _detect(ctx: Context, m: Migration) -> Pending:
         changes = m.plan(ctx, findings) if findings else []
     except Unavailable as exc:
         return Pending(m, unavailable=str(exc) or "the detector could not run")
+    except (OSError, ValueError) as exc:
+        # A detector that raises did not run: the plan still shows every other migration.
+        return Pending(m, unavailable=f"{type(exc).__name__}: {exc}")
     return Pending(m, findings, changes)
 
 
@@ -180,8 +183,13 @@ def run(
             continue
         # Read, decide and append under the log's lock: two agents migrating at once must
         # not both apply the same step.
-        with log.transaction():
-            outcome = _run_one(m, context(repo, log, cfg), backup)
+        try:
+            with log.transaction():
+                outcome = _run_one(m, context(repo, log, cfg), backup)
+        except (OSError, ValueError) as exc:
+            # A detector that raises: this migration is `failed`, and the ones that already
+            # ran keep their outcomes -- the loop goes on.
+            outcome = Outcome(m.id, FAILED, f"{type(exc).__name__}: {exc}")
         if outcome:
             out.append(outcome)
     return out

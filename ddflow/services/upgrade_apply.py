@@ -30,7 +30,7 @@ from __future__ import annotations
 import contextlib
 import re
 import tomllib
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +44,7 @@ from . import adopt as AD
 from . import claudehooks as CH
 from . import configwrite as CW
 from . import enforce as E
+from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_plan as UP
 from .backups import (  # noqa: F401 -- the backups' home
@@ -236,7 +237,13 @@ def _apply_mcp(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
 
 def _confirmed(item: dict[str, Any], confirm: Mapping[str, str]) -> str:
     """The reason the operator gave for this item, "" when they gave none."""
-    for k in (item["id"], item.get("key"), item.get("repair"), item.get("path")):
+    for k in (
+        item["id"],
+        item.get("key"),
+        item.get("repair"),
+        item.get("migration"),
+        item.get("path"),
+    ):
         if k and confirm.get(k):
             return confirm[k]
     return ""
@@ -286,7 +293,21 @@ def apply(
         failed = results + [_rec(i, status, why) for i in todo]
         return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
-    results += _execute(repo, log, cfg, todo, agent)
+    saved = {p.resolve() for p in files} if backup_dir else set()
+
+    def late_backup(more: list[Path]) -> str:
+        """Files a migration's own detect now plans that the plan's did not name (earlier
+        steps of this run can change what it finds): saved too, in the same mode."""
+        fresh = [p for p in more if p.resolve() not in saved]
+        if not fresh or backup == "none":
+            return ""
+        where, why, _refused = _save(repo, cfg, backup, fresh, frm, to)
+        if why:
+            raise OSError(why)
+        saved.update(p.resolve() for p in fresh)
+        return where
+
+    results += _execute(repo, log, cfg, todo, agent, late_backup)
     ok, done_cats, reasons = _summarise(results, todo, confirm)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     if ok:
@@ -370,7 +391,13 @@ def _record(
 
 
 def _ident(item: dict[str, Any]) -> str:
-    return item.get("key") or item.get("repair") or item.get("path") or item["id"]
+    return (
+        item.get("key")
+        or item.get("repair")
+        or item.get("migration")
+        or item.get("path")
+        or item["id"]
+    )
 
 
 def _select(
@@ -395,24 +422,32 @@ def _select(
 
 
 def _execute(
-    repo: Path, log: Any, cfg: Config, todo: list[dict[str, Any]], agent: str
+    repo: Path,
+    log: Any,
+    cfg: Config,
+    todo: list[dict[str, Any]],
+    agent: str,
+    late_backup: Callable[[list[Path]], str] | None = None,
 ) -> list[dict[str, Any]]:
     """Run each item's applier; repairs and instruction files go in one batch each."""
     out: list[dict[str, Any]] = []
     for item in todo:
-        if item["category"] not in ("repairs", "instructions"):
+        if item["category"] not in ("repairs", "migrations", "instructions"):
             out.append(_rec(item, *_run(repo, cfg, item, agent)))
     repairs = [i for i in todo if i["category"] == "repairs"]
+    migrations = [i for i in todo if i["category"] == "migrations"]
     docs = [i for i in todo if i["category"] == "instructions"]
     if repairs:
         out += _run_repairs(repo, log, cfg, repairs)
+    if migrations:
+        out += _run_migrations(repo, log, cfg, migrations, late_backup)
     if docs:
         out += _run_instructions(repo, docs)
     return out
 
 
 def _refusal(item: dict[str, Any], config_changes: str) -> str:
-    key = item.get("key") or item.get("repair") or item.get("path") or item["id"]
+    key = _ident(item)
     why = "needs the operator's confirmation"
     if item["category"] == "config" and item["action"] == UP.AGENT:
         why += f" ([upgrade].config_changes = {config_changes})"
@@ -451,6 +486,38 @@ def _run_repairs(repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]])
             out.append(_rec(i, UNAVAILABLE, f"could not run: {r['unavailable']}"))
         else:
             out.append(_rec(i, APPLIED, f"{len(r['findings'])} finding(s) settled"))
+    return out
+
+
+def _run_migrations(
+    repo: Path,
+    log: Any,
+    cfg: Config,
+    items: list[dict[str, Any]],
+    late_backup: Callable[[list[Path]], str] | None = None,
+) -> list[dict[str, Any]]:
+    """Run the chosen migrations. The files their plans named were saved by `apply` (in the
+    mode the caller chose, `none` included) before anything ran; ``late_backup`` saves any
+    other file a migration now plans to rewrite, so none is rewritten without a copy."""
+    try:
+        outcomes = MG.run(
+            repo, log, cfg, [i["migration"] for i in items], backup=late_backup or (lambda _f: "")
+        )
+    except (OSError, KeyError, ValueError) as exc:
+        return [_rec(i, FAILED, f"{type(exc).__name__}: {exc}") for i in items]
+    by_id = {o.migration: o for o in outcomes}
+    out = []
+    for i in items:
+        o = by_id.get(i["migration"])
+        if o is None:
+            out.append(_rec(i, SKIPPED, "nothing left to migrate"))
+            continue
+        detail = "; ".join([o.detail, *o.problems])
+        out.append(
+            _rec(
+                i, {MG.APPLIED: APPLIED, MG.UNAVAILABLE: UNAVAILABLE}.get(o.status, FAILED), detail
+            )
+        )
     return out
 
 
