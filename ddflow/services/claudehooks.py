@@ -160,6 +160,11 @@ class SettingsError(ValueError):
     """The settings file exists and is not a JSON object; nothing was written."""
 
 
+class NewerSettings(SettingsError):
+    """A hook entry a NEWER ddflow wrote: not downgraded (D-compat 2), a refusal (exit 3,
+    "upgrade ddflow to >= X") rather than a failure."""
+
+
 def _read(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -275,7 +280,9 @@ def install(
                     owned = region.owns(have)
                     wanted = region.splice(have, command) if owned else entry["command"]
                     edited = owned and region.state(have) == "edited"
-                except (NewerContent, RegionError) as exc:
+                except NewerContent as exc:
+                    raise NewerSettings(f"{path}: the ddflow {event} hook: {exc}") from exc
+                except RegionError as exc:
                     raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
                 if wanted == have and h.get("type") == "command":
                     return f"the ddflow {event} hook is already in {path}"
