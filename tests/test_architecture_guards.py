@@ -395,11 +395,8 @@ def _by_module(sites: list[str]) -> dict[str, list[str]]:
 def _module_baselines(kind: str) -> dict[str, int]:
     """{module: baseline} from `<kind>/*.toml`; a module with no file has none."""
     out: dict[str, int] = {}
-    directory = BASELINES / kind
-    assert directory.is_dir(), (
-        f"{directory.relative_to(ROOT)} is missing: {kind} keeps one file per module"
-    )
-    for path in sorted(directory.glob("*.toml")):
+    directory = BASELINES / kind  # absent once its last module reached zero: git keeps no empty dir
+    for path in sorted(directory.glob("*.toml")) if directory.is_dir() else ():
         rel = path.relative_to(ROOT)
         data = tomllib.loads(path.read_text("utf-8"))
         assert set(data) == {"baseline"}, (
@@ -695,19 +692,20 @@ def test_the_unreferenced_census_counts_what_it_says() -> None:
 
 
 def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> None:
-    """One file per guard: each counter and each `.importlinter` contract has its baseline
+    """One file per guard (a directory of files, one per module, for the PER_MODULE
+    counters): each counter and each `.importlinter` contract has its baseline
     file, holding exactly its keys; `.importlinter` itself lists no allowlist (two homes
     for one list would drift); and no other file is there -- one left behind by a renamed
     or removed guard would be read by nothing while looking like it still guarded."""
     contracts = _contracts()
-    expected = (
-        {f"{k}.toml" for k in COUNTERS if k not in PER_MODULE}
-        | set(PER_MODULE)
-        | {f"importlinter-{c}.toml" for c in contracts}
-    )
+    # A per-module counter's directory exists while some module still has sites.
+    expected = {f"{k}.toml" for k in COUNTERS if k not in PER_MODULE} | {
+        f"importlinter-{c}.toml" for c in contracts
+    }
     present = {p.name for p in BASELINES.iterdir() if not p.name.startswith(".")}
-    assert present == expected, (
-        f"missing: {sorted(expected - present)}; read by no guard: {sorted(present - expected)}"
+    assert present - set(PER_MODULE) == expected, (
+        f"missing: {sorted(expected - present)}; "
+        f"read by no guard: {sorted(present - expected - set(PER_MODULE))}"
     )
     modules = {_dotted(p) for p in _modules()}
     for kind in COUNTERS:
@@ -760,3 +758,11 @@ def test_every_per_module_baseline_is_a_positive_count_in_its_own_file(
     )
     with pytest.raises(AssertionError, match="delete it"):
         _module_baselines("git_argv")
+
+
+def test_a_counter_whose_last_module_reached_zero_has_no_directory(tmp_path, monkeypatch) -> None:
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "BASELINES", tmp_path / "guard_baselines")
+    (tmp_path / "guard_baselines").mkdir()
+    assert _module_baselines("fcntl") == {}
