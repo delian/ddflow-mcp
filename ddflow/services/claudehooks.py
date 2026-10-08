@@ -66,10 +66,22 @@ class HookSpec:
     purpose: str  #: what the install message says it buys
     extra: str = ""  #: arguments appended to the subcommand
     fail_open: bool = True  #: `|| true`: never fail the harness turn it observes
+    #: The subcommand the hook runs when that is no longer its `name` (a renamed command,
+    #: D-compat): the hook's IDENTITY stays `name`, so a hook installed under the old
+    #: command is refreshed in place, never orphaned beside a second one.
+    run: str = ""
+
+    @property
+    def subcommand(self) -> str:
+        """The `ddflow` arguments the hook line runs."""
+        return f"hooks {self.run or self.name}"
 
     @property
     def marker(self) -> str:
-        """What identifies OUR hook among the operator's: the subcommand it runs."""
+        """The hook's IDENTITY, which never changes with the command it runs. A hook entry
+        is ours when its stamped region (`hooks/<name>`, the one managed-region grammar,
+        D-doc-regions) is there, or, for an entry written before the stamp, when its line
+        runs this text."""
         return f"hooks {self.name}"
 
     @property
@@ -126,7 +138,7 @@ def command(h: HookSpec) -> str:
     """The shell line `h` runs, through `enforce.command_line`'s launcher fallback."""
     from .enforce import command_line
 
-    line = command_line(h.marker, extra=h.extra, refresh=f"ddflow hooks install {h.flag}")
+    line = command_line(h.subcommand, extra=h.extra, refresh=f"ddflow hooks install {h.flag}")
     return line + " || true" if h.fail_open else line
 
 
@@ -200,10 +212,18 @@ def _hooks_of(group: Any, path: Path) -> list[Any]:
 
 
 def _ours(hook: Any, marker: str = MARKER) -> bool:
-    """Whether a settings entry is ddflow's: its command runs the subcommand `marker`
-    names. Matched in the command LINE, which a stamped command (`_region`) still holds,
-    so entries written before the stamp, and by an older ddflow, are ours too."""
-    return isinstance(hook, dict) and marker in str(hook.get("command", ""))
+    """Whether a settings entry is ddflow's: it holds the stamped region `_region(marker)`
+    -- an identity that survives a rename of the subcommand it runs -- or, written before
+    the stamp or by an older ddflow, its command line runs the subcommand `marker` names."""
+    if not isinstance(hook, dict):
+        return False
+    command = str(hook.get("command", ""))
+    try:
+        if _region(marker).owns(command):
+            return True
+    except RegionError:
+        pass  # broken markers: fall back to the command text
+    return marker in command
 
 
 def _region(marker: str) -> Managed:
