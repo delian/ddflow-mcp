@@ -113,3 +113,24 @@ def test_rule_search_rows_with_scores(project, snapshot):
             out = RA.rule_search(project, q, **kw)
             got[f"{mode}:{q}"] = [(r["id"], r["score"]) for r in out.data.get("rows", [])]
     assert got == snapshot
+
+
+def test_gathered_rows_are_the_three_enumerators_in_order(project):
+    """search() gathers through the source registry (B-uni-search-core.2-sources): for every
+    subset of kinds the rows are exactly what the enumerators it replaced listed, in order."""
+    import itertools
+
+    from ddflow.api._base import _load
+    from ddflow.services import search as S
+
+    log, cfg, st = _load(project, "golden")
+    events = log.read_all()
+    for n in (0, 1, 2, len(S.SOURCES)):
+        for combo in itertools.combinations(S.SOURCES, n):
+            kinds = set(combo)
+            old = S._item_docs(st, cfg, kinds) + S._record_docs(st, cfg, kinds)
+            if kinds & {"session", "prompt"}:
+                old += S._session_docs(events, kinds)
+            if "log" in kinds:
+                old += S._log_docs(events, kinds)
+            assert S._docs(st, events, cfg, kinds) == old, combo
