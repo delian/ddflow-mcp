@@ -27,9 +27,10 @@ def safe_filename(
     default: str = "",
 ) -> str:
     """``s`` with every character outside ``[A-Za-z0-9]`` + ``keep`` replaced by ``repl``
-    (``""`` drops it), then cut to ``max``, stripped of ``strip`` at both ends, and ``default``
-    if nothing is left. ``unicode`` lets any ``str.isalnum()`` character through, not only
-    ASCII. The order is replace, strip, cut: callers that cut first say so in ``max``'s place.
+    (``""`` drops it); then, in this order, stripped of ``strip`` at both ends, cut to ``max``
+    (``None``: no cut; the cut can leave a ``strip`` character at the end, as the callers'
+    original expressions did), and ``default`` if nothing is left. ``unicode`` lets any
+    ``str.isalnum()`` character through, not only ASCII.
     """
     out = "".join(
         c if (c.isalnum() if unicode else c in _ASCII_ALNUM) or c in keep else repl for c in s
