@@ -101,12 +101,13 @@ def parse_section(section: str) -> FileDiff:
         elif line.startswith("+++ "):
             new = header_path(line, "b/")
             seen = True
-    if not seen:
-        old, new = _from_header_line(head)
-        return FileDiff(head, old, new)
-    # A pure rename has no ---/+++ lines; an added/deleted file has one /dev/null side.
+    # A header-only section (binary file, mode change) still says whether it adds or deletes.
     deleted = any(ln.startswith("deleted file mode") for ln in rest if not ln.startswith("@@"))
     added = any(ln.startswith("new file mode") for ln in rest if not ln.startswith("@@"))
+    if not seen:
+        old, new = _from_header_line(head)
+        return FileDiff(head, None if added else old, None if deleted else new)
+    # A pure rename has no ---/+++ lines; an added/deleted file has one /dev/null side.
     old = old or renamed_from or (None if added else new)
     new = new or renamed_to or (None if deleted else old)
     return FileDiff(head, None if added else old, None if deleted else new)

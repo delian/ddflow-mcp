@@ -90,3 +90,15 @@ def test_content_lines_that_look_like_headers_are_not_headers():
         "--- a/evil\n+++ b/evil\n"
     )
     assert unidiff.touched_paths(diff) == {"f"}
+
+
+def test_a_binary_add_and_delete_say_which_side_is_missing():
+    diff = (
+        "diff --git a/add.bin b/add.bin\nnew file mode 100644\nindex 0000000..cedf4fb\n"
+        "Binary files /dev/null and b/add.bin differ\n"
+        "diff --git a/gone.bin b/gone.bin\ndeleted file mode 100644\nindex 0f49c4a..0000000\n"
+        "Binary files a/gone.bin and /dev/null differ\n"
+    )
+    added, gone = unidiff.files(diff)
+    assert (added.old, added.new) == (None, "add.bin")
+    assert (gone.old, gone.new) == ("gone.bin", None)
