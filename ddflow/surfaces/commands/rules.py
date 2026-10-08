@@ -149,7 +149,7 @@ def cmd_rule(a, c: Ctx) -> int:
         )
         return _emit(c, out, verb, human)
     if verb == "remove":
-        out = rule_remove(c.repo, a.id)
+        out = rule_remove(c.repo, a.id, agent=_agent(c))
         return _emit(c, out, verb, f"removed {a.id}")
     if verb == "edit":
         return _cmd_edit(a, c)

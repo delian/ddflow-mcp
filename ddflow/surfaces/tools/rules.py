@@ -205,10 +205,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "reason": ("string", "", False),
         },
         "deprecated": {"reason": "a removal takes no reason and leaves no record"},
-        "api": lambda repo, a, agent: _api().rule_remove(
-            repo,
-            a["id"],
-        ),
+        "api": lambda repo, a, agent: _api().rule_remove(repo, a["id"], agent=agent),
         "payload": ("id",),
     },
     "ddflow_rule_show": {
