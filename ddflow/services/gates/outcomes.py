@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 import socket
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,6 +104,31 @@ def on_refutation(it, gate: str) -> dict[str, Any] | None:
         return None
     flag = (rec.evidence or {}).get("passed_on_refutation")
     return flag if isinstance(flag, dict) else None
+
+
+def refuted_passes(state: State, item_ids: Iterable[str] | None = None) -> list[dict[str, Any]]:
+    """Every gate recorded passed ON REFUTATION, for the operator's spot-check (D-unify 5):
+    one row per (item, gate) with the flag's own counts and rounds. ``item_ids`` narrows it
+    to those items; removed items are skipped. Ordered by item id, then gate name."""
+    wanted = None if item_ids is None else set(item_ids)
+    rows: list[dict[str, Any]] = []
+    for it in sorted(state.items.values(), key=lambda i: i.id):
+        if it.removed or (wanted is not None and it.id not in wanted):
+            continue
+        for gate in sorted(it.gates):
+            flag = on_refutation(it, gate)
+            if flag is not None:
+                rows.append(
+                    {"item": it.id, "title": it.title, "state": it.state, "gate": gate, **flag}
+                )
+    return rows
+
+
+def refuted_line(row: dict[str, Any]) -> str:
+    """One row of `refuted_passes` as a line: ``T1.critic  2 refuted, 0 confirmed, 2 round(s)``."""
+    rounds = row.get("rounds")
+    tail = f", {rounds} round(s)" if rounds is not None else ""
+    return f"{row['item']}.{row['gate']}  {row.get('refuted', 0)} refuted, {row.get('confirmed', 0)} confirmed{tail}"
 
 
 def triage_line(counts: dict[str, int]) -> str:

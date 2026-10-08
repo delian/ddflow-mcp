@@ -41,7 +41,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
         "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify ci onboard "
-        "dupes link"
+        "dupes link gate_list"
     ).split()
 )
 
