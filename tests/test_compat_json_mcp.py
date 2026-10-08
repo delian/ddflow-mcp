@@ -117,3 +117,38 @@ def test_a_refusal_keeps_refusal_first_in_the_structured_object(on):
     res = _call(server, "ddflow_claim", id="NO-SUCH-ITEM")
     assert res["_meta"]["exit"] == 3
     assert list(res["structuredContent"])[:2] == ["refusal", "schema"]
+
+
+@pytest.mark.parametrize(("version", "structured"), [("2024-11-05", False), ("2025-11-25", True)])
+def test_an_offloaded_worker_serves_the_revision_the_client_negotiated(on, version, structured):
+    """The worker is a fresh process whose `Server` defaults to the newest revision; without
+    the job's `protocol` an old client would get `structuredContent` on every long call."""
+    import os
+    import subprocess
+    import sys
+
+    job = {
+        "repo": str(on),
+        "called_from": str(on),
+        "agent": "A",
+        "protocol": version,
+        "state_key": "",
+        "msg": {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {"name": "ddflow_status", "arguments": {}},
+        },
+    }
+    root = str(Path(__file__).resolve().parents[1])
+    done = subprocess.run(
+        [sys.executable, "-c", "from ddflow.surfaces.mcp import _worker_main as m; m()"],
+        input=json.dumps(job),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": root},
+        timeout=120,
+    )
+    frames = [json.loads(line) for line in done.stdout.splitlines() if line.startswith("{")]
+    result = frames[-1]["result"]
+    assert ("structuredContent" in result) is structured, done.stderr[-400:]

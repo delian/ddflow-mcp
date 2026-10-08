@@ -4749,11 +4749,13 @@ Their full text lives once, in `ddflow_identify` and the handshake instructions.
 
 **Result schemas.** `[mcp].output_schemas = "off" | "on"` (env `DDFLOW_MCP_OUTPUT_SCHEMAS`;
 default `off`) makes `tools/list` declare an `outputSchema` for each tool whose result is a JSON
-object (`{"type": "object", "properties": {"schema": {"const": "claim@1"}, <its fields>: {}}}`:
+object of declared fields (`{"type": "object", "properties": {"schema": {"const": "claim@1"}, <its fields>: {}}}`:
 additive, nothing required, so a field added within a version never invalidates a result) and
 return that object also as `structuredContent` next to the text block. It needs MCP 2025-06-18
 or later (an older client is served as with `off`), costs about 16 KB more `tools/list` and
-sends every object result twice, which is why it is off. A tool whose result is a bare array
+sends every such result twice, which is why it is off. (A tool that answers one record or
+`null` -- `show`, `decision_show`, `recall` -- or text, or what the arguments decide, declares
+none.) A tool whose result is a bare array
 keeps its exact shape; its schema is under the tool's `_meta["ddflow/outputSchema"]`, because an
 `outputSchema` must describe an object. The `schema` tag in the result itself is there with the
 knob off too (see "What `--json` and the MCP tools return has a name", near the top).
