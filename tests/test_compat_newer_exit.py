@@ -75,3 +75,15 @@ def test_upgrade_apply_over_a_newer_harness_entry_is_refused_not_failed(repo):
         status, detail = UA._apply_hook(repo, item)
         assert status == UA.REFUSED, (item["id"], status, detail)
         assert E.NEWER_HINT in detail
+
+
+def test_upgrade_apply_over_a_newer_commit_msg_hook_is_refused_not_failed(repo):
+    """install() relabels the commit-msg refusal NOT INSTALLED; the hint must survive it."""
+    E.install(repo)
+    msg_hook = E.hooks_dir(repo) / "commit-msg"
+    msg_hook.write_text(msg_hook.read_text().replace(" fmt=1 ", " fmt=99 ", 1))
+    (E.hooks_dir(repo) / "pre-commit").unlink()  # pre-commit reinstalls; commit-msg is refused
+    item = {"id": "hooks:dangling:x", "fix": "ddflow hooks install", "paths": []}
+    status, detail = UA._apply_hook(repo, item)
+    assert status == UA.REFUSED, detail
+    assert E.NEWER_HINT in detail
