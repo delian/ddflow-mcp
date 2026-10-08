@@ -19,6 +19,9 @@ from ..infra.fsio import ensure_ignored_dir, replace_text
 
 BACKUPS = ".ddflow/backups"
 MANIFEST = "manifest.json"
+#: The copies live under this directory, so a project file named like the manifest cannot
+#: overwrite it.
+FILES = "files"
 
 
 def backup_name(frm: str, to: str) -> str:
@@ -29,7 +32,7 @@ def backup_name(frm: str, to: str) -> str:
 def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name: str = "") -> Path:
     """Copy every file that exists to `.ddflow/backups/<stamp>-<from>-to-<to>/` (or
     ``name``), a file inside the project at its relative path and one outside it under
-    `_outside/`, and write a `manifest.json` listing each file, whether it existed and where
+    `_outside/` (both below `files/`), and write a `manifest.json` listing each file, whether it existed and where
     its copy is. Returns the backup directory. Raises OSError when it cannot be written: the
     caller then writes nothing."""
     repo = Path(repo).resolve()
@@ -54,7 +57,7 @@ def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name:
             shown = f.as_posix()
         existed = f.is_file()
         if existed:
-            target = dest / stored
+            target = dest / FILES / stored
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, target)
         entries.append({"path": shown, "stored": stored if existed else "", "existed": existed})

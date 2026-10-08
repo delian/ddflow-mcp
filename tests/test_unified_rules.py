@@ -24,6 +24,7 @@ from conftest import run_cli
 
 from ddflow.services.adopt import (
     AIDER_READS,
+    BLOCK,
     CURRENT,
     FORM_AIDER,
     FORM_BLOCK,
@@ -128,7 +129,7 @@ def test_adopt_is_idempotent_across_every_surface(repo):
     for rel, text in before.items():
         assert (repo / rel).read_text() == text, f"{rel} changed on a second adopt"
     for rel in before:
-        assert (repo / rel).read_text().count("ddflow:begin rules/work-queue") <= 1, (
+        assert (repo / rel).read_text().count(f"ddflow:begin {BLOCK.name}") <= 1, (
             f"{rel} has two managed blocks"
         )
 
