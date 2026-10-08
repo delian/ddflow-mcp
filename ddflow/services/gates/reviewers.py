@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...core.digest import content_digest
 from ...core.model import State
+from ...infra import git as _git
 from .defs import DEFAULT_GATES, GateDef
 
 
@@ -183,3 +186,63 @@ def reviewer_independence(
         f"independent evidence."
         + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
     )
+
+
+def git_state(where: Path | str) -> dict[str, str] | None:
+    """What a reviewer tool must leave as it found it: HEAD, the index and working
+    tree, and the stash list (bug B5ce30dd94d).
+
+    The stash list is shared by every worktree of the repository, so a reviewer that
+    runs ``git stash apply|pop`` rewrites the working tree of whoever ran it and
+    consumes another lane's work. Each part is a digest, so the evidence stays small.
+    None when git could not answer: "could not tell" is not "unchanged"."""
+    parts = {
+        "head": ("rev-parse", "HEAD"),
+        "status": ("status", "--porcelain=v2", "--untracked-files=all"),
+        "diff": ("diff", "HEAD", "--binary"),
+        "stash": ("stash", "list", "--format=%H %gs"),
+    }
+    state: dict[str, str] = {}
+    for name, args in parts.items():
+        r = _git.run(where, *args, binary=True)
+        if not r.ok:
+            return None
+        state[name] = content_digest(r.out_bytes or b"", length=16)
+    return state
+
+
+def git_state_change(before: dict[str, str] | None, after: dict[str, str] | None) -> str:
+    """ "" when the state is as it was (or could not be compared), else a sentence naming
+    which parts changed."""
+    if before is None or after is None or before == after:
+        return ""
+    changed = ", ".join(k for k in before if before[k] != after.get(k))
+    return (
+        f"the reviewer tool changed git state ({changed}) -- a review must leave HEAD, "
+        f"the index, the working tree and the stash list as it found them (e.g. `git stash "
+        f"apply` or `pop`). This is NOT a clean review; nothing was restored, so check "
+        f"the tree and `git stash list` before going on, and run the reviewer against a "
+        f"clean throwaway worktree of the reviewed sha."
+    )
+
+
+def run_watching_git(
+    gdef: GateDef, cwd: Path, run: Callable[[], tuple[str, dict[str, Any]]]
+) -> tuple[str, dict[str, Any]]:
+    """``run()`` -- a command gate's execution -- with a reviewer gate's git state checked
+    around it. A reviewer tool (roborev, kilo) that moved HEAD, the index, the working
+    tree or the stash list reviewed nothing trustworthy: the gate is ``unavailable`` and
+    the evidence says what moved. Nothing is restored -- ddflow cannot prove which change
+    was the tool's. Any other gate is run as it is (a test suite may write the tree)."""
+    watch = is_reviewer_gate(gdef.id, gdef) and gdef.is_command_gate and cwd.exists()
+    before = git_state(cwd) if watch else None
+    outcome, ev = run()
+    after = git_state(cwd) if watch else None
+    moved = git_state_change(before, after)
+    if moved:
+        return "unavailable", {
+            **ev,
+            "reason": moved,
+            "git_state_changed": {"before": before, "after": after},
+        }
+    return outcome, ev
