@@ -26,7 +26,6 @@ import os
 import re
 import secrets
 import socket
-import subprocess
 import time
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, fields
@@ -52,7 +51,7 @@ from ..core.events import (
 )
 from ..core.model import known_kinds
 from . import fsio
-from . import proc as P
+from . import git as G
 
 __all__ = [
     "PROVENANCE_KINDS",
@@ -430,31 +429,15 @@ def _sorted_unique(events: list[Event]) -> list[Event]:
 
 
 def _toplevel(path: str) -> str:
-    try:
-        r = P.run(
-            ["git", "-C", path, "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return r.stdout.strip() if r.returncode == 0 else ""
+    r = G.run(path, "rev-parse", "--show-toplevel", timeout=G.PROBE_TIMEOUT)
+    return r.out if r.ok else ""
 
 
 def _common_dir(path: str) -> str:
-    try:
-        r = P.run(
-            ["git", "-C", path, "rev-parse", "--git-common-dir"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
+    r = G.run(path, "rev-parse", "--git-common-dir", timeout=G.PROBE_TIMEOUT)
+    if not r.ok or not r.out:
         return ""
-    if r.returncode != 0 or not r.stdout.strip():
-        return ""
-    p = Path(r.stdout.strip())
+    p = Path(r.out)
     return str((Path(path) / p).resolve() if not p.is_absolute() else p.resolve())
 
 
