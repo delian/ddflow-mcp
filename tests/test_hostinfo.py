@@ -74,3 +74,22 @@ def test_a_job_on_another_machine_is_elsewhere_and_this_ones_is_checked(box):
     assert jobs.status(jobs.Job(id="j", pid=0, host="other.example.org")).state == "elsewhere"
     assert jobs.status(jobs.Job(id="j", pid=0, host="box.example.org")).state != "elsewhere"
     assert jobs.status(jobs.Job(id="j", pid=0, host="box")).state == "elsewhere"
+
+
+def test_a_record_with_no_host_is_this_machines_to_check(box):
+    """The compatibility note: a wait or job stored before `host` existed names no machine,
+    and is checked here as before (the `host and ...` guard it used to carry lives in
+    `same_host`)."""
+    from ddflow.services import jobs, waits
+
+    assert jobs.status(jobs.Job(id="j", pid=0, host="")).state != "elsewhere"
+    assert waits.Waiter(agent="a", pid=0, until=9e12, host="").live() is False
+
+
+def test_a_machine_that_cannot_name_itself_matches_no_record(monkeypatch):
+    def boom():
+        raise OSError("no name")
+
+    monkeypatch.setattr(socket, "gethostname", boom)
+    assert H.same_host("box.example.org") is False  # it cannot be shown to be this machine
+    assert H.same_host("") is True
