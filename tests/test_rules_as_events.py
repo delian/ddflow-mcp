@@ -14,9 +14,11 @@ from pathlib import Path
 from ddflow.api import defs as ADEFS
 from ddflow.config import Config
 from ddflow.core import defs as D
+from ddflow.core import redact as R
 from ddflow.services.guidance import deffields as DF
 from ddflow.services.guidance import fileformat
 from ddflow.services.guidance.kinds import DECISION, RULE
+from ddflow.services.redact_report import redactor
 
 RICH = """id = "r-naming"
 title = "Naming conventions"
@@ -121,7 +123,8 @@ def test_the_log_profile_is_applied_before_the_digest(tmp_path: Path) -> None:
     secret = _fields(RICH) | {"body": "token ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"}
     assert DF.logged(secret, cfg)["body"] != secret["body"]
     # the digest is of the LOGGED form: hashing the raw fields would differ from it
-    assert DF.digest_of(secret, cfg) == D.digest(DF.logged(secret, cfg))
+    independent = R.redact_leaves(dict(secret), redactor("log", cfg))
+    assert DF.digest_of(secret, cfg) == D.digest(independent)
     assert DF.digest_of(secret, cfg) != D.digest(secret)
 
 
