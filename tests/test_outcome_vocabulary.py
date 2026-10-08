@@ -153,7 +153,7 @@ def test_every_site_agrees_on_a_settled_gate(outcome: str, required: bool, repo:
 def test_gate_outcome_vocabulary_is_unchanged() -> None:
     """The enum is the old tuple, marks and exits, byte for byte."""
     from ddflow.api.gates import OUTCOME_EXIT
-    from ddflow.core.records import OUTCOME_MARK, GateOutcome
+    from ddflow.core.records import OUTCOME_MARK
 
     assert GATE_OUTCOMES == ("passed", "failed", "unavailable", "partial", "skipped")
     assert OUTCOME_MARK == {
