@@ -284,9 +284,9 @@ def _apply(log, cfg, st, defs, trigs, decisions, at, errors) -> None:
     suppression, then the run. The caller holds the log lock."""
     taken = set(st.items)
     for d in decisions:
-        trig = trigs[d.trigger]
         item = None
         if d.fire:
+            trig = trigs[d.trigger]
             item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
             taken.add(item["id"])
             added = add_task(
@@ -305,6 +305,7 @@ def _apply(log, cfg, st, defs, trigs, decisions, at, errors) -> None:
                 {"key": d.key, "reason": d.reason, "detail": d.detail, "events": d.events},
             )
             continue
+        trig = trigs[d.trigger]
         log.append(
             "trigger.fired",
             d.trigger,

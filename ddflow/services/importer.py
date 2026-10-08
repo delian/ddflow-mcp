@@ -3009,11 +3009,11 @@ def _imported_research(f: Found) -> dict[str, Any]:
 
 def _add_imported_tasks(
     log: EventLog, st: Any, cfg: Config, plan: ImportPlan, bump: Callable[[str], None]
-) -> int:
+) -> set[str]:
     """Write the plan's tasks, each held to the checks every new task passes (`add_task`),
-    then its state; and its branches. Returns how many the checks refused -- none of those
+    then its state; and its branches. Returns the ids the checks refused -- none of those
     is written, and nothing is recorded about it."""
-    refused = 0
+    refused: set[str] = set()
     for f in plan.by_kind("task"):
         draft = TaskDraft(
             f.ident,
@@ -3029,7 +3029,7 @@ def _add_imported_tasks(
             extra={"source": f.source},
         )
         if not add_task(log, st, cfg, draft, dedupe=_SCREENED).ok:
-            refused += 1
+            refused.add(f.ident)
             continue
         bump("task")
         _apply_state(log, f, bump)
@@ -3045,7 +3045,7 @@ def _add_imported_tasks(
             extra={"source": f.source},
         )
         if not add_task(log, st, cfg, draft, dedupe=_SCREENED).ok:
-            refused += 1
+            refused.add(f.ident)
             continue
         bump("branch")
     return refused
@@ -3081,9 +3081,14 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
         st.items[f.ident] = Item(id=f.ident, kind="phase", title=f.title)
         bump("phase")
     refused = _add_imported_tasks(log, st, cfg, plan, bump)
+    # A phase whose task the checks refused is not finished by what is under it: it stays
+    # open, and the refused count says why.
+    held = {t.extra.get("phase", "") for t in plan.by_kind("task") if t.ident in refused}
     # Phases LAST: finished by what is under them, so only once that is written -- a
     # reader of the log never sees a phase done over tasks that do not exist yet.
     for f in [p for p in plan.by_kind("phase") if p.done] + plan.by_kind("completion"):
+        if f.ident in held:
+            continue
         log.append(
             "item.completed",
             f.ident,
@@ -3167,7 +3172,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
         log.append("research.recorded", f.ident, _imported_research(f))
         bump("research")
     if refused:
-        counts[_REFUSED_KEY] = refused
+        counts[_REFUSED_KEY] = len(refused)
     if plan.ticked_left_out:
         # Not written -- LEFT OUT, and said in the one line `--apply` prints, because
         # otherwise the report of what landed is read as the whole story (B45d5aa72fa).

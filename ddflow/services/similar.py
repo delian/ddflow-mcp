@@ -393,7 +393,8 @@ def screen(
     what the harness memory import wants. Which of two near records to keep is otherwise
     the author's call, and dropping the later would make the outcome depend on the order
     the files were read. ``repeats`` is in batch order. With ``[dedupe] on_match = "off"``
-    or a kind not in ``[dedupe].kinds`` nothing is left out (`assess` says ``off``).
+    or a kind not in ``[dedupe].kinds`` nothing is left out (`assess` says ``off``), copies
+    of a batch member included.
     """
     batch = list(records)
     base = similar_records(state) if state is not None else []
@@ -408,16 +409,29 @@ def screen(
     seen: dict[str, str] = {}
     for i, probe in enumerate(probes):
         hit = _repeat_of(i, probe, index, cfg, batch, peers, compare)
-        if hit is None and fold_copies:
-            key = same_text(str(batch[i].get("body") or ""))
-            if key in seen:
-                hit = Screened(i, seen[key], 1.0, True, "import")
-            else:
-                seen[key] = str(batch[i]["id"])
+        if hit is None and fold_copies and _screened(cfg, batch[i]):
+            hit = _copy_of(i, batch[i], seen)
         if hit is not None:
             repeats.append(hit)
     dropped = {h.index for h in repeats}
     return [r for i, r in enumerate(batch) if i not in dropped], repeats
+
+
+def _copy_of(i: int, rec: Mapping[str, Any], seen: dict[str, str]) -> Screened | None:
+    """``rec`` as a word-for-word copy of an earlier batch member (kept in ``seen``), or
+    None -- and None for a record with no text, which is a copy of nothing."""
+    key = same_text(str(rec.get("body") or ""))
+    if not key:
+        return None
+    if key in seen:
+        return Screened(i, seen[key], 1.0, True, "import")
+    seen[key] = str(rec["id"])
+    return None
+
+
+def _screened(cfg: Config, rec: Mapping[str, Any]) -> bool:
+    """Whether `[dedupe]` checks this record at all (``assess`` says ``off`` otherwise)."""
+    return cfg.dedupe.on_match != "off" and str(rec.get("kind") or "") in cfg.dedupe.kinds
 
 
 def _repeat_of(
