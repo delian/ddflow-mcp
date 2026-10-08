@@ -23,13 +23,43 @@ def test_budget_states_its_unit():
     assert B.Budget(2, "chars").tokens == 1  # never zero: a budget of nothing is not a budget
 
 
-def test_the_recall_default_is_defined_once():
-    """It was 4000 in the API, the CLI parser, the MCP tool and the MCP bound."""
+def test_the_recall_default_is_4000_everywhere(monkeypatch):
+    """It was 4000 in the API, the CLI parser, the MCP tool and the MCP bound; one constant
+    now serves all four, and the value is pinned here so a change of it is deliberate."""
     from ddflow.api.knowledge import retrieval
     from ddflow.surfaces import mcp_bound
     from ddflow.surfaces.parsers import knowledge as parser
+    from ddflow.surfaces.tools import reporting
 
-    assert inspect.signature(retrieval.recall).parameters["max_chars"].default == B.RECALL_MAX_CHARS
-    assert mcp_bound.RECALL_BUDGET == B.RECALL_MAX_CHARS
-    src = inspect.getsource(parser)
-    assert "default=RECALL_MAX_CHARS" in src and "default=4000" not in src
+    assert B.RECALL_MAX_CHARS == 4000
+    assert inspect.signature(retrieval.recall).parameters["max_chars"].default == 4000
+    assert mcp_bound.RECALL_BUDGET == 4000
+    assert "default=RECALL_MAX_CHARS" in inspect.getsource(parser)
+
+    seen = {}
+
+    class _Api:
+        def recall(self, repo, query, **kw):
+            seen.update(kw)
+
+    monkeypatch.setattr(reporting, "_api", _Api)
+    reporting.TOOLS["ddflow_recall"]["api"](None, {"query": "q"}, "")
+    assert seen["max_chars"] == 4000
+    reporting.TOOLS["ddflow_recall"]["api"](None, {"query": "q", "max_chars": 900}, "")
+    assert seen["max_chars"] == 900
+
+
+def test_the_brief_of_an_empty_project_reports_at_least_the_clamp(repo):
+    """`approx_tokens` clamps at 1 where the old `len(text) // 4` could say 0; a brief always
+    opens with its heading, so the two agree on the emptiest brief there is."""
+    import json
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    code, out, _err = run_cli(repo, "--json", "brief")
+    body = json.loads(out)
+    assert code == 0 and body["approx_tokens"] == len(body["brief"]) // 4 >= 1
