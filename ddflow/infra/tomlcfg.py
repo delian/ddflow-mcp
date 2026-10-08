@@ -241,6 +241,21 @@ def remove(text: str, dotted: str) -> tuple[str, bool]:
     return tomlkit.dumps(doc), True
 
 
+def _drop_if_empty(text: str, dotted: str) -> str:
+    """``text`` without the table ``dotted`` (``a`` or ``a.b``) when it is there and empty."""
+    tomlkit = _tomlkit()
+    doc = tomlkit.parse(text)
+    parts = [p.strip() for p in dotted.split(".")]
+    parent: Any = doc
+    for part in parts[:-1]:
+        parent = parent.get(part) if isinstance(parent, dict) else None
+    table = parent.get(parts[-1]) if isinstance(parent, dict) else None
+    if not isinstance(table, dict) or table:
+        return text
+    del parent[parts[-1]]
+    return tomlkit.dumps(doc)
+
+
 def move_keys(
     text: str, moves: Mapping[str, str], *, live: Iterable[str] = ()
 ) -> tuple[str, list[str]]:
@@ -260,10 +275,8 @@ def move_keys(
             continue
         literal_text = table[okey].as_string().strip()
         text, _ = remove(text, old)
-        if osec not in keep and not tomllib.loads(text).get(osec, {"x": 1}):
-            doc = _tomlkit().parse(text)
-            del doc[osec]
-            text = _tomlkit().dumps(doc)
+        if osec not in keep:
+            text = _drop_if_empty(text, osec)
         nsec, _, nkey = new.rpartition(".")
         have: Any = tomllib.loads(text)
         for part in nsec.split("."):

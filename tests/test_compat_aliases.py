@@ -415,15 +415,12 @@ def test_no_declared_old_key_is_also_a_live_knob():
 
 
 def test_an_option_value_is_not_suggested_a_command(capsys):
-    cmd = Command(
-        path=("search",),
-        params=(Param("mode", choices=("table", "json")),),
-        handler=lambda a, c: 0,
-    )
-    root = _parser(cmd)
+    root = _parser(_show())
+    root.add_argument("--mode", choices=("table", "json"))  # the parser that owns the commands
     with pytest.raises(SystemExit):
-        root.parse_args(["search", "--mode", "sear"])
-    assert "Did you mean" not in capsys.readouterr().err
+        root.parse_args(["--mode", "shw"])
+    err = capsys.readouterr().err
+    assert "invalid choice: 'shw'" in err and "Did you mean" not in err
 
 
 def test_a_flag_alias_declared_above_the_command_is_noticed():
@@ -496,3 +493,36 @@ def test_a_live_key_declared_after_its_old_name_is_refused(monkeypatch):
 
     with pytest.raises(ValueError, match="also a live key"):
         _docs.declare("zz")(Late)
+
+
+def test_an_abbreviation_of_the_current_flag_still_resolves():
+    """`--do` matched `--docs` and its old name `--doc` and was refused as ambiguous."""
+    cmd = Command(
+        path=("x",),
+        params=(Param("docs", aliases=("doc",), deprecated_since=SINCE),),
+        handler=lambda a, c: 0,
+    )
+    root = _parser(cmd)
+    assert root.parse_args(["x", "--do", "v"]).docs == "v"
+    assert root.parse_args(["x", "--doc", "v"]).docs == "v"  # the old flag, exactly
+    assert root.parse_args(["x", "--docs", "v"]).docs == "v"
+
+
+def test_a_command_word_cannot_be_both_alias_and_command():
+    sub = SuggestingParser(prog="d").add_subparsers(dest="cmd")
+    parser = sub.add_parser("docs")
+    R.add_command_alias(sub, parser, "doc", Alias("command", "doc", "docs", SINCE))
+    with pytest.raises(argparse.ArgumentError, match="conflicting subparser"):
+        sub.add_parser("doc")  # a canonical command registered after the alias is refused
+    with pytest.raises(ValueError, match="already a command"):
+        R.add_command_alias(sub, parser, "docs", Alias("command", "docs", "x", SINCE))
+
+
+def test_an_old_section_nested_deeper_is_dropped_when_emptied():
+    from ddflow.infra import tomlcfg as TC
+
+    text = "[a]\nx = 1\n\n[gate.unit_tests]\ncommand = 'pytest'\n"
+    out, moved = TC.move_keys(text, {"gate.unit_tests.command": "gate.commands.unit"})
+    assert moved == ["gate.unit_tests.command"]
+    assert tomllib.loads(out) == {"a": {"x": 1}, "gate": {"commands": {"unit": "pytest"}}}
+    assert "unit_tests" not in out

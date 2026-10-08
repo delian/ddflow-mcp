@@ -134,8 +134,10 @@ def declare(section: str) -> Callable[[type], type]:
             DECLARED[key] = meta
             DECLARED_IN[key] = cls.__module__
             for old in meta.renamed_from:
-                if old == key or old in RENAMED or old in DECLARED:
+                if old == key or old in DECLARED:
                     raise ValueError(f"{old} is renamed_from of {key} but is also a live key")
+                if old in RENAMED:
+                    raise ValueError(f"{old} is renamed_from of {key} and of {RENAMED[old][0]}")
                 RENAMED[old] = (key, meta.since, meta.removed_in)
         return cls
 
