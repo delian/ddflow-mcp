@@ -377,14 +377,11 @@ def test_a_required_field_given_as_zero_false_or_an_empty_list_is_present(repo):
     assert R.record_add(repo, COUNTED, "d", {**given, "title": "  "}).exit == O.FAIL
 
 
-def test_revise_keeps_the_text_the_duplicate_check_and_search_read(repo, monkeypatch):
+def test_search_reads_the_revised_text_not_the_old(repo):
     _add(repo, body="old words")
     R.record_revise(repo, NOTE, "alpha", {"title": "fresh", "body": "brand new text"}, reason="r")
     assert R.record_search(repo, NOTE, "brand new text").data["rows"][0]["id"] == "alpha"
-    from ddflow.api._base import _load
-
-    st = _load(repo)[2]
-    assert st.defs["skill:alpha"].fields["body"] == "brand new text"
+    assert R.record_search(repo, NOTE, "old words", mode="exact").exit == O.NOTHING
 
 
 def test_exact_search_only_looks_at_the_first_characters_like_regex(repo):
