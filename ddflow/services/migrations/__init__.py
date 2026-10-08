@@ -260,3 +260,4 @@ def _run_one(
 
 # The seed migrations register themselves on import, after the registry above exists.
 from . import refs as _refs  # noqa: E402, F401
+from . import rules as _rules  # noqa: E402, F401
