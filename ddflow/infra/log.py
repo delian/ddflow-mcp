@@ -978,29 +978,32 @@ class EventLog:
         red = self._redactor
         if red is None:
             names: list[str] = []
+            cached = True
             try:
                 cfg = Config.load(self.root)
                 patterns = [*cfg.session.redact_patterns, *cfg.session.redact_extra]
                 # `[upstream].redact_extra`, once that section exists (`names_for`)
-                names = [
-                    str(n)
-                    for n in (getattr(getattr(cfg, "upstream", None), "redact_extra", None) or [])
-                ]
+                up = getattr(cfg, "upstream", None)
+                names = [str(n) for n in (getattr(up, "redact_extra", None) or [])]
             except Exception:
-                patterns = [*SessionConfig().redact_patterns]
+                # an unreadable config: the built-in patterns for THIS write, and the config is
+                # read again on the next one, so a fixed config is not shadowed by the fallback
+                patterns, cached = [*SessionConfig().redact_patterns], False
             try:
                 host = socket.gethostname()
             except OSError:
                 host = ""
             # the `log` profile's machine-local inputs, as `services.redact_report.redactor`
             # resolves them: this machine's hostname and $HOME, no repo root
-            red = self._redactor = R.Redactor(
+            red = R.Redactor(
                 "log",
                 secret_patterns=patterns,
                 names=names,
                 hostname=host,
                 home=os.path.expanduser("~"),
             )
+            if cached:
+                self._redactor = red
         return R.redact_event_data(kind, data, red)
 
     # -- the version stamp and the skew guard -----------------------------------------

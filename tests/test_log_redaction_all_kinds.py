@@ -97,15 +97,121 @@ def test_ids_and_paths_stay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 #: justified here: the reviewer's point was that the table is only as good as its author's
 #: reading of the vocabulary, so every str/dict/list field has to be accounted for.
 _LOOKUP = re.compile(
-    r"(^|_)(id|ids|item|key|kind|by|user|host|agent|holder|gate|sha|digest|hash|path|paths|url"
-    r"|branch|worktree|base|into|head|tree|target|relation|subject|event|log|forge|number|state"
-    r"|status|stage|env|scope|severity|verdict|policy|mode|document|knob|value|tool|model|version"
-    r"|install|session|source|cwd|globs|tags|needs|parent|related|supersedes|extends|fixes"
-    r"|duplicate_of|fix_task|resources|sites|seen_in|sources|events|items|job|triggers"
-    r"|ahead|at|port_\w+|origin_at|proc_start)$"
+    r"(^|_)(id|ids|sha|digest|hash|path|paths|url|branch|worktree|head|base|tree|globs|tags"
+    r"|needs|parent|related|supersedes|extends|fixes|duplicate_of|fix_task|resources|number"
+    r"|subject)$"
 )
 #: str/dict/list fields of undeclared-text kinds that are NOT lookup-named, each with why.
 _NOT_TEXT = {
+    ("approval.granted", "user"): "a user id",
+    ("backmerge.recorded", "into"): "a branch name",
+    ("bug.found", "key"): "a dedupe key",
+    ("bug.found", "scope"): "a scope word",
+    ("bug.found", "severity"): "a severity word",
+    ("ci.result", "status"): "a status word",
+    ("ddflow.seen", "version"): "a version",
+    ("decision.recorded", "item"): "an item id",
+    ("decision.recorded", "status"): "a status word",
+    ("def.merged", "source"): "an origin id or path",
+    ("def.recorded", "source"): "an origin id or path",
+    ("def.retired", "source"): "an origin id or path",
+    ("def.superseded", "source"): "an origin id or path",
+    ("def.updated", "source"): "an origin id or path",
+    ("export.disabled", "document"): "a document name",
+    ("export.enabled", "document"): "a document name",
+    ("export.enabled", "mode"): "a mode word",
+    ("flow.chosen", "knob"): "a config key",
+    ("flow.chosen", "user"): "a user id",
+    ("gate.failed", "gate"): "a gate name",
+    ("gate.failed", "kind"): "a kind word",
+    ("gate.out_of_order", "gate"): "a gate name",
+    ("gate.out_of_order", "policy"): "a policy word",
+    ("gate.partial", "gate"): "a gate name",
+    ("gate.passed", "gate"): "a gate name",
+    ("gate.passed", "kind"): "a kind word",
+    ("gate.skipped", "gate"): "a gate name",
+    ("gate.unavailable", "gate"): "a gate name",
+    ("job.started", "host"): "a machine id compared for liveness",
+    ("job.started", "item"): "an item id",
+    ("job.started", "log"): "a path that is opened",
+    ("job.started", "proc_start"): "a process start stamp",
+    ("lease.acquired", "holder"): "an agent id",
+    ("lease.acquired", "kind"): "a kind word",
+    ("lease.expired", "holder"): "an agent id",
+    ("lease.released", "by"): "an agent id",
+    ("lease.released", "event"): "an event id",
+    ("lease.released", "holder"): "an agent id",
+    ("link.recorded", "relation"): "a relation word",
+    ("link.recorded", "target"): "an id",
+    ("phase.added", "source"): "an origin id or path",
+    ("pr.synced", "kind"): "a kind word",
+    ("pr.synced", "queue_state"): "a state word",
+    ("pr.synced", "state"): "a state word",
+    ("research.recorded", "verdict"): "a verdict word",
+    ("review.triaged", "severity"): "a severity word",
+    ("review.triaged", "verdict"): "a verdict word",
+    ("reviewer.configured", "user"): "a user id",
+    ("session.note", "item"): "an item id",
+    ("session.started", "tool"): "a harness name",
+    ("skew.overridden", "session"): "a session id",
+    ("task.added", "port_from"): "an id",
+    ("task.added", "port_of"): "an id",
+    ("task.added", "port_strategy"): "a strategy word",
+    ("task.added", "source"): "an origin id or path",
+    ("trigger.fired", "items"): "item ids",
+    ("trigger.fired", "job"): "a job id",
+    ("trigger.fired", "key"): "a dedupe key",
+    ("trigger.suppressed", "key"): "a dedupe key",
+    ("approval.granted", "host"): "a machine id compared by liveness",
+    ("backmerge.recorded", "forge"): "a forge name",
+    ("bug.found", "item"): "an item id",
+    ("ci.result", "stage"): "a stage word",
+    ("ddflow.seen", "install"): "an install kind",
+    ("decision.recorded", "decided_by"): "an agent id",
+    ("decision.superseded", "by"): "an agent id",
+    ("def.merged", "kind"): "a kind word",
+    ("def.recorded", "kind"): "a kind word",
+    ("def.retired", "kind"): "a kind word",
+    ("def.superseded", "kind"): "a kind word",
+    ("def.updated", "kind"): "a kind word",
+    ("deploy.recorded", "env"): "an environment name",
+    ("export.disabled", "by"): "an agent id",
+    ("export.enabled", "by"): "an agent id",
+    ("flow.chosen", "by"): "an agent id",
+    ("gate.failed", "by"): "an agent id",
+    ("gate.out_of_order", "ahead"): "gate names",
+    ("gate.partial", "by"): "an agent id",
+    ("gate.passed", "by"): "an agent id",
+    ("gate.skipped", "by"): "an agent id",
+    ("gate.started", "gate"): "a gate name",
+    ("gate.unavailable", "by"): "an agent id",
+    ("item.abandoned", "kind"): "a kind word",
+    ("item.blocked", "kind"): "a kind word",
+    ("item.completed", "kind"): "a kind word",
+    ("item.resolved", "kind"): "a kind word",
+    ("item.unblocked", "kind"): "a kind word",
+    ("job.started", "cwd"): "a directory that is opened",
+    ("lease.acquired", "agent"): "an agent id",
+    ("lease.expired", "event"): "an event id",
+    ("lease.released", "agent"): "an agent id",
+    ("lease.renewed", "holder"): "an agent id",
+    ("lesson.recorded", "seen_in"): "item ids",
+    ("link.recorded", "by"): "an agent id",
+    ("memory.recorded", "origin_at"): "a timestamp",
+    ("phase.added", "kind"): "a kind word",
+    ("pr.synced", "forge"): "a forge name",
+    ("record.extended", "relation"): "a relation word",
+    ("research.recorded", "item"): "an item id",
+    ("review.triaged", "gate"): "a gate name",
+    ("reviewer.configured", "kind"): "a kind word",
+    ("session.note", "at"): "a timestamp",
+    ("session.prompt", "item"): "an item id",
+    ("session.started", "model"): "a model id",
+    ("skew.overridden", "log_version"): "a version",
+    ("task.added", "kind"): "a kind word",
+    ("trigger.evaluated", "triggers"): "trigger ids",
+    ("trigger.fired", "events"): "event ids",
+    ("trigger.suppressed", "events"): "event ids",
     ("bug.fixed", "regression_verified"): "an outcome word",
     ("bug.reopened", "was"): "a state word",
     ("item.unblocked", "was"): "a state word",
@@ -143,11 +249,16 @@ _NOT_TEXT = {
 @pytest.mark.parametrize("kind", sorted(KINDS))
 def test_every_text_looking_field_is_accounted_for(kind: str) -> None:
     declared = set(R.LOG_TEXT_FIELDS.get(kind, ()))
-    for name, types in KINDS[kind]["fields"].items():
-        if name in declared or not set(types) & {"str", "dict", "list"}:
-            continue
-        ok = _LOOKUP.search(name) or (kind, name) in _NOT_TEXT or name == "dedupe"
-        assert ok, f"{kind}.{name} ({types}) is neither declared text nor a lookup field"
+    missing = [
+        name
+        for name, types in KINDS[kind]["fields"].items()
+        if name not in declared
+        and set(types) & {"str", "dict", "list"}
+        and not _LOOKUP.search(name)
+        and (kind, name) not in _NOT_TEXT
+        and name != "dedupe"
+    ]
+    assert not missing, f"{kind}: {missing} neither declared text nor a justified lookup field"
 
 
 def test_an_undeclared_kind_is_redacted_whole(
@@ -160,17 +271,34 @@ def test_an_undeclared_kind_is_redacted_whole(
     assert SECRET not in json.dumps(out) and out["n"] == 3
 
 
-def test_a_leaf_under_a_lookup_looking_key_is_still_redacted() -> None:
-    """The keys of a text field's dict come from data: `{"tests": <tail>}` is text."""
+def test_a_leaf_is_redacted_whatever_its_key() -> None:
+    """The keys of a text field's dict come from data: `{"path": <home path>}` is text."""
     red = R.Redactor("log", secret_patterns=[r"sk-[A-Za-z0-9]{16,}"], home="/home/zedd")
     out = R.redact_event_data(
         "gate.passed",
-        {"evidence": {"tests": PROBE, "files": [PROBE], "worktree": "/home/zedd/w"}},
+        {
+            "evidence": {
+                "tests": PROBE,
+                "files": [PROBE],
+                "path": HOME,
+                "output_log": "/home/zedd/x",
+            }
+        },
         red,
     )
     flat = json.dumps(out)
-    assert SECRET not in flat and "/home/zedd/work" not in flat
-    assert out["evidence"]["worktree"] == "/home/zedd/w"  # a path that is opened stays
+    assert SECRET not in flat and "/home/zedd" not in flat
+
+
+def test_a_relative_output_file_survives_redaction() -> None:
+    """What gate evidence really holds: a repo-relative file name with dots and hyphens."""
+    red = R.Redactor("log", secret_patterns=[], hostname="box", home="/home/zedd")
+    name = ".ddflow/local/reviews/B-x.critic.lan-deepseek-v4.1-flash.20261007T121514-76265fac.jsonl"
+    log = ".ddflow/runs/B-x/ci-20261007T124010443798Z-2485073.log"
+    out = R.redact_event_data(
+        "gate.passed", {"evidence": {"output_file": name, "output_log": log}}, red
+    )
+    assert out["evidence"] == {"output_file": name, "output_log": log}
 
 
 @pytest.mark.parametrize("kind", sorted(R.LOG_ALL_TEXT))

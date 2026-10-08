@@ -440,14 +440,21 @@ LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "bug.reopened": ("reason",),
     "cadence.ran": ("evidence", "result"),
     "ci.result": ("checks",),
-    "decision.recorded": ("alternatives", "consequences", "context", "decision", "title"),
+    "decision.recorded": (
+        "alternatives",
+        "consequences",
+        "context",
+        "decision",
+        "title",
+        "sources",
+    ),
     "decision.superseded": ("reason",),
     "def.merged": ("reason",),
     "def.recorded": ("fields",),
     "def.retired": ("reason",),
     "def.superseded": ("reason",),
     "def.updated": ("fields",),
-    "flow.chosen": ("reason",),
+    "flow.chosen": ("reason", "value"),
     "gate.failed": ("evidence", "reason"),
     "gate.partial": ("evidence", "reason"),
     "gate.passed": ("evidence", "reason"),
@@ -463,19 +470,27 @@ LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "job.started": ("command",),
     "lease.expired": ("reason",),
     "lease.released": ("note", "reason"),
-    "lesson.recorded": ("how", "pattern", "rule", "summary", "title", "why"),
+    "lesson.recorded": ("how", "pattern", "rule", "summary", "title", "why", "sites"),
     "memory.forgotten": ("reason",),
-    "memory.recorded": ("text",),
+    "memory.recorded": ("text", "source"),
     "phase.added": ("body", "title", "line"),
     "phase.updated": ("body", "title"),
     "pr.synced": ("feedback",),
     "record.extended": ("text",),
-    "research.recorded": ("claim", "falsifier", "mechanism", "probe", "probe_output", "question"),
+    "research.recorded": (
+        "claim",
+        "falsifier",
+        "mechanism",
+        "probe",
+        "probe_output",
+        "question",
+        "sources",
+    ),
     "review.triaged": ("title", "probe"),
     "schedule.defined": ("title",),
     "schedule.removed": ("reason",),
     "session.ended": ("summary",),
-    "session.note": ("text",),
+    "session.note": ("text", "source"),
     "session.prompt": ("text",),
     "session.started": ("cwd",),
     "skew.overridden": ("reason",),
@@ -535,22 +550,16 @@ LOG_ALL_TEXT = frozenset(
     }
 )
 
-#: Keys whose string value is a path something opens or compares (a worktree, an output log):
-#: only secrets are masked there, so the path still resolves. Every other leaf of a text
-#: field is redacted whatever its key, since keys come from data (gate names, `def` fields).
-_PATH_KEYS = frozenset({"worktree", "output_file", "output_log", "source_tree", "path"})
 
-
-def redact_leaves(value: object, redactor: Redactor, key: str = "") -> object:
-    """``value`` with every string leaf redacted; under a `_PATH_KEYS` key, only its secrets."""
+def redact_leaves(value: object, redactor: Redactor) -> object:
+    """``value`` with every string leaf redacted, whatever its key: the keys of a text field
+    come from data (gate names, `def` fields), and nothing looks a leaf up in the log."""
     if isinstance(value, str):
-        if key in _PATH_KEYS:
-            return mask_secrets(value, redactor.secret_patterns)[0]
         return redactor.text(value).text
     if isinstance(value, Mapping):
-        return {k: redact_leaves(v, redactor, str(k)) for k, v in value.items()}
+        return {k: redact_leaves(v, redactor) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
-        return [redact_leaves(v, redactor, key) for v in value]
+        return [redact_leaves(v, redactor) for v in value]
     return value
 
 
@@ -565,6 +574,5 @@ def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
     if names is not None and not any(n in data for n in names):
         return data
     return {
-        k: redact_leaves(v, redactor, k) if names is None or k in names else v
-        for k, v in data.items()
+        k: redact_leaves(v, redactor) if names is None or k in names else v for k, v in data.items()
     }
