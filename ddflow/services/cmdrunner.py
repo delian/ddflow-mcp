@@ -18,7 +18,7 @@ and what it may leak. This module is the one place that decides them.
   background work and gates share one bound on concurrent processes.
 * **Output.** The result keeps what the command wrote, optionally clipped, per stream, to ``max_output``
   characters (the tail: a suite's verdict is at its end) and passed through a `Redactor`.
-  The digest and the byte count are of the whole raw output, so a kept log can be checked
+  The digest and the length are of the whole raw output, so a kept log can be checked
   against them whatever the caller later shows.
 """
 
@@ -74,13 +74,20 @@ SHELL_WORDS = frozenset(
         "shift",
         "return",
         "{",
+        "!",
         "if",
         "for",
+        "while",
+        "until",
+        "case",
+        "select",
+        "function",
+        "time",
     }
 )
 
 
-def executable_missing(command: str) -> str:
+def executable_missing(command: str, path: str | None = None) -> str:
     """The leading program of ``command`` when it is a plain word and not installed, else "".
 
     "" means *no opinion*: an empty line, one that opens with shell syntax, a builtin or
@@ -88,6 +95,8 @@ def executable_missing(command: str) -> str:
     say so). Leading ``VAR=value`` words are environment, not the program. Being sure only
     about the easy case is the point: a guess about compound shell would produce false
     UNAVAILABLEs, which stall a pipeline as surely as a false pass corrupts one.
+
+    ``path`` is the ``PATH`` the command will run under (default: this process's).
     """
     cmd = command.strip()
     if not cmd or cmd[0] in SHELL_META:
@@ -101,7 +110,7 @@ def executable_missing(command: str) -> str:
         return ""
     if program in SHELL_WORDS or "/" in program:
         return ""
-    return "" if shutil.which(program) else program
+    return "" if shutil.which(program, path=path) else program
 
 
 def looks_like_not_found(stderr: str) -> bool:
@@ -143,7 +152,8 @@ class CommandRun:
     elapsed_s: float = 0.0
     #: The program that is not installed, for kind MISSING.
     missing: str = ""
-    #: Of the whole raw output, before any clipping or redaction.
+    #: Of the whole raw output (``output_bytes`` in characters, as gate evidence counts them),
+    #: before any clipping or redaction.
     digest: str = ""
     output_bytes: int = 0
     truncated: bool = False
@@ -203,7 +213,9 @@ class CommandRunner:
         if not isinstance(declared, Declared):
             raise TypeError("CommandRunner.run takes a Declared operator command, not a string")
         line = declared.line
-        if check_installed and (missing := executable_missing(line)):
+        if check_installed and (
+            missing := executable_missing(line, None if env is None else env.get("PATH"))
+        ):
             return _unavailable(line, MISSING, f"{missing!r} is not installed", missing=missing)
         if self.slots is None:
             return self._run(line, cwd, env, timeout_s, on_tick, tick_s, 0.0)
