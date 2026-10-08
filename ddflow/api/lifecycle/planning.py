@@ -11,20 +11,25 @@ once, and a caller says WHY it asks (``purpose``); the differences left are the 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING
 
-from ...config import Config
-from ...core.model import Event, State
-from ...core.schedule import Plan, plan
+from ...core.schedule import plan
+from ...services.flowstate import limit_for
 from .reservations import _reservation_hold
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+    from pathlib import Path
+
+    from ...config import Config
+    from ...core.model import Event, State
+    from ...core.schedule import Plan
+
+#: Why a caller asks (``plan_for(purpose=...)``).
 #: ``offer``: the offer an agent acts on (`next`, `wait`). ``view``: a report of that same
 #: offer (`status`, `brief`, `workflow_state`) -- the same answer, so a report never calls
 #: ready what `next` withholds. ``structure``: the queue's shape only (`doctor`'s cycles
 #: and blockers), with no reservations and no parallelism limit.
-Purpose = Literal["offer", "view", "structure"]
 PURPOSES: tuple[str, ...] = ("offer", "view", "structure")
 
 
@@ -34,7 +39,7 @@ def plan_for(
     cfg: Config,
     st: State,
     *,
-    purpose: Purpose,
+    purpose: str,
     kind: str = "task",
     phase: str = "",
     agent: str = "",
@@ -48,8 +53,6 @@ def plan_for(
     me = agent or cfg.agent.id or log.agent_id
     if purpose == "structure":
         return plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
-    from ...services.flowstate import limit_for
-
     return plan(
         st,
         cfg,
