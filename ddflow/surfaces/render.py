@@ -3,10 +3,10 @@ B-uni-cmd-migrate; D-compat-json-views).
 
 Every command used to print its own ``json.dumps(..., indent=2)``, twelve of them without
 ``default=str`` (so a Path or datetime in a body was a traceback there and a string
-elsewhere). The modules of ``surfaces/commands`` and ``Ctx.out`` now go through one function,
-which is also the one place a rule about every body (the ``schema`` tag, B-uni-compat-json)
-can live. ``cli.py`` (progress, loops) and ``commands/reporting.py`` still print their own;
-`tests/test_compat_json.py` lists them, and the list may only shrink.
+elsewhere). Every body a command in ``surfaces/commands``, ``cli.py`` or ``Ctx.out`` prints
+now goes through one function (``tests/test_compat_json.py`` fails on a new ``json.dumps``
+there), which is also the one place a rule about every body (the ``schema`` tag,
+B-uni-compat-json) can live.
 
 Standard library only: the surfaces and the registry may both import it.
 """
