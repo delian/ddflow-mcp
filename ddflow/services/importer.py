@@ -45,7 +45,7 @@ from ..core.globs import match as glob_match
 from ..core.ids import free
 from ..core.model import DONE, OPEN
 from ..core.schedule import is_external
-from ..infra import proc as P
+from ..infra import git as G
 from ..infra.log import EventLog
 
 #: Where projects actually keep these things. Ordered so the most specific wins when a
@@ -1705,27 +1705,15 @@ def scan_branches(repo: Path) -> list[Found]:
     from ..infra import worktree as W
 
     base = W.default_branch(repo)
-    r = P.run(
-        ["git", "-C", str(repo), "for-each-ref", "--format=%(refname:short)", "refs/heads/"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
-    if r.returncode != 0:
+    r = G.run(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/", timeout=60)
+    if not r.ok:
         return []
     out: list[Found] = []
-    for branch in [b.strip() for b in r.stdout.splitlines() if b.strip()]:
+    for branch in [b.strip() for b in r.out.splitlines() if b.strip()]:
         if branch == base:
             continue
-        c = P.run(
-            ["git", "-C", str(repo), "rev-list", "--count", f"{base}..{branch}"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        ahead = int(c.stdout.strip() or 0) if c.returncode == 0 else 0
+        c = G.run(repo, "rev-list", "--count", f"{base}..{branch}", timeout=60)
+        ahead = int(c.out or 0) if c.ok else 0
         if ahead <= 0:
             continue
         out.append(

@@ -1,3 +1,4 @@
+<!-- ddflow:begin drivers/deltas/vscode ddflow=0.2.0 fmt=1 sha=19a967e4d961 -->
 # Delta: VS Code (any agent)
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -28,3 +29,4 @@ not `mcpServers`, and the transport is named:
 VS Code also accepts a root `.mcp.json` using `mcpServers` as a portable format shared
 with Claude Code and Cursor. ddflow writes the native `.vscode/mcp.json`; if you would
 rather have the portable one, adopt `claude` as well — it writes exactly that file.
+<!-- ddflow:end drivers/deltas/vscode -->

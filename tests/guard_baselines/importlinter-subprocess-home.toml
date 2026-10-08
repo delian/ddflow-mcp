@@ -12,10 +12,8 @@ ignore_imports = [
     # home
     "ddflow.infra.proc -> subprocess",
     "ddflow.infra.claimref -> subprocess",
-    "ddflow.infra.log -> subprocess",
     "ddflow.infra.paths -> subprocess",
     "ddflow.services.bisect -> subprocess",
-    "ddflow.services.companions -> subprocess",
     "ddflow.services.onboard_verify -> subprocess",
     "ddflow.services.review -> subprocess",
     "ddflow.surfaces.mcp -> subprocess",
