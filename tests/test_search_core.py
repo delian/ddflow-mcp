@@ -184,3 +184,21 @@ def test_both_backends_put_the_same_lesson_first(repo, log):
         st.rebuild(log)
         first[backend] = st.search("lessons", "claim worktree", 5)[0]["id"]
     assert first["fts5"] == first["like"] == "L3"
+
+
+def test_rule_search_regex_stays_case_insensitive(repo):
+    _rule(repo)
+    code, out, _ = run_cli(repo, "rule", "search", "--regex", "SMALL")
+    assert code == 0 and "r-style" in out
+
+
+def test_the_like_fallback_returns_only_rows_that_share_a_term(repo, log):
+    from ddflow.config import Config
+    from ddflow.infra.store import Store
+
+    _lessons(log)
+    cfg = Config.load()
+    cfg.lessons.search_backend = "like"
+    st = Store(repo, cfg)
+    st.rebuild(log)
+    assert [r["id"] for r in st.search("lessons", "unrelated", 20)] == ["L4"]
