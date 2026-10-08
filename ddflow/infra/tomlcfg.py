@@ -40,6 +40,12 @@ from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from ..config_sections._layers import (  # noqa: F401 -- the layer paths, re-exported here
+    LAYERS,
+    LOCAL_DIR,
+    layer_path,
+)
+
 # The file layer lives in fsio; `atomic_write` stays importable from here for its callers.
 from .fsio import atomic_write, file_lock, lock_path_for  # noqa: F401
 
@@ -170,10 +176,9 @@ def config_paths(root: Path, own: str) -> tuple[Path, ...]:
     restate everything to change one thing gets copied once and then drifts, which is
     the failure this whole module is about.
     """
-    base = Path(root) / ".ddflow"
     # The machine-local layer last, so it wins: .ddflow/local/ is git-ignored, and holds
     # what belongs to whoever runs this checkout (their reviewers, their companions).
-    return (base / "config.toml", base / own, base / "local" / "config.toml", base / "local" / own)
+    return tuple(layer_path(root, layer, f) for layer in LAYERS for f in ("config.toml", own))
 
 
 @contextlib.contextmanager

@@ -15,7 +15,7 @@ reviewer has actually answered.
 from __future__ import annotations
 
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
 from ..services import review as RV
+from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ._base import _load
 
 
@@ -517,6 +518,86 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     return out
 
 
+def reviewer_block(entry: dict[str, object]) -> str:
+    """One `[[reviewer]]` block, every value written by `tomlcfg.value`."""
+    return "\n[[reviewer]]\n" + "".join(f"{k} = {TC.value(v)}\n" for k, v in entry.items())
+
+
+def reviewers_add(
+    repo: Path,
+    *,
+    preset: str = "",
+    name: str = "",
+    model: str = "",
+    base_url: str = "",
+    gates: Sequence[str] = (),
+    no_launch: bool = False,
+    shared: bool = False,
+    person: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """Append a `[[reviewer]]` block. Writes the KEY's variable NAME, never the key.
+
+    Local unless ``shared``: an endpoint and a key variable are one operator's setup, and a
+    reviewer added here is for THIS machine (bug B-reviewers-write-committed). A command
+    reviewer is written only for a ``person`` (decision D-reviewer-trust)."""
+    entry = dict(RV.PRESETS.get(preset, {}))
+    if preset and not entry:
+        return O.failed(
+            "reviewers.add", f"unknown preset {preset!r}; `ddflow reviewers presets`", name=name
+        )
+    if model:
+        entry["model"] = model
+    if base_url:
+        entry["base_url"] = base_url
+    if gates:
+        entry["gates"] = list(gates)
+    label = name or preset or str(entry.get("model", "reviewer"))
+    # No `family` guessed from the model name: a written one wins over the project's
+    # `[agent].families` for good (B98650136a8). A preset that declares one keeps it.
+    if no_launch:
+        entry.pop("launch", None)
+    launch = entry.pop("launch", None)
+    body = {
+        "name": label,
+        **{k: v for k, v in entry.items() if k != "name"},
+        **({"launch": launch} if launch else {}),
+    }
+    res = apply_edit(
+        repo,
+        Block(reviewer_block(body), own="reviewers.toml"),
+        layer="file" if shared else "local",
+        person=person,
+        agent=agent,
+    )
+    if res.error:
+        done = O.refused if isinstance(res.error, (KeyRefused, ReviewerRefusal)) else O.failed
+        return done(
+            "reviewers.add",
+            res.error,
+            name=label,
+            reviewer_refused=isinstance(res.error, ReviewerRefusal),
+        )
+    note = (
+        "\n  Committed config: every clone gets this reviewer."
+        if shared
+        else "\n  Git-ignored, machine-local: not committed. --shared commits a reviewer "
+        "every clone should use."
+    )
+    if entry.get("api_key_env"):
+        note += (
+            f"\n  Set ${entry['api_key_env']} in your environment. The KEY is never "
+            f"written to any config — only the variable's name."
+        )
+    return O.ok(
+        "reviewers.add",
+        name=label,
+        path=str(res.path),
+        shared=shared,
+        text=f"added reviewer {label!r} to {res.path}{note}",
+    )
+
+
 def reviewers_detect(
     repo: Path, *, write: bool = False, shared: bool = False, agent: str = ""
 ) -> O.Outcome:
@@ -548,24 +629,37 @@ def reviewers_detect(
             # (B98650136a8).
             fam = family_for(m, cfg.agent.families) or R.family_of(m)
             rows.append({"url": url, "label": label, "model": m, "family": fam})
-            # tomlcfg.value, not "{m}": a model name is whatever the endpoint reported,
-            # and a quote in it broke the block (Bb11e7a8186).
-            entry = {
-                "name": m.split("/")[-1].lower(),
-                "base_url": url,
-                "model": m,
-                "gates": ["critic"],
-            }
+            # `reviewer_block` writes through tomlcfg.value, not "{m}": a model name is
+            # whatever the endpoint reported, and a quote in it broke the block (Bb11e7a8186).
             blocks.append(
-                "\n[[reviewer]]\n" + "".join(f"{k} = {TC.value(v)}\n" for k, v in entry.items())
+                reviewer_block(
+                    {
+                        "name": m.split("/")[-1].lower(),
+                        "base_url": url,
+                        "model": m,
+                        "gates": ["critic"],
+                    }
+                )
             )
     written = ""
     if write:
-        from ..services.configwrite import append_block
-
-        written = str(
-            append_block(repo, "".join(blocks), shared=shared, own="reviewers.toml", agent=agent)
+        res = apply_edit(
+            repo,
+            Block("".join(blocks), own="reviewers.toml"),
+            layer="file" if shared else "local",
+            agent=agent,
         )
+        if res.error:
+            done = O.refused if isinstance(res.error, (KeyRefused, ReviewerRefusal)) else O.failed
+            return done(
+                "reviewers.detect",
+                res.error,
+                found=rows,
+                blocks="".join(blocks),
+                written="",
+                text="",
+            )
+        written = str(res.path)
     from ..views import human
 
     out = O.ok(

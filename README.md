@@ -919,6 +919,16 @@ reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce
 cadences, and the rest of the 197 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
+Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
+`config --set`, `--append-toml`, `ddflow_configure`, `workflow pipeline|gate|drop`,
+`reviewers add|detect --write` and `export enable` all compose the edit, judge the RESULT once
+(format, schema, plain keys, the adaptive range, `[gate.*]` tables, the human-approval gates,
+and the workflow's coherence) and replace the file atomically under a lock. The same guards hold
+for the committed and the local layer and for every kind of edit, so an appended block is held
+to what `--set` is held to. Only a person typing on the command line writes a number or boolean
+as text; a `workflow gate --command 5` is the string `"5"`. A committed write brings
+`.gitattributes` up to date with `[lease] append_only_globs`, whichever command made it.
+
 #### What is committed, and what stays on your machine
 
 ddflow **recommends** services; it never ships one person's configuration. Two layers:

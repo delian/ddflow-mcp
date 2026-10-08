@@ -27,11 +27,6 @@ from ..core import clock
 from ..core.model import fold
 from ..core.outcome import INTERRUPTED, exit_for
 from ..services import gates as G
-from .commands.config import (  # noqa: F401  -- moved out of this module
-    _config_set,
-    _workflow_problems,
-    _write_config,
-)
 from .context import (
     FAIL,
     NOTHING,

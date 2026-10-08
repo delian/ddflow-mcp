@@ -29,7 +29,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "dry_run": ("boolean", "Report the change and write nothing.", False),
         },
         "api": lambda repo, a, agent: _api().workflow_pipeline(
-            repo, a["which"], a["gates"], dry_run=bool(a.get("dry_run"))
+            repo, a["which"], a["gates"], dry_run=bool(a.get("dry_run")), agent=agent
         ),
         "payload": ("key", "gates", "applied"),
     },
@@ -72,6 +72,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 required=bool(a.get("required")),
             ),
             dry_run=bool(a.get("dry_run")),
+            agent=agent,
         ),
         "payload": ("gate", "changed", "applied"),
     },
@@ -84,7 +85,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "dry_run": ("boolean", "Report the change and write nothing.", False),
         },
         "api": lambda repo, a, agent: _api().workflow_drop(
-            repo, a["id"], dry_run=bool(a.get("dry_run"))
+            repo, a["id"], dry_run=bool(a.get("dry_run")), agent=agent
         ),
         "payload": ("gate", "removed_from", "applied"),
     },
