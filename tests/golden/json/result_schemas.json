@@ -730,18 +730,9 @@
  "ddflow_recall": {
   "command": "recall",
   "schema": "recall@1",
-  "shape": "object",
+  "shape": "nested",
   "payload": "results",
-  "output_schema": {
-   "type": "object",
-   "properties": {
-    "schema": {
-     "const": "recall@1"
-    },
-    "refusal": {}
-   },
-   "additionalProperties": true
-  },
+  "output_schema": null,
   "array_schema": null
  },
  "ddflow_similar": {
@@ -1472,18 +1463,9 @@
  "ddflow_decision_show": {
   "command": "decision_show",
   "schema": "decision_show@1",
-  "shape": "object",
+  "shape": "nested",
   "payload": "decision",
-  "output_schema": {
-   "type": "object",
-   "properties": {
-    "schema": {
-     "const": "decision_show@1"
-    },
-    "refusal": {}
-   },
-   "additionalProperties": true
-  },
+  "output_schema": null,
   "array_schema": null
  },
  "ddflow_prompts": {
@@ -1691,18 +1673,9 @@
  "ddflow_show": {
   "command": "show",
   "schema": "show@1",
-  "shape": "object",
+  "shape": "nested",
   "payload": "item",
-  "output_schema": {
-   "type": "object",
-   "properties": {
-    "schema": {
-     "const": "show@1"
-    },
-    "refusal": {}
-   },
-   "additionalProperties": true
-  },
+  "output_schema": null,
   "array_schema": null
  },
  "ddflow_update": {

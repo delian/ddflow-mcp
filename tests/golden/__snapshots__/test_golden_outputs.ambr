@@ -1457,6 +1457,24 @@
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
+      mcp.output_schemas = 'off'   [default]
+          Whether `tools/list` declares an `outputSchema` for every tool whose result
+          is a JSON object, and a call returns that object also as `structuredContent`
+          (MCP 2025-06-18 and later; an older client is served as with `off`). `off`
+          (default): the result is the JSON text in the first content block only, and
+          `tools/list` is as small as before. `on`: each object tool lists `{"type":
+          "object", "properties": {"schema": {"const": "<tool>@<n>"}, <its declared
+          fields>: {}}}` -- additive, nothing required -- and a bare-array tool lists
+          its schema under `_meta["ddflow/outputSchema"]`, since an `outputSchema`
+          must be an object. Costs about 16 KB more `tools/list` and every object
+          result is sent twice (the text block and `structuredContent`). Every object
+          result carries its `schema` tag either way. Read once at server start, so
+          change it and restart the server. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'off', the strictest
+          (no safety dimension; the smaller, unchanged tool list and result); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       ci.command = ''   [default]
           The command the `ci` gate and `ddflow ci run` execute in a scratch worktree
           of the branch merged with the base. Empty (default): the project's own pre-
