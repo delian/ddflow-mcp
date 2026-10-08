@@ -823,35 +823,64 @@ def tag_body(body: Any, command: str) -> Any:
     return {**tag, **body}
 
 
-def parsed_path(parser: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[str, ...]:
-    """The command words a parsed command line went through, aliases resolved to the
-    command they name: ``("gate", "record")``."""
+def parsed_path(parser: argparse.ArgumentParser, argv: Iterable[str]) -> tuple[str, ...]:
+    """The command words ``argv`` went through, aliases resolved to the command they name:
+    ``("gate", "record")``. Read from the words typed, not from the parsed namespace: an
+    option can share a subparser's ``dest`` (``bisect --cmd`` overwrote ``cmd``)."""
+    tokens = list(argv)
     words: list[str] = []
     node = parser
+    at = 0
     while True:
         sub = next((a for a in node._actions if isinstance(a, argparse._SubParsersAction)), None)
-        typed = getattr(args, sub.dest, None) if sub is not None else None
-        if sub is None or typed is None or typed not in sub.choices:
+        if sub is None:
             return tuple(words)
-        target = sub.choices[typed]
-        words.append(next((n for n, p in sub.choices.items() if p is target), typed))
-        node = target
+        typed = next((i for i in range(at, len(tokens)) if tokens[i] in sub.choices), None)
+        if typed is None or "--" in tokens[at:typed]:
+            return tuple(words)
+        target = sub.choices[tokens[typed]]
+        words.append(next((n for n, p in sub.choices.items() if p is target), tokens[typed]))
+        node, at = target, typed + 1
 
 
 #: CLI commands whose words are not the name of the tool that serves them and which no
 #: `via` declares: ``ddflow research`` (no verb) files what ``ddflow_research_add`` files.
-CLI_COMMAND_NAMES: dict[tuple[str, ...], str] = {("research",): "research_add"}
+CLI_COMMAND_NAMES: dict[tuple[str, ...], str] = {
+    ("research",): "research_add",
+    ("companions",): "companions",
+    ("companions", "list"): "companions",
+    ("hooks",): "hooks",
+    ("hooks", "status"): "hooks",
+    ("hooks", "install"): "hooks",
+    ("hooks", "uninstall"): "hooks",
+    ("prompts",): "prompts",
+    ("prompts", "list"): "prompts",
+    ("prompts", "get"): "prompts",
+    ("prompts", "show"): "prompts",
+}
+#: A flag that makes a command another tool's: ``(path, flag) -> name``.
+CLI_FLAG_COMMANDS: dict[tuple[tuple[str, ...], str], str] = {
+    (("companions",), "--verify"): "companions_verify",
+    (("companions", "list"), "--verify"): "companions_verify",
+    (("import",), "--verify"): "import_verify",
+    (("doctor",), "--upgrade"): "upgrade",
+}
 
 
 def command_for_path(
     path: tuple[str, ...],
     routed: Mapping[tuple[str, ...], tuple[str, str]],
     covering: Mapping[str, tuple[str, ...]],
+    argv: Iterable[str] = (),
 ) -> str:
     """The schema name of a CLI command: the name of the MCP tool that serves it, so the two
     surfaces tag one result alike. ``routed`` maps a path a selector serves to its tool
     (``task list`` -> ``ddflow_list``), ``covering`` a one-word command a differently named
     tool covers (``init`` -> ``ddflow_setup``); anything else is its words joined by ``_``."""
+    typed = set(argv)
+    for (where, flag), name in CLI_FLAG_COMMANDS.items():
+        if where == path and flag in typed:
+            return name
     if path in CLI_COMMAND_NAMES:
         return CLI_COMMAND_NAMES[path]
     if path in routed:

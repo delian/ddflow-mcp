@@ -246,7 +246,9 @@ def test_parsed_path_resolves_an_alias_to_its_command():
     from ddflow.surfaces.cli import build_parser
 
     parser = build_parser()
-    args = parser.parse_args(["gate", "status", "T1"])
-    assert R.parsed_path(parser, args) == ("gate", "status")
+    assert R.parsed_path(parser, ["gate", "status", "T1"]) == ("gate", "status")
+    assert R.parsed_path(parser, ["--agent", "A", "gate", "status"]) == ("gate", "status")
+    # an option that shares a subparser's dest (`bisect --cmd` overwrote `cmd`) does not confuse it
+    assert R.parsed_path(parser, ["bisect", "a", "--cmd", "x {tests}"]) == ("bisect",)
     assert R.command_for_path(("gate", "status"), {}, {}) == "gate_status"
     assert R.command_for_path(("bug", "file-tasks"), {}, {}) == "bug_file_tasks"
