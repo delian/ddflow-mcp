@@ -96,12 +96,14 @@ def knob(  # noqa: PLR0913 -- one keyword per declaration facet; the call sites 
     removed_in: str = MIN_REMOVED_IN,
     members: Callable[[Any], tuple[Any, list[str]]] | None = None,
     default_changed_in: str = "",
-    default_was: Any = None,
+    default_was: Any = MISSING,
 ) -> Any:
     """A dataclass field that carries its knob declaration (see the module docstring).
     `factory` for a mutable default (a list or dict), as `field(default_factory=...)`."""
     if default_changed_in:
         version_tuple(default_changed_in)
+        if default_was is MISSING:
+            raise ValueError("default_changed_in needs default_was: the default before the change")
         doc = f"{doc} (Default changed in {default_changed_in}; it was {default_was!r}.)"
     if choices and strictest is None:
         raise ValueError("an enum knob (choices) must name its strictest fallback")
@@ -126,7 +128,7 @@ def knob(  # noqa: PLR0913 -- one keyword per declaration facet; the call sites 
             removed_in,
             members,
             default_changed_in,
-            default_was,
+            None if default_was is MISSING else default_was,
         )
     }
     if factory is not MISSING:

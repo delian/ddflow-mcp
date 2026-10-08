@@ -759,6 +759,9 @@ def append_block(
     recommends services but never ships someone's configuration to every clone.
     `own` names the dedicated local file (`reviewers.toml`); the shared target is
     always `.ddflow/config.toml`, the one committed file a project is configured in.
+
+    Raises `FormatRefused` (exit 3) when the file's `format` is newer than this ddflow
+    understands, and `RT.ReviewerRefused` for an agent's command reviewer.
     """
     if shared:
         path = config_file(repo)

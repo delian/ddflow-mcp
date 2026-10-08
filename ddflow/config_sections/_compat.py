@@ -75,6 +75,6 @@ def upgrade_advice(highest: str = "", kind: str = "") -> str:
     """What to do about a ddflow that is older than the data it met, FOR HOW THIS ONE IS
     INSTALLED: a source checkout merges main, an installed ddflow upgrades its package.
     ``highest`` is the version needed ("" = unknown); ``kind`` an install kind (see
-    `install_info.KINDS`; "" = judged cheaply from where the package lives)."""
-    kind = kind or ("source-tree" if is_source_tree() else "index")
+    `install_info.KINDS`; "" = not known, so the package-upgrade advice: a path alone cannot
+    tell a checkout from a ``pip install --target`` tree)."""
     return _ADVICE.get(kind, _ADVICE["unknown"]).format(to=f" to >= {highest}" if highest else "")

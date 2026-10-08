@@ -95,18 +95,18 @@ def router_set(model: str, routers: dict[str, list[str]]) -> list[str] | None:
 
 
 def _routers_members(v: Any) -> tuple[Any, list[str]]:
-    """`[agent].routers` from a file. An entry in a shape this ddflow lacks (a newer release's)
-    is KEPT with an empty family set, which `router_set` reads as "unknown" -- so the router
-    still counts as a router and its author is refused as independent of nothing, rather than
-    the entry vanishing and the model passing as an ordinary one. Each is noted."""
+    """`[agent].routers` from a file. An entry in a TABLE shape this ddflow lacks (a newer
+    release's) is KEPT with an empty family set, which `router_set` reads as "unknown" -- so
+    the router still counts as a router and its author is refused as independent of nothing,
+    rather than the entry vanishing and the model passing as an ordinary one. Each is noted.
+    Any other malformed entry (a string, a list of non-words) is a typo and is left to the
+    check, which refuses it."""
     if not isinstance(v, dict):
         return v, []
-    ok = {k: m for k, m in v.items() if isinstance(m, list) and all(isinstance(x, str) for x in m)}
-    kept = {k: ok.get(k, []) for k in v}
+    shaped = [k for k, m in v.items() if isinstance(m, dict)]
+    kept = {k: ([] if k in shaped else m) for k, m in v.items()}
     return kept, [
-        f"router {k!r} (a shape not known here, so its families are unknown)"
-        for k in v
-        if k not in ok
+        f"router {k!r} (a shape not known here, so its families are unknown)" for k in shaped
     ]
 
 

@@ -376,7 +376,7 @@ class Config:
 
         def soft(key: str) -> bool:
             """May `key` be skipped or tolerated rather than refused?"""
-            if lenient or written is None:
+            if written is None:
                 return lenient
             return key not in written and not any(w.startswith(key + ".") for w in written)
 
@@ -452,9 +452,7 @@ class Config:
         ignored: list[str] = []
         if lenient and key in _MEMBER_FILTERS:
             value, ignored = _MEMBER_FILTERS[key](value)
-            self.ignored_members.extend(
-                f"{key}: ignored {what} (not known to this ddflow)" for what in ignored
-            )
+            self.ignored_members.extend(f"{key}: {what}" for what in ignored)
         check = _KNOB_CHECKS.get(key)
         if ignored and not value:
             # Emptied by the filter: a check that accepts an empty table would let it
