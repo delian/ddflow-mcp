@@ -19,7 +19,6 @@ this without special support:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 
@@ -45,6 +44,7 @@ from .context import (
 from .parsers import REGISTER_ORDER
 from .parsers._common import GLOBS_HELP, _Globs, _positive_int  # noqa: F401
 from .registry import Notices, SuggestingParser, used_aliases
+from .render import emit_json
 from .tools import TOOLS
 from .vocabulary import provide
 
@@ -138,7 +138,7 @@ def cmd_progress(a, c: Ctx) -> int:
         # The ROW ARRAY, unchanged. `ddflow progress --json` has always emitted a list
         # and callers index it; the Outcome carries more, and the `payload` entry on the
         # MCP tool keeps that surface identical too.
-        print(json.dumps(out.data["rows"], indent=2, default=str))
+        emit_json(out.data["rows"])
         return OK
 
     rows_d = out.data["rows"]
@@ -193,7 +193,7 @@ def cmd_loops(a, c: Ctx) -> int:
 
     out = _loops(c.repo)
     if c.json:
-        print(json.dumps(out.data["findings"], indent=2))
+        emit_json(out.data["findings"])
         return out.exit
     if not out.data["findings"]:
         print(

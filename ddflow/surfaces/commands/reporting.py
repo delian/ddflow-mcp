@@ -8,7 +8,6 @@ point is that the log is folded ONCE per command.
 
 from __future__ import annotations
 
-import json
 import sys
 import time
 
@@ -16,6 +15,7 @@ from ...api import reporting as A
 from ...infra import worktree as W
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..render import emit_json
 from ..vocabulary import sources
 from .setup import cmd_upgrade
 
@@ -143,7 +143,7 @@ def cmd_status(a, c: Ctx) -> int:
     # bounded answer is the MCP tool's (Bd6aa9ffde9).
     out = A.status(c.repo, agent=c.requested_agent, full=True)
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     d = out.data
     r = d["_render"]
@@ -187,7 +187,7 @@ def cmd_show(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body("item"), indent=2, default=str))
+        emit_json(out.body("item"))
         return OK
     if "bug" in out.data["_render"]:
         print(_bug_lines(out.data["_render"]["bug"]))
@@ -292,7 +292,7 @@ def _bug_lines(b: dict) -> str:
 def cmd_recover(a, c: Ctx) -> int:
     out = A.recover(c.repo, item=a.item or "", apply=a.apply, agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body("found"), indent=2, default=str))
+        emit_json(out.body("found"))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -337,7 +337,7 @@ def cmd_doctor(a, c: Ctx) -> int:
     parser, tools = sources()
     out = A.doctor(c.repo, agent=c.requested_agent, parser=parser, tools=tools)
     if c.json:
-        print(json.dumps(out.body(("problems", "notes", "events", "items")), indent=2))
+        emit_json(out.body(("problems", "notes", "events", "items")))
         return out.exit
     print(out.data["text"])
     return out.exit
