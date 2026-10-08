@@ -3840,7 +3840,7 @@ The upgrade plan reads it to tell a project what its upgrade will change.
 applied or acknowledged, 1 when a step failed, 2 when one could not run (never read as
 done), 3 while an item waits for the operator. Before it rewrites any file it copies the
 originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, never shared;
-`--backup none` or `[upgrade].backup = "none"` skips it) with a `manifest.json` of what was
+`--backup none` skips it) with a `manifest.json` of what was
 there, and prints the backup and `git diff` to review the change. What each category does:
 
 - **repairs**: the pending data repairs (new corrective events, never an edit of the log);

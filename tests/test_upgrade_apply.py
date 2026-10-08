@@ -743,10 +743,10 @@ def test_confirm_needs_a_reason_and_with_both_the_change_is_made_and_recorded(ol
     assert event.data["confirmed"] == {"worktree.max_parallel": "the new default fits"}
 
 
-def test_plan_and_apply_together_are_a_usage_error(old: Path) -> None:
+def test_plan_and_apply_together_are_refused(old: Path) -> None:
     code, _out, err = cli(old, "upgrade", "--plan", "--apply")
 
-    assert code == 2 and "not both" in err
+    assert code == 3 and "not both" in err
 
 
 def test_an_unknown_category_is_a_failure_that_names_the_known_ones(old: Path) -> None:
@@ -803,3 +803,19 @@ def test_over_mcp_apply_confirm_and_reason_work_like_the_cli(old: Path) -> None:
     assert done["_meta"]["exit"] == 0
     body = json.loads(done["content"][0]["text"])
     assert body["applied"]["confirmed"] == {"worktree.max_parallel": "the new default fits"}
+
+
+def test_over_mcp_an_explicit_plan_true_with_apply_is_refused_like_the_cli(old: Path) -> None:
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(old).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"plan": True, "apply": "hooks"}},
+        }
+    )["result"]
+
+    assert reply["_meta"]["exit"] == 3
+    assert not (old / ".claude" / "settings.json").exists(), "nothing was applied"
