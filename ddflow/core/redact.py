@@ -34,6 +34,8 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from .digest import MARKER
+
 #: The tool's own names are public, and a report about ddflow must still say "ddflow".
 PUBLIC_NAMES = frozenset({"ddflow", "ddflow-mcp", "ddflow_mcp"})
 
@@ -44,7 +46,7 @@ _GENERIC_HOSTS = frozenset({"localhost", "localdomain", "ubuntu", "debian", "hos
 _MIN_TERM = 3
 _V4 = 4
 
-_MARKER = re.compile(r"\[REDACTED(?::[a-z0-9_]*)?\]?")
+_MARKER = MARKER  # the grammar lives in `core.digest`, where digests read it too
 
 #: Same detectors as tests/test_repo_is_generic.py.
 _IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?!\d|\.\d)")

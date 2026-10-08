@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import digest as _digest
 from .events import canonical_digest
 
 #: The definition kinds, and what each is. A family starts writing its definitions here
@@ -58,8 +59,22 @@ def key(kind: str, rid: str) -> str:
 
 
 def digest(fields: dict[str, Any]) -> str:
-    """The content digest of a definition's fields: equal fields, equal digest."""
+    """The content digest of a definition's fields: equal fields, equal digest. Redaction
+    markers are one token in it, so clones on different redaction profiles (`[REDACTED]`,
+    `[REDACTED:secret]`) agree on whether a definition changed. Case and whitespace count:
+    they can change what a definition does."""
+    return _digest.of_obj(_digest.normalized(fields), size=16)
+
+
+def legacy_digest(fields: dict[str, Any]) -> str:
+    """The digest recorded before markers were normalized: still what an older record
+    carries, so `same` accepts it."""
     return canonical_digest(fields, size=16)
+
+
+def same(fields: dict[str, Any], stored: str) -> bool:
+    """Whether ``stored`` (a digest a record carries, in either spelling) is that of ``fields``."""
+    return stored in (digest(fields), legacy_digest(fields))
 
 
 @dataclass

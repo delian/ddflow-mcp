@@ -33,7 +33,7 @@ from typing import Any
 
 from ..core import clock
 from ..core import fieldcheck as FC
-from ..core.digest import content_digest
+from ..core.digest import content_digest, of_obj
 from ..core.ids import free
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
@@ -88,11 +88,23 @@ class Trigger:
     enabled: bool = False
     tags: list[str] = field(default_factory=list)
 
-    def digest(self) -> str:
-        """The definition, fingerprinted: a breaker holds until this changes."""
+    def _fingerprinted(self) -> dict:
         d = asdict(self)
         d.pop("enabled", None)
-        return content_digest(json.dumps(d, sort_keys=True), length=12)
+        return d
+
+    def digest(self) -> str:
+        """The definition, fingerprinted: a breaker holds until this changes."""
+        return of_obj(self._fingerprinted(), size=6)
+
+    def legacy_digest(self) -> str:
+        """The fingerprint older definitions recorded (a sorted dump with spaces, sha256):
+        a `trigger.fired` event may still carry it, and `same_definition` accepts it."""
+        return content_digest(json.dumps(self._fingerprinted(), sort_keys=True), length=12)
+
+    def same_definition(self, recorded: object) -> bool:
+        """Whether ``recorded`` (a digest a fire carries, in either spelling) is this definition's."""
+        return recorded in (self.digest(), self.legacy_digest())
 
 
 # -- one definition ------------------------------------------------------------------------
@@ -284,10 +296,9 @@ def outcome(st: State, item: str) -> str:
 def _held(st: State, trig: Trigger) -> int:
     """How many remediations in a row, newest first, of the CURRENT definition failed or
     yielded nothing. Open ones are skipped: they have not said yet."""
-    digest = trig.digest()
     n = 0
     for fire in reversed(st.trigger_fires.get(trig.id, [])):
-        if fire.get("digest") != digest:
+        if not trig.same_definition(fire.get("digest")):
             break
         results = [outcome(st, i) for i in fire.get("items", [])]
         if not results or all(r == "open" for r in results):
