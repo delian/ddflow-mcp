@@ -80,9 +80,10 @@ def preflight(
     )
 
 
-def status(repo: Path) -> O.Outcome:
-    """The standing drift report: every check, none of the suite, none of the writes."""
-    report = OV.verify(repo, suite=False)
+def _verification(kind: str, *, suite: bool, repo: Path) -> O.Outcome:
+    """`status` and `verify` are one report over the same checks; only whether the suite
+    runs and the outcome's kind differ."""
+    report = OV.verify(repo, suite=suite)
     text = report.render()
     data = {
         "checks": [
@@ -91,8 +92,13 @@ def status(repo: Path) -> O.Outcome:
         "text": text,
     }
     if report.passed:
-        return O.ok("onboard.status", **data)
-    return O.failed("onboard.status", "; ".join(c.name for c in report.problems), **data)
+        return O.ok(kind, **data)
+    return O.failed(kind, "; ".join(c.name for c in report.problems), **data)
+
+
+def status(repo: Path) -> O.Outcome:
+    """The standing drift report: every check, none of the suite, none of the writes."""
+    return _verification("onboard.status", suite=False, repo=repo)
 
 
 def legacy(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.Outcome:
@@ -117,13 +123,11 @@ def legacy(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.
         if not proposals and not imported:
             return O.nothing("onboard.legacy", text, **data)
         return O.ok("onboard.legacy", **data)
-    wanted = set(accept)
+    chosen, unmatched = ON.select_accepted(imported, accept, lambda n: (n,))
     refused = [
         {"name": n, "kind": "file", "outcome": "refused", "detail": "not an imported file"}
-        for n in accept
-        if n not in imported
+        for n in unmatched
     ]
-    chosen = [n for n in imported if n in wanted] if wanted else imported
     if not chosen:
         if not refused:
             return O.nothing("onboard.legacy", "nothing was imported to freeze", **data)
@@ -168,15 +172,12 @@ def memory(
         if not kept and not duplicates and not scan.problems:
             return O.nothing("onboard.memory", text, **data)
         return O.ok("onboard.memory", **data)
-    wanted = set(accept)
-    matched = [f for f in kept if f.ident in wanted or f.source in wanted] if wanted else kept
-    keys = {f.ident for f in matched} | {f.source for f in matched}
+    matched, unmatched = ON.select_accepted(kept, accept, lambda f: (f.ident, f.source))
     refused = [
         {"name": n, "kind": "fact", "outcome": "refused", "detail": "no offered fact has this name"}
-        for n in accept
-        if n not in keys
+        for n in unmatched
     ]
-    if wanted and not matched:
+    if accept and not matched:
         return O.refused("onboard.memory", "nothing approved to record", **data, refused=refused)
     actions = MH.apply(log, matched, state=state, cfg=cfg)
     return O.ok(
@@ -204,17 +205,7 @@ def test_gate(repo: Path) -> O.Outcome:
 
 def verify(repo: Path) -> O.Outcome:
     """Every probe including the suite; a check that could not run is not a pass."""
-    report = OV.verify(repo, suite=True)
-    text = report.render()
-    data = {
-        "checks": [
-            {"name": c.name, "outcome": c.outcome, "detail": c.detail} for c in report.checks
-        ],
-        "text": text,
-    }
-    if report.passed:
-        return O.ok("onboard.verify", **data)
-    return O.failed("onboard.verify", "; ".join(c.name for c in report.problems), **data)
+    return _verification("onboard.verify", suite=True, repo=repo)
 
 
 def onboard(

@@ -41,6 +41,7 @@ treated as "no problem".
 from __future__ import annotations
 
 import getpass  # noqa: F401
+import json  # noqa: F401
 import os  # noqa: F401
 import re  # noqa: F401
 import shlex  # noqa: F401
@@ -137,10 +138,7 @@ from .runner import (  # noqa: F401
     _RUN_FIELDS,
     _SHELL_BUILTINS,
     _SHELL_META,
-    _SUMMARY_LINE,
-    _VERDICT,
     KEEP_RUN_LOGS,
-    MAX_SUMMARY_LINES,
     RUNS_DIR,
     _account_for_drift,
     _looks_like_not_found,
@@ -151,19 +149,29 @@ from .runner import (  # noqa: F401
     gate_config_drift,
     run_command_gate,
     run_log_writer,
-    summary_lines,
 )
 from .testcmd import (  # noqa: F401
     _COMMENT,
+    _COUNT,
     _PY_MANIFESTS,
     _PYTEST,
     _PYTEST_NAME,
+    _SUMMARY_LINE,
+    _VERDICT,
     _XDIST_CHOSEN,
     _XDIST_NAME,
+    MAX_SUMMARY_LINES,
+    Runner,
     _manifest_texts,
+    _named_in,
+    counts_of,
     declares_xdist,
+    detect,
+    file_text,
+    last_count_line,
     parallel_test_advice,
     runs_pytest_serially,
     suggested_test_command,
+    summary_lines,
     uses_pytest,
 )

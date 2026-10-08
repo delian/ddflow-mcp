@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import contextlib
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import TypeVar
 
 from ..config import Config
 from ..core.model import fold
@@ -418,6 +419,26 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -
         "outcome": "failed",
         "detail": f"worktree removed, branch {item.branch} not deleted: {(rb.err or rb.out).strip() or f'git exit {rb.code}'}",
     }
+
+
+_T = TypeVar("_T")
+
+
+def select_accepted(
+    offered: Sequence[_T], accept: Sequence[str], names: Callable[[_T], Collection[str]]
+) -> tuple[list[_T], list[str]]:
+    """What the operator's approval picks out of what was offered, and the names it
+    mentioned that picked nothing: ``(chosen, unmatched)``.
+
+    No ``accept`` approves everything offered; with names, an offered item is chosen when
+    any of its ``names`` is among them. A name matching nothing is returned, in the order
+    given, for the caller to refuse (a typo must not read as a successful stage). The one
+    selection every onboarding stage with an offer and an approval list uses.
+    """
+    wanted = set(accept)
+    chosen = [o for o in offered if wanted & set(names(o))] if wanted else list(offered)
+    known = {n for o in chosen for n in names(o)}
+    return chosen, [n for n in accept if n not in known]
 
 
 def apply(

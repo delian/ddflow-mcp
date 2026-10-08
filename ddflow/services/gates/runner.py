@@ -17,31 +17,7 @@ from ...infra import fsio
 from ...infra import proc as P
 from .defs import GateDef
 from .evidence import diff_stat, digest, source_tree, tree_fingerprint
-from .testcmd import suggested_test_command
-
-#: A test runner's own verdict lines, wherever in the output they fall: pytest's
-#: `=== 3 failed, 112 passed in 4.2s ===` banners (bare under `-q`), unittest's `Ran 12 tests in 0.1s`
-#: and `FAILED (failures=2)` / `OK (skipped=1)`.
-_VERDICT = r"(passed|failed|errors?|skipped|xfailed|xpassed|deselected)"
-_SUMMARY_LINE = re.compile(
-    rf"=+ .*\b({_VERDICT[1:-1]}|no tests ran)\b.* =+"
-    # pytest -q: the same verdicts, with no banner
-    rf"|(\d+ {_VERDICT}\b.*|no tests ran) in \d[\d.]*s\b.*"
-    r"|Ran \d+ tests? in \S+"
-    r"|(OK|FAILED) \(.*\)"
-)
-#: How many summary lines are kept: the first and last half of them when there are more.
-MAX_SUMMARY_LINES = 20
-
-
-def summary_lines(out: str) -> list[str]:
-    """The suite's own verdict lines from the WHOLE output, not the tail."""
-    found = [ln.strip() for ln in out.splitlines() if _SUMMARY_LINE.fullmatch(ln.strip())]
-    if len(found) <= MAX_SUMMARY_LINES:
-        return found
-    half = MAX_SUMMARY_LINES // 2
-    return [*found[:half], f"... {len(found) - 2 * half} more ...", *found[-half:]]
-
+from .testcmd import suggested_test_command, summary_lines
 
 #: Where `gate run` keeps each run's full output, under the primary's `.ddflow/`.
 #: Machine-local: the directory ignores itself, so no project's .gitignore has to know.
