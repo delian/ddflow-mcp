@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 from ...api import ci as A
 from ...infra import worktree as W
 from ..context import Ctx
+from ..render import emit_json
 
 
 def add_ci_parser(sub) -> None:
@@ -60,7 +60,7 @@ def cmd_ci(a, c: Ctx) -> int:
             return 1
         out = A.record(c.repo, stage=a.stage, ok=a.result == "passed", sha=a.sha, report=a.report)
         if c.json:
-            print(json.dumps(out.body(""), indent=2, default=str))
+            emit_json(out.body(""))
         elif out.exit:
             print(out.reason, file=sys.stderr)
         else:
@@ -69,7 +69,7 @@ def cmd_ci(a, c: Ctx) -> int:
     if a.verb == "status":
         out = A.status(c.repo)
         if c.json:
-            print(json.dumps(out.body(""), indent=2, default=str))
+            emit_json(out.body(""))
             return out.exit
         d = out.data
         print(f"command:   {d['command'] or '(none)'}")
@@ -82,7 +82,7 @@ def cmd_ci(a, c: Ctx) -> int:
     ref = a.ref or _here_or_head(c.repo)
     out = A.run(c.repo, ref=ref, base=a.base, command=a.command)
     if c.json:
-        print(json.dumps(out.body(""), indent=2, default=str))
+        emit_json(out.body(""))
         return out.exit
     d = out.data
     if d.get("command"):

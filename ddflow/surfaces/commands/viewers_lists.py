@@ -9,13 +9,13 @@ the parser wiring in one place so `cli.py` needs a single `register` call.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from typing import Any
 
 from ...api import phase_progress, view_list
 from ...services import viewers as V
 from ..context import NOTHING, OK, Ctx
+from ..render import emit_json
 
 _HELP = {
     "state": "only rows in this state",
@@ -112,7 +112,7 @@ def cmd_list(a, c: Ctx) -> int:
             body["filters"] = {
                 ("owner" if k == "agent" else k): v for k, v in body["filters"].items()
             }
-        print(json.dumps(body, indent=2, default=str))
+        emit_json(body)
         if out.exit not in (OK, NOTHING):
             print(out.reason, file=sys.stderr)
         return out.exit

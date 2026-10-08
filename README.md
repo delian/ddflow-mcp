@@ -714,6 +714,22 @@ adopted agent's delta) that differs from the template the running ddflow ships.
 only those docs, the AGENTS.md/CLAUDE.md blocks and the agents' native rules -- never the
 MCP launch, hooks or command files -- and refuses a project that was never adopted.
 
+**Stale references.** A file the project holds can name a command or tool that a release
+renamed: a settings hook, a git hook, `.pre-commit-config.yaml`, a driver doc, an AGENTS.md or
+CLAUDE.md block, a slash command, an ejected prompt, a macro. `ddflow doctor` (and
+`ddflow_doctor`; an MCP server has no command parser loaded, so it checks tool names and
+says in one note how many command references it could not check; the CLI's `doctor` checks both) resolves every `ddflow <command>` (in backticks, a fenced block or a
+command line; prose is not read) and `ddflow_<tool>` they name against this ddflow: *ok*,
+*deprecated* (an alias, with the replacement), *unknown*, or *unchecked* where the process has no table to judge it by, each with `file:line`. A
+deprecated name, or an unknown one in the project's own text, is a note; an unknown name in a
+region ddflow wrote and nobody edited is a problem, because the command it runs will fail.
+Text inside a ddflow-managed region is rewritable (`services.compat_refs.rewrite`: backed up
+first, the region re-stamped); anything else is the project's own and only gets a proposal,
+never a silent edit. A hook entry in a settings file is ddflow's by its stamped region
+(`hooks/<name>`), not by the command it runs, so renaming a `ddflow hooks ...` subcommand
+refreshes the installed hook in place instead of adding a second one; an entry written before
+the stamp is still found by its command text.
+
 A driver doc is a stamped region (`<!-- ddflow:begin drivers/implement-phase ddflow=V fmt=N
 sha=H -->` ... `<!-- ddflow:end drivers/implement-phase -->`): the version that wrote it, its
 format level and a digest of its body. That is how a refresh and `ddflow upgrade` tell an
