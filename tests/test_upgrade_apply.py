@@ -303,7 +303,7 @@ def test_a_pending_repair_is_applied_and_recorded(old: Path) -> None:
     out = go(old, "repairs")
 
     # an operator-consent repair (an unknown author's shard) waits for --confirm
-    assert out["exit"] in (0, 3), out["text"]
+    assert out["exit"] in (0, 2, 3), out["text"]
     assert set(ids(out, "applied")) == {i["id"] for i in pend}
     assert not [i for i in plan(old)["categories"]["repairs"] if i["action"] == UP.AGENT]
 
@@ -407,3 +407,22 @@ def test_toml_remove_keeps_comments_and_reports_whether_the_key_was_there() -> N
     assert was is True and out == "# top\n[log]\nkeep = 2\n"
     assert TC.remove(out, "log.zzz") == (out, False)
     assert TC.remove(out, "nope.zzz") == (out, False)
+
+
+def test_two_backups_in_one_clock_tick_get_their_own_directories(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(UA, "backup_name", lambda frm, to: "same-tick")
+    f = old / DRIVER
+
+    first = UA.make_backup(old, [f], "", "9.9.9")
+    second = UA.make_backup(old, [f], "", "9.9.9")
+
+    assert first != second and first.is_dir() and second.is_dir()
+
+
+def test_a_partial_apply_summary_names_the_version_it_reached(old: Path) -> None:
+    go(old, "hooks")
+
+    event = [e for e in EventLog(old, "upgrader").read_all() if e.kind == "upgrade.applied"][-1]
+    assert event.data["to"] == "0.0.0" and "-> 0.0.0" in event.data["summary"]

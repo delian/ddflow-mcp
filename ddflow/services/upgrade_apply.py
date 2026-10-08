@@ -140,8 +140,14 @@ def make_backup(repo: Path, files: Collection[Path], frm: str, to: str) -> Path:
     root = ensure_ignored_dir(
         repo / BACKUPS, comment="ddflow upgrade backups: local, not shared, never committed"
     )
-    dest = root / backup_name(frm, to)
-    dest.mkdir(parents=True)
+    name = backup_name(frm, to)
+    dest = root / name
+    for n in range(2, 100):  # two applies in one clock tick keep their own directories
+        try:
+            dest.mkdir(parents=True)
+            break
+        except FileExistsError:
+            dest = root / f"{name}-{n}"
     entries: list[dict[str, Any]] = []
     for f in dict.fromkeys(Path(x).resolve() for x in files):
         try:
@@ -312,7 +318,7 @@ def apply(
     ok, done_cats, reasons = _summarise(results, todo, confirm)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     if ok:
-        _record(log, todo, ok, frm, new_to, to, done_cats, backup_dir, reasons)
+        _record(log, todo, ok, frm, new_to, done_cats, backup_dir, reasons)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
 
 
@@ -341,7 +347,6 @@ def _record(
     ok: set[str],
     frm: str,
     new_to: str,
-    to: str,
     cats: list[str],
     backup_dir: str,
     reasons: dict[str, str],
@@ -362,7 +367,7 @@ def _record(
                 for i in todo
                 if i["category"] == "config" and i["id"] in ok
             ],
-            "summary": f"upgrade {frm or 'unstamped'} -> {to}: {', '.join(cats)}",
+            "summary": f"upgrade {frm or 'unstamped'} -> {new_to}: {', '.join(cats)}",
         },
     )
 
