@@ -276,6 +276,19 @@ def _on_disk(path: Path) -> dict[str, Any]:
     return doc if isinstance(doc, dict) else {}
 
 
+def _with_window_extras(windows: Any, prev: Any) -> Any:
+    """``windows`` (this version's) with each window's keys it does not know carried over
+    from the on-disk window of the same ``(window, unit)``."""
+    if not isinstance(windows, list) or not isinstance(prev, list):
+        return windows
+    by = {(w.get("window"), w.get("unit")): w for w in prev if isinstance(w, dict)}
+    out = []
+    for w in windows:
+        old = by.get((w.get("window"), w.get("unit"))) if isinstance(w, dict) else None
+        out.append({**{k: v for k, v in old.items() if k not in w}, **w} if old else w)
+    return out
+
+
 def _dump(profiles: Iterable[Profile], path: Path | None = None) -> str:
     """The store text. With ``path``, keys this version does not know -- at the top and in
     each profile -- and a newer ``version`` are carried over from what is on disk."""
@@ -291,6 +304,10 @@ def _dump(profiles: Iterable[Profile], path: Path | None = None) -> str:
             else {}
         )
         out[p.subject] = {**extra, **known}
+        if isinstance(prev, dict):
+            out[p.subject]["windows"] = _with_window_extras(
+                known.get("windows"), prev.get("windows")
+            )
     version = old.get("version")
     doc = {
         **{k: v for k, v in old.items() if k not in ("version", "profiles")},
