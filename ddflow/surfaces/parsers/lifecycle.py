@@ -35,6 +35,11 @@ def _gate_list_parser(g_s) -> None:
         action="store_true",
         help="list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check",
     )
+    glist.add_argument(
+        "--since",
+        default="",
+        help="with --refuted: only passes recorded at or after this ISO date or timestamp",
+    )
     glist.set_defaults(fn=cmd_gate)
 
 

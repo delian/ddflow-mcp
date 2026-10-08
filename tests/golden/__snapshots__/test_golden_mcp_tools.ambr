@@ -973,13 +973,17 @@
     'ddflow_gate_list': '''
       {
        "name": "ddflow_gate_list",
-       "description": "The gates this project defines; with refuted=true, every gate recorded passed ON REFUTATION (its findings refuted with probes rather than a clean re-review), for the operator's spot-check.",
+       "description": "The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "refuted": {
           "type": "boolean",
           "description": "List the gates passed on refutation instead."
+         },
+         "since": {
+          "type": "string",
+          "description": "With refuted: since this ISO date."
          },
          "as_agent": {
           "type": "string",
