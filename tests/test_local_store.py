@@ -253,3 +253,25 @@ def test_the_store_sweeps_a_subdirectory_by_its_clock(store):
     store.remove("d.json")
     store.remove("d.json")
     assert store.read("d.json") is None
+
+
+@pytest.mark.parametrize("subdir", ["..", "/etc", "a/b", ""])
+def test_a_sweep_cannot_leave_the_store(store, subdir):
+    with pytest.raises(ValueError, match="plain store name"):
+        store.sweep(subdir, Retention(keep_n=0))
+
+
+@pytest.mark.parametrize("fmt", ["null", '"abc"', "true", "[1]"])
+def test_a_newer_document_with_an_odd_fmt_is_still_a_newer_refusal(store, fmt):
+    store.root.mkdir(parents=True)
+    store.path("n.json").write_text('{"schema": 9, "ddflow": "9.9.9", "fmt": ' + fmt + "}")
+    with pytest.raises(fsio.NewerContent, match=r"9\.9\.9"):
+        store.read("n.json")
+
+
+def test_remove_keeps_the_lock_file_so_exclusion_survives(store):
+    store.write("d.json", 1)
+    lock = fsio.lock_path_for(store.path("d.json"))
+    inode = lock.stat().st_ino
+    store.remove("d.json")
+    assert store.read("d.json") is None and lock.stat().st_ino == inode
