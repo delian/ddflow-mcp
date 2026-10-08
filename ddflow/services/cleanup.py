@@ -259,10 +259,6 @@ def our_prefixes(cfg: Config) -> list[str]:
     return out
 
 
-def is_ours(branch: str, cfg: Config) -> bool:
-    return _ours(branch, our_prefixes(cfg))
-
-
 def _ours(branch: str, prefixes: list[str]) -> bool:
     return any(not p or branch.startswith(p) for p in prefixes)
 
