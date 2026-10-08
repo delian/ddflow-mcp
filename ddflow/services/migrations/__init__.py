@@ -256,3 +256,7 @@ def _run_one(
             problems,
         )
     return Outcome(m.id, APPLIED, f"{len(p.findings)} finding(s) migrated", len(p.findings), where)
+
+
+# The seed migrations register themselves on import, after the registry above exists.
+from . import refs as _refs  # noqa: E402, F401

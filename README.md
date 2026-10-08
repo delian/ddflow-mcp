@@ -3892,6 +3892,12 @@ each with `would: <file>: <change>` lines; `ddflow upgrade --apply migrations` r
 operator-consent migration waits for `--confirm <migration id> --reason WHY`. A second run
 finds nothing and writes nothing.
 
+Registered now: `stale-references` (kind `references`) rewrites the deprecated command and
+tool names (`ddflow doc show` after a rename) that sit inside a region ddflow wrote and nobody
+edited, in settings hooks, git hooks, driver docs and instruction blocks; the project's own
+text and a hand-edited region are left, and `ddflow doctor` proposes the change. The surface
+that runs the upgrade hands it the command and tool tables (`services.migrations.refs.provide`).
+
 ### Applying an upgrade
 
 `ddflow upgrade` (or `--plan`) only reads. `ddflow upgrade --apply` does what the plan lists
