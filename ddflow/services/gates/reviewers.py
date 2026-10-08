@@ -208,15 +208,45 @@ def git_state(where: Path | str) -> dict[str, str] | None:
         if not r.ok:
             return None
         state[name] = content_digest(r.out_bytes or b"", length=16)
+    state["untracked"] = _untracked_digest(where)
     return state
+
+
+#: A file larger than this is digested by its size and mtime, not its bytes.
+_BIG_UNTRACKED = 8 << 20
+
+
+def _untracked_digest(where: Path | str) -> str:
+    """A digest of the untracked (not ignored) files' CONTENTS: ``status`` lists their
+    paths only and ``diff HEAD`` omits them, so a tool rewriting one would pass unseen."""
+    r = _git.run(where, "ls-files", "--others", "--exclude-standard", "-z", binary=True)
+    names = r.paths() if r.ok else None
+    if names is None:
+        return "unreadable"
+    h = []
+    for name in sorted(names):
+        path = Path(where) / name
+        try:
+            st = path.lstat()
+            if path.is_symlink() or st.st_size > _BIG_UNTRACKED:
+                h.append(f"{name}:{st.st_size}:{st.st_mtime_ns}")
+            else:
+                h.append(f"{name}:{content_digest(path.read_bytes(), length=16)}")
+        except OSError:
+            h.append(f"{name}:gone")
+    return content_digest("\n".join(h), length=16)
 
 
 def git_state_change(before: dict[str, str] | None, after: dict[str, str] | None) -> str:
     """ "" when the state is as it was (or could not be compared), else a sentence naming
-    which parts changed."""
-    if before is None or after is None or before == after:
+    which parts changed. A state that was readable before and is not now is a change:
+    the tool broke the repository. Only an unreadable START cannot be compared."""
+    if before is None or before == after:
         return ""
-    changed = ", ".join(k for k in before if before[k] != after.get(k))
+    if after is None:
+        changed = "unreadable afterwards"
+    else:
+        changed = ", ".join(k for k in before if before[k] != after.get(k))
     return (
         f"the reviewer tool changed git state ({changed}) -- a review must leave HEAD, "
         f"the index, the working tree and the stash list as it found them (e.g. `git stash "
