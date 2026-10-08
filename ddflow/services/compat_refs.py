@@ -49,6 +49,8 @@ _POSITION = re.compile(
 )
 _TOOL = re.compile(r"(?<![\w./-])ddflow_[a-z][a-z0-9_]*(?![\w*]|\.\w)")
 #: A shell word ends the command at one of these.
+#: A shell word: a quoted string is one, so an option's value with spaces is skipped whole.
+_TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
 _STOP = re.compile(r"[;&|)`\"'<>]")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _BACKTICK = re.compile(r"`([^`\n]+)`")
@@ -189,12 +191,13 @@ def _command_at(line: str, at: int, vocab: Vocabulary) -> Ref | None:
     is no command word at all (a placeholder, a path, a sentence)."""
     words: list[tuple[str, int]] = []
     skip = False
-    for tok in re.finditer(r"\S+", line[at:]):
+    for tok in _TOKEN.finditer(line[at:]):
         raw, col = tok.group(), at + tok.start()
-        head = _STOP.split(raw, 1)[0]
-        if skip:
+        if skip:  # the value of a global option, quoted or not
             skip = False
-        elif head.startswith("-"):
+            continue
+        head = _STOP.split(raw, 1)[0]
+        if head.startswith("-"):
             skip = head in _VALUE_FLAGS
         elif head:
             word = head.rstrip(".,:")
@@ -306,6 +309,8 @@ _TEXT_ARTIFACTS: tuple[tuple[str, str, bool], ...] = (
     (".ddflow/prompts/**/*.md", "ejected prompt", False),
     (".ddflow/macros.toml", "macro", False),
     (".ddflow/local/macros.toml", "macro", False),
+    (".ddflow/config.toml", "config macro", False),
+    (".ddflow/local/config.toml", "config macro", False),
 )
 _HOOKS_SUFFIX = " (git hooks)"
 _SETTINGS = (".claude/settings.json", ".gemini/settings.json")
@@ -378,6 +383,12 @@ def _hook_commands(data: object) -> Iterator[str]:
 
 
 def _line_of(text: str, command: str) -> int:
+    """The line of a hook command in its settings file: the whole string when it is found
+    exactly as written, else its first line (which another hook's may begin with)."""
+    for ascii_only in (True, False):
+        at = text.find(json.dumps(command, ensure_ascii=ascii_only))
+        if at >= 0:
+            return text.count("\n", 0, at) + 1
     key = json.dumps(command.splitlines()[0] if command else "")[1:-1][:60]
     at = text.find(key) if key else -1
     return text.count("\n", 0, at) + 1 if at >= 0 else 1
