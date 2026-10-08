@@ -2936,7 +2936,11 @@ after the landing — the merge commit, or the branch head on a fast-forward; th
 merge commit in PR mode — and `branch_head` is the merged branch's own head, which under a
 squash is not on the base at all. A tree you are standing in is kept (its directory is your
 shell's cwd; deleting it fails your next command), and `ddflow cleanup --apply` removes it
-once the item is complete. A merge that fails is **aborted**, so the primary checkout is
+once the item is complete. Every removal of a worktree — `merge`, the PR flow, `cleanup --apply`
+and the onboarding sweep — is one guarded, logged step (`cleanup.dispose_tree`): under the log's
+lock with the leases re-read, a tree another live lease holds or an adopted one is kept and named,
+git's own check refuses uncommitted files and unmerged commits unless the caller has proof it may
+force, and a removal that worked appends `worktree.removed`. A merge that fails is **aborted**, so the primary checkout is
 never left mid-merge (`doctor` flags one that was left, with the `git merge --abort` that
 clears it). A branch with nothing ahead of its target is refused — it would record the item
 merged with nothing landed — unless `--allow-empty`.
@@ -3975,6 +3979,15 @@ log cannot take the record (a lock timeout), the call FAILS (exit 1, on every su
 rule file is written and `ddflow upgrade` records it; a removal whose retirement failed says the file is
 removed and the log still holds the rule.
 
+The rule files are a checked generated view of those definitions: a file agrees with the log when the digest of
+its fields is the one on its active record (timestamps are not content). `ddflow rule sync` (MCP
+`ddflow_rule_sync`) settles every disagreement: a file with no record is recorded (`def.recorded`,
+`via = sync`), a hand-edited file is recorded as a `def.updated`, and a live rule whose file is gone has its
+file written from the log; a retired rule and a file that does not load are left alone, and a second run finds
+nothing. `ddflow doctor` notes the rule files that disagree with the log; the pre-commit check
+(`[enforce].generated_views`, with the other generated views) refuses a staged rule file the log does not say,
+naming `ddflow rule sync`; and `ddflow replay --out DIR` writes `rules/<id>.toml` rebuilt from the log alone.
+
 ### Applying an upgrade
 
 `ddflow upgrade` (or `--plan`) only reads. `ddflow upgrade --apply` does what the plan lists
@@ -4881,8 +4894,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=f2ea2577d87d -->
-<details><summary>All 111 MCP tools: 32 in the `core` tier, 46 more in `standard`, 33 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=de1b88693f8f -->
+<details><summary>All 112 MCP tools: 32 in the `core` tier, 47 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -4898,9 +4911,10 @@ drift. The groups are the ones `ddflow help` prints.
 | Setting up | `ddflow_rule_add` | standard | Add a project rule; duplicate-checked like every add (answer new \| extends:ID \| duplicate_of:ID \| related:ID). |
 | Setting up | `ddflow_rule_edit` | standard | Change fields of an existing rule; omitted fields stay. |
 | Setting up | `ddflow_rule_list` | standard | List the project's rules, filtered by tag or scope: what governs the current work. |
-| Setting up | `ddflow_rule_remove` | standard | Delete a rule and regenerate the DDFLOW.md manifest. |
+| Setting up | `ddflow_rule_remove` | standard | Delete a rule file and regenerate the DDFLOW.md manifest. |
 | Setting up | `ddflow_rule_search` | standard | Search rules by title or content, ranked by relevance, for an area or topic. |
 | Setting up | `ddflow_rule_show` | standard | One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps. |
+| Setting up | `ddflow_rule_sync` | standard | Sync rule files with the log: record hand edits and new files, restore missing ones. |
 | Setting up | `ddflow_setup` | core | Install ddflow into this repository: creates .ddflow/, writes the driver and the AGENTS.md section, and… |
 | The rules this project runs by | `ddflow_flow_choose` | all | Record a workflow choice for this project, attributed to you, with a reason the next agent will read. |
 | The rules this project runs by | `ddflow_flow_show` | standard | How THIS project works: its branching model, release lines, and every workflow choice (model, integration… |
