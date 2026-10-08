@@ -8,9 +8,10 @@ building a scanner.
 
 Two answers, for two situations:
 
-- `ChangeDetector.scan` / `.diff`: the files matching a glob set on disk, as a
+- `ChangeDetector.scan` / `.changes`: the files matching a glob set on disk, as a
   ``path -> content hash`` manifest, and what differs between a stored manifest and the
-  disk now (added, modified, removed). The manifest is plain data the caller keeps
+  disk now (added, modified, removed). A file that is there but cannot be read is neither
+  removed nor modified: it keeps the hash it last had and is listed in `unreadable`. The manifest is plain data the caller keeps
   wherever it keeps state; nothing here writes. A file whose size and modification time
   (and change time) are unchanged since the detector last hashed it is not read again, so a
   scan that finds nothing new costs one ``stat`` per file -- except for a file modified too
@@ -112,9 +113,14 @@ class ChangeDetector:
     now_ns: Callable[[], int] = time.time_ns
     #: path -> ((size, mtime_ns, ctime_ns), hash) of the last trusted read: the unread-again cache.
     _seen: dict[str, tuple[tuple[int, int, int], str]] = field(default_factory=dict, repr=False)
+    #: Files the last `scan` found but could not read.
+    unreadable: list[str] = field(default_factory=list, repr=False)
+    #: path -> the last hash taken, trusted or not: what an unreadable file keeps.
+    _last: Manifest = field(default_factory=dict, repr=False)
 
     def candidates(self) -> list[str]:
-        """The matching regular files on disk, sorted. Symlinks are not followed or listed."""
+        """The matching files on disk, directory by directory in name order. Symlinks to
+        directories are not followed; `scan` leaves out whatever is not a regular file."""
         out: list[str] = []
         root = str(self.root)
         for here, dirs, names in os.walk(root, followlinks=False):
@@ -133,6 +139,7 @@ class ChangeDetector:
         scanning is left out, as if it were not there."""
         manifest: Manifest = {}
         live: set[str] = set()
+        self.unreadable = []
         for rel in self.candidates():
             path = self.root / rel
             try:
@@ -151,11 +158,17 @@ class ChangeDetector:
                 self._seen.pop(rel, None)
                 if value is not None and started - st.st_mtime_ns >= RACY_NS:
                     self._seen[rel] = (sig, value)
+            if value is None:
+                self.unreadable.append(rel)
+                value = self._last.get(rel)
             if value is not None:
                 manifest[rel] = value
-                live.add(rel)
+                self._last[rel] = value
+            live.add(rel)
         for gone in set(self._seen) - live:
             del self._seen[gone]
+        for gone in set(self._last) - live:
+            del self._last[gone]
         return manifest
 
     def changes(self, old: Manifest) -> tuple[Changes, Manifest]:
