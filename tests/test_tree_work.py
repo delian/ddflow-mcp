@@ -259,6 +259,12 @@ STATES = [
 ]
 
 
+#: The commit counts that are LITERALLY right in a state (everything else sits at the base:
+#: 0 ahead, 0 behind). The old and the new code share `rev-list` plumbing, so equal to each
+#: other would not catch both reading -1; these do.
+COUNTS = {"_ahead": (2, 0), "_behind": (0, 1), "_diverged": (2, 1), "_unreadable": (-1, -1)}
+
+
 @pytest.mark.parametrize("state", STATES, ids=lambda f: f.__name__)
 def test_the_one_measurement_equals_the_three_old_ones(tree: Path, state) -> None:
     state(tree)
@@ -268,6 +274,8 @@ def test_the_one_measurement_equals_the_three_old_ones(tree: Path, state) -> Non
     readable, work, ignored = oracle_onboard(tree)
 
     assert tw.readable is readable
+    if state.__name__ != "_unreadable":
+        assert (tw.ahead, tw.behind) == COUNTS.get(state.__name__, (0, 0))
     assert (len(tw.dirty) if tw.readable else -1) == count  # lease recovery
     assert tw.ahead == ahead == ahead_c
     assert tw.behind == behind_c
