@@ -25,6 +25,8 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from . import git as G
+
 
 @lru_cache(maxsize=1)
 def package_dir() -> Path:
@@ -101,8 +103,6 @@ def common_dir(path: Path | str, *, ask_git: bool = True) -> Path | None:
             return gitdir
     if not ask_git:
         return None
-    from . import git as G
-
     r = G.run(str(path), "rev-parse", "--git-common-dir", timeout=G.PROBE_TIMEOUT)
     if not r.ok or not r.out:
         return None
