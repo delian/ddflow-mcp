@@ -22,6 +22,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..core.digest import content_digest
+from ..core.outcome import OK, REFUSED, Verdict
 from ..infra.fsio import Region, atomic_write
 from ..services.help import grouped_tools
 
@@ -37,7 +38,7 @@ _SENTENCE_END = re.compile(
 #: A summary longer than this is cut at a word and ends in an ellipsis.
 SUMMARY_MAX = 110
 #: The rewrite was refused: the region was edited by hand.
-EDITED = 3
+EDITED = REFUSED
 
 
 def summary(description: str) -> str:
@@ -98,7 +99,7 @@ def hand_edited(readme: str) -> bool:
     return sha is None or content_digest(body, length=12) != sha[1]
 
 
-def refresh(path: Path, block: str, *, force: bool = False) -> tuple[int, str]:
+def refresh(path: Path, block: str, *, force: bool = False) -> Verdict:
     """Rewrite the region of the README at `path`: ``(exit, message)``.
 
     A region edited by hand is refused (`EDITED`) unless ``force``: the table is the
@@ -106,12 +107,13 @@ def refresh(path: Path, block: str, *, force: bool = False) -> tuple[int, str]:
     text = path.read_text("utf-8")
     new = replace(text, block)
     if new == text:
-        return 0, f"{path}: tool table already current"
+        return Verdict(OK, f"{path}: tool table already current")
     if hand_edited(text) and not force:
-        return EDITED, (
+        return Verdict(
+            EDITED,
             f"{path}: the {REGION} region was edited by hand (its body no longer matches its "
             "sha). Move the edit outside the region (or into the tool declarations), then "
-            "rerun; --force rewrites the region and discards the edit"
+            "rerun; --force rewrites the region and discards the edit",
         )
     atomic_write(path, new)
-    return 0, f"{path}: tool table rewritten"
+    return Verdict(OK, f"{path}: tool table rewritten")

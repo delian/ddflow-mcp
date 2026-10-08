@@ -42,6 +42,10 @@ useDefault = true
     '''xoxb-1234567890-abcdef''',
     # A joke from xkcd 936, used as the "password:" case.
     '''hunter2hunter2''',
+    # ddflow's own split-slice item ids ("B-uni-record-surface.2-surface"): the event log
+    # names them in task bodies, and the generic-api-key rule reads one that follows an
+    # `api` word as the key. The `.N-` slice part is what no credential format has.
+    '''^[A-Za-z]+(?:-[A-Za-z0-9]+)+\.[0-9]+(?:-[A-Za-z0-9]+)+[.,;:]?$''',
   ]
   # The context7 key that leaked into the PARENT repository is deliberately NOT listed.
   # It does not appear in ddflow's history, and if it ever does, this scan must fire.

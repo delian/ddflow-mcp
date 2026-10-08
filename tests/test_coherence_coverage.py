@@ -178,6 +178,8 @@ WRITERS_EXEMPT: dict[str, str] = {
     "the same engine and [dedupe] thresholds (`_dedupe_found`) before apply",
     "services/importer_harness.py:apply": "each fact is checked with similar.assess / "
     "first_duplicate before it is written",
+    "api/defs.py:_write_record": "def_record calls it after check_add; def_record_unchecked is "
+    "for a writer that ran its own check first (rule add: rules and every other kind)",
 }
 
 #: CLI verbs (as argv words) that record text: -> "checked" | "own check: ..." | a reason.

@@ -30,12 +30,22 @@ queue are distinguishable without reading the text.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 OK = 0
 FAIL = 1
 NOTHING = 2
 REFUSED = 3
+
+
+class Verdict(NamedTuple):
+    """What a check says: an exit from the vocabulary above and the text for whoever has to
+    act on it. A tuple, so a caller that unpacks ``code, msg = ...`` or compares to
+    ``(0, "")`` is unchanged, with its parts named for the ones that read ``.exit``."""
+
+    exit: int
+    message: str = ""
+
 
 #: Human labels, for error messages that need to name a code.
 EXIT_NAMES = {OK: "ok", FAIL: "failed", NOTHING: "nothing", REFUSED: "refused"}

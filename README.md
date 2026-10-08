@@ -3962,8 +3962,16 @@ provenance says `via = import` and whose `source` is the file, and a file whose 
 differs by digest from its active record (a hand edit) becomes a `def.updated`. Timestamps
 are not content, a retired rule is left alone, a file that does not load is not imported (see
 `ddflow doctor`), and the files are not touched: it only appends events, so a second run finds
-nothing. Rules are recorded definitions from here on (decision D-unify 7); the files become a
-checked view in the slices that follow.
+nothing. Rules are recorded definitions from here on (decision D-unify 7).
+
+`rule add`, `rule update` and `rule remove` (CLI and MCP) write the file as before and then record what
+it says: a `def.recorded` (`via = write`, `source` the file) for a new or re-added rule, a `def.updated`
+when the content changed (a re-save that only moves `updated` is no change), a `def.retired` for a
+removed one; an `extends` answer records the longer text. The add-time duplicate check stays the
+rule's own (against rules and every other kind), so the record is written without a second one. If the
+log cannot take the record (a lock timeout), the call FAILS (exit 1, on every surface) and says the
+rule file is written and `ddflow upgrade` records it; a removal whose retirement failed says the file is
+removed and the log still holds the rule.
 
 ### Applying an upgrade
 
