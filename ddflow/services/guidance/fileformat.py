@@ -35,6 +35,17 @@ from .record import ACCEPTED, GuidanceRecord, KindSpec, Scope
 _FRONTMATTER_PARTS = 2  # frontmatter + content, split on the first blank line
 
 
+def _strings(data: dict[str, Any], key: str, default: list[str] | None = None) -> list[str]:
+    """``data[key]`` as a list of strings: a bare string is the one pattern it says (never
+    its characters), a list is itself; anything else is a mistake worth naming."""
+    got = data.get(key, default if default is not None else [])
+    if isinstance(got, str):
+        return [got]
+    if isinstance(got, list) and all(isinstance(x, str) for x in got):
+        return got
+    raise ValueError(f"{key} must be a string or a list of strings, got {got!r}")
+
+
 def parse(text: str, spec: KindSpec) -> GuidanceRecord:
     """The record in an authored file. Raises ValueError, naming the problem, for a file
     that is not TOML, lacks an id, a title or text, or breaks the kind's lint."""
@@ -61,21 +72,21 @@ def parse(text: str, spec: KindSpec) -> GuidanceRecord:
         title=data["title"],
         body=(data[body_key] if body_key else block).strip(),
         scope=Scope(
-            globs=tuple(data.get("globs", ())),
-            categories=tuple(data.get("categories", ())),
-            gates=tuple(data.get("gates", ())),
+            globs=tuple(_strings(data, "globs")),
+            categories=tuple(_strings(data, "categories")),
+            gates=tuple(_strings(data, "gates")),
         ),
         level=data.get("scope", spec.default_level),
         category=data.get("category", ""),
-        tags=data.get("tags", []),
+        tags=_strings(data, "tags"),
         priority=int(data.get("priority", spec.default_priority)),
         enforcement=data.get("enforcement", spec.default_enforcement),
         status=data.get("status", ACCEPTED),
         owner=data.get("owner", ""),
         review_by=data.get("review_by", ""),
-        sources=data.get("sources", []),
+        sources=_strings(data, "sources"),
         checks=data.get("checks", []),
-        links=data.get("links", []),
+        links=_strings(data, "links"),
         ext={k: data.get(k, default) for k, default in spec.extras},
     )
     if spec.stamped:
