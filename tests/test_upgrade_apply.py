@@ -649,26 +649,22 @@ def test_a_rules_file_that_is_not_utf8_is_skipped_and_left_whole(old: Path) -> N
     assert agents.read_bytes() == raw
 
 
-def test_a_refusal_naming_only_the_file_is_still_this_items_refusal(
-    old: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_refusal_from_a_nested_rules_file_is_that_items_and_not_its_namesakes(old: Path) -> None:
     from ddflow.services import adopt as AD
 
     _adopted_old(old)
-    nested = old / "docs" / "AGENTS.md"
-    nested.parent.mkdir(exist_ok=True)
-    nested.write_text("# mine\n")
-    item = {
-        "id": "instructions:docs/AGENTS.md",
-        "category": "instructions",
-        "path": "docs/AGENTS.md",
-        "action": UP.AGENT,
-        "summary": "x",
-    }
-    monkeypatch.setattr(
-        AD, "refresh_docs", lambda *a, **k: [AD.Refused("SKIPPED AGENTS.md: it is not UTF-8 text")]
-    )
+    keys = [k for k, r in AD.NATIVE_RULES.items() if r.form == AD.FORM_BLOCK]
+    paths = {AD.NATIVE_RULES[k].path for k in keys}
+    names = [Path(p).name for p in paths]
+    twins = sorted(p for p in paths if names.count(Path(p).name) > 1)
+    assert len(twins) >= 2, "the native rules table no longer has two block surfaces sharing a name"
+    assert run_cli(old, "adopt", "--agents", ",".join(keys))[0] == 0
+    bad = old / twins[0]
+    bad.write_bytes(b"# caf\xe9 not utf-8\n")
 
-    (rec,) = UA._run_instructions(old, [item])
+    out = go(old, "instructions")
 
-    assert rec["status"] == UA.REFUSED
+    refused = ids(out, "refused")
+    assert f"instructions:{twins[0]}" in refused
+    assert f"instructions:{twins[1]}" not in refused, "a namesake file was not refused"
+    assert bad.read_bytes() == b"# caf\xe9 not utf-8\n"
