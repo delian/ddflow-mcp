@@ -12,6 +12,7 @@ from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
+from ...services.waits import MAX_WAIT_S as WAIT_MAX_S
 from .._base import _load
 from ._common import _require
 from .ready import DEFAULT_NEXT_KIND
@@ -29,11 +30,6 @@ from .reservations import (
 #: for an afternoon. A caller that wants longer asks again, which also re-checks that
 #: waiting is still the right move.
 DEFAULT_WAIT_TIMEOUT_S = 600
-
-#: The longest one wait may block, whoever asks (CLI or MCP). The client -- not ddflow --
-#: decides when a call has hung, so a longer ask is shortened and says so; the caller that
-#: wants more waits again, which also re-checks that waiting is still the right move.
-WAIT_MAX_S = 1800
 
 
 def _note_cap(say, capped: bool) -> None:
@@ -298,7 +294,6 @@ def wait(
             return O.Outcome("wait", {**empty, **found.data}, found.exit, found.reason)
     me = cfg.agent.id or log.agent_id
     say = on_progress or (lambda _msg: None)
-    _note_cap(say, capped)
 
     def result(v: dict[str, Any], waited: float, freed: list[str]) -> O.Outcome:
         data = {
@@ -330,6 +325,7 @@ def wait(
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
+    _note_cap(say, capped)
     started = time.monotonic()
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`
