@@ -231,8 +231,11 @@ def instruction_items(
         if path in seen:
             return
         seen.add(path)
+        missing = state == AD.MISSING
         keeps = (
-            " (a refresh keeps your edits in .local-edits)" if provenance == "hand-edited" else ""
+            " (a refresh keeps your edits in .local-edits)"
+            if provenance == "hand-edited" and not missing
+            else ""
         )
         out.append(
             {
@@ -241,7 +244,7 @@ def instruction_items(
                 "path": path,
                 "state": state,
                 "provenance": provenance if state != AD.MISSING else "missing",
-                "summary": f"{text} ({provenance}){keeps}",
+                "summary": text if missing else f"{text} ({provenance}){keeps}",
                 "action": AGENT if state == AD.MISSING else action,
                 "fix": "ddflow adopt --refresh-docs",
             }

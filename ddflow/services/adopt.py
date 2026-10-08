@@ -866,6 +866,8 @@ def _write_driver(mine: Path, tmpl: Path, rel: str) -> str:
     if state == DOC_CURRENT and owned:
         return f"{rel} is current"
     replace_text(mine, region.splice(existing, want) if owned else region.render(want))
+    if state == DOC_LEGACY:
+        note = " (a copy from before headers: nothing says whether it was edited; see the backup)"
     return f"wrote {rel}{note}"
 
 
@@ -974,6 +976,8 @@ def adopt(
         )
 
     actions.extend(init_files(repo))
+    if saved := _backup_docs(repo, docs_dir, package_dir, None):  # the originals first
+        actions.append(f"saved the originals in {saved}")
 
     drivers_dst = repo / docs_dir / "drivers"
     drivers_dst.mkdir(parents=True, exist_ok=True)
