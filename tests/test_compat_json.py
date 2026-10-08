@@ -146,3 +146,49 @@ def test_the_declared_shape_is_the_shape_a_call_returns(repo):
             ok = got <= set(fields) if R.REFUSAL_KEY in body else got == set(fields)
             assert ok, (tool, sorted(body))
     assert all(seen.values()), seen
+
+
+# -- the one emitter (B-uni-cmd-migrate (a)) ---------------------------------------------
+
+
+def test_emit_json_is_the_bytes_every_command_printed(capsys):
+    import datetime
+    import json as _json
+
+    from ddflow.surfaces.render import emit_json
+
+    body = {"a": [1, 2], "when": datetime.date(2026, 10, 8), "path": Path("/x"), "n": None}
+    emit_json(body)
+    assert capsys.readouterr().out == _json.dumps(body, indent=2, default=str) + "\n"
+    emit_json([], file=None)
+    assert capsys.readouterr().out == "[]\n"
+
+
+#: An UPPER BOUND on the modules that print their own JSON, not an exact list: `reporting.py`
+#: and `cli.py` were held by another agent when the emitter landed, and whoever migrates one
+#: may land first. The migrating change deletes its entry here; the list only shrinks.
+_OWN_JSON = {"reporting.py", "cli.py"}
+
+
+def test_no_command_module_prints_its_own_json():
+    import ast
+
+    root = Path(__file__).parents[1] / "ddflow" / "surfaces"
+    own = []
+    for path in sorted([*(root / "commands").glob("*.py"), root / "context.py", root / "cli.py"]):
+        tree = ast.parse(path.read_text("utf-8"))
+        if any(
+            (
+                isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "dumps"
+            )
+            or (
+                isinstance(n, ast.ImportFrom)
+                and n.module == "json"
+                and any(a.name == "dumps" for a in n.names)
+            )
+            for n in ast.walk(tree)
+        ):
+            own.append(path.name)
+    assert set(own) <= _OWN_JSON, f"modules printing their own json.dumps beyond the list: {own}"

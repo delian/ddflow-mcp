@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...core import clock
 from ...services import session_view as V
 from ..context import NOTHING, OK, REFUSED, Ctx
+from ..render import emit_json
 
 
 def add_session_view_parsers(sub) -> None:
@@ -51,7 +51,7 @@ def cmd_session_list(a, c: Ctx) -> int:
             "truncated": view.truncated,
             "filters": {("owner" if k == "agent" else k): v for k, v in view.filters.items()},
         }
-        print(json.dumps(body, indent=2, default=str))
+        emit_json(body)
         return OK if view.rows else NOTHING
     if not view.rows:
         which = f" matching {view.filters}" if view.filters else ""
@@ -79,7 +79,7 @@ def cmd_session_show(a, c: Ctx) -> int:
         print(str(exc), file=sys.stderr)
         return REFUSED
     if c.json:
-        print(json.dumps(d, indent=2, default=str))
+        emit_json(d)
         return OK
     flags = d["state"] + (", implicit" if d["implicit"] else "")
     print(f"{d['id']}  [{flags}]  agent {d['agent'] or '-'}  model {d['model'] or '-'}")

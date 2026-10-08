@@ -7,11 +7,11 @@ calls and wire bodies as the `ddflow_verify` MCP tool; exit 1 when a claim does 
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api.verify import judge, pack, verify, verify_sweep
 from ..context import FAIL, NOTHING, REFUSED, Ctx
+from ..render import emit_json
 
 _MARK = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "unknown": "??  "}
 
@@ -58,7 +58,7 @@ def _one(a, c: Ctx) -> int:
             "claims",
             *(k for k in ("reopened", "reason_given", "appears_landed") if k in out.data),
         )
-        print(json.dumps(out.body(keys), indent=2, default=str))
+        emit_json(out.body(keys))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason, file=sys.stderr)
@@ -83,7 +83,7 @@ def _sweep(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(""), indent=2, default=str))
+        emit_json(out.body(""))
         return out.exit
     d = out.data
     print(
@@ -104,14 +104,17 @@ def _pack(a, c: Ctx) -> int:
     if out.exit != 0:
         print(out.reason, file=sys.stderr)
         return out.exit
-    print(json.dumps(out.body(("id", "pack")), indent=2) if c.json else out.data["pack"])
+    if c.json:
+        emit_json(out.body(("id", "pack")))
+    else:
+        print(out.data["pack"])
     return out.exit
 
 
 def _judge(a, c: Ctx) -> int:
     out = judge(c.repo, a.id, on_progress=None if c.json else print)
     if c.json:
-        print(json.dumps(out.body(""), indent=2, default=str))
+        emit_json(out.body(""))
     elif out.exit != 0 or not out.data.get("text"):
         print(out.reason or out.data.get("text", ""), file=sys.stderr if out.exit else sys.stdout)
     return out.exit

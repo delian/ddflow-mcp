@@ -8,18 +8,18 @@ than two presentations kept in step by hand. The `--json` bodies are the contrac
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import decisions as A
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..render import emit_json
 
 
 def _emit(c: Ctx, out, payload: str) -> int:
     """The JSON half, shared. `payload` names the key whose value IS the wire body —
     the same key the MCP tool declares, so the two surfaces cannot drift apart."""
-    print(json.dumps(out.data[payload], indent=2, default=str))
+    emit_json(out.data[payload])
     return out.exit
 
 
@@ -115,13 +115,7 @@ def _decision_applicable(a, c: Ctx, st) -> int:
     if c.json:
         # The object with both lists, unchanged: `{"applicable": [...],
         # "project_wide": [...]}`. Callers index both keys.
-        print(
-            json.dumps(
-                {"applicable": out.data["applicable"], "project_wide": out.data["project_wide"]},
-                indent=2,
-                default=str,
-            )
-        )
+        emit_json({"applicable": out.data["applicable"], "project_wide": out.data["project_wide"]})
         return OK if out.exit == OK else NOTHING
     if out.exit == NOTHING:
         print(out.reason)

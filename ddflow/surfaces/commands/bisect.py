@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import bisect as A
 from ..context import FAIL, Ctx
+from ..render import emit_json
 
 
 def add_bisect_parser(s) -> None:
@@ -47,12 +47,7 @@ def cmd_bisect(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(
-            json.dumps(
-                out.body(("state", "victim", "polluters", "candidates", "summary", "runs")),
-                indent=2,
-            )
-        )
+        emit_json(out.body(("state", "victim", "polluters", "candidates", "summary", "runs")))
         return out.exit
     d = out.data
     lines = [f"victim: {d['victim']}", f"candidates before it: {d['candidates']}", ""]
