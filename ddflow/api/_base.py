@@ -45,27 +45,25 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
     from ..services.choices import overlay
 
     overlay(cfg, st)
-    _sample_flow(repo, log, cfg, st)
+    _run_ticks(repo, log, cfg, st)
     return log, cfg, st
 
 
-def _sample_flow(repo: Path, log: EventLog, cfg: Config, st: State) -> None:
-    """Take an adaptive-parallelism sample when one is due (B-af-sampler).
-
-    Here, because every operation loads the project through `_load`: `next`, `brief`,
-    `claim` and `heartbeat` sample without a daemon, and heartbeats already run every
-    `lease.heartbeat_s` on every platform. Throttled to one sample per
-    `schedule.signal_interval_s`, writing only under the git-ignored `.ddflow/local/`,
-    and never raising: a sample that cannot be taken costs this command nothing.
+def _run_ticks(repo: Path, log: EventLog, cfg: Config, st: State) -> None:
+    """Run the periodic work that is due (`services.ticks`): the adaptive-parallelism sample
+    (B-af-sampler) and whatever else registered. Here, the ONE opportunistic call site,
+    because every operation loads the project through `_load`: `next`, `brief`, `claim`
+    and `heartbeat` tick without a daemon, and heartbeats already run every
+    `lease.heartbeat_s` on every platform. Each tick is budgeted and throttled by the
+    registry, writes only under the git-ignored `.ddflow/local/`, and never raises: a tick
+    that cannot run costs this command nothing.
     """
-    if cfg.schedule.parallel != "auto" or not (Path(repo) / ".ddflow").is_dir():
+    if not (Path(repo) / ".ddflow").is_dir():
         return
     try:
-        from ..infra import signals as SIG
-        from ..services import flowstate as FL
+        from ..services import ticks as TK
 
-        # `log.read_all`, not its result: the log is read only when a sample is due
-        ctx = FL.FlowCtx(repo=Path(repo), cfg=cfg, state=st, events=log.read_all)
-        FL.sample_if_due(ctx, SIG.HostSignals(repo))
+        # `log.read_all`, not its result: the log is read only when a tick asks for it
+        TK.run_due(TK.TickCtx(Path(repo), cfg, st, log.read_all))
     except Exception:
         return
