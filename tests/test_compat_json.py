@@ -178,12 +178,16 @@ def test_no_command_module_prints_its_own_json():
     for path in sorted([*(root / "commands").glob("*.py"), root / "context.py", root / "cli.py"]):
         tree = ast.parse(path.read_text("utf-8"))
         if any(
-            isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Attribute)
-            and n.func.attr == "dumps"
-            or isinstance(n, ast.ImportFrom)
-            and n.module == "json"
-            and any(a.name == "dumps" for a in n.names)
+            (
+                isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "dumps"
+            )
+            or (
+                isinstance(n, ast.ImportFrom)
+                and n.module == "json"
+                and any(a.name == "dumps" for a in n.names)
+            )
             for n in ast.walk(tree)
         ):
             own.append(path.name)
