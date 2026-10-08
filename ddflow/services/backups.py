@@ -34,7 +34,15 @@ def backup_name(frm: str, to: str) -> str:
     return f"{clock.compact_at()}-{frm or 'unstamped'}-to-{to}"
 
 
-def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name: str = "") -> Path:
+def make_backup(
+    repo: Path,
+    files: Collection[Path],
+    frm: str,
+    to: str,
+    *,
+    name: str = "",
+    extra: dict[str, Any] | None = None,
+) -> Path:
     """Copy every file that exists to `.ddflow/backups/<stamp>-<from>-to-<to>/` (or
     ``name``), a file inside the project at its relative path and one outside it under
     `out/` (both below `files/`: `files/in/...`, `files/out/...`), and write a `manifest.json` listing each file, whether it existed and where
@@ -68,7 +76,7 @@ def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, target)
         entries.append({"path": shown, "stored": stored if existed else "", "existed": existed})
-    manifest = {"from": frm, "to": to, "mode": "local", "files": entries}
+    manifest = {"from": frm, "to": to, "mode": "local", **(extra or {}), "files": entries}
     replace_text(dest / MANIFEST, json.dumps(manifest, indent=2) + "\n")
     return dest
 
@@ -177,7 +185,9 @@ def make_snapshot(repo: Path, files: Collection[Path], frm: str, to: str) -> Sna
     made = git.run(repo, "tag", "-a", tag, "-m", note, head.out)
     if not made.ok:
         raise SnapshotRefused(f"git could not tag the snapshot: {made.text()}")
-    local = str(make_backup(repo, elsewhere, frm, to)) if elsewhere else ""
+    # What git cannot hold goes beside the tag, marked as ITS sidecar: `restore` of the tag
+    # puts it back too, and it is not a restore point of its own.
+    local = str(make_backup(repo, elsewhere, frm, to, extra={"snapshot": tag})) if elsewhere else ""
     return Snapshot(tag, head.out, tuple(held), tuple(created), local)
 
 
@@ -187,11 +197,31 @@ def snapshots(repo: Path) -> list[str]:
     return sorted(out.out.splitlines()) if out.ok else []
 
 
+def _manifest(directory: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads((directory / MANIFEST).read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def local_backups(repo: Path) -> list[str]:
+    """The local backups that are restore points of their own (a snapshot's sidecar is not)."""
     root = Path(repo) / BACKUPS
     if not root.is_dir():
         return []
-    return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / MANIFEST).is_file())
+    found = ((p, _manifest(p)) for p in root.iterdir() if p.is_dir())
+    return sorted(p.name for p, m in found if m is not None and "snapshot" not in m)
+
+
+def _sidecar(repo: Path, tag: str) -> Path | None:
+    """The local copy of what git could not hold for snapshot ``tag``, if there is one."""
+    root = Path(repo) / BACKUPS
+    for p in sorted(root.iterdir()) if root.is_dir() else []:
+        m = _manifest(p) if p.is_dir() else None
+        if m is not None and m.get("snapshot") == tag:
+            return p
+    return None
 
 
 def _stamp(name: str) -> str:
@@ -229,12 +259,14 @@ def _abs(repo: Path, shown: str) -> Path:
     return p if p.is_absolute() else repo / p
 
 
-def _restore_local(repo: Path, directory: Path) -> dict[str, Any]:
+def _restore_local(repo: Path, directory: Path, *, safety: bool = True) -> dict[str, Any]:
     manifest = json.loads((directory / MANIFEST).read_text("utf-8"))
     entries = manifest.get("files", [])
     targets = [_abs(repo, e["path"]) for e in entries]
-    saved = make_backup(
-        repo, targets, "", "", name=f"{clock.compact_at()}-restore-of-{directory.name}"
+    saved = (
+        make_backup(repo, targets, "", "", name=f"{clock.compact_at()}-restore-of-{directory.name}")
+        if safety
+        else None
     )
     restored: list[str] = []
     removed: list[str] = []
@@ -252,7 +284,7 @@ def _restore_local(repo: Path, directory: Path) -> dict[str, Any]:
         "kind": "backup",
         "restored": restored,
         "removed": removed,
-        "saved": str(saved),
+        "saved": str(saved or ""),
     }
 
 
@@ -262,9 +294,11 @@ def _restore_snapshot(repo: Path, tag: str) -> dict[str, Any]:
         raise LookupError(f"no snapshot tag {tag!r} in this repository")
     note = json.loads(shown.out)
     held, created = list(note.get("held", [])), list(note.get("created", []))
+    side = _sidecar(repo, tag)  # the files git could not hold
+    side_files = (_manifest(side) or {}).get("files", []) if side is not None else []
     saved = make_backup(
         repo,
-        [repo / p for p in (*held, *created)],
+        [repo / p for p in (*held, *created)] + [_abs(repo, e["path"]) for e in side_files],
         "",
         "",
         name=f"{clock.compact_at()}-restore-of-{tag.removeprefix(SNAPSHOT_PREFIX)}",
@@ -278,6 +312,10 @@ def _restore_snapshot(repo: Path, tag: str) -> dict[str, Any]:
         if (repo / rel).exists():
             (repo / rel).unlink()
             removed.append(rel)
+    if side is not None:
+        part = _restore_local(repo, side, safety=False)
+        held += part["restored"]
+        removed += part["removed"]
     return {
         "name": tag,
         "kind": "snapshot",

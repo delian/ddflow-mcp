@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..config_sections.upgrade import UPGRADE_BACKUPS
 from ..core.events import UPGRADE_APPLIED_KIND
 from ..core.model import State
 from ..infra import tomlcfg as TC
@@ -55,7 +56,7 @@ from .backups import (  # noqa: F401 -- the backups' home
     prune,
 )
 
-BACKUP_MODES = ("local", "snapshot", "none")
+BACKUP_MODES = UPGRADE_BACKUPS
 #: What `[upgrade].config_changes` accepts: who may apply a config change on a knob nobody set.
 CONFIG_POLICIES = ("agent", "ask", "operator")
 
@@ -316,8 +317,9 @@ def _save(
         if mode == "snapshot":
             snap = make_snapshot(repo, files, frm, to)
             extra = f" (and {snap.local} for what git cannot hold)" if snap.local else ""
-            return snap.tag + extra, "", False
-        where = str(make_backup(repo, files, frm, to))
+            where = snap.tag + extra
+        else:
+            where = str(make_backup(repo, files, frm, to))
     except SnapshotRefused as exc:
         return "", str(exc), True
     except OSError as exc:

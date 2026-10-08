@@ -1085,6 +1085,7 @@ def _upgrade_restore(repo: Path, name: str, agent: str) -> O.Outcome:
     except (LookupError, OSError, ValueError) as exc:
         return O.failed("upgrade", str(exc))
     log, cfg, st = _load(repo, agent)
+    BK.prune(repo, cfg.upgrade.backup_keep)  # the safety copy it just made counts too
     data = UP.build(repo, log, cfg, st)
     data["restored"] = done
     lines = [f"restored from {done['kind']} {done['name']}:"]
