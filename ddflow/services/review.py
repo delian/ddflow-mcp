@@ -685,6 +685,11 @@ def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str,
     return _chat_openai(rev, system, user, timeout_s)
 
 
+def _tool_moved(before: dict[str, str] | None) -> str:
+    """Did a command reviewer, now finished or killed, leave git changed? (B5ce30dd94d)"""
+    return git_state_change(before, git_state(os.getcwd()))
+
+
 def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
     """Run a CLI, prompt on stdin, reply on stdout.
 
@@ -730,11 +735,11 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     except subprocess.TimeoutExpired:
         _abort(p)
         p.communicate()
-        return "", f"command timed out after {timeout_s:.0f}s"
+        return "", _tool_moved(state_before) or f"command timed out after {timeout_s:.0f}s"
     except OSError as exc:
         _abort(p)
-        return "", f"could not execute: {exc}"
-    moved = git_state_change(state_before, git_state(os.getcwd()))
+        return "", _tool_moved(state_before) or f"could not execute: {exc}"
+    moved = _tool_moved(state_before)
     if moved:
         return "", moved
     out = (stdout or "").strip()
