@@ -18,11 +18,14 @@ there is nothing to back up. The fields, their digest and the redaction profile 
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ...core import defs as D
 from ..guidance import deffields as DF
 from ..guidance.kinds import RULE
 from ..guidance.record import GuidanceRecord
 from ..guidance.store import GuidanceFiles
+from ..overlay import OverlayError
 from . import register
 from .base import Change, Context, Corrective, Finding, Migration
 
@@ -30,9 +33,19 @@ RECORD, UPDATE = "record", "update"
 
 
 def _own_files(ctx: Context) -> list[GuidanceRecord]:
-    """The rules the PROJECT has a file for (not the ones ddflow ships beneath them)."""
+    """The rules the PROJECT has a file for (not the ones ddflow ships beneath them), keyed by
+    FILE NAME -- the id `rule get` reads them by -- even when the file's own ``id`` says
+    otherwise. Only reads: the rules directory is not created."""
     files = GuidanceFiles(ctx.repo, RULE)
-    return [r for r in files.all() if files.path(r.id).is_file()]
+    out: list[GuidanceRecord] = []
+    for name in files.names():
+        if not files.path(name).is_file():
+            continue
+        try:
+            out.append(replace(files.read(name), id=name))
+        except (OSError, OverlayError, ValueError):
+            continue  # a file that does not load is `ddflow doctor`'s to report
+    return out
 
 
 def _needed(ctx: Context) -> list[tuple[str, GuidanceRecord]]:

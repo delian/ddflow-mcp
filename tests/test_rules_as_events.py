@@ -233,3 +233,20 @@ def test_a_file_that_does_not_load_is_not_imported(repo: Path) -> None:
     assert o.findings == 1 and sorted(k for k in _defs(repo) if k.startswith("rule:")) == [
         "rule:r-small"
     ]
+
+
+def test_a_file_whose_id_differs_from_its_name_is_imported_under_the_name(repo: Path) -> None:
+    _put(repo, "r-x", MINIMAL.replace("r-small", "r-y"))
+    (o,) = _run(repo)
+    assert o.status == "applied" and sorted(k for k in _defs(repo) if k.startswith("rule:")) == [
+        "rule:r-x"
+    ]
+    assert _run(repo) == []
+
+
+def test_detecting_does_not_create_the_rules_directory(repo: Path) -> None:
+    rules = repo / ".ddflow" / "rules"
+    assert not rules.exists()
+    ctx = M.context(repo, EventLog(repo, "importer"), Config.load(repo))
+    assert [p for p in M.pending(ctx) if p.migration.id == ID] == []
+    assert not rules.exists()
