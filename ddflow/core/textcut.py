@@ -13,6 +13,7 @@ Pure: no I/O.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 #: The start of a redaction mark (`core.redact`): `[REDACTED:<kind>]`. A cut never keeps a
@@ -37,14 +38,18 @@ def whole_marks(head: str) -> str:
     return head
 
 
+_MARK = re.compile(r"\[REDACTED:[^\]]*\]")
+
+
 def _after_mark(text: str, start: int) -> int:
-    """``start``, moved past the end of the redaction mark it falls inside (the first ``]``
-    after it); ``start`` itself when it falls inside none, or the mark never closes."""
-    mark = text.rfind(MARK_START, 0, start)
-    if mark == -1 or "]" in text[mark:start]:
-        return start
-    close = text.find("]", start)
-    return close + 1 if close != -1 else start
+    """``start``, moved to the end of the complete redaction mark it falls inside; ``start``
+    itself when it falls inside none."""
+    for m in _MARK.finditer(text):
+        if m.start() < start < m.end():
+            return m.end()
+        if m.start() >= start:
+            break
+    return start
 
 
 def clip(

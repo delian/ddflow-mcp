@@ -196,3 +196,24 @@ def test_window_and_tail_do_not_start_or_end_inside_a_mark():
     # a line clip whose first line is cut mid-mark stops before the mark
     out = T.clip_lines(text + "\n", 40, lambda n: f"[+{n}]\n")
     assert "[REDACTED:" not in out or "]" in out[out.rfind("[REDACTED:") :]
+
+
+def test_a_cut_inside_the_opening_of_a_mark_keeps_the_fragment():
+    """The documented limit of the protection (and what bugreport._cut always did): only a
+    cut AFTER `[REDACTED:` is held back."""
+    assert T.clip("abc[REDACTED:email]xyz", 12, marker="…") == "abc[REDACTED…"
+    assert T.clip("abc[REDACTED:email]xyz", 14, marker="…") == "abc…"
+
+
+def test_bugreport_cut_drops_an_unfinished_mark_even_when_nothing_was_cut():
+    assert BR._cut("user [REDACTED:tok", 100) == "user "
+
+
+def test_the_recorded_inputs_hold_only_whole_marks_without_spaces():
+    inputs = []
+    for rows in GOLDEN.values():
+        for r in rows:
+            inputs.append(json.dumps(r[0], ensure_ascii=False))
+    for text in inputs:
+        for m in re.finditer(r"\[REDACTED:([^\]\\]*)", text):
+            assert m.group(0).endswith(("secret", "host")) and " " not in m.group(1)
