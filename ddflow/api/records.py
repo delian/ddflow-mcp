@@ -412,6 +412,23 @@ def record_add(
     return _as(out, kind, "add", rid)
 
 
+def _named(kind: RecordKind, rid: str, reason: str) -> str:
+    """``reason`` (worded by `api.defs` for the storage kind) in the record's own name: a
+    ``note`` filed as a ``skill`` definition says note, and ``revise`` brings one back."""
+    dk, name = kind.def_kind, kind.name
+    swaps = [("record it again to bring it back", "revise it to bring it back")]
+    if dk != name:
+        swaps = [
+            (f"{dk} definition", name),
+            (f"{dk} {rid!r}", f"{name} {rid!r}"),
+            (f"{dk} {rid}:", f"{name} {rid}:"),
+            *swaps,
+        ]
+    for old, new in swaps:
+        reason = reason.replace(old, new)
+    return reason
+
+
 def _as(out: O.Outcome, kind: RecordKind, verb: str, rid: str) -> O.Outcome:
     """``out`` (an `api.defs` answer) as this surface's: the same data, its own event name
     and the record's kind and id."""
@@ -421,7 +438,7 @@ def _as(out: O.Outcome, kind: RecordKind, verb: str, rid: str) -> O.Outcome:
     if out.exit == O.OK:
         return O.ok(ev, **data)
     make = {O.NOTHING: O.nothing, O.REFUSED: O.refused}.get(out.exit, O.failed)
-    return make(ev, out.reason, **data)
+    return make(ev, _named(kind, rid, out.reason), **data)
 
 
 def record_edit(

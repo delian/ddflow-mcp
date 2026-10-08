@@ -405,3 +405,20 @@ def test_edit_cannot_blank_a_required_text_that_add_would_refuse(repo):
     assert R.record_show(repo, NOTE, "alpha").data["fields"]["title"] == "title of alpha"
     R.record_edit(repo, NOTE, "alpha", {"body": "x"})
     assert R.record_edit(repo, NOTE, "alpha", {"body": ""}).exit == O.OK  # optional: may be empty
+
+
+def test_a_reason_names_the_record_kind_not_the_kind_it_is_stored_as(repo):
+    """NOTE is stored as `skill` definitions; no reason may say so (B2f2c1479f9)."""
+    reasons = [
+        R.record_edit(repo, NOTE, "ghost", {"body": "x"}).reason,
+        R.record_remove(repo, NOTE, "ghost", reason="r").reason,
+    ]
+    _add(repo)
+    R.record_remove(repo, NOTE, "alpha", reason="done")
+    reasons.append(R.record_edit(repo, NOTE, "alpha", {"body": "x"}).reason)
+    _add(repo, "beta")
+    reasons.append(R.record_edit(repo, NOTE, "beta", {"title": "title of beta"}).reason)
+    assert reasons[0] == "no note 'ghost'"
+    assert reasons[2] == "note 'alpha' is retired; revise it to bring it back"
+    assert reasons[3] == "note beta: nothing changed"
+    assert not [r for r in reasons if "skill" in r or "definition" in r], reasons
