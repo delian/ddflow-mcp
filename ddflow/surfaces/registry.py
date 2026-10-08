@@ -777,19 +777,31 @@ def array_schema(command: str, payload: Any) -> dict[str, Any] | None:
     }
 
 
-def tag_body(body: Any, command: str) -> Any:
-    """``body`` with its ``schema`` key placed first when it is an object; any other body
-    (an array, text, a scalar, null) comes back unchanged. A refusal body keeps `refusal`
-    as its first key (`mcp._refusal_body`: the block a machine reads first) and the tag
-    follows it. A body already carrying the key keeps its own value: the tag never
-    overwrites a field."""
-    if not isinstance(body, dict) or SCHEMA_KEY in body:
-        return body
-    tag = {SCHEMA_KEY: schema_tag(command)}
-    if REFUSAL_KEY in body and next(iter(body)) == REFUSAL_KEY:
-        return {
-            REFUSAL_KEY: body[REFUSAL_KEY],
-            **tag,
-            **{k: v for k, v in body.items() if k != REFUSAL_KEY},
+def result_schemas(
+    tools: Mapping[str, Mapping[str, Any]], optional: Iterable[str] = ()
+) -> dict[str, dict[str, Any]]:
+    """Every tool's declared result: command, tag, shape, payload and generated schemas.
+
+    ``tools`` is the engine's tool table; ``optional`` the fields a projected body adds when
+    the call produced them (`mcp._OPTIONAL_KEYS`). The golden file pinning the contract is
+    this table (`tests/test_compat_json.py`; ``python -m ddflow.surfaces.tool_table
+    --schemas`` prints it).
+    """
+    table: dict[str, dict[str, Any]] = {}
+    for tool, spec in tools.items():
+        payload, text = spec.get("payload", ""), spec.get("text", False)
+        command = command_name(tool)
+        row: dict[str, Any] = {
+            "command": command,
+            "schema": schema_tag(command),
+            "shape": result_shape(payload, text=text),
         }
-    return {**tag, **body}
+        if isinstance(payload, str) and payload:
+            row["payload"] = payload
+        elif isinstance(payload, tuple):
+            row["payload"] = list(payload)
+        extra = tuple(optional) if isinstance(payload, tuple) else ()
+        row["output_schema"] = output_schema(command, payload, text=text, extra=extra)
+        row["array_schema"] = array_schema(command, payload)
+        table[tool] = row
+    return table
