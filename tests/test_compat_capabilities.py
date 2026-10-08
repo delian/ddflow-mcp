@@ -299,3 +299,31 @@ def test_a_version_override_with_a_format_ahead_too_records_the_format(repo: Pat
     _stamp(repo, "99.0.0", ddflow.FORMAT_LEVEL + 1)
     ov = EventLog(repo, "me").override_skew("go")
     assert ov.data["log_version"] == "99.0.0" and ov.data["log_format"] == ddflow.FORMAT_LEVEL + 1
+
+
+def test_a_stamp_without_a_format_names_no_format_carrier():
+    ev = [Event(kind="ddflow.seen", subject="ddflow", data={"version": "1.0"}, agent="me")]
+    facts = stamp_facts(ev, "me", "1.0", 1)
+    assert (facts.highest_format, facts.format_version, facts.format_by) == (0, "", "")
+
+
+def test_a_version_skew_is_not_reported_as_format_only_even_with_a_higher_format_elsewhere():
+    ev = [
+        Event(
+            kind="ddflow.seen",
+            subject="ddflow",
+            data={"version": "3.0", "format_level": 1},
+            agent="x",
+            lamport=1,
+        ),
+        Event(
+            kind="ddflow.seen",
+            subject="ddflow",
+            data={"version": "2.0", "format_level": 5},
+            agent="y",
+            lamport=2,
+        ),
+    ]
+    facts = stamp_facts(ev, "me", "1.0", 2)
+    assert facts.skewed and not facts.format_skewed  # the running VERSION is older: not format-only
+    assert facts.highest == "3.0" and facts.format_version == "2.0"

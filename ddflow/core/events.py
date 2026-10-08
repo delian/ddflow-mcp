@@ -237,7 +237,7 @@ def stamp_facts(
             if (version_key(v), v) > (version_key(highest), highest):
                 highest, highest_by = v, e.agent
             level = _format_of(e.data)
-            if (level, version_key(v), v) > (
+            if level and (level, version_key(v), v) > (
                 highest_format,
                 version_key(format_version),
                 format_version,
