@@ -558,7 +558,11 @@ def reviewers_add(
     if no_launch:
         entry.pop("launch", None)
     launch = entry.pop("launch", None)
-    body = {"name": label, **entry, **({"launch": launch} if launch else {})}
+    body = {
+        "name": label,
+        **{k: v for k, v in entry.items() if k != "name"},
+        **({"launch": launch} if launch else {}),
+    }
     res = apply_edit(
         repo,
         Block(reviewer_block(body), own="reviewers.toml"),
@@ -646,7 +650,15 @@ def reviewers_detect(
             agent=agent,
         )
         if res.error:
-            return O.failed("reviewers.detect", res.error, found=rows, blocks="".join(blocks))
+            done = O.refused if isinstance(res.error, (KeyRefused, ReviewerRefusal)) else O.failed
+            return done(
+                "reviewers.detect",
+                res.error,
+                found=rows,
+                blocks="".join(blocks),
+                written="",
+                text="",
+            )
         written = str(res.path)
     from ..views import human
 

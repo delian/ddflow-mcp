@@ -533,8 +533,8 @@ DEFAULT_GUARDS = Guards()
 @dataclass
 class EditResult:
     """What `apply_edit` did. ``error`` is empty on success and then nothing was refused;
-    a `KeyRefused` is a refusal (exit 3), a `ReviewerRefusal` an agent's refused reviewer,
-    any other string a failure. ``text`` is the file's text (as it would be, on a dry run);
+    a `KeyRefused` is a refusal (exit 3), a `ReviewerRefusal` an agent's refused reviewer (the
+    caller picks its exit), any other string a failure. ``text`` is the file's text (as it would be, on a dry run);
     ``path`` the file written."""
 
     error: str = ""

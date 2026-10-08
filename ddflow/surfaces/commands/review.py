@@ -108,9 +108,9 @@ def _reviewers_detect(a, c: Ctx) -> int:
     out = A.reviewers_detect(
         c.repo, write=a.write, shared=bool(getattr(a, "shared", False)), agent=c.requested_agent
     )
-    if out.exit == NOTHING:
+    if out.exit in (NOTHING, FAIL, REFUSED):
         print(out.reason, file=sys.stderr)
-        return NOTHING
+        return out.exit
     print(out.data["text"])
     return OK
 

@@ -170,5 +170,27 @@ def test_reviewers_add_refuses_an_unknown_preset_and_an_agent_command_reviewer(r
     out = AR.reviewers_add(repo, preset="nosuch")
     assert out.exit != 0 and "unknown preset" in out.reason
     out = AR.reviewers_add(repo, name="c", preset="claude-cli", person=False, agent="a1")
-    if out.exit != 0:  # the preset exists and is a command reviewer
-        assert out.exit == 3 and out.data["reviewer_refused"], out.reason
+    assert out.exit == 3 and out.data["reviewer_refused"], out.reason  # a command reviewer
+    out = AR.reviewers_add(repo, name="c", preset="claude-cli", person=True)
+    assert out.exit == 0, out.reason
+
+
+def test_a_name_given_wins_over_the_preset_and_a_newer_format_is_a_refusal(repo):
+    out = AR.reviewers_add(repo, preset="claude-cli", name="mine", person=True)
+    assert out.exit == 0, out.reason
+    names = [r["name"] for r in tomllib.loads(open(out.data["path"]).read())["reviewer"]]
+    assert names == ["mine"]
+    (repo / ".ddflow" / "config.toml").write_text("format = 99\n")
+    out = AR.reviewers_add(repo, name="n", model="m", shared=True)
+    assert out.exit == 3 and "format" in out.reason, out.reason
+
+
+def test_a_failing_detect_write_reports_the_reason_not_a_missing_payload(repo, monkeypatch):
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text("format = 99\n")
+    monkeypatch.setattr(
+        "ddflow.services.review.detect",
+        lambda: [("http://127.0.0.1:1/v1", "local", ["m/x"])],
+    )
+    out = AR.reviewers_detect(repo, write=True, shared=True)
+    assert out.exit == 3 and "format" in out.reason and out.data["text"] == "", out.reason
