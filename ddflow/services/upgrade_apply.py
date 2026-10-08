@@ -44,9 +44,17 @@ from . import configwrite as CW
 from . import enforce as E
 from . import repairs as RP
 from . import upgrade_plan as UP
-from .backups import BACKUPS, MANIFEST, backup_name, make_backup, prune  # noqa: F401 -- the home
+from .backups import (  # noqa: F401 -- the backups' home
+    BACKUPS,
+    MANIFEST,
+    SnapshotRefused,
+    backup_name,
+    make_backup,
+    make_snapshot,
+    prune,
+)
 
-BACKUP_MODES = ("local", "none")
+BACKUP_MODES = ("local", "snapshot", "none")
 #: What `[upgrade].config_changes` accepts: who may apply a config change on a knob nobody set.
 CONFIG_POLICIES = ("agent", "ask", "operator")
 
@@ -268,16 +276,13 @@ def apply(
     frm, to = plan["project_version"], plan["running"]
     results, todo = _select(plan, parse_categories(categories), confirm, config_changes)
 
-    backup_dir = ""
     files = [p for i in todo for p in touched(repo, cfg, i)]
-    if files and backup == "local":
-        try:
-            backup_dir = str(make_backup(repo, files, frm, to))
-            prune(repo, cfg.upgrade.backup_keep)
-        except OSError as exc:
-            detail = f"no backup could be written ({exc}); nothing was changed"
-            failed = results + [_rec(i, FAILED, detail) for i in todo]
-            return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
+    backup_dir, why = _save(repo, cfg, backup, files, frm, to)
+    if why:
+        # Nothing was changed: the originals could not be saved, so no item is applied.
+        status = REFUSED if backup == "snapshot" else FAILED
+        failed = results + [_rec(i, status, why) for i in todo]
+        return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
     results += _execute(repo, log, cfg, todo, agent)
     ok, done_cats, reasons = _summarise(results, todo, confirm)
@@ -295,6 +300,28 @@ def _summarise(
     cats = [c for c in UP.CATEGORIES if any(r["category"] == c and r["id"] in ok for r in results)]
     reasons = {_ident(i): why for i in todo if i["id"] in ok and (why := _confirmed(i, confirm))}
     return ok, cats, reasons
+
+
+def _save(
+    repo: Path, cfg: Config, mode: str, files: list[Path], frm: str, to: str
+) -> tuple[str, str]:
+    """Save the originals in ``mode`` before anything is written: `(where, "")`, or
+    `("", why)` when they could not be saved. Nothing to save, or `none`, is `("", "")`."""
+    if not files or mode == "none":
+        return "", ""
+    try:
+        if mode == "snapshot":
+            snap = make_snapshot(repo, files, frm, to)
+            return snap.tag + (
+                f" (and {snap.local} for what git cannot hold)" if snap.local else ""
+            ), ""
+        where = str(make_backup(repo, files, frm, to))
+    except SnapshotRefused as exc:
+        return "", str(exc)
+    except OSError as exc:
+        return "", f"no backup could be written ({exc}); nothing was changed"
+    prune(repo, cfg.upgrade.backup_keep)
+    return where, ""
 
 
 def _check_modes(backup: str, config_changes: str) -> None:
