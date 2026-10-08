@@ -43,6 +43,7 @@ from ..config import Config
 from ..core import digest as D
 from ..core import textsim
 from ..core.model import State, fold
+from ..core.textcut import clip
 from ..infra.log import EventLog, _flock
 
 SCHEMA = 10
@@ -631,6 +632,11 @@ RECALL_SOURCES: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def _fit(text: str, width: int) -> str:
+    """The first ``width`` characters of a hit's body: no marker, no trimming."""
+    return clip(text, width, rstrip=False)
+
+
 def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[str, str]:
     """(headline, body) for one hit, per source table."""
     if table == "decisions":
@@ -638,30 +644,30 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
         if row.get("status") != "accepted" or row.get("superseded_by"):
             head += f"  [{row.get('status')}"
             head += f" -> {row['superseded_by']}]" if row.get("superseded_by") else "]"
-        return head, (row.get("decision") or "")[:width]
+        return head, _fit(row.get("decision") or "", width)
     if table == "lessons":
-        return row.get("title", ""), (row.get("rule") or "")[:width]
+        return row.get("title", ""), _fit(row.get("rule") or "", width)
     if table == "research":
         return (
             f"{row.get('question', '')}  [{row.get('verdict', '')}]",
-            (row.get("claim") or "")[:width],
+            _fit(row.get("claim") or "", width),
         )
     if table == "bugs":
         # Three states, never two: a false finding labelled "fixed" would tell the next
         # agent a repair exists, and one labelled "OPEN" would send it to fix nothing.
         if row.get("fixed_at"):
-            return f"{row.get('summary', '')}  [fixed]", (row.get("lesson") or "")[:width]
+            return f"{row.get('summary', '')}  [fixed]", _fit(row.get("lesson") or "", width)
         if row.get("invalid_at"):
             why = f"invalid: {row.get('invalid_reason') or ''}"
             if row.get("evidence"):
                 why += f" (evidence: {row['evidence']})"
-            return f"{row.get('summary', '')}  [invalid]", why[:width]
-        return f"{row.get('summary', '')}  [OPEN]", (row.get("lesson") or "")[:width]
+            return f"{row.get('summary', '')}  [invalid]", _fit(why, width)
+        return f"{row.get('summary', '')}  [OPEN]", _fit(row.get("lesson") or "", width)
     if table == "items":
-        return f"{row.get('id', '')} — {row.get('title', '')}", (row.get("body") or "")[:width]
+        return f"{row.get('id', '')} — {row.get('title', '')}", _fit(row.get("body") or "", width)
     if table == "memories":
         when = (row.get("origin_at") or row.get("at") or "")[:10]
-        return f"{when} {row.get('id', '')}".strip(), (row.get("text") or "")[:width]
+        return f"{when} {row.get('id', '')}".strip(), _fit(row.get("text") or "", width)
     if table == "prompts":
         text = (row.get("text") or "").strip().replace("\n", " ")
         # A note is the AGENT's record of the work — a dead end, a surprise, why it
@@ -671,7 +677,7 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
             "note": "the agent noted:",
             "summary": f"SESSION SUMMARY ({row.get('session', '')}):",
         }.get(row.get("role") or "", "operator asked:")
-        return f"{row.get('at', '')[:10]} {who}", text[:width]
+        return f"{row.get('at', '')[:10]} {who}", _fit(text, width)
     return row.get("id", ""), ""
 
 
