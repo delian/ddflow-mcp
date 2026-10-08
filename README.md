@@ -4638,8 +4638,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=b27262a69eeb -->
-<details><summary>All 110 MCP tools: 32 in the `core` tier, 77 in `standard` (which includes core)</summary>
+<!-- ddflow:begin README/tools sha=77dfc076969f -->
+<details><summary>All 110 MCP tools: 32 in the `core` tier, 45 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|

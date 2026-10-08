@@ -37,8 +37,9 @@ def test_one_row_per_tool_and_the_counts_are_the_registry_s():
     names = [re.search(r"`(ddflow_[a-z_]+)`", r).group(1) for r in rows]
     assert sorted(names) == sorted(TOOLS) and len(set(names)) == len(TOOLS)
     assert f"All {len(TOOLS)} MCP tools" in block
-    assert f"{len(CORE_TOOLS)} in the `core` tier" in block
-    assert f"{len(CORE_TOOLS | STANDARD_EXTRA_TOOLS)} in `standard` (which includes core)" in block
+    core, standard = len(CORE_TOOLS), len(STANDARD_EXTRA_TOOLS)
+    assert f"{core} in the `core` tier, {standard} more in `standard`" in block
+    assert f"{len(TOOLS) - core - standard} more in `all`" in block
 
 
 def test_every_tool_is_in_a_help_group_and_a_tier():
@@ -53,6 +54,16 @@ def test_summary_is_the_first_sentence_cut_at_a_word_and_pipe_safe():
     long = "word " * 60
     out = RT.summary(long)
     assert len(out) <= RT.SUMMARY_MAX and out.endswith("…")
+
+
+def test_a_sentence_ends_at_a_capital_not_at_an_abbreviation():
+    assert RT.summary("Use e.g. this one. Then more.") == "Use e.g. this one."
+    assert RT.summary("No. 5 works. Next.") == "No. 5 works."
+    assert (
+        RT.summary("Handles big files... then returns. Next.")
+        == "Handles big files... then returns."
+    )
+    assert RT.summary("Reads it. `foo` does more.") == "Reads it."
 
 
 def test_hand_edit_is_detected_and_a_missing_region_refused():
