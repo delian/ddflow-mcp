@@ -20,12 +20,11 @@ import contextlib
 import re
 from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TypeVar
 
 from ..config import Config
 from ..core.model import fold
-from ..infra import git as G
 from ..infra import worktree as W
 from ..infra.log import EventLog, effective_agent_id
 from . import cleanup as C
@@ -37,21 +36,6 @@ from .jobs import alive
 _LOCK_PID = re.compile(r"\bpid[ =:]*(\d+)\b", re.I)
 #: How many unmerged commits/subjects the report quotes before summarising.
 _EXAMPLES = 3
-#: Directory names that are disposable caches. The prompt says a worktree is unmerged
-#: by "anything beyond caches", and nearly every tree here has a `.venv` or a
-#: `__pycache__`; anything untracked or ignored that is NOT one of these is work.
-_CACHES = frozenset(
-    {
-        "__pycache__",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".mypy_cache",
-        ".venv",
-        "venv",
-        "node_modules",
-        ".cache",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -83,30 +67,6 @@ class _Context:
     where: Path  #: the caller's own checkout, never a candidate
     primary: Path  #: the main working tree, never a candidate
     checked_out: dict[str, Path] = field(default_factory=dict)
-
-
-def _is_cache(name: str) -> bool:
-    return any(part in _CACHES for part in PurePosixPath(name).parts)
-
-
-def _status(path: Path) -> tuple[bool, list[str], list[str]]:
-    """(readable, work files, non-cache ignored files) for one tree.
-
-    `--ignored=matching` is what makes ignored work visible at all: `git worktree
-    remove` deletes ignored files without complaint, so a tree that "looks clean" while
-    holding a `.env` or a hand-edited local file is exactly the tree that must not be
-    removed (rubber_duck on f0d27314). A status that could not run is NOT clean.
-    """
-    entries = G.status(path, ignored="matching")
-    if entries is None:
-        return False, [], []
-    work: list[str] = []
-    ignored: list[str] = []
-    for e in entries:
-        if _is_cache(e.path):
-            continue
-        (ignored if e.ignored else work).append(e.path)
-    return True, work, ignored
 
 
 def _commits(repo: Path, base: str, ref: str) -> list[str] | None:
@@ -194,7 +154,8 @@ def _worktrees(ctx: _Context) -> list[Leftover]:
             )
             continue
         problems: list[str] = []
-        readable, work, ignored = _status(path)
+        tw = W.tree_work(path)
+        readable, work, ignored = tw.readable, tw.work, tw.ignored
         merged = W.is_merged(ctx.repo, branch, ctx.base)
         if not merged:
             problems.append(_commit_detail(ctx.repo, ctx.base, branch))
@@ -335,8 +296,8 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover, agent: str = "") -
     # Re-inspect IMMEDIATELY before the forced removal: force skips W.remove's own
     # guard, so anything written into the tree after the report would be deleted
     # without warning (roborev on 876f5b79).
-    readable, work, ignored = _status(path)
-    if not readable or work or ignored or not W.is_merged(repo, item.branch, base):
+    tw = W.tree_work(path)
+    if not tw.readable or tw.work or tw.ignored or not W.is_merged(repo, item.branch, base):
         return {
             "name": item.name,
             "kind": "worktree",
