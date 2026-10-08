@@ -3490,8 +3490,8 @@ emails, and (once the `[upstream]` section exists) its `redact_extra` names from
 `EventLog` applies it where every write passes: every string of an event's data is redacted unless it is a known lookup
 (`core.redact.LOG_VERBATIM_NAMES`: ids, digests, shas, paths, globs; `LOG_VERBATIM_FIELDS`: a few per-kind pairs, each with its reason), so
 gate evidence and output tails, bug summaries, lessons, decisions, task bodies, reasons, notes and a field the vocabulary has never heard
-of are all redacted. `LOG_TEXT_FIELDS` names the fields that are text even where their name is a lookup name. A new event kind or field
-must be classified or `tests/test_log_redaction_all_kinds.py` fails. A definition's digest (`def.recorded`) is of the redacted fields it
+of are all redacted. `LOG_TEXT_FIELDS` names the fields that are text even where their name is a lookup name. A new event kind must be classified or `tests/test_log_redaction_all_kinds.py` fails; a new
+field of a known kind that is a lookup must be added to those tables when the event-kind snapshot is regenerated, or it is redacted. A definition's digest (`def.recorded`) is of the redacted fields it
 stores. Events already written are
 not rewritten.
 
