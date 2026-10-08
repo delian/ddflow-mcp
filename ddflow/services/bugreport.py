@@ -35,6 +35,7 @@ from ..core.digest import content_digest, hasher
 from ..core.events import Event
 from ..core.model import known_kinds
 from ..core.redact import redact_argv
+from ..core.textcut import clip, whole_marks
 from . import install_info as _install
 from .redact_report import redactor
 
@@ -364,15 +365,11 @@ def _command(failure: Failure | None, clean: Callable[[object], str]) -> dict[st
 
 def _cut(text: str, n: int) -> str:
     """The first `n` characters, not ending inside a `[REDACTED:...]` marker."""
-    head = text[:n]
-    start = head.rfind("[REDACTED:")
-    if start != -1 and "]" not in head[start:]:
-        head = head[:start]
-    return head
+    return whole_marks(text[:n])
 
 
 def _tail(text: str, limit: int) -> str:
-    return text if len(text) <= limit else "[...]\n" + text[-limit:]
+    return clip(text, limit, side="tail", marker="[...]\n", rstrip=False)
 
 
 def _excerpt(events: Iterable[Event], agents: _Aliases) -> list[dict[str, Any]]:

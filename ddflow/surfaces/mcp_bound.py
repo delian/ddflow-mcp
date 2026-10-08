@@ -23,6 +23,8 @@ import json
 import re
 from typing import Any
 
+from ..core.textcut import clip
+
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
 NEXT_BLOCKED_SHOWN = 10
 #: Rows `ddflow_progress` and `ddflow_decision_list` return unless `limit` says otherwise;
@@ -95,17 +97,21 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     return out, None
 
 
+def _shorten(text: str, shown: int) -> str:
+    """``text`` cut to ``shown`` characters and ended in `CUT_MARK`; one no longer than
+    ``shown`` plus the marker stays whole (cutting would not save a byte)."""
+    return clip(text, shown + len(CUT_MARK), keep=shown, marker=CUT_MARK)
+
+
 def _clip(value: Any, cut: list[int]) -> Any:
     """``value`` with each string that is more than `TEXT_SHOWN` plus the marker long cut to
     `TEXT_SHOWN` and ended in `CUT_MARK` (a shorter one stays whole: cutting would not
     save a byte); ``cut[0]``
     counts them."""
     if isinstance(value, str):
-        # Only when the cut is a saving: the " [...]" marker is six characters.
-        if len(value) <= TEXT_SHOWN + len(CUT_MARK):
-            return value
-        cut[0] += 1
-        return value[:TEXT_SHOWN].rstrip() + CUT_MARK
+        out = _shorten(value, TEXT_SHOWN)
+        cut[0] += out != value
+        return out
     if isinstance(value, list):
         return [_clip(v, cut) for v in value]
     if isinstance(value, dict):
@@ -198,8 +204,8 @@ def bound_decisions(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             {k: v for k, v in row.items() if k not in ("context", "consequences", "alternatives")}
         )
         text = r.get("decision")
-        if isinstance(text, str) and len(text) > DECISION_TEXT_SHOWN + len(CUT_MARK):
-            r["decision"] = text[:DECISION_TEXT_SHOWN].rstrip() + CUT_MARK
+        if isinstance(text, str) and (short := _shorten(text, DECISION_TEXT_SHOWN)) != text:
+            r["decision"] = short
             clipped = True
         slim.append(r)
     extra = (
