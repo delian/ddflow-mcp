@@ -152,7 +152,8 @@ def _region(
                     f"({EW._begin(DOC, '<digest>')} ... {EW._end(DOC)}); "
                     f"--force does not repair or add markers"
                 )
-            EW._refuse_newer(rel, old, DOC, check=dry, diff=dry)
+            # A dry run refuses what the real cut refuses.
+            EW._refuse_newer(rel, old, DOC, check=False, diff=False)
             b, e = begins[0], ends[0]
             current = old[b.end() + 1 : e.start()]
             if F.body_digest(current) != b.group("sha") and not force:

@@ -185,6 +185,7 @@ def test_an_unknown_region_attribute_survives_a_same_level_rewrite(tmp_path):
     W.write_region(tmp_path, "CHANGELOG.md", "changelog", "b\n")
     text = (tmp_path / "CHANGELOG.md").read_text()
     assert "future=yes" in text and "\nb\n" in text
+    assert text.count("body-sha256=") == 1
 
 
 def test_check_reports_a_newer_log_stale_even_with_nothing_to_append(tmp_path, monkeypatch):
@@ -207,3 +208,27 @@ def test_the_changelog_cut_region_writer_refuses_a_newer_region(tmp_path, monkey
     with pytest.raises(W.Refused, match="upgrade ddflow before"):
         apply(tmp_path, force=True, dry=False)
     assert (tmp_path / "CHANGELOG.md").read_text() == "# Notes\n\n" + region
+
+
+def test_a_huge_or_odd_fmt_value_is_read_without_crashing():
+    assert F.parse_level("2") == 2 and F.parse_level("\u00b2") is None and F.parse_level("") is None
+    assert F.parse_level("9" * 5000) > 10**6
+    header = f"<!-- ddflow:generated doc=d v=1 body-sha256=000000000000 fmt={'9' * 5000} -->"
+    head, _ = F.split(f"{header}\n{F.NOTICE}\n\nb\n")
+    assert head is not None and F.newer(head)
+    region = f"<!-- ddflow:begin doc=d body-sha256=000000000000 fmt={'9' * 5000} -->\nx\n"
+    assert W._begin_attrs(region, "d")[0] > 10**6
+    assert W._is_newer(region, "d")
+
+
+def test_the_changelog_cut_dry_run_refuses_what_the_real_cut_refuses(tmp_path, monkeypatch):
+    from ddflow.services import changelog_cut as C
+
+    monkeypatch.setattr(F, "FORMAT_LEVEL", 2)
+    region = W.region_text(C.DOC, "future\n")
+    monkeypatch.setattr(F, "FORMAT_LEVEL", 1)
+    (tmp_path / "CHANGELOG.md").write_text("# Notes\n\n" + region)
+    (tmp_path / ".ddflow" / "local").mkdir(parents=True)
+    apply = C._region("CHANGELOG.md", "unreleased\n", "## [1.0.0]\n- x\n", "1.0.0", {})
+    with pytest.raises(W.Refused, match="upgrade ddflow before"):
+        apply(tmp_path, force=False, dry=True)

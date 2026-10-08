@@ -126,7 +126,7 @@ def _is_newer(old: str | None, doc: str) -> bool:
         return False
     head, _ = F.split(old)
     if head is not None:
-        return head.fmt > F.FORMAT_LEVEL
+        return F.newer(head)
     region = _begin_attrs(old, doc)
     return region is not None and region[0] > F.FORMAT_LEVEL
 
@@ -271,8 +271,10 @@ def _begin_attrs(text: str, doc: str) -> tuple[int, dict[str, str]] | None:
     if m is None:
         return None
     attrs = dict(p.split("=", 1) for p in m.group("extra").split())
-    level = attrs.pop("fmt", "")
-    return (int(level) if level.isascii() and level.isdecimal() else F.IMPLICIT_FMT), attrs
+    level = F.parse_level(attrs.get("fmt", ""))
+    if level is not None:
+        del attrs["fmt"]
+    return (F.IMPLICIT_FMT if level is None else level), attrs
 
 
 def region_extra(text: str, doc: str) -> dict[str, str]:

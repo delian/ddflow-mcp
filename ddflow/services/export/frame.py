@@ -82,6 +82,25 @@ def normalize(body: str) -> str:
     return body.rstrip("\n") + "\n"
 
 
+#: A format level longer than this many digits is read as this: beyond any real level, and
+#: never run through ``int`` (CPython refuses a very long digit string).
+_MAX_LEVEL_DIGITS = 9
+_MAX_LEVEL = 10**_MAX_LEVEL_DIGITS
+
+
+def parse_level(text: str) -> int | None:
+    """The format level spelled by a ``fmt=`` value, or None when it is not a plain decimal
+    number (an unknown attribute). An absurdly long number is a level above every real one."""
+    if not (text.isascii() and text.isdecimal()):
+        return None
+    return int(text) if len(text) <= _MAX_LEVEL_DIGITS else _MAX_LEVEL
+
+
+def newer(head: Header, fmt: int | None = None) -> bool:
+    """True when the header was written at a higher format level than ``fmt`` (this ddflow's)."""
+    return head.fmt > (FORMAT_LEVEL if fmt is None else fmt)
+
+
 def frame(
     body: str,
     doc: str,
@@ -113,10 +132,10 @@ def split(text: str) -> tuple[Header | None, str]:
     for pair in m.group("extra").split():
         k, _, v = pair.partition("=")
         extra[k] = v
-    level = extra.get("fmt", "")
     fmt = IMPLICIT_FMT
-    if level.isascii() and level.isdecimal():  # anything else stays an unknown attribute
-        fmt = int(level)
+    level = parse_level(extra.get("fmt", ""))
+    if level is not None:  # anything else stays an unknown attribute
+        fmt = level
         del extra["fmt"]
     return Header(m.group("doc"), m.group("v"), m.group("sha"), extra, fmt), after[1:]
 
@@ -142,7 +161,7 @@ def state(text: str | None, doc: str, version: str, fmt: int | None = None) -> s
     head, body = split(text)
     if head is None:
         return "not-ours"
-    if head.fmt > fmt:
+    if newer(head, fmt):
         return "newer"
     if body_digest(body) != head.digest:
         return "edited"
