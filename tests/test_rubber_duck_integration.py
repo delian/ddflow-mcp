@@ -18,12 +18,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.api.operations import _calendar_due
 from ddflow.config import Config
 from ddflow.core.model import State, fold
 from ddflow.core.progress import epoch
 from ddflow.infra.log import EventLog
 from ddflow.services import importer as IM
+from ddflow.services import schedule as SV
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -144,7 +144,7 @@ def test_the_newest_calendar_run_counts_whatever_order_it_folded_in():
         {"at": "2026-09-27T00:00:00Z"},
         {"at": "2026-08-01T00:00:00Z"},
     ]
-    assert _calendar_due(st, cfg, now=epoch("2026-09-28T00:00:00Z")) == []
+    assert SV.calendar_due(st, SV.calendar(cfg), epoch("2026-09-28T00:00:00Z")) == []
 
 
 # -- deliberate, on record ----------------------------------------------------------------
