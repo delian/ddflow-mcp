@@ -76,7 +76,9 @@ def test_the_re_homed_lease_keeps_what_the_claim_recorded(repo, monkeypatch):
         before.globs,
         before.resources,
     )
-    assert "re-homed" in after.note and _bare(repo) in after.note, after.note
+    # the note is log text, so the machine's hostname in the old id is redacted from it
+    # (D-unify 6, bug B5deba76d04); the holder field still carries the id
+    assert "re-homed" in after.note and "[REDACTED:hostname]" in after.note, after.note
     assert not fold(L.EventLog(repo, "r").read_all(), strict=False).items["T1"].lease_contest
 
 

@@ -973,8 +973,6 @@ class EventLog:
         The redactor is built on first need from the project's session patterns and the
         machine's own hostname and home. An unreadable config falls back to the built-in
         patterns; a bad pattern still raises, since this is a security control."""
-        if kind in R.LOG_NO_TEXT:
-            return data
         red = self._redactor
         if red is None:
             names: list[str] = []
