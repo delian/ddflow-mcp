@@ -178,13 +178,13 @@ def _event(kind: RecordKind, verb: str) -> str:
 
 
 def _limit(raw: Any) -> tuple[int, str]:
-    """``(limit, "")``, or ``(0, why)`` for one that is not a count. 0 or None is the
-    default; the most a call gives is `MAX_LIMIT`."""
-    if raw in (None, 0):
+    """``(limit, "")``, or ``(0, why)`` for one that is not a count. None is the default;
+    0 is the most a call gives (`MAX_LIMIT`), as in every list; a larger number is cut to it."""
+    if raw is None:
         return DEFAULT_LIMIT, ""
     if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
         return 0, f"limit must be a whole number, 0 or more; got {raw!r}"
-    return min(raw, MAX_LIMIT), ""
+    return (min(raw, MAX_LIMIT) if raw else MAX_LIMIT), ""
 
 
 def _cell(value: Any) -> Any:

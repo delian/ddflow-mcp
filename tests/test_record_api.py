@@ -246,7 +246,9 @@ def test_list_is_bounded_and_says_so_with_exact_totals(repo):
     assert [r["id"] for r in out.data["rows"]] == ["n0", "n1"]
     assert R.record_list(repo, NOTE).data["limit"] == R.DEFAULT_LIMIT
     assert R.record_list(repo, NOTE, limit=10**6).data["limit"] == R.MAX_LIMIT
-    assert R.record_list(repo, NOTE, limit=-1).exit == O.REFUSED
+    assert R.record_list(repo, NOTE, limit=0).data["limit"] == R.MAX_LIMIT  # 0 is the most
+    for bad in (-1, False, True, 0.0, 2.5, "3"):
+        assert R.record_list(repo, NOTE, limit=bad).exit == O.REFUSED, bad
 
 
 def test_a_long_text_in_a_row_is_cut_but_show_has_it_whole(repo):
