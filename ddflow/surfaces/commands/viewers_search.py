@@ -47,14 +47,14 @@ def register(s) -> None:
 
 def view_head(c: Ctx, out) -> int | None:
     """What `search` and `session list` do first with a `view_read` answer: a refusal is
-    its reason on stderr, and --json is the body whole (the exit says whether rows came back).
+    its reason on stderr, and --json is the body whole with the answer's own exit.
     None when the human rendering goes on."""
     if out.exit == REFUSED:
         print(out.reason, file=sys.stderr)
         return REFUSED
     if c.json:
         emit_json(out.data)
-        return OK if out.data["rows"] else NOTHING
+        return out.exit  # ok with rows, nothing without
     return None
 
 
