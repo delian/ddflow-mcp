@@ -383,6 +383,21 @@ def _rs_skew_overridden(n, ev):
     )
 
 
+def _rs_upgrade_applied(n, ev):
+    d = ev.data
+    cats = ", ".join(d.get("categories") or []) or "nothing"
+    backup = f"; originals saved in {d['backup']}" if d.get("backup") else ""
+    confirmed = ", ".join(sorted(d.get("confirmed") or {}))
+    sure = f"; the operator confirmed {confirmed}" if confirmed else ""
+    return ReplayStep(
+        n,
+        ev.ts,
+        "session",
+        f"Upgraded the project from ddflow {d.get('from') or 'before version stamps'} to "
+        f"{d.get('to') or '?'}: {cats} ({len(d.get('items') or [])} item(s)){sure}{backup}",
+    )
+
+
 def _rs_prompt(n, ev):
     return ReplayStep(n, ev.ts, "prompt", ev.data.get("text", ""), ev.data.get("item", ""))
 
@@ -553,6 +568,7 @@ _REPLAY_RENDERERS = {
     "record.extended": _rs_extended,
     "link.recorded": _rs_link,
     "skew.overridden": _rs_skew_overridden,
+    "upgrade.applied": _rs_upgrade_applied,
     **dict.fromkeys(
         ("def.recorded", "def.updated", "def.retired", "def.superseded", "def.merged"),
         _rs_definition,

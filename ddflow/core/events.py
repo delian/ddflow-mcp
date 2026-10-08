@@ -87,6 +87,10 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         # D-upgrade-skew-guard: the operator let an OLDER ddflow write to a newer log, and
         # why. An override a compaction dropped would leave the marked events unexplained.
         "skew.overridden",
+        # D-upgrade-model: an applied upgrade (what was changed, who confirmed what and the
+        # backup holding the originals) explains why files and config differ from the last
+        # release; a compaction that dropped it would leave that unexplained.
+        "upgrade.applied",
         # D-sched-no-daemon: a scheduled job's definition is operator intent like a
         # decision; a compaction that dropped it would silently stop the job.
         "schedule.defined",
