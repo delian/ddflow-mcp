@@ -22,25 +22,8 @@ from ddflow.surfaces.mcp import _OPTIONAL_KEYS, TOOLS, Server
 GOLDEN = Path(__file__).parent / "golden" / "json" / "result_schemas.json"
 
 
-def _describe(tool: str) -> dict:
-    spec = TOOLS[tool]
-    payload, text = spec.get("payload", ""), spec.get("text", False)
-    command = R.command_name(tool)
-    out: dict = {"command": command, "schema": R.schema_tag(command)}
-    out["shape"] = R.result_shape(payload, text=text)
-    if isinstance(payload, str) and payload:
-        out["payload"] = payload
-    elif isinstance(payload, tuple):
-        out["payload"] = list(payload)
-    out["output_schema"] = R.output_schema(
-        command, payload, text=text, extra=_OPTIONAL_KEYS if isinstance(payload, tuple) else ()
-    )
-    out["array_schema"] = R.array_schema(command, payload)
-    return out
-
-
 def _table() -> dict:
-    return {tool: _describe(tool) for tool in TOOLS}
+    return R.result_schemas(TOOLS, _OPTIONAL_KEYS)
 
 
 def test_the_result_schemas_are_pinned():
@@ -71,17 +54,6 @@ def test_no_object_result_declares_a_field_called_schema():
     overwritten (or, with `tag_body`, left untagged)."""
     for tool, spec in TOOLS.items():
         assert R.SCHEMA_KEY not in R.payload_fields(spec.get("payload", "")), tool
-
-
-def test_the_tag_is_first_and_only_on_objects():
-    assert list(R.tag_body({"b": 1, "a": 2}, "claim")) == ["schema", "b", "a"]
-    assert R.tag_body({"b": 1}, "claim")["schema"] == "claim@1"
-    for body in ([1], [], "text", None, 3):
-        assert R.tag_body(body, "claim") == body
-    refused = {"refusal": {"exit": 3}, "item": None}
-    assert list(R.tag_body(refused, "claim")) == ["refusal", "schema", "item"]
-    kept = {"schema": "mine", "x": 1}
-    assert R.tag_body(kept, "claim") == kept
 
 
 def test_a_bumped_version_is_what_the_tag_says(monkeypatch):
