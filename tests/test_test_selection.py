@@ -408,19 +408,29 @@ def test_a_test_that_governs_a_package_is_selected_when_the_package_changes(proj
     assert "tests/test_layout.py" not in _picked(proj)
 
 
+GUARDS = [
+    "tests/test_architecture_guards.py",
+    "tests/test_lifecycle_layout.py",
+    "tests/test_packaging.py",
+]
+
+
 @pytest.mark.parametrize(
-    ("changed", "guard"),
+    ("changed", "want"),
     [
-        ("ddflow/api/lifecycle/claim.py", "tests/test_lifecycle_layout.py"),
-        ("ddflow/api/lifecycle/__init__.py", "tests/test_architecture_guards.py"),
-        ("ddflow/surfaces/tools/lifecycle.py", "tests/test_architecture_guards.py"),
-        ("ddflow/services/gates/evidence.py", "tests/test_architecture_guards.py"),
-        (".importlinter", "tests/test_architecture_guards.py"),
-        ("tests/guard_baselines/unreferenced_functions.toml", "tests/test_architecture_guards.py"),
-        ("pyproject.toml", "tests/test_packaging.py"),
+        ("ddflow/api/lifecycle/claim.py", {GUARDS[0], GUARDS[1]}),
+        ("ddflow/api/lifecycle/__init__.py", {GUARDS[0], GUARDS[1]}),
+        ("ddflow/surfaces/tools/lifecycle.py", {GUARDS[0]}),
+        ("ddflow/services/gates/evidence.py", {GUARDS[0]}),
+        (".importlinter", {GUARDS[0]}),
+        ("tests/guard_baselines/unreferenced_functions.toml", {GUARDS[0]}),
+        ("pyproject.toml", {GUARDS[2]}),
+        ("ddflow/templates/AGENTS.md", {GUARDS[0], GUARDS[2]}),
+        ("docs/notes.md", set()),
     ],
 )
-def test_the_repos_guards_are_selected_by_the_packages_they_govern(changed, guard):
+def test_the_repos_guards_are_selected_by_the_packages_they_govern(changed, want):
+    """A change under ddflow/api/lifecycle/ selects BOTH the layout test and the import
+    contracts, each by its own declaration."""
     root = Path(__file__).resolve().parents[1]
-    tests = [guard]
-    assert T.governed(root, [changed], tests) == {guard: f"governs {changed}"}
+    assert set(T.governed(root, [changed], GUARDS)) == want
