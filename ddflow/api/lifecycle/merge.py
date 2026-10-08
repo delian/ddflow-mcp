@@ -9,6 +9,7 @@ from typing import Any
 
 from ...core import outcome as O
 from ...infra import worktree as W
+from ...services import changes as CH
 from ...services.cleanup import record_item_removed
 from .._base import _load
 from ._common import _require
@@ -474,7 +475,7 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str] | None
 
     # -z (via git_paths): a non-ASCII name is not C-quoted into one no glob matches;
     # --no-renames: a rename lists its old path too, which the landing removes (B20dc45f4c5).
-    changed = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{target}...{branch}")
+    changed = CH.changed_paths(repo, target, tip=branch, include=("committed",))
     if changed is None:
         return None
     return [
