@@ -29,8 +29,9 @@ def hasher(data: bytes | memoryview = b"", algo: str = "sha256", *, size: int | 
 
 
 #: A redaction marker in any spelling: the `[REDACTED:<kind>]` of a marker-style profile and
-#: the bare `[REDACTED]` of a masking one (`core.redact` writes both).
-_MARKER = re.compile(r"\[REDACTED(?::[a-z0-9_]*)?\]?")
+#: the bare `[REDACTED]` of a masking one. THE grammar: `core.redact` writes and strips markers
+#: with this pattern, so a change to it moves both together.
+MARKER = re.compile(r"\[REDACTED(?::[a-z0-9_]*)?\]?")
 #: The one token every spelling of a redaction marker is mapped to before a digest.
 REDACTED = "[REDACTED]"
 
@@ -55,7 +56,7 @@ def normalize_markers(text: str) -> str:
     """``text`` with every redaction marker spelled `[REDACTED]`: clones on different
     redaction profiles write different markers for the same secret, so a digest that decides
     whether two records are the same must not see the difference."""
-    return _MARKER.sub(REDACTED, text)
+    return MARKER.sub(REDACTED, text)
 
 
 def normalize_text(text: str) -> str:
