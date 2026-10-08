@@ -9,6 +9,7 @@ import ddflow.api._dedupe as DD
 
 from ...config import csv_list
 from ...core import outcome as O
+from ...core.budget import RECALL_MAX_CHARS
 from .._base import _load
 from .lessons import _store
 
@@ -60,7 +61,7 @@ def recall(
     *,
     sources: str = "",
     limit: int = 3,
-    max_chars: int = 4000,
+    max_chars: int = RECALL_MAX_CHARS,
     agent: str = "",
 ) -> O.Outcome:
     """ "Have we been here before?" — one query across everything the project remembers.
