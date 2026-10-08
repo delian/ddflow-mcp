@@ -217,3 +217,12 @@ def test_a_forward_merge_whose_unmerged_paths_are_unknown_is_aborted_not_called_
     out: dict = {}
     ports._forward_merge(Path("."), cfg, None, Path("."), "I", src, out)
     assert out["status"] == ports.FAILED and ("merge", "--abort") in calls
+
+
+def test_diff_stat_counts_untracked_files_and_the_listing_helper_exists(work):
+    _commit(work, **{"a.txt": "a\n"})
+    (work / "n1.txt").write_text("1\n2\n")
+    (work / "café.txt").write_text("c\n")
+    stat = EV.diff_stat(work)
+    assert stat["untracked"] == 2 and stat["files"] == 2 and stat["insertions"] == 3
+    assert callable(G.files)
