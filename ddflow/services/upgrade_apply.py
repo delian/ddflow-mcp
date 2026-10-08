@@ -415,7 +415,7 @@ def _owner(action: str, items: list[dict[str, Any]]) -> str:
     named = []
     for i in items:
         # whole path only: `replit.md` is not the tail of `docs/ddflow/drivers/deltas/replit.md`
-        hits = list(re.finditer(rf"(?<![\w./-]){re.escape(i['path'])}(?![\w-])", action))
+        hits = list(re.finditer(rf"(?<![\w./-]){re.escape(i['path'])}(?![\w.-])", action))
         if hits:
             named.append((hits[-1].start(), i["path"]))
     return max(named)[1] if named else ""

@@ -681,4 +681,11 @@ def test_an_action_naming_two_items_belongs_to_the_one_written() -> None:
     assert UA._owner("wrote docs/ddflow/drivers/deltas/replit.md", twins) == twins[0]["path"]
     assert UA._owner("updated the managed block in replit.md", twins) == "replit.md"
     kept = "wrote docs/x/a.md (your edits are kept in a.md.local-edits)"
-    assert UA._owner(kept, [{"path": "docs/x/a.md"}]) == "docs/x/a.md"
+    assert UA._owner(kept, [{"path": "docs/x/a.md"}, {"path": "a.md"}]) == "docs/x/a.md"
+    assert (
+        UA._owner(
+            "updated the managed block in a.md (your edits are kept in a.md.local-edits)",
+            [{"path": "a.md"}],
+        )
+        == "a.md"
+    )
