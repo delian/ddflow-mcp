@@ -308,7 +308,9 @@ def _fold_capability(caps: dict[str, RecordedCapability], e: Event) -> None:
     if old is None:
         caps[name] = RecordedCapability(new, v, e.agent)
         return
-    newer = (version_key(v), v) > (version_key(old.version), old.version)
+    # the agent breaks a tie between equal versions, so `by` is the same in any read order
+    mine, theirs = (version_key(v), v, e.agent), (version_key(old.version), old.version, old.by)
+    newer = mine > theirs
     caps[name] = RecordedCapability(
         old.kinds | new, v if newer else old.version, e.agent if newer else old.by
     )

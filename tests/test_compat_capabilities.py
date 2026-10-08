@@ -439,6 +439,11 @@ def test_the_capability_fold_is_independent_of_event_order():
         )
 
     a, b = ev(["x"], "0.1.9", "p", 1), ev(["y"], "0.1.10", "q", 2)
+    t1, t2 = ev(["x"], "0.1.9", "alice", 3), ev(["x"], "0.1.9", "bob", 4)
+    assert (
+        stamp_facts([t1, t2], "me", "1.0").capabilities["c"].by
+        == stamp_facts([t2, t1], "me", "1.0").capabilities["c"].by
+    )
     one = stamp_facts([a, b], "me", "1.0").capabilities["c"]
     two = stamp_facts([b, a], "me", "1.0").capabilities["c"]
     assert one == two
