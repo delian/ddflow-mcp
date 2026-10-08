@@ -30,6 +30,7 @@ from typing import Any
 from ..config import Config
 from ..core import textsim
 from ..core.model import State
+from ..core.textcut import window
 from . import session_view as SV
 from . import viewers as V
 from .export.query import ExportError, _cutoff
@@ -221,14 +222,9 @@ def check_regex(pattern: str, *, ignore_case: bool = True) -> re.Pattern[str]:
 def _snippet(flat: str, span: tuple[int, int] | None) -> str:
     """A window of the whitespace-folded text around `span` (or its start)."""
     if span is None:
-        return flat[:SNIPPET] + ("…" if len(flat) > SNIPPET else "")
+        return window(flat, 0, SNIPPET)
     width = span[1] - span[0]
-    start = max(0, span[0] - max(0, SNIPPET - width) // 2)
-    return (
-        ("…" if start else "")
-        + flat[start : start + SNIPPET]
-        + ("…" if start + SNIPPET < len(flat) else "")
-    )
+    return window(flat, max(0, span[0] - max(0, SNIPPET - width) // 2), SNIPPET)
 
 
 def _term_span(text: str, words: list[str]) -> tuple[int, int] | None:
