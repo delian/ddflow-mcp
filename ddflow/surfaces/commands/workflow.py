@@ -8,11 +8,11 @@ one call.
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import workflow as A
 from ..context import FAIL, NOTHING, REFUSED, Ctx
+from ..render import emit_json
 
 
 def _report(c: Ctx, out, human: str, payload: str | tuple[str, ...] = "") -> int:
@@ -31,7 +31,7 @@ def _report(c: Ctx, out, human: str, payload: str | tuple[str, ...] = "") -> int
 def _workflow_show(a, c: Ctx) -> int:
     out = A.show(c.repo)
     if c.json:
-        print(json.dumps(out.data, indent=2, default=str))
+        emit_json(out.data)
         return out.exit
     print(_render_workflow(A.view_for_render(c.repo)))
     return out.exit
@@ -216,7 +216,7 @@ def _workflow_state(a, c: Ctx) -> int:
 
     out = workflow_state(c.repo)
     if c.json:
-        print(json.dumps(out.data, indent=2, default=str))
+        emit_json(out.data)
         return out.exit
     o = out.data
     wf, q, proj = o["workflow"], o["task_queue"], o["project"]

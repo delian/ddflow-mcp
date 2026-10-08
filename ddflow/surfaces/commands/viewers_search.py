@@ -7,11 +7,11 @@ to `services/search.py`. The parser and handler live here so `cli.py` needs a si
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...services import search as S
 from ..context import NOTHING, OK, REFUSED, Ctx
+from ..render import emit_json
 
 
 def register(s) -> None:
@@ -73,7 +73,7 @@ def cmd_search(a, c: Ctx) -> int:
             "filters": {("owner" if k == "agent" else k): v for k, v in res.filters.items()},
             "note": res.note,
         }
-        print(json.dumps(body, indent=2, default=str))
+        emit_json(body)
         return OK if res.rows else NOTHING
     if not res.rows:
         which = f" under {res.filters}" if res.filters else ""

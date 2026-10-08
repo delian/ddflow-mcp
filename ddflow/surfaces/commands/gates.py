@@ -8,11 +8,11 @@ is a dispatcher and four renderings.
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import gates as A
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
+from ..render import emit_json
 
 
 def _gate_status(a, c: Ctx) -> int:
@@ -21,7 +21,7 @@ def _gate_status(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body("status"), indent=2, default=str))
+        emit_json(out.body("status"))
         return OK
     print(out.data["text"])
     return OK
@@ -30,7 +30,7 @@ def _gate_status(a, c: Ctx) -> int:
 def _gate_list(a, c: Ctx) -> int:
     out = A.list_gates(c.repo, refuted=a.refuted, agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body(("refuted", "count", "passes", "gates")), indent=2, default=str))
+        emit_json(out.body(("refuted", "count", "passes", "gates")))
         return OK
     print(out.data["text"])
     return OK
@@ -45,7 +45,7 @@ def _gate_verify(a, c: Ctx) -> int:
     """
     out = A.verify(c.repo, a.id, a.gate, agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body(("gate", "reason", "results", "verified")), indent=2))
+        emit_json(out.body(("gate", "reason", "results", "verified")))
         return out.exit
     if out.data.get("reason"):
         print(out.data["reason"], file=sys.stderr)

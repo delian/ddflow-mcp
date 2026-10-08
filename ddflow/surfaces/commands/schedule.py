@@ -7,13 +7,13 @@ mount it; the authoring verbs and the MCP tool come with the job-authoring work.
 
 from __future__ import annotations
 
-import json
 import sys
 from typing import Any
 
 from ...api import schedule as A
 from ...core.outcome import FAIL
 from ..context import Ctx
+from ..render import emit_json
 
 _PAYLOADS = {"list": "rows", "search": "rows", "show": ""}
 
@@ -109,7 +109,7 @@ def cmd_trigger(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     if c.json:
-        print(json.dumps(out.body("rows" if verb == "list" else ""), indent=2, default=str))
+        emit_json(out.body("rows" if verb == "list" else ""))
         return out.exit
     if verb == "evaluate":
         lines = [_decision(d) for d in out.data.get("decisions", [])]
@@ -152,7 +152,7 @@ def cmd_schedule(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     if c.json:
-        print(json.dumps(out.body(_PAYLOADS[verb]), indent=2, default=str))
+        emit_json(out.body(_PAYLOADS[verb]))
         return out.exit
     if verb == "show":
         print(_show(out.data))

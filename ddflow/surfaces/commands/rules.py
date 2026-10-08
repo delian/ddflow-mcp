@@ -6,7 +6,6 @@ its payload projection and both surfaces ask the Outcome for it.
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import (
@@ -22,6 +21,7 @@ from ...api import (
 )
 from ...core.outcome import EXIT_NAMES, REFUSED
 from ..context import FAIL, Ctx
+from ..render import emit_json
 
 _PAYLOADS = {
     "list": ("rows", "count"),
@@ -82,7 +82,7 @@ def _emit(c: Ctx, out, verb: str, human: str) -> int:
             # The same lead the MCP tool puts first on a refusal: the reason, then the body.
             lead = {"reason": out.reason, "outcome": EXIT_NAMES[REFUSED], "exit": REFUSED}
             body = {"refusal": lead, **body}
-        print(json.dumps(body, indent=2, default=str))
+        emit_json(body)
     else:
         print(human or out.reason)
     return out.exit
