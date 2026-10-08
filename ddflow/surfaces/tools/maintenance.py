@@ -66,7 +66,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_upgrade": {
         "description": (
-            "What upgrading this project to the running ddflow would change, by category (repairs, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it does the plan after saving originals to .ddflow/backups, returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. Plan exit: 0 up to date, 1 items."
+            "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it does the plan after saving originals to .ddflow/backups, returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. Plan exit: 0 up to date, 1 items."
         ),
         "properties": {
             "plan": ("boolean", "Dry run (default); false applies all.", False),
