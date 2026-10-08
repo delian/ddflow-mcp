@@ -179,7 +179,12 @@ def _hide_from_abbreviation(parser: argparse.ArgumentParser) -> None:
 
 
 class SuggestingParser(argparse.ArgumentParser):
-    """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it."""
+    """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it,
+    and every level records the command word taken (`_WordsRecorder`)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.register("action", "parsers", _WordsRecorder)
 
     def error(self, message: str) -> Any:
         for a in self._actions:
@@ -806,3 +811,92 @@ def result_schemas(
         row["array_schema"] = array_schema(command, payload)
         table[tool] = row
     return table
+
+
+def tag_body(body: Any, command: str) -> Any:
+    """``body`` with its ``schema`` key placed first when it is an object; any other body
+    (an array, text, a scalar, null) comes back unchanged. A refusal body keeps `refusal`
+    as its first key (`mcp._refusal_body`: the block a machine reads first, fixed in
+    c5c7d9f) and the tag follows it. A body already carrying the key keeps its own value:
+    the tag never overwrites a field."""
+    if not isinstance(body, dict) or not command or SCHEMA_KEY in body:
+        return body
+    tag = {SCHEMA_KEY: schema_tag(command)}
+    if next(iter(body), None) == REFUSAL_KEY:
+        rest = {k: v for k, v in body.items() if k != REFUSAL_KEY}
+        return {REFUSAL_KEY: body[REFUSAL_KEY], **tag, **rest}
+    return {**tag, **body}
+
+
+class _WordsRecorder(argparse._SubParsersAction):
+    """A subparsers action that also records which command word was taken, on the namespace
+    under `WORDS`: ``("gate", "record")``. Read from argparse's own decision, not rebuilt from
+    the words typed (an option's value can spell a command, ``--`` makes the rest positional,
+    and an option can share a subparser's ``dest``: ``bisect --cmd`` overwrote ``cmd``)."""
+
+    def __call__(self, parser, namespace, values, option_string=None):  # type: ignore[no-untyped-def]
+        word = values[0] if isinstance(values, (list, tuple)) else values
+        super().__call__(parser, namespace, values, option_string)
+        target = self._name_parser_map.get(word)
+        # the sub-namespace was copied over ours by now and carries the deeper words
+        canonical = next((n for n, p in self.choices.items() if p is target), word)
+        setattr(namespace, WORDS, (canonical, *getattr(namespace, WORDS, ())))
+
+
+#: The namespace attribute `_WordsRecorder` fills.
+WORDS = "_command_words"
+
+
+def parsed_path(args: argparse.Namespace) -> tuple[str, ...]:
+    """The command words a parsed command line went through, aliases resolved to the
+    command they name: ``("gate", "record")``; empty when no subcommand was taken."""
+    return tuple(getattr(args, WORDS, ()))
+
+
+#: CLI commands whose words are not the name of the tool that serves them and which no
+#: `via` declares: ``ddflow research`` (no verb) files what ``ddflow_research_add`` files.
+CLI_COMMAND_NAMES: dict[tuple[str, ...], str] = {
+    ("research",): "research_add",
+    ("companions",): "companions",
+    ("companions", "list"): "companions",
+    ("hooks",): "hooks",
+    ("hooks", "status"): "hooks",
+    ("hooks", "install"): "hooks",
+    ("hooks", "uninstall"): "hooks",
+    ("prompts",): "prompts",
+    ("prompts", "list"): "prompts",
+    ("prompts", "get"): "prompts",
+    ("prompts", "show"): "prompts",
+}
+#: A flag that makes a command another tool's: ``(path, parsed attribute) -> name``. Read from
+#: what argparse parsed (an abbreviation, ``--verif``, sets the same attribute), not from the
+#: words typed.
+CLI_FLAG_COMMANDS: dict[tuple[tuple[str, ...], str], str] = {
+    (("companions",), "verify"): "companions_verify",
+    (("companions", "list"), "verify"): "companions_verify",
+    (("import",), "verify"): "import_verify",
+    (("doctor",), "upgrade"): "upgrade",
+}
+
+
+def command_for_path(
+    path: tuple[str, ...],
+    routed: Mapping[tuple[str, ...], tuple[str, str]],
+    covering: Mapping[str, tuple[str, ...]],
+    args: argparse.Namespace | None = None,
+) -> str:
+    """The schema name of a CLI command: the name of the MCP tool that serves it, so the two
+    surfaces tag one result alike. ``routed`` maps a path a selector serves to its tool
+    (``task list`` -> ``ddflow_list``), ``covering`` a one-word command a differently named
+    tool covers (``init`` -> ``ddflow_setup``), ``args`` the parsed line for a flag that picks the
+    tool; anything else is its words joined by ``_``."""
+    for (where, dest), name in CLI_FLAG_COMMANDS.items():
+        if where == path and args is not None and getattr(args, dest, False) is True:
+            return name
+    if path in CLI_COMMAND_NAMES:
+        return CLI_COMMAND_NAMES[path]
+    if path in routed:
+        return command_name(routed[path][0])
+    if len(path) == 1 and path[0] in covering:
+        return command_name(covering[path[0]][0])
+    return "_".join(path).replace("-", "_")

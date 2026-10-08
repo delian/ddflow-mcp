@@ -8,13 +8,25 @@ now goes through one function (``tests/test_compat_json.py`` fails on a new ``js
 there), which is also the one place a rule about every body (the ``schema`` tag,
 B-uni-compat-json) can live.
 
-Standard library only: the surfaces and the registry may both import it.
+Standard library only (and the registry): the surfaces may import it.
 """
 
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from typing import Any, TextIO
+
+from .registry import tag_body
+
+#: The command a CLI process is running (``gate_record``), set once by `cli.main`; the schema
+#: tag of an object body is made from it. Empty outside a command, and bodies are not tagged.
+_COMMAND: ContextVar[str] = ContextVar("ddflow_command", default="")
+
+
+def set_command(name: str) -> None:
+    """Name the command whose bodies `emit_json` now tags."""
+    _COMMAND.set(name)
 
 
 def dumps(data: Any) -> str:
@@ -25,4 +37,4 @@ def dumps(data: Any) -> str:
 
 def emit_json(data: Any, *, file: TextIO | None = None) -> None:
     """Print ``data`` as a ``--json`` body (stdout unless ``file`` is given)."""
-    print(dumps(data), file=file)
+    print(dumps(tag_body(data, _COMMAND.get())), file=file)

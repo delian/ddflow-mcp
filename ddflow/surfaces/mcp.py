@@ -213,6 +213,7 @@ def _outcome_result(
     as_text: bool = False,
     bound: Any = None,
     args: dict[str, Any] | None = None,
+    command: str = "",
 ) -> dict[str, Any]:
     """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
 
@@ -278,6 +279,9 @@ def _outcome_result(
         # The bounded reads (`mcp_bound`): the full body, cut and said so. The CLI's
         # `--json` is the whole body, and the parsed MCP body equals it except here.
         full, note = bound(full, args or {})
+    # The schema tag (D-compat-json-views): an object body names its schema, the same name
+    # `--json` gives it (`render.emit_json`); an array or a scalar keeps its exact shape.
+    full = _REGISTRY.tag_body(full, command)
     # Compact: a model reads every byte of this and indentation is a quarter of it.
     body = json.dumps(full, separators=(",", ":"), default=str)
     result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
@@ -748,6 +752,7 @@ class Server:
                     as_text=bool(wants_text),
                     bound=_bounds().get(name),
                     args=args,
+                    command=_REGISTRY.command_name(name),
                 )
                 # The footer goes on LAST, after the reason block, so it never comes between
                 # a caller and the answer it asked for — `content[0]` is still the body and
