@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config
-from ...core.model import GATE_OUTCOMES, State
+from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra.log import EventLog
 from .defs import GateDef, pipeline_for
 from .evidence import (
@@ -46,16 +46,8 @@ class GateStatus:
     rounds: dict[str, str] = field(default_factory=dict)
 
     def render(self) -> str:
-        marks = {
-            "passed": "[x]",
-            "failed": "[!]",
-            "unavailable": "[?]",
-            "partial": "[~]",
-            "skipped": "[-]",
-            "": "[ ]",
-        }
         return "\n".join(
-            f"  {marks.get(o, '[ ]')} {g}"
+            f"  [{OUTCOME_MARK.get(o, ' ')}] {g}"
             + (f"  -- {self.triage[g]}" if g in self.triage else "")
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             for g, o in self.rows
@@ -127,20 +119,14 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         raise KeyError(item_id)
     gates = pipeline_for(it, cfg)
     rows = [(g, it.gate_outcome(g)) for g in gates]
-    done = [g for g, o in rows if o in ("passed", "skipped")]
+    required = set(cfg.gates.required)
+    settled = {g: it.gate_satisfied(g, g in required) for g in gates}
+    done = [g for g in gates if settled[g]]
     blocked = [g for g, o in rows if o == "failed"]
     unavail = [g for g, o in rows if o in ("unavailable", "partial")]
     skipped = [g for g, o in rows if o == "skipped"]
-    current = ""
-    for g, o in rows:
-        if o not in ("passed", "skipped"):
-            current = g
-            break
-    required = set(cfg.gates.required)
-    complete = (
-        all(o == "passed" or (o == "skipped" and g not in required) for g, o in rows)
-        and not blocked
-    )
+    current = next((g for g in gates if not settled[g]), "")
+    complete = all(settled.values())
     return GateStatus(
         item=item_id,
         pipeline=gates,

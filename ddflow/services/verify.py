@@ -26,7 +26,7 @@ from typing import Any
 
 from ..config import Config
 from ..core.events import Event
-from ..core.model import State
+from ..core.model import GateOutcome, State
 from ..core.schedule import path_in_glob
 from . import backfill as BF
 from . import gates as G
@@ -272,9 +272,11 @@ def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
     required_bad = [
         g
         for g in cfg.gates.required
-        if g in pipeline and gates.get(g, {}).get("outcome") != "passed"
+        if g in pipeline and not GateOutcome.settled(gates.get(g, {}).get("outcome", ""), True)
     ]
-    unreasoned = [g for g, v in gates.items() if v["outcome"] == "skipped" and not v.get("reason")]
+    unreasoned = [
+        g for g, v in gates.items() if v["outcome"] == GateOutcome.SKIPPED and not v.get("reason")
+    ]
     if silent or required_bad or unreasoned:
         parts = []
         if required_bad:
@@ -285,9 +287,13 @@ def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
             parts.append(f"skipped with no reason: {_trim(unreasoned)}")
         return Claim("gates", FAIL, "; ".join(parts))
     notes = []
-    if failed := [g for g, v in gates.items() if v["outcome"] == "failed"]:
+    if failed := [g for g, v in gates.items() if v["outcome"] == GateOutcome.FAILED]:
         notes.append(f"failed but not required: {_trim(failed)}")
-    if soft := [g for g, v in gates.items() if v["outcome"] in ("unavailable", "partial")]:
+    if soft := [
+        g
+        for g, v in gates.items()
+        if v["outcome"] in (GateOutcome.UNAVAILABLE, GateOutcome.PARTIAL)
+    ]:
         notes.append(f"unavailable/partial: {_trim(soft)}")
     if led["forced"]:
         notes.append(

@@ -311,12 +311,13 @@ def test_the_cli_plan_flag_is_the_default_spelled_out(old: Path) -> None:
     assert run_cli(old, "upgrade", "--plan")[1] == run_cli(old, "upgrade")[1]
 
 
-def test_a_remedy_that_is_the_apply_step_says_apply_is_not_there_yet(old: Path) -> None:
+def test_a_remedy_that_is_the_apply_step_names_the_command_alone(old: Path) -> None:
     _code, body = plan(old)
 
     fixes = [i["fix"] for i in items(body, "config") if "--apply" in i["fix"]]
 
-    assert fixes and all(f.endswith(UP.NOT_YET) for f in fixes)
+    assert fixes and all("not available" not in f for f in fixes)
+    assert {"ddflow upgrade --apply"} <= set(fixes)
 
 
 def test_a_changed_then_removed_then_added_knob_keeps_the_baseline_default() -> None:
