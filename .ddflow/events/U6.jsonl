@@ -2210,3 +2210,4 @@
 {"agent":"U6","data":{"at":1791489966.9134657,"holder":"U6"},"id":"ee38e312a0b9c8e3dd8d7fb62","kind":"lease.renewed","lamport":44036,"schema":1,"subject":"B-uni-rules-import.3-writes","ts":"2026-10-08T20:06:06.987837Z"}
 {"agent":"U6","data":{"at":1791490049.5225592,"holder":"U6"},"id":"ed2b327679601166eb62c15c1","kind":"lease.renewed","lamport":44049,"schema":1,"subject":"B-uni-rules-import.3-writes","ts":"2026-10-08T20:07:29.614567Z"}
 {"agent":"U6","data":{"at":1791490089.9926102,"holder":"U6"},"id":"ebdb51ccfff33ee80a5ced858","kind":"lease.renewed","lamport":44051,"schema":1,"subject":"B-uni-rules-import.3-writes","ts":"2026-10-08T20:08:10.090798Z"}
+{"agent":"U6","data":{"at":1791490213.3300593,"holder":"U6"},"id":"e30a19d3d75299973cbdaf1b4","kind":"lease.renewed","lamport":44072,"schema":1,"subject":"B-uni-rules-import.3-writes","ts":"2026-10-08T20:10:13.423727Z"}
