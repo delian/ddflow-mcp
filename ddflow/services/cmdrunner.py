@@ -12,8 +12,9 @@ and what it may leak. This module is the one place that decides them.
   text) has no business here; it goes through `infra.proc.run` as an argv.
 * **Unavailable is never passed.** A binary that is not installed, a timeout, a command that
   could not be started, the shell's own "not found" and a full admission queue are each an
-  *unavailable* result with the reason; only a command that ran has an exit code, and only
-  the caller decides what that code means.
+  *unavailable* result with the reason; only a command that ran has an exit code (the shell's
+  own "not found" keeps the 126/127 it reported), and only the caller decides what that code
+  means.
 * **Admission.** With ``slots`` the run holds one `Slots` slot for its duration, so
   background work and gates share one bound on concurrent processes.
 * **Output.** The result keeps what the command wrote, optionally clipped, per stream, to ``max_output``
@@ -97,6 +98,12 @@ SHELL_WORDS = frozenset(
         "readonly",
         "umask",
         "ulimit",
+        "printf",
+        "pwd",
+        "kill",
+        "getopts",
+        "break",
+        "continue",
     }
 )
 

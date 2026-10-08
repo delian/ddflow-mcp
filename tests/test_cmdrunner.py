@@ -235,3 +235,31 @@ def test_every_unavailable_path_redacts_its_reason_and_counts_once(tmp_path):
     nf = runner.run(decl("echo hunter2 not found >&2; exit 127"), timeout_s=5)
     assert nf.kind == CR.NOT_FOUND and "hunter2" not in nf.reason
     assert sum(nf.redactions.values()) == 1  # the reason repeats stderr; one secret, one count
+
+
+def test_the_shared_word_list_covers_both_lists_it_replaced():
+    """The gate's old builtins and ci's old shell words: no line either let through is now
+    called a missing tool."""
+    old_gate = {
+        "exit", "true", "false", "cd", "echo", "test", "[", ":", "set", "unset", "export",
+        "eval", "source", ".", "read", "wait", "trap", "shift", "return",
+    }  # fmt: skip
+    old_ci = {"cd", "export", "set", "source", ".", "{", "if", "for", "test", "[", "[[", "(("}
+    assert (old_gate | old_ci) <= CR.SHELL_WORDS
+    for word in sorted(old_gate | old_ci):
+        assert CR.executable_missing(f"{word} x") == ""
+
+
+def test_a_later_missing_binary_in_a_compound_gate_is_unavailable_not_failed(tmp_path):
+    """The pre-flight sees only the first word; the shell's 127 + "not found" is the net."""
+    import dataclasses
+
+    from ddflow.services import gates as G
+
+    gd = dataclasses.replace(
+        G.DEFAULT_GATES["unit_tests"],
+        command="true && definitely-not-installed-xyz --check",
+        timeout_s=10,
+    )
+    outcome, ev = G.run_command_gate(gd, tmp_path)
+    assert outcome == "unavailable" and ev["exit"] == 127 and "not found" in ev["reason"]
