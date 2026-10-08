@@ -1136,7 +1136,7 @@ def _write_command(repo: Path, rel: str, src: Path) -> str:
             note = ""
             if region.state(existing) == "edited":  # a hand edit inside the region: kept
                 aside = local_edits_path(path)
-                replace_text(aside, existing)
+                atomic_write(aside, path.read_bytes())
                 note = f" (your edits are kept in {aside.name})"
             replace_text(path, updated)
             return f"wrote {rel}{note}"
@@ -1282,7 +1282,13 @@ def _section_body(section: str) -> str:
 
 def _upsert_block(path: Path, section: str) -> str:
     """Insert or replace the managed block, leaving the rest of the file untouched."""
-    existing = path.read_text("utf-8") if path.exists() else ""
+    try:
+        existing = path.read_text("utf-8") if path.exists() else ""
+    except UnicodeDecodeError:
+        return Refused(
+            f"SKIPPED {path.name}: it is not UTF-8 text, so ddflow cannot place its block "
+            f"in it safely; convert it to UTF-8 and re-run adopt"
+        )
     try:
         owned = BLOCK.owns(existing)
     except RegionError as exc:
@@ -1296,7 +1302,7 @@ def _upsert_block(path: Path, section: str) -> str:
         note = ""
         if edited:  # a hand edit inside the block: kept, not lost
             aside = local_edits_path(path)
-            replace_text(aside, existing)
+            atomic_write(aside, path.read_bytes())
             note = f" (your edits are kept in {aside.name})"
         replace_text(path, updated)
         return f"updated the managed block in {path.name}{note}"
