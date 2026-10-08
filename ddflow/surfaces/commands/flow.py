@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import flow as A
 from ...services.choices import config_wins
 from ..context import NOTHING, OK, Ctx
+from ..render import emit_json
 
 
 def _emit_json(out) -> int:
-    print(json.dumps(out.body(), indent=2, default=str))
+    emit_json(out.body())
     if out.exit != OK and out.reason:
         # The body is the contract; WHY it was refused goes where every other command
         # puts it, so a caller reading JSON is not left with an exit code alone.

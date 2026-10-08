@@ -9,7 +9,6 @@ think about.
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import knowledge as A
@@ -22,6 +21,7 @@ from ..context import FAIL, NOTHING, OK, Ctx
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
+from ..render import emit_json
 
 
 def cmd_lesson(a, c: Ctx) -> int:
@@ -65,7 +65,7 @@ def cmd_lesson(a, c: Ctx) -> int:
     if a.lesson_cmd == "search":
         out = A.lesson_search(c.repo, a.query, limit=a.limit, agent=c.requested_agent)
         if c.json:
-            print(json.dumps(out.body("hits"), indent=2, default=str))
+            emit_json(out.body("hits"))
             return out.exit
         if out.exit == NOTHING:
             print(out.reason)
@@ -127,7 +127,7 @@ def cmd_job(a, c: Ctx) -> int:
         return out.exit
     out = AJ.job_list(c.repo, item=a.item or "", include_ended=a.all, agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body("jobs"), indent=2, default=str))
+        emit_json(out.body("jobs"))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -171,7 +171,7 @@ def cmd_memory(a, c: Ctx) -> int:
         agent=c.requested_agent,
     )
     if c.json:
-        print(json.dumps(out.body(("memories", "total_live")), indent=2, default=str))
+        emit_json(out.body(("memories", "total_live")))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -195,7 +195,7 @@ def cmd_recall(a, c: Ctx) -> int:
         agent=c.requested_agent,
     )
     if c.json:
-        print(json.dumps(out.body("results"), indent=2, default=str))
+        emit_json(out.body("results"))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -246,7 +246,7 @@ def cmd_similar(a, c: Ctx) -> int:
     """Existing records like a text, before it is filed. Exit 0 with candidates, 2 with none."""
     out = A.similar(c.repo, a.text, kinds=a.kind or "", agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body("candidates"), indent=2, default=str))
+        emit_json(out.body("candidates"))
         return out.exit
     if out.exit != OK:
         print(out.reason)
@@ -267,7 +267,7 @@ def cmd_dupes(a, c: Ctx) -> int:
     )
     keys = ("pairs", "count", "kinds", "open_only", "floor", "limit")
     if c.json:
-        print(json.dumps(out.body(keys), indent=2, default=str))
+        emit_json(out.body(keys))
         return out.exit
     if out.exit != OK:
         print(out.reason)
@@ -667,7 +667,7 @@ def cmd_history(a, c: Ctx) -> int:
     if c.json:
         body = out.body(("total", "shown", "events"))
         body["events"] = _bounded_events(body.get("events") or [])
-        print(json.dumps(body, indent=2, default=str))
+        emit_json(body)
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)

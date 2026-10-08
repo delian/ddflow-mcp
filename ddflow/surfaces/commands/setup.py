@@ -10,7 +10,6 @@ without "here is what to do about it" is a report nobody acts on.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
@@ -19,6 +18,7 @@ from pathlib import Path
 from ...api import setup as A
 from ...infra import worktree as W
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx, _wrap
+from ..render import emit_json
 
 _MARKS = {"registered": "[x]", "installed": "[+]", "missing": "[ ]", "unknown": "[?]"}
 
@@ -76,7 +76,7 @@ def _companions_verify(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(("verified", "skipped")), indent=2))
+        emit_json(out.body(("verified", "skipped")))
         return out.exit
     marks = {"speaks_mcp": "[x]", "not_mcp": "[!]", "unknown": "[?]"}
     lines = ["MCP companions, launched and asked `initialize`", ""]
@@ -101,7 +101,7 @@ def _companions_list(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(("companions", "gate_coverage", "uncovered_gates")), indent=2))
+        emit_json(out.body(("companions", "gate_coverage", "uncovered_gates")))
         return out.exit
     statuses = out.data["_render"]["statuses"]
     lines = ["Companion tools", "", *_companion_lines(statuses)]
@@ -195,7 +195,7 @@ def cmd_upgrade(a, c: Ctx) -> int:
     )
     if c.json:
         payload = A.UPGRADE_APPLY_PAYLOAD if "applied" in out.data else A.UPGRADE_PAYLOAD
-        print(json.dumps(out.body(payload), indent=2))
+        emit_json(out.body(payload))
     elif out.data.get("text"):
         print(out.data["text"])
     # The reason says what the exit code means; the text already says what was found.
@@ -240,7 +240,7 @@ def cmd_config(a, c: Ctx) -> int:
         c.out(f"appended to {out.data['path']}{added}", out.body(("path", "gitattributes_added")))
         return OK
     if c.json:
-        print(json.dumps(out.body("rows"), indent=2, default=str))
+        emit_json(out.body("rows"))
         return OK
     for row in out.data["rows"]:
         print(f"{row['key']} = {row['value']!r}   [{row['source']}]")
@@ -285,7 +285,7 @@ def cmd_prompts(a, c: Ctx) -> int:
         # loaded goes beside it, where a human or a log still sees it.
         for p in problems:
             print(f"not loaded: {p}", file=sys.stderr)
-        print(json.dumps(rows, indent=2))
+        emit_json(rows)
         return OK
     # Grouped, because the two kinds are used for entirely different things: a template is
     # machinery (the review prompt, the gate instruction, the MCP handshake) and a command

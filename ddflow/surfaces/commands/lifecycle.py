@@ -9,7 +9,6 @@ an argparse Namespace.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from ...core import clock
 from ...core.tier import tier_of
 from ...views.markdown import new_reports_line
 from ..context import FAIL, MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
+from ..render import emit_json
 
 
 def _refused(out) -> int:
@@ -30,7 +30,7 @@ def _next_without_plan(out, c: Ctx) -> int:
     refusal's reason (an unknown `--phase`, Bde0c6e9fad) on stderr in either mode, with
     its exit code."""
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
     if out.exit == FAIL and out.reason:
         print(out.reason, file=sys.stderr)
     return out.exit
@@ -227,7 +227,7 @@ def cmd_wait(a, c: Ctx) -> int:
         on_progress=lambda msg: print(msg, file=sys.stderr, flush=True),
     )
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     if out.exit != OK:
         print(out.reason)
@@ -480,7 +480,7 @@ def cmd_brief(a, c: Ctx) -> int:
     if out.exit == FAIL:  # an unknown --phase (Bc2acd426f4)
         return _next_without_plan(out, c)
     if c.json:
-        print(json.dumps(out.body(("brief", "item", "ready", "approx_tokens")), indent=2))
+        emit_json(out.body(("brief", "item", "ready", "approx_tokens")))
     else:
         print(out.data["text"])
     return OK

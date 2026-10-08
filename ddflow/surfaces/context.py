@@ -15,7 +15,6 @@ belongs in `api/`.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -35,6 +34,7 @@ from ..infra import worktree as W
 from ..infra.log import EventLog, resolve_agent_id
 from ..infra.store import Store
 from ..services import gates as G
+from .render import emit_json
 
 #: Splitting into one piece is a rename, not a split.
 _MIN_SPLIT_PARTS = 2
@@ -139,11 +139,7 @@ class Ctx:
 
     def out(self, human: str, data: Any = None) -> None:
         if self.json:
-            print(
-                json.dumps(
-                    _plain(data if data is not None else {"message": human}), indent=2, default=str
-                )
-            )
+            emit_json(_plain(data if data is not None else {"message": human}))
         else:
             print(human)
 
