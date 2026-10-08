@@ -41,6 +41,10 @@ from . import schedule as SV
 TRIGGERS_DIR = Path(".ddflow") / "triggers"
 #: How many of a trigger's latest suppressions `show` lists (all are in the log).
 SHOWN_SUPPRESSIONS = 20
+#: The minute-valued knobs, and the `<knob>_s` alias that gives the same length in seconds
+#: (a number, or a duration text such as "90s" or "1h30m"): every other knob in ddflow is
+#: in seconds, and a trigger's three were the exception (D-unify, B-uni-clock.3).
+MINUTE_KNOBS = ("window", "debounce", "cooldown")
 FIELDS = (
     "title",
     "event",
@@ -69,12 +73,12 @@ class Trigger:
     #: data field (or `subject` / `agent`) -> glob its value must match.
     match: dict[str, str] = field(default_factory=dict)
     count: int = 1  #: N matching events ...
-    window: int = 0  #: ... within this many minutes (0: since the key last fired)
+    window: int | float = 0  #: ... within this many minutes (0: since the key last fired)
     #: The dedupe key, a template over `{subject}`, `{agent}`, `{kind}`, `{data.X}`: one
     #: open remediation per key. "" -- one per trigger.
     key: str = ""
-    debounce: int = 0  #: minutes without a new matching event before it fires
-    cooldown: int = 60  #: minutes after a fire before the same key may fire again
+    debounce: int | float = 0  #: minutes without a new matching event before it fires
+    cooldown: int | float = 60  #: minutes after a fire before the same key may fire again
     max_open: int = 3  #: open remediations of this trigger, at most
     hop_limit: int = 1  #: how deep a chain of remediations may go
     breaker: int = 3  #: consecutive failed or zero-yield remediations that hold it
@@ -181,9 +185,41 @@ _CHECKS = {
 }
 
 
+def _seconds_as_minutes(name: str, v: Any, errors: list[str]) -> int | float | None:
+    """`<name>_s` as the minutes the evaluator counts in: a whole number when it is one,
+    so a definition that says 1800 and one that says 30 are the same definition."""
+    try:
+        secs = clock.parse_duration(v)
+    except ValueError as exc:
+        errors.append(f"{name}_s must be seconds or a duration such as 90s or 30m: {exc}")
+        return None
+    minutes = secs / 60
+    return int(minutes) if minutes == int(minutes) else minutes
+
+
+def _split_second_aliases(
+    spec: dict[str, Any], errors: list[str]
+) -> tuple[dict[str, Any], dict[str, int | float]]:
+    """`spec` without its `<knob>_s` aliases, and those as `{knob: minutes}`; giving a knob
+    and its alias is an error. The minutes skip the whole-number check, which would
+    refuse a fraction that a file may not write directly."""
+    rest, aliased = dict(spec), {}
+    for name in MINUTE_KNOBS:
+        alias = f"{name}_s"
+        if alias not in rest:
+            continue
+        given = rest.pop(alias)
+        if name in rest:
+            errors.append(f"give {name} (minutes) or {alias} (seconds), not both")
+        elif (minutes := _seconds_as_minutes(name, given, errors)) is not None:
+            aliased[name] = minutes
+    return rest, aliased
+
+
 def build(tid: str, spec: dict[str, Any]) -> tuple[Trigger | None, list[str]]:
     """A trigger from `spec`, or None and every reason why not."""
     errors = [e for e in [SV.check_id(tid).replace("job id", "trigger id")] if e]
+    spec, aliased = _split_second_aliases(spec, errors)
     unknown = sorted(set(spec) - set(FIELDS))
     if unknown:
         errors.append(f"unknown field(s) {', '.join(unknown)}: a trigger has {', '.join(FIELDS)}")
@@ -191,6 +227,7 @@ def build(tid: str, spec: dict[str, Any]) -> tuple[Trigger | None, list[str]]:
         if need not in spec:
             errors.append(f"{need} is required")
     fields = {k: _CHECKS[k](spec[k], errors) for k in FIELDS if k in spec}
+    fields.update(aliased)
     if errors:
         return None, errors
     return Trigger(id=tid, **fields), []
@@ -334,7 +371,7 @@ def _groups(st: State, trig: Trigger, events: list, last_at: dict, now: datetime
     return out
 
 
-def cluster(evs: list, count: int, window: int) -> list:
+def cluster(evs: list, count: int, window: int | float) -> list:
     """The latest run of `count` or more events lying within `window` minutes of each
     other (a sliding window over their times), or [] when there is none. No window: all.
     Neither anchored on `now` -- a debounce longer than the gap aged the older events out

@@ -135,10 +135,12 @@ from .reservations import (  # noqa: F401
 )
 from .wait import (  # noqa: F401
     DEFAULT_WAIT_TIMEOUT_S,
+    WAIT_MAX_S,
     _end_wait,
     _freed,
     _judge_any,
     _judge_wait,
+    _note_cap,
     _wait_globs,
     wait,
 )

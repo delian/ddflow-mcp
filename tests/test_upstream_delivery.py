@@ -326,3 +326,46 @@ def test_consume_is_serialised_by_the_consents_lock():
     [x.start() for x in ts]
     [x.join() for x in ts]
     assert wins.count(True) == 1
+
+
+def _project_with_redaction(tmp_path, body: str):
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text(body)
+    return tmp_path
+
+
+def test_prepare_failure_messages_use_the_projects_redaction_patterns(tmp_path, monkeypatch):
+    """Bug B9fad3e83d9: `_safe` built the redactor with no config, so a secret shape the
+    project configured ([session].redact_extra) passed through a failure message."""
+    root = _project_with_redaction(tmp_path, '[session]\nredact_extra = ["ZZSECRET-[0-9]+"]\n')
+
+    def broken(root, bundle):
+        raise OSError(f"cannot write ZZSECRET-12345 in {HOME}/x for {ADDR}")
+
+    monkeypatch.setattr(D, "write_report", broken)
+    out = D.prepare(root, _bundle(), REPO)
+    assert out.status == "failed" and out.reason
+    assert "ZZSECRET-12345" not in out.reason
+    assert HOME not in out.reason and ADDR not in out.reason  # the profile's masks still apply
+
+
+def test_failure_messages_fall_back_to_the_defaults_on_a_broken_config(tmp_path, monkeypatch):
+    root = _project_with_redaction(tmp_path, "this is = not [valid toml")
+
+    def broken(root, bundle):
+        raise OSError(f"cannot write {HOME}/x for {ADDR}")
+
+    monkeypatch.setattr(D, "write_report", broken)
+    out = D.prepare(root, _bundle(), REPO)
+    assert out.status == "failed" and HOME not in out.reason and ADDR not in out.reason
+
+
+def test_a_pattern_that_does_not_compile_falls_back_to_the_profile(tmp_path, monkeypatch):
+    root = _project_with_redaction(tmp_path, '[session]\nredact_extra = ["(unclosed"]\n')
+
+    def broken(root, bundle):
+        raise OSError(f"cannot write {HOME}/x for {ADDR}")
+
+    monkeypatch.setattr(D, "write_report", broken)
+    out = D.prepare(root, _bundle(), REPO)
+    assert out.status == "failed" and HOME not in out.reason and ADDR not in out.reason
