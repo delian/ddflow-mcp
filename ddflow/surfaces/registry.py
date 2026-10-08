@@ -162,6 +162,19 @@ def add_command_alias(
     subparsers._compat[word] = alias  # type: ignore[attr-defined]
 
 
+def _hide_from_abbreviation(parser: argparse.ArgumentParser) -> None:
+    """Keep ``parser``'s old flags out of argparse's prefix matching: `--do` matched both
+    `--docs` and its old name `--doc` (the same action) and was refused as ambiguous. The old
+    flag still matches EXACTLY; only an abbreviation of it is not offered."""
+    matches = parser._get_option_tuples
+
+    def visible(option_string: str) -> list[Any]:
+        old = parser._compat_flags  # type: ignore[attr-defined]
+        return [m for m in matches(option_string) if m[1] not in old]
+
+    parser._get_option_tuples = visible  # type: ignore[method-assign]
+
+
 class SuggestingParser(argparse.ArgumentParser):
     """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it."""
 
@@ -235,7 +248,8 @@ class Param:
     aliases: tuple[str, ...] = ()
     deprecated_since: str = ""
     removed_in: str = MIN_REMOVED_IN
-    #: What an old name should be replaced by when that is not simply this parameter.
+    #: What an old name should be replaced by when that is not simply this parameter; shown
+    #: verbatim in the notice (spell a flag's as the flag, ``--name``).
     replacement: str = ""
 
     def __post_init__(self) -> None:
@@ -337,6 +351,7 @@ class Param:
             parser._option_string_actions[option] = action
             if not hasattr(parser, "_compat_flags"):
                 parser._compat_flags = {}  # type: ignore[attr-defined]
+                _hide_from_abbreviation(parser)
             parser._compat_flags[option] = alias  # type: ignore[attr-defined]
 
     def spec(self) -> tuple[str, str, bool]:
