@@ -415,7 +415,9 @@ def _run_instructions(repo: Path, items: list[dict[str, Any]]) -> list[dict[str,
         return [_rec(i, FAILED, f"{type(exc).__name__}: {exc}") for i in items]
     out = []
     for i in items:
-        mine = [a for a in actions if i["path"] in a]
+        # An action names the file by its project path, or by its bare name (a refusal from
+        # the block writer, which knows only the file): either one is this item's.
+        mine = [a for a in actions if i["path"] in a or Path(i["path"]).name in a]
         if any(isinstance(a, AD.Refused) for a in mine):
             # A refusal (a newer format, broken markers) is never counted as applied.
             out.append(_rec(i, REFUSED, "; ".join(mine)))
