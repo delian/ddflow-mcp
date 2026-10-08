@@ -53,6 +53,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from ...infra import tomlcfg
+from ...infra.fsio import NewerContent
 from . import frame as F
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
@@ -117,6 +118,23 @@ def safe_target(repo: Path | str, target: str) -> tuple[Path, str]:
                     f"export target {target!r}: {cur.relative_to(root)} is not a directory"
                 )
     return cur, "/".join(parts)
+
+
+def _refuse_newer(rel: str, old: str | None, doc: str, *, check: bool, diff: bool) -> None:
+    """A file written at a higher format level than this ddflow's is never rewritten (exit
+    3, "upgrade ddflow to >= X"): not even by ``force``, because the content it would lose
+    is one this version cannot read. ``check`` and ``diff`` write nothing and report it."""
+    if check or diff or old is None:
+        return
+    head, _ = F.split(old)
+    if head is not None and head.fmt > F.FORMAT_LEVEL:
+        raise Refused(str(NewerContent(rel, head.version, head.fmt)))
+    region = _begin_attrs(old, doc)
+    if region is not None and region[0] > F.FORMAT_LEVEL:
+        raise Refused(
+            f"the {doc!r} region of {rel} was written at format level {region[0]}, this ddflow "
+            f"writes {F.FORMAT_LEVEL}; upgrade ddflow before rewriting it"
+        )
 
 
 # -- shared plumbing ------------------------------------------------------------------
@@ -210,6 +228,7 @@ def write_whole(
     with tomlcfg.locked(_lock_path(repo)):
         path, rel = safe_target(repo, target)  # again, under the lock
         old = _read(path)
+        _refuse_newer(rel, old, head.doc, check=check, diff=diff)
         refuse = ""
         if old is not None and old != document and not force:
             old_head, _ = F.split(old)
@@ -227,7 +246,19 @@ def write_whole(
 
 
 def _begin(doc: str, digest: str) -> str:
-    return f"<!-- ddflow:begin doc={doc} body-sha256={digest} -->"
+    fmt = f" fmt={F.FORMAT_LEVEL}" if F.FORMAT_LEVEL != F.IMPLICIT_FMT else ""
+    return f"<!-- ddflow:begin doc={doc} body-sha256={digest}{fmt} -->"
+
+
+def _begin_attrs(text: str, doc: str) -> tuple[int, dict[str, str]] | None:
+    """``(format level, other attributes)`` of the ``doc`` region's begin line, or None
+    when the text has none. An absent ``fmt`` is the implicit level."""
+    m = _region_pattern(doc, "begin").search(text)
+    if m is None:
+        return None
+    attrs = dict(p.split("=", 1) for p in m.group("extra").split())
+    level = attrs.pop("fmt", "")
+    return (int(level) if level.isascii() and level.isdecimal() else F.IMPLICIT_FMT), attrs
 
 
 def _end(doc: str) -> str:
@@ -238,7 +269,8 @@ def _region_pattern(doc: str, which: str) -> re.Pattern[str]:
     d = re.escape(doc)
     if which == "begin":
         return re.compile(
-            rf"^<!-- ddflow:begin doc={d} body-sha256=(?P<sha>[0-9a-f]{{{F.DIGEST_LEN}}}) -->\r?$",
+            rf"^<!-- ddflow:begin doc={d} body-sha256=(?P<sha>[0-9a-f]{{{F.DIGEST_LEN}}})"
+            rf"(?P<extra>(?: [A-Za-z0-9_-]+=\S+)*) -->\r?$",
             re.M,
         )
     return re.compile(rf"^<!-- ddflow:end doc={d} -->\r?$", re.M)
@@ -266,6 +298,7 @@ def write_region(
     with tomlcfg.locked(_lock_path(repo)):
         path, rel = safe_target(repo, target)
         old = _read(path)
+        _refuse_newer(rel, old, doc, check=check, diff=diff)
         if old is None:
             return _finish(path, rel, None, new_region, check=check, diff=diff, refuse="")
         begins = list(_region_pattern(doc, "begin").finditer(old))
@@ -338,6 +371,7 @@ def append_entries(
     with tomlcfg.locked(_lock_path(repo)):
         path, rel = safe_target(repo, target)
         old = _read(path)
+        _refuse_newer(rel, old, doc, check=check, diff=diff)
         head, old_body = F.split(old) if old is not None else (None, "")
         refuse = ""
         if old is not None and head is None and not force:
