@@ -23,6 +23,7 @@ from typing import Any
 from ..core import clock
 from ..core import outcome as O
 from ..core.plain import plain
+from ..services.schedule import done_counts
 from ._base import _load
 
 
@@ -112,8 +113,7 @@ def due_cadences(
 def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.Outcome:
     """Which periodic passes are due? Derived from the log, so there is no state file."""
     log, cfg, st = _load(repo, agent)
-    done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
-    done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
+    done_tasks, done_phases = done_counts(st)
     try:
         calendar = _calendar(cfg)
     except ValueError as exc:
