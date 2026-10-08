@@ -96,3 +96,23 @@ def test_git_state_sees_head_detached_at_the_same_commit(tmp_path):
     before = git_state(repo)
     _git(repo, "checkout", "-q", "--detach")
     assert git_state(repo) != before
+
+
+def test_a_killed_command_reviewer_that_applied_a_stash_is_reported(tmp_path, monkeypatch):
+    repo = _repo_with_stash(tmp_path)
+    monkeypatch.chdir(repo)
+    rev = R.Reviewer(name="r", kind="command", command="git stash apply -q; sleep 30")
+    out, err = R._chat(rev, "sys", "user", 2)
+    assert out == "" and "git state" in err
+
+
+def test_ddflows_own_files_are_not_the_reviewers_change(tmp_path):
+    repo = _repo_with_stash(tmp_path)
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "log.jsonl").write_text("1\n")
+    _git(repo, "add", ".ddflow")
+    _git(repo, "commit", "-qm", "log")
+    before = git_state(repo)
+    (repo / ".ddflow" / "log.jsonl").write_text("1\n2\n")
+    (repo / ".ddflow" / "new.log").write_text("x")
+    assert git_state(repo) == before

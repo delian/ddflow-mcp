@@ -188,6 +188,11 @@ def reviewer_independence(
     )
 
 
+#: ddflow's own state (the event log its heartbeats append to, run logs) changes while a
+#: reviewer runs in a checkout that holds it; it is not the tool's doing.
+_OURS = ":(exclude).ddflow"
+
+
 def git_state(where: Path | str) -> dict[str, str] | None:
     """What a reviewer tool must leave as it found it: HEAD, the index and working
     tree, and the stash list (bug B5ce30dd94d).
@@ -201,8 +206,8 @@ def git_state(where: Path | str) -> dict[str, str] | None:
         # The branch HEAD is on (or "HEAD" when detached): a checkout of the same commit
         # moves it without moving the sha.
         "ref": ("rev-parse", "--symbolic-full-name", "HEAD"),
-        "status": ("status", "--porcelain=v2", "--untracked-files=all"),
-        "diff": ("diff", "HEAD", "--binary"),
+        "status": ("status", "--porcelain=v2", "--untracked-files=all", "--", ".", _OURS),
+        "diff": ("diff", "HEAD", "--binary", "--", ".", _OURS),
         "stash": ("stash", "list", "--format=%H %gs"),
     }
     state: dict[str, str] = {}
@@ -216,13 +221,15 @@ def git_state(where: Path | str) -> dict[str, str] | None:
 
 
 #: A file larger than this is digested by its size and mtime, not its bytes.
-_BIG_UNTRACKED = 8 << 20
+_BIG_UNTRACKED = 256 << 20
 
 
 def _untracked_digest(where: Path | str) -> str:
     """A digest of the untracked (not ignored) files' CONTENTS: ``status`` lists their
     paths only and ``diff HEAD`` omits them, so a tool rewriting one would pass unseen."""
-    r = _git.run(where, "ls-files", "--others", "--exclude-standard", "-z", binary=True)
+    r = _git.run(
+        where, "ls-files", "--others", "--exclude-standard", "-z", "--", ".", _OURS, binary=True
+    )
     names = r.paths() if r.ok else None
     if names is None:
         return "unreadable"
