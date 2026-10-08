@@ -401,9 +401,14 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     for state in rules_status(repo):
         if not state.needs_attention:
             continue
+        # A block a newer ddflow wrote is not rewritten by a refresh: its own line says so.
         line = (
-            f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
-            "(plain `ddflow adopt` also rewrites MCP launches)"
+            state.render()
+            if state.newer
+            else (
+                f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
+                "(plain `ddflow adopt` also rewrites MCP launches)"
+            )
         )
         # NOT_BINDING sits with MISSING: a rule the agent may never load is not a
         # milder version of a drifted one, it is the mechanism switched off.

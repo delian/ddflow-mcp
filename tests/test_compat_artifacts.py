@@ -359,3 +359,21 @@ def test_a_gitignore_with_broken_markers_keeps_a_persons_lines(tmp_path):
     assert AD.write_ddflow_gitignore(gi) is True
     text = gi.read_text()
     assert "secrets/\n" in text and AD.GITIGNORE_REGION.state(text) == "current"
+
+
+def test_the_driver_note_names_each_difference_and_never_offers_a_refresh_for_a_newer_one(
+    monkeypatch, tmp_path
+):
+    from ddflow.api.reporting import health
+    from ddflow.services import adopt as AD
+
+    def note(states):
+        monkeypatch.setattr(AD, "driver_states", lambda repo: states)
+        return health._driver_drift_notes(tmp_path)
+
+    assert note({}) == []
+    only_newer = note({"d.md": AD.DOC_NEWER})[0]
+    assert "newer format" in only_newer and "rewrites them" not in only_newer
+    mixed = note({"a.md": AD.DOC_STALE, "b.md": AD.DOC_NEWER, "c.md": AD.DOC_EDITED})[0]
+    assert "a.md (older release)" in mixed and "c.md (edited by hand)" in mixed
+    assert "rewrites them" in mixed and "upgrade ddflow for the newer ones" in mixed
