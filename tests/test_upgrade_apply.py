@@ -768,7 +768,7 @@ def test_json_carries_the_plan_that_is_left_and_what_the_apply_did(old: Path) ->
     assert body["applied"]["to"] == "0.0.0", "a partial apply keeps the project's version"
 
 
-UP_FIELDS = ("running", "project_version", "up_to_date", "total", "categories")
+UP_FIELDS = ("schema", "running", "project_version", "up_to_date", "total", "categories")
 
 
 def test_the_plan_json_is_unchanged_and_has_no_applied(old: Path) -> None:

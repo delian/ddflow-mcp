@@ -190,7 +190,7 @@ def test_a_single_id_failure_over_mcp_keeps_the_item_verdict_claims_shape(repo):
         return reply["result"], json.loads(reply["result"]["content"][0]["text"])
 
     result, body = call({"id": "T-FALSE"})
-    assert result["isError"] is True and set(body) == {"item", "verdict", "claims"}
+    assert result["isError"] is True and set(body) == {"schema", "item", "verdict", "claims"}
     assert body["item"] == "T-FALSE" and body["verdict"] == "does not hold"
     assert any(c["id"] == "declared_files" and c["status"] == "fail" for c in body["claims"])
     assert "refusal" not in body

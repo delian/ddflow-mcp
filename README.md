@@ -228,6 +228,15 @@ Every read command takes `--json`. Every exit code means the same thing everywhe
 refused. `2` is never collapsed into `0` — *"nothing is ready"* and *"everything is
 fine"* are different facts, and an agent that cannot tell them apart invents work.
 
+**What `--json` and the MCP tools return has a name.** A result that is a JSON object carries a
+top-level `"schema": "<command>@<n>"` -- for example `"claim@1"`; the command is the MCP tool's
+name without `ddflow_`, and `--json` of the CLI command that tool serves says the same. Within
+a version fields are only ever added; removing or retyping one bumps `n`. On a refusal the
+`refusal` object still leads and the tag follows it. A result that is a bare array
+(`progress`, `loops`, `lesson search`, ...) keeps its exact shape and has no tag, and text
+bodies (`board`, `doctor`) have none. `python -m ddflow.surfaces.tool_table --schemas` prints
+every tool's declared result schema; `tests/golden/json/result_schemas.json` pins them.
+
 ---
 
 ## Table of contents

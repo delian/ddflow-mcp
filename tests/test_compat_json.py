@@ -56,6 +56,19 @@ def test_no_object_result_declares_a_field_called_schema():
         assert R.SCHEMA_KEY not in R.payload_fields(spec.get("payload", "")), tool
 
 
+def test_the_tag_is_first_and_only_on_objects():
+    assert list(R.tag_body({"b": 1, "a": 2}, "claim")) == ["schema", "b", "a"]
+    assert R.tag_body({"b": 1}, "claim")["schema"] == "claim@1"
+    for body in ([1], [], "text", None, 3):
+        assert R.tag_body(body, "claim") == body
+    assert R.tag_body({"b": 1}, "") == {"b": 1}, "no command, no tag"
+    # c5c7d9f: a refusal body leads with `refusal` (the block a machine reads first)
+    refused = {"refusal": {"exit": 3}, "item": None}
+    assert list(R.tag_body(refused, "claim")) == ["refusal", "schema", "item"]
+    kept = {"schema": "mine", "x": 1}
+    assert R.tag_body(kept, "claim") == kept
+
+
 def test_a_bumped_version_is_what_the_tag_says(monkeypatch):
     monkeypatch.setitem(R.SCHEMA_VERSIONS, "claim", 2)
     assert R.schema_tag("claim") == "claim@2"
@@ -138,9 +151,11 @@ def test_the_declared_shape_is_the_shape_a_call_returns(repo):
             assert isinstance(body, list), (tool, body)
             continue
         assert body is None or isinstance(body, dict), (tool, type(body))
+        if isinstance(body, dict):
+            assert body.get(R.SCHEMA_KEY) == R.schema_tag(R.command_name(tool)), (tool, body)
         fields = R.payload_fields(spec.get("payload", ""))
         if fields and isinstance(body, dict):
-            extra = {R.REFUSAL_KEY, *_OPTIONAL_KEYS}
+            extra = {R.REFUSAL_KEY, R.SCHEMA_KEY, *_OPTIONAL_KEYS}
             got = set(body) - extra
             # a refused or failed call leads with `refusal` and leaves unset fields out
             ok = got <= set(fields) if R.REFUSAL_KEY in body else got == set(fields)
@@ -188,3 +203,84 @@ def test_no_command_module_prints_its_own_json():
         ):
             own.append(path.name)
     assert not own, f"modules printing their own json.dumps instead of render.emit_json: {own}"
+
+
+# -- both surfaces name a result alike ----------------------------------------------------
+
+
+def _leaf_paths(parser) -> list[tuple[str, ...]]:
+    import argparse
+
+    out: list[tuple[str, ...]] = []
+
+    def walk(node, path):
+        subs = [a for a in node._actions if isinstance(a, argparse._SubParsersAction)]
+        if not subs:
+            out.append(path)
+            return
+        for word, child in subs[0].choices.items():
+            walk(child, (*path, word))
+
+    walk(parser, ())
+    return out
+
+
+def test_every_cli_command_is_named_by_the_tool_that_serves_it():
+    from ddflow.surfaces.cli import build_parser
+    from ddflow.surfaces.exemptions import COVERING_TOOLS, EXEMPT_PATHS, EXEMPT_WORDS, ROUTED_PATHS
+
+    tools = {R.command_name(t) for t in TOOLS}
+    paths = _leaf_paths(build_parser())
+    assert len(paths) > 80
+    unnamed = [
+        p
+        for p in paths
+        if R.command_for_path(p, ROUTED_PATHS, COVERING_TOOLS) not in tools
+        and p not in EXEMPT_PATHS
+        and p[0] not in EXEMPT_WORDS
+    ]
+    assert not unnamed, f"CLI commands whose --json schema name no tool carries: {unnamed}"
+
+
+def test_a_flag_selects_the_tool_argparse_resolved_it_to():
+    from ddflow.surfaces.cli import build_parser
+
+    parser = build_parser()
+
+    def name(*argv: str) -> str:
+        args = parser.parse_args(argv)
+        return R.command_for_path(R.parsed_path(args), {}, {}, args)
+
+    assert name("import", "--verify") == "import_verify"
+    assert name("import", "--verif") == "import_verify", "an abbreviation is the same flag"
+    assert name("import") == "import"
+    assert name("doctor", "--upgrade") == "upgrade"
+    assert name("companions", "--verify") == "companions_verify"
+    assert name("companions", "list", "--verify") == "companions_verify"
+
+
+def test_parsed_path_is_what_argparse_took():
+    from ddflow.surfaces.cli import build_parser
+
+    parser = build_parser()
+
+    def path(*argv: str) -> tuple[str, ...]:
+        return R.parsed_path(parser.parse_args(argv))
+
+    assert path("gate", "status", "T1") == ("gate", "status")
+    assert path("--agent", "A", "gate", "status", "T1") == ("gate", "status")
+    # an option's VALUE can spell another command; `--` makes the rest positional
+    assert path("--agent", "task", "hooks", "status") == ("hooks", "status")
+    assert path("gate", "--repo", "status", "record", "T1", "research") == ("gate", "record")
+    assert path("task", "--", "list") == ("task", "list")
+    assert path("--json", "--allow-older-version", "task", "list") == ("task", "list")
+    # an option that shares a subparser's dest (`bisect --cmd` overwrote `cmd`)
+    assert path("bisect", "a", "--cmd", "x {tests}") == ("bisect",)
+    assert R.command_for_path(("gate", "status"), {}, {}) == "gate_status"
+    assert R.command_for_path(("bug", "file-tasks"), {}, {}) == "bug_file_tasks"
+
+
+def test_every_cli_command_with_a_selecting_flag_names_a_tool():
+    tools = {R.command_name(t) for t in TOOLS}
+    for (_path, _dest), name in R.CLI_FLAG_COMMANDS.items():
+        assert name in tools, f"{_path} {_dest} is named {name}, which no tool carries"
