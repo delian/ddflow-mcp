@@ -712,7 +712,7 @@ ARRAY_PAYLOADS = frozenset(
 )
 
 #: What a tool's body is, as `result_shape` says.
-SHAPES = ("object", "array", "text", "dynamic")
+SHAPES = ("object", "nested", "array", "text", "dynamic")
 
 
 def command_name(tool: str) -> str:
@@ -734,15 +734,16 @@ def result_shape(payload: Any, *, text: Any = False) -> str:
     """What a tool's body is, from its table entry (`payload` and `text`):
 
     ``text`` a document, ``dynamic`` decided by the call's arguments (a callable), ``array``
-    a bare array (kept exactly as it is), ``object`` everything else -- a projection of
-    fields, the whole data dict, or one nested object or null.
+    a bare array (kept exactly as it is), ``nested`` the value of one data field (an object
+    that is a record, or null: ``show``, ``decision_show``, ``recall``), ``object`` a projection
+    of fields or the whole data dict.
     """
     if text:
         return "dynamic" if callable(text) else "text"
     if callable(payload):
         return "dynamic"
-    if isinstance(payload, str) and payload in ARRAY_PAYLOADS:
-        return "array"
+    if isinstance(payload, str) and payload:
+        return "array" if payload in ARRAY_PAYLOADS else "nested"
     return "object"
 
 
