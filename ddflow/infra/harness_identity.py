@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from ..core.agentname import AGENT_NAME as _NAME
+from ..core.agentname import is_valid
 from .paths import common_dir
 
 #: Under the primary checkout's `.git`.
@@ -124,7 +124,7 @@ def declare(repo: Path | str, agent: str) -> str:
 
     Returns "" when it did, else why not -- which `ddflow_identify` reports, because a
     declaration the shell will not see is the original split, silently back."""
-    if agent and not _NAME.fullmatch(agent):
+    if agent and not is_valid(agent):
         return (
             f"not recorded for shell commands: {agent!r} is not a usable agent name, "
             "so they keep any name declared before"
@@ -162,7 +162,7 @@ def own(repo: Path | str) -> str:
             name = (d / key).read_text().strip()
         except OSError:
             continue
-        if _NAME.fullmatch(name):
+        if is_valid(name):
             return name
     return ""
 
@@ -182,7 +182,7 @@ def declared(repo: Path | str) -> str:
             name = (d / f"{pid}-{start}").read_text().strip()
         except OSError:
             name = ""
-        if _NAME.fullmatch(name):
+        if is_valid(name):
             return name
         pid = ppid
     return ""

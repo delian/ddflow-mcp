@@ -238,13 +238,11 @@ def test_a_harness_declaration_names_the_cli_agent_unless_flag_or_env_is_given(
 )
 def test_mcp_accepts_these_agent_names(name):
     assert agentname.is_valid(name)
-    assert harness_identity._NAME.fullmatch(name)
 
 
 @pytest.mark.parametrize("name", ["", "x" * 65, "a b", "a/b", "a\n", "é", "a:b"])
 def test_mcp_refuses_these_agent_names(name):
     assert not agentname.is_valid(name)
-    assert not harness_identity._NAME.fullmatch(name)
 
 
 def test_mcp_default_agent_reports_the_layer(adopted, monkeypatch):
@@ -336,7 +334,6 @@ def test_export_is_agent_follows_agent_marker_except_over_mcp(monkeypatch):
 
 def test_every_surface_shares_the_one_agent_name_pattern():
     assert not hasattr(mcp, "_VALID_AGENT"), "the surface asks core.agentname, not a copy"
-    assert harness_identity._NAME is agentname.AGENT_NAME
     assert agentname.is_valid("A.b_c-9") and not agentname.is_valid("a\n")
     assert agentname.refusal("a b") == (
         "'a b' is not a usable agent name: use letters, digits, '.', '_' or '-', "
@@ -391,3 +388,14 @@ def test_primary_checkout_ignores_a_separate_git_dir_and_an_unreadable_pointer(t
         assert paths.primary_checkout(work) is None  # and no exception
     (work / ".git").write_bytes(b"gitdir: foo\x00bar\n")
     assert paths.common_dir(work, ask_git=False) is None
+
+
+def test_a_dangling_or_empty_git_pointer_is_no_repository(tmp_path):
+    from ddflow.infra import paths
+
+    work = tmp_path / "wt"
+    work.mkdir()
+    for line in (f"gitdir: {tmp_path / 'gone'}\n", "gitdir:\n", "gitdir:   \n"):
+        (work / ".git").write_text(line)
+        assert paths.common_dir(work, ask_git=False) is None, line
+        assert paths.primary_checkout(work) is None
