@@ -339,3 +339,15 @@ def test_recording_an_existing_definition_again_is_not_rechecked(checked):
 def test_a_kind_not_in_dedupe_kinds_is_not_checked(checked):
     out = A.def_record(checked, "skill", "s", {"body": SECOND}, title=SECOND, agent="a")
     assert out.exit == 0 and "candidates" not in out.data
+
+
+def test_a_definition_with_a_secret_is_digested_as_stored_and_a_repeat_update_is_no_change(repo):
+    """D-unify 6 redacts `fields` in the log; the digest must be of what is stored (roborev
+    on bug B5deba76d04), or a no-op update would write a spurious `def.updated`."""
+    secret = "sk-" + "abcdefghijklmnop1234567890"
+    out = A.def_record(repo, "skill", "k", {"note": f"use {secret} here"}, agent="a")
+    rec = _state(repo).defs["skill:k"]
+    assert secret not in json.dumps(rec.fields)
+    assert out.data["digest"] == rec.digest == D.digest(rec.fields)
+    again = A.def_update(repo, "skill", "k", {"note": f"use {secret} here"}, agent="a")
+    assert again.exit == 2, again.reason

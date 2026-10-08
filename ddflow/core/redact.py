@@ -492,13 +492,10 @@ LOG_NO_TEXT = frozenset(
     {
         "approval.used",
         "backmerge.recorded",
-        "bug.reported_upstream",
         "ddflow.seen",
         "deploy.recorded",
-        "export.acknowledged",
         "export.disabled",
         "export.enabled",
-        "external.observed",
         "gate.out_of_order",
         "gate.started",
         "item.started",
@@ -506,25 +503,35 @@ LOG_NO_TEXT = frozenset(
         "lease.acquired",
         "lease.renewed",
         "link.recorded",
+        "pr.opened",
+        "reviewer.configured",
+        "trigger.fired",
+        "worktree.adopted",
+        "worktree.created",
+        "worktree.merged",
+        "worktree.removed",
+    }
+)
+
+#: Kinds the fixture pins NO fields for (their writers pass free-form payloads: a sibling
+#: repository's item title, a git error): every field is treated as text, like an unknown kind.
+LOG_ALL_TEXT = frozenset(
+    {
+        "bug.reported_upstream",
+        "export.acknowledged",
+        "external.observed",
         "phase.removed",
         "pr.changes_requested",
         "pr.closed",
         "pr.merged",
-        "pr.opened",
         "port.applied",
         "release.closed",
         "release.opened",
         "release.tagged",
         "repair.applied",
         "reviewer.approved",
-        "reviewer.configured",
         "schedule.updated",
-        "trigger.fired",
         "upgrade.applied",
-        "worktree.adopted",
-        "worktree.created",
-        "worktree.merged",
-        "worktree.removed",
     }
 )
 
@@ -554,7 +561,7 @@ def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
     vocabulary) has EVERY field treated as text: unknown is not the same as text-free."""
     if kind in LOG_NO_TEXT:
         return data
-    names = LOG_TEXT_FIELDS.get(kind)
+    names = None if kind in LOG_ALL_TEXT else LOG_TEXT_FIELDS.get(kind)
     if names is not None and not any(n in data for n in names):
         return data
     return {
