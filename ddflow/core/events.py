@@ -176,8 +176,16 @@ class StampFacts:
     override: Event | None = None
     #: The agent's open session ("" when it has none).
     session: str = ""
-    #: The running version is OLDER than the log's highest stamp.
+    #: The running version is OLDER than the log's highest stamp, or this ddflow writes an
+    #: older FORMAT level than the highest one a stamp carries (`format_skewed`): the log is
+    #: ahead of this code in either case.
     skewed: bool = False
+    #: The highest `format_level` any `ddflow.seen` stamp carries, 0 when none does (a stamp
+    #: from before the field says nothing about format).
+    highest_format: int = 0
+    #: Only the format level is behind: the running version is not older than the log's
+    #: highest stamp (a branch that changed a format without a version bump).
+    format_skewed: bool = False
 
 
 def _open_session(started: dict[str, tuple[int, str]], ended: set[str]) -> str:
@@ -185,8 +193,21 @@ def _open_session(started: dict[str, tuple[int, str]], ended: set[str]) -> str:
     return max(live)[1] if live else ""
 
 
-def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts:
+def _format_of(data: dict[str, Any]) -> int:
+    """The `format_level` a stamp carries: a positive integer, else 0 (says nothing)."""
+    raw = data.get("format_level")
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 1 else 0
+
+
+def stamp_facts(
+    events: Iterable[Event], agent: str, version: str, format_level: int | None = None
+) -> StampFacts:
     """Fold the stamp kinds out of `events` (any order). One pass, pure.
+
+    ``format_level`` is the running ddflow's FORMAT_LEVEL; with it the facts also say whether
+    the log's highest stamped format is ahead of it (`format_skewed`), and a stamp counts as
+    this agent's own only when it carries this format level too. Without it, only versions
+    are compared (every caller before the format level existed).
 
     A session-scoped override is one this agent wrote for the session it currently has OPEN
     (the latest `session.started` of its own with no later `session.ended`; "" when it has
@@ -195,6 +216,7 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
     -- or a newer stamp -- is therefore refused again, which is the point of "session-scoped,
     not per command"."""
     highest, highest_by, seen_by_me = "", "", False
+    highest_format = 0
     started: dict[str, tuple[int, str]] = {}
     ended: set[str] = set()
     overrides: list[Event] = []
@@ -210,8 +232,11 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
             # (key, text): two spellings of one version resolve the same way in any order.
             if (version_key(v), v) > (version_key(highest), highest):
                 highest, highest_by = v, e.agent
+            highest_format = max(highest_format, _format_of(e.data))
             if e.agent == agent and v == version:
-                seen_by_me = True
+                seen_by_me = (
+                    seen_by_me or format_level is None or _format_of(e.data) == format_level
+                )
         elif k == "session.started" and e.agent == agent:
             started[e.subject] = max(started.get(e.subject, (0, "")), (e.lamport, e.id))
         elif k == "session.ended":
@@ -219,6 +244,7 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
         elif k == SKEW_OVERRIDDEN_KIND and e.agent == agent:
             overrides.append(e)
     session = _open_session(started, ended)
+    format_skewed = format_level is not None and highest_format > format_level
     override = None
     for e in sorted(overrides, key=Event.sort_key):
         d = e.data
@@ -226,17 +252,21 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
             d.get("session", "") == session
             and d.get("running") == version
             and d.get("log_version") == highest
+            and d.get("log_format", 0) == (highest_format if format_skewed else 0)
             # An override made with no session open ends when the agent opens or ends one.
             and (session or e.lamport > last_session_event)
         ):
             override = e
+    version_skewed = bool(highest) and is_older(version, highest)
     return StampFacts(
         highest,
         highest_by,
         seen_by_me,
         override,
         session=session,
-        skewed=bool(highest) and is_older(version, highest),
+        skewed=version_skewed or format_skewed,
+        highest_format=highest_format,
+        format_skewed=format_skewed and not version_skewed,
     )
 
 

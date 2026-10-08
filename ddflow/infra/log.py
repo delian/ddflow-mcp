@@ -37,6 +37,7 @@ from ..config import Config, LogConfig, SessionConfig
 from ..core import digest as D
 from ..core import redact as R
 from ..core import upcasters as UP
+from ..core import version as V
 from ..core.events import (
     OLDER_MARK,
     PROVENANCE_KINDS,
@@ -129,12 +130,26 @@ def install_kind() -> str:
     )
 
 
-def skew_message(version: str, highest: str, by: str = "") -> str:
+def skew_message(
+    version: str, highest: str, by: str = "", *, log_format: int = 0, format_level: int = 0
+) -> str:
     who = f" (stamped by {by})" if by else ""
+    if log_format > format_level > 0:
+        # only the FORMAT is behind: the same or a newer version number, an older data format
+        head = (
+            f"REFUSED: this project's log has been worked on by ddflow {highest}{who} at data "
+            f"format level {log_format}, and this ddflow ({version}) writes level "
+            f"{format_level}, which is older: writing now could drop or misread what the "
+            f"newer one recorded."
+        )
+    else:
+        head = (
+            f"REFUSED: this project's log has been worked on by ddflow {highest}{who}, and "
+            f"this ddflow is {version}, which is older: writing now could drop or misread "
+            f"what the newer one recorded."
+        )
     return (
-        f"REFUSED: this project's log has been worked on by ddflow {highest}{who}, and this "
-        f"ddflow is {version}, which is older: writing now could drop or misread what the "
-        f"newer one recorded. Upgrade ddflow-mcp to >= {highest} and retry (for example "
+        f"{head} Upgrade ddflow-mcp to >= {highest} and retry (for example "
         f"`uvx --refresh --from ddflow-mcp ddflow ...`, or restart the MCP server after "
         f"upgrading). Reads still work. If you cannot upgrade, ask the user; only if the "
         f'user insists, rerun with --allow-older-version --reason "<why>" (MCP: the '
@@ -1026,19 +1041,30 @@ class EventLog:
         Returns extra `data` for the event about to be written: the older-version mark when
         a session-scoped override is what lets it through. Raises `SkewRefused` otherwise.
         Caller holds the lock."""
-        version = running_version()
-        facts = stamp_facts(self._all_events(), self.agent_id, version)
+        version, fmt = running_version(), V.format_level()
+        facts = stamp_facts(self._all_events(), self.agent_id, version, fmt)
         extra: dict[str, Any] = {}
         if facts.skewed:
             policy = self._skew_policy()
             if policy == "refuse":
                 if facts.override is None:
-                    raise SkewRefused(skew_message(version, facts.highest, facts.highest_by))
+                    raise SkewRefused(
+                        skew_message(
+                            version,
+                            facts.highest,
+                            facts.highest_by,
+                            log_format=facts.highest_format,
+                            format_level=fmt,
+                        )
+                    )
                 extra[OLDER_MARK] = version
             elif policy == "warn":
                 _warn_skew_once(version, facts.highest)
         if not facts.seen_by_me and version_known(version):
-            self._write(SEEN_KIND, "ddflow", {"version": version, "install": install_kind()})
+            stamp: dict[str, Any] = {"version": version, "install": install_kind()}
+            if fmt:
+                stamp["format_level"] = fmt
+            self._write(SEEN_KIND, "ddflow", stamp)
             _write_seen_marker(self.root, version)
         return extra
 
@@ -1061,8 +1087,8 @@ class EventLog:
         then overriding silently would only be a slower way of not asking."""
         reason = (reason or "").strip()
         with self.transaction():
-            version = running_version()
-            facts = stamp_facts(self._all_events(), self.agent_id, version)
+            version, fmt = running_version(), V.format_level()
+            facts = stamp_facts(self._all_events(), self.agent_id, version, fmt)
             if not facts.skewed:
                 return None
             if facts.override is not None:
@@ -1083,6 +1109,13 @@ class EventLog:
                     "log_version": facts.highest,
                     "session": facts.session,
                     "reason": reason,
+                    # a log whose FORMAT is ahead is overridden against that format, so a
+                    # later, higher format is refused again (`stamp_facts`)
+                    **(
+                        {"log_format": facts.highest_format}
+                        if fmt and facts.highest_format > fmt
+                        else {}
+                    ),
                 },
             )
 
