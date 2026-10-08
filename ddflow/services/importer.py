@@ -43,7 +43,7 @@ from typing import Any
 from ..config import Config
 from ..core.globs import match as glob_match
 from ..core.ids import free
-from ..core.model import ABANDONED, DONE, OPEN
+from ..core.model import DONE, OPEN
 from ..core.schedule import is_external
 from ..infra import proc as P
 from ..infra.log import EventLog
@@ -2056,7 +2056,7 @@ def _phase_verdict(
     for it in state.children(pid) if state is not None else ():
         if it.removed:
             continue
-        if it.state not in (DONE, ABANDONED):
+        if not it.terminal:
             return "open", ""
         if it.id in touched.state:
             by_hand = True
@@ -2188,7 +2188,7 @@ def _settle_needed_phases(
     # ...and what work ALREADY in the queue needs: on a re-run the dependent was imported
     # last time, so it is not in this plan, and it is the one stuck.
     for it in getattr(state, "items", {}).values():
-        if it.state not in (DONE, ABANDONED) and not it.removed:
+        if not it.terminal and not it.removed:
             needed.update(it.needs)
     # Judged over EVERY task under the phase once this import has run -- the ones in this
     # plan (open ones keep it open; a finished one pulled in as a dependency counts as
@@ -2607,7 +2607,7 @@ def _scan_queue(state, r: VerifyReport) -> tuple[list[str], dict[str, list[str]]
         )
         if it.created_at:
             ats.append(it.created_at)
-        if it.kind == "task" and not it.globs and it.state not in (DONE, ABANDONED):
+        if it.kind == "task" and not it.globs and not it.terminal:
             (r.no_globs_branches if it.source.startswith("git:") else r.no_globs).append(it.id)
         elif it.kind == "phase" and _claims_done(it.title) and _has_open_child(state, it):
             r.shipped_drift.append(it.id)
@@ -2741,7 +2741,7 @@ def _path_shaped(rel: str) -> bool:
 
 
 def _has_open_child(state, phase) -> bool:
-    return any(c.state not in (DONE, ABANDONED) and not c.removed for c in state.children(phase.id))
+    return any(not c.terminal and not c.removed for c in state.children(phase.id))
 
 
 def verify_import(

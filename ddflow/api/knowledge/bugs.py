@@ -158,10 +158,9 @@ def _fix_task_of(st, cfg, item: str):
     fix; one filed against the item it was FOUND in -- a feature, a finished task, a
     phase -- names where to look, and gets a task of its own."""
     from ...core.flow import FEATURE, branch_kind
-    from ...core.model import ABANDONED, DONE
 
     it = st.items.get(item) if item else None
-    if it is None or it.removed or it.kind != "task" or it.state in (DONE, ABANDONED):
+    if it is None or it.removed or it.kind != "task" or it.terminal:
         return None
     return it if branch_kind(it, cfg) != FEATURE else None
 
@@ -169,13 +168,12 @@ def _fix_task_of(st, cfg, item: str):
 def _open_phase_of(st, item: str) -> str:
     """The nearest OPEN phase at or above ``item``, or "". A finished phase does not take
     new work: a task filed under it would sit open beneath a phase that says done."""
-    from ...core.model import ABANDONED, DONE
 
     it = st.items.get(item) if item else None
     if it is None or it.removed:
         return ""
     for node in (it, *st.ancestors(item)):
-        if node.kind == "phase" and node.state not in (DONE, ABANDONED) and not node.removed:
+        if node.kind == "phase" and not node.terminal and not node.removed:
             return node.id
     return ""
 
