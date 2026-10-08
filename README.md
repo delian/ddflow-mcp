@@ -2936,7 +2936,11 @@ after the landing — the merge commit, or the branch head on a fast-forward; th
 merge commit in PR mode — and `branch_head` is the merged branch's own head, which under a
 squash is not on the base at all. A tree you are standing in is kept (its directory is your
 shell's cwd; deleting it fails your next command), and `ddflow cleanup --apply` removes it
-once the item is complete. A merge that fails is **aborted**, so the primary checkout is
+once the item is complete. Every removal of a worktree — `merge`, the PR flow, `cleanup --apply`
+and the onboarding sweep — is one guarded, logged step (`cleanup.dispose_tree`): under the log's
+lock with the leases re-read, a tree another live lease holds or an adopted one is kept and named,
+git's own check refuses uncommitted files and unmerged commits unless the caller has proof it may
+force, and a removal that worked appends `worktree.removed`. A merge that fails is **aborted**, so the primary checkout is
 never left mid-merge (`doctor` flags one that was left, with the `git merge --abort` that
 clears it). A branch with nothing ahead of its target is refused — it would record the item
 merged with nothing landed — unless `--allow-empty`.
