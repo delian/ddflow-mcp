@@ -266,14 +266,19 @@ def resolve_command(name: str, repo: Path | None = None) -> Template:
                 raise TemplateError(str(exc)) from exc
         known = sorted({*COMMANDS, *(load_macros(repo) if repo else {})})
         raise TemplateError(f"unknown command {name!r}. Known: {', '.join(known)}")
-    if repo:
-        local = Path(repo) / ".ddflow" / "prompts" / "commands" / f"{name}.md"
-        if local.is_file():
-            return Template(name, local.read_text("utf-8"), "project", local, "command")
-    path = command_dir() / f"{name}.md"
-    if not path.is_file():
-        raise TemplateError(f"shipped command {name}.md is missing from the package")
-    return Template(name, path.read_text("utf-8"), "builtin", path, "command")
+    try:
+        got = _command_loader().resolve(name, repo)
+    except OverlayError as exc:
+        raise TemplateError(str(exc)) from exc
+    return Template(name, got.text, got.source, got.path, "command")
+
+
+def _command_loader() -> OverlayLoader:
+    """The overlay of the shipped workflow commands (D-unify, B-uni-overlay.4):
+    ``.ddflow/prompts/commands/<name>.md`` over the package default."""
+    return OverlayLoader(
+        "command", shipped_dir=command_dir(), project_subdir="prompts/commands", suffix=".md"
+    )
 
 
 def overrides_from(cfg) -> dict[str, str]:

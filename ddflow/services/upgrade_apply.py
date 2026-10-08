@@ -44,7 +44,7 @@ from . import configwrite as CW
 from . import enforce as E
 from . import repairs as RP
 from . import upgrade_plan as UP
-from .backups import BACKUPS, MANIFEST, backup_name, make_backup  # noqa: F401 -- the backups' home
+from .backups import BACKUPS, MANIFEST, backup_name, make_backup, prune  # noqa: F401 -- the home
 
 BACKUP_MODES = ("local", "none")
 #: What `[upgrade].config_changes` accepts: who may apply a config change on a knob nobody set.
@@ -101,12 +101,18 @@ def _config_files(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
     return [both[1] if src.startswith("local") else both[0]]
 
 
+def _writes_config(item: dict[str, Any]) -> bool:
+    """Does applying this config item change a file? Only a value somebody SET does: a knob
+    at its shipped default takes the new default by itself, even when the policy makes the
+    operator confirm it, and writing it out would pin it as if they had chosen it."""
+    return item["action"] == UP.OPERATOR and bool(item.get("set_by"))
+
+
 def touched(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
     """The files applying ``item`` may change (the ones a backup must hold)."""
     cat = item["category"]
     if cat == "config":
-        needs_write = item["action"] == UP.OPERATOR
-        return _config_files(repo, cfg, item) if needs_write else []
+        return _config_files(repo, cfg, item) if _writes_config(item) else []
     if cat == "instructions":
         return [_abs(repo, item["path"])]
     out = [_abs(repo, p) for p in item.get("paths", [])]
@@ -142,7 +148,7 @@ def _value_text(value: Any) -> str:
 def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
     key, kind = item["key"], item["change"]
     src = cfg.sources.get(key, "default")
-    if item["action"] != UP.OPERATOR:
+    if not _writes_config(item):
         return ACKNOWLEDGED, (
             f"{key}: the new default applies on its own"
             + (
@@ -240,7 +246,6 @@ def apply(
     *,
     categories: str | Collection[str] | None = None,
     confirm: Mapping[str, str] | None = None,
-    config_changes: str = "agent",
     backup: str = "local",
     agent: str = "",
     plan: dict[str, Any] | None = None,
@@ -252,9 +257,11 @@ def apply(
     ``from``/``to``, ``noop`` and the ``text`` for a person. ``exit`` is 0 when everything
     chosen was applied, acknowledged or already fine, 1 when an applier failed, 3 when an
     item waits for the operator's confirmation, 2 when a step could not run (a repair whose
-    detector was unavailable). Raises ValueError for an unknown category,
-    ``config_changes`` or ``backup`` value."""
+    detector was unavailable). Raises ValueError for an unknown category or
+    ``backup`` value. Who may apply a config change is the `[upgrade].config_changes` knob
+    (``cfg.upgrade``), the same one the plan reads."""
     repo = Path(repo)
+    config_changes = cfg.upgrade.config_changes  # the one source: the plan reads it too
     _check_modes(backup, config_changes)
     confirm = dict(confirm or {})
     plan = plan or UP.build(repo, log, cfg, st)
@@ -266,6 +273,7 @@ def apply(
     if files and backup == "local":
         try:
             backup_dir = str(make_backup(repo, files, frm, to))
+            prune(repo, cfg.upgrade.backup_keep)
         except OSError as exc:
             detail = f"no backup could be written ({exc}); nothing was changed"
             failed = results + [_rec(i, FAILED, detail) for i in todo]
