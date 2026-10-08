@@ -26,17 +26,18 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
-import tomllib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from ..core import clock
+from ..core import fieldcheck as FC
 from ..core.digest import content_digest
 from ..core.ids import free
 from ..core.model import ABANDONED, DONE, TRIGGER_FIRES_KEPT, State
 from . import schedule as SV
+from .tomldir import load_toml_dir
 
 TRIGGERS_DIR = Path(".ddflow") / "triggers"
 #: How many of a trigger's latest suppressions `show` lists (all are in the log).
@@ -97,27 +98,8 @@ class Trigger:
 # -- one definition ------------------------------------------------------------------------
 
 
-def _int(name: str, lo: int, hi: int | None = None):
-    def check(v: Any, errors: list[str]) -> Any:
-        if not isinstance(v, int) or isinstance(v, bool) or v < lo or (hi and v > hi):
-            top = f" and at most {hi}" if hi else " or more"
-            errors.append(f"{name} must be a whole number, {lo}{top}, got {v!r}")
-            return None
-        return v
-
-    return check
-
-
-def _str_map(name: str):
-    def check(v: Any, errors: list[str]) -> Any:
-        if not isinstance(v, dict) or not all(
-            isinstance(k, str) and isinstance(x, str) for k, x in v.items()
-        ):
-            errors.append(f"{name} must be a table of strings, got {v!r}")
-            return None
-        return dict(v)
-
-    return check
+_int = FC.whole
+_str_map = FC.str_map
 
 
 def _event(v: Any, errors: list[str]) -> Any:
@@ -152,18 +134,8 @@ def _action(v: Any, errors: list[str]) -> Any:
     return out
 
 
-def _title(v: Any, errors: list[str]) -> Any:
-    if not isinstance(v, str):
-        errors.append(f"title must be a string, got {v!r}")
-        return None
-    return v.strip()
-
-
-def _enabled(v: Any, errors: list[str]) -> Any:
-    if not isinstance(v, bool):
-        errors.append(f"enabled must be true or false, got {v!r}")
-        return None
-    return v
+_title = FC.text("title", "a string")
+_enabled = FC.flag("enabled")
 
 
 #: One checker per field: (value, errors) -> the typed value; it appends what is wrong.
@@ -181,7 +153,7 @@ _CHECKS = {
     "breaker": _int("breaker", 1, TRIGGER_FIRES_KEPT),
     "action": _action,
     "enabled": _enabled,
-    "tags": lambda v, e: SV._str_list("tags", v, e),
+    "tags": lambda v, e: FC.str_list("tags", v, e),
 }
 
 
@@ -236,30 +208,20 @@ def build(tid: str, spec: dict[str, Any]) -> tuple[Trigger | None, list[str]]:
 def load(repo: Path, jobs: dict[str, Any]) -> tuple[dict[str, Trigger], list[str]]:
     """Every `.ddflow/triggers/*.toml`, id = file name. A broken file, or one whose action
     names no scheduled job, is reported and left out; it never stops the rest."""
-    d = Path(repo) / TRIGGERS_DIR
-    out: dict[str, Trigger] = {}
-    errors: list[str] = []
-    if not d.is_dir():
-        return out, errors
-    for f in sorted(d.glob("*.toml")):
-        rel = (TRIGGERS_DIR / f.name).as_posix()
-        try:
-            spec = tomllib.loads(f.read_text("utf-8"))
-        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-            errors.append(f"{rel}: cannot read it: {exc}")
-            continue
-        if spec.pop("id", f.stem) != f.stem:
-            errors.append(f"{rel}: its id differs from the file name; a trigger file is <id>.toml")
-            continue
-        trig, bad = build(f.stem, spec)
+
+    def build_one(tid: str, spec: dict[str, Any]) -> tuple[Trigger | None, list[str]]:
+        trig, bad = build(tid, spec)
         if trig is not None and trig.action["job"] not in jobs:
-            bad = [f"action.job {trig.action['job']!r} is not a scheduled job"]
-            trig = None
-        if trig is None:
-            errors.append(f"{rel}: " + "; ".join(bad))
-            continue
-        out[f.stem] = trig
-    return out, errors
+            return None, [f"action.job {trig.action['job']!r} is not a scheduled job"]
+        return trig, bad
+
+    loaded, errors = load_toml_dir(
+        repo,
+        TRIGGERS_DIR,
+        build_one,
+        lambda _: "its id differs from the file name; a trigger file is <id>.toml",
+    )
+    return dict(loaded), errors
 
 
 # -- the evaluator -------------------------------------------------------------------------
