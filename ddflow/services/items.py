@@ -124,16 +124,20 @@ def missing_parent(st: State, parent: str | None) -> str:
     return ""
 
 
-def release_umbrella(log: EventLog, st: State, parent: str, *, note: str) -> bool:
+def release_umbrella(
+    log: EventLog, st: State, parent: str, *, note: str, tasks_only: bool = True
+) -> bool:
     """Release ``parent``'s lease -- True when it held one.
 
     Giving a task its first child turns it into an umbrella, and an umbrella is not the
     thing being worked -- its children are. Holding its lease would put a live claim on
     globs that overlap every child's, so a SECOND agent could not take one, and recovery
-    would point at a worktree where nothing more will happen.
+    would point at a worktree where nothing more will happen. A claimed PHASE keeps its
+    claim when a task is added under it (a phase with tasks is its normal state) unless
+    ``tasks_only`` is False: `split` lets any item go.
     """
     holder = st.items.get(parent) if parent else None
-    if not (holder and holder.lease):
+    if not (holder and holder.lease) or (tasks_only and holder.kind != "task"):
         return False
     L.release(log, parent, note=note)
     holder.lease = None  # a second child added in this batch finds nothing to release

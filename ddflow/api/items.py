@@ -788,7 +788,7 @@ def split(
 
     # The umbrella is no longer the thing being worked; holding its lease would block its
     # own children on a glob conflict with itself.
-    IT.release_umbrella(log, st, item, note=f"split into {', '.join(created)}")
+    IT.release_umbrella(log, st, item, note=f"split into {', '.join(created)}", tasks_only=False)
     log.append(
         "task.updated",
         item,
