@@ -27,7 +27,7 @@ def _head(text: str, budget: int, unit: str) -> str:
     dropped whole, never half-encoded)."""
     if unit == "bytes":
         return text.encode("utf-8")[: max(0, budget)].decode("utf-8", "ignore")
-    return text[:budget]
+    return text[: max(0, budget)]
 
 
 def whole_marks(head: str) -> str:
@@ -84,7 +84,7 @@ def clip(
             tail = text.encode("utf-8")[-budget:].decode("utf-8", "ignore") if budget > 0 else ""
         else:
             tail = text[-budget:] if budget > 0 else ""
-        if tail and unit != "bytes":
+        if tail:
             tail = text[_after_mark(text, len(text) - len(tail)) :]
         return marker + tail
     head = whole_marks(_head(text, budget, unit))

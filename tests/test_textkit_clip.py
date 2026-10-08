@@ -217,3 +217,19 @@ def test_the_recorded_inputs_hold_only_whole_marks_without_spaces():
     for text in inputs:
         for m in re.finditer(r"\[REDACTED:([^\]\\]*)", text):
             assert m.group(0).endswith(("secret", "host")) and " " not in m.group(1)
+
+
+def test_a_budget_below_zero_keeps_nothing_in_either_unit():
+    assert T.clip("abcdefgh", 4, keep=-3, marker="…") == "…"
+    assert T.clip("abcdefgh", 4, keep=-3, marker="…", unit="bytes") == "…"
+
+
+def test_the_tail_keeps_marks_whole_in_bytes_too():
+    text = "abc[REDACTED:secret]xyz"
+    assert T.clip(text, 6, unit="bytes", side="tail", marker="…") == "…xyz"
+    assert T.clip(text, 6, side="tail", marker="…") == "…xyz"
+
+
+def test_the_snippet_and_line_cut_goldens_hold_no_marks_so_they_need_no_exception():
+    for table in ("snippet", "frame_truncate"):
+        assert all("[REDACTED" not in r[0] for r in GOLDEN[table]), table
