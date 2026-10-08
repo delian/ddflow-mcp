@@ -1,7 +1,8 @@
 """D-compat: derived and local stores are keyed on what built them. The index and the read
 snapshot carry a code fingerprint in their name, so checkouts on different code never
-rebuild each other's; a local store written by a NEWER ddflow is ignored (derived) or read
-for the fields this version knows (user data), never refused (B-uni-compat-derived)."""
+rebuild each other's; a local store written by a NEWER ddflow is ignored when derived, and
+the user-level quota file is read for the fields this version knows and written back with
+the rest kept. The generic LocalStore still refuses newer USER data (B-uni-compat-derived)."""
 
 from __future__ import annotations
 
@@ -162,6 +163,7 @@ def _future_doc() -> dict:
                 "declared_by": "operator",
                 "at": "2026-01-01T00:00:00Z",
                 "future_field": "kept",
+                "windows": [],
             }
         },
     }
@@ -185,3 +187,27 @@ def test_an_unversioned_quota_store_is_still_refused(quotas):
     quotas.write_text(json.dumps({"profiles": {}}))
     with pytest.raises(Q.QuotaError):
         Q.load(quotas)
+
+
+def test_window_level_unknown_keys_are_kept_too(quotas):
+    doc = _future_doc()
+    doc["profiles"]["agent:h/a"] = {
+        "subject": "agent:h/a",
+        "declared_by": "operator",
+        "at": "2026-01-01T00:00:00Z",
+        "windows": [{"window": "day", "limit": 5, "unit": "usd", "burst": 3}],
+    }
+    quotas.write_text(json.dumps(doc))
+    Q.declare(Q.Profile(subject="llm:http://x", unlimited=True), quotas)
+    saved = json.loads(quotas.read_text())["profiles"]["agent:h/a"]["windows"]
+    assert saved[0]["burst"] == 3 and saved[0]["limit"] == 5
+
+
+def test_an_index_in_use_is_touched_so_it_is_not_taken_for_abandoned(log, repo, cfg):
+    log.append("lesson.recorded", "L1", {"title": "Alpha", "rule": "alpha"})
+    st = S.Store(repo, cfg)
+    st.rebuild(log)
+    ago = time.time() - (S.STALE_INDEX_DAYS + 1) * 86400
+    os.utime(st.path, (ago, ago))
+    assert not st.stale(log)  # a reader asks, finds it current ...
+    assert time.time() - st.path.stat().st_mtime < 60  # ... and marks it used
