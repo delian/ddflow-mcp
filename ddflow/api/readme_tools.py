@@ -22,16 +22,14 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..core.digest import content_digest
-from ..infra.fsio import atomic_write
+from ..infra.fsio import Region, atomic_write
 from ..services.help import grouped_tools
 
 REGION = "README/tools"
 END = f"<!-- ddflow:end {REGION} -->"
-_BLOCK = re.compile(
-    rf"^<!-- ddflow:begin {re.escape(REGION)} sha=(?P<sha>[0-9a-f]{{12}}) -->\r?\n"
-    rf"(?P<body>.*?)\r?\n?{re.escape(END)}(?=\r?$)",
-    re.M | re.S,
-)
+_BEGIN = rf"<!-- ddflow:begin {re.escape(REGION)} sha=(?P<sha>[0-9a-f]{{12}}) -->"
+#: The region's lines, found by the one line-splice primitive every managed block uses.
+_LINES = Region(_BEGIN, re.escape(END))
 #: A summary longer than this is cut at a word and ends in an ellipsis.
 SUMMARY_MAX = 110
 #: The rewrite was refused: the region was edited by hand.
@@ -60,7 +58,7 @@ def render(tools: Mapping[str, Mapping[str, object]], tiers: Mapping[str, str]) 
     body = "\n".join(
         [
             f"<details><summary>All {len(tools)} MCP tools: {core} in the `core` tier, "
-            f"{standard} in `standard`</summary>",
+            f"{standard} in `standard` (which includes core)</summary>",
             "",
             "| Group | Tool | Tier | What it does |",
             "|---|---|---|---|",
@@ -72,23 +70,26 @@ def render(tools: Mapping[str, Mapping[str, object]], tiers: Mapping[str, str]) 
     return f"<!-- ddflow:begin {REGION} sha={content_digest(body, length=12)} -->\n{body}\n{END}"
 
 
-def _found(readme: str) -> re.Match[str]:
-    found = _BLOCK.search(readme)
-    if found is None:
+def _found(readme: str) -> tuple[int, int, int, int]:
+    """The region's ``(start, body_start, body_end, stop)`` offsets, or ValueError."""
+    at = _LINES.find(readme)
+    if at is None:
         raise ValueError(f"README has no {REGION} region (ddflow:begin ... {END})")
-    return found
+    return at
 
 
 def replace(readme: str, block: str) -> str:
     """`readme` with its `README/tools` region (markers included) replaced by `block`."""
-    found = _found(readme)
-    return readme[: found.start()] + block + readme[found.end() :]
+    _found(readme)
+    return _LINES.splice(readme, block + "\n")
 
 
 def hand_edited(readme: str) -> bool:
     """Does the region's body no longer hash to the `sha` its begin marker recorded?"""
-    found = _found(readme)
-    return content_digest(found["body"].replace("\r\n", "\n"), length=12) != found["sha"]
+    start, body_start, body_end, _stop = _found(readme)
+    sha = re.search(r"sha=([0-9a-f]{12})", readme[start:body_start])
+    body = readme[body_start:body_end].replace("\r\n", "\n").removesuffix("\n")
+    return sha is None or content_digest(body, length=12) != sha[1]
 
 
 def refresh(path: Path, block: str, *, force: bool = False) -> tuple[int, str]:
