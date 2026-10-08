@@ -81,9 +81,12 @@ def _pointer(path: Path | str) -> tuple[Path, Path | None] | None:
         line = (Path(path) / ".git").read_bytes().decode("utf-8", "surrogateescape").strip()
         if not line.startswith("gitdir:"):
             return None
-        gitdir = (Path(path) / line[len("gitdir:") :].strip()).resolve()
+        target = line[len("gitdir:") :].strip()
+        gitdir = (Path(path) / target).resolve()
     except (OSError, ValueError):
         return None
+    if not target or not gitdir.is_dir():
+        return None  # an empty or dangling pointer is no repository
     try:
         raw = (gitdir / "commondir").read_bytes().decode("utf-8", "surrogateescape")
         return gitdir, (gitdir / raw.strip()).resolve()
