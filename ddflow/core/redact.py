@@ -307,7 +307,7 @@ def _mask(s: str) -> str:
     if cuts:  # the FIRST separator ends the key; a later one belongs to the value
         head, sep, tail = s[: min(cuts)], s[min(cuts)], s[min(cuts) + 1 :]
         # a key reads as words; anything else before the separator is part of the secret
-        if _KEY.fullmatch(head.strip()) and tail.strip("=: \t"):  # not base64 padding `abc==`
+        if _KEY.fullmatch(head.strip()) and tail.strip("=: \t"):  # not only padding (`abc==`, `:`)
             return f"{head}{sep} [REDACTED]"
     parts = s.split(None, 1)
     if len(parts) == _SCHEME_AND_VALUE:
