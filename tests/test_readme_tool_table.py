@@ -38,7 +38,7 @@ def test_one_row_per_tool_and_the_counts_are_the_registry_s():
     assert sorted(names) == sorted(TOOLS) and len(set(names)) == len(TOOLS)
     assert f"All {len(TOOLS)} MCP tools" in block
     assert f"{len(CORE_TOOLS)} in the `core` tier" in block
-    assert f"{len(CORE_TOOLS | STANDARD_EXTRA_TOOLS)} in `standard`" in block
+    assert f"{len(CORE_TOOLS | STANDARD_EXTRA_TOOLS)} in `standard` (which includes core)" in block
 
 
 def test_every_tool_is_in_a_help_group_and_a_tier():
@@ -73,3 +73,11 @@ def test_main_rewrites_a_stale_table_and_refuses_a_hand_edited_one(tmp_path, cap
     assert TT.main([str(stale)]) == 0
     assert "already current" in capsys.readouterr().out
     assert stale.read_text() == "intro\n\n" + TT.render() + "\n"
+
+
+def test_no_summary_stops_at_an_abbreviation():
+    """`summary` splits at the first '. ': a description whose first sentence holds an
+    abbreviation would be cut there (review finding), so none may end in one."""
+    for name, spec in TOOLS.items():
+        cell = RT.summary(spec["description"])
+        assert not cell.endswith(("e.g.", "i.e.", "etc.", "vs.")), name
