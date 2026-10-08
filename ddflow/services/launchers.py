@@ -38,6 +38,7 @@ class Dangling:
     missing: tuple[str, ...]  #: the recorded paths that no longer exist or are not executable
     fallback: bool  #: True when `ddflow` on PATH still runs it
     fix: str  #: the command that refreshes it
+    path: str = ""  #: the file that holds the record (absolute, or relative to the project)
 
     def render(self) -> str:
         gone = ", ".join(self.missing)
@@ -72,12 +73,12 @@ def _on_path() -> bool:
     return shutil.which("ddflow") is not None
 
 
-def check_command(where: str, command: str, fix: str) -> Dangling | None:
+def check_command(where: str, command: str, fix: str, path: str = "") -> Dangling | None:
     """A hook command line whose recorded launcher is gone, or None."""
     missing = _gone(_needs(command))
     # Only a line written WITH the fallback has one; an older line execs its dead path.
     return (
-        Dangling(where, missing, _on_path() and bool(_PROBE.search(command)), fix)
+        Dangling(where, missing, _on_path() and bool(_PROBE.search(command)), fix, path)
         if missing
         else None
     )
@@ -88,7 +89,7 @@ def check_hook_file(path: Path, fix: str = "ddflow hooks install") -> Dangling |
         text = path.read_text("utf-8", errors="replace")
     except OSError:
         return None
-    return check_command(f"the git hook {path}", text, fix)
+    return check_command(f"the git hook {path}", text, fix, str(path))
 
 
 def _commands(data: Any) -> list[str]:
@@ -124,7 +125,7 @@ def check_settings(repo: Path) -> list[Dangling]:
         for cmd in _commands(data):
             if any(m in cmd for m in ours):
                 fix = "ddflow hooks install --claude" + (" --gemini" if "gemini" in rel else "")
-                if d := check_command(f"the hook command in {rel}", cmd, fix):
+                if d := check_command(f"the hook command in {rel}", cmd, fix, rel):
                     out.append(d)
     return out
 
@@ -175,7 +176,9 @@ def check_mcp(repo: Path) -> list[Dangling]:
                 missing.append(f"{dirs[0]}/ddflow")
         if missing:
             out.append(
-                Dangling(f"the ddflow MCP entry in {rel}", tuple(missing), False, "ddflow adopt")
+                Dangling(
+                    f"the ddflow MCP entry in {rel}", tuple(missing), False, "ddflow adopt", rel
+                )
             )
     return out
 
