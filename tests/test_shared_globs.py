@@ -518,3 +518,15 @@ def test_a_declared_text_merge_silences_the_note_for_a_hand_edited_shared_doc(re
     _p, notes = SF.findings(repo, cfg)
     assert not [n for n in notes if "README.md" in n], notes
     assert "no merge strategy" not in run_cli(repo, "doctor")[1]
+
+
+def test_a_glob_git_cannot_read_is_a_problem_through_core_globs():
+    """`findings` reads a shared glob the way `core.globs` does (the `schedule._gitattributes_re`
+    shim is gone), so an unreadable range is named instead of crashing a claim."""
+    from ddflow.core import schedule
+
+    assert not hasattr(schedule, "_gitattributes_re")
+    cfg = Config()
+    cfg.lease.shared_globs = ["a[z-a]"]
+    problems, _notes = SF.findings(Path("/nonexistent-repo"), cfg)
+    assert any("a[z-a]" in p and "cannot be read as git reads it" in p for p in problems)
