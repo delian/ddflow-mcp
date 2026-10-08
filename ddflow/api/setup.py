@@ -1055,7 +1055,6 @@ def _upgrade_apply(
             st,
             categories=categories,
             confirm=dict.fromkeys(keys, reason.strip()),
-            config_changes=cfg.upgrade.config_changes,
             backup=backup or cfg.upgrade.backup,
             agent=agent,
         )

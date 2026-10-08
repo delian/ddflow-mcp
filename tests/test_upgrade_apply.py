@@ -40,6 +40,8 @@ def old(tmp_path: Path) -> Path:
 
 def go(repo: Path, categories: Any = None, **kw: Any) -> dict[str, Any]:
     log, cfg, st = _load(repo, "upgrader")
+    if "config_changes" in kw:  # the policy is the knob: plan and apply both read it
+        cfg.upgrade.config_changes = kw.pop("config_changes")
     return UA.apply(repo, log, cfg, st, categories=categories, agent="upgrader", **kw)
 
 
@@ -321,7 +323,7 @@ def test_bad_policy_and_backup_values_are_errors(old: Path) -> None:
     with pytest.raises(ValueError, match="backup mode"):
         go(old, backup="sideways")
     with pytest.raises(ValueError, match="config_changes"):
-        go(old, config_changes="whenever")
+        go(old, config_changes="whenever")  # a value the strictest fallback never lets through
 
 
 def test_backup_none_writes_no_copy_but_still_records(old: Path) -> None:
@@ -984,6 +986,19 @@ def test_a_bad_backup_value_still_makes_the_backup(old: Path) -> None:
         (old / ".ddflow" / "config.toml").read_text() + '\n[upgrade]\nbackup = "snapshotty"\n'
     )
 
-    cfg = Config.load(old)
+    assert Config.load(old).upgrade.backup == "local"
+    code, out, _ = cli(old, "upgrade", "--apply", "hooks")
 
-    assert cfg.upgrade.backup == "local" and cfg.upgrade.config_changes == "agent"
+    assert code == 0 and "backup:" in out and len(backups(old)) == 1
+
+
+def test_one_policy_serves_the_plan_and_the_apply(old: Path) -> None:
+    set_knob(old, "upgrade.config_changes", "operator")
+
+    plan_action = next(
+        i["action"] for i in plan(old)["categories"]["config"] if i["key"] == "worktree.root"
+    )
+    out = go(old, "config")
+
+    assert plan_action == UP.OPERATOR
+    assert any(r["key"] == "worktree.root" and r["status"] == "refused" for r in out["results"])
