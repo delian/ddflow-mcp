@@ -13,13 +13,17 @@ from typing import Any
 
 import ddflow.api._dedupe as DD
 
+from ..core import defs as D
 from ..core import outcome as O
 from ..infra.fsio import replace_text
+from ..services.guidance import deffields as DF
 from ..services.guidance.kinds import RULE
 from ..services.guidance.limits import lint, over_limit
 from ..services.guidance.similarity import similar
+from ..services.guidance.store import GuidanceFiles
 from ..services.rules import Rule, RulesStorage
 from ..services.searchcore import SearchError, check_regex
+from . import defs as ADEFS
 from ._base import _load
 
 DEFAULT_RULE_PRIORITY = 50
@@ -324,6 +328,57 @@ No project rules are currently defined.
     return "\n".join(lines)
 
 
+def _record_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> O.Outcome:
+    """Say in the log what the rule file now says: the log holds the rule (a `rule` definition,
+    D-unify 7) and the file is its view. Called after the file is written, so an op that
+    fails writes nothing in either place; a record this cannot append (a lock timeout, an
+    older ddflow refused by the skew guard) leaves the file for the `rules-to-events`
+    migration to record, and the result says so. ``outcome`` is returned when it worked."""
+    try:
+        rec = RulesStorage(repo).get(rule_id).to_record()
+        fields = DF.to_fields(rec, RULE)
+        prov = {"via": "write", **DF.to_provenance(rec)}
+        files = GuidanceFiles(repo, RULE)
+        source = files.path(rule_id).relative_to(Path(repo)).as_posix()
+        log_cfg = _load(repo, agent)
+        known = log_cfg[2].defs.get(D.key(RULE.kind, rule_id))
+        if known is not None and known.live:
+            if D.same(DF.logged(fields, log_cfg[1]), known.digest):
+                return outcome  # a re-save that changed no content (a timestamp is not content)
+            res = ADEFS.def_update(
+                repo, RULE.kind, rule_id, fields, source=source, provenance=prov, agent=agent
+            )
+        else:  # new, or brought back after a removal
+            res = ADEFS.def_record_unchecked(
+                repo, RULE.kind, rule_id, fields, source=source, provenance=prov, agent=agent
+            )
+    except Exception as exc:
+        return _unrecorded(outcome, str(exc))
+    return outcome if res.exit in (O.OK, O.NOTHING) else _unrecorded(outcome, res.reason)
+
+
+def _retire_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> O.Outcome:
+    """A removed rule file retires its definition (`def.retired`; the history stays). A rule
+    the log never recorded has nothing to retire."""
+    try:
+        known = _load(repo, agent)[2].defs.get(D.key(RULE.kind, rule_id))
+        if known is None or not known.live:
+            return outcome
+        res = ADEFS.def_retire(repo, RULE.kind, rule_id, reason="the rule was removed", agent=agent)
+    except Exception as exc:
+        return _unrecorded(outcome, str(exc))
+    return outcome if res.exit in (O.OK, O.NOTHING) else _unrecorded(outcome, res.reason)
+
+
+def _unrecorded(outcome: O.Outcome, why: str) -> O.Outcome:
+    """``outcome`` plus the fact that the rule file was written and the log could not say so."""
+    outcome.data["unrecorded"] = (
+        f"the rule file was written but not recorded in the log ({why}); "
+        f"`ddflow upgrade` records it"
+    )
+    return outcome
+
+
 def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") -> O.Outcome:
     """Extend an existing rule by appending new content to it.
 
@@ -349,10 +404,15 @@ def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") ->
         manifest_path = repo / "DDFLOW.md"
         replace_text(manifest_path, manifest_content)
 
-        return O.ok(
-            "rule.added",
-            id=rule_id,
-            extended=rule_id,
+        return _record_in_log(
+            repo,
+            rule_id,
+            agent,
+            O.ok(
+                "rule.added",
+                id=rule_id,
+                extended=rule_id,
+            ),
         )
 
     except FileNotFoundError:
@@ -416,11 +476,16 @@ def apply_rule_update(
         manifest_path = repo / "DDFLOW.md"
         replace_text(manifest_path, manifest_content)
 
-        return O.ok(
-            f"rule.{operation}",
-            id=rule.id,
-            title=rule.title,
-            scope=rule.scope,
+        return _record_in_log(
+            repo,
+            rule.id,
+            agent,
+            O.ok(
+                f"rule.{operation}",
+                id=rule.id,
+                title=rule.title,
+                scope=rule.scope,
+            ),
         )
 
     except Exception as exc:
@@ -655,11 +720,16 @@ def rule_update(
         manifest_path = repo / "DDFLOW.md"
         replace_text(manifest_path, manifest_content)
 
-        return O.ok(
-            "rule.updated",
-            id=rule_id,
-            **fields,
-            **extra,
+        return _record_in_log(
+            repo,
+            rule_id,
+            agent,
+            O.ok(
+                "rule.updated",
+                id=rule_id,
+                **fields,
+                **extra,
+            ),
         )
 
     except FileNotFoundError:
@@ -668,7 +738,7 @@ def rule_update(
         return O.failed("rule.updated", f"Failed to update rule: {exc}", id=rule_id)
 
 
-def rule_remove(repo: Path, rule_id: str) -> O.Outcome:
+def rule_remove(repo: Path, rule_id: str, *, agent: str = "") -> O.Outcome:
     """Remove a rule from the project.
 
     Args:
@@ -688,7 +758,7 @@ def rule_remove(repo: Path, rule_id: str) -> O.Outcome:
         manifest_path = repo / "DDFLOW.md"
         replace_text(manifest_path, manifest_content)
 
-        return O.ok("rule.deleted", id=rule_id)
+        return _retire_in_log(repo, rule_id, agent, O.ok("rule.deleted", id=rule_id))
 
     except FileNotFoundError:
         return O.failed("rule.deleted", f"Rule {rule_id} not found", id=rule_id)
