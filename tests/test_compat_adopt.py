@@ -240,3 +240,16 @@ def test_inside_and_outside_files_never_share_a_backup_path(tmp_path: Path) -> N
 
     assert (dest / "files" / "in" / "_outside" / "notes.txt").read_text() == "inside\n"
     assert (dest / "files" / "out" / other.as_posix().lstrip("/")).read_text() == "outside\n"
+
+
+def test_reversed_legacy_markers_are_a_broken_block_not_an_empty_one() -> None:
+    import pytest
+
+    from ddflow.infra.fsio import RegionError
+
+    text = f"{A.LEGACY_END}\nnotes\n{A.LEGACY_BEGIN}\n"
+
+    assert A.has_legacy_block(text) is False
+    with pytest.raises(RegionError):
+        A.block_body(text)
+    assert A._block_state(text, "want") == A.NO_BLOCK

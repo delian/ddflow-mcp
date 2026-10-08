@@ -321,13 +321,21 @@ def block_body(text: str) -> str | None:
     at = BLOCK._region().find(text)
     if at is not None:
         return text[at[1] : at[2]]
-    if LEGACY_BEGIN in text and LEGACY_END in text:
+    if has_legacy_block(text):
         return text[text.index(LEGACY_BEGIN) + len(LEGACY_BEGIN) : text.index(LEGACY_END)]
+    if LEGACY_BEGIN in text and LEGACY_END in text:
+        raise RegionError("the legacy block markers are reversed")
     return None
 
 
 def has_legacy_block(text: str) -> bool:
-    return LEGACY_BEGIN in text and LEGACY_END in text and not BLOCK.owns(text)
+    """Is there a block under the legacy markers (begin before end, no stamped block too)?"""
+    return (
+        LEGACY_BEGIN in text
+        and LEGACY_END in text
+        and text.index(LEGACY_BEGIN) + len(LEGACY_BEGIN) <= text.index(LEGACY_END)
+        and not BLOCK.owns(text)
+    )
 
 
 def block_marker(line: str) -> str:
