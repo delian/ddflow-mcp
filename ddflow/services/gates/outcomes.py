@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import socket
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,7 +11,6 @@ from typing import Any
 
 from ...config import Config
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
-from ...infra import hostinfo as H
 from ...infra.log import EventLog
 from .defs import GateDef, pipeline_for
 from .evidence import (
@@ -435,7 +435,7 @@ def approve(
     ev = {
         "human": True,
         "approved_by": who,
-        "host": H.short_host(),
+        "host": socket.gethostname().split(".")[0],
         "note": note,
     }
     outcome = "failed" if reject else "passed"
