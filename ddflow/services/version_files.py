@@ -16,7 +16,6 @@ wrong answer this refuses to give. A file already at the new version is simply l
 from __future__ import annotations
 
 import re
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,46 +112,42 @@ def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: 
         from .export.query import EXIT_UNAVAILABLE
 
         raise VersionFileError(str(exc), unavailable=exc.code == EXIT_UNAVAILABLE) from exc
-    tmp: Path | None = None
-    tree = root
-    if throwaway:
-        base = (root / cfg.worktree.root).resolve()
-        base.mkdir(parents=True, exist_ok=True)
-        tmp = Path(tempfile.mkdtemp(prefix=f".version-{W.safe_name(branch)}-", dir=base))
-        tmp.rmdir()
-        add = W.git(root, "worktree", "add", str(tmp), branch)
-        if not add.ok:
+    if not throwaway:
+        return _commit_edits(root, prep, message)
+    base = (root / cfg.worktree.root).resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    with W.scratch_tree(root, branch, prefix=f".version-{W.safe_name(branch)}-", under=base) as s:
+        if s.path is None:
             raise VersionFileError(
-                f"could not stage {branch} for the bump: {add.err}", unavailable=True
+                f"could not stage {branch} for the bump: {s.add.err}", unavailable=True
             )
-        tree = tmp
+        return _commit_edits(s.path, prep, message)
+
+
+def _commit_edits(tree: Path, prep: Prepared, message: str) -> list[str]:
+    """Write ``prep``'s edits in ``tree`` and commit them; the paths changed."""
+    paths = list(prep.edits)
+    dirty = GIT.status_run(tree, *paths)
+    entries = GIT.parse_status(dirty)
+    if entries is None:
+        raise VersionFileError(f"git status failed: {dirty.err}", unavailable=True)
+    if entries:
+        raise VersionFileError(
+            f"{', '.join(paths)} has uncommitted changes; refusing to commit them into "
+            f"the release (commit or discard them)"
+        )
+    for path, text in prep.edits.items():
+        (tree / path).write_text(text, encoding="utf-8")
     try:
-        paths = list(prep.edits)
-        dirty = GIT.status_run(tree, *paths)
-        entries = GIT.parse_status(dirty)
-        if entries is None:
-            raise VersionFileError(f"git status failed: {dirty.err}", unavailable=True)
-        if entries:
-            raise VersionFileError(
-                f"{', '.join(paths)} has uncommitted changes; refusing to commit them into "
-                f"the release (commit or discard them)"
-            )
-        for path, text in prep.edits.items():
-            (tree / path).write_text(text, encoding="utf-8")
-        try:
-            for step in (("add", "--", *paths), ("commit", "-m", message, "--", *paths)):
-                r = W.git(tree, *step)
-                if not r.ok:
-                    raise VersionFileError(
-                        f"git {step[0]} of the version files failed: {r.err or r.out}"
-                    )
-        except VersionFileError:
-            # Never leave a half-bumped working tree behind (a failing hook, a signing error).
-            W.git(tree, "reset", "-q", "--", *paths)
-            W.git(tree, "checkout", "-q", "--", *paths)
-            raise
-        return paths
-    finally:
-        if tmp is not None:
-            W.git(root, "worktree", "remove", "--force", str(tmp))
-            W.git(root, "worktree", "prune")
+        for step in (("add", "--", *paths), ("commit", "-m", message, "--", *paths)):
+            r = W.git(tree, *step)
+            if not r.ok:
+                raise VersionFileError(
+                    f"git {step[0]} of the version files failed: {r.err or r.out}"
+                )
+    except VersionFileError:
+        # Never leave a half-bumped working tree behind (a failing hook, a signing error).
+        W.git(tree, "reset", "-q", "--", *paths)
+        W.git(tree, "checkout", "-q", "--", *paths)
+        raise
+    return paths
