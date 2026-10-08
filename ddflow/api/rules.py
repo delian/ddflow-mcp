@@ -373,8 +373,8 @@ def _retire_in_log(repo: Path, rule_id: str, agent: str, outcome: O.Outcome) -> 
 
 
 def _unrecorded(outcome: O.Outcome, why: str, *, removed: bool = False) -> O.Outcome:
-    """``outcome`` plus the fact that the rule file was written (or ``removed``) and the log
-    could not say so."""
+    """``outcome`` turned into a failure that says the rule file was written (or ``removed``)
+    and the log could not say so. The file is as the caller asked; the log is not."""
     if removed:
         note = (
             f"the rule file was removed but the log still holds the rule ({why}); "
@@ -385,7 +385,9 @@ def _unrecorded(outcome: O.Outcome, why: str, *, removed: bool = False) -> O.Out
             f"the rule file was written but not recorded in the log ({why}); "
             f"`ddflow upgrade` records it"
         )
-    return dataclasses.replace(outcome, data={**outcome.data, "unrecorded": note})
+    # A FAILURE that says what is on disk: every surface shows a failure's reason, and a
+    # payload field would have been invisible to the ones that project the result.
+    return O.failed(outcome.kind, note, **outcome.data)
 
 
 def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") -> O.Outcome:
