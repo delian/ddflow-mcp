@@ -92,7 +92,7 @@ def register(s: argparse._SubParsersAction) -> None:
         default=None,
         metavar="NAME",
         help="put back what a local backup or a snapshot holds (NAME, or the newest when "
-        "omitted), saving what it replaces; stands alone: not with --plan, --apply or --confirm",
+        "omitted), saving what it replaces; stands alone: no other option may accompany it",
     )
     up.set_defaults(fn=cmd_upgrade)
 
