@@ -422,3 +422,134 @@ def redact_argv(
             after_flag = out[-1] in known and "=" not in out[-1]
             out.append("<value>" if after_flag else "<arg>")
     return out
+
+
+# -- the committed log: which fields of which event kind are free text (D-unify 6) ----------
+
+#: Event kind -> the `data` fields that hold free text. `EventLog._write` runs these through
+#: the `log` profile, so a secret, a LAN address, the machine's hostname or a home path in a
+#: gate's output tail, a bug summary or a lesson is never committed (bug B5deba76d04).
+#: A string field is redacted whole; a dict or list field is redacted leaf by leaf, leaving
+#: the lookup keys of `_KEEP_KEYS` alone. A field NOT listed is an id, a digest, a path or a
+#: number that something looks up by, and is written as given.
+LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "approval.granted": ("note",),
+    "bug.fixed": ("lesson", "changelog", "regression_verify"),
+    "bug.found": ("summary", "title"),
+    "bug.invalid": ("evidence", "reason"),
+    "bug.reopened": ("reason",),
+    "cadence.ran": ("evidence", "result"),
+    "ci.result": ("checks",),
+    "decision.recorded": ("alternatives", "consequences", "context", "decision", "title"),
+    "decision.superseded": ("reason",),
+    "def.merged": ("reason",),
+    "def.recorded": ("fields",),
+    "def.retired": ("reason",),
+    "def.superseded": ("reason",),
+    "def.updated": ("fields",),
+    "flow.chosen": ("reason",),
+    "gate.failed": ("evidence", "reason"),
+    "gate.partial": ("evidence", "reason"),
+    "gate.passed": ("evidence", "reason"),
+    "gate.skipped": ("evidence", "reason"),
+    "gate.unavailable": ("evidence", "reason"),
+    "item.abandoned": ("reason",),
+    "item.blocked": ("reason",),
+    "item.completed": ("changelog", "evidence"),
+    "item.reopened": ("reason",),
+    "item.resolved": ("definition",),
+    "item.unblocked": ("note",),
+    "job.ended": ("note",),
+    "job.started": ("command",),
+    "lease.acquired": ("note",),
+    "lease.expired": ("reason",),
+    "lease.released": ("note", "reason"),
+    "lesson.recorded": ("how", "pattern", "rule", "summary", "title", "why"),
+    "memory.forgotten": ("reason",),
+    "memory.recorded": ("text",),
+    "phase.added": ("body", "title", "line"),
+    "phase.updated": ("body", "title"),
+    "pr.synced": ("feedback",),
+    "record.extended": ("text",),
+    "research.recorded": ("claim", "falsifier", "mechanism", "probe", "probe_output", "question"),
+    "review.triaged": ("title", "probe"),
+    "schedule.defined": ("title",),
+    "schedule.removed": ("reason",),
+    "session.ended": ("summary",),
+    "session.note": ("text",),
+    "session.prompt": ("text",),
+    "session.started": ("cwd",),
+    "skew.overridden": ("reason",),
+    "task.added": ("body", "title", "line"),
+    "task.removed": ("reason",),
+    "task.updated": ("body", "title"),
+    "trigger.suppressed": ("detail",),
+}
+
+#: Kinds whose payload is ids, digests, paths, flags and numbers only. Declared so a NEW kind
+#: must choose (tests/test_log_redaction_all_kinds.py).
+LOG_NO_TEXT = frozenset(
+    {
+        "approval.used",
+        "backmerge.recorded",
+        "bug.reported_upstream",
+        "ddflow.seen",
+        "deploy.recorded",
+        "export.acknowledged",
+        "export.disabled",
+        "export.enabled",
+        "external.observed",
+        "gate.out_of_order",
+        "gate.started",
+        "item.started",
+        "lease.renewed",
+        "link.recorded",
+        "phase.removed",
+        "pr.changes_requested",
+        "pr.closed",
+        "pr.merged",
+        "pr.opened",
+        "port.applied",
+        "release.closed",
+        "release.opened",
+        "release.tagged",
+        "repair.applied",
+        "reviewer.approved",
+        "reviewer.configured",
+        "schedule.updated",
+        "trigger.evaluated",
+        "trigger.fired",
+        "upgrade.applied",
+        "worktree.adopted",
+        "worktree.created",
+        "worktree.merged",
+        "worktree.removed",
+    }
+)
+
+#: Leaves of a dict or list field that are looked up, compared or opened, not read: shas,
+#: digests, trees, paths, ids, branches, model and gate names.
+_KEEP_KEYS = re.compile(
+    r"(?:^|_)(?:sha|digest|tree|head|base|path|paths|worktree|branch|file|files|log|id|ids"
+    r"|kind|model|family|reviewer|gate|status|outcome|agent|event|ts|source|key|category"
+    r"|tests|regression_tests|output_file|output_log)$"
+)
+
+
+def redact_leaves(value: object, redactor: Redactor, key: str = "") -> object:
+    """``value`` with every string leaf redacted, except under a lookup key (`_KEEP_KEYS`)."""
+    if isinstance(value, str):
+        return value if key and _KEEP_KEYS.search(key) else redactor.text(value).text
+    if isinstance(value, Mapping):
+        return {k: redact_leaves(v, redactor, str(k)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_leaves(v, redactor, key) for v in value]
+    return value
+
+
+def redact_event_data(kind: str, data: dict, redactor: Redactor) -> dict:
+    """``data`` of an event of ``kind`` with its declared text fields redacted (new dict)."""
+    names = LOG_TEXT_FIELDS.get(kind, ())
+    if not names or not any(n in data for n in names):
+        return data
+    return {k: redact_leaves(v, redactor, "") if k in names else v for k, v in data.items()}

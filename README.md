@@ -3486,7 +3486,10 @@ scrub at read time is a scrub that `git show` walks straight past.
 One shared `Redactor` (`core/redact.py`) serves the log, the views, the exports, upstream reports, each a
 named profile (`redact_argv` gives the shape of a command line). The log profile is the full one: besides secrets (which keep their
 surrounding words, `api_key: [REDACTED]`) it removes private addresses and hosts, this machine's hostname, home-directory paths,
-emails, and (once the `[upstream]` section exists) its `redact_extra` names from every NEW prompt and note. Events already written are
+emails, and (once the `[upstream]` section exists) its `redact_extra` names from the free text of every NEW event, not only prompts and notes:
+`EventLog` applies it where every write passes, to the fields `core.redact.LOG_TEXT_FIELDS` declares for each event kind (gate evidence and
+output tails, bug summaries, lessons, decisions, research, task bodies, reasons and the like). Ids, digests, shas and paths that are looked up
+are not text and are written as given; a new event kind must declare its text fields or `LOG_NO_TEXT`. Events already written are
 not rewritten.
 
 ---
