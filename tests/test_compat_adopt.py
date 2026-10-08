@@ -296,3 +296,17 @@ def test_a_second_local_edit_does_not_overwrite_the_first(repo: Path) -> None:
     assert kept == ["implement-phase.md.local-edits", "implement-phase.md.local-edits.2"]
     assert "Claim first" in (driver.parent / kept[0]).read_text()
     assert "Claim second" in (driver.parent / kept[1]).read_text()
+
+
+def test_a_plain_adopt_over_a_pre_header_driver_saves_the_original(repo: Path) -> None:
+    _adopted(repo)
+    driver = repo / "docs/ddflow/drivers/implement-phase.md"
+    driver.write_text("# my own driver, written before headers\n")
+
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+
+    assert code == 0 and "saved the originals in" in out, out
+    (saved,) = _backups(repo)
+    kept = saved / "files" / "in" / "docs/ddflow/drivers/implement-phase.md"
+    assert kept.read_text() == "# my own driver, written before headers\n"
+    assert "before headers" in out
