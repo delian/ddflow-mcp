@@ -40,6 +40,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import clock
+from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
 from ..core.globs import overlap as globs_overlap
@@ -1093,11 +1094,6 @@ _UNKNOWN_STAGED = (
     "checked.\nRefusing rather than guessing. Check `git status`: a damaged or "
     "truncated `.git/index` is the usual cause."
 )
-
-
-#: Paths ddflow's own bookkeeping writes. Requiring a lease for these would make it
-#: impossible to commit the event log that records the lease.
-SELF_MANAGED = (".ddflow/", "docs/ddflow/", "AGENTS.md", "CLAUDE.md", ".cursor/rules/")
 
 
 def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> bool:

@@ -140,15 +140,13 @@ def run(
     return res
 
 
-def git_paths(
+def paths(
     repo: Path | str, *args: str, timeout: float | None = LISTING_TIMEOUT
 ) -> list[str] | None:
     """File paths git lists, EXACTLY as the filesystem names them; None if git failed.
 
-    The way a path listing SHOULD be read -- not yet the only one: several older listings
-    (`dirty`, the gate tree fingerprint, and others named in docs/HANDOFF.md §2) still
-    read without `-z` and are not migrated. A caller must treat None as "could not
-    tell", never as "no paths". Adds `-z` and reads BYTES:
+    The one way a path listing is read. A caller must treat None as "could not tell",
+    never as "no paths". Adds `-z` and reads BYTES:
     - without `-z`, git C-quotes any non-ASCII name (`"caf\\303\\251.txt"`), so a
       path built from it names no file and matches no glob;
     - with `-z` but in text mode, the raw bytes are decoded strictly as UTF-8, so ONE
@@ -163,3 +161,129 @@ def git_paths(
     `"--"` in ``args`` as usual -- `-z` is inserted before it.
     """
     return run(repo, *args, z=True, timeout=timeout).paths()
+
+
+#: The name this helper had before the queries were named; imports of it keep working.
+git_paths = paths
+
+
+def files(
+    repo: Path | str,
+    kind: str = "all",
+    *,
+    exclude: tuple[str, ...] = (),
+    pathspec: tuple[str, ...] = (),
+    timeout: float | None = LISTING_TIMEOUT,
+) -> list[str] | None:
+    """The files of a work tree, ``-z`` exact; None when git could not list them.
+
+    ``kind``: ``"tracked"`` (in the index), ``"untracked"`` (neither tracked nor ignored)
+    or ``"all"`` (both). ``exclude`` are pathspecs such as `core.bookkeeping.STATE_EXCLUDE`
+    and ``pathspec`` narrows the listing (``"."`` is the tree below ``repo``, the default
+    whenever ``exclude`` is given).
+    """
+    if kind not in _FILE_KINDS:
+        raise ValueError(f"unknown kind of file listing {kind!r}; expected one of {_FILE_KINDS}")
+    args = ["ls-files", *_FILE_KINDS[kind]]
+    if pathspec or exclude:
+        args += ["--", *(pathspec or (".",)), *exclude]
+    return paths(repo, *args, timeout=timeout)
+
+
+_FILE_KINDS: dict[str, tuple[str, ...]] = {
+    "tracked": ("--cached",),
+    "untracked": ("--others", "--exclude-standard"),
+    "all": ("--cached", "--others", "--exclude-standard"),
+}
+
+#: Both columns of `git status --porcelain` that mark a path as unmerged.
+_UNMERGED_XY = frozenset({"DD", "AU", "UD", "UA", "DU", "AA", "UU"})
+
+
+@dataclass(frozen=True)
+class StatusEntry:
+    """One `git status --porcelain -z` record: two status columns and the path(s)."""
+
+    xy: str
+    path: str
+    #: The source of a rename or copy; "" for every other entry.
+    orig: str = ""
+
+    @property
+    def untracked(self) -> bool:
+        return self.xy == "??"
+
+    @property
+    def ignored(self) -> bool:
+        return self.xy == "!!"
+
+    @property
+    def unmerged(self) -> bool:
+        return self.xy in _UNMERGED_XY
+
+    @property
+    def paths(self) -> tuple[str, ...]:
+        """Every path the entry names: a rename is BOTH its old and its new path."""
+        return (self.path, self.orig) if self.orig else (self.path,)
+
+    def line(self) -> str:
+        """The entry as a porcelain text line, ``XY path`` (``XY old -> new`` for a rename),
+        with the names as the filesystem spells them rather than C-quoted."""
+        return f"{self.xy} {self.orig} -> {self.path}" if self.orig else f"{self.xy} {self.path}"
+
+
+def status_run(
+    repo: Path | str,
+    *pathspec: str,
+    untracked: str = "normal",
+    timeout: float | None = LISTING_TIMEOUT,
+) -> GitResult:
+    """The `git status --porcelain -z` call itself, for a caller that needs git's own
+    message when it fails (`parse_status` reads it; `status` does both).
+
+    ``untracked`` is git's ``--untracked-files`` mode: ``"normal"`` (an untracked directory
+    is one entry), ``"all"`` (every file) or ``"no"``. ``pathspec`` narrows the status.
+    """
+    argv = ["status", "--porcelain", f"--untracked-files={untracked}"]
+    if pathspec:
+        argv += ["--", *pathspec]
+    return run(repo, *argv, z=True, timeout=timeout)
+
+
+def parse_status(r: GitResult) -> list[StatusEntry] | None:
+    """The entries of a `status_run` result, names as the filesystem spells them; None when
+    git failed -- "could not tell", never "nothing changed"."""
+    if not r.ok or r.out_bytes is None:
+        return None
+    records = [os.fsdecode(x) for x in r.out_bytes.split(b"\0")]
+    if records and records[-1] == "":
+        records.pop()
+    out: list[StatusEntry] = []
+    i = 0
+    while i < len(records):
+        rec = records[i]
+        i += 1
+        xy, path = rec[:2], rec[3:]
+        orig = ""
+        if "R" in xy or "C" in xy:  # `-z` puts the source path in the NEXT record
+            if i < len(records):
+                orig = records[i]
+            i += 1
+        if path:
+            out.append(StatusEntry(xy, path, orig))
+    return out
+
+
+def status(
+    repo: Path | str,
+    *pathspec: str,
+    untracked: str = "normal",
+    timeout: float | None = LISTING_TIMEOUT,
+) -> list[StatusEntry] | None:
+    """`git status --porcelain -z` parsed (see `status_run`); None when git failed."""
+    return parse_status(status_run(repo, *pathspec, untracked=untracked, timeout=timeout))
+
+
+def unmerged(repo: Path | str, timeout: float | None = LISTING_TIMEOUT) -> list[str] | None:
+    """The paths a merge left unmerged, ``-z`` exact; None when git could not list them."""
+    return paths(repo, "diff", "--name-only", "--diff-filter=U", timeout=timeout)
