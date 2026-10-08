@@ -277,17 +277,30 @@ def test_remove_keeps_the_lock_file_so_exclusion_survives(store):
     assert store.read("d.json") is None and lock.stat().st_ino == inode
 
 
-def test_a_put_is_stamped_when_it_holds_the_lock_not_when_it_was_called(store):
-    started = threading.Event()
+def _clock_probing_the_lock(store, name):
+    """A clock that records whether the store's lock is held at the moment it is read."""
+    held = []
 
-    def late_put():
-        started.set()
-        store.queue_put("q.json", "k", 1)
+    def clock():
+        try:
+            with fsio.file_lock(fsio.lock_path_for(store.path(name)), timeout_s=0):
+                held.append(False)  # we could take it: nobody holds it
+        except fsio.LockTimeout:
+            held.append(True)
+        return 1000.0
 
-    with store.lock("q.json"):
-        t = threading.Thread(target=late_put)
-        t.start()
-        started.wait()
-        store.fake.t += 50  # the put is waiting on the lock while time passes
-    t.join()
-    assert store.queue_pending("q.json")["k"]["last_at"] == 1050.0
+    return clock, held
+
+
+def test_a_put_reads_the_clock_while_it_holds_the_lock(store):
+    store.queue_put("q.json", "k", 1)  # creates the lock file
+    store.clock, held = _clock_probing_the_lock(store, "q.json")
+    store.queue_put("q.json", "k", 2)
+    assert held and all(held)
+
+
+def test_a_take_reads_the_clock_while_it_holds_the_lock(store):
+    store.queue_put("q.json", "k", 1)
+    store.clock, held = _clock_probing_the_lock(store, "q.json")
+    store.queue_take("q.json")
+    assert held and all(held)
