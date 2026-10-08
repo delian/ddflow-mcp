@@ -1,5 +1,5 @@
-"""The one regex safety check for every search mode (`search --regex`; `rule search --regex`
-moves onto it in B-uni-search-core.3-callers).
+"""The regex safety check the pattern modes use: `search --regex` today, `rule search --regex`
+once B-uni-search-core.3-callers moves it here.
 
 `regex` runs Python's backtracking engine, which cannot be interrupted, so a pattern is
 checked before it runs (`check_regex`): too long, a back-reference, a variable-length repeat

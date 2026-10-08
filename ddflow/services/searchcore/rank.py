@@ -42,10 +42,11 @@ def bm25(docs: Sequence[Sequence[str]], query: Iterable[str]) -> dict[int, float
 
 
 def tfidf(docs: Sequence[Sequence[str]], query: Sequence[str]) -> dict[int, float]:
-    """Cosine of the query against each tokenised doc (`core/textsim`); zero scores left out."""
+    """Cosine of the query against each tokenised doc (`core/textsim`); a doc sharing no term
+    with the query is absent (`cosine` only scores docs that share one)."""
     df, post = textsim.invert(docs)
     scores = textsim.cosine(textsim.vector(query, df, max(1, len(docs))), post)
-    return {i: sc for i, sc in scores.items() if sc > 0}
+    return dict(scores)
 
 
 def rrf(rankings: Iterable[Sequence[str]], k: int = RRF_K) -> dict[str, float]:

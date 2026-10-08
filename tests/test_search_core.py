@@ -89,7 +89,7 @@ def test_sources_register_and_gather_only_the_kinds_asked_for():
         H._REGISTRY.update(saved)
 
 
-def test_tfidf_ranks_the_closest_doc_first_and_drops_zero_scores():
+def test_tfidf_ranks_the_closest_doc_first_and_omits_docs_sharing_no_term():
     from ddflow.services.searchcore import tfidf
 
     docs = [["alpha", "beta"], ["gamma"], ["alpha"], []]
