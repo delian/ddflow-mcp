@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 
 #: What this checks, read by `ddflow tests --item` (B2a1eaa259e): a change under one of
-#: these paths selects this test, which imports nothing it governs.
-GOVERNS = ("pyproject.toml", "ddflow/templates/**", "MANIFEST.in")
+#: these paths selects this test, even where nothing it imports changed.
+GOVERNS = ("pyproject.toml", "ddflow/templates/**")
 
 ROOT = Path(__file__).resolve().parents[1]
 
