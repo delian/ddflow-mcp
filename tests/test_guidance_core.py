@@ -88,6 +88,14 @@ def test_a_stamped_record_without_provenance_is_stamped_on_write_not_a_crash() -
     assert got.provenance["created"] and got.provenance["updated"]
 
 
+def test_a_bare_string_is_one_pattern_not_its_characters() -> None:
+    text = 'id = "r-x"\ntitle = "x"\nglobs = "*.py"\ntags = "style"\n\nb'
+    rec = fileformat.parse(text, RULE)
+    assert rec.scope.globs == ("*.py",) and rec.tags == ["style"]
+    with pytest.raises(ValueError, match="globs must be a string or a list of strings"):
+        fileformat.parse(text.replace('"*.py"', "[1]"), RULE)
+
+
 def test_a_decision_file_uses_the_same_schema() -> None:
     rec = GuidanceRecord(
         id="D-sqlite",
