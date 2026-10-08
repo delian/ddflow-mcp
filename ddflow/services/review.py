@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import family_for
+from ..core import unidiff
 from ..core.digest import content_digest
 from ..infra import proc as P
 from ..services.gates import _missing_executable
@@ -655,56 +656,9 @@ def strip_hunk_context(diff: str) -> str:
     return _HUNK_CONTEXT_RE.sub(r"\1", diff)
 
 
-def _git_path(raw: str, prefix: str) -> str:
-    """A path as a diff header line prints it: C-quoted when it is not plain ASCII
-    (``core.quotePath``), and prefixed ``a/``/``b/`` unless ``diff.noprefix`` is set."""
-    import codecs
-
-    raw = raw.rstrip("\t")
-    if len(raw) > 1 and raw[0] == raw[-1] == '"':
-        try:
-            raw = codecs.escape_decode(raw[1:-1].encode())[0].decode("utf-8", "replace")
-        except ValueError:
-            raw = raw[1:-1]
-    return raw[len(prefix) :] if raw.startswith(prefix) else raw
-
-
-def _section_path(section: str) -> str:
-    """The file one ``diff --git`` section changes: from its ``+++``/``---`` or rename
-    lines, which name ONE path each, and only failing those from the header line, whose
-    two paths cannot be told apart when a path contains `` b/``."""
-    head, *rest = section.split("\n")
-    found = ""
-    for line in rest:
-        if line.startswith("@@"):
-            break
-        if line.startswith("+++ ") and line[4:].rstrip("\t") != "/dev/null":
-            return _git_path(line[4:], "b/")
-        if line.startswith(("rename to ", "copy to ")):
-            found = _git_path(line.split(" to ", 1)[1], "")
-        elif line.startswith("--- ") and not found and line[4:].rstrip("\t") != "/dev/null":
-            found = _git_path(line[4:], "a/")
-    if found:
-        return found
-    pair = head[len("diff --git ") :]
-    quoted = re.findall(r'"(?:[^"\\]|\\.)*"', pair)
-    if quoted:
-        return _git_path(quoted[-1], "b/")
-    # "a/X b/X", or "X X" under diff.noprefix: two halves naming the same file.
-    half = len(pair) // 2
-    if len(pair) % 2 == 1 and pair[half] == " ":
-        left, right = pair[:half], pair[half + 1 :]
-        if left.startswith("a/") and right.startswith("b/") and left[2:] == right[2:]:
-            return left[2:]
-        if left == right:
-            return left
-    return pair
-
-
 def chunk_files(chunk: str) -> list[str]:
     """The files a chunk's diff touches, in order, each once."""
-    sections = re.split(r"(?m)^(?=diff --git )", chunk)
-    return list(dict.fromkeys(_section_path(s) for s in sections if s.startswith("diff --git ")))
+    return list(dict.fromkeys(f.path for f in unidiff.files(chunk)))
 
 
 def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
@@ -1222,11 +1176,6 @@ def _race(
     return [settled[i] for i in range(n)]
 
 
-def _file_headers(diff: str) -> list[str]:
-    """Every `diff --git` line of a diff, i.e. the files it touches."""
-    return re.findall(r"(?m)^diff --git .*$", diff)
-
-
 def _retry_truncated(
     rev: Reviewer,
     system: str,
@@ -1255,7 +1204,7 @@ def _retry_truncated(
         # chunk whose halves do not carry every file header is retried whole. split_diff
         # no longer drops a hunkless section (B779270c994); this stays as the invariant
         # check, not as a workaround.
-        headers = _file_headers(chunks[i])
+        headers = unidiff.headers(chunks[i])
         # No header at all is not "every header kept": without one there is nothing to
         # check the halves against, so the chunk goes again whole (roborev).
         if not pieces or not headers or not all(any(h in p for p in pieces) for h in headers):
