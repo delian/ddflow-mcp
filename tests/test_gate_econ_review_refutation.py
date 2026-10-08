@@ -103,6 +103,27 @@ def test_an_unsettled_finding_after_the_cap_holds_the_gate_and_names_the_operato
     assert (flag["refuted"], flag["confirmed"]) == (1, 1)
 
 
+def test_findings_all_confirmed_and_fixed_pass_without_the_refutation_flag(repo, tmp_path):
+    """B1396d7bd55: D-unify 5 flags gates whose findings were REFUTED with probes. A gate
+    whose every finding was confirmed and fixed is a fix, not a refutation: passed, shown
+    as fixed, and absent from `gate list --refuted`."""
+    _setup(repo, tmp_path)
+    for _ in (1, 2):
+        api.review(repo, gate="critic", item="T1")
+    out = api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="t passes")
+    assert out.exit == OK and out.data["passed_on_refutation"] is False
+    assert "ON REFUTATION" not in out.data["text"]
+    rec = _gate(repo)
+    assert rec.outcome == "passed"
+    assert "passed_on_refutation" not in rec.evidence
+    assert rec.evidence["findings_fixed"] == {"confirmed": 1, "rounds": 2, "max_rounds": 2}
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert G.on_refutation(st.items["T1"], "critic") is None
+    assert G.refuted_passes(st) == []
+    assert _status_line(repo).endswith("-- findings fixed")
+    assert "ON REFUTATION" not in _status_line(repo)
+
+
 def test_an_unlimited_budget_never_passes_on_refutation(repo, tmp_path, monkeypatch):
     monkeypatch.setenv("DDFLOW_REVIEW_MAX_ROUNDS", "0")
     _setup(repo, tmp_path)
