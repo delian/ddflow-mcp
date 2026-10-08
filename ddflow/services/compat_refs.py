@@ -48,9 +48,9 @@ _POSITION = re.compile(
     r"(?:^|[;&|(`:$\"'-]|(?<!\w)(?:then|else|do|exec|run|sudo|xargs|command|-m))\s*(?:\w+=\S*\s+)*$"
 )
 _TOOL = re.compile(r"(?<![\w./-])ddflow_[a-z][a-z0-9_]*(?![\w*]|\.\w)")
-#: A shell word ends the command at one of these.
 #: A shell word: a quoted string is one, so an option's value with spaces is skipped whole.
 _TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
+#: A shell word ends the command at one of these.
 _STOP = re.compile(r"[;&|)`\"'<>]")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _BACKTICK = re.compile(r"`([^`\n]+)`")

@@ -414,3 +414,12 @@ def test_installing_a_renamed_spec_over_an_unstamped_entry_leaves_one_stamped_ho
     ]
     assert len(cmds) == 1 and "hooks start-session" in cmds[0]
     assert Managed("hooks/session-start", open="#", close="").owns(cmds[0])
+
+
+def test_scan_reads_the_macros_in_the_projects_config(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text(
+        '[[macro]]\nname = "m"\nprompt = "Run `ddflow doc show` first."\ntools = ["ddflow_old_next"]\n'
+    )
+    got = {(f.artifact, f.ref.text) for f in C.scan(tmp_path, VOCAB)}
+    assert got == {("config macro", "doc show"), ("config macro", "ddflow_old_next")}
