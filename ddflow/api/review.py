@@ -96,10 +96,7 @@ def diff_for(
     """
     base = base or cfg.worktree.base_ref or W.default_branch(repo)
     if not item:
-        try:
-            return W.capture_diff(repo), f"working tree in {repo}"
-        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
-            return "", f"working tree in {repo} could not be read: {exc}"
+        return _captured(repo, f"working tree in {repo}")
     it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
@@ -143,16 +140,26 @@ def diff_for(
     if not branch:
         from ..services.enforce import SELF_MANAGED
 
-        how = (
+        return _captured(
+            repo,
             f"working tree in {repo}, ddflow's bookkeeping excluded -- for {item}'s work "
-            f"on a branch, pass --branch <branch> or run review from its worktree"
+            f"on a branch, pass --branch <branch> or run review from its worktree",
+            exclude=SELF_MANAGED,
         )
-        try:
-            return W.capture_diff(repo, exclude=SELF_MANAGED), how
-        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
-            return "", f"working tree in {repo} could not be read: {exc}"
     d = W.git(repo, "diff", "--no-color", f"{base}...{branch}")
-    return (d.out + "\n") if d.ok and d.out else "", f"{base}...{branch} ({chosen})"
+    how = f"{base}...{branch} ({chosen})"
+    if not d.ok:  # git could not say: an empty diff, recorded unavailable, with the reason
+        return "", f"{how} could not be read: {d.err or d.out}"
+    return (d.out + "\n") if d.out else "", how
+
+
+def _captured(tree: Path, how: str, **kw) -> tuple[str, str]:
+    """(`W.capture_diff` of ``tree``, ``how``); git failing is an empty diff whose ``how``
+    says so -- the review then records UNAVAILABLE, never "nothing changed"."""
+    try:
+        return W.capture_diff(tree, **kw), how
+    except RuntimeError as exc:
+        return "", f"{how}: git could not read it ({exc})"
 
 
 #: How often a running review says what it is still waiting for.

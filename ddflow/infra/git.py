@@ -183,6 +183,8 @@ def files(
     and ``pathspec`` narrows the listing (``"."`` is the tree below ``repo``, the default
     whenever ``exclude`` is given); ``literal`` reads ``pathspec`` as names, not globs.
     """
+    if literal and exclude:
+        raise ValueError("literal pathspecs would read an exclude pathspec as a file name")
     if kind not in _FILE_KINDS:
         raise ValueError(f"unknown kind of file listing {kind!r}; expected one of {_FILE_KINDS}")
     args = ["--literal-pathspecs"] if literal else []
