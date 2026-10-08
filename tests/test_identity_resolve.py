@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 
 from ddflow.config import Config
-from ddflow.infra import harness_identity, log as L
+from ddflow.infra import harness_identity
+from ddflow.infra import log as L
 from ddflow.infra.log import EventLog
 from ddflow.services import approval
 from ddflow.services.export import select as export_select
@@ -66,11 +67,15 @@ def test_derived_id_after_adoption_carries_the_clone_suffix(adopted, monkeypatch
     assert L.tree_agent_ids(adopted, adopted) == {f"{HOST}-proj", got}
 
 
-def test_a_linked_worktree_derives_its_own_name_and_the_clones_suffix(adopted, tmp_path, monkeypatch):
+def test_a_linked_worktree_derives_its_own_name_and_the_clones_suffix(
+    adopted, tmp_path, monkeypatch
+):
     import subprocess
 
     tree = tmp_path / "wt-a"
-    subprocess.run(["git", "-C", str(adopted), "worktree", "add", "-q", "-b", "b", str(tree)], check=True)
+    subprocess.run(
+        ["git", "-C", str(adopted), "worktree", "add", "-q", "-b", "b", str(tree)], check=True
+    )
     monkeypatch.chdir(tree)
     suffix = L._clone_suffix(adopted)
     assert L.default_agent_id(adopted) == f"{HOST}-wt-a-{suffix}"
@@ -118,7 +123,9 @@ def _cfg(repo: Path, *, config_id: str = "", env_sourced: bool = False) -> Confi
         ("", "", "", None, "derived"),
     ],
 )
-def test_resolve_agent_id_precedence_and_layer(adopted, monkeypatch, declared, env, config_id, want, layer):
+def test_resolve_agent_id_precedence_and_layer(
+    adopted, monkeypatch, declared, env, config_id, want, layer
+):
     monkeypatch.chdir(adopted)
     if env:
         monkeypatch.setenv("DDFLOW_AGENT", env)
@@ -133,7 +140,10 @@ def test_without_a_config_the_env_wins_over_derived_and_nothing_is_validated(ado
     monkeypatch.chdir(adopted)
     monkeypatch.setenv("DDFLOW_AGENT", "has space/and slash")
     assert L.resolve_agent_id(adopted, None) == ("has space/and slash", "env")
-    assert L.resolve_agent_id(adopted, None, "not valid either!") == ("not valid either!", "explicit")
+    assert L.resolve_agent_id(adopted, None, "not valid either!") == (
+        "not valid either!",
+        "explicit",
+    )
 
 
 def test_an_empty_event_log_agent_falls_past_the_env_var_to_the_derived_id(adopted, monkeypatch):
@@ -161,7 +171,11 @@ def test_cli_agent_flag_wins_and_is_reported_explicit(adopted, monkeypatch):
     monkeypatch.chdir(adopted)
     monkeypatch.setenv("DDFLOW_AGENT", "envy")
     c = _ctx(adopted, "flagged")
-    assert (c.log.agent_id, c.cfg.sources["agent.id"], c.requested_agent) == ("flagged", "explicit", "flagged")
+    assert (c.log.agent_id, c.cfg.sources["agent.id"], c.requested_agent) == (
+        "flagged",
+        "explicit",
+        "flagged",
+    )
 
 
 def test_cli_env_var_is_reported_env(adopted, monkeypatch):
@@ -188,7 +202,9 @@ needs_proc = pytest.mark.skipif(not Path("/proc/self/stat").exists(), reason="re
 
 
 @needs_proc
-def test_a_harness_declaration_names_the_cli_agent_unless_flag_or_env_is_given(adopted, monkeypatch):
+def test_a_harness_declaration_names_the_cli_agent_unless_flag_or_env_is_given(
+    adopted, monkeypatch
+):
     monkeypatch.chdir(adopted)
     d = harness_identity._dir(adopted)
     assert d is not None
