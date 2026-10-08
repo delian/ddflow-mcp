@@ -1,10 +1,12 @@
 """One vocabulary for "how much may this take": tokens, characters, and the exchange rate.
 
 Before this module the brief, the markdown view and the recall renderer each wrote their own
-`// 4` and `* 4`, and the recall default of 4000 was defined in four places. Every
-budget in ddflow now states its unit: the brief counts TOKENS (`[session] brief_max_tokens`),
-recall counts CHARACTERS (`max_chars`), and `CHARS_PER_TOKEN` is the one conversion
-between them. The estimate is deliberately cheap -- a tokenizer import would make the brief
+`// 4` and `* 4`, and the recall default of 4000 was defined in four places. The brief's
+API and the recall defaults now use this vocabulary; `views/markdown.py` (the brief's
+renderer) and the recall renderers move onto it with the context pack
+(B-uni-context-pack.2-pack). A budget states its unit: the brief counts TOKENS
+(`[session] brief_max_tokens`), recall counts CHARACTERS (`max_chars`), and
+`CHARS_PER_TOKEN` is the one conversion between them. The estimate is deliberately cheap -- a tokenizer import would make the brief
 the slowest command in the tool.
 """
 
