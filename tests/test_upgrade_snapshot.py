@@ -54,6 +54,7 @@ def tags(repo: Path) -> list[str]:
 
 def test_a_snapshot_tags_head_before_the_apply_and_names_it(old: Path) -> None:
     head = git(old, "rev-parse", "HEAD")
+    original = (old / DRIVER).read_bytes()
 
     out = go(old, "instructions", backup="snapshot")
 
@@ -63,7 +64,11 @@ def test_a_snapshot_tags_head_before_the_apply_and_names_it(old: Path) -> None:
     assert git(old, "rev-parse", f"{tag}^{{commit}}") == head, (
         "nothing to commit: HEAD is the snapshot"
     )
-    assert git(old, "show", f"{tag}:{DRIVER}") != (old / DRIVER).read_text()
+    shown = subprocess.run(
+        ["git", "-C", str(old), "show", f"{tag}:{DRIVER}"], capture_output=True, check=True
+    ).stdout
+    assert shown == original, "the tag holds the file as it was BEFORE the apply"
+    assert (old / DRIVER).read_bytes() != original
 
 
 def test_a_dirty_tree_is_refused_clearly_and_nothing_changes(old: Path) -> None:
@@ -186,3 +191,29 @@ def test_a_snapshot_of_a_repository_with_no_commit_is_refused(tmp_path: Path) ->
     # nothing exists to commit and HEAD does not exist either
     with pytest.raises(BK.SnapshotRefused, match=r"needs a commit"):
         BK.make_snapshot(r, [r / "not-there.txt"], "a", "b")
+
+
+def test_a_restore_that_git_refuses_is_exit_3_not_a_failure(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(repo: Path, name: str) -> dict[str, Any]:
+        raise BK.SnapshotRefused("git could not restore the snapshot: no")
+
+    monkeypatch.setattr(BK, "restore", refuse)
+
+    out = A.upgrade(old, restore="latest", agent="upgrader")
+
+    assert out.exit == 3 and "git could not restore" in out.reason
+
+
+def test_a_disk_failure_while_saving_is_a_failure_not_a_snapshot_refusal(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_disk(*a: Any, **k: Any) -> BK.Snapshot:
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(UA, "make_snapshot", no_disk)
+
+    out = go(old, "hooks", backup="snapshot")
+
+    assert out["exit"] == 1 and "[failed]" in out["text"] and "[refused]" not in out["text"]

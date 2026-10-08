@@ -27,6 +27,7 @@ command that pins the old behaviour.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import tomllib
 from collections.abc import Collection, Mapping
@@ -277,10 +278,10 @@ def apply(
     results, todo = _select(plan, parse_categories(categories), confirm, config_changes)
 
     files = [p for i in todo for p in touched(repo, cfg, i)]
-    backup_dir, why = _save(repo, cfg, backup, files, frm, to)
+    backup_dir, why, refused = _save(repo, cfg, backup, files, frm, to)
     if why:
         # Nothing was changed: the originals could not be saved, so no item is applied.
-        status = REFUSED if backup == "snapshot" else FAILED
+        status = REFUSED if refused else FAILED
         failed = results + [_rec(i, status, why) for i in todo]
         return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
@@ -304,24 +305,26 @@ def _summarise(
 
 def _save(
     repo: Path, cfg: Config, mode: str, files: list[Path], frm: str, to: str
-) -> tuple[str, str]:
-    """Save the originals in ``mode`` before anything is written: `(where, "")`, or
-    `("", why)` when they could not be saved. Nothing to save, or `none`, is `("", "")`."""
+) -> tuple[str, str, bool]:
+    """Save the originals in ``mode`` before anything is written: `(where, "", False)`, or
+    `("", why, refused)` when they could not be saved -- ``refused`` when the snapshot policy
+    said no (no git, a dirty tree), not when a disk failed. Nothing to save, or `none`, is
+    `("", "", False)`."""
     if not files or mode == "none":
-        return "", ""
+        return "", "", False
     try:
         if mode == "snapshot":
             snap = make_snapshot(repo, files, frm, to)
-            return snap.tag + (
-                f" (and {snap.local} for what git cannot hold)" if snap.local else ""
-            ), ""
+            extra = f" (and {snap.local} for what git cannot hold)" if snap.local else ""
+            return snap.tag + extra, "", False
         where = str(make_backup(repo, files, frm, to))
     except SnapshotRefused as exc:
-        return "", str(exc)
+        return "", str(exc), True
     except OSError as exc:
-        return "", f"no backup could be written ({exc}); nothing was changed"
-    prune(repo, cfg.upgrade.backup_keep)
-    return where, ""
+        return "", f"no backup could be written ({exc}); nothing was changed", False
+    with contextlib.suppress(OSError):  # tidying old backups never fails an upgrade
+        prune(repo, cfg.upgrade.backup_keep)
+    return where, "", False
 
 
 def _check_modes(backup: str, config_changes: str) -> None:

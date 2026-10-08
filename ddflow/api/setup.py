@@ -1080,7 +1080,9 @@ def _upgrade_restore(repo: Path, name: str, agent: str) -> O.Outcome:
     """Put back what a local backup or a snapshot holds (``name``, or ``latest``)."""
     try:
         done = BK.restore(repo, name)
-    except (LookupError, BK.SnapshotRefused, OSError, ValueError) as exc:
+    except BK.SnapshotRefused as exc:
+        return O.refused("upgrade", str(exc))
+    except (LookupError, OSError, ValueError) as exc:
         return O.failed("upgrade", str(exc))
     log, cfg, st = _load(repo, agent)
     data = UP.build(repo, log, cfg, st)
