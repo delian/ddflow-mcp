@@ -300,13 +300,14 @@ def test_over_mcp_plan_defaults_to_the_plan_and_false_applies(old: Path) -> None
         return reply["result"]
 
     planned = call({})
+    explicit = call({"plan": True})  # before anything is applied
     applied = call({"plan": False})
 
+    assert explicit["content"] == planned["content"], "plan: true is the plan"
     assert json.loads(planned["content"][0]["text"])["total"] > 0
     assert "applied" not in json.loads(planned["content"][0]["text"])
     done = json.loads(applied["content"][0]["text"])
     assert "applied" in done and done["applied"]["results"], "plan=false applied the plan"
-    assert call({"plan": True})["content"] != applied["content"]
 
 
 def test_the_cli_plan_flag_is_the_default_spelled_out(old: Path) -> None:

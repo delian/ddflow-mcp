@@ -2118,8 +2118,7 @@
     --confirm KEY         with --apply: accept the change to this knob, file or repair that the
                           operator set or wrote (repeatable; needs --reason, which is recorded)
     --reason REASON       with --confirm: why the operator accepts it
-    --backup MODE         with --apply: where the originals go (local, none); default
-                          [upgrade].backup
+    --backup MODE         with --apply: where the originals go: local (default) or none
   
   '''
 # ---

@@ -819,3 +819,9 @@ def test_over_mcp_an_explicit_plan_true_with_apply_is_refused_like_the_cli(old: 
 
     assert reply["_meta"]["exit"] == 3
     assert not (old / ".claude" / "settings.json").exists(), "nothing was applied"
+
+
+def test_a_refusal_on_the_cli_json_path_still_says_why_on_stderr(old: Path) -> None:
+    code, _out, err = cli(old, "--json", "upgrade", "--plan", "--apply")
+
+    assert code == 3 and "not both" in err

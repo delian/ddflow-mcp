@@ -76,7 +76,7 @@ def register(s: argparse._SubParsersAction) -> None:
         "--backup",
         default="",
         metavar="MODE",
-        help="with --apply: where the originals go (local, none); default [upgrade].backup",
+        help="with --apply: where the originals go: local (default) or none",
     )
     up.set_defaults(fn=cmd_upgrade)
 

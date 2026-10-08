@@ -199,8 +199,8 @@ def cmd_upgrade(a, c: Ctx) -> int:
     elif out.data.get("text"):
         print(out.data["text"])
     # The reason says what the exit code means; the text already says what was found.
-    if out.reason and not c.json and (out.exit == REFUSED or not out.data.get("text")):
-        print(out.reason, file=sys.stderr)
+    if out.reason and (out.exit == REFUSED or (not c.json and not out.data.get("text"))):
+        print(out.reason, file=sys.stderr)  # a refusal says why even beside a JSON body
     return out.exit
 
 
