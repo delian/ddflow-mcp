@@ -270,7 +270,9 @@ def _untracked_content_digest(where: Path | str) -> str:
 def git_state_change(before: dict[str, str] | None, after: dict[str, str] | None) -> str:
     """ "" when the state is as it was (or could not be compared), else a sentence naming
     which parts changed. A state that was readable before and is not now is a change:
-    the tool broke the repository. Only an unreadable START cannot be compared."""
+    the tool broke the repository. An unreadable START cannot be compared, and a part
+    (the untracked listing) that either snapshot could not read is left out: "could not
+    list" is not "changed" (B049f8ce85d), at the cost of not watching that part then."""
     if before is None or before == after:
         return ""
     if after is None:
