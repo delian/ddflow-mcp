@@ -1,6 +1,6 @@
 """textcut.clip: one clipper under nine call sites (D-unify 4, strangler).
 
-`tests/golden/textkit_clip.json` was recorded from the nine ORIGINAL clippers over one
+`tests/golden/textkit_clip.json.gz` (gzipped JSON; `zcat` reads it) was recorded from the nine ORIGINAL clippers over one
 corpus (`_corpus`: lengths around each budget, multibyte text, leading/trailing spaces,
 redaction marks cut at, before and after the budget). Every call site now reproduces its
 recorded output byte for byte, with one decided exception: a cut no longer ends inside a
@@ -10,6 +10,7 @@ recorded output byte for byte, with one decided exception: a cut no longer ends 
 
 from __future__ import annotations
 
+import gzip
 import json
 import re
 from pathlib import Path
@@ -28,7 +29,9 @@ from ddflow.services.export import registry as RG
 from ddflow.surfaces import mcp_bound as MB
 from ddflow.views import markdown as MD
 
-GOLDEN = json.loads((Path(__file__).parent / "golden" / "textkit_clip.json").read_text("utf-8"))
+GOLDEN = json.loads(
+    gzip.decompress((Path(__file__).parent / "golden" / "textkit_clip.json.gz").read_bytes())
+)
 
 #: A cut that used to end inside a redaction mark ("xx[REDACTED:sec") and now stops before it.
 _UNCLOSED = re.compile(r"\[REDACTED:[^\]\s…]*(?=$| \[\.\.\.\]$|…$| \.\.\.$)")
