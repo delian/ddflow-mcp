@@ -24,8 +24,8 @@ from datetime import date, timedelta
 from typing import Any
 
 from ...core import clock
-from ...core import digest as DG
 from ...core import globs as G
+from ...core.events import canonical_digest
 from ..approval import check as approval_check
 from .checks import FAIL, WAIVED, CheckResult, Finding
 
@@ -58,10 +58,17 @@ class Waiver:
     @property
     def digest(self) -> str:
         """Equal waivers, equal digest: the thing a person approves."""
-        text = "\n".join(
-            [self.id, self.record, self.check, self.reason, self.expires, self.granted, *self.globs]
+        return canonical_digest(
+            {
+                "id": self.id,
+                "record": self.record,
+                "check": self.check,
+                "reason": self.reason,
+                "expires": self.expires,
+                "granted": self.granted,
+                "globs": list(self.globs),
+            }
         )
-        return DG.content_digest(text, "sha256", length=16)
 
 
 def validate(w: Waiver) -> list[str]:

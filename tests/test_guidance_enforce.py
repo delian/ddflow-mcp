@@ -77,7 +77,7 @@ def test_a_check_that_cannot_be_evaluated_is_unavailable_never_a_pass(kinds):
     assert "RuntimeError: tool crashed" in got[1].reason
     assert got[2].reason == "semgrep is not installed"
     assert "list of findings" in got[3].reason and "needs a kind" in got[4].reason
-    assert CK.gate_verdict([rec], got).outcome == "unavailable"
+    assert CK.gate_verdict(got).outcome == "unavailable"
 
 
 def test_only_live_guidance_is_held_to_its_checks(kinds):
@@ -104,19 +104,22 @@ def test_the_gate_verdict_follows_enforcement_and_never_hides_what_it_found(kind
     fine = _rec("f", enforcement="block", checks=[{"kind": "ok"}])
     recs = [blocking, warning, advisory, fine]
     results = [r for rec in recs for r in CK.run_record(rec, _ctx("x.py"))]
-    v = CK.gate_verdict(recs, results)
+    v = CK.gate_verdict(results)
     assert v.outcome == "failed"
     assert [r.record for r in v.blocking] == ["b"]
     assert [r.record for r in v.warnings] == ["w"] and [r.record for r in v.notes] == ["a"]
     assert v.summary() == "1 blocking, 1 warning, 1 note"
     # without the blocking record the gate passes, still carrying the warning
     rest = [r for r in results if r.record != "b"]
-    v = CK.gate_verdict(recs, rest)
+    v = CK.gate_verdict(rest)
     assert v.outcome == "passed" and len(v.warnings) == 1
-    assert CK.gate_verdict([], []).outcome == "passed"
+    assert CK.gate_verdict([]).outcome == "passed"
     # a failure beats an unavailable one
-    both = [*results, CK.CheckResult("f", "f#2", "x", CK.UNAVAILABLE, reason="no tool")]
-    assert CK.gate_verdict(recs, both).outcome == "failed"
+    both = [
+        *results,
+        CK.CheckResult("f", "f#2", "x", CK.UNAVAILABLE, reason="no tool", enforcement="block"),
+    ]
+    assert CK.gate_verdict(both).outcome == "failed"
 
 
 def test_equal_outcomes_have_equal_digests(kinds):
@@ -192,11 +195,11 @@ def test_a_waiver_covers_its_scope_and_expiry_resurfaces_the_finding(kind, kinds
     only = CK.run_record(rec, _ctx("src/legacy/a.py"))
     [r] = WV.apply(only, [_waiver()], today=TODAY, approved=approved)
     assert r.status == CK.WAIVED and not r.findings
-    v = CK.gate_verdict([rec], [r])
+    v = CK.gate_verdict([r])
     assert v.outcome == "passed" and v.waived == [r]
     # the day after it expires the finding is live again, and the gate fails
     [r] = WV.apply(only, [_waiver()], today=date(2026, 11, 2), approved=approved)
-    assert r.status == CK.FAIL and CK.gate_verdict([rec], [r]).outcome == "failed"
+    assert r.status == CK.FAIL and CK.gate_verdict([r]).outcome == "failed"
     assert [w.id for w in WV.resurfaced([_waiver()], date(2026, 11, 2))] == ["w1"]
     assert WV.resurfaced([_waiver()], TODAY) == []
 
@@ -276,6 +279,65 @@ def test_a_recorded_review_moves_the_date_or_clears_it():
 def test_reminders_are_budgeted():
     recs = [_rec(f"g-{n}", review_by="2026-01-01") for n in range(8)]
     lines = RV.reminders(RV.review_due(recs, TODAY), limit=3)
-    assert len(lines) == 4 and lines[-1] == "... and 5 more due for review"
+    assert len(lines) == 3 and lines[-1] == "... and 6 more due for review"
     assert lines[0].startswith("rule g-0: review_by 2026-01-01 has passed (280 days)")
     assert RV.reminders([]) == []
+
+
+def test_reminders_never_exceed_their_limit():
+    """The summary line counts against the limit (roborev/critic): a caller sizing a fixed
+    block by `limit` must not overflow by one."""
+    recs = [_rec(f"g-{n}", review_by="2026-01-01") for n in range(6)]
+    due = RV.review_due(recs, TODAY)
+    for limit in (1, 2, 5, 6, 7):
+        assert len(RV.reminders(due, limit)) <= limit
+    assert len(RV.reminders(due, 5)) == 5 and RV.reminders(due, 5)[-1].startswith("... and 2")
+    assert RV.reminders(due, 0) == [] and len(RV.reminders(due, 6)) == 6
+
+
+# -- regressions found in review ---------------------------------------------------------------
+
+
+def test_a_waiver_digest_cannot_be_forged_by_moving_a_newline_between_fields():
+    """Fields were joined with newlines, so a reason holding one could stand in for a
+    later field: `globs=("src/**\nx",)` hashed like `globs=("src/**", "x")`, and one
+    approval covered both (critic, rubber_duck)."""
+    a = _waiver(globs=("src/**", "x"))
+    b = _waiver(globs=("src/**\nx",))
+    assert a.digest != b.digest
+    w1 = _waiver(reason="why\n2026-11-01", expires="2026-11-01", granted="2026-10-08")
+    w2 = _waiver(
+        reason="why",
+        expires="2026-11-01",
+        granted="2026-10-08",
+        globs=("2026-10-08", "src/legacy/**"),
+    )
+    assert w1.digest != w2.digest
+
+
+def test_a_result_digest_sees_which_findings_a_waiver_covered(kinds):
+    CK.register("flag", _flag_all)
+    rec = _rec(checks=[{"kind": "flag"}])
+    [res] = CK.run_record(rec, _ctx("a.py", "b.py"))
+    approved = lambda _w: True  # noqa: E731
+    a = WV.apply([res], [_waiver(globs=("a.py",))], today=TODAY, approved=approved)[0]
+    b = WV.apply([res], [_waiver(id="w2", globs=("b.py",))], today=TODAY, approved=approved)[0]
+    assert a.status == b.status == CK.FAIL and a.digest != b.digest
+
+
+def test_the_verdict_cannot_lose_a_blocking_record_it_was_not_handed(kinds):
+    """Enforcement travels with the result: a gate that rebuilt it from a second list
+    filed a blocking failure as an advisory note when the lists disagreed (roborev 2212)."""
+    CK.register("flag", _flag_all)
+    rec = _rec("b", enforcement="block", checks=[{"kind": "flag"}])
+    v = CK.gate_verdict(CK.run_record(rec, _ctx("x.py")))
+    assert v.outcome == "failed" and [r.record for r in v.blocking] == ["b"]
+
+
+def test_two_checks_of_one_record_cannot_share_an_id(kinds):
+    """A waiver naming `c1` would otherwise cover both (roborev 2212)."""
+    CK.register("flag", _flag_all)
+    rec = _rec(checks=[{"kind": "flag", "id": "c1"}, {"kind": "flag", "id": "c1"}])
+    first, second = CK.run_record(rec, _ctx("a.py"))
+    assert first.status == CK.FAIL
+    assert second.status == CK.UNAVAILABLE and "duplicate check id 'c1'" in second.reason
