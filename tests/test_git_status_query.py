@@ -260,17 +260,17 @@ def test_event_shards_are_unknown_when_git_cannot_say(tmp_path):
     assert eventcommit.uncommitted_shards(tmp_path) is None
 
 
-def test_onboard_status_separates_work_from_ignored_and_skips_caches(work):
-    from ddflow.services import onboard
+def test_tree_work_separates_work_from_ignored_and_skips_caches(work):
+    from ddflow.infra import worktree as W
 
     _commit(work, **{".gitignore": "keep.env\n__pycache__/\n", "a.txt": "a\n"})
     (work / "a.txt").write_text("b\n")
     (work / "keep.env").write_text("secret\n")
     (work / "__pycache__").mkdir()
     (work / "__pycache__" / "m.pyc").write_text("c\n")
-    readable, wk, ignored = onboard._status(work)
-    assert readable and wk == ["a.txt"] and ignored == ["keep.env"]
-    assert onboard._status(work / "nope")[0] is False
+    tw = W.tree_work(work)
+    assert tw.readable and tw.work == ["a.txt"] and tw.ignored == ["keep.env"]
+    assert W.tree_work(work / "nope").readable is False
 
 
 def test_a_snapshot_backup_refuses_a_tree_whose_status_git_cannot_read(work, monkeypatch):
