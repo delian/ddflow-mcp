@@ -81,14 +81,9 @@ _BUMP_CATEGORY = {F.MAJOR: "Changed", F.PATCH: "Fixed", F.MINOR: "Added"}
 
 def _git(repo: Path, *args: str) -> str:
     """Stdout of a git command; failure is ``ExportError`` (could not run)."""
-    try:
-        r = W.git(repo, *args)
-    except (OSError, ValueError) as exc:
-        raise ExportError(f"could not run git: {exc}", EXIT_UNAVAILABLE) from exc
-    except Exception as exc:  # a timeout from the subprocess layer
-        raise ExportError(
-            f"could not run git: {type(exc).__name__}: {exc}", EXIT_UNAVAILABLE
-        ) from exc
+    r = W.git(repo, *args)
+    if r.unavailable:  # a missing git, or a timeout
+        raise ExportError(f"could not run git: {r.err}", EXIT_UNAVAILABLE)
     if not r.ok:
         raise ExportError(f"git {' '.join(args[:2])} failed: {r.err or r.out}", EXIT_UNAVAILABLE)
     return r.out

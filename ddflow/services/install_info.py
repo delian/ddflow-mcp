@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+from ..infra import git as G
 from ..infra import paths as _paths
 from ..infra import proc as P
 
@@ -159,12 +160,8 @@ def is_own_dev_tree(root: Path | None = None) -> bool:
 
 
 def _git(root: Path, *args: str) -> str | None:
-    try:
-        r = P.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30)
-    except (OSError, ValueError):
-        return None
-    out = (r.stdout or "").strip()
-    return out if r.returncode == 0 and out else None
+    r = G.run(root, *args, timeout=P.TIMEOUTS["probe"])
+    return r.out if r.ok and r.out else None
 
 
 def _kind(dist, record: dict | None, from_source: bool) -> str:

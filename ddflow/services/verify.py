@@ -79,10 +79,8 @@ class Report:
 def _git_ok(repo: Path, *args: str) -> bool | None:
     from ..infra.worktree import git
 
-    try:
-        return git(repo, *args, timeout=60).ok
-    except Exception:
-        return None
+    r = git(repo, *args, timeout=60)
+    return None if r.unavailable else r.ok
 
 
 def _ever_existed(repo: Path, path: str, rev: str) -> bool:
