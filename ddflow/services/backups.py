@@ -152,8 +152,8 @@ def _require_clean(repo: Path) -> None:
             "a snapshot backup needs a git repository, and this is not one; "
             "use [upgrade].backup = local (or --backup local)"
         )
-    dirty = git.run(repo, "status", "--porcelain", "--untracked-files=no")
-    if not dirty.ok or dirty.out:
+    dirty = git.status(repo, untracked="no")
+    if dirty is None or dirty:
         raise SnapshotRefused(
             "a snapshot backup needs a clean working tree (it is what HEAD holds), and this "
             "one has uncommitted changes to tracked files: commit or stash them, or use "

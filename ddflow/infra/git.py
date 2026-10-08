@@ -236,15 +236,20 @@ def status_run(
     repo: Path | str,
     *pathspec: str,
     untracked: str = "normal",
-    timeout: float | None = LISTING_TIMEOUT,
+    ignored: str = "",
+    timeout: float | None = GIT_TIMEOUT,
 ) -> GitResult:
     """The `git status --porcelain -z` call itself, for a caller that needs git's own
     message when it fails (`parse_status` reads it; `status` does both).
 
     ``untracked`` is git's ``--untracked-files`` mode: ``"normal"`` (an untracked directory
-    is one entry), ``"all"`` (every file) or ``"no"``. ``pathspec`` narrows the status.
+    is one entry), ``"all"`` (every file) or ``"no"``. ``ignored`` is git's ``--ignored`` mode
+    (``"traditional"``, ``"matching"`` or ``"no"``; "" leaves ignored files out, as git does).
+    ``pathspec`` narrows the status.
     """
     argv = ["status", "--porcelain", f"--untracked-files={untracked}"]
+    if ignored:
+        argv.append(f"--ignored={ignored}")
     if pathspec:
         argv += ["--", *pathspec]
     return run(repo, *argv, z=True, timeout=timeout)
@@ -278,10 +283,12 @@ def status(
     repo: Path | str,
     *pathspec: str,
     untracked: str = "normal",
-    timeout: float | None = LISTING_TIMEOUT,
+    ignored: str = "",
+    timeout: float | None = GIT_TIMEOUT,
 ) -> list[StatusEntry] | None:
     """`git status --porcelain -z` parsed (see `status_run`); None when git failed."""
-    return parse_status(status_run(repo, *pathspec, untracked=untracked, timeout=timeout))
+    r = status_run(repo, *pathspec, untracked=untracked, ignored=ignored, timeout=timeout)
+    return parse_status(r)
 
 
 def unmerged(repo: Path | str, timeout: float | None = LISTING_TIMEOUT) -> list[str] | None:
