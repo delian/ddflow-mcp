@@ -132,9 +132,13 @@ class _Pass:
         self.text = text
         self.counts: dict[str, int] = {}
 
-    def sub(self, pattern: re.Pattern[str], kind: str, keep=None, fill=None) -> None:
+    def sub(
+        self, pattern: re.Pattern[str], kind: str, keep=None, fill=None, whole: bool = False
+    ) -> None:
         """Replace matches outside markers; `keep(match)` true leaves a match alone;
-        `fill(text)` builds the replacement from the matched text (default: a marker)."""
+        `fill(text)` builds the replacement from the matched text (default: a marker).
+        `whole` scans the text unsplit, so a match may straddle a marker (a secret must not
+        keep its tail because a marker sits inside it); `keep` then guards idempotence."""
         n = 0
 
         def repl(m: re.Match[str]) -> str:
@@ -144,6 +148,11 @@ class _Pass:
             n += 1
             return fill(m.group(0)) if fill is not None else _marker(kind)
 
+        if whole:
+            self.text = pattern.sub(repl, self.text)
+            if n:
+                self.counts[kind] = self.counts.get(kind, 0) + n
+            return
         pieces = _MARKER.split(self.text)
         marks = _MARKER.findall(self.text)
         out = []
@@ -179,7 +188,15 @@ def _secrets(p: _Pass, patterns: Iterable[str], style: str) -> None:
                 f"it. Pass the list as JSON instead:\n"
                 f"""  DDFLOW_SESSION_REDACT_PATTERNS='["pattern one", "pattern two"]'"""
             ) from exc
-        p.sub(compiled, "secret", fill=_mask if style == "mask" else None)
+        fill = _mask if style == "mask" else None
+
+        def settled(m: re.Match[str], fill=fill) -> bool:
+            # a marker, or a masked value, from an earlier pass: scanning it again changes nothing
+            return _MARKER.fullmatch(m.group(0)) is not None or (
+                fill is not None and fill(m.group(0)) == m.group(0)
+            )
+
+        p.sub(compiled, "secret", keep=settled, fill=fill, whole=True)
 
 
 def mask_secrets(text: object, secret_patterns: Iterable[str]) -> tuple[str, int]:
@@ -268,6 +285,9 @@ def _host_forms(machine: str) -> list[str]:
     )
 
 
+_KEY = re.compile(r"[A-Za-z0-9_. -]*")
+#: Authorization schemes: `<scheme> <secret>`, no key separator.
+_SCHEMES = frozenset({"bearer", "basic", "token"})
 #: A `Bearer <token>` match splits into exactly two parts: the scheme and the secret.
 _SCHEME_AND_VALUE = 2
 
@@ -280,11 +300,14 @@ def _mask(s: str) -> str:
     without the value. A whole-match blanking would make the surrounding prompt
     ungrammatical and harder to follow months later.
     """
-    for sep in (":", "="):
-        if sep in s:
-            head, _, tail = s.partition(sep)
-            if not tail.strip("= \t"):  # a bare token with padding (base64 `abc==`)
-                break
+    scheme, _, rest = s.partition(" ")
+    if scheme.lower() in _SCHEMES and rest.strip() and rest.lstrip()[0] not in ":=":
+        return f"{scheme} [REDACTED]"  # `Bearer abc:def`: the value may hold a separator
+    cuts = [i for i in (s.find(":"), s.find("=")) if i >= 0]
+    if cuts:  # the FIRST separator ends the key; a later one belongs to the value
+        head, sep, tail = s[: min(cuts)], s[min(cuts)], s[min(cuts) + 1 :]
+        # a key reads as words; anything else before the separator is part of the secret
+        if _KEY.fullmatch(head.strip()) and tail.strip("= \t"):  # not base64 padding `abc==`
             return f"{head}{sep} [REDACTED]"
     parts = s.split(None, 1)
     if len(parts) == _SCHEME_AND_VALUE:
