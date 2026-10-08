@@ -429,6 +429,7 @@ _FORBIDDEN = {
     ),
     "ddflow/api/rules.py": ("fnmatch", "textsim", "_get_overlap_terms", "_tokenize", "_compared"),
     "ddflow/api/decisions.py": ("conflicts",),
+    "ddflow/api/lifecycle/brief.py": ("conflicts",),
 }
 
 
@@ -451,3 +452,28 @@ def test_a_rule_refused_by_a_limit_says_why_and_does_not_say_added(repo) -> None
     assert code == 3
     assert "added" not in out and "scope 'nope' is not in rules.scopes_allowed" in err
     assert not (repo / ".ddflow" / "rules" / "r-x.toml").exists()
+
+
+def test_brief_hands_over_the_decisions_decision_applicable_names(repo) -> None:
+    """`brief` and `decision applicable` ask the one resolver: the same decisions, the same
+    order, project-wide ones after those the item's files select."""
+    import json
+
+    from conftest import run_cli
+
+    for did, globs in (("D-a", "ddflow/infra/*"), ("D-b", ""), ("D-c", "docs/**")):
+        args = ["decision", "add", "--id", did, "--title", did, "--decision", f"do {did}"]
+        assert run_cli(repo, *args, *(["--globs", globs] if globs else []))[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T1", "--title", "infra", "--globs", "ddflow/infra/log.py")[0]
+        == 0
+    )
+    out = run_cli(repo, "--json", "decision", "applicable", "T1")[1]
+    body = json.loads(out)
+    named = [d["id"] for d in body["applicable"]] + [d["id"] for d in body["project_wide"]]
+    assert named == ["D-a", "D-b"]
+    brief = run_cli(repo, "brief", "--item", "T1")[1]
+    mentioned = sorted(
+        (brief.index(f'id="{d}"'), d) for d in ("D-a", "D-b", "D-c") if f'id="{d}"' in brief
+    )
+    assert [d for _, d in mentioned] == named
