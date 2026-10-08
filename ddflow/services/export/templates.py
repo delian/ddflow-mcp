@@ -16,22 +16,34 @@ the copy; ``validate`` and ``doctor`` only say it has drifted.
 
 from __future__ import annotations
 
-import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from ...config import Config
-from ...infra import tomlcfg
 from ...infra.fsio import repo_rel
+from ...infra.paths import templates_dir
+from ..overlay import OverlayError, OverlayLoader
 from . import registry as R
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
-_MARK = re.compile(r"\A\{#\s*ddflow-shipped:\s*([0-9a-f]{12})\s*-#\}\n?")
+
+def _loader() -> OverlayLoader:
+    """The overlay of the shipped export templates (D-unify, B-uni-overlay.3):
+    ``.ddflow/templates/export/<kind>.md.j2`` over the package default."""
+    return OverlayLoader(
+        "template",
+        shipped_dir=templates_dir() / "export",
+        project_subdir="templates/export",
+        suffix=".md.j2",
+        display=rel,
+        force_flag="--force",
+    )
 
 
 def project_path(repo: Path, kind: str) -> Path:
-    return Path(repo) / ".ddflow" / "templates" / "export" / f"{kind}.md.j2"
+    return _loader().project_path(repo, kind)
 
 
 def rel(repo: Path, p: Path) -> str:
@@ -40,32 +52,26 @@ def rel(repo: Path, p: Path) -> str:
 
 def split_mark(text: str) -> tuple[str, str]:
     """``(recorded shipped digest or "", the template text without the marker)``."""
-    m = _MARK.match(text)
-    return (m.group(1), text[m.end() :]) if m else ("", text)
+    return _loader().split_mark(text)
 
 
 def ejected_text(kind: str) -> str:
     """What eject writes for ``kind`` today."""
-    shipped = R.shipped_template(kind).text
-    return f"{{# ddflow-shipped: {R.template_digest(shipped)} -#}}\n{shipped}"
-
-
-def _read(p: Path) -> str | None:
-    try:
-        return p.read_text("utf-8")
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeDecodeError) as exc:
-        raise ExportError(f"could not read {p}: {exc}", EXIT_UNAVAILABLE) from exc
+    return _wrapped(lambda: _loader().ejected_text(kind))
 
 
 def is_edited(text: str, kind: str) -> bool:
     """True when ``text`` (an existing file) is neither a pristine copy of some shipped
     version (recorded digest = digest of its own body) nor the current shipped text."""
-    recorded, body = split_mark(text)
-    if recorded:
-        return R.template_digest(body) != recorded
-    return body != R.shipped_template(kind).text
+    return _wrapped(lambda: _loader().is_edited(text, kind))
+
+
+def _wrapped(fn: Callable[[], Any]) -> Any:
+    """``fn()`` with the loader's refusal as exit 3 and its other failures as exit 2."""
+    try:
+        return fn()
+    except OverlayError as exc:
+        raise ExportError(str(exc), EXIT_REFUSED if exc.refused else EXIT_UNAVAILABLE) from exc
 
 
 @dataclass
@@ -82,33 +88,9 @@ def eject(repo: Path, doc: str, *, force: bool = False, cfg: Config | None = Non
     refused (exit 3) without ``force``; an unedited older copy is refreshed."""
     R.get(doc)
     repo = Path(repo)
-    dst = project_path(repo, doc)
-    base = repo / ".ddflow"
-    for p in (base, base / "templates", base / "templates" / "export", dst):
-        if p.is_symlink():
-            raise ExportError(
-                f"{rel(repo, p)} is a symlink; ddflow does not write through it", EXIT_REFUSED
-            )
-    new = ejected_text(doc)
-    old = _read(dst)
-    shown = rel(repo, dst)
-    action = "created"
-    if old is not None:
-        if old == new:
-            action = "unchanged"
-        elif not is_edited(old, doc):
-            action = "updated"
-        elif force:
-            action = "overwritten"
-        else:
-            raise ExportError(
-                f"{shown} was edited since it was ejected; refusing to overwrite it "
-                "(--force replaces it with the shipped default, losing your edits)",
-                EXIT_REFUSED,
-            )
-    if action != "unchanged":
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        tomlcfg.atomic_write(dst, new)
+    done = _wrapped(lambda: _loader().eject(repo, doc, force=force))
+    shown = rel(repo, done.path)
+    action = done.action
     msg = {
         "created": f"ejected {doc} -> {shown}",
         "updated": f"{shown}: refreshed from the shipped default (it had no edits)",
@@ -136,26 +118,19 @@ def drift_notes(repo: Path) -> list[str]:
     except Exception:
         return out
     for kind in kinds:
-        p = project_path(repo, kind)
-        try:
-            text = _read(p)
-            if text is None:
-                continue
-            recorded, body = split_mark(text)
-            if recorded and recorded != R.shipped_digest(kind):
-                edited = R.template_digest(body) != recorded
-                out.append(
-                    f"export template {rel(repo, p)} was ejected from an older shipped "
-                    f"{kind} template; "
-                    + (
-                        "it has your edits: compare it with the shipped default "
-                        "(`ddflow export eject " + kind + " --force` writes it to replace)"
-                        if edited
-                        else f"it has no edits: `ddflow export eject {kind}` refreshes it"
-                    )
-                )
-        except ExportError:
+        d = _loader().drift(repo, kind)
+        if d is None:
             continue
+        out.append(
+            f"export template {rel(repo, d.path)} was ejected from an older shipped "
+            f"{kind} template; "
+            + (
+                "it has your edits: compare it with the shipped default "
+                "(`ddflow export eject " + kind + " --force` writes it to replace)"
+                if d.edited
+                else f"it has no edits: `ddflow export eject {kind}` refreshes it"
+            )
+        )
     return out
 
 

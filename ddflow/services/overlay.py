@@ -145,6 +145,8 @@ class OverlayLoader:
         syntax: str = "jinja",
         check: Callable[[str], None] | None = None,
         missing_configured: Callable[[str, Path], str] | None = None,
+        display: Callable[[Path, Path], str] | None = None,
+        force_flag: str = "force",
     ) -> None:
         if syntax not in _MARKERS:
             raise ValueError(f"unknown syntax {syntax!r}; one of {', '.join(_MARKERS)}")
@@ -157,6 +159,12 @@ class OverlayLoader:
         #: The kind's own sentence for "the configured path does not exist" (name, path), for
         #: a caller whose messages predate the loader and are quoted in its docs and tests.
         self._missing_configured = missing_configured
+        #: How ``eject`` names a path of the project in its messages: ``(repo, path)`` ->
+        #: text. The caller's own form (a repo-relative label) where its messages predate
+        #: the loader; the absolute path otherwise.
+        self._display = display or (lambda repo, path: str(path))
+        #: How the caller's surface spells "overwrite my edits" in the refusal (``--force``).
+        self._force_flag = force_flag
 
     # -- where ------------------------------------------------------------------------
 
@@ -239,7 +247,8 @@ class OverlayLoader:
         for p in (base, *(base / q for q in _prefixes(dst.relative_to(base)))):
             if p.is_symlink():
                 raise OverlayError(
-                    f"{p} is a symlink; ddflow does not write through it", refused=True
+                    f"{self._display(repo, p)} is a symlink; ddflow does not write through it",
+                    refused=True,
                 )
         new = self.ejected_text(name)
         old = _read_or_none(dst)
@@ -253,8 +262,9 @@ class OverlayLoader:
                 action = "overwritten"
             else:
                 raise OverlayError(
-                    f"{dst} was edited since it was ejected; refusing to overwrite it "
-                    "(force replaces it with the shipped default, losing your edits)",
+                    f"{self._display(repo, dst)} was edited since it was ejected; "
+                    "refusing to overwrite it "
+                    f"({self._force_flag} replaces it with the shipped default, losing your edits)",
                     refused=True,
                 )
         if action != "unchanged":

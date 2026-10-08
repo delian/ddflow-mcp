@@ -228,3 +228,48 @@ def test_an_undecodable_prompt_is_a_template_error_not_a_traceback(tmp_path):
     mine.write_bytes(b"\xff")
     with pytest.raises(P.TemplateError, match="could not read"):
         P.resolve("review_system", tmp_path)
+
+
+# -- B-uni-overlay.3: export/templates.py runs on the loader, messages unchanged -------------
+
+
+def test_the_loader_names_paths_and_the_force_flag_as_its_caller_asks(tmp_path):
+    shipped = tmp_path / "pkg"
+    shipped.mkdir()
+    (shipped / "a.j2").write_text("x\n")
+    ld = O.OverlayLoader(
+        "widget",
+        shipped_dir=shipped,
+        project_subdir="w",
+        suffix=".j2",
+        display=lambda repo, p: "<" + p.relative_to(repo).as_posix() + ">",
+        force_flag="--force",
+    )
+    repo = tmp_path / "repo"
+    ld.eject(repo, "a")
+    ld.project_path(repo, "a").write_text("mine\n")
+    with pytest.raises(O.OverlayError) as e:
+        ld.eject(repo, "a")
+    assert str(e.value).startswith("<.ddflow/w/a.j2> was edited") and "(--force replaces" in str(
+        e.value
+    )
+    assert e.value.refused
+
+
+def test_export_eject_refusals_keep_their_exit_codes_and_words(tmp_path):
+    kind = R.names()[0]
+    T.eject(tmp_path, kind)
+    p = T.project_path(tmp_path, kind)
+    p.write_text(p.read_text() + "edit\n")
+    with pytest.raises(T.ExportError) as e:
+        T.eject(tmp_path, kind)
+    assert e.value.code == 3
+    assert str(e.value) == (
+        f".ddflow/templates/export/{kind}.md.j2 was edited since it was ejected; refusing to "
+        "overwrite it (--force replaces it with the shipped default, losing your edits)"
+    )
+    p.unlink()
+    p.mkdir()
+    with pytest.raises(T.ExportError) as e:
+        T.eject(tmp_path, kind)
+    assert e.value.code == 2 and "could not read" in str(e.value)
