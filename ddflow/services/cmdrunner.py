@@ -227,7 +227,19 @@ class CommandRunner:
         """
         if not isinstance(declared, Declared):
             raise TypeError("CommandRunner.run takes a Declared operator command, not a string")
-        line = declared.line
+        run = self._admitted(declared.line, cwd, env, timeout_s, on_tick, tick_s, check_installed)
+        return self._clean(run)
+
+    def _admitted(
+        self,
+        line: str,
+        cwd: Path | str | None,
+        env: Mapping[str, str] | None,
+        timeout_s: float | None,
+        on_tick: Callable[[], None] | None,
+        tick_s: float,
+        check_installed: bool,
+    ) -> CommandRun:
         if check_installed and (
             missing := executable_missing(
                 line, None if env is None else env.get("PATH", os.defpath)
@@ -287,12 +299,18 @@ class CommandRunner:
         run.out, run.err = p.out, p.err
         run.digest = content_digest(raw, "blake2b", size=8, errors="replace")
         run.output_bytes = len(raw)
+        return run
+
+    def _clean(self, run: CommandRun) -> CommandRun:
+        """Mask and clip what a result holds, every path alike: the output, and the reason
+        (which can quote the command's stderr or a path from the OS error)."""
         if self.redactor is not None:
-            for name in ("out", "err", "reason"):
+            for name in ("out", "err"):
                 red = self.redactor.text(getattr(run, name))
                 setattr(run, name, red.text)
                 for kind, n in red.counts.items():
                     run.redactions[kind] = run.redactions.get(kind, 0) + n
+            run.reason = self.redactor.text(run.reason).text  # not counted: it repeats stderr
         if self.max_output is not None:
             marker = f"[... clipped to the last {self.max_output} characters]\n"
             for name in ("out", "err"):
