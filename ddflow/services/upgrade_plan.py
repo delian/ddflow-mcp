@@ -6,6 +6,9 @@ driver/rules checks, the hook and launcher checks) and lays their answers side b
 one list, grouped by CATEGORY:
 
 - `repairs`: data damage an older ddflow left in the log that a repair would mend;
+- `migrations`: breaking changes of a release to something the project holds (a file format, a
+  marker grammar, a reference), each a registered migration (`services.migrations`) that
+  detects, plans (the files it would rewrite) and, on apply, backs those up first;
 - `config`: knobs added, knobs whose default changed and knobs removed since the version this
   project last worked under (the manifest, `services.upgrade_manifest`), judged against THIS
   project's config -- a knob it never set takes the new default; one anyone set (a config
@@ -36,10 +39,11 @@ from ..infra.log import running_version
 from . import adopt as AD
 from . import claudehooks as CH
 from . import launchers as LA
+from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_manifest as UM
 
-CATEGORIES = ("repairs", "config", "instructions", "hooks", "mcp", "features")
+CATEGORIES = ("repairs", "migrations", "config", "instructions", "hooks", "mcp", "features")
 
 AGENT = "agent"
 OPERATOR = "needs operator confirmation"
@@ -202,6 +206,36 @@ def repair_items(repo: Path, log: Any, cfg: Config) -> list[dict[str, Any]]:
                 "unavailable": p.unavailable,
                 "action": OPERATOR if r.consent == RP.OPERATOR else AGENT,
                 "fix": "ddflow upgrade --apply",
+            }
+        )
+    return out
+
+
+def migration_items(repo: Path, log: Any, cfg: Config, running: str = "") -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for p in MG.pending(MG.context(repo, log, cfg), running=running):
+        m = p.migration
+        n = len(p.findings)
+        if p.unavailable:
+            summary = f"{m.title}: could not be checked ({p.unavailable})"
+        else:
+            summary = f"{m.title}: {n} finding(s); {m.action}"
+        out.append(
+            {
+                "category": "migrations",
+                "id": f"migration:{m.id}",
+                "migration": m.id,
+                "since_version": m.since_version,
+                "format_level": m.format_level,
+                "kinds": list(m.kinds),
+                "summary": summary,
+                "findings": [{"key": f.key, "detail": f.detail} for f in p.findings[:_SHOWN]],
+                "finding_count": n,
+                "changes": [{"path": c.path, "action": c.action} for c in p.changes],
+                "paths": sorted({c.path for c in p.changes}),
+                "unavailable": p.unavailable,
+                "action": OPERATOR if m.consent == MG.OPERATOR else AGENT,
+                "fix": "ddflow upgrade --apply migrations",
             }
         )
     return out
@@ -374,6 +408,7 @@ def build(
     changes = _since(baseline, running, manifest)
     cats: dict[str, list[dict[str, Any]]] = {
         "repairs": repair_items(repo, log, cfg),
+        "migrations": migration_items(repo, log, cfg, running),
         "config": config_items(changes, cfg),
         "instructions": instruction_items(repo, not baseline or is_older(baseline, running)),
         "hooks": hook_items(repo),
@@ -392,6 +427,7 @@ def build(
 
 _TITLES = {
     "repairs": "data repairs",
+    "migrations": "migrations",
     "config": "config",
     "instructions": "instructions",
     "hooks": "hooks",
@@ -418,6 +454,8 @@ def render(plan: dict[str, Any]) -> str:
             lines.append(f"  - [{it['action']}] {it['summary']}")
             for f in it.get("findings", []):
                 lines.append(f"      {f['detail']}")
+            for c in it.get("changes", []):
+                lines.append(f"      would: {c['path']}: {c['action']}")
             if it.get("finding_count", 0) > len(it.get("findings", [])):
                 lines.append(f"      ... and {it['finding_count'] - len(it['findings'])} more")
             if it.get("fix"):

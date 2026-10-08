@@ -44,6 +44,7 @@ from . import adopt as AD
 from . import claudehooks as CH
 from . import configwrite as CW
 from . import enforce as E
+from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_plan as UP
 from .backups import (  # noqa: F401 -- the backups' home
@@ -236,7 +237,13 @@ def _apply_mcp(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
 
 def _confirmed(item: dict[str, Any], confirm: Mapping[str, str]) -> str:
     """The reason the operator gave for this item, "" when they gave none."""
-    for k in (item["id"], item.get("key"), item.get("repair"), item.get("path")):
+    for k in (
+        item["id"],
+        item.get("key"),
+        item.get("repair"),
+        item.get("migration"),
+        item.get("path"),
+    ):
         if k and confirm.get(k):
             return confirm[k]
     return ""
@@ -370,7 +377,13 @@ def _record(
 
 
 def _ident(item: dict[str, Any]) -> str:
-    return item.get("key") or item.get("repair") or item.get("path") or item["id"]
+    return (
+        item.get("key")
+        or item.get("repair")
+        or item.get("migration")
+        or item.get("path")
+        or item["id"]
+    )
 
 
 def _select(
@@ -400,19 +413,22 @@ def _execute(
     """Run each item's applier; repairs and instruction files go in one batch each."""
     out: list[dict[str, Any]] = []
     for item in todo:
-        if item["category"] not in ("repairs", "instructions"):
+        if item["category"] not in ("repairs", "migrations", "instructions"):
             out.append(_rec(item, *_run(repo, cfg, item, agent)))
     repairs = [i for i in todo if i["category"] == "repairs"]
+    migrations = [i for i in todo if i["category"] == "migrations"]
     docs = [i for i in todo if i["category"] == "instructions"]
     if repairs:
         out += _run_repairs(repo, log, cfg, repairs)
+    if migrations:
+        out += _run_migrations(repo, log, cfg, migrations)
     if docs:
         out += _run_instructions(repo, docs)
     return out
 
 
 def _refusal(item: dict[str, Any], config_changes: str) -> str:
-    key = item.get("key") or item.get("repair") or item.get("path") or item["id"]
+    key = _ident(item)
     why = "needs the operator's confirmation"
     if item["category"] == "config" and item["action"] == UP.AGENT:
         why += f" ([upgrade].config_changes = {config_changes})"
@@ -451,6 +467,32 @@ def _run_repairs(repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]])
             out.append(_rec(i, UNAVAILABLE, f"could not run: {r['unavailable']}"))
         else:
             out.append(_rec(i, APPLIED, f"{len(r['findings'])} finding(s) settled"))
+    return out
+
+
+def _run_migrations(
+    repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Run the chosen migrations. The files they rewrite were saved by `apply` (in the mode
+    the caller chose, `none` included) before anything ran, so the runner is given a backup
+    that saves nothing more."""
+    try:
+        outcomes = MG.run(repo, log, cfg, [i["migration"] for i in items], backup=lambda _f: "")
+    except (OSError, KeyError, ValueError) as exc:
+        return [_rec(i, FAILED, f"{type(exc).__name__}: {exc}") for i in items]
+    by_id = {o.migration: o for o in outcomes}
+    out = []
+    for i in items:
+        o = by_id.get(i["migration"])
+        if o is None:
+            out.append(_rec(i, SKIPPED, "nothing left to migrate"))
+            continue
+        detail = "; ".join([o.detail, *o.problems])
+        out.append(
+            _rec(
+                i, {MG.APPLIED: APPLIED, MG.UNAVAILABLE: UNAVAILABLE}.get(o.status, FAILED), detail
+            )
+        )
     return out
 
 
