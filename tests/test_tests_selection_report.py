@@ -69,7 +69,7 @@ def test_a_larger_task_says_so(repo):
     _task(repo, "T1", lines=40)
     _ci(repo, "T1")
     g = _gate(repo, "T1")
-    assert g["scope"] == "full" and "not a bug fix" in g["why"], g
+    assert g["scope"] == "full" and "(small is under 20)" in g["why"], g
 
 
 def test_a_change_no_test_reaches_says_so(repo):
@@ -82,3 +82,12 @@ def test_a_change_no_test_reaches_says_so(repo):
     _ci(repo, "fix-B1")
     g = _gate(repo, "fix-B1")
     assert g["scope"] == "full" and "no test reaches" in g["why"], g
+
+
+def test_uncommitted_edits_after_ci_say_the_tree_changed(repo):
+    _project(repo)
+    wt = _fix(repo)
+    _ci(repo, "fix-B1")
+    (wt / "src.py").write_text("def f():\n    return 2  # dirty\n")
+    g = _gate(repo, "fix-B1")
+    assert g["scope"] == "full" and "the tree changed since the ci gate passed" in g["why"], g
