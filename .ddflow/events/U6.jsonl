@@ -2352,3 +2352,6 @@
 {"agent":"U6","data":{"at":1791497418.5716057,"holder":"U6"},"id":"e387ef3bcacdfe8120a8f6a47","kind":"lease.renewed","lamport":44952,"schema":1,"subject":"B-uni-tree-lifecycle.3-dispose","ts":"2026-10-08T22:10:18.682393Z"}
 {"agent":"U6","data":{"at":1791497482.147919,"holder":"U6"},"id":"e3eda526236aadd0eb6af5694","kind":"lease.renewed","lamport":44954,"schema":1,"subject":"B-uni-tree-lifecycle.3-dispose","ts":"2026-10-08T22:11:22.386398Z"}
 {"agent":"U6","data":{"at":1791497611.3990126,"holder":"U6"},"id":"ed382f84cac8e642f3a7b3548","kind":"lease.renewed","lamport":44964,"schema":1,"subject":"B-uni-tree-lifecycle.3-dispose","ts":"2026-10-08T22:13:31.655918Z"}
+{"agent":"U6","data":{"at":1791497728.3336334,"holder":"U6"},"id":"e8d8f4e04b471e824f3ac157a","kind":"lease.renewed","lamport":44982,"schema":1,"subject":"B-uni-tree-lifecycle.3-dispose","ts":"2026-10-08T22:15:28.888155Z"}
+{"agent":"U6","data":{"at":1791497744.515343,"holder":"U6"},"id":"ec6c124fb35c1bfd9a73fd31e","kind":"lease.renewed","lamport":44984,"schema":1,"subject":"B-uni-tree-lifecycle.3-dispose","ts":"2026-10-08T22:15:44.770594Z"}
+{"agent":"U6","data":{"at":1791497874.3781307,"holder":"U6"},"id":"ee922d435542e1160dcab41ba","kind":"lease.renewed","lamport":45000,"schema":1,"subject":"B-uni-tree-lifecycle.3-dispose","ts":"2026-10-08T22:17:54.487805Z"}
