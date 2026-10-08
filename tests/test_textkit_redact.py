@@ -145,3 +145,7 @@ def test_redact_report_applies_the_configured_project_names_like_the_upstream_pr
         == redact_report.redactor("upstream", cfg, repo_root="").text(text).text
     )
 
+
+
+def test_a_padded_base64_match_with_a_trailing_colon_is_blanked_whole():
+    assert R.mask_secrets("cGFzc3dvcmQ=:", [r"\S+"]) == ("[REDACTED]", 1)
