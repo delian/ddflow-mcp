@@ -116,8 +116,6 @@ class ChangeDetector:
     _seen: dict[str, tuple[tuple[int, int, int], str]] = field(default_factory=dict, repr=False)
     #: Files the last `scan` found but could not read.
     unreadable: list[str] = field(default_factory=list, repr=False)
-    #: path -> the last hash taken, trusted or not: what an unreadable file keeps.
-    _last: Manifest = field(default_factory=dict, repr=False)
 
     def candidates(self) -> list[str]:
         """The matching files on disk, directory by directory in name order. Symlinks to
@@ -135,9 +133,11 @@ class ChangeDetector:
                     out.append(rel)
         return out
 
-    def scan(self) -> Manifest:
-        """The manifest of the disk now. A file that vanishes or cannot be read while
-        scanning is left out, as if it were not there."""
+    def scan(self, known: Manifest | None = None) -> Manifest:
+        """The manifest of the disk now. A file that vanishes while scanning is left out. One
+        that cannot be read is listed in `unreadable` and keeps its hash in ``known`` (the
+        manifest the caller holds), else it is left out: it is never reported as changed
+        on the strength of an error."""
         manifest: Manifest = {}
         live: set[str] = set()
         self.unreadable = []
@@ -161,20 +161,17 @@ class ChangeDetector:
                     self._seen[rel] = (sig, value)
             if value is None:
                 self.unreadable.append(rel)
-                value = self._last.get(rel)
+                value = (known or {}).get(rel)
             if value is not None:
                 manifest[rel] = value
-                self._last[rel] = value
             live.add(rel)
         for gone in set(self._seen) - live:
             del self._seen[gone]
-        for gone in set(self._last) - live:
-            del self._last[gone]
         return manifest
 
     def changes(self, old: Manifest) -> tuple[Changes, Manifest]:
         """(what differs from ``old``, the manifest of now): keep the second for the next call."""
-        now = self.scan()
+        now = self.scan(old)
         return diff(old, now), now
 
 

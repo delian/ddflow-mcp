@@ -205,3 +205,13 @@ def test_the_git_file_of_a_linked_worktree_is_not_content(tmp_path):
     _write(tmp_path, ".git", "gitdir: /elsewhere/.git/worktrees/x\n")
     _write(tmp_path, "a.md", "1")
     assert sorted(C.ChangeDetector(tmp_path).scan()) == ["a.md"]
+
+
+def test_a_fresh_detector_keeps_the_callers_hash_of_an_unreadable_file(tmp_path):
+    """Mutant: remembering the hash only inside the detector. A new process holds just the
+    manifest it stored."""
+    _write(tmp_path, "a.md", "one")
+    stored = C.ChangeDetector(tmp_path).scan()
+    fresh = C.ChangeDetector(tmp_path, hasher=lambda p: None)
+    got, now = fresh.changes(stored)
+    assert not got and now == stored and fresh.unreadable == ["a.md"]
