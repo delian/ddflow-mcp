@@ -30,7 +30,7 @@ from __future__ import annotations
 import contextlib
 import re
 import tomllib
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -293,7 +293,21 @@ def apply(
         failed = results + [_rec(i, status, why) for i in todo]
         return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
-    results += _execute(repo, log, cfg, todo, agent)
+    saved = {p.resolve() for p in files} if backup_dir else set()
+
+    def late_backup(more: list[Path]) -> str:
+        """Files a migration's own detect now plans that the plan's did not name (earlier
+        steps of this run can change what it finds): saved too, in the same mode."""
+        fresh = [p for p in more if p.resolve() not in saved]
+        if not fresh or backup == "none":
+            return ""
+        where, why, _refused = _save(repo, cfg, backup, fresh, frm, to)
+        if why:
+            raise OSError(why)
+        saved.update(p.resolve() for p in fresh)
+        return where
+
+    results += _execute(repo, log, cfg, todo, agent, late_backup)
     ok, done_cats, reasons = _summarise(results, todo, confirm)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     if ok:
@@ -408,7 +422,12 @@ def _select(
 
 
 def _execute(
-    repo: Path, log: Any, cfg: Config, todo: list[dict[str, Any]], agent: str
+    repo: Path,
+    log: Any,
+    cfg: Config,
+    todo: list[dict[str, Any]],
+    agent: str,
+    late_backup: Callable[[list[Path]], str] | None = None,
 ) -> list[dict[str, Any]]:
     """Run each item's applier; repairs and instruction files go in one batch each."""
     out: list[dict[str, Any]] = []
@@ -421,7 +440,7 @@ def _execute(
     if repairs:
         out += _run_repairs(repo, log, cfg, repairs)
     if migrations:
-        out += _run_migrations(repo, log, cfg, migrations)
+        out += _run_migrations(repo, log, cfg, migrations, late_backup)
     if docs:
         out += _run_instructions(repo, docs)
     return out
@@ -471,13 +490,19 @@ def _run_repairs(repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]])
 
 
 def _run_migrations(
-    repo: Path, log: Any, cfg: Config, items: list[dict[str, Any]]
+    repo: Path,
+    log: Any,
+    cfg: Config,
+    items: list[dict[str, Any]],
+    late_backup: Callable[[list[Path]], str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run the chosen migrations. The files they rewrite were saved by `apply` (in the mode
-    the caller chose, `none` included) before anything ran, so the runner is given a backup
-    that saves nothing more."""
+    """Run the chosen migrations. The files their plans named were saved by `apply` (in the
+    mode the caller chose, `none` included) before anything ran; ``late_backup`` saves any
+    other file a migration now plans to rewrite, so none is rewritten without a copy."""
     try:
-        outcomes = MG.run(repo, log, cfg, [i["migration"] for i in items], backup=lambda _f: "")
+        outcomes = MG.run(
+            repo, log, cfg, [i["migration"] for i in items], backup=late_backup or (lambda _f: "")
+        )
     except (OSError, KeyError, ValueError) as exc:
         return [_rec(i, FAILED, f"{type(exc).__name__}: {exc}") for i in items]
     by_id = {o.migration: o for o in outcomes}
