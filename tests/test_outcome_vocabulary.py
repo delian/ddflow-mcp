@@ -194,3 +194,59 @@ def test_gate_status_render_draws_the_shared_marks() -> None:
         "[ ]",
     ]
     assert isinstance(s, GateStatus)
+
+
+# -- exit codes: one home ---------------------------------------------------------------
+
+#: Modules still defining an exit code as an int literal (the ratchet only goes down);
+#: `core/outcome.py` is the home.
+EXIT_NAME = re.compile(r"^(OK|FAIL|FAILED|NOTHING|REFUSED|EXIT_[A-Z_]+)$")
+
+
+def _exit_literals() -> list[str]:
+    import ast
+
+    sites = []
+    for path in sorted(PKG.rglob("*.py")):
+        rel = path.relative_to(PKG).as_posix()
+        if rel == "core/outcome.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Assign):
+                continue
+            for tgt in node.targets:
+                names = tgt.elts if isinstance(tgt, ast.Tuple) else [tgt]
+                if any(isinstance(n, ast.Name) and EXIT_NAME.match(n.id) for n in names) and all(
+                    isinstance(c, ast.Constant) and isinstance(c.value, int)
+                    for c in (
+                        node.value.elts if isinstance(node.value, ast.Tuple) else [node.value]
+                    )
+                ):
+                    sites.append(f"{rel}:{node.lineno}")
+    return sites
+
+
+#: export/write.py's EXIT_STALE, awaiting its slice.
+OLD_EXIT_LITERALS = 1
+
+
+def test_exit_codes_are_defined_once() -> None:
+    sites = _exit_literals()
+    assert len(sites) <= OLD_EXIT_LITERALS, f"import from ddflow.core.outcome instead: {sites}"
+
+
+def test_the_reexported_exit_names_are_the_outcome_values() -> None:
+    from ddflow.core import outcome as O
+    from ddflow.services import upstream_delivery as U
+    from ddflow.services.export import query
+    from ddflow.surfaces import context
+
+    assert (context.OK, context.FAIL, context.NOTHING, context.REFUSED) == (0, 1, 2, 3)
+    assert (context.OK, context.FAIL, context.NOTHING, context.REFUSED) == (
+        O.OK,
+        O.FAIL,
+        O.NOTHING,
+        O.REFUSED,
+    )
+    assert (query.EXIT_UNAVAILABLE, query.EXIT_REFUSED) == (2, 3)
+    assert (U.OK, U.FAILED, U.UNAVAILABLE, U.REFUSED) == (0, 1, 2, 3)
