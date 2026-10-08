@@ -122,109 +122,41 @@ def test_ci_checks_every_push_not_only_a_release_tag():
     assert on_push, "every workflow is tag-triggered; nothing checks ordinary commits"
 
 
+#: How late each live-window check starts in the load regression below: longer than the 8 s
+#: lease the scenario once ran under, which is what a slow process start did to it at load
+#: average 100-300 (B11e64b1e8c, Bb070dd642d, Bfb0e454b49, B06a0a99c0e). Each earlier fix
+#: widened a margin or scaled to a measured latency; the scenario now keeps the lease live
+#: by grace instead of racing the clock, so no latency is long enough to fail it.
+LATE_CHECK_S = 10
+
+
 @pytest.mark.slow
 @pytest.mark.scenarios
 @pytest.mark.timeout(1800)
-def test_crash_recovery_survives_a_check_slower_than_the_lease(tmp_path):
-    """B11e64b1e8c: crash-recovery asserted "recover reports nothing yet" inside the 8 s
-    lease measured from a heartbeat, so at load average 100-190 the check itself outlived
-    the lease and the scenario failed. Simulated here by one `recover` that starts later
-    than the TTL -- exactly what a slow process start under load does. The scenario must
-    tell an observation made after the lease ran out from a wrong answer, not fail."""
+def test_crash_recovery_does_not_race_the_clock_for_its_live_window_checks(tmp_path):
+    """B06a0a99c0e: every live-window check (the refused claim, `recover`, `doctor` in the
+    new holder's lease) starts `LATE_CHECK_S` late (every time it is run), longer than the lease once was. The
+    scenario must still pass: it may not depend on how fast the machine starts a process.
+    Against the scenario that held an 8 s lease and retried, this failed every time."""
     import scenario_crash_recovery as S
     from harness import Fail, Scenario
 
-    class SlowOnce(Scenario):
-        delayed = False
+    class Late(Scenario):
+        late: frozenset = frozenset()
 
         def ddflow(self, *argv, **kw):
-            if argv == ("recover",) and not self.delayed:
-                self.delayed = True
-                time.sleep(S.TTL_S + 1)
+            if (
+                argv == ("recover",)
+                or (argv[:1] == ("claim",) and kw.get("expect") is None)
+                or argv[:1] == ("doctor",)
+            ):
+                self.late = self.late | {argv[0]}
+                time.sleep(LATE_CHECK_S)
             return super().ddflow(*argv, **kw)
 
-    sc = SlowOnce("crash-recovery-slow", tmp_path / "slow")
+    sc = Late("crash-recovery-late", tmp_path / "late")
     try:
         S.run(sc)
     except Fail as exc:
-        pytest.fail(f"crash-recovery under a slow check: {exc}")
-    assert sc.delayed, "the slow check was never injected: the scenario changed shape"
-
-
-@pytest.mark.slow
-@pytest.mark.scenarios
-@pytest.mark.timeout(1800)
-def test_crash_recovery_doctor_is_read_inside_the_new_holders_lease(tmp_path):
-    """Bfb0e454b49: the last step ran `doctor` long after EPSILON's claim; under ci load
-    its 8 s lease had expired by then and doctor, correctly, reported the expired lease
-    as a problem. Simulated by a `next` that starts later than the TTL."""
-    import scenario_crash_recovery as S
-    from harness import Fail, Scenario
-
-    class SlowNext(Scenario):
-        delayed = False
-
-        def ddflow(self, *argv, **kw):
-            if "next" in argv and not self.delayed:
-                self.delayed = True
-                time.sleep(S.TTL_S + 1)
-            return super().ddflow(*argv, **kw)
-
-    sc = SlowNext("crash-recovery-slow-next", tmp_path / "slow")
-    try:
-        S.run(sc)
-    except Fail as exc:
-        pytest.fail(f"crash-recovery with a slow step before doctor: {exc}")
-    assert sc.delayed, "the slow step was never injected: the scenario changed shape"
-
-
-#: What one live-window check costs the machine beyond its injected delay -- the `show`
-#: that reads the bound plus the real `claim` -- at load average 120-220 on the 192-thread
-#: box CI runs on: 3.6-4.8 s (Bb070dd642d). The loaded test adds it to its injection.
-CI_LATENCY_S = 4.8
-#: The lease the loaded test runs under: one injected check (TTL/2 + 0.5) plus
-#: `CI_LATENCY_S` leaves 24 - 17.3 = 6.7 s, at least `CI_LATENCY_S` again for the
-#: machine's real cost; the test asserts that room.
-LOADED_TTL_S = 24
-
-
-@pytest.mark.slow
-@pytest.mark.scenarios
-@pytest.mark.timeout(1800)
-def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(
-    tmp_path, monkeypatch
-):
-    """B11e64b1e8c, sustained load: every `claim` and every `recover` is slow enough that
-    the two together outlive the lease but each alone does not. Observing both in one
-    window failed every attempt; each check gets its own window.
-
-    The injection has to leave room for what the machine itself costs. Under the 8 s
-    lease it left 3.5 s, and at load 120-220 the `show` and the real `claim` took
-    3.6-4.8 s, so every attempt outlived the lease (Bb070dd642d). This test therefore
-    runs under a longer lease AND adds that measured cost on top of its injection, so
-    the margin is exercised on an idle machine, not only discovered under CI load."""
-    import scenario_crash_recovery as S
-    from harness import Scenario
-
-    monkeypatch.setattr(S, "TTL_S", LOADED_TTL_S)
-    slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease
-    injected = slow + CI_LATENCY_S  # what each slowed check sleeps
-    room = S.TTL_S - injected  # what one loaded check leaves the machine
-    assert room >= CI_LATENCY_S, f"one check leaves {room:.1f}s, less than CI's own cost"
-
-    class Loaded(Scenario):
-        slowed: frozenset = frozenset()
-
-        def ddflow(self, *argv, **kw):
-            # The two live-window checks: `recover`, and the claim whose answer is read.
-            if argv[:1] == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
-                self.slowed = self.slowed | {argv[0]}
-                time.sleep(injected)
-            return super().ddflow(*argv, **kw)
-
-    sc = Loaded("crash-recovery-loaded", tmp_path / "loaded")
-    try:
-        S.run(sc)
-    except AssertionError as exc:
-        pytest.fail(f"crash-recovery under sustained load: {exc}")
-    assert sc.slowed == {"recover", "claim"}, f"load was not injected: {sc.slowed}"
+        pytest.fail(f"crash-recovery with late live-window checks: {exc}")
+    assert sc.late == {"recover", "claim", "doctor"}, f"no delay was injected: {sc.late}"
