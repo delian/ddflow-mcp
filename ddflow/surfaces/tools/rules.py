@@ -131,8 +131,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_edit": {
         "description": (
-            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest; "
-            "new text is duplicate-checked."
+            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest "
+            "and, as a def.updated, in the log; new text is duplicate-checked."
         ),
         "properties": {
             "id": ("string", "Rule id to edit.", True),
@@ -197,14 +197,15 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_remove": {
         "description": (
-            "Delete a rule and regenerate the DDFLOW.md manifest. Rules are files, not "
-            "log records: the removal leaves no record and takes no reason."
+            "Delete a rule file and regenerate the DDFLOW.md manifest. The rule's definition "
+            "in the log is retired (def.retired; its history stays); a retirement the log "
+            "cannot take fails. A removal takes no reason."
         ),
         "properties": {
             "id": ("string", "Rule id to remove.", True),
             "reason": ("string", "", False),
         },
-        "deprecated": {"reason": "a removal takes no reason and leaves no record"},
+        "deprecated": {"reason": "a removal takes no reason"},
         "api": lambda repo, a, agent: _api().rule_remove(repo, a["id"], agent=agent),
         "payload": ("id",),
     },

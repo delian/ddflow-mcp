@@ -331,10 +331,11 @@ disposable on purpose.
   branch — that swaps files under any live session.
 - **Exit codes are the contract:** `0` healthy · `1` real failure · `2` could not run /
   nothing to do · `3` coordination refused. Never treat 2 as 0.
-- **A refusal that says "upgrade ddflow-mcp to >= X" is the skew guard:** this ddflow is
-  older than one that already worked on the project's log, and writing could drop what the
-  newer one recorded. Upgrade ddflow-mcp (restart the MCP server) and retry; reads still
-  work. If you cannot, ask the operator — only if they insist, rerun with
+- **A refusal that begins "REFUSED: this project's log has been worked on by ddflow X" is
+  the skew guard:** the running one is older than the one that already worked on the
+  project's log, and writing could drop what the newer one recorded. Upgrade ddflow-mcp to >= X (in a source checkout: merge main), restart
+  the MCP server and retry; reads still work. If you cannot, ask the operator — only if they
+  insist, rerun with
   `--allow-older-version --reason "<why>"` [MCP: the `allow_older_version` argument]. It is
   recorded (`skew.overridden`), marks that session's events as written by an older ddflow
   and covers this session only. Never add the flag on your own initiative.
