@@ -93,3 +93,31 @@ def test_a_machine_that_cannot_name_itself_matches_no_record(monkeypatch):
     monkeypatch.setattr(socket, "gethostname", boom)
     assert H.same_host("box.example.org") is False  # it cannot be shown to be this machine
     assert H.same_host("") is True
+
+
+def test_a_human_approval_stamps_the_short_host(tmp_path):
+    """`approve` records this machine's SHORT name, as it did before it used the helper."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conftest import run_cli
+
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    repo = tmp_path / "p"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.plan_approved]\ntitle = "ok"\nhuman = true\nprompt = "ask"\n'
+    )
+    run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "approve", "T1", "plan_approved")
+    rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["plan_approved"]
+    # The committed log redacts this machine's name (`[REDACTED:hostname]`); anything else
+    # on disk must be the short form, never the full one.
+    assert rec.evidence.get("host") in (H.short_host(), "[REDACTED:hostname]"), rec.evidence

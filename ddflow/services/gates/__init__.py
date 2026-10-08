@@ -63,6 +63,7 @@ from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
 from ...core.records import GateOutcome  # noqa: F401
 from ...infra import fsio  # noqa: F401
 from ...infra import git as GIT  # noqa: F401
+from ...infra import hostinfo as H  # noqa: F401
 from ...infra import proc as P  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from .. import cmdrunner  # noqa: F401
