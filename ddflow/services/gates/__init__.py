@@ -56,7 +56,7 @@ from pathlib import Path  # noqa: F401
 from typing import Any  # noqa: F401
 
 from ...config import Config, _is_code_tree  # noqa: F401
-from ...core.digest import content_digest  # noqa: F401
+from ...core.digest import content_digest, hasher  # noqa: F401
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
 from ...infra import fsio  # noqa: F401
 from ...infra import git as GIT  # noqa: F401
@@ -129,6 +129,7 @@ from .reviewers import (  # noqa: F401
     _OURS,
     REVIEWER_GATES,
     _declared_family,
+    _file_digest,
     _unapproved_reviewer,
     _untracked_content_digest,
     family_of,

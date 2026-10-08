@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config
-from ...core.digest import content_digest
+from ...core.digest import content_digest, hasher
 from ...core.model import State
 from ...infra import git as GIT
 from .defs import DEFAULT_GATES, GateDef
@@ -210,6 +210,12 @@ def git_state(where: Path | str) -> dict[str, str] | None:
         "diff": ("diff", "HEAD", "--binary", "--", ".", _OURS),
         "stash": ("stash", "list", "--format=%H %gs"),
     }
+    # From the repository top, whatever directory the reviewer was started in: a pathspec
+    # of `.` would narrow every query to that directory.
+    top = GIT.run(where, "rev-parse", "--show-toplevel")
+    if not top.ok or not top.out:
+        return None
+    where = Path(top.out)
     state: dict[str, str] = {}
     for name, args in parts.items():
         r = GIT.run(where, *args, binary=True)
@@ -222,6 +228,15 @@ def git_state(where: Path | str) -> dict[str, str] | None:
 
 #: A file larger than this is digested by its size and mtime, not its bytes.
 _BIG_UNTRACKED = 256 << 20
+
+
+def _file_digest(path: Path) -> str:
+    """A file's content digest, read in pieces: an artifact may be hundreds of MiB."""
+    h = hasher()
+    with path.open("rb") as fh:
+        while piece := fh.read(1 << 20):
+            h.update(piece)
+    return h.hexdigest()[:16]
 
 
 def _untracked_content_digest(where: Path | str) -> str:
@@ -241,7 +256,7 @@ def _untracked_content_digest(where: Path | str) -> str:
             if path.is_symlink() or st.st_size > _BIG_UNTRACKED:
                 h.append(f"{name}:{st.st_size}:{st.st_mtime_ns}")
             else:
-                h.append(f"{name}:{content_digest(path.read_bytes(), length=16)}")
+                h.append(f"{name}:{_file_digest(path)}")
         except OSError:
             h.append(f"{name}:gone")
     return content_digest("\n".join(h), length=16)
