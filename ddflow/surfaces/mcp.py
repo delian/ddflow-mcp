@@ -34,6 +34,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -378,6 +379,82 @@ def _default_agent(repo: Path) -> tuple[str, str]:
         "derived": "derived from the working tree",
         "explicit": "declared",
     }[layer]
+
+
+@dataclass(frozen=True)
+class Resource:
+    """One MCP resource: what `resources/list` says of it and how `resources/read` serves it.
+
+    Declared once, in `RESOURCES`: the URI list and the read map used to be two literals that
+    had to agree, and a dead entry in one that the other shadowed is how a second path hides.
+    Every resource is read through the api, like every tool (B97)."""
+
+    uri: str
+    name: str
+    description: str
+    read: Callable[[Path], str]
+    mime: str = "text/markdown"
+
+    def listing(self) -> dict[str, str]:
+        return {
+            "uri": self.uri,
+            "name": self.name,
+            "description": self.description,
+            "mimeType": self.mime,
+        }
+
+
+def _rendered(show: str) -> Callable[[Path], str]:
+    return lambda repo: _api().render(repo, show=show).data["text"]
+
+
+#: The resources a client can read, in the order `resources/list` shows them.
+RESOURCES: tuple[Resource, ...] = (
+    Resource(
+        "ddflow://board",
+        "Work queue",
+        "The full queue with the critical path.",
+        lambda repo: _api().board(repo).data["text"],
+    ),
+    Resource(
+        "ddflow://brief",
+        "Session brief",
+        "Budgeted session-start pack.",
+        lambda repo: _api().brief(repo).data["text"],
+    ),
+    Resource("ddflow://lessons", "Lessons", "Everything learned so far.", _rendered("lessons")),
+    Resource(
+        "ddflow://lessons-summary",
+        "Lessons summary",
+        "Every live lesson in one paragraph, by tag.",
+        _rendered("lessons-summary"),
+    ),
+    Resource(
+        "ddflow://research",
+        "Research log",
+        "Findings with verdicts and probes.",
+        _rendered("research"),
+    ),
+    Resource(
+        "ddflow://bugs",
+        "Bugs",
+        "Every bug with its item, its regression tests and its lesson.",
+        _rendered("bugs"),
+    ),
+    Resource(
+        "ddflow://decisions",
+        "Decisions",
+        "The architectural decisions in force.",
+        _rendered("decisions"),
+    ),
+    Resource(
+        "ddflow://sessions",
+        "Sessions",
+        "The sessions, when they ran and what they were for.",
+        _rendered("sessions"),
+    ),
+)
+RESOURCE_BY_URI: dict[str, Resource] = {r.uri: r for r in RESOURCES}
 
 
 class Server:
@@ -822,93 +899,19 @@ class Server:
                 ),
             )
         if method == "resources/list":
-            return _ok(
-                mid,
-                {
-                    "resources": [
-                        {
-                            "uri": "ddflow://board",
-                            "name": "Work queue",
-                            "description": "The full queue with the critical path.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://brief",
-                            "name": "Session brief",
-                            "description": "Budgeted session-start pack.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://lessons",
-                            "name": "Lessons",
-                            "description": "Everything learned so far.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://lessons-summary",
-                            "name": "Lessons summary",
-                            "description": "Every live lesson in one paragraph, by tag.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://research",
-                            "name": "Research log",
-                            "description": "Findings with verdicts and probes.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://bugs",
-                            "name": "Bugs",
-                            "description": "Every bug with its item, its regression tests and its lesson.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://decisions",
-                            "name": "Decisions",
-                            "description": "The architectural decisions in force.",
-                            "mimeType": "text/markdown",
-                        },
-                        {
-                            "uri": "ddflow://sessions",
-                            "name": "Sessions",
-                            "description": "The sessions, when they ran and what they were for.",
-                            "mimeType": "text/markdown",
-                        },
-                    ]
-                },
-            )
+            return _ok(mid, {"resources": [r.listing() for r in RESOURCES]})
         if method == "resources/read":
             uri = (msg.get("params") or {}).get("uri", "")
-            # Every resource goes through the CLI, like every tool. The lessons and
-            # research URIs used to fold the log directly — a second data path that
-            # re-wired EventLog + fold without `Ctx`'s config and agent resolution, in
-            # a module whose whole premise is "one implementation, two doors". The
-            # table also carried a dead entry for `ddflow://lessons` that the branch
-            # above it shadowed, which is how a second path hides: nothing reads the
-            # line, so nothing contradicts it.
-            cmd = {
-                "ddflow://board": lambda repo: _api().board(repo).data["text"],
-                # Through the API, like every tool. This served the resources by invoking
-                # the CLI in-process and scraping its stdout, which was the last live user
-                # of `_run_cli` and therefore the last reason the process-global stream
-                # swap existed at all (B97).
-                "ddflow://brief": lambda repo: _api().brief(repo).data["text"],
-                "ddflow://lessons": lambda repo: _api().render(repo, show="lessons").data["text"],
-                "ddflow://lessons-summary": lambda repo: (
-                    _api().render(repo, show="lessons-summary").data["text"]
-                ),
-                "ddflow://research": lambda repo: _api().render(repo, show="research").data["text"],
-                "ddflow://bugs": lambda repo: _api().render(repo, show="bugs").data["text"],
-                "ddflow://decisions": lambda repo: (
-                    _api().render(repo, show="decisions").data["text"]
-                ),
-                "ddflow://sessions": lambda repo: _api().render(repo, show="sessions").data["text"],
-            }.get(uri)
-            if not cmd:
+            resource = RESOURCE_BY_URI.get(uri)
+            if resource is None:
                 return _err(mid, -32602, f"unknown resource {uri!r}")
             return _ok(
                 mid,
-                {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": cmd(self.repo)}]},
+                {
+                    "contents": [
+                        {"uri": uri, "mimeType": resource.mime, "text": resource.read(self.repo)}
+                    ]
+                },
             )
         if method == "prompts/list":
             from ..services import prompts as P
