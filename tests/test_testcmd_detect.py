@@ -62,3 +62,10 @@ def test_one_parser_reads_both_summary_shapes():
     # a line the banner grammar does not match still counts for a baseline (jest)
     assert TC.counts_of(TC.last_count_line("Tests:  3 passed, 3 total\n")) == {"passed": 3}
     assert TC.last_count_line("nothing here\n") == "" and TC.counts_of("") == {}
+
+
+def test_a_package_json_that_is_not_an_object_is_no_runner_not_a_crash(repo):
+    """Be91dfbcca0: valid JSON of another shape ([] / null / "x") raised AttributeError."""
+    for body in ("[]", "null", '"x"', "3"):
+        _write(repo, "package.json", body)
+        assert TC.detect(repo) is None, body
