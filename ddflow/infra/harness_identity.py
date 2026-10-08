@@ -27,8 +27,10 @@ connection, which carry the parent's identity unless they pass `as_agent`.
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
+
+from ..core.agentname import AGENT_NAME as _NAME
+from .paths import common_dir
 
 #: Under the primary checkout's `.git`.
 DIR = "ddflow-identity"
@@ -41,7 +43,6 @@ LAUNCHERS = frozenset({"uv", "uvx", "pipx", "npx", "env"})
 #: and climbing past it would hand the name to every command typed there.
 SHELLS = frozenset({"sh", "dash", "bash", "zsh"})
 
-_NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _MAX_DEPTH = 64
 
 
@@ -62,25 +63,11 @@ def _stat(pid: int) -> tuple[str, int, str] | None:
 
 
 def _dir(repo: Path | str) -> Path | None:
-    """`<common git dir>/ddflow-identity`, from a primary checkout or a linked worktree."""
-    git = Path(repo) / ".git"
-    if git.is_dir():
-        return git / DIR
-    # A linked worktree: `.git` is a file naming its gitdir, whose `commondir` names the
-    # shared one. Read, not asked of git: this runs on every CLI call in a worktree.
-    try:
-        line = git.read_bytes().decode("utf-8", "surrogateescape").strip()
-        if not line.startswith("gitdir:"):
-            return None
-        gitdir = (Path(repo) / line[len("gitdir:") :].strip()).resolve()
-    except OSError:
-        return None
-    try:
-        raw = (gitdir / "commondir").read_bytes().decode("utf-8", "surrogateescape")
-        common = (gitdir / raw.strip()).resolve()
-    except OSError:  # no commondir: a separate git dir or a submodule, which is its own
-        common = gitdir
-    return common / DIR
+    """`<common git dir>/ddflow-identity`, from a primary checkout or a linked worktree.
+    Read from the files git keeps, not asked of git: this runs on every CLI call in a
+    worktree."""
+    common = common_dir(repo, ask_git=False)
+    return common / DIR if common else None
 
 
 def _gone(key: str) -> bool:

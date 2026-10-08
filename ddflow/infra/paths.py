@@ -57,18 +57,10 @@ def primary_checkout(tree: Path) -> Path | None:
     names its `commondir`) rather than by running git: this is asked while writing a
     hook, in whatever environment that happens.
     """
-    marker = Path(tree) / ".git"
-    if not marker.is_file():
+    if not (Path(tree) / ".git").is_file():
         return None
-    try:
-        text = marker.read_text("utf-8").strip()
-        if not text.startswith("gitdir:"):
-            return None
-        gitdir = (Path(tree) / text.split(":", 1)[1].strip()).resolve()
-        common = (gitdir / (gitdir / "commondir").read_text("utf-8").strip()).resolve()
-    except (OSError, ValueError):
-        # ValueError: a path git wrote as raw non-UTF-8 bytes. Unreadable is "no primary",
-        # never a crash in the middle of writing a hook.
+    common = common_dir(tree, ask_git=False)
+    if common is None:
         return None
     # A bare or `--separate-git-dir` common dir has no checkout beside it: its parent
     # is just a directory, and one holding an unrelated `ddflow/` is not a primary.
@@ -78,6 +70,44 @@ def primary_checkout(tree: Path) -> Path | None:
     if primary == Path(tree).resolve() or not (primary / "ddflow" / "__init__.py").is_file():
         return None
     return primary
+
+
+def common_dir(path: Path | str, *, ask_git: bool = True) -> Path | None:
+    """The git common directory of the repository or linked worktree checked out at
+    ``path`` (the shared `.git`), resolved; None when ``path`` is not one.
+
+    The one answer. Three copies disagreed on odd layouts: the identity declaration read
+    the files git keeps, the derived-id check ran `git rev-parse --git-common-dir`, and the
+    primary-checkout probe read `commondir` its own way. This reads the files (a `.git`
+    directory, or a `.git` file naming a gitdir whose `commondir` names the shared one; no
+    `commondir` means a separate git dir or a submodule, which is its own), and only when
+    that finds none -- ``path`` is a subdirectory, or git is told where to look through
+    GIT_DIR -- asks git, unless ``ask_git`` is false (the per-call CLI path reads files
+    only: it runs on every command in a worktree).
+    """
+    git = Path(path) / ".git"
+    if git.is_dir():
+        return git.resolve()
+    try:
+        line = git.read_bytes().decode("utf-8", "surrogateescape").strip()
+    except OSError:
+        line = ""
+    if line.startswith("gitdir:"):
+        gitdir = (Path(path) / line[len("gitdir:") :].strip()).resolve()
+        try:
+            raw = (gitdir / "commondir").read_bytes().decode("utf-8", "surrogateescape")
+            return (gitdir / raw.strip()).resolve()
+        except OSError:
+            return gitdir
+    if not ask_git:
+        return None
+    from . import git as G
+
+    r = G.run(str(path), "rev-parse", "--git-common-dir", timeout=G.PROBE_TIMEOUT)
+    if not r.ok or not r.out:
+        return None
+    found = Path(r.out)
+    return (Path(path) / found).resolve() if not found.is_absolute() else found.resolve()
 
 
 def launch_parent() -> Path:

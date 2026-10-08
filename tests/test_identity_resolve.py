@@ -328,3 +328,47 @@ def test_export_is_agent_follows_agent_marker_except_over_mcp(monkeypatch):
     assert export_select._is_agent("kilo", False) == "--agent kilo"
     monkeypatch.setenv("DDFLOW_AGENT", "envy")
     assert export_select._is_agent("", False) == "DDFLOW_AGENT=envy"
+
+
+# -- one name rule, one common_dir (B-uni-identity.3-resolver.1-names) -------------------
+
+
+def test_every_surface_shares_the_one_agent_name_pattern():
+    from ddflow.core import agentname
+
+    assert mcp._VALID_AGENT is agentname.AGENT_NAME
+    assert harness_identity._NAME is agentname.AGENT_NAME
+    assert agentname.is_valid("A.b_c-9") and not agentname.is_valid("a\n")
+    assert agentname.refusal("a b") == (
+        "'a b' is not a usable agent name: use letters, digits, '.', '_' or '-', "
+        "up to 64 characters."
+    )
+
+
+def test_common_dir_agrees_for_a_primary_checkout_and_a_linked_worktree(
+    adopted, tmp_path, monkeypatch
+):
+    import subprocess
+
+    from ddflow.infra import paths
+
+    tree = tmp_path / "wt-c"
+    subprocess.run(
+        ["git", "-C", str(adopted), "worktree", "add", "-q", "-b", "c", str(tree)], check=True
+    )
+    want = (adopted / ".git").resolve()
+    assert paths.common_dir(adopted) == paths.common_dir(tree) == want
+    assert paths.common_dir(adopted, ask_git=False) == paths.common_dir(tree, ask_git=False) == want
+    assert L._common_dir(str(tree)) == L._common_dir(str(adopted)) == str(want)
+    assert harness_identity._dir(tree) == harness_identity._dir(adopted) == want / "ddflow-identity"
+
+
+def test_common_dir_asks_git_only_when_the_files_say_nothing(adopted, tmp_path):
+    from ddflow.infra import paths
+
+    sub = adopted / "pkg"
+    sub.mkdir()
+    assert paths.common_dir(sub, ask_git=False) is None
+    assert paths.common_dir(sub) == (adopted / ".git").resolve()
+    assert paths.common_dir(tmp_path / "nowhere") is None
+    assert paths.common_dir(tmp_path) is None
