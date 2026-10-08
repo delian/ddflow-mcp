@@ -139,8 +139,8 @@ def _api():
     if not _upgrade_vocabulary["provided"]:
         # The MCP server's side of what the CLI registers at import: the tool table, which
         # `ddflow_upgrade` judges names by. Here, not at import, to keep the table api-free.
-        _upgrade_vocabulary["provided"] = True
         api.refs.provide_upgrade_vocabulary(None, sources()[1])
+        _upgrade_vocabulary["provided"] = True  # only once it has happened
     return api
 
 
