@@ -159,6 +159,7 @@ from .rules import (
     rule_list,
     rule_remove,
     rule_search,
+    rule_sync,
     rule_update,
 )
 
@@ -306,6 +307,7 @@ __all__ = [
     "rule_list",
     "rule_remove",
     "rule_search",
+    "rule_sync",
     "rule_update",
     "run_review",
     "session_adopt_orphans",

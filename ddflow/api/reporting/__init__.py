@@ -27,6 +27,7 @@ from ...infra.log import EventLog  # noqa: F401
 from ...services import configcompat as CC  # noqa: F401
 from ...services import gates as G  # noqa: F401
 from ...services import repairs as RP  # noqa: F401
+from ...services.guidance import ruleview as RULEVIEW  # noqa: F401
 from ...views.markdown import may_hold_work  # noqa: F401
 from .._base import _load  # noqa: F401
 from ..refs import stale_references  # noqa: F401

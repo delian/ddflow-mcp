@@ -117,6 +117,7 @@ from .merge import (  # noqa: F401
     _scope_fields,
     _stands_in,
     _what_to_land,
+    dispose_tree,
     merge,
     record_item_removed,
 )
