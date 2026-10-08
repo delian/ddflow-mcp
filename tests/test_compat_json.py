@@ -247,21 +247,29 @@ def test_a_flag_after_the_terminator_selects_nothing():
     assert R.command_for_path(("import",), {}, {}, ["import", "--", "--verify"]) == "import"
 
 
-def test_parsed_path_resolves_an_alias_to_its_command():
+def test_parsed_path_is_what_argparse_took():
     from ddflow.surfaces.cli import build_parser
 
     parser = build_parser()
-    assert R.parsed_path(parser, ["gate", "status", "T1"]) == ("gate", "status")
-    assert R.parsed_path(parser, ["--agent", "A", "gate", "status"]) == ("gate", "status")
+
+    def path(*argv: str) -> tuple[str, ...]:
+        return R.parsed_path(parser.parse_args(argv))
+
+    assert path("gate", "status", "T1") == ("gate", "status")
+    assert path("--agent", "A", "gate", "status") == ("gate", "status")
     # an option's VALUE can spell another command; `--` makes the rest positional
-    assert R.parsed_path(parser, ["--agent", "task", "hooks", "status"]) == ("hooks", "status")
-    assert R.parsed_path(parser, ["gate", "--repo", "status", "record", "T1"]) == ("gate", "record")
-    assert R.parsed_path(parser, ["task", "--", "list"]) == ("task", "list")
-    assert R.parsed_path(parser, ["--json", "--allow-older-version", "task", "list"]) == (
-        "task",
-        "list",
-    )
-    # an option that shares a subparser's dest (`bisect --cmd` overwrote `cmd`) does not confuse it
-    assert R.parsed_path(parser, ["bisect", "a", "--cmd", "x {tests}"]) == ("bisect",)
+    assert path("--agent", "task", "hooks", "status") == ("hooks", "status")
+    assert path("gate", "--repo", "status", "record", "T1", "research") == ("gate", "record")
+    assert path("task", "--", "list") == ("task", "list")
+    assert path("--json", "--allow-older-version", "task", "list") == ("task", "list")
+    # an option that shares a subparser's dest (`bisect --cmd` overwrote `cmd`)
+    assert path("bisect", "a", "--cmd", "x {tests}") == ("bisect",)
     assert R.command_for_path(("gate", "status"), {}, {}) == "gate_status"
     assert R.command_for_path(("bug", "file-tasks"), {}, {}) == "bug_file_tasks"
+
+
+def test_every_cli_command_with_a_selecting_flag_names_a_tool():
+    tools = {R.command_name(t) for t in TOOLS}
+    for (path, flag), name in R.CLI_FLAG_COMMANDS.items():
+        assert R.command_for_path(path, {}, {}, [*path, flag]) == name, (path, flag)
+        assert name in tools, f"{path} {flag} is named {name}, which no tool carries"
