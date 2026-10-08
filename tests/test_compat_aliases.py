@@ -526,3 +526,31 @@ def test_an_old_section_nested_deeper_is_dropped_when_emptied():
     assert moved == ["gate.unit_tests.command"]
     assert tomllib.loads(out) == {"a": {"x": 1}, "gate": {"commands": {"unit": "pytest"}}}
     assert "unit_tests" not in out
+
+
+def test_a_short_old_flag_keeps_its_attached_value_form():
+    cmd = Command(
+        path=("x",),
+        params=(Param("docs", aliases=("-d",), deprecated_since=SINCE),),
+        handler=lambda a, c: 0,
+    )
+    root = _parser(cmd)
+    assert root.parse_args(["x", "-dv"]).docs == "v"
+    assert root.parse_args(["x", "-d", "v"]).docs == "v"
+
+
+def test_two_knobs_cannot_claim_one_old_name(monkeypatch):
+    from dataclasses import dataclass
+
+    from ddflow.config_sections import _docs
+
+    for table in ("KNOB_DOCS", "DECLARED", "DECLARED_IN", "RENAMED"):
+        monkeypatch.setattr(_docs, table, dict(getattr(_docs, table)))
+
+    @dataclass
+    class Two:
+        a: int = knob(1, doc="d", renamed_from=("zz.old",), since=SINCE)
+        b: int = knob(2, doc="d", renamed_from=("zz.old",), since=SINCE)
+
+    with pytest.raises(ValueError, match=r"and of zz\.a"):
+        _docs.declare("zz")(Two)
