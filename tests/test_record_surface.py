@@ -379,3 +379,17 @@ def test_show_renders_an_outcome_a_family_supplied_itself(repo):
     own = O.ok("quota.show", id="q", fields={"a": 1})
     text = S._human(NOTE, "show", own)
     assert text.startswith("q  []") and "a: 1" in text
+
+
+def test_add_record_commands_returns_the_tool_command_for_the_mcp_table():
+    sub = SuggestingParser(prog="ddflow").add_subparsers(dest="cmd")
+    tool = S.add_record_commands(sub, NOTE, since="0.1.17")
+    assert tool.path == () and tool.tool == S.tool_name(NOTE) == "ddflow_note"
+    assert set(tool.tool_entry()) >= {"description", "properties", "api", "payload"}
+    assert "note" in sub.choices and "notes" in sub.choices  # the group and its old word
+
+
+def test_a_blank_id_or_query_is_a_malformed_call_like_a_blank_reason(repo):
+    for args in ({"verb": "show", "id": " "}, {"verb": "search", "query": "  "}):
+        with pytest.raises(ValueError, match="needs"):
+            S.dispatch(repo, NOTE, args)
