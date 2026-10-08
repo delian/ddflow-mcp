@@ -76,7 +76,7 @@ def test_a_hand_edit_inside_the_block_is_seen_as_edited_and_saved_before_it_is_r
     assert A.BLOCK.state(path.read_text()) == "current"
     saved = _backups(repo)
     assert len(saved) == 1 and saved[0].name.endswith("-refresh-docs")
-    assert (saved[0] / "files" / "AGENTS.md").read_text() == edited
+    assert (saved[0] / "files" / "in" / "AGENTS.md").read_text() == edited
 
 
 def test_a_noop_refresh_leaves_no_backup(repo: Path) -> None:
@@ -97,7 +97,7 @@ def test_a_stale_driver_doc_is_saved_byte_for_byte_before_the_refresh(repo: Path
 
     (saved,) = _backups(repo)
     assert (
-        saved / "files" / "docs/ddflow/drivers/implement-phase.md"
+        saved / "files" / "in" / "docs/ddflow/drivers/implement-phase.md"
     ).read_text() == "an older driver\n"
     assert driver.read_text() != "an older driver\n"
 
@@ -211,5 +211,32 @@ def test_a_project_file_named_like_the_manifest_does_not_overwrite_it(tmp_path: 
 
     dest = make_backup(tmp_path, [tmp_path / "manifest.json"], "a", "b")
 
-    assert (dest / "files" / "manifest.json").read_text() == "mine\n"
+    assert (dest / "files" / "in" / "manifest.json").read_text() == "mine\n"
     assert '"existed": true' in (dest / MANIFEST).read_text()
+
+
+def test_a_command_file_whose_end_marker_is_gone_is_the_projects_own(repo: Path) -> None:
+    _adopted(repo)
+    path = repo / CMD
+    mine = path.read_text().replace("<!-- ddflow:end commands/implement -->", "")
+    path.write_text(mine)
+
+    code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+
+    assert code == 0 and "kept .claude/commands/implement.md" in out
+    assert path.read_text() == mine
+
+
+def test_inside_and_outside_files_never_share_a_backup_path(tmp_path: Path) -> None:
+    from ddflow.services.backups import make_backup
+
+    inside = tmp_path / "proj" / "_outside" / "notes.txt"
+    inside.parent.mkdir(parents=True)
+    inside.write_text("inside\n")
+    other = tmp_path / "notes.txt"
+    other.write_text("outside\n")
+
+    dest = make_backup(tmp_path / "proj", [inside, other], "a", "b")
+
+    assert (dest / "files" / "in" / "_outside" / "notes.txt").read_text() == "inside\n"
+    assert (dest / "files" / "out" / other.as_posix().lstrip("/")).read_text() == "outside\n"

@@ -22,6 +22,8 @@ MANIFEST = "manifest.json"
 #: The copies live under this directory, so a project file named like the manifest cannot
 #: overwrite it.
 FILES = "files"
+INSIDE = "in"  #: files of the project, at their project-relative path
+OUTSIDE = "out"  #: files elsewhere (a git hooks directory), at their absolute path
 
 
 def backup_name(frm: str, to: str) -> str:
@@ -32,7 +34,7 @@ def backup_name(frm: str, to: str) -> str:
 def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name: str = "") -> Path:
     """Copy every file that exists to `.ddflow/backups/<stamp>-<from>-to-<to>/` (or
     ``name``), a file inside the project at its relative path and one outside it under
-    `_outside/` (both below `files/`), and write a `manifest.json` listing each file, whether it existed and where
+    `out/` (both below `files/`: `files/in/...`, `files/out/...`), and write a `manifest.json` listing each file, whether it existed and where
     its copy is. Returns the backup directory. Raises OSError when it cannot be written: the
     caller then writes nothing."""
     repo = Path(repo).resolve()
@@ -47,14 +49,16 @@ def make_backup(repo: Path, files: Collection[Path], frm: str, to: str, *, name:
             break
         except FileExistsError:
             dest = root / f"{name}-{n}"
+    else:
+        raise OSError(f"{root}: too many backups named {name}")
     entries: list[dict[str, Any]] = []
     for f in dict.fromkeys(Path(x).resolve() for x in files):
         try:
-            stored = f.relative_to(repo).as_posix()
-            shown = stored
+            shown = f.relative_to(repo).as_posix()
+            stored = f"{INSIDE}/{shown}"
         except ValueError:
-            stored = "_outside/" + f.as_posix().lstrip("/")
             shown = f.as_posix()
+            stored = f"{OUTSIDE}/{shown.lstrip('/')}"
         existed = f.is_file()
         if existed:
             target = dest / FILES / stored
