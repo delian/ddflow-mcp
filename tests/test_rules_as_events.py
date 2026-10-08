@@ -15,6 +15,9 @@ from ddflow.api import defs as ADEFS
 from ddflow.config import Config
 from ddflow.core import defs as D
 from ddflow.core import redact as R
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+from ddflow.services import migrations as M
 from ddflow.services.guidance import deffields as DF
 from ddflow.services.guidance import fileformat
 from ddflow.services.guidance.kinds import DECISION, RULE
@@ -140,3 +143,110 @@ def test_nulls_in_an_old_definition_mean_the_default_not_the_word_none() -> None
     )
     text = DF.render("r-old", nulls, {}, RULE)
     assert "None" not in text and fileformat.parse(text, RULE).title == "T"
+
+
+# -- the rules-to-events migration ---------------------------------------------------------
+
+ID = "rules-to-events"
+
+
+def _put(repo: Path, rid: str, text: str) -> Path:
+    path = repo / ".ddflow" / "rules" / f"{rid}.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def _defs(repo: Path):
+    return fold(EventLog(repo, "importer").read_all(), strict=False).defs
+
+
+def _run(repo: Path):
+    return M.run(repo, EventLog(repo, "importer"), Config.load(repo), [ID])
+
+
+def test_a_rule_file_is_detected_with_its_file(repo: Path) -> None:
+    _put(repo, "r-naming", RICH)
+    ctx = M.context(repo, EventLog(repo, "importer"), Config.load(repo))
+    (got,) = [p for p in M.pending(ctx) if p.migration.id == ID]
+    assert [(f.key, f.path) for f in got.findings] == [
+        ("record:r-naming", ".ddflow/rules/r-naming.toml")
+    ]
+    assert got.changes == [], "only the log is appended to: no file for a backup to hold"
+
+
+def test_importing_records_each_file_with_imported_provenance_and_is_idempotent(repo: Path) -> None:
+    path = _put(repo, "r-naming", RICH)
+    _put(repo, "r-small", MINIMAL)
+    before = path.read_bytes()
+    out = _run(repo)
+    assert [(o.migration, o.status, o.findings) for o in out] == [(ID, "applied", 2)], out
+    rec = _defs(repo)["rule:r-naming"]
+    cfg = Config.load(repo)
+    assert rec.live and rec.fields == DF.logged(_fields(RICH), cfg)
+    assert rec.digest == DF.digest_of(_fields(RICH), cfg)
+    assert rec.source == ".ddflow/rules/r-naming.toml"
+    assert rec.provenance["via"] == "import" and rec.provenance["created"] == "2026-10-03T12:00:00"
+    assert sorted(k for k in _defs(repo) if k.startswith("rule:")) == [
+        "rule:r-naming",
+        "rule:r-small",
+    ]
+    assert path.read_bytes() == before, "the file is not touched"
+    assert _run(repo) == [], "a second run finds nothing"
+
+
+def test_a_file_edited_since_is_recorded_as_an_update(repo: Path) -> None:
+    path = _put(repo, "r-naming", RICH)
+    _run(repo)
+    path.write_text(RICH.replace("snake_case", "camelCase"))
+    (o,) = _run(repo)
+    assert o.status == "applied"
+    rec = _defs(repo)["rule:r-naming"]
+    assert "camelCase" in rec.fields["body"]
+    assert [h["event"] for h in rec.history] == ["def.recorded", "def.updated"]
+    assert rec.provenance["via"] == "import"
+    assert _run(repo) == []
+
+
+def test_a_timestamp_only_change_is_no_edit(repo: Path) -> None:
+    path = _put(repo, "r-naming", RICH)
+    _run(repo)
+    path.write_text(
+        RICH.replace('updated = "2026-10-04T08:30:00"', 'updated = "2027-01-01T00:00:00"')
+    )
+    assert _run(repo) == []
+
+
+def test_a_retired_rule_is_left_alone(repo: Path) -> None:
+    path = _put(repo, "r-naming", RICH)
+    _run(repo)
+    assert ADEFS.def_retire(repo, "rule", "r-naming", reason="obsolete", agent="t").exit == 0
+    path.write_text(RICH.replace("snake_case", "camelCase"))
+    assert _run(repo) == []
+    assert _defs(repo)["rule:r-naming"].status == "retired"
+
+
+def test_a_file_that_does_not_load_is_not_imported(repo: Path) -> None:
+    _put(repo, "r-broken", "this is not a rule file")
+    _put(repo, "r-small", MINIMAL)
+    (o,) = _run(repo)
+    assert o.findings == 1 and sorted(k for k in _defs(repo) if k.startswith("rule:")) == [
+        "rule:r-small"
+    ]
+
+
+def test_a_file_whose_id_differs_from_its_name_is_imported_under_the_name(repo: Path) -> None:
+    _put(repo, "r-x", MINIMAL.replace("r-small", "r-y"))
+    (o,) = _run(repo)
+    assert o.status == "applied" and sorted(k for k in _defs(repo) if k.startswith("rule:")) == [
+        "rule:r-x"
+    ]
+    assert _run(repo) == []
+
+
+def test_detecting_does_not_create_the_rules_directory(repo: Path) -> None:
+    rules = repo / ".ddflow" / "rules"
+    assert not rules.exists()
+    ctx = M.context(repo, EventLog(repo, "importer"), Config.load(repo))
+    assert [p for p in M.pending(ctx) if p.migration.id == ID] == []
+    assert not rules.exists()
