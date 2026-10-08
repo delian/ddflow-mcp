@@ -25,6 +25,7 @@ from ..core import outcome as O
 from ..core.model import SCHEDULE_FIELDS, Schedule, fold
 from ..services import schedule as SV
 from ..services import triggers as TR
+from ..services.items import TaskDraft, add_task
 from ._base import _load
 
 
@@ -261,7 +262,7 @@ def trigger_evaluate(
         else:
             with log.decide_then_append(decide) as decided:
                 at, st, defs, trigs, errors, decisions = decided
-                _apply(log, st, defs, trigs, decisions, at, errors)
+                _apply(log, cfg, st, defs, trigs, decisions, at, errors)
     except _Unreadable as exc:  # raised before anything is written
         return O.failed(
             "trigger.evaluated",
@@ -278,11 +279,25 @@ def trigger_evaluate(
     return O.ok("trigger.evaluated", **data)
 
 
-def _apply(log, st, defs, trigs, decisions, at, errors) -> None:
+def _apply(log, cfg, st, defs, trigs, decisions, at, errors) -> None:
     """Write what `decisions` decided: each fire's item and `trigger.fired`, each
     suppression, then the run. The caller holds the log lock."""
     taken = set(st.items)
     for d in decisions:
+        trig = trigs[d.trigger]
+        item = None
+        if d.fire:
+            item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
+            taken.add(item["id"])
+            added = add_task(
+                log,
+                st,
+                cfg,
+                TaskDraft.from_data(item["id"], item["data"]),
+                dedupe="a trigger's remediation; one open per dedupe key",
+            )
+            if not added.ok:  # e.g. `action.phase` names no phase: nothing was filed
+                d.fire, d.reason, d.detail = False, "item_refused", added.problem
         if not d.fire:
             log.append(
                 "trigger.suppressed",
@@ -290,10 +305,6 @@ def _apply(log, st, defs, trigs, decisions, at, errors) -> None:
                 {"key": d.key, "reason": d.reason, "detail": d.detail, "events": d.events},
             )
             continue
-        trig = trigs[d.trigger]
-        item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
-        taken.add(item["id"])
-        log.append("task.added", item["id"], item["data"])
         log.append(
             "trigger.fired",
             d.trigger,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from ..core import globspec as GS
 from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.model import fold
+from ..services import items as IT
 from ..services import leases as L
 from ._base import _load
 
@@ -246,46 +247,6 @@ def _dropped(it, globs: list[str] | None) -> list[str]:
     return [g for g in dict.fromkeys(before) if g not in globs]
 
 
-def _bad_id(item: str) -> str:
-    """Why `item` cannot be a local id, or "". A colon is how a dependency names an item
-    in ANOTHER repository (`repo:ID`); a local `foo:bar` was taken for one, looked up
-    in the sibling observations, and blocked everything that needed it (rubber-duck)."""
-    if ":" in item:
-        return (
-            f"{item!r}: a colon marks a dependency in another repository (`repo:ID`, "
-            f"[schedule] repos), so it cannot be part of a local id"
-        )
-    return ""
-
-
-def _taken(st, item: str, *, readd: bool) -> str:
-    """Why ``item`` cannot be ADDED because the id is already in the queue, or "".
-
-    An `added` event folds as a re-definition, so a second `task add B207` overwrote the
-    first B207 -- title, body, globs -- while its lease and gate records stayed, now under
-    another agent's title (B6bd279367e / B16042585f4). Adding never changes an item;
-    `update` does. A REMOVED id may come back, but only when the caller says so.
-    """
-    it = st.items.get(item)
-    if it is None:
-        return ""
-    what = f"{it.kind} {it.title!r}" if it.title else it.kind
-    if it.removed:
-        if readd:
-            return ""
-        return (
-            f"{item} is a {what} that was removed from the queue. Re-adding it brings the "
-            f"id back with the new definition: pass --readd (MCP/api: readd) to do that "
-            f"on purpose, or file this under a free id."
-        )
-    held = f", leased by {it.lease.holder}" if it.lease else ""
-    return (
-        f"{item} already exists: {what} ({it.state}{held}). Adding never changes an "
-        f"existing item -- use `ddflow update {item} --title ... --globs ...` to change "
-        f"it, or file this under a free id."
-    )
-
-
 def _fresh(log):
     """The state to decide an add from, read UNDER the append lock: two agents filing the
     same id at once must not both see it free."""
@@ -367,7 +328,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     in the queue is REFUSED; ``readd`` lets a removed one come back. A phase that reads
     like an existing record is refused until ``answer`` says what it is (``_dedupe``).
     """
-    bad = _bad_id(item) or GS.problem(GS.parse(globs))
+    bad = IT.bad_id(item) or GS.problem(GS.parse(globs))
     if bad:
         return O.failed("phase.added", bad, id=item)
     log, cfg, st = _load(repo, agent)
@@ -376,7 +337,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
         return O.failed("phase.added", bad, id=item)
     with log.transaction():
         st = _fresh(log)
-        taken = _taken(st, item, readd=readd)
+        taken = IT.taken(st, item, readd=readd)
         if taken:
             return O.refused("phase.added", taken, id=item)
         # Inside the transaction, against the log as it is NOW: a record another agent
@@ -471,16 +432,22 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     """
     from ..core import flow as F
     from ..services import choices as CH
-    from ..services import leases as L
 
-    bad = _bad_id(item) or GS.problem(GS.parse(globs))
+    base = IT.TaskDraft(
+        item,
+        parent=parent,
+        globs=GS.parse(globs),
+        body=body,
+        tags=csv_list(tags),
+        priority=priority,
+    )
+    bad = IT.problem_of(base)
     if bad:
         return O.failed("task.added", bad, id=item)
     log, cfg, st = _load(repo, agent)
-    if parent and parent not in st.items:
-        return O.failed(
-            "task.added", f"no such parent {parent!r}. Add the phase or task first.", id=item
-        )
+    bad = IT.missing_parent(st, parent)
+    if bad:
+        return O.failed("task.added", bad, id=item)
     wanted = csv_list(lines) or ([line] if line else [])
     if port_of:
         wanted, bad = _port_of_lines(st, cfg, port_of, wanted)
@@ -492,7 +459,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
             return O.failed("task.added", bad, id=item)
     with log.transaction():
         st = _fresh(log)
-        taken = _taken(st, item, readd=readd)
+        taken = IT.taken(st, item, readd=readd)
         if taken:
             return O.refused("task.added", taken, id=item)
         chk = DD.check_add(
@@ -519,54 +486,40 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
             # unmade choice is defaulted HERE, on the record, and followed from now on.
             adopted = CH.adopt_defaults(log, cfg, ["port_strategy"])
             plan = F.plan_ports(cfg, wanted, cfg.flow.port_strategy)
-        base = {
-            "parent": parent,
-            "globs": GS.parse(globs),
-            "body": body,
-            "tags": csv_list(tags),
-            "priority": priority,
-        }
-        log.append(
-            "task.added",
-            item,
-            {
-                **base,
-                "title": title,
-                "needs": csv_list(needs),
-                "line": plan.author if plan else (wanted[0] if wanted else ""),
-                **chk.fields,
-            },
-        )
+        author_line = plan.author if plan else (wanted[0] if wanted else "")
+        main = replace(base, title=title, needs=csv_list(needs), line=author_line)
+        added = IT.add_task(log, st, cfg, main, dedupe=chk, readd=readd)
+        if not added.ok:
+            return (O.refused if added.refused else O.failed)("task.added", added.problem, id=item)
         DD.after_add(log, cfg, item, chk)
         ports: list[str] = []
         for ln, frm in plan.ports if plan else []:
             source = item if frm < 0 else ports[frm]
             pid = f"{item}@{ln}"
-            log.append(
-                "task.added",
-                pid,
-                {
-                    **base,
-                    "title": f"{title or item} (port to {ln})",
-                    "needs": [source],
-                    "line": ln,
+            port = replace(
+                base,
+                id=pid,
+                title=f"{title or item} (port to {ln})",
+                needs=[source],
+                line=ln,
+                tags=[*csv_list(tags), "port"],
+                extra={
                     "port_of": item,
                     "port_from": source,
                     "port_strategy": plan.strategy,
-                    "tags": [*csv_list(tags), "port"],
                 },
             )
+            added = IT.add_task(
+                log, st, cfg, port, dedupe="a port of the fix just checked: one per release line"
+            )
+            if not added.ok:
+                return O.failed("task.added", added.problem, id=item)
             ports.append(pid)
-        # Giving a task its first child turns it into an umbrella, and an umbrella is not the
-        # thing being worked -- its children are. Holding its lease from here would put a live
-        # claim on globs that overlap every child's, so a SECOND agent could not take one, and
-        # recovery would point at a worktree where nothing more will happen. `split` already
-        # released for exactly this reason; adding a sub-task by hand is the same transition
-        # by a different route, and it did not.
-        parent_item = st.items.get(parent) if parent else None
-        released = bool(parent_item and parent_item.kind == "task" and parent_item.lease)
-        if released:
-            L.release(log, parent, note=f"became an umbrella when {item} was added")
+        # Giving a task its first child turns it into an umbrella: its lease is released
+        # (`split` does the same), see `IT.release_umbrella`.
+        released = IT.release_umbrella(
+            log, st, parent, note=f"became an umbrella when {item} was added"
+        )
     return O.ok(
         "task.added",
         id=item,
@@ -683,7 +636,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
                 id=item,
             )
         for nid in new_ids:
-            bad = _bad_id(nid) or _taken(st, nid, readd=False)
+            bad = IT.bad_id(nid) or IT.taken(st, nid, readd=False)
             if bad:
                 return O.failed("item.resolved", bad, id=item)
         losers = it.lease_losers(claims[0]) if claims else []
@@ -748,7 +701,6 @@ def split(
     the work that was planned and the work that happened, which is exactly what
     `ddflow replay` needs to reconstruct the project.
     """
-    from ..services import leases as L
 
     log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
@@ -793,6 +745,9 @@ def split(
             return O.failed(
                 "task.split", f"{sub_id} already exists; choose another id", id=item, created=[]
             )
+        bad = IT.bad_id(sub_id)
+        if bad:
+            return O.failed("task.split", bad, id=item, created=[])
         if sub_id in [p for p, _ in planned]:
             return O.failed(
                 "task.split",
@@ -808,27 +763,27 @@ def split(
 
     created: list[str] = []
     for i, (sub_id, title) in enumerate(planned, 1):
-        log.append(
-            "task.added",
+        # Inherit the parent's globs unless the child declares its own: while the split is
+        # half-done the children are the only things being worked, and a child with no
+        # declared globs is a child the conflict detector cannot protect.
+        draft = IT.TaskDraft(
             sub_id,
-            {
-                "parent": item,
-                "title": title,
-                # Inherit the parent's globs unless the child declares its own: while the
-                # split is half-done the children are the only things being worked, and a
-                # child with no declared globs is a child the conflict detector cannot
-                # protect.
-                "globs": GS.parse(globs) or list(it.globs),
-                "needs": csv_list(needs) if i == 1 else [],
-                "priority": it.priority,
-            },
+            parent=item,
+            title=title,
+            globs=GS.parse(globs) or list(it.globs),
+            needs=csv_list(needs) if i == 1 else [],
+            priority=it.priority,
         )
+        added = IT.add_task(
+            log, st, cfg, draft, dedupe="a part of the item being split: its text is the parent's"
+        )
+        if not added.ok:
+            return O.failed("task.split", added.problem, id=item, created=created)
         created.append(sub_id)
 
-    if it.lease:
-        # The umbrella is no longer the thing being worked; holding its lease would block
-        # its own children on a glob conflict with itself.
-        L.release(log, item, note=f"split into {', '.join(created)}")
+    # The umbrella is no longer the thing being worked; holding its lease would block its
+    # own children on a glob conflict with itself.
+    IT.release_umbrella(log, st, item, note=f"split into {', '.join(created)}")
     log.append(
         "task.updated",
         item,
