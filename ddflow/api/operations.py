@@ -393,7 +393,7 @@ def relevant_tests(
         return O.nothing(
             "tests",
             f"No test reaches the {len(sel.changed)} changed file(s) since {base}. That is "
-            "not a pass: a targeted run is only feedback.",
+            "not a pass: with no test to select, the unit_tests gate runs the whole suite.",
             **data,
         )
     return O.ok("tests", **data)
