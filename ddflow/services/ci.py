@@ -24,6 +24,7 @@ from pathlib import Path
 
 from ..config import CI_ON_MERGE_MODES, Config
 from ..core.digest import content_digest
+from ..core.slug import ascii_slug
 from ..infra import proc as P
 from ..infra import worktree as W
 
@@ -235,7 +236,7 @@ def bug_id(check: str, cfg: Config | None = None) -> str:
     that share a prefix (pytest node ids) from being one bug."""
     from ..core import ids as IDS
 
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", check).strip("-").lower()[:30].strip("-")
+    slug = ascii_slug(check, 30)
     digest = content_digest(check, "sha1", length=10)
     return IDS.render(cfg if cfg is not None else Config(), "ci_bug", slug=slug, digest=digest)
 

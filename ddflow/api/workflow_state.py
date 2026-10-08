@@ -7,9 +7,9 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
-from ..core.schedule import plan
 from ..services.gates import pipelines
 from ._base import _load
+from .lifecycle.planning import plan_for
 
 _READY_SHOWN, _BLOCKED_SHOWN, _BUGS_SHOWN = 10, 5, 5
 _SEVERITY = {"critical": 0, "high": 1, "medium": 2, "low": 3, "": 4}
@@ -18,7 +18,7 @@ _SEVERITY = {"critical": 0, "high": 1, "medium": 2, "low": 3, "": 4}
 def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
     """One read-only overview: workflow, rules, decisions, active work, queue, bugs."""
     log, cfg, st = _load(repo, agent)
-    p = plan(st, cfg, agent=cfg.agent.id or log.agent_id)
+    p = plan_for(repo, log, cfg, st, purpose="view")
     now = time.time()
     leases = st.active_leases(now, cfg.lease.grace_s)
     live_items = st.live_items()
