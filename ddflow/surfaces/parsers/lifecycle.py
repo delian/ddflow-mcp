@@ -25,6 +25,19 @@ from ..commands.lifecycle import (
 from ._common import GLOBS_HELP, _Globs
 
 
+def _gate_list_parser(g_s) -> None:
+    glist = g_s.add_parser(
+        "list",
+        help="the gates this project defines; --refuted: the gates passed on refutation",
+    )
+    glist.add_argument(
+        "--refuted",
+        action="store_true",
+        help="list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check",
+    )
+    glist.set_defaults(fn=cmd_gate)
+
+
 def register(s: argparse._SubParsersAction) -> None:
     """Add the lifecycle subcommands to `s`, the root `ddflow` subparsers."""
     # Handlers that live in `cli.py`; imported at call time, when `cli` is loaded.
@@ -106,6 +119,7 @@ def register(s: argparse._SubParsersAction) -> None:
     gst = g_s.add_parser("status")
     gst.add_argument("id")
     gst.set_defaults(fn=cmd_gate, gate="")
+    _gate_list_parser(g_s)
     grun = g_s.add_parser("run")
     grun.add_argument("id")
     grun.add_argument("gate")

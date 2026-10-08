@@ -7,6 +7,8 @@ from pathlib import Path
 
 from conftest import run_cli
 
+from ddflow.services import adopt as AD
+
 ROOT = Path(__file__).resolve().parents[1]
 HELP = (ROOT / "ddflow/templates/prompts/help/verify.md").read_text("utf-8")
 
@@ -53,7 +55,8 @@ def test_every_claim_the_topic_lists_is_a_claim_verify_can_make():
 
 def test_the_driver_notes_mention_verify_and_both_copies_agree():
     a = (ROOT / "ddflow/templates/drivers/implement-phase.md").read_text("utf-8")
-    b = (ROOT / "docs/ddflow/drivers/implement-phase.md").read_text("utf-8")
+    rel = "docs/ddflow/drivers/implement-phase.md"
+    b = AD._region_body(AD._driver_region(rel), (ROOT / rel).read_text("utf-8"))  # the shipped text
     assert "ddflow verify <id> --reopen" in a and a == b
 
 
