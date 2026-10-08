@@ -37,7 +37,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from ddflow import FORMAT_LEVEL
+from ddflow import FORMAT_LEVEL, __version__
 
 from ..config import Config
 from ..core import digest as D
@@ -79,9 +79,7 @@ def code_fingerprint() -> str:
     if len(sources) < MIN_FINGERPRINT_SOURCES:
         # No source tree to read (a zipped or bytecode-only install): the release stands in
         # for the code rather than the fingerprint silently becoming a constant.
-        import ddflow
-
-        h.update(ddflow.__version__.encode())
+        h.update(__version__.encode())
     return h.hexdigest()[:16]
 
 
