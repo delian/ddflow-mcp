@@ -868,12 +868,14 @@ CLI_COMMAND_NAMES: dict[tuple[str, ...], str] = {
     ("prompts", "get"): "prompts",
     ("prompts", "show"): "prompts",
 }
-#: A flag that makes a command another tool's: ``(path, flag) -> name``.
+#: A flag that makes a command another tool's: ``(path, parsed attribute) -> name``. Read from
+#: what argparse parsed (an abbreviation, ``--verif``, sets the same attribute), not from the
+#: words typed.
 CLI_FLAG_COMMANDS: dict[tuple[tuple[str, ...], str], str] = {
-    (("companions",), "--verify"): "companions_verify",
-    (("companions", "list"), "--verify"): "companions_verify",
-    (("import",), "--verify"): "import_verify",
-    (("doctor",), "--upgrade"): "upgrade",
+    (("companions",), "verify"): "companions_verify",
+    (("companions", "list"), "verify"): "companions_verify",
+    (("import",), "verify"): "import_verify",
+    (("doctor",), "upgrade"): "upgrade",
 }
 
 
@@ -881,16 +883,15 @@ def command_for_path(
     path: tuple[str, ...],
     routed: Mapping[tuple[str, ...], tuple[str, str]],
     covering: Mapping[str, tuple[str, ...]],
-    argv: Iterable[str] = (),
+    args: argparse.Namespace | None = None,
 ) -> str:
     """The schema name of a CLI command: the name of the MCP tool that serves it, so the two
     surfaces tag one result alike. ``routed`` maps a path a selector serves to its tool
     (``task list`` -> ``ddflow_list``), ``covering`` a one-word command a differently named
-    tool covers (``init`` -> ``ddflow_setup``); anything else is its words joined by ``_``."""
-    words = list(argv)
-    typed = set(words[: words.index("--")] if "--" in words else words)  # past `--` is data
-    for (where, flag), name in CLI_FLAG_COMMANDS.items():
-        if where == path and flag in typed:
+    tool covers (``init`` -> ``ddflow_setup``), ``args`` the parsed line for a flag that picks the
+    tool; anything else is its words joined by ``_``."""
+    for (where, dest), name in CLI_FLAG_COMMANDS.items():
+        if where == path and args is not None and getattr(args, dest, False) is True:
             return name
     if path in CLI_COMMAND_NAMES:
         return CLI_COMMAND_NAMES[path]

@@ -702,7 +702,9 @@ def test_recording_a_decision_over_mcp_records_it(repo):
     assert reply["result"]["isError"] is False, reply
     text = reply["result"]["content"][0]["text"]
     body = _json.loads(text[text.index("{") :])
-    assert set(body) == {"schema", "id"}, f"the wire body was {body}, not {{'id': ...}}"
+    assert set(body) == {"schema", "id"}, (
+        f"the wire body was {body}, not {{'schema': ..., 'id': ...}}"
+    )
 
     _code, out, _ = run_cli(repo, "--json", "decision", "list")
     rows = _json.loads(out)

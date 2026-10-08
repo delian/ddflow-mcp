@@ -242,9 +242,20 @@ def test_every_cli_command_is_named_by_the_tool_that_serves_it():
     assert not unnamed, f"CLI commands whose --json schema name no tool carries: {unnamed}"
 
 
-def test_a_flag_after_the_terminator_selects_nothing():
-    assert R.command_for_path(("import",), {}, {}, ["import", "--verify"]) == "import_verify"
-    assert R.command_for_path(("import",), {}, {}, ["import", "--", "--verify"]) == "import"
+def test_a_flag_selects_the_tool_argparse_resolved_it_to():
+    from ddflow.surfaces.cli import build_parser
+
+    parser = build_parser()
+
+    def name(*argv: str) -> str:
+        args = parser.parse_args(argv)
+        return R.command_for_path(R.parsed_path(args), {}, {}, args)
+
+    assert name("import", "--verify") == "import_verify"
+    assert name("import", "--verif") == "import_verify", "an abbreviation is the same flag"
+    assert name("import") == "import"
+    assert name("doctor", "--upgrade") == "upgrade"
+    assert name("companions", "--verify") == "companions_verify"
 
 
 def test_parsed_path_is_what_argparse_took():
@@ -270,6 +281,5 @@ def test_parsed_path_is_what_argparse_took():
 
 def test_every_cli_command_with_a_selecting_flag_names_a_tool():
     tools = {R.command_name(t) for t in TOOLS}
-    for (path, flag), name in R.CLI_FLAG_COMMANDS.items():
-        assert R.command_for_path(path, {}, {}, [*path, flag]) == name, (path, flag)
-        assert name in tools, f"{path} {flag} is named {name}, which no tool carries"
+    for (_path, _dest), name in R.CLI_FLAG_COMMANDS.items():
+        assert name in tools, f"{_path} {_dest} is named {name}, which no tool carries"
