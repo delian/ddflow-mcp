@@ -183,6 +183,9 @@ def changed_since(
     ``patterns`` (all when empty) minus ``exclude``. Sorted. None when git could not say."""
     listings = [
         G.git_paths(root, "diff", "--name-only", "--no-renames", sha),
+        # The index alone: a change staged and then undone in the work tree, or a path
+        # removed from the index but still on disk, differs from `sha` only here.
+        G.git_paths(root, "diff", "--cached", "--name-only", "--no-renames", sha),
         G.git_paths(root, "ls-files", "--others", "--exclude-standard"),
     ]
     if any(listing is None for listing in listings):
