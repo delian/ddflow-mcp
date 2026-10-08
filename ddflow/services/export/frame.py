@@ -132,9 +132,9 @@ def hand_edited(text: str) -> bool | None:
 
 def state(text: str | None, doc: str, version: str, fmt: int | None = None) -> str:
     """How a file on disk compares with a document ddflow is about to write over it: one of
-    ``absent``, ``not-ours`` (no header), ``other-doc``, ``newer`` (written at a higher
-    format level: rewriting it would lose what that ddflow wrote), ``edited`` (the body no
-    longer matches its digest), ``older`` (written by an older release or format level) and
+    ``absent``, ``not-ours`` (no header), ``newer`` (written at a higher format level, of
+    any document: rewriting it would lose what that ddflow wrote), ``edited`` (the body no
+    longer matches its digest), ``other-doc`` (intact, but generated as another kind), ``older`` (written by an older release or format level) and
     ``current``. A version alone never makes a file ``newer`` (docs/ddflow/compatibility.md)."""
     fmt = FORMAT_LEVEL if fmt is None else fmt
     if text is None:
@@ -144,10 +144,10 @@ def state(text: str | None, doc: str, version: str, fmt: int | None = None) -> s
         return "not-ours"
     if head.fmt > fmt:
         return "newer"
-    if head.doc != doc:
-        return "other-doc"
     if body_digest(body) != head.digest:
         return "edited"
+    if head.doc != doc:
+        return "other-doc"
     return "older" if head.fmt < fmt or is_older(head.version, version) else "current"
 
 

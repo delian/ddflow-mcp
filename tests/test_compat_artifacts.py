@@ -176,3 +176,34 @@ def test_a_current_level_region_round_trips_unchanged(tmp_path):
     (tmp_path / "CHANGELOG.md").write_text("# Notes\n\n" + W.region_text("changelog", "a\n"))
     assert W.write_region(tmp_path, "CHANGELOG.md", "changelog", "b\n").action == "updated"
     assert W.write_region(tmp_path, "CHANGELOG.md", "changelog", "b\n").action == "unchanged"
+
+
+def test_an_unknown_region_attribute_survives_a_same_level_rewrite(tmp_path):
+    region = W.region_text("changelog", "a\n", {"future": "yes"})
+    assert "future=yes" in region
+    (tmp_path / "CHANGELOG.md").write_text("# Notes\n\n" + region)
+    W.write_region(tmp_path, "CHANGELOG.md", "changelog", "b\n")
+    text = (tmp_path / "CHANGELOG.md").read_text()
+    assert "future=yes" in text and "\nb\n" in text
+
+
+def test_check_reports_a_newer_log_stale_even_with_nothing_to_append(tmp_path, monkeypatch):
+    _newer_file(tmp_path, monkeypatch)
+    res = W.append_entries(
+        tmp_path, "ROADMAP.md", "roadmap", lambda last: ("", last), register=False, check=True
+    )
+    assert (res.action, res.code) == ("stale", 1)
+
+
+def test_the_changelog_cut_region_writer_refuses_a_newer_region(tmp_path, monkeypatch):
+    from ddflow.services import changelog_cut as C
+
+    monkeypatch.setattr(F, "FORMAT_LEVEL", 2)
+    region = W.region_text(C.DOC, "future\n")
+    monkeypatch.setattr(F, "FORMAT_LEVEL", 1)
+    (tmp_path / "CHANGELOG.md").write_text("# Notes\n\n" + region)
+    (tmp_path / ".ddflow" / "local").mkdir(parents=True)
+    apply = C._region("CHANGELOG.md", "unreleased\n", "## [1.0.0]\n- x\n", "1.0.0", {})
+    with pytest.raises(W.Refused, match="upgrade ddflow before"):
+        apply(tmp_path, force=True, dry=False)
+    assert (tmp_path / "CHANGELOG.md").read_text() == "# Notes\n\n" + region

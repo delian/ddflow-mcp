@@ -120,21 +120,33 @@ def safe_target(repo: Path | str, target: str) -> tuple[Path, str]:
     return cur, "/".join(parts)
 
 
+def _is_newer(old: str | None, doc: str) -> bool:
+    """True when the file (or its ``doc`` region) was written at a higher format level."""
+    if old is None:
+        return False
+    head, _ = F.split(old)
+    if head is not None:
+        return head.fmt > F.FORMAT_LEVEL
+    region = _begin_attrs(old, doc)
+    return region is not None and region[0] > F.FORMAT_LEVEL
+
+
 def _refuse_newer(rel: str, old: str | None, doc: str, *, check: bool, diff: bool) -> None:
     """A file written at a higher format level than this ddflow's is never rewritten (exit
     3, "upgrade ddflow to >= X"): not even by ``force``, because the content it would lose
-    is one this version cannot read. ``check`` and ``diff`` write nothing and report it."""
-    if check or diff or old is None:
+    is one this version cannot read. ``check`` and ``diff`` write nothing; they report the
+    file stale (see ``_finish`` and ``append_entries``)."""
+    if check or diff or not _is_newer(old, doc):
         return
-    head, _ = F.split(old)
-    if head is not None and head.fmt > F.FORMAT_LEVEL:
+    head, _ = F.split(old or "")
+    if head is not None:
         raise Refused(str(NewerContent(rel, head.version, head.fmt)))
-    region = _begin_attrs(old, doc)
-    if region is not None and region[0] > F.FORMAT_LEVEL:
-        raise Refused(
-            f"the {doc!r} region of {rel} was written at format level {region[0]}, this ddflow "
-            f"writes {F.FORMAT_LEVEL}; upgrade ddflow before rewriting it"
-        )
+    region = _begin_attrs(old or "", doc)
+    level = region[0] if region else F.FORMAT_LEVEL
+    raise Refused(
+        f"the {doc!r} region of {rel} was written at format level {level}, this ddflow "
+        f"writes {F.FORMAT_LEVEL}; upgrade ddflow before rewriting it"
+    )
 
 
 # -- shared plumbing ------------------------------------------------------------------
@@ -231,23 +243,25 @@ def write_whole(
         _refuse_newer(rel, old, head.doc, check=check, diff=diff)
         refuse = ""
         if old is not None and old != document and not force:
-            old_head, _ = F.split(old)
-            edited = F.hand_edited(old)
-            if old_head is None:
+            found = F.state(old, head.doc, head.version)
+            if found == "not-ours":
                 refuse = f"{rel} has no ddflow header: it is not a generated file; refusing to overwrite (--force to replace)"
-            elif edited:
+            elif found == "edited":
                 refuse = f"{rel} was edited by hand since ddflow wrote it (body does not match its digest); refusing to overwrite (--force to replace)"
-            elif old_head.doc != head.doc:
-                refuse = f"{rel} was generated as {old_head.doc!r}, not {head.doc!r}; refusing to overwrite (--force to replace)"
+            elif found == "other-doc":
+                refuse = f"{rel} was generated as {F.split(old)[0].doc!r}, not {head.doc!r}; refusing to overwrite (--force to replace)"
         return _finish(path, rel, old, document, check=check, diff=diff, refuse=refuse)
 
 
 # -- marker region --------------------------------------------------------------------
 
 
-def _begin(doc: str, digest: str) -> str:
-    fmt = f" fmt={F.FORMAT_LEVEL}" if F.FORMAT_LEVEL != F.IMPLICIT_FMT else ""
-    return f"<!-- ddflow:begin doc={doc} body-sha256={digest}{fmt} -->"
+def _begin(doc: str, digest: str, extra: dict[str, str] | None = None) -> str:
+    attrs = dict(extra or {})
+    if F.FORMAT_LEVEL != F.IMPLICIT_FMT:
+        attrs["fmt"] = str(F.FORMAT_LEVEL)
+    tail = "".join(f" {k}={v}" for k, v in sorted(attrs.items()))
+    return f"<!-- ddflow:begin doc={doc} body-sha256={digest}{tail} -->"
 
 
 def _begin_attrs(text: str, doc: str) -> tuple[int, dict[str, str]] | None:
@@ -259,6 +273,13 @@ def _begin_attrs(text: str, doc: str) -> tuple[int, dict[str, str]] | None:
     attrs = dict(p.split("=", 1) for p in m.group("extra").split())
     level = attrs.pop("fmt", "")
     return (int(level) if level.isascii() and level.isdecimal() else F.IMPLICIT_FMT), attrs
+
+
+def region_extra(text: str, doc: str) -> dict[str, str]:
+    """The begin-line attributes this version does not know, to carry over a rewrite of a
+    region written at the SAME format level (at another level they are not ours to keep)."""
+    found = _begin_attrs(text, doc)
+    return found[1] if found is not None and found[0] == F.FORMAT_LEVEL else {}
 
 
 def _end(doc: str) -> str:
@@ -276,10 +297,10 @@ def _region_pattern(doc: str, which: str) -> re.Pattern[str]:
     return re.compile(rf"^<!-- ddflow:end doc={d} -->\r?$", re.M)
 
 
-def region_text(doc: str, body: str) -> str:
+def region_text(doc: str, body: str, extra: dict[str, str] | None = None) -> str:
     """The marked region for ``body`` (begin line, body, end line), ending in a newline."""
     body = F.normalize(body)
-    return f"{_begin(doc, F.body_digest(body))}\n{body}{_end(doc)}\n"
+    return f"{_begin(doc, F.body_digest(body), extra)}\n{body}{_end(doc)}\n"
 
 
 def write_region(
@@ -294,11 +315,11 @@ def write_region(
 ) -> WriteResult:
     """Replace the ``doc`` region of ``target`` with ``body``; the rest is kept byte for byte."""
     path, rel = safe_target(repo, target)
-    new_region = region_text(doc, body)
     with tomlcfg.locked(_lock_path(repo)):
         path, rel = safe_target(repo, target)
         old = _read(path)
         _refuse_newer(rel, old, doc, check=check, diff=diff)
+        new_region = region_text(doc, body, region_extra(old, doc) if old is not None else None)
         if old is None:
             return _finish(path, rel, None, new_region, check=check, diff=diff, refuse="")
         begins = list(_region_pattern(doc, "begin").finditer(old))
@@ -374,11 +395,12 @@ def append_entries(
         _refuse_newer(rel, old, doc, check=check, diff=diff)
         head, old_body = F.split(old) if old is not None else (None, "")
         refuse = ""
-        if old is not None and head is None and not force:
+        found = F.state(old, doc, version)
+        if found == "not-ours" and not force:
             refuse = f"{rel} has no ddflow header: it is not a generated file; refusing to append (--force to adopt it as the log's first lines)"
-        elif head is not None and F.hand_edited(old or "") and not force:
+        elif found == "edited" and not force:
             refuse = f"{rel} was edited by hand since ddflow wrote it; refusing to append (--force to continue anyway)"
-        elif head is not None and head.doc != doc and not force:
+        elif found == "other-doc" and not force and head is not None:
             refuse = (
                 f"{rel} was generated as {head.doc!r}, not {doc!r}; refusing to append (--force)"
             )
@@ -386,8 +408,9 @@ def append_entries(
         entries, new_last = produce(last)
         if not entries:  # nothing new since `last`
             if check:  # a file ddflow would refuse to append to is not fresh either
+                stale = bool(refuse) or found == "newer"
                 return WriteResult(
-                    path, rel, "stale" if refuse else "fresh", EXIT_STALE if refuse else 0
+                    path, rel, "stale" if stale else "fresh", EXIT_STALE if stale else 0
                 )
             return WriteResult(path, rel, "unchanged")
         prior = old_body if head is not None else (old or "")
