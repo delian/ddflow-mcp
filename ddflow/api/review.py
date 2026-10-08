@@ -96,13 +96,16 @@ def diff_for(
     """
     base = base or cfg.worktree.base_ref or W.default_branch(repo)
     if not item:
-        return W.capture_diff(repo), f"working tree in {repo}"
+        return _captured(repo, f"working tree in {repo}")
     it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
         # The branch's commits plus TRACKED edits. An untracked file is a draft nobody
         # committed (B2bf4d38cc1): it is named, not reviewed.
-        diff = W.capture_diff(wt_path, base, include_untracked=False)
+        try:
+            diff = W.capture_diff(wt_path, base, include_untracked=False)
+        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
+            return "", f"{base}..HEAD in {wt_path} could not be read: {exc}"
         how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
         if untracked := W.untracked_files(wt_path):
             shown = ", ".join(untracked[:SHOWN_UNTRACKED]) + (
@@ -137,12 +140,26 @@ def diff_for(
     if not branch:
         from ..services.enforce import SELF_MANAGED
 
-        return W.capture_diff(repo, exclude=SELF_MANAGED), (
+        return _captured(
+            repo,
             f"working tree in {repo}, ddflow's bookkeeping excluded -- for {item}'s work "
-            f"on a branch, pass --branch <branch> or run review from its worktree"
+            f"on a branch, pass --branch <branch> or run review from its worktree",
+            exclude=SELF_MANAGED,
         )
     d = W.git(repo, "diff", "--no-color", f"{base}...{branch}")
-    return (d.out + "\n") if d.ok and d.out else "", f"{base}...{branch} ({chosen})"
+    how = f"{base}...{branch} ({chosen})"
+    if not d.ok:  # git could not say: an empty diff, recorded unavailable, with the reason
+        return "", f"{how} could not be read: {d.err or d.out}"
+    return (d.out + "\n") if d.out else "", how
+
+
+def _captured(tree: Path, how: str, **kw) -> tuple[str, str]:
+    """(`W.capture_diff` of ``tree``, ``how``); git failing is an empty diff whose ``how``
+    says so -- the review then records UNAVAILABLE, never "nothing changed"."""
+    try:
+        return W.capture_diff(tree, **kw), how
+    except RuntimeError as exc:
+        return "", f"{how}: git could not read it ({exc})"
 
 
 #: How often a running review says what it is still waiting for.
@@ -1145,14 +1162,8 @@ def _delta_of_tree(wt: Path, head: str, base: str) -> str:
     """The delta of an item's worktree: its commits and tracked edits since the start.
     Raises RuntimeError when a diff cannot be produced: never "nothing changed"."""
     start = _delta_start(wt, "HEAD", head, base)
-    # `start..HEAD` plus the tracked edits: what `capture_diff(wt, head)` sent (a delta is
-    # only taken from a head the branch contains), with each git call's failure kept.
-    committed = W.git(wt, "diff", "--no-color", start, "HEAD")
-    working = W.git(wt, "diff", "--no-color", "HEAD")
-    for part in (committed, working):
-        if not part.ok:  # could not run: never "nothing changed"
-            raise RuntimeError(f"git diff in {wt} failed: {part.err or part.out}")
-    return "\n".join(p.out for p in (committed, working) if p.out.strip())
+    # `start..HEAD` plus the tracked edits: what a review sent, with a git failure kept.
+    return W.capture_diff(wt, include_untracked=False, since=start)
 
 
 def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:

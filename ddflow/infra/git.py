@@ -173,6 +173,7 @@ def files(
     *,
     exclude: tuple[str, ...] = (),
     pathspec: tuple[str, ...] = (),
+    literal: bool = False,
     timeout: float | None = LISTING_TIMEOUT,
 ) -> list[str] | None:
     """The files of a work tree, ``-z`` exact; None when git could not list them.
@@ -180,11 +181,14 @@ def files(
     ``kind``: ``"tracked"`` (in the index), ``"untracked"`` (neither tracked nor ignored)
     or ``"all"`` (both). ``exclude`` are pathspecs such as `core.bookkeeping.STATE_EXCLUDE`
     and ``pathspec`` narrows the listing (``"."`` is the tree below ``repo``, the default
-    whenever ``exclude`` is given).
+    whenever ``exclude`` is given); ``literal`` reads ``pathspec`` as names, not globs.
     """
+    if literal and exclude:
+        raise ValueError("literal pathspecs would read an exclude pathspec as a file name")
     if kind not in _FILE_KINDS:
         raise ValueError(f"unknown kind of file listing {kind!r}; expected one of {_FILE_KINDS}")
-    args = ["ls-files", *_FILE_KINDS[kind]]
+    args = ["--literal-pathspecs"] if literal else []
+    args += ["ls-files", *_FILE_KINDS[kind]]
     if pathspec or exclude:
         args += ["--", *(pathspec or (".",)), *exclude]
     return paths(repo, *args, timeout=timeout)

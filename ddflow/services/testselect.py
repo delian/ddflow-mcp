@@ -63,6 +63,7 @@ from ..core import globs
 from ..core.bookkeeping import STATE_EXCLUDE, is_state
 from ..infra import git as GIT
 from ..infra import worktree as W
+from . import changes as CH
 from . import gates as G
 
 #: A test file by name, in the conventions of pytest, Jest/Vitest and Go.
@@ -102,19 +103,9 @@ class Selection:
 def changed_files(tree: Path, base: str) -> list[str] | None:
     """Every path that differs from ``base``: committed on the branch, staged, unstaged
     and untracked. None when git cannot answer — never an empty "nothing changed"."""
-    mb = W.git(tree, "merge-base", base, "HEAD")
-    if mb.code != 0:
-        return None
-    parts = [
-        # `--no-renames`: a rename is its OLD path too. The old module's importers are the
-        # ones a rename breaks, and `--name-only` alone reports only the new path.
-        W.git_paths(tree, "diff", "--name-only", "--no-renames", f"{mb.out}..HEAD"),
-        W.git_paths(tree, "diff", "--name-only", "--no-renames", "HEAD"),
-        GIT.files(tree, "untracked"),
-    ]
-    if any(p is None for p in parts):
-        return None
-    return sorted({n for p in parts for n in p or ()})
+    # A rename is its OLD path too (`changed_paths` default): the old module's importers
+    # are the ones a rename breaks.
+    return CH.changed_paths(tree, base, include=("committed", "tracked", "untracked"))
 
 
 def module_name(path: str) -> str:

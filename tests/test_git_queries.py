@@ -154,3 +154,157 @@ def test_header_only_sections_with_two_different_names_split_at_the_boundary():
     assert [f.paths for f in unidiff.files(plain)] == [("old.bin", "new.bin")]
     assert [f.paths for f in unidiff.files(one_quoted)] == [("old.txt", "n\u00f6.bin")]
     assert [f.paths for f in unidiff.files(both)] == [("\u00f6 x", "\u00f6 y")]
+
+
+# ---- changes.changed_paths / base_changed (B-uni-git-queries.3-changes) -------------------
+
+from ddflow.services import changes as CH  # noqa: E402
+
+
+@pytest.fixture
+def forked(repo):
+    """main with one commit, a branch `work` that forked from it and moved on, and main
+    moved on too."""
+    (repo / "base.txt").write_text("b\n")
+    (repo / "old name.txt").write_text("c\nd\ne\nf\ng\nh\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    _git(repo, "checkout", "-qb", "work")
+    (repo / "committed.txt").write_text("1\n")
+    _git(repo, "add", "committed.txt")
+    _git(repo, "mv", "old name.txt", "café.txt")
+    _git(repo, "commit", "-qm", "work")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "on main.txt").write_text("m\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "main moves")
+    _git(repo, "checkout", "-q", "work")
+    return repo
+
+
+def test_changed_paths_reads_every_kind_and_both_sides_of_a_rename(forked):
+    repo = forked
+    (repo / "base.txt").write_text("b2\n")  # worktree
+    (repo / "staged.txt").write_text("s\n")
+    _git(repo, "add", "staged.txt")
+    (repo / "new file.txt").write_text("u\n")  # untracked
+    got = CH.changed_paths(repo, "main")
+    assert got == sorted(
+        ["committed.txt", "café.txt", "old name.txt", "base.txt", "staged.txt", "new file.txt"]
+    )  # nothing from main's own commit; exact (-z) names, a rename is both paths
+    assert CH.changed_paths(repo, "main", include=("committed",)) == [
+        "café.txt",
+        "committed.txt",
+        "old name.txt",
+    ]
+    assert CH.changed_paths(repo, include=("staged",)) == ["staged.txt"]
+    assert CH.changed_paths(repo, include=("untracked",)) == ["new file.txt"]
+    assert CH.changed_paths(repo, include=("tracked",)) == ["base.txt", "staged.txt"]
+
+
+def test_changed_paths_renames_flag_and_filter(forked):
+    repo = forked
+    assert CH.changed_paths(repo, "main", include=("committed",), renames=True) == [
+        "café.txt",
+        "committed.txt",
+    ]
+    assert CH.changed_paths(
+        repo, "main", include=("committed",), renames=True, diff_filter="ACMR"
+    ) == ["café.txt", "committed.txt"]
+    assert CH.changed_paths(repo, "main", include=("committed",), pathspec=("café.txt",)) == [
+        "café.txt"
+    ]
+
+
+def test_changed_paths_without_fork_compares_the_two_commits_as_they_are(forked):
+    got = CH.changed_paths(forked, "main", tip="work", include=("committed",), fork=False)
+    assert "on main.txt" in got and "committed.txt" in got
+
+
+def test_a_git_failure_is_unknown_never_unchanged(forked, tmp_path_factory):
+    assert CH.changed_paths(forked, "no-such-ref") is None
+    assert CH.base_changed(forked, "no-such-ref") is None
+    outside = tmp_path_factory.mktemp("not-a-repo")
+    assert CH.changed_paths(outside, "main") is None
+    assert CH.base_changed(forked, "main") is True
+    _git(forked, "checkout", "-q", "main")
+    assert CH.base_changed(forked, "main") is False
+
+
+def test_changed_paths_refuses_an_unknown_kind_or_a_committed_read_without_a_base(forked):
+    with pytest.raises(ValueError):
+        CH.changed_paths(forked, "main", include=("bogus",))
+    with pytest.raises(ValueError):
+        CH.changed_paths(forked, include=("committed",))
+
+
+def test_capture_diff_raises_when_the_base_cannot_be_resolved(forked):
+    """B-uni-git-queries.3: a failed merge-base fell back to the base and read as an empty
+    diff, "nothing changed"."""
+    with pytest.raises(RuntimeError):
+        W.capture_diff(forked, "no-such-ref", include_untracked=False)
+    assert "committed.txt" in W.capture_diff(forked, "main", include_untracked=False)
+
+
+def test_changed_paths_with_nothing_to_read_is_refused_not_empty(forked):
+    for kw in ({"tip": "work"}, {"include": ()}):
+        with pytest.raises(ValueError):
+            CH.changed_paths(forked, **kw)
+
+
+def test_literal_pathspecs_apply_to_untracked_too(forked):
+    (forked / "a1.py").write_text("x\n")
+    (forked / "a[1].py").write_text("x\n")
+    got = CH.changed_paths(forked, include=("untracked",), pathspec=("a[1].py",), literal=True)
+    assert got == ["a[1].py"]
+
+
+def test_capture_diff_with_no_common_ancestor_still_diffs(forked):
+    """git's merge-base exit 1 is an answer (unrelated history), not a failure."""
+    _git(forked, "checkout", "-q", "--orphan", "other")
+    _git(forked, "rm", "-rqf", ".")
+    (forked / "o.txt").write_text("o\n")
+    _git(forked, "add", "o.txt")
+    _git(forked, "commit", "-qm", "orphan")
+    assert "o.txt" in W.capture_diff(forked, "main", include_untracked=False)
+
+
+def test_diff_for_says_unavailable_when_git_cannot_read_the_tree(tmp_path_factory):
+    from types import SimpleNamespace
+
+    from ddflow.api import review as R
+
+    cfg = SimpleNamespace(worktree=SimpleNamespace(base_ref=""))
+    outside = tmp_path_factory.mktemp("not-a-repo")
+    diff, how = R.diff_for(outside, cfg, SimpleNamespace(items={}), "")
+    assert diff == "" and "could not read it" in how
+
+
+def test_no_common_ancestor_is_unknown_for_changed_paths(forked):
+    _git(forked, "checkout", "-q", "--orphan", "other")
+    _git(forked, "rm", "-rqf", ".")
+    (forked / "o.txt").write_text("o\n")
+    _git(forked, "add", "o.txt")
+    _git(forked, "commit", "-qm", "orphan")
+    assert CH.changed_paths(forked, "main") is None  # base...HEAD has no merge base
+
+
+def test_literal_files_refuses_an_exclude(forked):
+    from ddflow.infra import git as G
+
+    with pytest.raises(ValueError):
+        G.files(forked, "all", exclude=(":(exclude)x",), literal=True)
+
+
+def test_diff_for_a_branch_whose_diff_fails_says_so(forked):
+    from types import SimpleNamespace
+
+    from ddflow.api import review as R
+
+    cfg = SimpleNamespace(worktree=SimpleNamespace(base_ref=""))
+    it = SimpleNamespace(worktree="", branch="", lease=None)
+    st = SimpleNamespace(items={"T1": it})
+    diff, how = R.diff_for(forked, cfg, st, "T1", base="main", branch="no-such-branch")
+    assert diff == "" and "could not be read" in how
+    diff, how = R.diff_for(forked, cfg, st, "T1", base="main", branch="work")
+    assert "committed.txt" in diff
