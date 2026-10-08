@@ -3352,3 +3352,6 @@
 {"agent":"U4","data":{"at":1791501367.5436006,"holder":"U4"},"id":"e4a07633f033a6e9256372c11","kind":"lease.renewed","lamport":45389,"schema":1,"subject":"B-uni-tree-lifecycle.4-orphans","ts":"2026-10-08T23:16:07.656043Z"}
 {"agent":"U4","data":{"at":1791501492.988395,"holder":"U4"},"id":"e0e9b4e8289af749d4f2a9daf","kind":"lease.renewed","lamport":45396,"schema":1,"subject":"B-uni-tree-lifecycle.4-orphans","ts":"2026-10-08T23:18:13.094562Z"}
 {"agent":"U4","data":{"at":1791501617.6701775,"holder":"U4"},"id":"e6db1480b712b6338c895f947","kind":"lease.renewed","lamport":45410,"schema":1,"subject":"B-uni-tree-lifecycle.4-orphans","ts":"2026-10-08T23:20:17.783624Z"}
+{"agent":"U4","data":{"at":1791501741.4461877,"holder":"U4"},"id":"e0fde019f7447eceb0d1e538b","kind":"lease.renewed","lamport":45423,"schema":1,"subject":"B-uni-tree-lifecycle.4-orphans","ts":"2026-10-08T23:22:21.562776Z"}
+{"agent":"U4","data":{"at":1791501865.531169,"holder":"U4"},"id":"e42c771138a6bd0187e36aa68","kind":"lease.renewed","lamport":45430,"schema":1,"subject":"B-uni-tree-lifecycle.4-orphans","ts":"2026-10-08T23:24:25.651577Z"}
+{"agent":"U4","data":{"at":1791501990.469142,"holder":"U4"},"id":"e94a4d90e02a0d541346398ab","kind":"lease.renewed","lamport":45450,"schema":1,"subject":"B-uni-tree-lifecycle.4-orphans","ts":"2026-10-08T23:26:30.614378Z"}
