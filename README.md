@@ -1314,7 +1314,7 @@ findings were refuted and confirmed, and the rounds used). The pass is flagged, 
 silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, `status`
 counts such gates (`refuted_passes` in `--json`), the brief names those of unfinished
 items, `complete` prints a `PASSED ON REFUTATION:` line for each (`refuted_passes` in its result), and `ddflow gate list --refuted` (MCP `ddflow_gate_list` with
-`refuted=true`) lists every one for the operator to spot-check. Without `--refuted`, `gate
+`refuted=true`) lists every one for the operator to spot-check; `--since <ISO date or timestamp>` (MCP `since`) keeps the ones recorded at or after it (refused without `--refuted`). Without `--refuted`, `gate
 list` lists the gates the project defines. A gate whose findings were ALL confirmed (and fixed), none refuted, is recorded `passed` too but is not flagged: `gate status` shows `-- findings fixed` and `gate list --refuted` leaves it out; a mix of refuted and confirmed is flagged with both counts. A finding still without a verdict holds the gate where it is,
 and the triage output says so: settle it, or ask the operator for one more round
 (`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
@@ -4754,7 +4754,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=5501e13c4cd5 -->
+<!-- ddflow:begin README/tools sha=165d7f9a7197 -->
 <details><summary>All 111 MCP tools: 32 in the `core` tier, 46 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -4805,7 +4805,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
-| Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate recorded passed ON REFUTATION (its findings… |
+| Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check. |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
 | Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
 | Gates and review | `ddflow_gate_skip` | core | Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. |
@@ -4895,7 +4895,7 @@ ddflow heartbeat <id>           renew a lease
 ddflow release <id>             give it up
 
 ddflow gate status <id>         pipeline position + the next gate's instruction
-ddflow gate list [--refuted]    the defined gates; --refuted: every gate passed on refutation (spot-check)
+ddflow gate list [--refuted [--since D]]    the defined gates; --refuted: every gate passed on refutation (spot-check), --since: recorded at or after D
 ddflow gate run <id> <gate>     execute a command gate, record its evidence
 ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model, --reviewer-model, --reviewed-sha)
 ddflow gate skip <id> <gate>    skip, with a mandatory reason

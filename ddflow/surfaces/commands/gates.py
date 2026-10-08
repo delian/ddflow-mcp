@@ -28,7 +28,10 @@ def _gate_status(a, c: Ctx) -> int:
 
 
 def _gate_list(a, c: Ctx) -> int:
-    out = A.list_gates(c.repo, refuted=a.refuted, agent=c.requested_agent)
+    out = A.list_gates(c.repo, refuted=a.refuted, since=a.since, agent=c.requested_agent)
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
     if c.json:
         emit_json(out.body(("refuted", "count", "passes", "gates")))
         return OK

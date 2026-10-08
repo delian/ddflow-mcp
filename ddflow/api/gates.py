@@ -26,6 +26,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from ..core import clock
 from ..core import outcome as O
 from ..core.model import GateOutcome
 from ..core.plain import plain
@@ -132,13 +133,24 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 
-def list_gates(repo: Path, *, refuted: bool = False, agent: str = "") -> O.Outcome:
+def list_gates(repo: Path, *, refuted: bool = False, since: str = "", agent: str = "") -> O.Outcome:
     """The gates this project defines; with ``refuted``, the ones recorded passed ON
     REFUTATION instead (D-unify 5), for the operator to spot-check: every (item, gate)
-    whose last finding was settled by a triage rather than a clean re-review."""
+    whose last finding was settled by a triage rather than a clean re-review. ``since``
+    (an ISO date or timestamp) keeps those recorded at or after it."""
     _log, cfg, st = _load(repo, agent)
+    if since and not refuted:
+        return O.failed("gate.list", "--since narrows --refuted; give both")
     if refuted:
         rows = G.refuted_passes(st)
+        if since:
+            # Instants, not strings: `+02:00`, `Z` and a bare date (midnight UTC) all compare
+            # as the times they are.
+            try:
+                floor = clock.parse_ts(since).timestamp()
+            except (ValueError, TypeError):
+                return O.failed("gate.list", f"--since {since!r} is not an ISO date or timestamp")
+            rows = [r for r in rows if clock.epoch(r["at"], default=-1.0) >= floor]
         lines = [G.refuted_line(r) + f"  [{r['state']}] {r['title']}" for r in rows]
         return O.ok(
             "gate.list",
