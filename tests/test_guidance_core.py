@@ -107,6 +107,12 @@ def test_enforcement_is_carried_by_the_file_not_dropped() -> None:
     )
 
 
+def test_checks_are_tables_never_exploded_characters() -> None:
+    text = 'id = "r-x"\ntitle = "x"\nchecks = "pytest -q"\n\nb'
+    with pytest.raises(ValueError, match="checks must be a list of tables"):
+        fileformat.parse(text, RULE)
+
+
 def test_a_decision_file_uses_the_same_schema() -> None:
     rec = GuidanceRecord(
         id="D-sqlite",
@@ -158,6 +164,7 @@ def test_listing_rules_skips_a_file_that_is_not_one_and_creates_the_directory(tm
     store = RulesStorage(tmp_path)
     assert store.list() == [] and store.rules_dir.is_dir()
     (store.rules_dir / "r-bad.toml").write_text('title = "x"\n\nb')
+    (store.rules_dir / "r-bad-id.toml").write_text('id = "not-a-rule-id"\ntitle = "x"\n\nb')
     store.add(Rule(id="r-ok", title="t", content="c"))
     assert [r.id for r in store.list()] == ["r-ok"]
 
@@ -212,6 +219,15 @@ def test_files_are_listed_in_file_name_order_and_bad_ones_reported(tmp_path: Pat
     files.delete("r-a")
     with pytest.raises(ValueError, match="not found at"):
         files.delete("r-a")
+
+
+def test_an_unreadable_file_is_reported_not_raised(tmp_path: Path) -> None:
+    files = GuidanceFiles(tmp_path, RULE)
+    files.ensure_dir()
+    (files.directory / "r-x.toml").mkdir()  # a directory where the file should be: names() skips it
+    (files.directory / "r-y.toml").write_bytes(b"\xff\xfe id = ")
+    (problem,) = files.problems()
+    assert problem.path.name == "r-y.toml"
 
 
 def test_a_toml_syntax_error_is_reported_with_its_line(tmp_path: Path) -> None:
