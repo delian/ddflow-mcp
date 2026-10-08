@@ -329,7 +329,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "bugs_closed",
             "umbrellas_completed",
             "umbrella_refused",
-            "passed_on_refutation",
+            "refuted_passes",
         ),
     },
     "ddflow_merge": {

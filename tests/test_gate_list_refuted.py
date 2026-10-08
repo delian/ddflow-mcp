@@ -70,14 +70,14 @@ def test_the_mcp_tool_takes_refuted(repo, tmp_path):
 
 def test_status_counts_them_and_stays_quiet_when_there_are_none(repo, tmp_path):
     _setup(repo, tmp_path)
-    assert "passed_on_refutation" not in A.status(repo).data
+    assert "refuted_passes" not in A.status(repo).data
     _, text, _ = run_cli(repo, "status")
     assert "passed on refutation" not in text
     for _ in (1, 2):
         api.review(repo, gate="critic", item="T1")
     api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="ok")
     data = A.status(repo).data
-    assert data["passed_on_refutation"]["gates"] == 1 and data["passed_on_refutation"]["items"] == 1
+    assert data["refuted_passes"]["gates"] == 1 and data["refuted_passes"]["items"] == 1
     _, text, _ = run_cli(repo, "status")
     assert "1 gate(s) passed on refutation (`ddflow gate list --refuted`)" in text
 
