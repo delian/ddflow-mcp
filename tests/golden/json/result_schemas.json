@@ -1,0 +1,2281 @@
+{
+ "ddflow_brief": {
+  "command": "brief",
+  "schema": "brief@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_next": {
+  "command": "next",
+  "schema": "next@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "next@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_claim": {
+  "command": "claim",
+  "schema": "claim@1",
+  "shape": "object",
+  "payload": [
+   "item",
+   "holder",
+   "worktree",
+   "branch",
+   "base",
+   "rebound",
+   "here",
+   "port",
+   "port_advice"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "claim@1"
+    },
+    "item": {},
+    "holder": {},
+    "worktree": {},
+    "branch": {},
+    "base": {},
+    "rebound": {},
+    "here": {},
+    "port": {},
+    "port_advice": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_heartbeat": {
+  "command": "heartbeat",
+  "schema": "heartbeat@1",
+  "shape": "object",
+  "payload": [
+   "renewed",
+   "waiters",
+   "globs_withheld"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "heartbeat@1"
+    },
+    "renewed": {},
+    "waiters": {},
+    "globs_withheld": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_gate_status": {
+  "command": "gate_status",
+  "schema": "gate_status@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_gate_list": {
+  "command": "gate_list",
+  "schema": "gate_list@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_gate_run": {
+  "command": "gate_run",
+  "schema": "gate_run@1",
+  "shape": "object",
+  "payload": [
+   "gate",
+   "outcome",
+   "evidence"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "gate_run@1"
+    },
+    "gate": {},
+    "outcome": {},
+    "evidence": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_gate_record": {
+  "command": "gate_record",
+  "schema": "gate_record@1",
+  "shape": "object",
+  "payload": [
+   "gate",
+   "outcome",
+   "warning"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "gate_record@1"
+    },
+    "gate": {},
+    "outcome": {},
+    "warning": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_gate_verify": {
+  "command": "gate_verify",
+  "schema": "gate_verify@1",
+  "shape": "object",
+  "payload": [
+   "gate",
+   "reason",
+   "results",
+   "verified"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "gate_verify@1"
+    },
+    "gate": {},
+    "reason": {},
+    "results": {},
+    "verified": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_gate_skip": {
+  "command": "gate_skip",
+  "schema": "gate_skip@1",
+  "shape": "object",
+  "payload": [
+   "gate",
+   "outcome"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "gate_skip@1"
+    },
+    "gate": {},
+    "outcome": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_complete": {
+  "command": "complete",
+  "schema": "complete@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "sha",
+   "independence",
+   "forced",
+   "coverage_gaps",
+   "note",
+   "woke",
+   "bugs_closed",
+   "umbrellas_completed",
+   "umbrella_refused",
+   "refuted_passes"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "complete@1"
+    },
+    "id": {},
+    "sha": {},
+    "independence": {},
+    "forced": {},
+    "coverage_gaps": {},
+    "note": {},
+    "woke": {},
+    "bugs_closed": {},
+    "umbrellas_completed": {},
+    "umbrella_refused": {},
+    "refuted_passes": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_merge": {
+  "command": "merge",
+  "schema": "merge@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "sha",
+   "branch_head",
+   "base",
+   "pr",
+   "branch",
+   "outside_globs",
+   "outside_globs_unknown",
+   "merge_gate_human",
+   "worktree",
+   "worktree_removed"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "merge@1"
+    },
+    "id": {},
+    "sha": {},
+    "branch_head": {},
+    "base": {},
+    "pr": {},
+    "branch": {},
+    "outside_globs": {},
+    "outside_globs_unknown": {},
+    "merge_gate_human": {},
+    "worktree": {},
+    "worktree_removed": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_pr_sync": {
+  "command": "pr_sync",
+  "schema": "pr_sync@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "pr_sync@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_pr_status": {
+  "command": "pr_status",
+  "schema": "pr_status@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "pr_status@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_pr_threads": {
+  "command": "pr_threads",
+  "schema": "pr_threads@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "pr_threads@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_version_show": {
+  "command": "version_show",
+  "schema": "version_show@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "version_show@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_version_cut": {
+  "command": "version_cut",
+  "schema": "version_cut@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "version_cut@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_promote_add": {
+  "command": "promote_add",
+  "schema": "promote_add@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "promote_add@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_promote_deployed": {
+  "command": "promote_deployed",
+  "schema": "promote_deployed@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "promote_deployed@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_promote_status": {
+  "command": "promote_status",
+  "schema": "promote_status@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "promote_status@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_flow_show": {
+  "command": "flow_show",
+  "schema": "flow_show@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "flow_show@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_flow_choose": {
+  "command": "flow_choose",
+  "schema": "flow_choose@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "flow_choose@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_phase_add": {
+  "command": "phase_add",
+  "schema": "phase_add@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "phase_add@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_split": {
+  "command": "split",
+  "schema": "split@1",
+  "shape": "object",
+  "payload": [
+   "item",
+   "created"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "split@1"
+    },
+    "item": {},
+    "created": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_task_add": {
+  "command": "task_add",
+  "schema": "task_add@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "line",
+   "ports",
+   "port_strategy",
+   "defaulted"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "task_add@1"
+    },
+    "id": {},
+    "line": {},
+    "ports": {},
+    "port_strategy": {},
+    "defaulted": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_lesson_verify": {
+  "command": "lesson_verify",
+  "schema": "lesson_verify@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_lesson_add": {
+  "command": "lesson_add",
+  "schema": "lesson_add@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "lesson_add@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_lesson_search": {
+  "command": "lesson_search",
+  "schema": "lesson_search@1",
+  "shape": "array",
+  "payload": "hits",
+  "output_schema": null,
+  "array_schema": {
+   "title": "lesson_search@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_research_add": {
+  "command": "research_add",
+  "schema": "research_add@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "verdict"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "research_add@1"
+    },
+    "id": {},
+    "verdict": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_fixed": {
+  "command": "bug_fixed",
+  "schema": "bug_fixed@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "regression_verified",
+   "lesson_captured",
+   "lesson_capture"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_fixed@1"
+    },
+    "id": {},
+    "regression_verified": {},
+    "lesson_captured": {},
+    "lesson_capture": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_invalid": {
+  "command": "bug_invalid",
+  "schema": "bug_invalid@1",
+  "shape": "dynamic",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_recover": {
+  "command": "recover",
+  "schema": "recover@1",
+  "shape": "array",
+  "payload": "found",
+  "output_schema": null,
+  "array_schema": {
+   "title": "recover@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_board": {
+  "command": "board",
+  "schema": "board@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_progress": {
+  "command": "progress",
+  "schema": "progress@1",
+  "shape": "array",
+  "payload": "rows",
+  "output_schema": null,
+  "array_schema": {
+   "title": "progress@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_loops": {
+  "command": "loops",
+  "schema": "loops@1",
+  "shape": "array",
+  "payload": "findings",
+  "output_schema": null,
+  "array_schema": {
+   "title": "loops@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_cleanup": {
+  "command": "cleanup",
+  "schema": "cleanup@1",
+  "shape": "object",
+  "payload": [
+   "trees",
+   "stale_branches"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "cleanup@1"
+    },
+    "trees": {},
+    "stale_branches": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_onboard": {
+  "command": "onboard",
+  "schema": "onboard@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "onboard@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_recall": {
+  "command": "recall",
+  "schema": "recall@1",
+  "shape": "object",
+  "payload": "results",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "recall@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_similar": {
+  "command": "similar",
+  "schema": "similar@1",
+  "shape": "array",
+  "payload": "candidates",
+  "output_schema": null,
+  "array_schema": {
+   "title": "similar@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_dupes": {
+  "command": "dupes",
+  "schema": "dupes@1",
+  "shape": "object",
+  "payload": [
+   "pairs",
+   "count",
+   "kinds",
+   "open_only",
+   "floor",
+   "limit"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "dupes@1"
+    },
+    "pairs": {},
+    "count": {},
+    "kinds": {},
+    "open_only": {},
+    "floor": {},
+    "limit": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_link": {
+  "command": "link",
+  "schema": "link@1",
+  "shape": "object",
+  "payload": [
+   "subject",
+   "relation",
+   "target",
+   "merged"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "link@1"
+    },
+    "subject": {},
+    "relation": {},
+    "target": {},
+    "merged": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_status": {
+  "command": "status",
+  "schema": "status@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "status@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_identify": {
+  "command": "identify",
+  "schema": "identify@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "identify@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_decision_add": {
+  "command": "decision_add",
+  "schema": "decision_add@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "decision_add@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_decision_list": {
+  "command": "decision_list",
+  "schema": "decision_list@1",
+  "shape": "array",
+  "payload": "rows",
+  "output_schema": null,
+  "array_schema": {
+   "title": "decision_list@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_decision_applicable": {
+  "command": "decision_applicable",
+  "schema": "decision_applicable@1",
+  "shape": "object",
+  "payload": [
+   "applicable",
+   "project_wide"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "decision_applicable@1"
+    },
+    "applicable": {},
+    "project_wide": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_decision_supersede": {
+  "command": "decision_supersede",
+  "schema": "decision_supersede@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "by"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "decision_supersede@1"
+    },
+    "id": {},
+    "by": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_replay": {
+  "command": "replay",
+  "schema": "replay@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_render": {
+  "command": "render",
+  "schema": "render@1",
+  "shape": "dynamic",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_list": {
+  "command": "list",
+  "schema": "list@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "list@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rebuild": {
+  "command": "rebuild",
+  "schema": "rebuild@1",
+  "shape": "object",
+  "payload": [
+   "events",
+   "items"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rebuild@1"
+    },
+    "events": {},
+    "items": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_history": {
+  "command": "history",
+  "schema": "history@1",
+  "shape": "object",
+  "payload": [
+   "total",
+   "shown",
+   "events"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "history@1"
+    },
+    "total": {},
+    "shown": {},
+    "events": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_import": {
+  "command": "import",
+  "schema": "import@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "import@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_workflow": {
+  "command": "workflow",
+  "schema": "workflow@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "workflow@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_workflow_pipeline": {
+  "command": "workflow_pipeline",
+  "schema": "workflow_pipeline@1",
+  "shape": "object",
+  "payload": [
+   "key",
+   "gates",
+   "applied"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "workflow_pipeline@1"
+    },
+    "key": {},
+    "gates": {},
+    "applied": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_workflow_gate": {
+  "command": "workflow_gate",
+  "schema": "workflow_gate@1",
+  "shape": "object",
+  "payload": [
+   "gate",
+   "changed",
+   "applied"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "workflow_gate@1"
+    },
+    "gate": {},
+    "changed": {},
+    "applied": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_workflow_drop": {
+  "command": "workflow_drop",
+  "schema": "workflow_drop@1",
+  "shape": "object",
+  "payload": [
+   "gate",
+   "removed_from",
+   "applied"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "workflow_drop@1"
+    },
+    "gate": {},
+    "removed_from": {},
+    "applied": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_workflow_state": {
+  "command": "workflow_state",
+  "schema": "workflow_state@1",
+  "shape": "object",
+  "payload": [
+   "workflow",
+   "workflow_diagram",
+   "rules",
+   "decisions",
+   "active_work",
+   "project",
+   "task_queue",
+   "bugs",
+   "blockers",
+   "discovery_hints"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "workflow_state@1"
+    },
+    "workflow": {},
+    "workflow_diagram": {},
+    "rules": {},
+    "decisions": {},
+    "active_work": {},
+    "project": {},
+    "task_queue": {},
+    "bugs": {},
+    "blockers": {},
+    "discovery_hints": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_verify": {
+  "command": "verify",
+  "schema": "verify@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "verify@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_ci": {
+  "command": "ci",
+  "schema": "ci@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "ci@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_help": {
+  "command": "help",
+  "schema": "help@1",
+  "shape": "object",
+  "payload": [
+   "topic",
+   "text",
+   "topics"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "help@1"
+    },
+    "topic": {},
+    "text": {},
+    "topics": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_import_verify": {
+  "command": "import_verify",
+  "schema": "import_verify@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "import_verify@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_companions": {
+  "command": "companions",
+  "schema": "companions@1",
+  "shape": "object",
+  "payload": [
+   "companions",
+   "gate_coverage",
+   "uncovered_gates"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "companions@1"
+    },
+    "companions": {},
+    "gate_coverage": {},
+    "uncovered_gates": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bisect": {
+  "command": "bisect",
+  "schema": "bisect@1",
+  "shape": "object",
+  "payload": [
+   "state",
+   "victim",
+   "polluters",
+   "candidates",
+   "summary",
+   "runs"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bisect@1"
+    },
+    "state": {},
+    "victim": {},
+    "polluters": {},
+    "candidates": {},
+    "summary": {},
+    "runs": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_companions_verify": {
+  "command": "companions_verify",
+  "schema": "companions_verify@1",
+  "shape": "object",
+  "payload": [
+   "verified",
+   "skipped"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "companions_verify@1"
+    },
+    "verified": {},
+    "skipped": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_companions_add": {
+  "command": "companions_add",
+  "schema": "companions_add@1",
+  "shape": "object",
+  "payload": [
+   "actions",
+   "applied",
+   "written",
+   "refused"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "companions_add@1"
+    },
+    "actions": {},
+    "applied": {},
+    "written": {},
+    "refused": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_found": {
+  "command": "bug_found",
+  "schema": "bug_found@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "offer",
+   "fix_task",
+   "fix_task_filed"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_found@1"
+    },
+    "id": {},
+    "offer": {},
+    "fix_task": {},
+    "fix_task_filed": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_file_tasks": {
+  "command": "bug_file_tasks",
+  "schema": "bug_file_tasks@1",
+  "shape": "object",
+  "payload": [
+   "filed",
+   "linked",
+   "tasks",
+   "links",
+   "dry_run"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_file_tasks@1"
+    },
+    "filed": {},
+    "linked": {},
+    "tasks": {},
+    "links": {},
+    "dry_run": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_note": {
+  "command": "session_note",
+  "schema": "session_note@1",
+  "shape": "object",
+  "payload": [
+   "session",
+   "how"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_note@1"
+    },
+    "session": {},
+    "how": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_end": {
+  "command": "session_end",
+  "schema": "session_end@1",
+  "shape": "object",
+  "payload": [
+   "session"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_end@1"
+    },
+    "session": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_decision_show": {
+  "command": "decision_show",
+  "schema": "decision_show@1",
+  "shape": "object",
+  "payload": "decision",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "decision_show@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_prompts": {
+  "command": "prompts",
+  "schema": "prompts@1",
+  "shape": "dynamic",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_hooks": {
+  "command": "hooks",
+  "schema": "hooks@1",
+  "shape": "object",
+  "payload": [
+   "installed",
+   "policy",
+   "session_hook",
+   "trailer_hook"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "hooks@1"
+    },
+    "installed": {},
+    "policy": {},
+    "session_hook": {},
+    "trailer_hook": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_upgrade": {
+  "command": "upgrade",
+  "schema": "upgrade@1",
+  "shape": "dynamic",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_doctor": {
+  "command": "doctor",
+  "schema": "doctor@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_cadence": {
+  "command": "cadence",
+  "schema": "cadence@1",
+  "shape": "array",
+  "payload": "due",
+  "output_schema": null,
+  "array_schema": {
+   "title": "cadence@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_export": {
+  "command": "export",
+  "schema": "export@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "export@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_pins": {
+  "command": "pins",
+  "schema": "pins@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "pins@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_precommit": {
+  "command": "precommit",
+  "schema": "precommit@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "precommit@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_tests": {
+  "command": "tests",
+  "schema": "tests@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "tests@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_prompt": {
+  "command": "session_prompt",
+  "schema": "session_prompt@1",
+  "shape": "object",
+  "payload": [
+   "redactions",
+   "session",
+   "how"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_prompt@1"
+    },
+    "redactions": {},
+    "session": {},
+    "how": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_setup": {
+  "command": "setup",
+  "schema": "setup@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_configure": {
+  "command": "configure",
+  "schema": "configure@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_reviewers_detect": {
+  "command": "reviewers_detect",
+  "schema": "reviewers_detect@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_reviewers_list": {
+  "command": "reviewers_list",
+  "schema": "reviewers_list@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_review": {
+  "command": "review",
+  "schema": "review@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_review_triage": {
+  "command": "review_triage",
+  "schema": "review_triage@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
+ "ddflow_show": {
+  "command": "show",
+  "schema": "show@1",
+  "shape": "object",
+  "payload": "item",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "show@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_update": {
+  "command": "update",
+  "schema": "update@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "update@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_abandon": {
+  "command": "abandon",
+  "schema": "abandon@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "reason"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "abandon@1"
+    },
+    "id": {},
+    "reason": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_remove": {
+  "command": "remove",
+  "schema": "remove@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "remove@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_release": {
+  "command": "release",
+  "schema": "release@1",
+  "shape": "object",
+  "payload": [
+   "released",
+   "woke"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "release@1"
+    },
+    "released": {},
+    "woke": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_wait": {
+  "command": "wait",
+  "schema": "wait@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "wait@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_block": {
+  "command": "block",
+  "schema": "block@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "block@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_external_sync": {
+  "command": "external_sync",
+  "schema": "external_sync@1",
+  "shape": "array",
+  "payload": "observed",
+  "output_schema": null,
+  "array_schema": {
+   "title": "external_sync@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_job_run": {
+  "command": "job_run",
+  "schema": "job_run@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "pid",
+   "log",
+   "cwd"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "job_run@1"
+    },
+    "id": {},
+    "pid": {},
+    "log": {},
+    "cwd": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_job_add": {
+  "command": "job_add",
+  "schema": "job_add@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "pid",
+   "log",
+   "cwd"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "job_add@1"
+    },
+    "id": {},
+    "pid": {},
+    "log": {},
+    "cwd": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_job_list": {
+  "command": "job_list",
+  "schema": "job_list@1",
+  "shape": "array",
+  "payload": "jobs",
+  "output_schema": null,
+  "array_schema": {
+   "title": "job_list@1",
+   "type": "array",
+   "items": {}
+  }
+ },
+ "ddflow_job_end": {
+  "command": "job_end",
+  "schema": "job_end@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "exit_code"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "job_end@1"
+    },
+    "id": {},
+    "exit_code": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_memory_add": {
+  "command": "memory_add",
+  "schema": "memory_add@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "replaced"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "memory_add@1"
+    },
+    "id": {},
+    "replaced": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_memory_list": {
+  "command": "memory_list",
+  "schema": "memory_list@1",
+  "shape": "object",
+  "payload": [
+   "memories",
+   "total_live"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "memory_list@1"
+    },
+    "memories": {},
+    "total_live": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_memory_forget": {
+  "command": "memory_forget",
+  "schema": "memory_forget@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "memory_forget@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_resolve": {
+  "command": "resolve",
+  "schema": "resolve@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "kept_definition",
+   "kept_holder",
+   "lost",
+   "refiled",
+   "released"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "resolve@1"
+    },
+    "id": {},
+    "kept_definition": {},
+    "kept_holder": {},
+    "lost": {},
+    "refiled": {},
+    "released": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_unblock": {
+  "command": "unblock",
+  "schema": "unblock@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "was",
+   "released"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "unblock@1"
+    },
+    "id": {},
+    "was": {},
+    "released": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_start": {
+  "command": "session_start",
+  "schema": "session_start@1",
+  "shape": "object",
+  "payload": [
+   "session"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_start@1"
+    },
+    "session": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rule_add": {
+  "command": "rule_add",
+  "schema": "rule_add@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "candidates",
+   "related",
+   "options",
+   "extended",
+   "extended_kind",
+   "relation",
+   "dedupe_unavailable"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_add@1"
+    },
+    "id": {},
+    "candidates": {},
+    "related": {},
+    "options": {},
+    "extended": {},
+    "extended_kind": {},
+    "relation": {},
+    "dedupe_unavailable": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rule_list": {
+  "command": "rule_list",
+  "schema": "rule_list@1",
+  "shape": "object",
+  "payload": [
+   "rows",
+   "count"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_list@1"
+    },
+    "rows": {},
+    "count": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rule_search": {
+  "command": "rule_search",
+  "schema": "rule_search@1",
+  "shape": "object",
+  "payload": [
+   "rows",
+   "count",
+   "query"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_search@1"
+    },
+    "rows": {},
+    "count": {},
+    "query": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rule_edit": {
+  "command": "rule_edit",
+  "schema": "rule_edit@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "candidates",
+   "related",
+   "options",
+   "dedupe_unavailable"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_edit@1"
+    },
+    "id": {},
+    "candidates": {},
+    "related": {},
+    "options": {},
+    "dedupe_unavailable": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rule_remove": {
+  "command": "rule_remove",
+  "schema": "rule_remove@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_remove@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_rule_show": {
+  "command": "rule_show",
+  "schema": "rule_show@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "title",
+   "content",
+   "tags",
+   "scope",
+   "priority",
+   "globs",
+   "created",
+   "updated"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "rule_show@1"
+    },
+    "id": {},
+    "title": {},
+    "content": {},
+    "tags": {},
+    "scope": {},
+    "priority": {},
+    "globs": {},
+    "created": {},
+    "updated": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ }
+}
