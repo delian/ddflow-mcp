@@ -8,7 +8,6 @@ project names -- and re-exports what callers imported from here.
 from __future__ import annotations
 
 import os
-import socket
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from ..core.redact import (
     private_addresses,
     redact_text,
 )
+from ..infra import hostinfo as H
 
 __all__ = [
     "PUBLIC_NAMES",
@@ -48,13 +48,6 @@ def session_patterns(cfg: Config | None) -> list[str]:
     return [*session.redact_patterns, *session.redact_extra]
 
 
-def _machine_name() -> str:
-    try:
-        return socket.gethostname()
-    except OSError:
-        return ""
-
-
 def _cwd_repo_root() -> str:
     try:
         cwd = Path.cwd()
@@ -73,7 +66,7 @@ def _resolved(
 ) -> dict[str, str]:
     """`None` is the machine's own: its name, `$HOME`, the repo found from the working directory."""
     return {
-        "hostname": hostname if hostname is not None else _machine_name(),
+        "hostname": hostname if hostname is not None else H.hostname(),
         "home": str(home) if home is not None else os.path.expanduser("~"),
         "repo_root": str(repo_root) if repo_root is not None else _cwd_repo_root(),
     }
