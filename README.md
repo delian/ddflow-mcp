@@ -5119,9 +5119,10 @@ part that matters.
   `# ddflow:end ...`; the Claude/Gemini command carries its markers as shell comments).
   `hooks install` refreshes the region and keeps every line around it; an older ddflow
   refuses (`upgrade ddflow to >= X`) to rewrite one a newer format level wrote, and a region
-  you edited by hand is copied to `.ddflow/backups/` first. A hook written before the stamp
+  you edited by hand is copied to `.ddflow/backups/` first. A git hook written before the stamp
   (it carries only the `# DDFLOW-HOOK v1` line, which the region keeps for older ddflow
-  versions) is still ddflow's and is upgraded in place. `hooks uninstall` removes the
+  versions) is still ddflow's and, as it always was, is replaced whole (lines you added to
+  one are not kept; add them after upgrading). `hooks uninstall` removes the
   region and leaves your own lines.
 * **Hooks find ddflow when they run, and fail open.** The git hooks and the Claude/Gemini
   hook commands record the launcher that installed them, but try it only first: if that

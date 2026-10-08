@@ -272,13 +272,15 @@ def install(
             if _ours(h, marker):
                 have = str(h.get("command", ""))
                 try:
-                    wanted = region.splice(have, command) if region.owns(have) else entry["command"]
+                    owned = region.owns(have)
+                    wanted = region.splice(have, command) if owned else entry["command"]
+                    edited = owned and region.state(have) == "edited"
                 except (NewerContent, RegionError) as exc:
                     raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
                 if wanted == have and h.get("type") == "command":
                     return f"the ddflow {event} hook is already in {path}"
                 saved = ""
-                if region.state(have) == "edited":
+                if edited:
                     saved = backup_edited(repo, path, "command")
                 g["hooks"][i] = {**h, "type": "command", "command": wanted}
                 _write(path, data)
