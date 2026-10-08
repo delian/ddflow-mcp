@@ -1,6 +1,6 @@
 """What each command deliberately does NOT do on the other surface, as declared fields.
 
-`tests/test_mcp_parity.py` used to hold these as five dicts (`NOT_EXPOSED`, `ALIASES`,
+`tests/test_mcp_parity.py` used to hold these as six dicts (`NOT_EXPOSED`, `ALIASES`,
 `LEAF_NOT_EXPOSED`, `LEAF_VIA`, `FLAG_EXEMPTIONS`, `PROSE_TOOLS`) beside the code they
 excuse. They are fields of the command registry now (D-unify, B-uni-cmd-core): a `Command`
 carries ``reason`` (why it has no MCP tool of its own), ``via`` (the tool, and the argument
@@ -132,11 +132,7 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(path=("lesson", "list"), via=("ddflow_list", "lesson")),
     Command(path=("session", "list"), via=("ddflow_list", "session")),
     Command(path=("session", "show"), via=("ddflow_list", "session")),
-    Command(
-        path=("search",),
-        via=("ddflow_list", "search"),
-        reason="people-facing viewer; the consolidated MCP read tool that will carry it is the later task B-view-mcp-list (tools/list byte budget), until then agents use `ddflow_recall` and `ddflow_history`",
-    ),
+    Command(path=("search",), via=("ddflow_list", "search")),
     Command(path=("bug", "reopen"), via=("ddflow_bug_invalid", "reopen")),
     Command(
         path=(),

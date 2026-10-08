@@ -42,7 +42,7 @@ def cli_commands() -> list[str]:
 
 
 def covered(cmd: str) -> bool:
-    if cmd in EXEMPT_WORDS:
+    if cmd in EXEMPT_WORDS or (cmd,) in LEAF_VIA:
         return True
     for alias in ALIASES.get(cmd, ()):
         if alias in TOOLS:

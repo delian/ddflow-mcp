@@ -313,8 +313,8 @@ def covering_tools(commands: tuple[Command, ...]) -> dict[str, tuple[str, ...]]:
 
 
 def declared_words(commands: tuple[Command, ...]) -> set[str]:
-    """One-word commands any declaration names (for the 'does it still exist' ratchet)."""
-    return {c.path[0] for c in commands if len(c.path) == 1}
+    """One-word commands exempt from MCP outright (a reason, no tool covering them)."""
+    return {c.path[0] for c in commands if len(c.path) == 1 and c.reason and not c.via}
 
 
 def flag_exemptions(commands: tuple[Command, ...]) -> dict[tuple[str, str], str]:
