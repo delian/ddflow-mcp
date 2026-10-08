@@ -1299,7 +1299,7 @@ silent: `gate status` shows `-- PASSED ON REFUTATION` beside the triage counts, 
 counts such gates (`refuted_passes` in `--json`), the brief names those of unfinished
 items, `complete` prints a `PASSED ON REFUTATION:` line for each (`refuted_passes` in its result), and `ddflow gate list --refuted` (MCP `ddflow_gate_list` with
 `refuted=true`) lists every one for the operator to spot-check. Without `--refuted`, `gate
-list` lists the gates the project defines. A finding still without a verdict holds the gate where it is,
+list` lists the gates the project defines. A gate whose findings were ALL confirmed (and fixed), none refuted, is recorded `passed` too but is not flagged: `gate status` shows `-- findings fixed` and `gate list --refuted` leaves it out; a mix of refuted and confirmed is flagged with both counts. A finding still without a verdict holds the gate where it is,
 and the triage output says so: settle it, or ask the operator for one more round
 (`--force --reason`, theirs to grant). With `review.max_rounds = 0` (no budget) a gate is
 never passed this way; a re-review settles it.
@@ -3723,6 +3723,20 @@ ddflow can no longer read or write a project safely. An older ddflow writes what
 understands, preserves the rest, and is refused only on a direct conflict. The skew guard
 below is the current, version-based form of that refusal.
 
+**Aliases and deprecations.** A renamed command, command group, flag, MCP tool, tool argument
+or config key keeps working under its old name until 1.0 (D-compat). The new name is declared
+once in the command registry (`ddflow/surfaces/registry.py`: `aliases`, `tool_aliases`,
+`deprecated_since`, `removed_in` on `Command` and `Param`; `renamed_from` on a knob in
+`config_sections/`), and the declaration is refused if it names no release or lets the old
+name go before 1.0. An alias is hidden from `--help`, usage and `tools/list` and is always
+callable; the first use in a session says so in one line (`ddflow: command 'doc' is deprecated
+since 0.1.17; use 'docs' ...` on stderr for the CLI, a `note:` in the MCP result, a warning
+for a config key), and a second use says nothing. An old config key is read (the new key wins
+when both are set), and the next config write moves it to the new key, keeping comments; an
+old `config --set` key writes the new one. An unknown command, MCP tool or argument names the
+closest known one (`Did you mean 'ddflow_probe'?`). A command's alias is the same command to
+the parity test.
+
 ### The version stamp and the skew guard
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
@@ -4662,8 +4676,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=77dfc076969f -->
-<details><summary>All 110 MCP tools: 32 in the `core` tier, 45 more in `standard`, 33 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=7f0f7c51cb58 -->
+<details><summary>All 111 MCP tools: 32 in the `core` tier, 46 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -4713,6 +4727,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
+| Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate recorded passed ON REFUTATION (its findings… |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
 | Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
 | Gates and review | `ddflow_gate_skip` | core | Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. |
@@ -5265,6 +5280,17 @@ part that matters.
   next `pre-commit install` would discard the edit): it advises a `repo: local` hook in
   `.pre-commit-config.yaml` (`ddflow precommit` proposes it), says nothing needs installing
   when the framework already runs ddflow's check, and `--force` replaces the generated hook.
+* **Hooks say which ddflow wrote them.** A git hook, a Claude/Gemini hook command and the
+  frozen-files block `onboard` adds to `.pre-commit-config.yaml` are each a stamped
+  region (`# ddflow:begin hooks/pre-commit ddflow=<version> fmt=<level> sha=<digest>` ...
+  `# ddflow:end ...`; the Claude/Gemini command carries its markers as shell comments).
+  `hooks install` refreshes the region and keeps every line around it; an older ddflow
+  refuses (`upgrade ddflow to >= X`) to rewrite one a newer format level wrote, and a region
+  you edited by hand is copied to `.ddflow/backups/` first. A git hook written before the stamp
+  (it carries only the `# DDFLOW-HOOK v1` line, which the region keeps for older ddflow
+  versions) is still ddflow's and, as it always was, is replaced whole (lines you added to
+  one are not kept; add them after upgrading). `hooks uninstall` removes the
+  region and leaves your own lines.
 * **Hooks find ddflow when they run, and fail open.** The git hooks and the Claude/Gemini
   hook commands record the launcher that installed them, but try it only first: if that
   script or interpreter no longer exists or is no longer executable (a deleted venv, an uninstalled tool, a removed

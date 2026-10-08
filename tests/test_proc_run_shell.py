@@ -26,8 +26,10 @@ def test_a_tick_without_an_interval_is_the_callers_bug():
 
 
 def test_a_timed_out_result_carries_the_elapsed_time(tmp_path):
-    r = P.run_shell("sleep 30", cwd=tmp_path, timeout_s=0.5)
-    assert r.timed_out and 0.4 <= r.elapsed_s < 20
+    r = P.run_shell("sleep 600", cwd=tmp_path, timeout_s=0.5)
+    # killed, not run to completion: bounded by the command's own length, not by a guess
+    # at how slow the machine is
+    assert r.timed_out and 0.4 <= r.elapsed_s < 600
 
 
 def test_output_that_is_not_utf8_is_replaced_not_raised(tmp_path):
@@ -58,24 +60,30 @@ def test_every_entry_of_the_timeout_table_has_a_reader():
     assert not dead, f"TIMEOUTS entries nothing reads: {dead}"
 
 
-def test_an_error_in_the_tick_callback_is_not_a_command_that_could_not_start(tmp_path):
+@pytest.mark.parametrize("startup_s", [0, 1.0])
+def test_an_error_in_the_tick_callback_is_not_a_command_that_could_not_start(tmp_path, startup_s):
+    """Ba1b804841a: the tick used to raise at its first call, 0.2 s in, and the test then
+    read a pidfile the shell had not written yet when the machine was loaded. The tick
+    now raises only once the child has recorded its pid (``startup_s`` stands in for a
+    slow start), and the wait for its death is on observed state, not a 3 s guess."""
+    import time
+
     pidfile = tmp_path / "pid"
 
     def tick():
-        raise OSError("lease renewal failed")
+        if pidfile.exists() and pidfile.read_text().endswith("\n"):
+            raise OSError("lease renewal failed")
 
     with pytest.raises(OSError, match="lease renewal"):
         P.run_shell(
-            f"sleep 30 & echo $! > {pidfile}; wait",
+            f"sleep {startup_s}; sleep 600 & echo $! > {pidfile}; wait",
             cwd=tmp_path,
-            timeout_s=10,
+            timeout_s=120,
             on_tick=tick,
             tick_s=0.2,
         )
     pid = int(pidfile.read_text())
-    import time
-
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)

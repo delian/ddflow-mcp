@@ -286,7 +286,7 @@ def triage(
         verdict=verdict,
         counts=counts,
         text=f"{text}\n{settled}" if settled else text,
-        passed_on_refutation=settled.startswith("recorded"),
+        passed_on_refutation="ON REFUTATION" in settled,
     )
 
 
@@ -313,12 +313,15 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int]) -> str:
             f'settle goes to the operator (`ddflow review {it.id} --gate {gate} --force --reason "..."` '
             "is theirs to grant)"
         )
-    flag = {
-        "refuted": counts["refuted"],
-        "confirmed": counts["confirmed"],
-        "rounds": used,
-        "max_rounds": cap,
-    }
+    rounds = {"rounds": used, "max_rounds": cap}
+    # D-unify 5 flags a pass on REFUTATION. A gate whose every finding was confirmed (and
+    # fixed) is a fix: passed, shown as fixed, never in `gate list --refuted` (B1396d7bd55).
+    refuted = counts["refuted"]
+    mark = (
+        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts["confirmed"], **rounds}}
+        if refuted
+        else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
+    )
     GD.record(
         log,
         cfg,
@@ -326,15 +329,16 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int]) -> str:
         gate,
         "passed",
         reason="",
-        evidence={**(rec.evidence or {}), "passed_on_refutation": flag},
+        evidence={**(rec.evidence or {}), **mark},
         by=rec.by,
     )
-    return (
-        f"recorded {it.id}.{gate} = passed ON REFUTATION (flagged): every one of the "
-        f"{counts['findings']} finding(s) has a verdict with its probe "
-        f"({counts['refuted']} refuted, {counts['confirmed']} confirmed) after {used} of "
-        f"{cap} review rounds"
+    verdicts = (
+        f"every one of the {counts['findings']} finding(s) has a verdict with its probe "
+        f"({refuted} refuted, {counts['confirmed']} confirmed) after {used} of {cap} review rounds"
     )
+    if not refuted:
+        return f"recorded {it.id}.{gate} = passed (findings fixed): {verdicts}"
+    return f"recorded {it.id}.{gate} = passed ON REFUTATION (flagged): {verdicts}"
 
 
 def _chunk_numbers(value) -> list[int] | str:

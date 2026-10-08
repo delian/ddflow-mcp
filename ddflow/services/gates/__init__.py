@@ -110,6 +110,7 @@ from .mutation import (  # noqa: F401
 from .outcomes import (  # noqa: F401
     GateStatus,
     StaleNote,
+    _pass_mark,
     _what_differs,
     approve,
     on_refutation,
