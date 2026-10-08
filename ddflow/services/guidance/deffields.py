@@ -90,28 +90,33 @@ def from_fields(
 ) -> GuidanceRecord:
     """The record a definition's fields and stamps describe. A key the fields lack takes the
     kind's default, so a definition recorded by an older ddflow still renders."""
-    get = fields.get
+
+    def get(key: str, default: Any = "") -> Any:
+        """The field, or ``default`` when it is absent or null (nothing is "None" text)."""
+        value = fields.get(key)
+        return default if value is None else value
+
     return GuidanceRecord(
         id=rid,
         kind=spec.kind,
-        title=str(get("title", "")),
-        body=str(get("body", "")),
+        title=str(get("title")),
+        body=str(get("body")),
         scope=Scope(
-            globs=tuple(get("globs") or ()),
-            categories=tuple(get("categories") or ()),
-            gates=tuple(get("gates") or ()),
+            globs=tuple(get("globs", ())),
+            categories=tuple(get("categories", ())),
+            gates=tuple(get("gates", ())),
         ),
         level=str(get("level", spec.default_level)),
-        category=str(get("category", "")),
-        tags=list(get("tags") or []),
+        category=str(get("category")),
+        tags=list(get("tags", [])),
         priority=int(get("priority", spec.default_priority)),
         enforcement=str(get("enforcement", spec.default_enforcement)),
-        status=str(get("status", ACCEPTED)),
-        owner=str(get("owner", "")),
-        review_by=str(get("review_by", "")),
-        sources=list(get("sources") or []),
-        checks=[dict(c) for c in get("checks") or []],
-        links=list(get("links") or []),
+        status=str(get("status", ACCEPTED)),  # as `fileformat.parse`: a file has no other default
+        owner=str(get("owner")),
+        review_by=str(get("review_by")),
+        sources=list(get("sources", [])),
+        checks=[dict(c) for c in get("checks", [])],
+        links=list(get("links", [])),
         provenance={k: provenance[k] for k in STAMPS if provenance.get(k)} if spec.stamped else {},
         ext={k: get(k, d) for k, d in spec.extras},
     )
