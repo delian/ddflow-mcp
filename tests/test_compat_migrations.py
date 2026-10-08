@@ -213,3 +213,22 @@ def test_apply_oserror_is_failed_with_the_error(old: Path) -> None:
     M.register(replace(TOY, apply=apply))
     out = M.run(old, EventLog(old, "migrator"), Config.load(old))
     assert out[0].status == "failed" and "OSError: read-only file system" in out[0].detail
+
+
+def test_a_raising_detector_is_unavailable_and_isolated(old: Path) -> None:
+    def boom(ctx: M.Context) -> list[M.Finding]:
+        raise OSError("unreadable")
+
+    M.register(replace(TOY, id="a-first"))
+    M.register(replace(TOY, id="b-boom", detect=boom))
+    got = M.pending(_ctx(old))
+    assert [(p.migration.id, bool(p.findings), p.unavailable) for p in got] == [
+        ("a-first", True, ""),
+        ("b-boom", False, "OSError: unreadable"),
+    ]
+    out = M.run(old, EventLog(old, "migrator"), Config.load(old))
+    assert [(o.migration, o.status) for o in out] == [
+        ("a-first", "applied"),
+        ("b-boom", "unavailable"),
+    ]
+    assert "OSError: unreadable" in out[1].detail
