@@ -59,6 +59,11 @@ from .install_info import running_from_source
 HOOK_MARKER = "# DDFLOW-HOOK v1 — managed by `ddflow hooks install`"
 
 
+#: What a refusal for a hook a NEWER ddflow wrote says (`fsio.NewerContent`), so the caller
+#: can tell that refusal (exit 3) from the others (exit 1).
+NEWER_HINT = "upgrade ddflow to >= "
+
+
 def hook_region(name: str) -> Managed:
     """The region a git hook's text is: version, format level and body digest on its begin
     line (fsio.Managed, the grammar every managed file shares), so a hook an older ddflow

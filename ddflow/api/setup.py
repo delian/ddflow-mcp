@@ -891,6 +891,17 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
     return O.nothing("hooks", message, **data)
 
 
+def _installed_hooks(E: Any, repo: Path, msg: str) -> O.Outcome:
+    """The outcome of `E.install`'s message (``E`` is `services.enforce`): a refusal over
+    a hook a NEWER ddflow wrote is exit 3 (upgrade), any other REFUSED is a failure, the
+    rest succeeded."""
+    installed = E.installed(repo)
+    if msg.startswith("REFUSED"):
+        make = O.refused if E.NEWER_HINT in msg else O.failed
+        return make("hooks", msg, message=msg, installed=installed)
+    return O.ok("hooks", message=msg, installed=installed)
+
+
 def hooks(
     repo: Path,
     *,
@@ -930,6 +941,8 @@ def hooks(
     if (claude or gemini) and action in ("install", "uninstall"):
         try:
             msgs = _agent_hooks(repo, action, claude=claude, gemini=gemini)
+        except CH.NewerSettings as exc:  # a newer ddflow's entry: upgrade, not a failure
+            return O.refused("hooks", str(exc), message=str(exc), installed=E.installed(repo))
         except CH.SettingsError as exc:
             return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
         return O.ok(
@@ -939,10 +952,7 @@ def hooks(
             session_hook=CH.installed(repo),
         )
     if action == "install":
-        msg = E.install(repo, force=force)
-        if msg.startswith("REFUSED"):
-            return O.failed("hooks", msg, message=msg, installed=E.installed(repo))
-        return O.ok("hooks", message=msg, installed=E.installed(repo))
+        return _installed_hooks(E, repo, E.install(repo, force=force))
     if action == "uninstall":
         msg = E.uninstall(repo)
         return O.ok("hooks", message=msg, installed=E.installed(repo))

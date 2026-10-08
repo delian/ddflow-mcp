@@ -282,3 +282,30 @@ def test_a_hand_edited_frozen_block_is_backed_up_first(repo):
         p for p in (repo / ".ddflow" / "backups").rglob(".pre-commit-config.yaml") if p.is_file()
     ]
     assert copies and copies[0].read_text() == edited
+
+
+# -- exit codes: a newer ddflow's artifact is a refusal (3), not a failure (1) ---------------
+
+
+def test_hooks_install_over_a_newer_hook_exits_3(repo):
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    E.install(repo)
+    hook = _hook(repo)
+    hook.write_text(hook.read_text().replace(" fmt=1 ", " fmt=99 ", 1))
+    code, out, err = run_cli(repo, "hooks", "install")
+    assert code == 3, out + err
+    assert "upgrade ddflow to >= " in out + err
+
+
+def test_hooks_install_claude_over_a_newer_entry_exits_3(repo):
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    _install_session_hook(repo)
+    p = repo / ".claude" / "settings.json"
+    p.write_text(p.read_text().replace(" fmt=1 ", " fmt=99 ", 1))
+    code, out, err = run_cli(repo, "hooks", "install", "--claude")
+    assert code == 3, out + err
+    assert "upgrade ddflow to >= " in out + err
