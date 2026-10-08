@@ -2832,3 +2832,8 @@
 {"agent":"U4","data":{"at":1791472346.620183,"holder":"U4"},"id":"e19e74eebc0f623c7853bebe0","kind":"lease.renewed","lamport":42013,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:12:26.754230Z"}
 {"agent":"U4","data":{"at":1791472473.911462,"holder":"U4"},"id":"ef82cce301065332ec81d33c2","kind":"lease.renewed","lamport":42028,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:14:34.014655Z"}
 {"agent":"U4","data":{"at":1791472597.941555,"holder":"U4"},"id":"e594fb5168325d9b6c62957db","kind":"lease.renewed","lamport":42039,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:16:38.052909Z"}
+{"agent":"U4","data":{"format_level":1,"install":"source-tree","version":"0.2.1"},"id":"e0429e464c898dac85c6820ca","kind":"ddflow.seen","lamport":42057,"schema":1,"subject":"ddflow","ts":"2026-10-08T15:18:43.636585Z"}
+{"agent":"U4","data":{"at":1791472723.3619788,"holder":"U4"},"id":"e35c3ce070f230b62b677f810","kind":"lease.renewed","lamport":42058,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:18:43.739238Z"}
+{"agent":"U4","data":{"at":1791472855.213851,"holder":"U4"},"id":"e38c2cb930d9ed54b4c32899d","kind":"lease.renewed","lamport":42073,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:20:55.302219Z"}
+{"agent":"U4","data":{"at":1791472979.1516116,"holder":"U4"},"id":"ea8c68f4671050f764f6ce5a4","kind":"lease.renewed","lamport":42084,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:22:59.256267Z"}
+{"agent":"U4","data":{"at":1791473104.3509686,"holder":"U4"},"id":"e75d520889e7880bf794ec749","kind":"lease.renewed","lamport":42099,"schema":1,"subject":"B-uni-git-queries.4-porcelain","ts":"2026-10-08T15:25:04.461450Z"}
