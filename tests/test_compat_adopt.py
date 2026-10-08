@@ -259,3 +259,15 @@ def test_an_empty_front_matter_block_stays_first() -> None:
     assert A._split_front_matter("---\n---\nbody\n") == ("---\n---\n", "body\n")
     assert A._split_front_matter("---\na: 1\n---\nbody\n") == ("---\na: 1\n---\n", "body\n")
     assert A._split_front_matter("no front matter\n") == ("", "no front matter\n")
+
+
+def test_adopt_refuses_a_file_with_reversed_legacy_markers_and_changes_nothing(repo: Path) -> None:
+    _adopted(repo)
+    path = repo / "AGENTS.md"
+    reversed_ = f"{A.LEGACY_END}\nnotes\n{A.LEGACY_BEGIN}\n"
+    path.write_text(reversed_)
+
+    code, out, err = run_cli(repo, "adopt", "--refresh-docs")
+
+    assert code == 3 and "reversed" in out + err
+    assert path.read_text() == reversed_
