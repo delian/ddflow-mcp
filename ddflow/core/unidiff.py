@@ -80,36 +80,40 @@ def _from_header_line(head: str) -> tuple[str | None, str | None]:
     return None, pair
 
 
-def parse_section(section: str) -> FileDiff:
-    """The `FileDiff` of one ``diff --git`` section (its header line first)."""
-    head, *rest = section.split("\n")
-    old = new = None
-    renamed_to = renamed_from = None
-    seen = False
+def _markers(rest: list[str]) -> dict[str, str | None]:
+    """The path-bearing lines of one section's header (everything before its first ``@@``):
+    ``old``/``new`` from ``---``/``+++``, ``from``/``to`` from rename and copy lines."""
+    got: dict[str, str | None] = {}
     for line in rest:
         if line.startswith("@@"):
             break
-        if line.startswith("rename to ") or line.startswith("copy to "):
-            renamed_to = unquote(line.split(" to ", 1)[1].rstrip("\t"))
-            seen = True
-        elif line.startswith("rename from ") or line.startswith("copy from "):
-            renamed_from = unquote(line.split(" from ", 1)[1].rstrip("\t"))
-            seen = True
-        elif line.startswith("--- "):
-            old = header_path(line, "a/")
-            seen = True
-        elif line.startswith("+++ "):
-            new = header_path(line, "b/")
-            seen = True
-    # A header-only section (binary file, mode change) still says whether it adds or deletes.
-    deleted = any(ln.startswith("deleted file mode") for ln in rest if not ln.startswith("@@"))
-    added = any(ln.startswith("new file mode") for ln in rest if not ln.startswith("@@"))
-    if not seen:
+        for lead, key, read in (
+            ("--- ", "old", lambda x: header_path(x, "a/")),
+            ("+++ ", "new", lambda x: header_path(x, "b/")),
+            ("rename from ", "from", lambda x: unquote(x[12:].rstrip("\t"))),
+            ("copy from ", "from", lambda x: unquote(x[10:].rstrip("\t"))),
+            ("rename to ", "to", lambda x: unquote(x[10:].rstrip("\t"))),
+            ("copy to ", "to", lambda x: unquote(x[8:].rstrip("\t"))),
+        ):
+            if line.startswith(lead):
+                got[key] = read(line)
+    return got
+
+
+def parse_section(section: str) -> FileDiff:
+    """The `FileDiff` of one ``diff --git`` section (its header line first)."""
+    head, *rest = section.split("\n")
+    header = [ln for ln in rest if not ln.startswith("@@")]
+    # Even a header-only section (binary file, mode change) says whether it adds or deletes.
+    added = any(ln.startswith("new file mode") for ln in header)
+    deleted = any(ln.startswith("deleted file mode") for ln in header)
+    got = _markers(rest)
+    if not got:
         old, new = _from_header_line(head)
-        return FileDiff(head, None if added else old, None if deleted else new)
-    # A pure rename has no ---/+++ lines; an added/deleted file has one /dev/null side.
-    old = old or renamed_from or (None if added else new)
-    new = new or renamed_to or (None if deleted else old)
+    else:
+        # A pure rename has no ---/+++ lines; an added/deleted file has one /dev/null side.
+        old = got.get("old") or got.get("from") or (None if added else got.get("new"))
+        new = got.get("new") or got.get("to") or (None if deleted else old)
     return FileDiff(head, None if added else old, None if deleted else new)
 
 
