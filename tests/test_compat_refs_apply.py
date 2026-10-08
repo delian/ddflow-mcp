@@ -112,3 +112,32 @@ def test_a_second_apply_changes_nothing(project):
 def test_without_a_vocabulary_nothing_is_judged(project):
     R.provide(None)
     assert notes(plan(project)) == []
+
+
+def test_names_the_process_had_no_table_for_are_one_note_not_silence(project):
+    """An MCP server loads the tools only: a `ddflow <command>` in the project's text comes back
+    unchecked, and the plan says so instead of reading as clean."""
+    tools_only = C.Vocabulary(
+        commands=frozenset(),
+        tools=VOCAB.tools,
+        tool_aliases=VOCAB.tool_aliases,
+        check_commands=False,
+    )
+    R.provide(lambda: tools_only)
+    items = notes(plan(project))
+    unchecked = [i for i in items if i["id"].endswith(":unchecked")]
+    assert len(unchecked) == 1 and "command" in unchecked[0]["summary"]
+    assert "were not checked: this process has no command table loaded" in unchecked[0]["summary"]
+    assert [i["path"] for i in items if not i["id"].endswith(":unchecked")] == ["AGENTS.md"]
+
+
+def test_the_note_says_when_the_old_name_stops_working_from_the_alias_itself(project):
+    late = C.Vocabulary(
+        commands=VOCAB.commands,
+        tools=VOCAB.tools,
+        command_aliases={("doc",): C.Renamed("docs", "0.2.0", "2.0")},
+        tool_aliases={"ddflow_old_next": C.Renamed("ddflow_next", "0.2.0", "1.0")},
+    )
+    R.provide(lambda: late)
+    (item,) = [i for i in notes(plan(project)) if i["path"] == "AGENTS.md"]
+    assert item["fix"].endswith("until 1.0 / 2.0")
