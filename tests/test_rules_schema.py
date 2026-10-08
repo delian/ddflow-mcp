@@ -20,7 +20,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ddflow.services.rules import Rule, _globs_match, _is_valid_rule_id, _tokenize
+from ddflow.services.guidance.resolve import resolve
+from ddflow.services.guidance.similarity import words as _tokenize
+from ddflow.services.rules import Rule, _is_valid_rule_id
 
 
 class TestRuleIDValidation:
@@ -211,59 +213,35 @@ class TestRuleToTOML:
         assert restored.globs == original.globs
 
 
-class TestGlobMatching:
-    """Test glob matching logic."""
+def _applies(rule: Rule, globs: list[str]) -> bool:
+    """Whether the one guidance resolver hands ``rule`` to work on ``globs``."""
+    return bool(resolve([rule.to_record()], globs=globs))
 
-    def test_exact_glob_match(self):
-        """Identical globs match."""
-        assert _globs_match("*.py", "*.py")
-        assert _globs_match("src/**/*.js", "src/**/*.js")
 
-    def test_recursive_glob_matches_anything(self):
-        """Recursive ** glob matches other patterns."""
-        assert _globs_match("**/*.py", "**/*.py")
-        assert _globs_match("**", "anything.txt")
-        # ** at the start with same suffix should match
-        assert _globs_match("**/*.py", "**/*.py")
+class TestRuleApplicability:
+    """Which work a rule governs: the guidance resolver, the one answer for rules and
+    decisions (it replaced the rule-only `Rule.matches_globs` and `_globs_match`)."""
 
-    def test_suffix_glob_matching(self):
-        """Pattern matching for extension globs."""
-        assert _globs_match("**/*.py", "**/*.py")
-        assert _globs_match("*.py", "*.py")
-
-    def test_non_matching_globs(self):
-        """Different specific patterns don't match."""
-        assert not _globs_match("*.py", "*.js")
-        assert not _globs_match("*.txt", "*.md")
-
-    def test_rule_matches_globs_empty_rule_globs(self):
-        """Rule with no globs matches any file list."""
+    def test_rule_without_globs_applies_to_any_work(self):
         rule = Rule(id="r-global", title="Global", content="Applies everywhere")
-        assert rule.matches_globs(["**/*.py"])
-        assert rule.matches_globs(["src/", "tests/"])
+        assert _applies(rule, ["**/*.py"])
+        assert _applies(rule, ["src/", "tests/"])
+        assert _applies(rule, [])
 
-    def test_rule_matches_globs_with_patterns(self):
-        """Rule matches when its globs overlap with provided globs."""
-        rule = Rule(
-            id="r-naming",
-            title="Python naming",
-            content="Use snake_case",
-            globs=["**/*.py"],
-        )
-        assert rule.matches_globs(["**/*.py"])
-        # Different glob patterns don't match unless they truly overlap
-        assert not rule.matches_globs(["**/*.js"])
-        assert not rule.matches_globs(["*.js"])
+    def test_rule_with_globs_applies_where_they_overlap(self):
+        rule = Rule(id="r-naming", title="Python naming", content="snake_case", globs=["src/**"])
+        assert _applies(rule, ["src/a.py"])
+        assert _applies(rule, ["src/**"])
+        assert not _applies(rule, ["docs/readme.md"])
 
-    def test_rule_matches_globs_empty_file_list(self):
-        """Rule with globs doesn't match empty file list."""
-        rule = Rule(
-            id="r-test",
-            title="Test rule",
-            content="Something",
-            globs=["**/*.py"],
-        )
-        assert not rule.matches_globs([])
+    def test_rule_with_globs_does_not_apply_to_work_with_no_files(self):
+        rule = Rule(id="r-test", title="Test rule", content="Something", globs=["src/**"])
+        assert not _applies(rule, [])
+
+    def test_the_reason_is_reported(self):
+        rule = Rule(id="r-x", title="X", content="y", globs=["src/**"])
+        (hit,) = resolve([rule.to_record()], globs=["src/a.py"])
+        assert hit.reason == "globs" and hit.matched == (("src/a.py", "src/**"),)
 
 
 class TestSimilarityScoring:

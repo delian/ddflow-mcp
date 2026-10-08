@@ -5449,7 +5449,7 @@ knob with its value, source and documentation.
 | `.ddflow/local/reviewers.toml` | local | Reviewer endpoints, model names, API-key variable *names* | `ddflow reviewers detect --write`, editor |
 | `.ddflow/prompts/<name>.md` | shared | Override of a shipped prompt template (Jinja2) | `ddflow prompts eject <name>` |
 | `.ddflow/templates/export/<kind>.md.j2` | shared | Format of each generated document | `ddflow export eject <kind>` |
-| `.ddflow/rules/<id>.toml` | shared | Project rules agents are told to follow | `ddflow rule add/edit/remove`, `ddflow_rule_*` |
+| `.ddflow/rules/<id>.toml` | shared | Project rules agents are told to follow: TOML frontmatter, a blank line, the text. Besides `title`, `tags`, `scope`, `priority` and `globs`, a file may carry `categories`, `gates`, `category`, `enforcement`, `status`, `owner`, `review_by`, `sources`, `checks` and `links` (the schema rules share with decisions) | `ddflow rule add/edit/remove`, `ddflow_rule_*`, editor |
 | `AGENTS.md` / `CLAUDE.md` | shared | The managed ddflow block plus your own prose | `ddflow adopt` (re-run), editor outside the block |
 | `docs/ddflow/drivers/implement-phase.md` and `deltas/<agent>.md` | shared | The implementation driver and per-agent notes | edit (outside the stamped region freely; an edit inside it is kept in `<file>.local-edits` when `ddflow adopt --refresh-docs` resets it to shipped) |
 | `.claude/commands/implement.md` (and other agents' command dirs) | shared | The slash command that drives the queue | edit after `ddflow adopt` |

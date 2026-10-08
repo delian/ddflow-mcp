@@ -24,6 +24,7 @@ from ..core import outcome as O
 from ..core.plain import plain as _plain
 from ..infra.store import Store
 from ..services.export.query import ExportError, _cutoff
+from ..services.guidance.kinds import governing
 from ._base import _load
 
 
@@ -181,8 +182,6 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
     Exit 2 when nothing governs it: "no decision applies" is an answer, and reporting
     it as success is how a caller comes to believe it consulted something.
     """
-    from ..core.schedule import conflicts
-
     _log, _cfg, st = _load(repo)
     it = st.items.get(item)
     if it is None or it.removed:
@@ -194,8 +193,7 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
             applicable=[],
             project_wide=[],
         )
-    hits = [d for d in st.decisions.values() if d.live and d.globs and conflicts(it.globs, d.globs)]
-    wide = [d for d in st.decisions.values() if d.live and not d.globs]
+    hits, wide = governing(st, it.globs)
     data: dict[str, Any] = {
         "id": item,
         "globs": list(it.globs),
