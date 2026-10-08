@@ -180,7 +180,8 @@ def _write(path: Path, ticks: dict[str, dict[str, Any]]) -> None:
 def status(repo: Path | str) -> list[dict[str, Any]]:
     """What each registered tick last did on this machine: for a doctor line or a person.
     A tick that has never run reports ``status: never``; one with no interval (`every_s == 0`:
-    asked on every pass, recorded only when it fails or is cut) reports ``every-pass``."""
+    asked on every pass, recorded only when it fails or is cut, and when a success follows a
+    recorded failure) reports ``every-pass`` until one of those happens."""
     rows = _read(_dir(repo) / STATE)
     out = []
     for t in registered():
@@ -231,10 +232,14 @@ def _claim(path: Path, due: list[Tick], now: float) -> list[Tick]:
     return won
 
 
-def _record(path: Path, t: Tick, result: TickResult) -> None:
+def _record(path: Path, t: Tick, result: TickResult, *, keep_running: bool = False) -> None:
+    """Write ``result`` as ``t``'s last outcome. ``keep_running``: leave a row another command
+    is running right now alone (a note about a tick must not end its claim)."""
     with fsio.file_lock(path.with_name(LOCK), LOCK_WAIT_S):
         rows = _read(path)
         row = rows.get(t.name, {})
+        if keep_running and row.get("status") == RUNNING:
+            return
         rows[t.name] = {
             **row,
             "status": result.status,
@@ -358,16 +363,16 @@ def _run_due(
     if not due and not results:
         return []
     fsio.ensure_ignored_dir(_dir(ctx.repo))  # only now that something will be written
+    by_name = {t.name: t for t in ticks}
     for r in results:  # a tick that could not be judged is shown, once, not dropped
         prior = rows.get(r.name, {})
         if (prior.get("status"), prior.get("detail")) != (r.status, r.detail):
-            with contextlib.suppress(OSError, fsio.LockTimeout, KeyError):
-                _record(path, next(t for t in ticks if t.name == r.name), r)
+            with contextlib.suppress(OSError, fsio.LockTimeout):
+                _record(path, by_name[r.name], r, keep_running=True)
     started = ctx.mono()
     stateful_due = [t for t in due if t.every_s > 0]
     claimed = {t.name for t in _claim(path, stateful_due, now)} if stateful_due else set()
     pending = set(claimed)  # claimed and not yet run: handed back if this pass is cut short
-    by_name = {t.name: t for t in due}
     try:
         for t in due:
             if t.every_s > 0 and t.name not in claimed:

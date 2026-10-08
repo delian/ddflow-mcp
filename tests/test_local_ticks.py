@@ -511,10 +511,16 @@ def test_a_claim_of_a_command_that_died_is_taken_back_after_the_budget_window(pr
     t = TK.Tick("a", every_s=1, budget_s=10, target=counting(log))
     fsio.ensure_ignored_dir(proj / ".ddflow/local")
     (proj / ".ddflow/local/ticks.json").write_text(
+        json.dumps({"format": 1, "ticks": {"a": {"last_at": clock.now - 15, "status": "running"}}})
+    )
+    # 15s ago is past every_s (1s) but inside the claim window (2 budgets = 20s)
+    assert run(proj, [t], clock) == [], "inside the window: still the other command's"
+
+    (proj / ".ddflow/local/ticks.json").write_text(
         json.dumps({"format": 1, "ticks": {"a": {"last_at": clock.now - 25, "status": "running"}}})
     )
-
-    assert [r.status for r in run(proj, [t], clock)] == [TK.RAN], "2 budgets (20s) have passed"
+    # 25s: past the window, the claim is taken for a command that died
+    assert [r.status for r in run(proj, [t], clock)] == [TK.RAN]
 
 
 def test_handing_back_a_claim_never_erases_another_commands_newer_claim(proj: Path) -> None:
@@ -574,3 +580,17 @@ def test_load_calls_the_registry_with_the_project(
     _load(proj)
 
     assert len(seen) == 1 and Path(seen[0].repo) == proj
+
+
+def test_a_note_about_a_tick_never_ends_a_claim_another_command_holds(proj: Path) -> None:
+    clock = Clock()
+    boom = TK.Tick("boom", every_s=60, budget_s=10, target=lambda c: None, enabled=lambda c: 1 / 0)
+    fsio.ensure_ignored_dir(proj / ".ddflow/local")
+    claimed = {"last_at": clock.now - 3, "status": "running"}
+    (proj / ".ddflow/local/ticks.json").write_text(
+        json.dumps({"format": 1, "ticks": {"boom": claimed}})
+    )
+
+    run(proj, [boom], clock)
+
+    assert state_rows(proj)["boom"] == claimed
