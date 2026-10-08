@@ -6,99 +6,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import knowledge as K
 from ._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
 
 TOOLS: dict[str, dict[str, Any]] = {
-    "ddflow_lesson_verify": {
-        "description": (
-            "Re-scan every lesson that declared a code `pattern` and report the sites where "
-            "it has REAPPEARED. Exit 1 names them; exit 2 means no lesson declares a "
-            "pattern, which is NOT a pass — it means this project has no mechanical ratchet "
-            "on its lessons yet. Run after a change that touches code a lesson governs."
-        ),
-        "properties": {},
-        "api": lambda repo, a, agent: _api().lessons_verify(repo, agent=agent),
-        "payload": "text",
-        "text": True,
-    },
-    "ddflow_lesson_add": {
-        "description": (
-            "Record a lesson so it is never re-learned. Use after any bug, any operator "
-            "correction, any surprise. Make the rule transferable — a future agent on a "
-            "different task must be able to apply it."
-        ),
-        "properties": {
-            "id": (
-                "string",
-                "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance.",
-                False,
-            ),
-            "title": ("string", "The rule as a one-line statement.", True),
-            "rule": ("string", "The rule in full.", False),
-            "why": ("string", "Why it is true / what went wrong.", False),
-            "how": ("string", "How to apply or detect it.", False),
-            "summary": (
-                "string",
-                "The lesson in ONE paragraph, for a reader who will not open the full rule. Rendered into docs/ddflow/LESSONS-SUMMARY.md.",
-                False,
-            ),
-            "tags": ("string", "Comma-separated tags.", False),
-            "seen_in": (
-                "string",
-                "Comma-separated item ids where this was hit. What makes a lesson "
-                "checkable later instead of merely memorable.",
-                False,
-            ),
-            "supersedes": (
-                "string",
-                "Comma-separated lesson ids this replaces. The old one is retired, not deleted: the corpus stops growing without losing what was once believed.",
-                False,
-            ),
-            "pattern": (
-                "string",
-                "A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Prefer it to a remembered rule when mechanical: a count says 'worse', never 'which'. Refused if it does not compile.",
-                False,
-            ),
-            "globs": (
-                "string",
-                "Comma-separated globs to scan for `pattern`. Default: every tracked file.",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent: _api().lesson_add(
-            repo,
-            _api().LessonDraft(
-                title=a.get("title", "") or "",
-                rule=a.get("rule", "") or "",
-                why=a.get("why", "") or "",
-                how=a.get("how", "") or "",
-                summary=a.get("summary", "") or "",
-                tags=a.get("tags", "") or "",
-                seen_in=a.get("seen_in", "") or "",
-                supersedes=a.get("supersedes", "") or "",
-                pattern=a.get("pattern", "") or "",
-                globs=a.get("globs", "") or "",
-                id=a.get("id", "") or "",
-                answer=_answer(a),
-            ),
-            agent=agent,
-        ),
-        "payload": ("id",),
-    },
-    "ddflow_lesson_search": {
-        "description": (
-            "Search past lessons by relevance (BM25). Use before starting "
-            "work, and whenever something surprises you."
-        ),
-        "properties": {
-            "query": ("string", "What you are about to do, in words.", True),
-            "limit": ("integer", "Max results (default 5).", False),
-        },
-        "api": lambda repo, a, agent: _api().lesson_search(
-            repo, a.get("query", "") or "", limit=a.get("limit"), agent=agent
-        ),
-        "payload": "hits",
-    },
+    "ddflow_lesson_verify": K.BY_TOOL["ddflow_lesson_verify"].tool_entry(),
+    "ddflow_lesson_add": K.BY_TOOL["ddflow_lesson_add"].tool_entry(),
+    "ddflow_lesson_search": K.BY_TOOL["ddflow_lesson_search"].tool_entry(),
     "ddflow_research_add": {
         "description": (
             "Record a research finding. verdict MUST be CONFIRMED, REFUTED or "

@@ -18,41 +18,15 @@ from typing import Any
 
 from ..api._dedupe import Answer
 from ..core.outcome import REFUSED, Outcome
+from .declared.answer import ANSWER_CLI_PARAMS
 
 
 def add_flags(parser) -> None:
-    """The answer flags and ``--check`` on one add command's parser."""
-    g = parser.add_mutually_exclusive_group()
-    g.add_argument(
-        "--new",
-        action="store_true",
-        help="answer a possible-duplicate refusal: this is a different record, file it",
-    )
-    g.add_argument(
-        "--extends",
-        metavar="ID",
-        default="",
-        help="answer it: this adds to record ID -- appended to ID while it is open and "
-        "unclaimed, else filed as a new record linked to it",
-    )
-    g.add_argument(
-        "--duplicate-of",
-        metavar="ID",
-        default="",
-        help="answer it: this is the same thing as record ID (handled like --extends)",
-    )
-    g.add_argument(
-        "--related",
-        metavar="ID",
-        default="",
-        help="answer it: a different record that is related to ID; linked both ways",
-    )
-    g.add_argument(
-        "--check",
-        action="store_true",
-        help="dry run: print the existing records this would be refused as a duplicate "
-        "of and write nothing (exit 0 with candidates, 2 with none)",
-    )
+    """The answer flags and ``--check`` on one add command's parser: the declared
+    parameters (`declared/answer.py`), at most one of them."""
+    groups: dict = {}
+    for param in ANSWER_CLI_PARAMS:
+        param.add_to(parser, groups)
 
 
 def answer_of(a) -> Answer:

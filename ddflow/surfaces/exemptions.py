@@ -13,6 +13,8 @@ Each entry carries its reason; the ratchet is that the list may only shrink.
 
 from __future__ import annotations
 
+from .declared.answer import ANSWER_FLAG_EXEMPT
+from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .registry import (
     Command,
     covering_tools,
@@ -77,10 +79,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         path=("config",),
         reason="covered by ddflow_configure, which reads and writes the same knobs",
         via=("ddflow_configure",),
-    ),
-    Command(
-        path=("decision", "search"),
-        reason="covered by ddflow_recall, which searches decisions along with everything else the project remembers — one search beats five",
     ),
     Command(
         path=("hooks", "session-start"),
@@ -206,89 +204,27 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=(),
         tool="ddflow_phase_add",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
+        flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
         path=(),
         tool="ddflow_task_add",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
+        flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
         path=(),
         tool="ddflow_bug_found",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_lesson_add",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_decision_add",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
+        flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
         path=(),
         tool="ddflow_research_add",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
+        flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
         path=(),
         tool="ddflow_memory_add",
-        flag_exempt={
-            "--new": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--extends": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--duplicate-of": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--related": "the duplicate-check answer: MCP `relation` / `check_only`",
-            "--check": "the duplicate-check answer: MCP `relation` / `check_only`",
-        },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_link",
-        flag_exempt={
-            "--extends": "the relation is MCP `relation` + `target`, not one flag per relation",
-            "--duplicate-of": "the relation is MCP `relation` + `target`, not one flag per relation",
-            "--related": "the relation is MCP `relation` + `target`, not one flag per relation",
-            "--distinct": "the relation is MCP `relation` + `target`, not one flag per relation",
-        },
+        flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
         path=(),
@@ -334,12 +270,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         tool="ddflow_doctor",
         prose=True,
         prose_reason="a health report written to be read, with remedies in prose",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_lesson_verify",
-        prose=True,
-        prose_reason="names the sites a forbidden pattern reappeared at; the list IS the finding, and the point of B20 is that a caller reads which rather than parsing how many",
     ),
     Command(
         path=(),
@@ -391,10 +321,14 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
 )
 
+#: Every declaration about the two surfaces' differences: these, and those a migrated command
+#: carries itself (D-unify 4: a command moved onto the registry moves its exemption with it).
+DECLARATIONS: tuple[Command, ...] = (*EXEMPTIONS, *_KNOWLEDGE)
+
 #: The tables `tests/test_mcp_parity.py` checks the surfaces against, derived once.
-EXEMPT_PATHS = exempt_paths(EXEMPTIONS)
-ROUTED_PATHS = routed_paths(EXEMPTIONS)
-COVERING_TOOLS = covering_tools(EXEMPTIONS)
-EXEMPT_WORDS = declared_words(EXEMPTIONS)
-FLAG_EXEMPT = flag_exemptions(EXEMPTIONS)
-PROSE_REASONS = prose_reasons(EXEMPTIONS)
+EXEMPT_PATHS = exempt_paths(DECLARATIONS)
+ROUTED_PATHS = routed_paths(DECLARATIONS)
+COVERING_TOOLS = covering_tools(DECLARATIONS)
+EXEMPT_WORDS = declared_words(DECLARATIONS)
+FLAG_EXEMPT = flag_exemptions(DECLARATIONS)
+PROSE_REASONS = prose_reasons(DECLARATIONS)
