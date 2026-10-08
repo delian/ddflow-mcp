@@ -146,7 +146,7 @@ def test_queue_file_names_keep_their_digest(tmp_path):
     assert waits._queue_path(tmp_path, agent, item).name.endswith(f"-{want}.json")
 
 
-def test_a_trigger_fingerprint_is_unchanged():
+def test_a_trigger_fingerprint_keeps_its_legacy_spelling():
     from dataclasses import asdict
 
     from ddflow.services import triggers
@@ -156,7 +156,10 @@ def test_a_trigger_fingerprint_is_unchanged():
         pytest.skip("no Trigger dataclass")
     d = asdict(t)
     d.pop("enabled", None)
-    assert t.digest() == sha256(json.dumps(d, sort_keys=True).encode())[:12]
+    # a fire recorded before the canonical form carries the old spelling: still this definition
+    assert t.legacy_digest() == sha256(json.dumps(d, sort_keys=True).encode())[:12]
+    assert t.same_definition(t.legacy_digest()) and t.same_definition(t.digest())
+    assert t.digest() == D.of_obj(d, size=6) and t.digest() != t.legacy_digest()
 
 
 def test_a_docs_report_digest_is_unchanged(tmp_path):

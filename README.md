@@ -3536,7 +3536,12 @@ emails, and (once the `[upstream]` section exists) its `redact_extra` names from
 gate evidence and output tails, bug summaries, lessons, decisions, task bodies, reasons, notes and a field the vocabulary has never heard
 of are all redacted. `LOG_TEXT_FIELDS` names the fields that are text even where their name is a lookup name. A new event kind must be classified or `tests/test_log_redaction_all_kinds.py` fails; a new
 field of a known kind that is a lookup must be added to those tables when the event-kind snapshot is regenerated, or it is redacted. A definition's digest (`def.recorded`) is of the redacted fields it
-stores. Events already written are
+stores, with every redaction marker (`[REDACTED]`, `[REDACTED:secret]`, ...) read as one token
+(`core.digest.normalized`), so clones on different redaction profiles agree on whether a definition
+changed; a digest recorded before that still matches (`core.defs.same`). The duplicate check's
+"identical text" digest does the same and also ignores case and whitespace (`core.digest.normalize_text`;
+the similarity index re-derives once). A trigger definition's fingerprint is `core.digest.of_obj` of
+its fields; a fire that carries the older spelling still counts as the same definition. Events already written are
 not rewritten.
 
 ---
