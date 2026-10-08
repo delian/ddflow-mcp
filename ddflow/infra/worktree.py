@@ -23,6 +23,7 @@ import contextlib
 import os
 import shutil
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,53 @@ git_paths = G.git_paths
 status = G.status
 GitError = G.GitError
 GitResult = G.GitResult
+
+
+@dataclass(frozen=True)
+class Scratch:
+    """A scratch worktree made by `scratch_tree`, or why there is none."""
+
+    #: The tree; None when git could not make it.
+    path: Path | None
+    #: The `git worktree add` itself, for its message and exit code.
+    add: GitResult
+
+    @property
+    def error(self) -> str:
+        return (self.add.err or self.add.out) if self.path is None else ""
+
+
+@contextlib.contextmanager
+def scratch_tree(
+    root: Path | str,
+    ref: str,
+    *,
+    detach: bool = False,
+    prefix: str = "ddflow-scratch-",
+    under: Path | None = None,
+    quiet: bool = False,
+) -> Iterator[Scratch]:
+    """A throwaway worktree of ``ref`` in ``root``'s repository: one place that makes it,
+    removes it however the body ends and prunes the registry.
+
+    ``under`` is the directory it is made in (the system temp directory by default);
+    ``detach`` checks out the commit, not the branch ``ref`` names (git allows a branch in
+    one tree only). Yields a `Scratch` whose ``path`` is None when git refused, so the
+    caller words its own failure from ``add``. Nothing is left behind: the tree is removed
+    (forced), pruned, and its directory deleted whatever the body did.
+    """
+    root = Path(root)
+    tmp = Path(tempfile.mkdtemp(prefix=prefix, dir=under))
+    tmp.rmdir()  # `worktree add` wants to create it
+    args = ["worktree", "add", *(["--quiet"] if quiet else []), *(["--detach"] if detach else [])]
+    add = git(root, *args, str(tmp), ref)
+    try:
+        yield Scratch(tmp if add.ok else None, add)
+    finally:
+        if add.ok:
+            git(root, "worktree", "remove", "--force", str(tmp))
+        git(root, "worktree", "prune")
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _ignore_inside(repo: Path, wt_root: Path) -> None:
@@ -403,21 +451,18 @@ def merge_into(repo: Path, cfg: Config, target: str, source: str, *, message: st
     wt_root = (root / cfg.worktree.root).resolve()
     wt_root.mkdir(parents=True, exist_ok=True)
     _ignore_inside(root, wt_root)
-    tmp = Path(tempfile.mkdtemp(prefix=f".merge-{safe_name(target)}-", dir=wt_root))
-    tmp.rmdir()  # `worktree add` wants to create it
-    add = git(root, "worktree", "add", str(tmp), target)
-    if not add.ok:
-        return GitResult(
-            add.code, add.out, f"could not stage a merge of {target}: {add.err}", attempted=False
-        )
-    try:
-        r = _merge_here(tmp, cfg, source, message)
+    with scratch_tree(root, target, prefix=f".merge-{safe_name(target)}-", under=wt_root) as s:
+        if s.path is None:
+            return GitResult(
+                s.add.code,
+                s.add.out,
+                f"could not stage a merge of {target}: {s.add.err}",
+                attempted=False,
+            )
+        r = _merge_here(s.path, cfg, source, message)
         if not r.ok:
-            git(tmp, "merge", "--abort")
+            git(s.path, "merge", "--abort")
         return r
-    finally:
-        git(root, "worktree", "remove", "--force", str(tmp))
-        git(root, "worktree", "prune")
 
 
 def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult:

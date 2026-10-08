@@ -13,10 +13,7 @@ ignore_imports = [
     "ddflow.infra.forge -> tempfile",
     "ddflow.infra.worktree -> tempfile",
     "ddflow.services.changelog_cut -> tempfile",
-    "ddflow.services.ci -> tempfile",
     "ddflow.services.companions -> tempfile",
     "ddflow.services.gates.runner -> tempfile",
-    "ddflow.services.onboard_tests -> tempfile",
     "ddflow.services.onboard_verify -> tempfile",
-    "ddflow.services.version_files -> tempfile",
 ]

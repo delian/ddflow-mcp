@@ -221,47 +221,41 @@ def commit_on(
     repo: Path, cfg: Config, branch: str, prep: Prepared, *, force: bool, message: str
 ) -> str:
     """Write and commit the prepared changelog on local ``branch``. Returns the action."""
-    import tempfile
-
     root, throwaway = _tree_for(repo, cfg, branch)
-    tmp: Path | None = None
-    tree = root
-    if throwaway:
-        base = (root / cfg.worktree.root).resolve()
-        base.mkdir(parents=True, exist_ok=True)
-        tmp = Path(tempfile.mkdtemp(prefix=f".changelog-{W.safe_name(branch)}-", dir=base))
-        tmp.rmdir()
-        add = _git(root, "worktree", "add", str(tmp), branch)
-        if not add.ok:
+    if not throwaway:
+        return _commit_in(root, prep, force=force, message=message)
+    base = (root / cfg.worktree.root).resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    with W.scratch_tree(root, branch, prefix=f".changelog-{W.safe_name(branch)}-", under=base) as s:
+        if s.path is None:
             raise ExportError(
-                f"could not stage {branch} for the changelog: {add.err}", EXIT_UNAVAILABLE
+                f"could not stage {branch} for the changelog: {s.add.err}", EXIT_UNAVAILABLE
             )
-        tree = tmp
-    try:
-        dirty = GIT.status_run(tree, prep.path)
-        if dirty.unavailable:  # a timeout or a missing git
-            raise ExportError(f"could not run git: {dirty.err}", EXIT_UNAVAILABLE)
-        entries = GIT.parse_status(dirty)
-        if entries is None:
-            raise ExportError(f"git status failed: {dirty.err}", EXIT_UNAVAILABLE)
-        if entries and not force:
-            raise EW.Refused(
-                f"{prep.path} has uncommitted changes; refusing to commit them into the "
-                f"release (commit or discard them, or --force)"
-            )
-        action = prep.apply(tree, force=force, dry=False)
-        if action in ("created", "updated"):
-            for step in (("add", "--", prep.path), ("commit", "-m", message, "--", prep.path)):
-                r = _git(tree, *step)
-                if not r.ok:
-                    raise ExportError(
-                        f"git {step[0]} of {prep.path} failed: {r.err or r.out}", EXIT_UNAVAILABLE
-                    )
-        return action
-    finally:
-        if tmp is not None:
-            _git(root, "worktree", "remove", "--force", str(tmp))
-            _git(root, "worktree", "prune")
+        return _commit_in(s.path, prep, force=force, message=message)
+
+
+def _commit_in(tree: Path, prep: Prepared, *, force: bool, message: str) -> str:
+    """Write the prepared changelog in ``tree`` and commit it. Returns the action."""
+    dirty = GIT.status_run(tree, prep.path)
+    if dirty.unavailable:  # a timeout or a missing git
+        raise ExportError(f"could not run git: {dirty.err}", EXIT_UNAVAILABLE)
+    entries = GIT.parse_status(dirty)
+    if entries is None:
+        raise ExportError(f"git status failed: {dirty.err}", EXIT_UNAVAILABLE)
+    if entries and not force:
+        raise EW.Refused(
+            f"{prep.path} has uncommitted changes; refusing to commit them into the "
+            f"release (commit or discard them, or --force)"
+        )
+    action = prep.apply(tree, force=force, dry=False)
+    if action in ("created", "updated"):
+        for step in (("add", "--", prep.path), ("commit", "-m", message, "--", prep.path)):
+            r = _git(tree, *step)
+            if not r.ok:
+                raise ExportError(
+                    f"git {step[0]} of {prep.path} failed: {r.err or r.out}", EXIT_UNAVAILABLE
+                )
+    return action
 
 
 __all__ = ["Prepared", "commit_on", "prepare"]
