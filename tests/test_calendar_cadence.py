@@ -14,9 +14,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.api.operations import _calendar_due
 from ddflow.config import Config
 from ddflow.core.model import State
+from ddflow.services import schedule as SV
 
 OK, FAIL, NOTHING = 0, 1, 2
 
@@ -46,8 +46,8 @@ def test_it_falls_due_again_after_its_period():
     from ddflow.core.progress import epoch
 
     ran = epoch("2026-09-01T00:00:00Z")
-    assert _calendar_due(st, cfg, now=ran + 6 * 86400) == []
-    assert _calendar_due(st, cfg, now=ran + 7 * 86400)[0]["cadence"] == "bug_hunt"
+    assert SV.calendar_due(st, SV.calendar(cfg), ran + 6 * 86400) == []
+    assert SV.calendar_due(st, SV.calendar(cfg), ran + 7 * 86400)[0]["cadence"] == "bug_hunt"
 
 
 def test_a_calendar_name_replaces_the_count_based_pass_of_the_same_name(repo):
