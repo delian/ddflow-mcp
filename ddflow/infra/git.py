@@ -237,7 +237,7 @@ def status_run(
     *pathspec: str,
     untracked: str = "normal",
     ignored: str = "",
-    timeout: float | None = LISTING_TIMEOUT,
+    timeout: float | None = GIT_TIMEOUT,
 ) -> GitResult:
     """The `git status --porcelain -z` call itself, for a caller that needs git's own
     message when it fails (`parse_status` reads it; `status` does both).
@@ -284,7 +284,7 @@ def status(
     *pathspec: str,
     untracked: str = "normal",
     ignored: str = "",
-    timeout: float | None = LISTING_TIMEOUT,
+    timeout: float | None = GIT_TIMEOUT,
 ) -> list[StatusEntry] | None:
     """`git status --porcelain -z` parsed (see `status_run`); None when git failed."""
     r = status_run(repo, *pathspec, untracked=untracked, ignored=ignored, timeout=timeout)
