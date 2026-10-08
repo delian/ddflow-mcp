@@ -88,8 +88,10 @@ def test_a_zero_timeout_is_one_sweep(tmp_path):
 
 def test_a_limit_below_one_is_one(tmp_path):
     s = _slots(tmp_path)
-    with s.hold(0) as slot, pytest.raises(SlotsTimeout), s.try_hold(-3):
+    with s.hold(0) as slot:
         assert slot.index == 0
+        with pytest.raises(SlotsTimeout), s.try_hold(-3):
+            pass
 
 
 def test_lowering_the_limit_never_evicts_a_holder_and_nobody_new_takes_its_slot(tmp_path):
