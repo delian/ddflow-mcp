@@ -11,8 +11,8 @@ makes every review fail to load its reviewers.
 from __future__ import annotations
 
 import pytest
-
-from ddflow.services.configwrite import _append_config, append_block
+from conftest import add_block as append_block
+from conftest import append_config as _append_config
 
 TYPO = '[[reviewer]]\nname = "x"\nmodel = "m"\nbase_url = "http://127.0.0.1:1/v1"\nmodle = "typo"\n'
 GOOD = '[[reviewer]]\nname = "x"\nmodel = "m"\nbase_url = "http://127.0.0.1:1/v1"\n'

@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from conftest import add_block
 
 from ddflow.infra import fsio
 from ddflow.infra import log as L
@@ -325,7 +326,7 @@ def test_a_markerless_region_always_appends():
 
 
 def test_append_block_joins_exactly_as_before(tmp_path):
-    path = CW.append_block(tmp_path, "[x]\na = 1   \n\n", shared=True, person=True)
-    assert path.read_text("utf-8") == "\n[x]\na = 1\n"
-    CW.append_block(tmp_path, "[y]\nb = 2\n", shared=True, person=True)
-    assert path.read_text("utf-8") == "\n[x]\na = 1\n[y]\nb = 2\n"
+    path = add_block(tmp_path, "[lease]\nttl_s = 1   \n\n", shared=True, person=True)
+    assert path.read_text("utf-8") == "\n[lease]\nttl_s = 1\n"
+    add_block(tmp_path, "[review]\nmax_rounds = 2\n", shared=True, person=True)
+    assert path.read_text("utf-8") == "\n[lease]\nttl_s = 1\n[review]\nmax_rounds = 2\n"

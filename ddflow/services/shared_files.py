@@ -25,6 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import Config
+from ..config_sections._layers import layer_path
 
 
 def export_targets(cfg: Config, *, generated_only: bool = False) -> list[str]:
@@ -276,7 +277,7 @@ def committed_append_only(repo: Path) -> list[str]:
     """
     import tomllib
 
-    p = Path(repo) / ".ddflow" / "config.toml"
+    p = layer_path(repo, "file")
     try:
         data = tomllib.loads(p.read_text("utf-8")) if p.exists() else {}
     except (OSError, tomllib.TOMLDecodeError):

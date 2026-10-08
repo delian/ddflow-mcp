@@ -27,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.services.configwrite import _toml_upsert
+from ddflow.infra.tomlcfg import upsert as _toml_upsert
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 

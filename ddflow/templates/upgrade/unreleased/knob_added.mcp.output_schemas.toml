@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.output_schemas"
+new = '"off"'
+why = "Whether tools/list declares an outputSchema for each object-result tool and a call also returns structuredContent (MCP 2025-06-18+): off (default, the smaller unchanged list) or on."
+impact = "additive"
