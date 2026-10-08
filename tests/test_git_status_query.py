@@ -289,3 +289,23 @@ def test_a_status_may_run_as_long_as_any_other_git_call():
 
     for fn in (G.status_run, G.status):
         assert inspect.signature(fn).parameters["timeout"].default == G.GIT_TIMEOUT
+
+
+def test_ignored_matching_names_the_ignored_file_not_its_directory(work):
+    """Mutant: `--ignored` without `=matching` (git then reports `dir/`, hiding which file)."""
+    _commit(work, **{".gitignore": "*.log\n", "a.txt": "a\n"})
+    (work / "dir").mkdir()
+    (work / "dir" / "a.log").write_text("l\n")
+    assert [e.path for e in G.status(work, ignored="matching")] == ["dir/a.log"]
+    assert [e.path for e in G.status(work, ignored="traditional")] == ["dir/"]
+
+
+def test_a_pathspec_that_looks_like_an_option_is_a_path(work):
+    """Mutant: dropping the `--` before the pathspec (version_files and setup rely on it)."""
+    _commit(work, **{"a.txt": "a\n"})
+    (work / "-uno").write_text("x\n")
+    (work / "b.txt").write_text("y\n")
+    assert [e.path for e in G.status(work, "-uno")] == ["-uno"]
+    assert [e.path for e in G.status(work, "a.txt")] == []
+    assert G.parse_status(G.status_run(work, "-uno"))[0].path == "-uno"
+    assert W.status is G.status
