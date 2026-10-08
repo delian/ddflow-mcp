@@ -179,6 +179,20 @@ class Capability:
     summary: str
 
 
+#: The events that record a minted record (its subject is an id made from an `[ids]` template).
+ID_MINTING_KINDS = frozenset(
+    {
+        "bug.found",
+        "lesson.recorded",
+        "research.recorded",
+        "decision.recorded",
+        "memory.recorded",
+        "job.started",
+        "session.started",
+        "task.added",
+        "phase.added",
+    }
+)
 #: Ids minted under a configured `[ids]` template (decision D-id-schemes-final): a ddflow
 #: that cannot render the template would mint a different id for the same record.
 CAP_ID_TEMPLATE = "id-template"
@@ -193,19 +207,7 @@ CAPABILITIES: dict[str, Capability] = {
         Capability(
             CAP_ID_TEMPLATE,
             "0.2.1",
-            frozenset(
-                {
-                    "bug.found",
-                    "lesson.recorded",
-                    "research.recorded",
-                    "decision.recorded",
-                    "memory.recorded",
-                    "job.started",
-                    "session.started",
-                    "task.added",
-                    "phase.added",
-                }
-            ),
+            ID_MINTING_KINDS,
             "ids minted under a configured [ids] template",
         ),
         Capability(
