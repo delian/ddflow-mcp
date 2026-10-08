@@ -644,11 +644,14 @@ def capture_diff(
                 merge_base = since
             else:
                 found = git(tree, "merge-base", base, "HEAD")
-                if not found.ok or not found.out:
+                # Exit 1 is git's ANSWER "no common ancestor" (unrelated or shallow
+                # history): the two commits are still diffed as they are. Anything else
+                # is a git that could not say.
+                if found.code != 1 and (not found.ok or not found.out):
                     raise RuntimeError(
                         f"git merge-base {base} HEAD in {tree} failed: {found.err or found.out}"
                     )
-                merge_base = found.out
+                merge_base = found.out or base
             committed = _diff_text(tree, f"{merge_base}..HEAD", *spec)
         else:
             committed = ""
@@ -671,7 +674,7 @@ def _diff_text(tree: Path, *args: str) -> str:
     non-UTF-8 content (or a non-UTF-8 name under `core.quotepath=false`) is replaced, not
     raised (`git()` replaces by default; stated here because a strict decode once aborted the
     whole review)."""
-    r = git(tree, "diff", *_DIFF_PREFIXES, *args, errors="replace")
+    r = git(tree, "diff", "--no-color", *_DIFF_PREFIXES, *args, errors="replace")
     if not r.ok:  # could not run: never "nothing changed"
         raise RuntimeError(f"git diff in {tree} failed: {r.err or r.out}")
     return r.out

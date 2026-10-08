@@ -242,7 +242,7 @@ def changed_paths(
         ),
         "staged": lambda: G.paths(root, *pre, "diff", "--cached", *flags, *tail),
         "worktree": lambda: G.paths(root, *pre, *diff, "HEAD", *tail),
-        "untracked": lambda: G.files(root, "untracked", pathspec=tuple(spec)),
+        "untracked": lambda: G.files(root, "untracked", pathspec=tuple(spec), literal=literal),
     }
     found = [queries[k]() for k in kinds]
     if any(q is None for q in found):
@@ -254,15 +254,20 @@ def _kinds(include: Iterable[str] | None, base: str, tip: str) -> tuple[str, ...
     """The kinds of change `changed_paths` reads: ``include``, or by default every kind
     that applies (`committed` needs a base; the tree kinds need ``tip`` to be HEAD)."""
     if include is None:
-        return tuple(
+        kinds = tuple(
             k for k in KINDS if (base or k != "committed") and (tip == "HEAD" or k == "committed")
         )
+        if not kinds:
+            raise ValueError("no kind of change applies: pass a base, or leave tip at HEAD")
+        return kinds
     kinds = tuple(include)
     unknown = [k for k in kinds if k not in KINDS]
     if unknown:
         raise ValueError(f"unknown kind(s) of change {unknown!r}; expected from {KINDS}")
     if "committed" in kinds and not base:
         raise ValueError("a committed change is against a base: pass base")
+    if not kinds:
+        raise ValueError("include names no kind of change")
     return kinds
 
 

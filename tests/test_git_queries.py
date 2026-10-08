@@ -244,3 +244,37 @@ def test_capture_diff_raises_when_the_base_cannot_be_resolved(forked):
     with pytest.raises(RuntimeError):
         W.capture_diff(forked, "no-such-ref", include_untracked=False)
     assert "committed.txt" in W.capture_diff(forked, "main", include_untracked=False)
+
+
+def test_changed_paths_with_nothing_to_read_is_refused_not_empty(forked):
+    for kw in ({"tip": "work"}, {"include": ()}):
+        with pytest.raises(ValueError):
+            CH.changed_paths(forked, **kw)
+
+
+def test_literal_pathspecs_apply_to_untracked_too(forked):
+    (forked / "a1.py").write_text("x\n")
+    (forked / "a[1].py").write_text("x\n")
+    got = CH.changed_paths(forked, include=("untracked",), pathspec=("a[1].py",), literal=True)
+    assert got == ["a[1].py"]
+
+
+def test_capture_diff_with_no_common_ancestor_still_diffs(forked):
+    """git's merge-base exit 1 is an answer (unrelated history), not a failure."""
+    _git(forked, "checkout", "-q", "--orphan", "other")
+    _git(forked, "rm", "-rqf", ".")
+    (forked / "o.txt").write_text("o\n")
+    _git(forked, "add", "o.txt")
+    _git(forked, "commit", "-qm", "orphan")
+    assert "o.txt" in W.capture_diff(forked, "main", include_untracked=False)
+
+
+def test_diff_for_says_unavailable_when_git_cannot_read_the_tree(tmp_path_factory):
+    from types import SimpleNamespace
+
+    from ddflow.api import review as R
+
+    cfg = SimpleNamespace(worktree=SimpleNamespace(base_ref=""))
+    outside = tmp_path_factory.mktemp("not-a-repo")
+    diff, how = R.diff_for(outside, cfg, SimpleNamespace(items={}), "")
+    assert diff == "" and "could not be read" in how
