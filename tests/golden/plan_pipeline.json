@@ -1,0 +1,599 @@
+{
+ "bugsoff": {
+  "blocked": [
+   [
+    "T11",
+    "deps",
+    "unknown dependency 'Missing' (typo? or not yet added)",
+    [
+     "Missing"
+    ]
+   ],
+   [
+    "T13",
+    "deps",
+    "Q:T1 is in another repository and has not been observed yet: `ddflow external sync`",
+    [
+     "Q:T1"
+    ]
+   ],
+   [
+    "T3",
+    "deps",
+    "T1 is open",
+    [
+     "T1"
+    ]
+   ],
+   [
+    "T6",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T7",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T9",
+    "conflict",
+    "globs overlap T8 held by other (held/sub.py vs held/**)",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T1",
+    "conflict",
+    "globs overlap T2 (a/** vs a/x.py) offered in this plan",
+    [
+     "T2"
+    ]
+   ],
+   [
+    "T12",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T2, T4, T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T10",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T2, T4, T5",
+    [
+     "T8"
+    ]
+   ]
+  ],
+  "cap_note": "the parallelism cap (schedule.max_parallel_tasks=4)",
+  "capped": [
+   "T12",
+   "T10"
+  ],
+  "cycles": [
+   [
+    "T6",
+    "T7",
+    "T6"
+   ]
+  ],
+  "finished": [],
+  "interrupted": [],
+  "overlapped": [
+   "T1"
+  ],
+  "parallel_line": "",
+  "ready": [
+   "T2",
+   "T4",
+   "T5"
+  ],
+  "review": [],
+  "running": [
+   "T8"
+  ],
+  "summary": "3 ready, 1 running, 6 blocked, 2 held by the parallelism cap (schedule.max_parallel_tasks=4), 1 overlap an offered item, 1 CYCLE(S)"
+ },
+ "cap2": {
+  "blocked": [
+   [
+    "T11",
+    "deps",
+    "unknown dependency 'Missing' (typo? or not yet added)",
+    [
+     "Missing"
+    ]
+   ],
+   [
+    "T13",
+    "deps",
+    "Q:T1 is in another repository and has not been observed yet: `ddflow external sync`",
+    [
+     "Q:T1"
+    ]
+   ],
+   [
+    "T3",
+    "deps",
+    "T1 is open",
+    [
+     "T1"
+    ]
+   ],
+   [
+    "T6",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T7",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T9",
+    "conflict",
+    "globs overlap T8 held by other (held/sub.py vs held/**)",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T12",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T2",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T4",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T1",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T10",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ]
+  ],
+  "cap_note": "the parallelism cap (schedule.max_parallel_tasks=2)",
+  "capped": [
+   "T12",
+   "T2",
+   "T4",
+   "T1",
+   "T10"
+  ],
+  "cycles": [
+   [
+    "T6",
+    "T7",
+    "T6"
+   ]
+  ],
+  "finished": [],
+  "interrupted": [],
+  "overlapped": [],
+  "parallel_line": "",
+  "ready": [
+   "T5"
+  ],
+  "review": [],
+  "running": [
+   "T8"
+  ],
+  "summary": "1 ready, 1 running, 6 blocked, 5 held by the parallelism cap (schedule.max_parallel_tasks=2), 1 CYCLE(S)"
+ },
+ "default": {
+  "blocked": [
+   [
+    "T11",
+    "deps",
+    "unknown dependency 'Missing' (typo? or not yet added)",
+    [
+     "Missing"
+    ]
+   ],
+   [
+    "T13",
+    "deps",
+    "Q:T1 is in another repository and has not been observed yet: `ddflow external sync`",
+    [
+     "Q:T1"
+    ]
+   ],
+   [
+    "T3",
+    "deps",
+    "T1 is open",
+    [
+     "T1"
+    ]
+   ],
+   [
+    "T6",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T7",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T9",
+    "conflict",
+    "globs overlap T8 held by other (held/sub.py vs held/**)",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T1",
+    "conflict",
+    "globs overlap T2 (a/** vs a/x.py) offered in this plan",
+    [
+     "T2"
+    ]
+   ],
+   [
+    "T4",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T5, T12, T2",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T10",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T5, T12, T2",
+    [
+     "T8"
+    ]
+   ]
+  ],
+  "cap_note": "the parallelism cap (schedule.max_parallel_tasks=4)",
+  "capped": [
+   "T4",
+   "T10"
+  ],
+  "cycles": [
+   [
+    "T6",
+    "T7",
+    "T6"
+   ]
+  ],
+  "finished": [],
+  "interrupted": [],
+  "overlapped": [
+   "T1"
+  ],
+  "parallel_line": "",
+  "ready": [
+   "T5",
+   "T12",
+   "T2"
+  ],
+  "review": [],
+  "running": [
+   "T8"
+  ],
+  "summary": "3 ready, 1 running, 6 blocked, 2 held by the parallelism cap (schedule.max_parallel_tasks=4), 1 overlap an offered item, 1 CYCLE(S)"
+ },
+ "depsonly": {
+  "blocked": [
+   [
+    "T11",
+    "deps",
+    "unknown dependency 'Missing' (typo? or not yet added)",
+    [
+     "Missing"
+    ]
+   ],
+   [
+    "T13",
+    "deps",
+    "Q:T1 is in another repository and has not been observed yet: `ddflow external sync`",
+    [
+     "Q:T1"
+    ]
+   ],
+   [
+    "T3",
+    "deps",
+    "T1 is open",
+    [
+     "T1"
+    ]
+   ],
+   [
+    "T6",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T7",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T12",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T2",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T4",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T1",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T10",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T9",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=2): 1 in flight across the queue; 1 slot(s) free, offered to higher-ranked T5",
+    [
+     "T8"
+    ]
+   ]
+  ],
+  "cap_note": "the parallelism cap (schedule.max_parallel_tasks=2)",
+  "capped": [
+   "T12",
+   "T2",
+   "T4",
+   "T1",
+   "T10",
+   "T9"
+  ],
+  "cycles": [
+   [
+    "T6",
+    "T7",
+    "T6"
+   ]
+  ],
+  "finished": [],
+  "interrupted": [],
+  "overlapped": [],
+  "parallel_line": "",
+  "ready": [
+   "T5"
+  ],
+  "review": [],
+  "running": [
+   "T8"
+  ],
+  "summary": "1 ready, 1 running, 5 blocked, 6 held by the parallelism cap (schedule.max_parallel_tasks=2), 1 CYCLE(S)"
+ },
+ "me": {
+  "blocked": [
+   [
+    "T11",
+    "deps",
+    "unknown dependency 'Missing' (typo? or not yet added)",
+    [
+     "Missing"
+    ]
+   ],
+   [
+    "T13",
+    "deps",
+    "Q:T1 is in another repository and has not been observed yet: `ddflow external sync`",
+    [
+     "Q:T1"
+    ]
+   ],
+   [
+    "T3",
+    "deps",
+    "T1 is open",
+    [
+     "T1"
+    ]
+   ],
+   [
+    "T6",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T7",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T1",
+    "conflict",
+    "globs overlap T2 (a/** vs a/x.py) offered in this plan",
+    [
+     "T2"
+    ]
+   ],
+   [
+    "T4",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T5, T12, T2",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T10",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T5, T12, T2",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T9",
+    "state",
+    "held by the parallelism cap (schedule.max_parallel_tasks=4): 1 in flight across the queue; 3 slot(s) free, offered to higher-ranked T5, T12, T2",
+    [
+     "T8"
+    ]
+   ]
+  ],
+  "cap_note": "the parallelism cap (schedule.max_parallel_tasks=4)",
+  "capped": [
+   "T4",
+   "T10",
+   "T9"
+  ],
+  "cycles": [
+   [
+    "T6",
+    "T7",
+    "T6"
+   ]
+  ],
+  "finished": [],
+  "interrupted": [],
+  "overlapped": [
+   "T1"
+  ],
+  "parallel_line": "",
+  "ready": [
+   "T5",
+   "T12",
+   "T2"
+  ],
+  "review": [],
+  "running": [
+   "T8"
+  ],
+  "summary": "3 ready, 1 running, 5 blocked, 3 held by the parallelism cap (schedule.max_parallel_tasks=4), 1 overlap an offered item, 1 CYCLE(S)"
+ },
+ "phaseP": {
+  "blocked": [
+   [
+    "T3",
+    "deps",
+    "T1 is open",
+    [
+     "T1"
+    ]
+   ],
+   [
+    "T6",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T7",
+    "cycle",
+    "T6 -> T7 -> T6",
+    []
+   ],
+   [
+    "T9",
+    "conflict",
+    "globs overlap T8 held by other (held/sub.py vs held/**)",
+    [
+     "T8"
+    ]
+   ],
+   [
+    "T1",
+    "conflict",
+    "globs overlap T2 (a/** vs a/x.py) offered in this plan",
+    [
+     "T2"
+    ]
+   ]
+  ],
+  "cap_note": "the parallelism cap (schedule.max_parallel_tasks=4)",
+  "capped": [],
+  "cycles": [
+   [
+    "T6",
+    "T7",
+    "T6"
+   ]
+  ],
+  "finished": [],
+  "interrupted": [],
+  "overlapped": [
+   "T1"
+  ],
+  "parallel_line": "",
+  "ready": [
+   "T5",
+   "T2",
+   "T4"
+  ],
+  "review": [],
+  "running": [
+   "T8"
+  ],
+  "summary": "3 ready, 1 running, 4 blocked, 1 overlap an offered item, 1 CYCLE(S)"
+ }
+}
