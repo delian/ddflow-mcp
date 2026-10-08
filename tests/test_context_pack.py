@@ -62,4 +62,5 @@ def test_the_brief_of_an_empty_project_reports_at_least_the_clamp(repo):
     run_cli(repo, "init")
     code, out, _err = run_cli(repo, "--json", "brief")
     body = json.loads(out)
-    assert code == 0 and body["approx_tokens"] == len(body["brief"]) // 4 >= 1
+    assert code == 0 and len(body["brief"]) >= 4  # the clamp and the plain // 4 coincide
+    assert body["approx_tokens"] == len(body["brief"]) // 4 >= 1
