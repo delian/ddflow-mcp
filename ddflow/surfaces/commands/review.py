@@ -17,7 +17,6 @@ import sys
 # form reads `ddflow.api.review` out of sys.modules and cannot be shadowed.
 import ddflow.api.review as A
 
-from ...infra.tomlcfg import value as _toml_value  # the one TOML value writer
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 
 
@@ -136,68 +135,32 @@ def _reviewers_presets(_a, _c: Ctx) -> int:
 
 
 def _reviewers_add(a, c: Ctx) -> int:
-    """Append a `[[reviewer]]` block. Writes the KEY's variable NAME, never the key."""
+    """Append a `[[reviewer]]` block (`api.review.reviewers_add`)."""
     from ...config import csv_list
-    from ...services import review as R
-
-    preset = dict(R.PRESETS.get(a.preset, {}))
-    if a.preset and not preset:
-        print(f"unknown preset {a.preset!r}; `ddflow reviewers presets`", file=sys.stderr)
-        return FAIL
-    if a.model:
-        preset["model"] = a.model
-    if a.base_url:
-        preset["base_url"] = a.base_url
-    if a.gates:
-        preset["gates"] = csv_list(a.gates)
-    name = a.name or a.preset or preset.get("model", "reviewer")
-    # No `family` guessed from the model name: a written one wins over the project's
-    # `[agent].families` for good (B98650136a8). A preset that declares one keeps it.
-    if a.no_launch:
-        preset.pop("launch", None)
-    body = [f"\n[[reviewer]]\nname = {_toml_value(name)}"]
-    launch = preset.pop("launch", None)
-    for k, v in preset.items():
-        body.append(f"{k} = {_toml_value(v)}")
-    if launch:
-        body.append("launch = " + _toml_value(launch))
     from ...services import reviewer_trust as RT
-    from ...services.configwrite import append_block
 
-    # Local unless --shared: an endpoint and a key variable are one operator's setup,
-    # and a reviewer added here is for THIS machine (bug B-reviewers-write-committed).
-    shared = bool(getattr(a, "shared", False))
     # A command reviewer only from a person (decision D-reviewer-trust): nothing about
     # this invocation may say it is an agent's.
-    person = not RT.agent_marker(c.requested_agent)
-    try:
-        path = append_block(
-            c.repo,
-            "\n".join(body),
-            shared=shared,
-            own="reviewers.toml",
-            person=person,
-            agent=c.cfg.agent.id,
-        )
-    except RT.ReviewerRefused as exc:
-        why = RT.agent_marker(c.requested_agent)
-        print(f"{exc}\n  (this command runs as an agent: {why}; a person runs it)", file=sys.stderr)
-        return REFUSED
-    note = (
-        "\n  Committed config: every clone gets this reviewer."
-        if shared
-        else "\n  Git-ignored, machine-local: not committed. --shared commits a reviewer "
-        "every clone should use."
+    why = RT.agent_marker(c.requested_agent)
+    out = A.reviewers_add(
+        c.repo,
+        preset=a.preset or "",
+        name=a.name or "",
+        model=a.model or "",
+        base_url=a.base_url or "",
+        gates=csv_list(a.gates) if a.gates else (),
+        no_launch=bool(a.no_launch),
+        shared=bool(getattr(a, "shared", False)),
+        person=not why,
+        agent=c.cfg.agent.id,
     )
-    if preset.get("api_key_env"):
-        note += (
-            f"\n  Set ${preset['api_key_env']} in your environment. The KEY is never "
-            f"written to any config — only the variable's name."
-        )
-    c.out(
-        f"added reviewer {name!r} to {path}{note}",
-        {"name": name, "path": str(path), "shared": shared},
-    )
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        if out.data.get("reviewer_refused") and why:
+            print(f"  (this command runs as an agent: {why}; a person runs it)", file=sys.stderr)
+        return out.exit
+    d = out.data
+    c.out(out.data["text"], {"name": d["name"], "path": d["path"], "shared": d["shared"]})
     return OK
 
 

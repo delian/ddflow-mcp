@@ -14,14 +14,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from ddflow.infra.tomlcfg import literal as _toml_literal
 from ddflow.infra.tomlcfg import value as _toml
-from ddflow.services.configwrite import _toml_literal
-from ddflow.surfaces.commands.review import _toml_value
 
 TEXTS = ["ship it 🚀", "del\x7fete", 'quote " back\\slash', "tab\tnew\nline", "é ü 中文 𝄞"]
 
 
-@pytest.mark.parametrize("writer", [_toml_literal, _toml_value, _toml], ids=lambda f: f.__name__)
+@pytest.mark.parametrize("writer", [_toml_literal, _toml], ids=lambda f: f.__name__)
 @pytest.mark.parametrize("text", TEXTS)
 def test_every_toml_string_writer_round_trips_any_text(writer, text):
     assert tomllib.loads(f"x = {writer(text)}")["x"] == text
@@ -29,7 +28,7 @@ def test_every_toml_string_writer_round_trips_any_text(writer, text):
 
 def test_nested_values_round_trip_an_emoji():
     value = {"env": {"NOTE": "🚀"}, "args": ["a", "🎉"]}
-    for writer in (_toml_value, _toml):
+    for writer in (_toml,):
         assert tomllib.loads(f"x = {writer(value)}")["x"] == value
 
 

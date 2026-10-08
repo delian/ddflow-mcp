@@ -6,7 +6,7 @@ renderings of ONE answer. They were not: `_workflow_show` assembled a JSON paylo
 separate prose renderer, and `coherent` — whether the configured workflow hangs together
 at all — was computed once per surface.
 
-The three WRITE operations are validated by `services/configwrite.write_config`, which
+The three WRITE operations are validated by `services/configwrite.apply_edit`, which
 refuses before it writes. The validation lives there, not here, because it is the same
 validation whether the change arrives from `ddflow config --set`, a workflow subcommand
 or an MCP tool, and a rule enforced in three places is a rule enforced in two.
@@ -20,9 +20,8 @@ from typing import Any
 
 from ..core import outcome as O
 from ..core.plain import plain as _plain
-from ..infra.tomlcfg import value as toml_value
 from ..services import gates as G
-from ..services.configwrite import KeyRefused, _write_config, gate_id_problem
+from ..services.configwrite import KeyRefused, SetPairs, apply_edit, gate_id_problem
 from ._base import _load
 
 
@@ -86,7 +85,9 @@ def _not_written(kind: str, err: str, **data: Any) -> O.Outcome:
     return (O.refused if isinstance(err, KeyRefused) else O.failed)(kind, err, **data)
 
 
-def pipeline(repo: Path, which: str, gates: str, *, dry_run: bool = False) -> O.Outcome:
+def pipeline(
+    repo: Path, which: str, gates: str, *, dry_run: bool = False, agent: str = ""
+) -> O.Outcome:
     """Set the task or phase pipeline. Refuses an empty one, and an undefined gate."""
     from ..services.gates import load_gates
 
@@ -121,9 +122,9 @@ def pipeline(repo: Path, which: str, gates: str, *, dry_run: bool = False) -> O.
             unknown=unknown,
         )
     key = f"gates.{which}_pipeline"
-    err, _text = _write_config(repo, [(key, toml_value(ids))], dry_run=dry_run)
-    if err:
-        return _not_written("workflow.pipeline", err, key=key, gates=ids, applied=False)
+    res = apply_edit(repo, SetPairs([(key, ids)]), dry_run=dry_run, agent=agent)
+    if res.error:
+        return _not_written("workflow.pipeline", res.error, key=key, gates=ids, applied=False)
     return O.ok("workflow.pipeline", key=key, gates=ids, applied=not dry_run)
 
 
@@ -149,7 +150,7 @@ class GateEdit:
     required: bool = False
 
 
-def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
+def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
     """Define a gate, and optionally place it in a pipeline.
 
     Refuses to put a gate with no command and no prompt into a pipeline: that gate can
@@ -158,14 +159,14 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
     """
     from ..services.gates import load_gates
 
-    # Checked first for a plain answer; `_write_config` refuses it again at the choke
+    # Checked first for a plain answer; `apply_edit` refuses it again at the choke
     # point, for every other writer (B72b8adba30).
     problem = gate_id_problem(edit.id)
     if problem:
         return O.refused("workflow.gate", problem, gate=edit.id, changed=[], applied=False)
     _log, cfg, _st = _load(repo)
     known = load_gates(repo, cfg)
-    pairs: list[tuple[str, str]] = []
+    pairs: list[tuple[str, object]] = []
     for value, field in (
         (edit.command, "command"),
         (edit.prompt, "prompt"),
@@ -176,7 +177,7 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
         if value:
             pairs.append((f"gate.{edit.id}.{field}", value))
     if edit.timeout:
-        pairs.append((f"gate.{edit.id}.timeout_s", str(edit.timeout)))
+        pairs.append((f"gate.{edit.id}.timeout_s", edit.timeout))
     if edit.applies_to:
         pairs.append((f"gate.{edit.id}.applies_to", edit.applies_to))
     if not pairs and not edit.into:
@@ -219,14 +220,14 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
                     )
                 at = current.index(edit.after) + 1
             current.insert(at, edit.id)
-            pairs.append((f"gates.{which}_pipeline", toml_value(current)))
+            pairs.append((f"gates.{which}_pipeline", current))
     if edit.required:
-        pairs.append(("gates.required", toml_value(sorted({*cfg.gates.required, edit.id}))))
+        pairs.append(("gates.required", sorted({*cfg.gates.required, edit.id})))
 
-    err, _text = _write_config(repo, pairs, dry_run=dry_run)
-    if err:
+    res = apply_edit(repo, SetPairs(pairs), dry_run=dry_run, agent=agent)
+    if res.error:
         return _not_written(
-            "workflow.gate", err, gate=edit.id, changed=[k for k, _v in pairs], applied=False
+            "workflow.gate", res.error, gate=edit.id, changed=[k for k, _v in pairs], applied=False
         )
     return O.ok(
         "workflow.gate",
@@ -236,7 +237,7 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
     )
 
 
-def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
+def drop(repo: Path, item: str, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
     """Remove a gate from every pipeline, and from `required` with it.
 
     Dropping it from a pipeline but leaving it `required` creates an INERT requirement:
@@ -245,7 +246,7 @@ def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
     in place, because the definition is the part that is expensive to rewrite.
     """
     _log, cfg, _st = _load(repo)
-    pairs: list[tuple[str, str]] = []
+    pairs: list[tuple[str, object]] = []
     removed: list[str] = []
     # Every pipeline, promotion included (B7f0b7c8839): walking task and phase only left
     # a promotion-only gate in place and called it "in neither pipeline".
@@ -253,10 +254,10 @@ def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
         current = list(ids)
         if item in current:
             current.remove(item)
-            pairs.append((f"gates.{which}_pipeline", toml_value(current)))
+            pairs.append((f"gates.{which}_pipeline", current))
             removed.append(which)
     if item in cfg.gates.required:
-        pairs.append(("gates.required", toml_value([g for g in cfg.gates.required if g != item])))
+        pairs.append(("gates.required", [g for g in cfg.gates.required if g != item]))
         removed.append("required")
     if not pairs:
         return O.nothing(
@@ -266,7 +267,9 @@ def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
             removed_from=[],
             applied=False,
         )
-    err, _text = _write_config(repo, pairs, dry_run=dry_run)
-    if err:
-        return _not_written("workflow.drop", err, gate=item, removed_from=removed, applied=False)
+    res = apply_edit(repo, SetPairs(pairs), dry_run=dry_run, agent=agent)
+    if res.error:
+        return _not_written(
+            "workflow.drop", res.error, gate=item, removed_from=removed, applied=False
+        )
     return O.ok("workflow.drop", gate=item, removed_from=removed, applied=not dry_run)

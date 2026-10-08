@@ -10,13 +10,10 @@
 ignore_imports = [
     "ddflow.surfaces.cli -> ddflow.services.gates",
     "ddflow.surfaces.commands.ci -> ddflow.infra.worktree",
-    "ddflow.surfaces.commands.config -> ddflow.services.configwrite",
     "ddflow.surfaces.commands.flow -> ddflow.services.choices",
     "ddflow.surfaces.commands.knowledge -> ddflow.infra.store",
     "ddflow.surfaces.commands.operations -> ddflow.services.importer",
     "ddflow.surfaces.commands.reporting -> ddflow.infra.worktree",
-    "ddflow.surfaces.commands.review -> ddflow.infra.tomlcfg",
-    "ddflow.surfaces.commands.review -> ddflow.services.configwrite",
     "ddflow.surfaces.commands.review -> ddflow.services.review",
     "ddflow.surfaces.commands.review -> ddflow.services.reviewer_trust",
     "ddflow.surfaces.commands.setup -> ddflow.infra.worktree",
