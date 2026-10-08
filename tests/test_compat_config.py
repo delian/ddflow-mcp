@@ -137,7 +137,10 @@ def test_check_still_judges_a_known_key_of_the_wrong_type(tmp_path):
 def test_a_dedupe_kind_from_a_newer_release_is_ignored_with_a_note(tmp_path):
     cfg = Config.load(_repo(tmp_path))
     assert cfg.dedupe.kinds == ["bug", "task"]
-    assert any("dedupe.kinds" in n and "kind-from-the-future" in n for n in cfg.ignored_members)
+    assert any(
+        n.startswith("dedupe.kinds: ignored kind 'kind-from-the-future'")
+        for n in cfg.ignored_members
+    )
 
 
 def test_a_router_in_a_shape_this_code_lacks_stays_a_router_with_unknown_families(tmp_path):
@@ -147,7 +150,9 @@ def test_a_router_in_a_shape_this_code_lacks_stays_a_router_with_unknown_familie
 
     cfg = Config.load(_repo(tmp_path))
     assert cfg.agent.routers == {"hydrafusion": ["openai"], "shape-from-the-future": []}
-    assert any("shape-from-the-future" in n for n in cfg.ignored_members)
+    # said as what happened: kept, not ignored
+    assert any("kept router 'shape-from-the-future'" in n for n in cfg.ignored_members)
+    assert not any("ignored router" in n for n in cfg.ignored_members)
     assert router_set("x-shape-from-the-future-v2", cfg.agent.routers) == []
 
 
@@ -189,6 +194,17 @@ def test_a_malformed_waiver_is_refused_when_written_and_only_noted_in_a_file(tmp
     for bad in ('{ "Phase-ships" = "none" }', '{ "Phase-ships" = ["none", 5] }'):
         err, _ = _set(_repo(tmp_path, ""), "enforce.trailer_waivers", bad)
         assert isinstance(err, CW.KeyRefused) and "enforce.trailer_waivers" in err
+
+
+def test_a_malformed_waiver_in_a_file_is_noted_and_does_not_brick_the_load(tmp_path):
+    cfg = Config.load(_repo(tmp_path, '[enforce.trailer_waivers]\nPhase-ships = "none"\n'))
+    assert cfg.enforce.trailer_waivers == {}
+    assert any("Phase-ships" in n for n in cfg.ignored_members)
+
+
+def test_a_malformed_router_is_a_typo_the_check_still_refuses(tmp_path):
+    with pytest.raises(InvalidValue, match=r"agent\.routers"):
+        Config.load(_repo(tmp_path, '[agent.routers]\nhydrafusion = "openai"\n'))
 
 
 def test_a_member_filter_is_declared_on_each_growing_list():
@@ -260,6 +276,20 @@ def test_a_changed_default_is_declared_on_the_knob_and_shown_in_its_doc():
     assert field.metadata["ddflow.knob"].default_changed_in == "0.1.20"
 
 
+def test_a_changed_default_must_say_what_it_was():
+    with pytest.raises(ValueError, match="default_was"):
+        knob(5, doc="How many.", default_changed_in="0.1.20")
+    assert knob(5, doc="How many.", default_changed_in="0.1.20", default_was=None)
+
+
+def test_a_written_key_stays_strict_even_when_the_layer_is_a_file():
+    with pytest.raises(ValueError, match="unknown config section"):
+        Config()._apply({"newsec": {"x": 1}}, "local", written=frozenset({"newsec.x"}))
+    cfg = Config()
+    cfg._apply({"newsec": {"x": 1}}, "check", written=frozenset({"lease.ttl_s"}))
+    assert cfg.unknown_knobs == ["[newsec]"]
+
+
 def test_a_changed_default_must_name_a_release():
     with pytest.raises(ValueError, match="not a version"):
         knob(5, doc="How many.", default_changed_in="soon", default_was=3)
@@ -272,6 +302,11 @@ def test_a_changed_default_must_name_a_release():
 def test_a_source_checkout_is_told_to_merge_main(kind):
     assert "merge main" in CV.upgrade_advice("0.3.0", kind)
     assert "pip install" not in CV.upgrade_advice("0.3.0", kind)
+
+
+def test_an_unknown_install_is_never_told_to_merge_main():
+    """A path alone cannot tell a checkout from a `pip install --target` tree."""
+    assert "merge main" not in CV.upgrade_advice("0.3.0")
 
 
 @pytest.mark.parametrize("kind", ["index", "installed", "unknown"])

@@ -29,7 +29,9 @@ def _kinds_members(v: Any) -> tuple[Any, list[str]]:
     (a newer release's record kind). A value that is not a list of words is left to the check."""
     if not isinstance(v, list) or not all(isinstance(k, str) for k in v):
         return v, []
-    return [k for k in v if k in DEDUPE_KINDS], [f"kind {k!r}" for k in v if k not in DEDUPE_KINDS]
+    return [k for k in v if k in DEDUPE_KINDS], [
+        f"ignored kind {k!r} (not known to this ddflow)" for k in v if k not in DEDUPE_KINDS
+    ]
 
 
 @declare("dedupe")

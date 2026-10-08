@@ -39,7 +39,9 @@ def _waivers_members(v: Any) -> tuple[Any, list[str]]:
     if not isinstance(v, dict):
         return v, []
     keep = {k: w for k, w in v.items() if not _waivers_problem({k: w})}
-    return keep, [f"trailer waiver {k!r}" for k in v if k not in keep]
+    return keep, [
+        f"ignored trailer waiver {k!r} (not a shape this ddflow knows)" for k in v if k not in keep
+    ]
 
 
 @declare("enforce")
