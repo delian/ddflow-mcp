@@ -5317,7 +5317,9 @@ tests the change reaches — changed test files, tests importing a changed modul
 or one step removed, tests named after a changed file, everything under a changed
 `conftest.py`, tests that name a changed data file kept below a test directory (a
 fixture, a golden file, a guard baseline: by its name with its directory, else by its
-name or its nearest directory) — each with why, and prints one command that runs them in parallel
+name or its nearest directory), and the tests of repo-wide structure (the architecture guards,
+the lifecycle layout, packaging) whenever a path they govern changes: a test file says what it
+checks with a module-level `GOVERNS = ("ddflow/api/**", ...)` of globs — each with why, and prints one command that runs them in parallel
 with the project's own runner and worker flags. The agent driver tells agents to run it
 after each change; `ddflow workflow` and `ddflow doctor` say when the configured test
 command uses one core.

@@ -19,6 +19,10 @@ A test is selected when, relative to the item's base:
   the Python import graph of the repository, not from names;
 * its file name carries a changed file's stem (``test_gates.py`` for ``gates.py``) — the
   convention that covers languages this module does not parse;
+* it DECLARES it governs the changed path: a test of repo-wide structure (architecture
+  guards, a package layout, packaging) imports nothing it checks, so it says what it
+  checks with a module-level ``GOVERNS = ("ddflow/api/**", ...)`` of globs, and a change
+  to a path matching one selects it (B2a1eaa259e);
 * it names a changed DATA file -- a fixture, a golden file, a baseline -- that lives below
   a directory holding tests: a test reads one by its path, never by an import
   (`_data_readers` says how it is matched).
@@ -55,6 +59,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from ..core import globs
 from ..infra import worktree as W
 from . import gates as G
 
@@ -201,8 +206,50 @@ def select(tree: Path, base: str) -> Selection | None:
     for t, why in _data_readers(tree, changed, tests).items():
         pick(t, why)
 
+    for t, why in governed(tree, changed, tests).items():
+        pick(t, why)
+
     sel.tests = [Selected(t, reasons[t]) for t in sorted(reasons)]
     return sel
+
+
+def _governs(source: str) -> list[str]:
+    """The globs a test module's top-level ``GOVERNS = (...)`` lists; none if it has no such
+    literal (or is not valid Python: the import graph reports that on its own)."""
+    try:
+        module = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return []
+    for node in module.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "GOVERNS" for t in node.targets
+        ):
+            try:
+                value = ast.literal_eval(node.value)
+            except ValueError:
+                return []
+            if isinstance(value, (tuple, list)):
+                return [g for g in value if isinstance(g, str)]
+    return []
+
+
+def governed(tree: Path, changed: list[str], tests: list[str]) -> dict[str, str]:
+    """Each test that declares (`GOVERNS`) it checks a path in ``changed``, with why."""
+    out: dict[str, str] = {}
+    for t in tests:
+        if not t.endswith(".py"):
+            continue
+        try:
+            source = (tree / t).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if "GOVERNS" not in source:
+            continue
+        mine = _governs(source)
+        hit = next((c for c in changed if any(globs.match(c, g) for g in mine)), "")
+        if hit:
+            out[t] = f"governs {hit}"
+    return out
 
 
 def _names(text: str, word: str) -> bool:

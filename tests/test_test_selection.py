@@ -390,3 +390,37 @@ def test_a_data_file_directly_in_a_test_directory_is_matched_by_its_name(data):
 )
 def test_a_name_is_matched_whole_not_inside_a_longer_name(text, word, named):
     assert T._names(text, word) is named
+
+
+def test_a_test_that_governs_a_package_is_selected_when_the_package_changes(proj):
+    """B2a1eaa259e: a guard that checks repo-wide structure imports nothing it governs, so
+    no import or name can reach it. It declares `GOVERNS` and a change under one of those
+    paths selects it."""
+    (proj / "tests/test_layout.py").write_text(
+        'GOVERNS = ("pkg/api/**", "pyproject.toml")\n\ndef test_layout():\n    assert True\n'
+    )
+    _git(proj, "add", "-A")
+    _git(proj, "commit", "-qm", "guard")
+    (proj / "pkg/api/more.py").write_text("X = 1\n")
+    assert _picked(proj) == {"tests/test_layout.py": "governs pkg/api/more.py"}
+    (proj / "pkg/api/more.py").unlink()
+    (proj / "pkg/widget.py").write_text("WIDTH = 9\n")
+    assert "tests/test_layout.py" not in _picked(proj)
+
+
+@pytest.mark.parametrize(
+    ("changed", "guard"),
+    [
+        ("ddflow/api/lifecycle/claim.py", "tests/test_lifecycle_layout.py"),
+        ("ddflow/api/lifecycle/__init__.py", "tests/test_architecture_guards.py"),
+        ("ddflow/surfaces/tools/lifecycle.py", "tests/test_architecture_guards.py"),
+        ("ddflow/services/gates/evidence.py", "tests/test_architecture_guards.py"),
+        (".importlinter", "tests/test_architecture_guards.py"),
+        ("tests/guard_baselines/unreferenced_functions.toml", "tests/test_architecture_guards.py"),
+        ("pyproject.toml", "tests/test_packaging.py"),
+    ],
+)
+def test_the_repos_guards_are_selected_by_the_packages_they_govern(changed, guard):
+    root = Path(__file__).resolve().parents[1]
+    tests = [guard]
+    assert T.governed(root, [changed], tests) == {guard: f"governs {changed}"}
