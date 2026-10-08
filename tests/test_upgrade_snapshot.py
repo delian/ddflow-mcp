@@ -282,3 +282,58 @@ def test_a_backup_with_a_damaged_manifest_is_listed_and_restoring_it_says_why_no
     with pytest.raises(ValueError):
         BK.restore(old, "latest")
     assert A.upgrade(old, restore="latest", agent="upgrader").exit == 1
+
+
+def test_a_failed_commit_leaves_no_staged_files_and_no_sidecar(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fresh = old / "fresh.txt"  # affected, untracked: the snapshot has to commit it
+    fresh.write_text("x\n")
+    hook = old / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\n# ddflow-managed\n")
+    git(old, "config", "commit.gpgsign", "false")
+    (old / ".git" / "hooks" / "pre-commit").write_text("#!/bin/sh\nexit 1\n")  # the commit fails
+    hook.chmod(0o755)
+    head = git(old, "rev-parse", "HEAD")
+
+    with pytest.raises(BK.SnapshotRefused, match="could not commit"):
+        BK.make_snapshot(old, [fresh, hook], "a", "b")
+
+    assert git(old, "status", "--porcelain", "--untracked-files=no") == "", "nothing stays staged"
+    assert git(old, "rev-parse", "HEAD") == head and tags(old) == []
+    backups = old / ".ddflow" / "backups"
+    assert not backups.exists() or not [p for p in backups.iterdir() if p.is_dir()], "no sidecar"
+
+
+def test_a_tag_that_cannot_be_made_undoes_the_commit_it_made(old: Path) -> None:
+    fresh = old / "fresh.txt"
+    fresh.write_text("x\n")
+    head = git(old, "rev-parse", "HEAD")
+    tag = f"{BK.SNAPSHOT_PREFIX}{BK.backup_name('a', 'b')}"
+    git(old, "tag", tag)  # the name is taken
+    import ddflow.services.backups as mod
+
+    original = mod.backup_name
+    mod.backup_name = lambda frm, to: tag.removeprefix(BK.SNAPSHOT_PREFIX)
+    try:
+        with pytest.raises(BK.SnapshotRefused, match="could not tag"):
+            BK.make_snapshot(old, [fresh], "a", "b")
+    finally:
+        mod.backup_name = original
+
+    assert git(old, "rev-parse", "HEAD") == head, "our commit is undone"
+    assert (
+        fresh.read_text() == "x\n"
+        and git(old, "status", "--porcelain", "--untracked-files=no") == ""
+    )
+
+
+def test_a_dangling_link_is_not_mistaken_for_a_file_that_did_not_exist(old: Path) -> None:
+    import os
+
+    link = old / "link"
+    os.symlink("/nonexistent/target", link)
+
+    snap = BK.make_snapshot(old, [link], "a", "b")
+
+    assert "link" not in snap.created

@@ -3881,7 +3881,7 @@ for one run). Both are explained here so you can choose:
 | what it is | the files copied under `.ddflow/backups/<stamp>-<from>-to-<to>/` with a `manifest.json` | a git tag `ddflow-upgrade-snapshot/<stamp>-<from>-to-<to>` on HEAD, after committing affected files git did not track yet ("ddflow: snapshot before upgrade") |
 | where it lives | this machine only, git-ignored; the newest `[upgrade].backup_keep` (10) are kept | in the repository: shared when you push it, durable |
 | cost | disk; nothing in your history | a tag and, for untracked files, one commit; needs git, and a clean working tree (the snapshot is what HEAD holds) |
-| refused when | the backup cannot be written | there is no git, no commit, or uncommitted changes to tracked files: exit 3 and nothing is changed, with the reason |
+| stops when | the backup cannot be written (a failure, exit 1) | there is no git, no commit, or uncommitted changes to tracked files: exit 3 and nothing is changed, with the reason |
 | undo | copy the files back from `<backup>/files/in/` (`manifest.json` lists them) | `git checkout <tag> -- <file>` (the upgrade's changes stay uncommitted until you commit them; once committed, `git revert` that commit) |
 
 A snapshot cannot hold a file git ignores or one outside the project (the git hooks): those
