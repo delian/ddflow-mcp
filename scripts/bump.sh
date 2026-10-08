@@ -16,11 +16,12 @@
 # and re-reads the result. The OCI tag was the one that used to get left behind: a `:0.1.0`
 # while everything else moved publishes a manifest pointing at the PREVIOUS image.
 #
-# CI RUNS `patch` FOR YOU. `.github/workflows/publish.yml` bumps the patch version on every
-# push to main that changes shipped code, commits 'release X.Y.Z' to main, and publishes.
-# MAJOR AND MINOR ARE YOURS: run `minor`, `major` or an exact version by hand, commit and
-# push. publish.yml releases a declared version PyPI does not have yet AS IS, instead of
-# bumping it again, and the automatic patches continue from there.
+# CI BUMPS FOR YOU, BY IMPACT. `.github/workflows/publish.yml` bumps the version on every push
+# to main that changes shipped code -- a patch, or a minor when the upgrade manifest declares a
+# breaking change while ddflow is 0.x (`scripts/release_impact.py`) -- commits 'release X.Y.Z'
+# to main, and publishes. MAJOR, AND ANY EXACT VERSION, ARE YOURS: run `major` or an exact
+# version by hand, commit and push. publish.yml releases a declared version PyPI does not
+# have yet AS IS, instead of bumping it again, and the automatic bumps continue from there.
 #
 # No re-lock: uv.lock records no version for this project.
 set -eu

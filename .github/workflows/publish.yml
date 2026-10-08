@@ -1,6 +1,8 @@
 # Publish to PyPI, Docker Hub, ghcr.io and the MCP registry. A push to main that changes
-# shipped code bumps the PATCH version, commits the bump to main and releases it; a `v*`
-# tag releases exactly the version it names. The `gate` job says how the version is chosen.
+# shipped code bumps the version by the IMPACT its changes declare (a patch; a minor when the
+# upgrade manifest declares a breaking change while ddflow is 0.x), commits the bump to main
+# and releases it; a `v*` tag releases exactly the version it names. The `gate` job says how
+# the version is chosen.
 #
 # HOW THIS AUTHENTICATES, per target — four mechanisms, and only one stored secret.
 #
@@ -64,15 +66,18 @@ concurrency:
 jobs:
   # ---------------------------------------------------------------- what to publish, if anything
   gate:
-    # CI bumps only the PATCH version; major and minor are the operator's to move
-    # (operator, 2026-09-30): 0.1.1 -> 0.1.2, 1.1.2 -> 1.1.3. A push to main that changes
+    # The bump level is the IMPACT the upgrade manifest declares for the changes since the
+    # last release (D-compat, docs/ddflow/compatibility.md): only fixes, additive and
+    # deprecating changes are a PATCH (0.1.1 -> 0.1.2); a change declared `breaking`, while
+    # ddflow is 0.x, is a MINOR (0.1.1 -> 0.2.0). `scripts/release_impact.py` reads it. Major
+    # stays the operator's to move (`scripts/bump.sh major`). A push to main that changes
     # shipped code is the release decision, so nobody has to remember scripts/bump.sh.
     #
     # The rule is "publish the declared version if PyPI does not have it yet, otherwise
-    # bump patch and publish that". The first half is how a person moves major or minor
-    # (`scripts/bump.sh minor|major|X.Y.Z`, commit, push: published as declared, and the
-    # patches continue from it), and how a release that failed after its bump landed is
-    # retried with the new code instead of being skipped.
+    # bump by the declared impact and publish that". The first half is how a person moves
+    # major or minor by hand (`scripts/bump.sh minor|major|X.Y.Z`, commit, push: published
+    # as declared, and the bumps continue from it), and how a release that failed after its
+    # bump landed is retried with the new code instead of being skipped.
     #
     # The bump is committed to main BEFORE anything publishes. Pushed last, a push that
     # lost a race with another commit would leave PyPI holding a version main does not
@@ -95,6 +100,9 @@ jobs:
       sha: ${{ steps.decide.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0       # the last release is found in history, to read what changed since
+      - uses: astral-sh/setup-uv@v10.2.0
       - id: decide
         run: |
           set -eu
@@ -124,19 +132,27 @@ jobs:
             404)
               echo "$version is declared and not on PyPI yet — publishing it without a bump" ;;
             200)
-              # The next patch PyPI does NOT have. The obvious +1 can be taken already -- a
-              # `v*` tag publishes out of band, and never moves main's declared version --
-              # and committing `release X.Y.Z` for a number PyPI holds would put a false
-              # release on main before the upload failed. Checked here, before any commit.
-              next=$version
+              # The impact of what changed since the last release decides the step; then the
+              # first version at that step PyPI does NOT have. The obvious candidate can be
+              # taken already -- a `v*` tag publishes out of band, and never moves main's
+              # declared version -- and committing `release X.Y.Z` for a number PyPI holds
+              # would put a false release on main before the upload failed. Checked here,
+              # before any commit. A taken candidate moves on by patch.
+              level=patch
+              if base=$(uv run --frozen python scripts/release_impact.py base); then
+                level=$(uv run --frozen python scripts/release_impact.py level --base "$base")
+              fi
+              echo "declared impact since the last release asks for a $level bump"
+              next=$(uv run --frozen python scripts/release_impact.py next "$version" "$level")
+              taken=$(pypi "$next")
               for _ in $(seq 1 50); do
-                next=$(python3 -c 'import sys; a, b, c = sys.argv[1].split("."); print(f"{a}.{b}.{int(c) + 1}")' "$next")
-                taken=$(pypi "$next")
                 [ "$taken" = 404 ] && break
                 [ "$taken" = 200 ] || { echo "::error::PyPI answered HTTP $taken for ddflow-mcp $next"; exit 1; }
                 echo "$next is on PyPI already (released out of band) — skipping it"
+                next=$(uv run --frozen python scripts/release_impact.py next "$next" patch)
+                taken=$(pypi "$next")
               done
-              [ "$taken" = 404 ] || { echo "::error::no free patch version within 50 of $version"; exit 1; }
+              [ "$taken" = 404 ] || { echo "::error::no free version within 50 of $version"; exit 1; }
               scripts/bump.sh "$next"
               version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
               git config user.name "github-actions[bot]"
@@ -144,7 +160,7 @@ jobs:
               git commit -qam "release $version"
               # Refused if main moved since checkout: nothing has been published yet.
               git push origin "HEAD:${{ github.ref_name }}"
-              echo "bumped patch and committed to ${{ github.ref_name }} — publishing $version" ;;
+              echo "bumped $level and committed to ${{ github.ref_name }} — publishing $version" ;;
             *)
               echo "::error::PyPI answered HTTP $code for ddflow-mcp $version; cannot tell whether it is released"
               exit 1 ;;

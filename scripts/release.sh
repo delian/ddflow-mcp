@@ -6,8 +6,9 @@
 #   scripts/release.sh --publish       # ...then push to PyPI, Docker Hub, ghcr.io, MCP
 #
 # WHY THIS EXISTS ALONGSIDE .github/workflows/publish.yml. The workflow is the thing that
-# actually releases -- on every push to main that changes shipped code (bumping patch), or
-# on a `v*` tag. But a release is not reversible: PyPI refuses to re-upload
+# actually releases -- on every push to main that changes shipped code (bumping by the impact
+# the upgrade manifest declares: a patch, or a minor for a breaking change while 0.x), or on a
+# `v*` tag. But a release is not reversible: PyPI refuses to re-upload
 # a version, `:latest` is already on someone's disk by the time you notice, and a manifest
 # in the MCP registry is what an IDE marketplace offers people. So the same checks have to
 # be runnable BEFORE the tag exists, from a laptop, with no credentials — which is what
@@ -65,6 +66,38 @@ say "upgrade manifest"
 # unannounced. [release].manifest_lint decides: block (default) fails here, with the
 # options (D-upgrade-manifest-lint); warn prints; off is silent.
 uv run ddflow version lint || die "the release changes knobs or event kinds the upgrade manifest does not announce (see above)"
+
+# ---------------------------------------------------------------- 1c. the declared impact
+say "declared impact"
+# The release is numbered by the impact its changes DECLARE (docs/ddflow/compatibility.md):
+# a change the manifest marks `impact = "breaking"` is a minor release while ddflow is 0.x.
+# CI chooses the bump from the same declarations (scripts/release_impact.py); a version that
+# is a smaller step than they ask for is refused here, before anything is built.
+uv run --frozen python scripts/release_impact.py check \
+  || die "the declared version is a smaller step than the declared impact (see above)"
+
+# ---------------------------------------------------------------- 1d. the surface
+say "surface against the previous release"
+# What a release exposes (CLI commands and flags, MCP tools and arguments, config knobs, event
+# kinds) is compared with the previous release's committed snapshot (tests/compat/surfaces/).
+# A removal or a change that breaks a caller is refused unless it is declared; the full suite
+# below runs this too, but a failure here comes with the operator's options and costs seconds.
+uv run --frozen pytest tests/compat/test_surface.py -q --timeout=300 || {
+  cat >&2 <<'EOF'
+
+The surface differs from the previous release in a way nothing declares. Options
+(docs/ddflow/compatibility.md, decision D-compat):
+  1. Keep the old name working: a renamed or removed command, flag, tool, argument or knob
+     keeps answering through a declared alias until 1.0. This is the usual answer.
+  2. Announce a knob or event-kind change in the upgrade manifest: `uv run ddflow version lint`
+     names the entry that is missing (scripts/upgrade_manifest.py writes it).
+  3. If the break is deliberate: declare `impact = "breaking"` in the manifest entry (the
+     release is then a minor while ddflow is 0.x: `scripts/bump.sh minor`) and, for a command,
+     flag, tool or argument, list it in DECLARED in tests/compat/test_surface.py with the bug
+     that tracks it.
+EOF
+  die "the surface changed without a declaration (see above)"
+}
 
 # ---------------------------------------------------------------- 2. the suite
 say "tests"
