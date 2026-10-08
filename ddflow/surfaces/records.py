@@ -262,6 +262,8 @@ def dispatch(
         raise ValueError(f"{verb} needs id")
     if verb == "search" and not args.get("query"):
         raise ValueError("search needs query")
+    if verb in ("remove", "revise") and not str(args.get("reason") or "").strip():
+        raise ValueError(f"{verb} needs reason")
     common: dict[str, Any] = {"agent": agent}
     if verb in ("list", "search"):
         common.update(
