@@ -16,6 +16,8 @@ one list, grouped by CATEGORY:
   their confirmation (decision D-upgrade-config-changes);
 - `instructions`: driver docs, rules blocks and native rules whose bytes differ from the ones
   this ddflow ships, and whether the drift is a release's (`stale`) or an edit (`hand-edited`);
+  also a note per file whose OWN text names a deprecated command or tool (never edited for
+  you: the `stale-references` migration rewrites only what ddflow wrote);
 - `hooks`: git and harness hooks that point at a launcher that is gone, and the harness hooks
   an adopted agent should have and does not;
 - `mcp`: an MCP entry that launches a ddflow that is gone;
@@ -42,6 +44,8 @@ from . import launchers as LA
 from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_manifest as UM
+from .compat_refs import DEPRECATED, UNCHECKED, scan
+from .migrations import refs as MR
 
 CATEGORIES = ("repairs", "migrations", "config", "instructions", "hooks", "mcp", "features")
 
@@ -50,6 +54,7 @@ OPERATOR = "needs operator confirmation"
 NOTE = "note"
 
 _SHOWN = 8  #: findings quoted per repair in the text
+_FILES_SHOWN = 3  #: files named in an "unchecked" note
 
 
 def project_version(st: State, has_history: bool, running: str) -> str:
@@ -328,6 +333,73 @@ def instruction_items(
     return out
 
 
+def _until(found: list[Any]) -> str:
+    """When the old names stop working: each alias's own ``removed_in`` (D-compat: none before
+    1.0), not a number written here."""
+    versions = sorted(
+        {f.ref.renamed.removed_in for f in found if f.ref.renamed and f.ref.renamed.removed_in},
+        key=version_key,
+    )
+    return " / ".join(versions) if versions else "their removal"
+
+
+def reference_items(repo: Path) -> list[dict[str, Any]]:
+    """One note per file whose OWN text (not a region ddflow wrote) names a deprecated command
+    or tool. An upgrade never edits it: the plan says what to change, the alias keeps the old
+    name working. (What ddflow wrote itself is rewritten by the `stale-references` migration.)
+    References this process had no table to judge are one more note that says so, never
+    silence: "nobody looked" must not read as "none". A caller with no vocabulary at all (a
+    library use that wired no surface; the CLI and the MCP server always do) gets nothing,
+    exactly as `doctor`'s stale-reference check reports nothing then."""
+    vocab = MR._vocabulary()
+    if vocab is None:
+        return []  # nothing loaded to judge names by: nothing is reported (as `doctor` does)
+    by_path: dict[str, list[Any]] = {}
+    unchecked: list[Any] = []
+    for f in scan(repo, vocab):
+        if f.ref.status == UNCHECKED:
+            unchecked.append(f)
+        elif not f.managed and f.ref.status == DEPRECATED and f.ref.replacement:
+            by_path.setdefault(f.path, []).append(f)
+    out: list[dict[str, Any]] = []
+    for path, found in sorted(by_path.items()):
+        out.append(
+            {
+                "category": "instructions",
+                "id": f"instructions:references:{path}",
+                "path": path,
+                "state": "references",
+                "provenance": "yours",
+                "summary": f"{path} names {len(found)} deprecated ddflow name(s) in your own text",
+                "findings": [{"key": f.where, "detail": f.proposal} for f in found[:_SHOWN]],
+                "finding_count": len(found),
+                "action": NOTE,
+                "fix": f"edit them yourself; the old names keep working until {_until(found)}",
+            }
+        )
+    if unchecked:
+        kinds = sorted({f.ref.kind for f in unchecked})
+        files = sorted({f.path for f in unchecked})
+        table = "command table" if "command" in kinds else "tool table"
+        shown = ", ".join(files[:_FILES_SHOWN]) + (" ..." if len(files) > _FILES_SHOWN else "")
+        out.append(
+            {
+                "category": "instructions",
+                "id": "instructions:references:unchecked",
+                "path": files[0],
+                "state": "references",
+                "provenance": "unchecked",
+                "summary": (
+                    f"{len(unchecked)} {'/'.join(kinds)} reference(s) in {shown} were not "
+                    f"checked: this process has no {table} loaded"
+                ),
+                "action": NOTE,
+                "fix": "run `ddflow upgrade --plan` from the CLI, which loads both tables",
+            }
+        )
+    return out
+
+
 def hook_items(repo: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     mcp = LA.check_mcp(repo)
@@ -410,7 +482,8 @@ def build(
         "repairs": repair_items(repo, log, cfg),
         "migrations": migration_items(repo, log, cfg, running),
         "config": config_items(changes, cfg),
-        "instructions": instruction_items(repo, not baseline or is_older(baseline, running)),
+        "instructions": instruction_items(repo, not baseline or is_older(baseline, running))
+        + reference_items(repo),
         "hooks": hook_items(repo),
         "mcp": mcp_items(repo),
         "features": feature_items(changes),
