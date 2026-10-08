@@ -136,3 +136,29 @@ def test_a_big_untracked_file_rewritten_in_place_is_seen(tmp_path):
     big.write_bytes(b"b" * (9 << 20))
     os.utime(big, ns=(stamp, stamp))
     assert git_state(repo) != before
+
+
+def test_an_unreadable_untracked_listing_is_not_a_change(tmp_path, monkeypatch):
+    """B049f8ce85d: `ls-files` failing under load made one snapshot's untracked part
+    "unreadable" and the other a real digest; that difference was reported as the reviewer
+    tool changing git state. A part one snapshot could not read is left out of the
+    comparison. A part that WAS read in both and differs is still a change."""
+    from ddflow.services.gates import reviewers as RV
+
+    repo = _repo_with_stash(tmp_path)
+    (repo / "new.txt").write_text("x\n")
+    before = git_state(repo)
+    real = RV._untracked_content_digest
+    monkeypatch.setattr(RV, "_untracked_content_digest", lambda where: "unreadable")
+    after = git_state(repo)
+    assert after["untracked"] == "unreadable" and before["untracked"] != "unreadable"
+    assert RV.git_state_change(before, after) == ""
+    assert RV.git_state_change(after, before) == ""
+    # A real change elsewhere is still seen, with the unreadable part ignored.
+    _git(repo, "stash", "apply", "-q")
+    moved = RV.git_state(repo)
+    assert "status" in RV.git_state_change(before, moved)
+    # Readable on both sides: a rewritten untracked file is still a change.
+    monkeypatch.setattr(RV, "_untracked_content_digest", real)
+    (repo / "new.txt").write_text("changed\n")
+    assert "untracked" in RV.git_state_change(before, RV.git_state(repo))

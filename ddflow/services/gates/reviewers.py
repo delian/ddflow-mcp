@@ -240,6 +240,10 @@ def _file_digest(path: Path) -> str:
     return h.hexdigest()[:16]
 
 
+#: The digest of a part git could not list; never compared as a value.
+_UNREADABLE = "unreadable"
+
+
 def _untracked_content_digest(where: Path | str) -> str:
     """A digest of the untracked (not ignored) files' CONTENTS: ``status`` lists their
     paths only and ``diff HEAD`` omits them, so a tool rewriting one would pass unseen."""
@@ -248,7 +252,7 @@ def _untracked_content_digest(where: Path | str) -> str:
     )
     names = r.paths() if r.ok else None
     if names is None:
-        return "unreadable"
+        return _UNREADABLE
     h = []
     for name in sorted(names):
         path = Path(where) / name
@@ -266,13 +270,23 @@ def _untracked_content_digest(where: Path | str) -> str:
 def git_state_change(before: dict[str, str] | None, after: dict[str, str] | None) -> str:
     """ "" when the state is as it was (or could not be compared), else a sentence naming
     which parts changed. A state that was readable before and is not now is a change:
-    the tool broke the repository. Only an unreadable START cannot be compared."""
+    the tool broke the repository. An unreadable START cannot be compared, and a part
+    (the untracked listing) that either snapshot could not read is left out: "could not
+    list" is not "changed" (B049f8ce85d), at the cost of not watching that part then."""
     if before is None or before == after:
         return ""
     if after is None:
         changed = "unreadable afterwards"
     else:
-        changed = ", ".join(k for k in before if before[k] != after.get(k))
+        # A part one snapshot could not read (a listing that failed or timed out under
+        # load, B049f8ce85d) says nothing about a change: it is left out.
+        changed = ", ".join(
+            k
+            for k in before
+            if before[k] != after.get(k) and _UNREADABLE not in (before[k], after.get(k))
+        )
+        if not changed:
+            return ""
     return (
         f"the reviewer tool changed git state ({changed}) -- a review must leave HEAD, "
         f"the index, the working tree and the stash list as it found them (e.g. `git stash "
