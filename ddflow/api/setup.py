@@ -503,7 +503,7 @@ def _check_msg(repo: Path, cfg, msg_file: str) -> O.Outcome:
     for `check-commit`, so a commit in a linked worktree is checked against the one
     queue every worktree shares.
     """
-    from ..infra import proc as P
+    from ..infra import git as G
     from ..services import enforce as E
 
     data: dict[str, Any] = {"message": "", "installed": True, "policy": ""}
@@ -527,21 +527,14 @@ def _check_msg(repo: Path, cfg, msg_file: str) -> O.Outcome:
     # A merge really in progress: MERGE_HEAD resolves AND is not already contained in
     # HEAD. A stale or planted MERGE_HEAD pointing at HEAD exempted every ordinary
     # commit from the trailer rule (rubber-duck).
-    head = P.run(
-        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    merging = head.returncode == 0 and (
-        P.run(
-            ["git", "merge-base", "--is-ancestor", head.stdout.strip(), "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        ).returncode
-        != 0
-    )
+    head = G.run(".", "rev-parse", "-q", "--verify", "MERGE_HEAD", timeout=G.PROBE_TIMEOUT)
+    merging = False
+    if head.ok:
+        # A probe git could not answer is not "not an ancestor": it would exempt the commit.
+        ancestor = G.run(
+            ".", "merge-base", "--is-ancestor", head.out, "HEAD", timeout=G.PROBE_TIMEOUT
+        )
+        merging = not ancestor.unavailable and ancestor.code != 0
     code, msg = E.check_item_trailer(
         text,
         list(cfg.enforce.item_trailer_keys) or ["Item"],

@@ -31,6 +31,8 @@ from . import proc as P
 
 #: Seconds a git call may run unless the caller says otherwise.
 GIT_TIMEOUT = P.TIMEOUTS["git"]
+#: Seconds a quick probe of the environment may run (`rev-parse`, `config`, a trailer parse).
+PROBE_TIMEOUT = P.TIMEOUTS["probe"]
 #: Seconds a path listing (`git_paths`) may run.
 LISTING_TIMEOUT = P.TIMEOUTS["git_listing"]
 
