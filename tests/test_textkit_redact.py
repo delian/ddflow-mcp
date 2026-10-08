@@ -106,3 +106,45 @@ def test_the_full_hostname_is_redacted_before_its_short_label():
         "on devbox.example.com"
     )
     assert out.text == "on [REDACTED:hostname]"
+
+
+@pytest.mark.parametrize(
+    ("text", "want"),
+    [
+        ("token=abc:def", "token= [REDACTED]"),
+        ("token=abc=def", "token= [REDACTED]"),
+        ("token: abc=def", "token: [REDACTED]"),
+        ("Bearer abc:def", "Bearer [REDACTED]"),
+    ],
+)
+def test_masking_splits_at_the_first_separator_so_no_value_prefix_survives(text, want):
+    out, n = R.mask_secrets(text, [r"(?i)(token|bearer)\s*[:=]?\s*\S+"])
+    assert (out, n) == (want, 1)
+
+
+@pytest.mark.parametrize("name", list(R.PROFILES))
+def test_a_secret_straddling_an_existing_marker_is_removed_whole(name):
+    cfg = Config()
+    cfg.session.redact_extra = [r"hunter\S+"]
+    out = redact_report.redactor(name, cfg).text("pw hunter2[REDACTED:x]tail2 end").text
+    assert "tail2" not in out
+    assert "hunter" not in out
+
+
+def test_masking_is_idempotent_with_a_straddling_marker_pattern():
+    first = R.mask_secrets("api_key: abc123", [r"(?i)api_key\s*:\s*\S+"])[0]
+    assert R.mask_secrets(first, [r"(?i)api_key\s*:\s*\S+"]) == (first, 0)
+
+
+def test_redact_report_applies_the_configured_project_names_like_the_upstream_profile():
+    cfg = Config()
+    cfg.upstream = type("U", (), {"redact_extra": ["acme-internal"]})()
+    text = "deploy acme-internal now"
+    assert (
+        redact_report.redact_report(text, cfg=cfg, repo_root="").text
+        == redact_report.redactor("upstream", cfg, repo_root="").text(text).text
+    )
+
+
+def test_a_padded_base64_match_with_a_trailing_colon_is_blanked_whole():
+    assert R.mask_secrets("cGFzc3dvcmQ=:", [r"\S+"]) == ("[REDACTED]", 1)
