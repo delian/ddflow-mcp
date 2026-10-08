@@ -113,7 +113,7 @@ def redact_report(
     text: object,
     *,
     hostname: str | None = None,
-    names: Iterable[str] = (),
+    names: Iterable[str] | None = None,
     home: str | os.PathLike[str] | None = None,
     repo_root: str | os.PathLike[str] | None = None,
     cfg: Config | None = None,
@@ -125,6 +125,6 @@ def redact_report(
     return redact_text(
         text,
         secret_patterns=patterns,
-        names=names,
+        names=names_for(cfg) if names is None else names,
         **_resolved(hostname, home, repo_root),
     )
