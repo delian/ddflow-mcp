@@ -121,3 +121,23 @@ def test_two_non_utf8_names_are_not_confused_when_the_diff_drops_one(repo):
     only_one = "".join(s for s in unidiff.sections(full) if "\\351" in s.split("\n")[0])
     assert only_one
     assert W.diff_covers_everything(repo, only_one) == (False, [two])
+
+
+def test_lossy_names_cover_only_as_many_changed_files_as_the_diff_shows(repo):
+    """Under `core.quotepath=false` two non-UTF-8 names read the same in the diff text, so
+    a diff that shows one section must not cover both changed files."""
+    import os
+
+    one, two = os.fsdecode(b"a\xe9"), os.fsdecode(b"a\x80")
+    _git(repo, "config", "core.quotepath", "false")
+    for name in (one, two):
+        (repo / name).write_text("1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    for name in (one, two):
+        (repo / name).write_text("2\n")
+    full = _diff(repo)
+    assert W.diff_covers_everything(repo, full) == (True, [])
+    first = next(unidiff.sections(full))
+    ok, missing = W.diff_covers_everything(repo, first)
+    assert not ok and len(missing) == 1
