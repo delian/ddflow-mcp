@@ -164,8 +164,9 @@ def test_emit_json_is_the_bytes_every_command_printed(capsys):
     assert capsys.readouterr().out == "[]\n"
 
 
-#: Modules that still print their own JSON; the list may only shrink. `reporting.py` and
-#: `cli.py` were held by another agent when the emitter landed.
+#: An UPPER BOUND on the modules that print their own JSON, not an exact list: `reporting.py`
+#: and `cli.py` were held by another agent when the emitter landed, and whoever migrates one
+#: may land first. The migrating change deletes its entry here; the list only shrinks.
 _OWN_JSON = {"reporting.py", "cli.py"}
 
 
