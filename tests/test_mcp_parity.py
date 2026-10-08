@@ -18,7 +18,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ddflow.surfaces import exemptions as X
 from ddflow.surfaces.cli import build_parser
+from ddflow.surfaces.exemptions import EXEMPTIONS
 from ddflow.surfaces.mcp import TOOLS
 
 #: EXEMPTION: the `[mcp].tools` tier (core | standard | all) changes what `tools/list`
@@ -26,29 +28,11 @@ from ddflow.surfaces.mcp import TOOLS
 #: so parity is checked against all tools whatever tier a server runs at; a tool a tier
 #: hides is still callable by name. `tests/test_mcp_tool_tiers.py` pins that.
 
-#: CLI command -> the MCP tool(s) that cover it, when the names differ.
-ALIASES: dict[str, tuple[str, ...]] = {
-    "init": ("ddflow_setup",),
-    "adopt": ("ddflow_setup",),
-    "config": ("ddflow_configure",),
-}
-
-#: CLI commands deliberately NOT exposed, each with its reason.
-NOT_EXPOSED: dict[str, str] = {
-    "mcp": "starts the MCP server itself; exposing it over MCP would be recursive",
-    "search": (
-        "people-facing viewer; the consolidated MCP read tool that will carry it is the "
-        "later task B-view-mcp-list (tools/list byte budget), until then agents use "
-        "`ddflow_recall` and `ddflow_history`"
-    ),
-    "approve": (
-        "clears a HUMAN-approval gate, and the whole point is that the agent cannot. "
-        "A human checkpoint reachable from the MCP surface is not a human checkpoint — "
-        "it is a second `gate record` with a longer name. This exemption is the "
-        "feature, not an oversight, and `test_no_mcp_tool_can_clear_a_human_gate` "
-        "asserts it holds end to end rather than resting on this line."
-    ),
-}
+#: The exemptions are FIELDS of the command registry (`surfaces/exemptions.py`), and every
+#: table below is derived from them: command-level (`NOT_EXPOSED`, `ALIASES`), per-leaf
+#: (`LEAF_NOT_EXPOSED`, `LEAF_VIA`), per-flag (`FLAG_EXEMPTIONS`) and prose (`PROSE_TOOLS`).
+EXEMPT_WORDS = X.EXEMPT_WORDS
+ALIASES: dict[str, tuple[str, ...]] = X.COVERING_TOOLS
 
 
 def cli_commands() -> list[str]:
@@ -58,7 +42,7 @@ def cli_commands() -> list[str]:
 
 
 def covered(cmd: str) -> bool:
-    if cmd in NOT_EXPOSED:
+    if cmd in EXEMPT_WORDS or (cmd,) in LEAF_VIA:
         return True
     for alias in ALIASES.get(cmd, ()):
         if alias in TOOLS:
@@ -95,91 +79,12 @@ def cli_leaves() -> list[tuple[str, ...]]:
 
 
 #: Subcommand paths deliberately NOT exposed, each with its reason.
-LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
-    ("mcp",): "starts the MCP server itself; exposing it over MCP would be recursive",
-    ("approve",): (
-        "clears a HUMAN-approval gate, and the whole point is that the agent cannot. "
-        "See NOT_EXPOSED for the full reason; the property is asserted end to end by "
-        "test_no_mcp_tool_can_clear_a_human_gate rather than resting on this line."
-    ),
-    ("version", "lint"): (
-        "the release lint runs inside ddflow_version_cut (also with dry_run), and its waiver "
-        "is the operator's decision, from the CLI; a tool of its own would cost every "
-        "client's tools/list for a check only a release-maker runs"
-    ),
-    ("hooks", "status"): "covered by ddflow_hooks, whose action argument selects it",
-    ("hooks", "install"): "covered by ddflow_hooks, whose action argument selects it",
-    ("hooks", "uninstall"): "covered by ddflow_hooks, whose action argument selects it",
-    ("prompts", "list"): "covered by ddflow_prompts, whose action argument selects it",
-    ("prompts", "show"): "covered by ddflow_prompts, whose action argument selects it",
-    ("prompts", "eject"): "covered by ddflow_prompts, whose action argument selects it",
-    ("prompts", "get"): "covered by ddflow_prompts, whose action argument selects it",
-    ("companions", "list"): "covered by ddflow_companions",
-    ("companions", "add"): "covered by ddflow_companions_add",
-    ("config",): "covered by ddflow_configure, which reads and writes the same knobs",
-    ("decision", "search"): (
-        "covered by ddflow_recall, which searches decisions along with everything "
-        "else the project remembers — one search beats five"
-    ),
-    ("hooks", "session-start"): (
-        "invoked BY the Claude Code SessionStart hook to put the brief into a new "
-        "session; over MCP that is ddflow_brief"
-    ),
-    ("session", "adopt-orphans"): (
-        "a one-off backfill an operator runs after ddflow doctor names id-less prompts; "
-        "agents record with ddflow_session_prompt, which never lacks a session now"
-    ),
-    ("hooks", "pre-compact"): (
-        "invoked by Claude Code's own PreCompact hook with its JSON on stdin; an agent "
-        "never calls it, and the record it writes is a session note (ddflow_session_note)"
-    ),
-    ("hooks", "prompt"): (
-        "invoked BY the harness's prompt hook with the prompt's JSON on stdin; an agent "
-        "records its own words with ddflow_session_prompt"
-    ),
-    ("hooks", "check-msg"): (
-        "invoked BY the installed commit-msg hook with the message being committed; "
-        "it is not something an agent calls"
-    ),
-    ("hooks", "check-commit"): (
-        "invoked BY the installed git hook, inside the commit that is being checked; "
-        "it is not something an agent calls"
-    ),
-    ("reviewers", "presets"): (
-        "lists boilerplate for authoring reviewer config, which pairs with "
-        "`reviewers add` — an operator edit, exempt for the same reason"
-    ),
-    ("reviewers", "add"): (
-        "writes an API-key env-var name into project config; a config edit an "
-        "operator should make deliberately, not an agent mid-task"
-    ),
-    ("reviewers", "approve"): (
-        "a PERSON vouches for a tool-written reviewer (decision D-reviewer-trust); an "
-        "agent that could approve the reviewer it wrote would make the record decorative. "
-        "test_approve_is_not_an_mcp_tool asserts there is no such tool."
-    ),
-    ("reviewers", "detect"): "covered by ddflow_reviewers_detect",
-    ("reviewers", "list"): "covered by ddflow_reviewers_list",
-    ("reviewers", "test"): "covered by ddflow_reviewers_detect, which probes the same way",
-    ("adopt",): "covered by ddflow_setup",
-    ("init",): "covered by ddflow_setup",
-}
-
+LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = X.EXEMPT_PATHS
 
 #: Read-only viewer leaves served by ONE consolidated tool (a per-leaf tool would cost
-#: tools/list bytes for no capability): leaf -> (tool, the `kind` that selects it).
-LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = {
-    ("task", "list"): ("ddflow_list", "task"),
-    ("phase", "list"): ("ddflow_list", "phase"),
-    ("bug", "list"): ("ddflow_list", "bug"),
-    ("lesson", "list"): ("ddflow_list", "lesson"),
-    ("session", "list"): ("ddflow_list", "session"),
-    ("session", "show"): ("ddflow_list", "session"),
-    ("search",): ("ddflow_list", "search"),
-    # Not a viewer: `bug reopen` is `ddflow_bug_invalid` with `reopen=true`, the one
-    # bug-closure tool, rather than a tool of its own (tools/list byte budget).
-    ("bug", "reopen"): ("ddflow_bug_invalid", "reopen"),
-}
+#: tools/list bytes for no capability): leaf -> (tool, the `kind` that selects it). Also
+#: `bug reopen`, which is `ddflow_bug_invalid` with `reopen=true`, not a tool of its own.
+LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = X.ROUTED_PATHS
 
 
 def _tool_stem(path: tuple[str, ...]) -> str:
@@ -213,6 +118,12 @@ def test_the_leaf_exemptions_are_real_and_reasoned():
         assert len(reason) > 20, f"{path}: the exemption needs a real reason"
 
 
+def test_the_routed_leaves_are_real():
+    live = set(cli_leaves())
+    stale = [p for p in LEAF_VIA if p not in live]
+    assert not stale, f"routes declared for subcommands that no longer exist: {stale}"
+
+
 def test_the_leaf_detector_can_fail():
     assert not leaf_covered(("definitely", "not", "a", "tool"))
 
@@ -227,10 +138,13 @@ def test_every_cli_command_is_reachable_over_mcp():
 
 
 def test_the_exemption_list_only_shrinks():
-    stale = [c for c in NOT_EXPOSED if c not in cli_commands()]
+    stale = [c for c in EXEMPT_WORDS if c not in cli_commands()]
     assert not stale, f"exemptions for commands that no longer exist: {stale}"
-    for cmd, reason in NOT_EXPOSED.items():
-        assert len(reason) > 20, f"{cmd}: the exemption needs a real reason"
+    for c in EXEMPTIONS:
+        if len(c.path) == 1 and c.reason:
+            assert len(c.reason) > 20, f"{c.path}: the exemption needs a real reason"
+        if c.path and not (c.reason or c.via):
+            raise AssertionError(f"{c.path}: a declaration with neither a reason nor a route")
 
 
 def test_the_aliases_all_resolve():
@@ -292,105 +206,7 @@ def _cli_flags(argv: list[str]) -> set[str]:
 
 #: CLI flags deliberately absent from an MCP tool, each with the reason. An entry here
 #: is a decision on the record; an omission that is NOT here is a divergence.
-FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
-    # `ddflow search` shares ddflow_list with the other viewers, whose `kind` selects the
-    # viewer; the search's own `--kind` (which sources) is `sources`, and `--exact` /
-    # `--regex` (a mutually exclusive pair) are `mode`.
-    (
-        "ddflow_ci",
-        "--stage",
-    ): "`ci record` is for the pre-push hook script, which has a shell and no MCP session",
-    ("ddflow_ci", "--result"): "`ci record`: see --stage",
-    ("ddflow_ci", "--report"): "`ci record`: see --stage",
-    ("ddflow_ci", "--sha"): "`ci record`: see --stage",
-    ("ddflow_verify", "--all"): "a sweep is what omitting `id` means",
-    ("ddflow_doctor", "--upgrade"): "the same as `ddflow upgrade`, which is `ddflow_upgrade`",
-    ("ddflow_list", "--kind"): "carried by `sources`: `kind` selects the viewer",
-    ("ddflow_list", "--exact"): "carried by `mode`=exact",
-    ("ddflow_list", "--regex"): "carried by `mode`=regex",
-    # `ddflow review triage <id>` is the same parser as `ddflow review`: its flags are
-    # listed there, and over MCP it is its own tool, `ddflow_review_triage`.
-    **{
-        (
-            "ddflow_review",
-            f,
-        ): "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)"
-        for f in ("--finding", "--refuted", "--confirmed", "--probe")
-    },
-    # The round budget is the operator's (D-review-budget): an agent may not lift it for
-    # an item. `--force --reason` is the recorded per-item exception, CLI only;
-    # `ddflow_configure` (reported to the operator) is the MCP route to change the knob.
-    **{
-        ("ddflow_review", f): "lifting the review-round budget belongs to the operator"
-        for f in ("--force", "--reason")
-    },
-    # `gate skip` shares its argparse parent with `gate record`, so `--help` lists
-    # record's evidence flags. They are meaningless for a skip: a skipped gate produced
-    # no command, no exit code and no reviewer, which is the whole point of calling it
-    # skipped rather than passed. Only `--reason` is real here, and it is required.
-    ("ddflow_gate_skip", "--outcome"): "a skip IS the outcome",
-    ("ddflow_gate_skip", "--evidence"): "a skipped gate produced none; that is what skipped means",
-    ("ddflow_gate_skip", "--command"): "nothing ran",
-    ("ddflow_gate_skip", "--exit-code"): "nothing ran",
-    ("ddflow_gate_skip", "--output-file"): "nothing ran",
-    ("ddflow_gate_skip", "--model"): "no reviewer performed it",
-    # `import --verify` is a different QUESTION, not a mode of importing, so it gets
-    # its own tool with its own description rather than a boolean on this one. Folding
-    # it in would let an agent send `apply=true, verify=true`, which means nothing and
-    # would silently do one of them.
-    ("ddflow_import", "--verify"): "covered by ddflow_import_verify, its own tool",
-    # `export`: the tool's writing is `write=true` + `path`; an agent never overrides hand-edit
-    # protection or points the renderer at an arbitrary file (D-export-templates).
-    ("ddflow_export", "--update"): "MCP writes with write=true plus a repo-relative path",
-    ("ddflow_export", "--out"): "MCP: write=true plus path (the same path-safety rules)",
-    (
-        "ddflow_export",
-        "--force",
-    ): "overriding hand-edit protection is the operator's, at a terminal",
-    ("ddflow_export", "--template"): "an agent never feeds the renderer an arbitrary file",
-    ("ddflow_export", "--lock"): "the operator's veto: a person at a terminal locks a document",
-    ("ddflow_export", "--local"): "a per-machine selection is the operator's, at a terminal",
-    ("ddflow_export", "--yes"): "answers the terminal confirmation, which MCP has none of",
-    # The answer flags of the add-time duplicate check are ONE MCP argument: `relation`
-    # ("new", "extends:ID", "duplicate_of:ID", "related:ID" -- a mutually exclusive set
-    # is a single string, not four booleans), and `--check` is `check_only`. The pair is
-    # on every add tool (tests/test_add_dedupe_mcp.py).
-    **{
-        (tool, flag): "the duplicate-check answer: MCP `relation` / `check_only`"
-        for tool in (
-            "ddflow_phase_add",
-            "ddflow_task_add",
-            "ddflow_bug_found",
-            "ddflow_lesson_add",
-            "ddflow_decision_add",
-            "ddflow_research_add",
-            "ddflow_memory_add",
-        )
-        for flag in ("--new", "--extends", "--duplicate-of", "--related", "--check")
-    },
-    # `ddflow link` picks ONE relation with a flag; over MCP that is `relation` (a single
-    # string) plus `target`, exactly as the add tools fold the mutually exclusive answer
-    # flags into `relation`. One relation per call, whichever surface it comes from.
-    **{
-        (
-            "ddflow_link",
-            flag,
-        ): "the relation is MCP `relation` + `target`, not one flag per relation"
-        for flag in ("--extends", "--duplicate-of", "--related", "--distinct")
-    },
-    ("ddflow_bisect", "--glob"): (
-        "where candidates come from stays the default tests/**/test_*.py over MCP; an agent "
-        "names `candidates` when the suite lives elsewhere (tools/list byte budget)"
-    ),
-    ("ddflow_bisect", "--repeat"): (
-        "re-running each probe is a terminal-side choice for a flaky pollution "
-        "(tools/list byte budget)"
-    ),
-    ("ddflow_bisect", "--max-runs"): (
-        "the run budget is the operator's, set at a terminal; the default 200 bounds an "
-        "agent's call (tools/list byte budget)"
-    ),
-}
+FLAG_EXEMPTIONS: dict[tuple[str, str], str] = X.FLAG_EXEMPT
 
 
 def _tool_for(path: tuple[str, ...]) -> str | None:
@@ -448,41 +264,13 @@ def test_every_cli_flag_is_reachable_from_its_mcp_tool(tool, argv):
 
 # -- JSON or prose, but decided rather than accidental --------------------------------
 
-#: Tools that deliberately return PROSE rather than JSON, each with the reason.
-#:
-#: The distinction is real and worth keeping: some of these tools exist to hand the
-#: model an *instruction* — the next gate's prompt, the decisions in force, the
-#: reconstruction narrative — and JSON-encoding a paragraph so the client can decode it
-#: again helps nobody. But it was not a decision, it was an accident: `decision_add`
-#: returned JSON while `task_add` returned prose, for no reason either could state.
-PROSE_TOOLS: dict[str, str] = {
-    "ddflow_brief": "a budgeted reading pack — rules, decisions and lessons as text to read",
-    "ddflow_board": "a rendered markdown board, meant to be shown or committed as-is",
-    "ddflow_gate_status": "carries the next gate's INSTRUCTION, which is the useful half",
-    "ddflow_replay": "the reconstruction narrative; the whole output is the deliverable",
-    "ddflow_doctor": "a health report written to be read, with remedies in prose",
-    "ddflow_lesson_verify": (
-        "names the sites a forbidden pattern reappeared at; the list IS the finding, and the "
-        "point of B20 is that a caller reads which rather than parsing how many"
-    ),
-    "ddflow_configure": "prints every knob with its documentation and its source",
-    "ddflow_setup": "a checklist of what it wrote and what to do next",
-    "ddflow_review": "reviewer findings, already formatted with their severities",
-    "ddflow_review_triage": "one confirmation line, which is the whole answer",
-    "ddflow_reviewers_list": "a table, plus the warning about unclassified reviewers",
-    "ddflow_reviewers_detect": "a probe report naming each endpoint and what answered",
-    # Prose for SOME arguments: `--show <view>` returns the rendered document, while
-    # `render` alone returns the list of files it wrote. Both are pre-existing contracts.
-    #
-    # It was missing from this list before the migration, and not because anyone decided
-    # it should be: the check built ONE stub argument dict, that stub had no `show` key,
-    # so it only ever saw the JSON branch. A tool whose shape depends on its arguments was
-    # judged on the arguments the test happened to pass.
-    "ddflow_render": "with --show it returns the rendered view itself, to read or commit",
-    # Prose for SOME arguments, like `render`: `show` returns the template TEXT and
-    # `eject` the list of files it wrote, while `list` is a table callers parse.
-    "ddflow_prompts": "with show it returns the template itself, which is the thing to read",
-}
+#: Tools that deliberately return PROSE rather than JSON, each with the reason (the
+#: `prose_reason` of their declaration). The distinction is real: some tools hand the model
+#: an *instruction* or a document, and JSON-encoding a paragraph helps nobody. But it must be
+#: a decision, never an accident (`decision_add` returned JSON while `task_add` returned prose
+#: for no reason either could state). A tool prose for SOME arguments (`render --show`,
+#: `prompts show`) is declared too: prose is a shape it has.
+PROSE_TOOLS: dict[str, str] = X.PROSE_REASONS
 
 
 def test_every_tool_is_explicitly_json_or_explicitly_prose():
