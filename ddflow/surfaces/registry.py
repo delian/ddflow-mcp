@@ -68,6 +68,8 @@ class Param:
             raise ValueError(f"param {self.name!r}: type {self.type!r} not in {TYPES}")
         if self.repeat and self.type != "array":
             object.__setattr__(self, "type", "array")
+        if self.positional and self.default is not _UNSET:
+            raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
         if self.positional and not self.required:
             # argparse refuses a missing positional, so the schema must say it is required.
             object.__setattr__(self, "required", True)
