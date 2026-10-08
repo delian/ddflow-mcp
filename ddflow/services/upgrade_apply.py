@@ -257,8 +257,9 @@ def apply(
     ``from``/``to``, ``noop`` and the ``text`` for a person. ``exit`` is 0 when everything
     chosen was applied, acknowledged or already fine, 1 when an applier failed, 3 when an
     item waits for the operator's confirmation, 2 when a step could not run (a repair whose
-    detector was unavailable). Raises ValueError for an unknown category,
-    ``config_changes`` or ``backup`` value."""
+    detector was unavailable). Raises ValueError for an unknown category or
+    ``backup`` value. Who may apply a config change is the `[upgrade].config_changes` knob
+    (``cfg.upgrade``), the same one the plan reads."""
     repo = Path(repo)
     config_changes = cfg.upgrade.config_changes  # the one source: the plan reads it too
     _check_modes(backup, config_changes)
