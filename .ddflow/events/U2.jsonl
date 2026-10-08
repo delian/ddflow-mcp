@@ -3148,3 +3148,4 @@
 {"agent":"U2","data":{"at":1791445202.9956226,"holder":"U2"},"id":"e9a5f90a8c0cba1677531eb49","kind":"lease.renewed","lamport":39012,"schema":1,"subject":"B-upgrade.4-apply.1b-wire","ts":"2026-10-08T07:40:03.093644Z"}
 {"agent":"U2","data":{"at":1791445328.4277442,"holder":"U2"},"id":"e39be103b3cae6b3bef26c7aa","kind":"lease.renewed","lamport":39018,"schema":1,"subject":"B-upgrade.4-apply.1b-wire","ts":"2026-10-08T07:42:08.523741Z"}
 {"agent":"U2","data":{"at":1791445451.9336517,"holder":"U2"},"id":"e8a6937d31f3f97129b8775d1","kind":"lease.renewed","lamport":39024,"schema":1,"subject":"B-upgrade.4-apply.1b-wire","ts":"2026-10-08T07:44:11.996883Z"}
+{"agent":"U2","data":{"at":1791445574.827675,"holder":"U2"},"id":"e01e6c2375f80f9f8e0175839","kind":"lease.renewed","lamport":39051,"schema":1,"subject":"B-upgrade.4-apply.1b-wire","ts":"2026-10-08T07:46:14.928682Z"}
