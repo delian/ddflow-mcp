@@ -8,6 +8,7 @@ from pathlib import Path
 from conftest import run_cli
 
 from ddflow.core.tier import tier_of, unknown_tiers
+from ddflow.services import adopt as AD
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -70,9 +71,11 @@ def test_driver_and_readme_say_advisory():
     ):
         t = (ROOT / p).read_text()
         assert "Model-tier hint (advisory)" in t and "advice only" in t
-    assert (ROOT / "docs/ddflow/drivers/implement-phase.md").read_text() == (
-        ROOT / "ddflow/templates/drivers/implement-phase.md"
-    ).read_text()
+    rel = "docs/ddflow/drivers/implement-phase.md"
+    assert (
+        AD._region_body(AD._driver_region(rel), (ROOT / rel).read_text())
+        == (ROOT / "ddflow/templates/drivers/implement-phase.md").read_text()
+    )
     assert "### Model-tier hint (advisory)" in (ROOT / "README.md").read_text()
 
 

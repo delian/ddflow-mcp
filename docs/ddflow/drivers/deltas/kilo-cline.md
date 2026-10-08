@@ -1,3 +1,4 @@
+<!-- ddflow:begin drivers/deltas/kilo-cline ddflow=0.2.0 fmt=1 sha=3b1109e4343a -->
 # Delta: Kilo / Cline / Roo
 
 The driver is `templates/drivers/implement-phase.md`. Read and follow it in full.
@@ -22,3 +23,4 @@ MCP registration in `.kilo/kilo.json`:
 The key is `mcp`, not `mcpServers`: Kilo silently ignores an `mcpServers` block. `command`
 is ONE array including the arguments. `timeout`, if you add one, is in MILLISECONDS
 (default 10000). Source: https://kilo.ai/docs/automate/mcp/using-in-cli
+<!-- ddflow:end drivers/deltas/kilo-cline -->

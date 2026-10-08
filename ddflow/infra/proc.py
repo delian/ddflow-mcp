@@ -33,6 +33,7 @@ PIPE = subprocess.PIPE
 CalledProcessError = subprocess.CalledProcessError
 SubprocessError = subprocess.SubprocessError
 TimeoutExpired = subprocess.TimeoutExpired
+Popen = subprocess.Popen
 
 
 def run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
@@ -60,8 +61,9 @@ def popen(*args: Any, **kwargs: Any) -> subprocess.Popen:
     return subprocess.Popen(*args, **kwargs)
 
 
-def kill_group(p: subprocess.Popen) -> None:
-    """Kill ``p`` AND everything it started: its whole process group.
+def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
+    """Signal ``p`` AND everything it started: its whole process group (``sig``; SIGKILL when None,
+    SIGTERM to ask it to stop first). SIGKILL is named only on POSIX: Windows has no such signal.
 
     ``p`` must have been started in a session of its own (`run_shell` does), so the
     group is its pid; call it before ``p`` is reaped, while that pid -- and so the group
@@ -70,7 +72,7 @@ def kill_group(p: subprocess.Popen) -> None:
     """
     if os.name == "posix":
         try:
-            os.killpg(p.pid, signal.SIGKILL)
+            os.killpg(p.pid, signal.SIGKILL if sig is None else sig)
             return
         except (ProcessLookupError, PermissionError):
             pass  # gone already, or not ours: the direct child is all we can still reach
@@ -82,7 +84,10 @@ def kill_group(p: subprocess.Popen) -> None:
                 timeout=TIMEOUTS["instant"],
             )
     with contextlib.suppress(OSError):
-        p.kill()
+        if sig is None or sig == getattr(signal, "SIGKILL", None):
+            p.kill()
+        else:
+            p.terminate()
 
 
 #: Every named timeout in seconds, in one table (D-unify: one process layer). A call site
