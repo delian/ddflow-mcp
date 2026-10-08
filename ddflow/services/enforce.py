@@ -54,6 +54,7 @@ from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from ..infra.log import EventLog
 from . import changes as CH
 from .backups import make_backup
+from .guidance import ruleview as RV
 from .install_info import running_from_source
 
 #: The line every ddflow git hook has carried since the first. Kept INSIDE the stamped
@@ -1603,8 +1604,6 @@ def _staged_generated(
 def _staged_rule_files(repo: Path, listed: list[str], tree: Path) -> dict[str, bytes]:
     """The staged rule files ``{path: bytes}``: ``.ddflow/rules/<id>.toml``, which the log
     renders (D-unify 7). A deletion is not listed (`staged_paths` is ACMR)."""
-    from .guidance import ruleview as RV
-
     prefix = RV.files(repo).directory.relative_to(repo).as_posix() + "/"
     found: dict[str, bytes] = {}
     for p in listed:
@@ -1622,8 +1621,6 @@ def _wrong_rule_files(
     with no record, or whose content differs from its live record -- a hand edit, which
     ``ddflow rule sync`` records. A retired rule and a file that does not load are not
     this check's (``doctor`` reports the latter)."""
-    from .guidance import ruleview as RV
-
     st = fold(log.read_all(), strict=False)
     wrong: list[tuple[str, str]] = []
     for p in sorted(staged):

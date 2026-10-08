@@ -516,3 +516,12 @@ def test_replay_rebuilds_the_rule_files_from_the_log(repo: Path, tmp_path: Path)
     want = fileformat.parse((repo / ".ddflow" / "rules" / "r-w.toml").read_text(), RULE)
     got = fileformat.parse(rebuilt.read_text(), RULE)
     assert DF.to_fields(got, RULE) == DF.to_fields(want, RULE)
+
+
+def test_a_staged_rule_file_without_its_log_events_is_refused(repo: Path) -> None:
+    """The check compares with the log only when the log is committed beside the file: a
+    rule file staged alone (its record unstaged) is refused, never judged by the working log."""
+    ARULES.rule_add(repo, _rule(), agent="t")
+    _git(repo, "add", ".ddflow/rules")
+    code, msg = E.check_views(repo, Config.load(repo))
+    assert code == 1 and "the commit does not record" in msg, msg

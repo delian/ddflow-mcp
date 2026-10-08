@@ -209,10 +209,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "payload": ("id",),
     },
     "ddflow_rule_sync": {
-        "description": (
-            "Make the log and the rule files agree: record hand-edited or new rule files "
-            "(def.updated / def.recorded) and write the files the log has but the disk lacks."
-        ),
+        "description": "Sync rule files with the log: record hand edits and new files, restore missing ones.",
         "properties": {},
         "api": lambda repo, a, agent: _api().rule_sync(repo, agent=agent),
         "payload": ("recorded", "updated", "restored", "failed"),
