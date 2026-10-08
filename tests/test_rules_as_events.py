@@ -325,36 +325,27 @@ def test_a_log_that_cannot_record_leaves_the_file_and_says_so(repo: Path, monkey
 
     monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
     out = ARULES.rule_add(repo, _rule(), agent="t")
-    assert out.exit == 0 and (repo / ".ddflow" / "rules" / "r-w.toml").exists()
-    assert (
-        "not recorded in the log" in out.data["unrecorded"]
-        and "log is locked" in out.data["unrecorded"]
-    )
+    # a failure, so no surface shows it as a success; the file is there as the caller asked
+    assert out.exit == 1 and (repo / ".ddflow" / "rules" / "r-w.toml").exists()
+    assert "not recorded in the log" in out.reason and "log is locked" in out.reason
+    assert "ddflow upgrade" in out.reason
     monkeypatch.undo()
     # the one-time import records it later
     assert [o.status for o in _run(repo)] == ["applied"]
     assert _defs(repo)["rule:r-w"].live
 
 
-def test_every_surface_carries_the_unrecorded_note(repo: Path, monkeypatch) -> None:
-    from ddflow.surfaces.commands.rules import _PAYLOADS
-    from ddflow.surfaces.mcp import TOOLS
-
-    for verb in ("add", "edit", "remove"):
-        assert "unrecorded" in _PAYLOADS[verb], verb
-    for tool in ("ddflow_rule_add", "ddflow_rule_edit", "ddflow_rule_remove"):
-        assert "unrecorded" in TOOLS[tool]["payload"], tool
+def test_a_removal_the_log_cannot_retire_says_the_log_still_holds_the_rule(
+    repo: Path, monkeypatch
+) -> None:
+    ARULES.rule_add(repo, _rule(), agent="t")
 
     def refuse(*a, **k):
         raise RuntimeError("log is locked")
 
-    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
-    added = ARULES.rule_add(repo, _rule(), agent="t")
-    assert "unrecorded" in added.body(TOOLS["ddflow_rule_add"]["payload"])
-    monkeypatch.undo()
-    assert _run(repo)  # recorded by the import
     monkeypatch.setattr(ARULES, "def_retire", refuse)
-    removed = ARULES.rule_remove(repo, "r-w", agent="t")
-    note = removed.body(TOOLS["ddflow_rule_remove"]["payload"])["unrecorded"]
-    assert "file was removed but the log still holds the rule" in note and "log is locked" in note
+    out = ARULES.rule_remove(repo, "r-w", agent="t")
+    assert out.exit == 1 and "file was removed but the log still holds the rule" in out.reason
+    assert "log is locked" in out.reason
     assert not (repo / ".ddflow" / "rules" / "r-w.toml").exists()
+    assert _defs(repo)["rule:r-w"].live
