@@ -722,7 +722,8 @@ matches). A hand edit is never silently overwritten: before the refresh rewrites
 your version is copied whole to `<file>.local-edits` (`.local-edits.2`, `.3` ... when that
 name is taken) and the action says so; text you wrote outside the region stays where it is,
 and the originals also go to `.ddflow/backups/`. The same holds for an edit inside the
-AGENTS.md/CLAUDE.md block and the `/implement` command file. A copy written before the
+AGENTS.md/CLAUDE.md block, and for the `/implement` command file when a plain
+`ddflow adopt` rewrites it (a refresh never touches command files). A copy written before the
 stamp (a driver an older ddflow copied) has no digest to tell by: it is replaced after a
 backup, and `ddflow upgrade --plan` calls it *stale* when a release has shipped since the
 project last worked and *hand-edited* (needs the operator) when none has. A doc written at
