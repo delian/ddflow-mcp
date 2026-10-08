@@ -26,7 +26,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
 from ..config import Config
-from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
+from ..core.model import BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
 from . import flowcontrol as FC
 from .flow import FEATURE, branch_kind, line_key, stack_base, unknown_line
 from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
@@ -86,10 +86,10 @@ def unpickable(state: State, cfg: Config) -> list[Unpickable]:
     """
     out: list[Unpickable] = []
     for ph in sorted(state.items.values(), key=lambda i: i.id):
-        if ph.kind != "phase" or ph.removed or ph.state in (DONE, ABANDONED):
+        if ph.kind != "phase" or ph.removed or ph.terminal:
             continue
         tasks = [t for t in state.tasks(ph.id) if not t.removed]
-        live = [t for t in tasks if t.state not in (DONE, ABANDONED)]
+        live = [t for t in tasks if not t.terminal]
         if live:
             continue
         if not tasks:
@@ -347,7 +347,7 @@ def _settled_umbrella_detail(state: State, it: Item) -> str:
     (`api.lifecycle.complete._umbrella_children` is the same rule on the api side; core
     cannot import it). With every one abandoned there is nothing to complete: it is the
     operator's call to abandon it too or give it work."""
-    if it.kind != "task" or it.state in (DONE, ABANDONED):
+    if it.kind != "task" or it.terminal:
         return ""
     below = state.descendants(it.id)
     if not below or state.open_descendants(it.id):
@@ -386,7 +386,7 @@ def plan_blocker(
     guarantee the queue exists to provide.
     """
     if in_cycle is None or cycles is None:
-        cycles = find_cycles({i.id: i for i in state.items.values() if not i.removed})
+        cycles = find_cycles(state.live_by_id())
         in_cycle = {n for c in cycles for n in c}
     contest = it.contest_summary()
     if contest:
@@ -756,13 +756,13 @@ def plan(
             for i in state.items.values()
             if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
         ]
-    p.cycles = find_cycles({i.id: i for i in state.items.values() if not i.removed})
+    p.cycles = find_cycles(state.live_by_id())
     in_cycle = {n for c in p.cycles for n in c}
     live = state.active_leases(now, grace)
 
     bugs = bug_items(state, cfg) if cfg.schedule.bugs_first else set()
     for it in sorted(candidates, key=lambda x: (x.id not in bugs, x.priority, x.id)):
-        if it.state in (DONE, ABANDONED):
+        if it.terminal:
             continue
         if it.state == REVIEW:
             p.review.append(it)
@@ -918,7 +918,7 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         deps = [d for _owner, d in inherited_deps(state, it)]
         return deps + [c.id for c in state.children(it.id) if not c.removed]
 
-    live = {i.id: i for i in state.items.values() if not i.removed}
+    live = state.live_by_id()
     if phase:
         # The phase, EVERY item below it -- a chain of sub-tasks nested under a task is
         # the phase's work too (B13ed484062) -- and everything those wait on, wherever

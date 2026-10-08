@@ -1,6 +1,0 @@
-# Ratchet `git_argv` (tests/test_architecture_guards.py) counts
-# a list or tuple literal starting with "git" (a git argv) outside ddflow.infra.git.
-#
-# Lower the baseline in the same change that removes sites; the failure message
-# prints the exact value. Never raise it.
-baseline = 13

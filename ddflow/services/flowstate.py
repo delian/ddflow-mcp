@@ -38,6 +38,7 @@ from ..core import flowparams as FP
 from ..core import flowsignals as FS
 from ..core.events import Event
 from ..core.model import State
+from ..infra import git as G
 from ..infra import signals as SIG
 from ..infra.fsio import atomic_write
 from .configwrite import LOCAL_DIR, ensure_local_dir
@@ -365,7 +366,6 @@ def history_notes(cfg: Config, events: Sequence[Event], now: float | None = None
 def doctor_notes(repo: Path) -> list[str]:
     """Notes, never problems, and writing nothing: a ring that cannot be read or written
     (auto then holds at its start value), and a local directory git does not ignore."""
-    from ..infra import proc as P
 
     notes = []
     ring = ring_path(repo)
@@ -383,15 +383,10 @@ def doctor_notes(repo: Path) -> list[str]:
             f"the adaptive parallelism ring ({RING.as_posix()}) cannot be read -- auto holds "
             "at its start value"
         )
-    try:
-        ignored = P.run(
-            ["git", "-C", str(repo), "check-ignore", "-q", RING.as_posix()],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        ).returncode
-    except (OSError, P.TimeoutExpired):
-        ignored = 0  # cannot tell; say nothing
+    from ..infra import proc as P
+
+    probe = G.run(repo, "check-ignore", "-q", RING.as_posix(), timeout=P.TIMEOUTS["instant"])
+    ignored = 0 if probe.unavailable else probe.code  # cannot tell: say nothing
     if ignored == 1:
         notes.append(
             f"{RING.parent.parent.as_posix()}/ is not ignored by git, so the derived "

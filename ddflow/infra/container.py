@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from ..infra import git as G
 from ..infra import proc as P
 
 HOST_ALIAS = "host.docker.internal"
@@ -130,7 +131,4 @@ ReviewerUrls = list[tuple[str, str]]
 
 
 def _repo_has_identity(repo: Path) -> bool:
-    r = P.run(
-        ["git", "-C", str(repo), "config", "user.email"], capture_output=True, text=True, timeout=30
-    )
-    return bool(r.stdout.strip())
+    return bool(G.run(repo, "config", "user.email", timeout=P.TIMEOUTS["probe"]).out)

@@ -1,6 +1,0 @@
-# Ratchet `deferred_imports` (tests/test_architecture_guards.py) counts
-# an import statement inside a function body.
-#
-# Lower the baseline in the same change that removes sites; the failure message
-# prints the exact value. Never raise it.
-baseline = 602

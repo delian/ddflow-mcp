@@ -166,6 +166,7 @@ from .records import (  # noqa: F401
     Bug,
     Decision,
     FoldProblem,
+    GateOutcome,
     GateRecord,
     Item,
     Job,

@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..core.model import GateOutcome
 from ..core.plain import plain
 from ..services import gates as G
 from ..services import testselect as TS
@@ -34,13 +35,7 @@ from ._base import _load
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
-OUTCOME_EXIT = {
-    "passed": O.OK,
-    "skipped": O.OK,
-    "failed": O.FAIL,
-    "unavailable": O.NOTHING,
-    "partial": O.NOTHING,
-}
+OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
 
 
 def _gates_ahead_of(st, cfg, item_id: str, gate: str) -> list[str]:
