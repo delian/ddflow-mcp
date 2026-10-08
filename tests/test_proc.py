@@ -55,10 +55,20 @@ def test_the_popen_alias_is_the_standard_one():
 
 
 @pytest.mark.parametrize("sig", [None, signal.SIGTERM])
-def test_signalling_a_group_that_is_already_gone_is_not_an_error(sig):
-    """Mutant: `kill_group` letting `ProcessLookupError` out. `companions._stop` relies on it
-    when a server exited on its own before it was stopped."""
-    p = P.popen(["true"], start_new_session=True)
-    p.wait(timeout=10)
-    P.kill_group(p, sig)
-    P.kill_group(p, sig)
+@pytest.mark.parametrize("error", [ProcessLookupError, PermissionError])
+def test_a_group_that_cannot_be_signalled_is_not_an_error(monkeypatch, sig, error):
+    """Mutant: `kill_group` letting the error out. The group is gone, or not ours: the direct
+    child is all that is left to reach. The signal is faked, never sent to a pid that
+    may have been recycled."""
+    p = P.popen(["sleep", "60"], start_new_session=True)
+    try:
+
+        def refuse(pgid, signum):
+            raise error
+
+        monkeypatch.setattr(os, "killpg", refuse)
+        P.kill_group(p, sig)
+        assert p.wait(timeout=10) == -(sig or signal.SIGKILL)
+    finally:
+        p.kill()
+        p.wait()
