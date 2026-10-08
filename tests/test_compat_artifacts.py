@@ -272,7 +272,10 @@ def test_view_freshness_compares_body_and_state_not_the_first_line():
     assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nsame\n", fmt=1), want) == ""
     assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nother\n"), want) == "stale"
     assert MD.view_difference(want.replace("same", "hand"), want) == "edited"
-    assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nsame\n", fmt=2), want) == "newer"
+    newer = MD.stamp_view(MD.GENERATED + "\nother\n", fmt=2)
+    assert MD.view_difference(newer, want) == "newer"
+    # the same body at a higher level needs no regeneration
+    assert MD.view_difference(MD.stamp_view(MD.GENERATED + "\nsame\n", fmt=2), want) == ""
 
 
 def test_rendering_does_not_downgrade_a_view_a_newer_format_wrote(tmp_path):
@@ -331,3 +334,17 @@ def test_a_rules_difference_says_what_it_is():
     assert "older version" in line(stamped=True)
     unstamped = line()
     assert "older version" not in unstamped and "no version stamp" in unstamped
+
+
+def test_a_staged_newer_view_gets_no_regenerate_remedy(tmp_path):
+    from ddflow.config import Config
+    from ddflow.infra.log import EventLog
+    from ddflow.services import enforce as E
+    from ddflow.views import markdown as MD
+
+    log = EventLog(tmp_path, "t")
+    staged = {"docs/ddflow/QUEUE.md": MD.stamp_view(MD.GENERATED + "\nx\n", fmt=2).encode()}
+    lines = E._wrong_views(log, Config(), staged)
+    text = "\n".join(lines)
+    assert "newer format level" in text and "upgrade ddflow first" in text
+    assert "git add" not in text and "ddflow render" not in text

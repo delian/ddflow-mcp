@@ -103,10 +103,10 @@ def view_difference(have: str, want: str) -> str:
     matches its digest: a person changed it) or ``stale`` (the log moved since)."""
     head, body = split_view(have)
     _wh, want_body = split_view(want)
-    if head is not None and head.fmt > FORMAT_LEVEL:
-        return "newer"
     if body == want_body:
         return ""
+    if head is not None and head.fmt > FORMAT_LEVEL:
+        return "newer"
     if head is not None and head.sha is not None and content_digest(body, length=12) != head.sha:
         return "edited"
     return "stale"
