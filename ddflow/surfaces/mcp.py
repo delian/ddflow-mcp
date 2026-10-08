@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 import time
 import traceback
@@ -38,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ddflow.core import agentname as AN
 from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
 
 # The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
@@ -338,19 +338,8 @@ def _outcome_result(
     return result
 
 
-#: What a declared agent name may contain. It becomes a log SHARD FILENAME, so a name
-#: with a path separator would write outside the events directory, and one with a
-#: newline would corrupt the line-oriented log. Refused at declaration time, where the
-#: caller can read why, rather than at the first write.
-#:
-#: `fullmatch`, and no anchors. With `^...$` and `.match()` this accepted
-#: `"reviewer\n"` — Python's `$` matches at end-of-string OR immediately before a final
-#: newline — so the pattern did not refuse the one character the comment above singles
-#: out. It was unreachable in practice only because the handler strips the name first,
-#: which means the guarantee lived in an incidental `.strip()` rather than in the check
-#: credited with it. Two lines that disagree about which one is load-bearing is how the
-#: next edit removes the wrong one.
-_VALID_AGENT = re.compile(r"[A-Za-z0-9._-]{1,64}")
+#: What a declared agent name may contain: one rule for every surface (core/agentname.py).
+_VALID_AGENT = AN.AGENT_NAME
 
 
 def _default_agent(repo: Path) -> tuple[str, str]:
@@ -588,15 +577,7 @@ class Server:
                 return self.agent, "", args, f"{AS_AGENT} must be a string"
             want = want.strip()
             if want and not _VALID_AGENT.fullmatch(want):
-                return (
-                    self.agent,
-                    "",
-                    args,
-                    (
-                        f"{want!r} is not a usable agent name: use letters, digits, "
-                        f"'.', '_' or '-', up to 64 characters."
-                    ),
-                )
+                return self.agent, "", args, AN.refusal(want)
             if want:
                 return want, want, args, ""
         if not modern:
@@ -789,14 +770,7 @@ class Server:
                 # where the agent can read the reason and retry, rather than at the
                 # first write -- by which point the caller believes it is identified.
                 if want and not _VALID_AGENT.fullmatch(want):
-                    return _ok(
-                        mid,
-                        _text(
-                            f"{want!r} is not a usable agent name: use letters, digits, "
-                            f"'.', '_' or '-', up to 64 characters.",
-                            error=True,
-                        ),
-                    )
+                    return _ok(mid, _text(AN.refusal(want), error=True))
                 self.agent = want
                 # The same agent's shell commands take it too (Bfad021e8d9).
                 from ..infra import harness_identity
@@ -976,10 +950,7 @@ def _meta_agent(params: dict[str, Any]) -> tuple[str, str]:
     want = meta.get(META_AGENT, "") if isinstance(meta, dict) else ""
     if isinstance(want, str) and (not want.strip() or _VALID_AGENT.fullmatch(want.strip())):
         return want.strip(), ""
-    return "", (
-        f"_meta {META_AGENT!r} = {want!r} is not a usable agent name: "
-        f"use letters, digits, '.', '_' or '-', up to 64 characters."
-    )
+    return "", (f"_meta {META_AGENT!r} = {want!r} is not a usable agent name: {AN.USABLE}")
 
 
 def _modern_identify_note(agent: str) -> str:
