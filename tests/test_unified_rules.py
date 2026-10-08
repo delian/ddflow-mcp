@@ -24,9 +24,8 @@ from conftest import run_cli
 
 from ddflow.services.adopt import (
     AIDER_READS,
-    BEGIN,
+    BLOCK,
     CURRENT,
-    END,
     FORM_AIDER,
     FORM_BLOCK,
     FORM_WHOLE,
@@ -35,7 +34,8 @@ from ddflow.services.adopt import (
     NO_BLOCK,
     NOT_BINDING,
     STALE,
-    project_section,
+    block_body,
+    project_body,
     rules_status,
 )
 
@@ -86,7 +86,7 @@ def _parse_read_list(text: str) -> list[str]:
 def test_every_native_surface_carries_the_canonical_text(repo):
     """Not a pointer TO the rules — the rules."""
     _adopt(repo)
-    canonical = project_section().replace(BEGIN, "").replace(END, "").strip()
+    canonical = project_body().strip()
     # A sentence from the block that no pointer stub would contain.
     probe = next(ln for ln in canonical.splitlines() if "claim" in ln.lower())
     for key, rule in NATIVE_RULES.items():
@@ -110,8 +110,8 @@ def test_all_copies_say_the_same_thing(repo):
         if rule.form == FORM_AIDER:
             continue
         text = (repo / rule.path).read_text()
-        if BEGIN in text and END in text:
-            body = text[text.index(BEGIN) + len(BEGIN) : text.index(END)]
+        if block_body(text) is not None:
+            body = block_body(text)
         else:  # FORM_WHOLE: frontmatter, then the body
             body = text.split("---\n\n", 1)[-1]
         bodies[key] = body.strip()
@@ -129,7 +129,9 @@ def test_adopt_is_idempotent_across_every_surface(repo):
     for rel, text in before.items():
         assert (repo / rel).read_text() == text, f"{rel} changed on a second adopt"
     for rel in before:
-        assert (repo / rel).read_text().count(BEGIN) <= 1, f"{rel} has two managed blocks"
+        assert (repo / rel).read_text().count(f"ddflow:begin {BLOCK.name}") <= 1, (
+            f"{rel} has two managed blocks"
+        )
 
 
 @pytest.mark.parametrize("key", sorted(k for k, r in NATIVE_RULES.items() if r.form == FORM_BLOCK))
@@ -144,7 +146,7 @@ def test_a_block_surface_preserves_the_operators_own_content(repo, key):
     assert run_cli(repo, "adopt", "--agents", key)[0] == 0
     text = path.read_text()
     assert "keep me" in text, f"{rule.path}: adopt destroyed the operator's content"
-    assert BEGIN in text, f"{rule.path}: no managed block was added"
+    assert block_body(text) is not None, f"{rule.path}: no managed block was added"
 
 
 def test_drift_is_reported_for_every_kind_of_break(repo):

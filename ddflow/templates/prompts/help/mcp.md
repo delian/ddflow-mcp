@@ -30,8 +30,9 @@ Ask it anything about itself with `ddflow_help`, and ask what the rules are here
 ## What to put in AGENTS.md / CLAUDE.md
 
 `ddflow adopt` writes this for you, as a managed block between
-`<!-- DDFLOW:BEGIN -->` and `<!-- DDFLOW:END -->` markers. Your own prose around the
-block is preserved; re-running updates only what is inside it.
+`<!-- ddflow:begin rules/work-queue ... -->` and `<!-- ddflow:end rules/work-queue -->`
+markers. Your own prose around the block is preserved; re-running updates only what is
+inside it.
 
 If you are writing it by hand, the four things that must be in it are:
 

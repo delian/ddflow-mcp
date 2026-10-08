@@ -91,7 +91,7 @@ def test_the_backup_directory_is_git_ignored_and_holds_the_original_bytes(old: P
 
     assert DRIVER in " ".join(ids(out, "applied")), out["text"]
     assert driver.read_bytes() != original
-    assert (Path(out["backup"]) / DRIVER).read_bytes() == original
+    assert (Path(out["backup"]) / "files" / "in" / DRIVER).read_bytes() == original
     assert (old / ".ddflow" / "backups" / ".gitignore").read_text().strip().endswith("*")
     status = subprocess.run(
         ["git", "-C", str(old), "status", "--porcelain", ".ddflow/backups"],
@@ -238,7 +238,7 @@ def test_a_removed_knob_the_config_carries_is_removed_only_when_confirmed(old: P
     assert done["exit"] == 0, done["text"]
     assert "zzz_old" not in cfgfile.read_text()
     assert "[log]" in cfgfile.read_text() or "log" in cfgfile.read_text()
-    saved = Path(done["backup"]) / ".ddflow" / "config.toml"
+    saved = Path(done["backup"]) / "files" / "in" / ".ddflow" / "config.toml"
     assert "zzz_old = 1  # keep this comment" in saved.read_text()
 
 
@@ -272,7 +272,7 @@ def test_a_dangling_mcp_entry_is_rewritten_and_saved_first(old: Path) -> None:
     out = go(old, "mcp")
 
     assert out["exit"] == 0, out["text"]
-    assert (Path(out["backup"]) / ".mcp.json").read_bytes() == stale
+    assert (Path(out["backup"]) / "files" / "in" / ".mcp.json").read_bytes() == stale
     assert plan(old)["categories"]["mcp"] == []
 
 
@@ -413,7 +413,9 @@ def test_toml_remove_keeps_comments_and_reports_whether_the_key_was_there() -> N
 def test_two_backups_in_one_clock_tick_get_their_own_directories(
     old: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(UA, "backup_name", lambda frm, to: "same-tick")
+    from ddflow.services import backups as BK
+
+    monkeypatch.setattr(BK, "backup_name", lambda frm, to: "same-tick")
     f = old / DRIVER
 
     first = UA.make_backup(old, [f], "", "9.9.9")
