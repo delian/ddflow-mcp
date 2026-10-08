@@ -31,6 +31,8 @@ _UNSET: Any = object()
 
 #: The longest CLI path: `group command`.
 GROUP_DEPTH = 2
+#: `via` is a tool, optionally with the selector value.
+MAX_VIA = 2
 
 
 @dataclass(frozen=True)
@@ -184,8 +186,16 @@ class Command:
     kind: str = ""
     identify: bool = False
     deprecated: Mapping[str, Any] = field(default_factory=dict)
-    #: Why this command is absent from a surface (the parity exemption), or "".
+    #: Why this command has no MCP tool of its own (the parity exemption), or "".
     reason: str = ""
+    #: The tool that serves this command when it has none of its own, and the value of the
+    #: argument that selects it: ``("ddflow_list", "task")``; a one-element form names a
+    #: tool that covers it whole (``init`` -> ``("ddflow_setup",)``).
+    via: tuple[str, ...] = ()
+    #: CLI flags this command's tool omits on purpose: ``{"--force": reason}``.
+    flag_exempt: Mapping[str, str] = field(default_factory=dict)
+    #: Why the body is text and not JSON (required of every ``prose`` tool).
+    prose_reason: str = ""
 
     def __post_init__(self) -> None:
         names = [p.name for p in self.params]
@@ -193,6 +203,8 @@ class Command:
             raise ValueError(f"{'/'.join(self.path)}: duplicate parameter names")
         if not self.path and not self.tool:
             raise ValueError("a command needs a CLI path or an MCP tool name")
+        if len(self.via) > MAX_VIA:
+            raise ValueError(f"{'/'.join(self.path)}: via is (tool,) or (tool, selector)")
 
     @property
     def mcp_params(self) -> tuple[Param, ...]:
@@ -279,3 +291,37 @@ def add_commands(
             gp = subparsers.add_parser(group, help=(groups or {}).get(group, ""))
             made[group] = gp.add_subparsers(dest=f"{group}_cmd", required=True)
         cmd.add_to(made[group])
+
+
+# -- what the declarations say, derived (the parity test reads these) -----------------
+
+
+def exempt_paths(commands: tuple[Command, ...]) -> dict[tuple[str, ...], str]:
+    """CLI paths with no tool of their own, each with its reason. A command routed by a
+    selector (``via`` of two) is served, not exempt, even when it also carries a reason."""
+    return {c.path: c.reason for c in commands if c.path and c.reason and len(c.via) != MAX_VIA}
+
+
+def routed_paths(commands: tuple[Command, ...]) -> dict[tuple[str, ...], tuple[str, str]]:
+    """CLI paths served by another tool's selector: ``path -> (tool, selector value)``."""
+    return {c.path: (c.via[0], c.via[1]) for c in commands if c.path and len(c.via) == MAX_VIA}
+
+
+def covering_tools(commands: tuple[Command, ...]) -> dict[str, tuple[str, ...]]:
+    """One-word commands a differently named tool covers whole: ``init -> (ddflow_setup,)``."""
+    return {c.path[0]: c.via for c in commands if len(c.path) == 1 and len(c.via) == 1}
+
+
+def declared_words(commands: tuple[Command, ...]) -> set[str]:
+    """One-word commands any declaration names (for the 'does it still exist' ratchet)."""
+    return {c.path[0] for c in commands if len(c.path) == 1}
+
+
+def flag_exemptions(commands: tuple[Command, ...]) -> dict[tuple[str, str], str]:
+    """``(tool, flag) -> reason`` for every flag a tool omits on purpose."""
+    return {(c.tool, f): r for c in commands for f, r in c.flag_exempt.items()}
+
+
+def prose_reasons(commands: tuple[Command, ...]) -> dict[str, str]:
+    """``tool -> reason`` for every tool whose body is text."""
+    return {c.tool: c.prose_reason for c in commands if c.tool and c.prose}
