@@ -174,12 +174,12 @@ def test_recall_drops_raw_records_and_keeps_within_budget_saying_so(repo):
         )
     r = _call(repo, "ddflow_recall", query="payload bound", limit=12, max_chars=1000)
     body = _body(r)
-    hits = [h for v in body.values() for h in v]
+    hits = [h for k, v in body.items() if k != "schema" for h in v]
     assert hits and all("raw" not in h for h in hits)
     assert 1 <= len(hits) < 12
     assert "truncated" in r["content"][1]["text"] and "max_chars" in r["content"][1]["text"]
     cli = json.loads(run_cli(repo, "--json", "recall", "payload bound")[1])
-    assert "raw" in next(iter(cli.values()))[0]
+    assert "raw" in next(v for k, v in cli.items() if k != "schema")[0]
 
 
 def test_mcp_json_is_compact(repo):

@@ -60,6 +60,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from ..core import globs
+from ..core.bookkeeping import STATE_EXCLUDE, is_state
+from ..infra import git as GIT
 from ..infra import worktree as W
 from . import gates as G
 
@@ -108,7 +110,7 @@ def changed_files(tree: Path, base: str) -> list[str] | None:
         # ones a rename breaks, and `--name-only` alone reports only the new path.
         W.git_paths(tree, "diff", "--name-only", "--no-renames", f"{mb.out}..HEAD"),
         W.git_paths(tree, "diff", "--name-only", "--no-renames", "HEAD"),
-        W.git_paths(tree, "ls-files", "--others", "--exclude-standard"),
+        GIT.files(tree, "untracked"),
     ]
     if any(p is None for p in parts):
         return None
@@ -161,7 +163,7 @@ def _resolve(name: str, known: set[str]) -> str:
 
 def _listed(tree: Path) -> list[str] | None:
     """Every tracked and untracked (not ignored) path."""
-    paths = W.git_paths(tree, "ls-files", "--cached", "--others", "--exclude-standard")
+    paths = GIT.files(tree, "all")
     return None if paths is None else sorted(set(paths))
 
 
@@ -447,7 +449,7 @@ def changed_lines(tree: Path, base: str) -> int | None:
     mb = W.git(tree, "merge-base", base, "HEAD")
     if mb.code != 0:
         return None
-    num = W.git(tree, "diff", "--numstat", "--no-renames", mb.out, "--", ".", ":(exclude).ddflow")
+    num = W.git(tree, "diff", "--numstat", "--no-renames", mb.out, "--", ".", *STATE_EXCLUDE)
     if num.code != 0:
         return None
     n = 0
@@ -455,8 +457,8 @@ def changed_lines(tree: Path, base: str) -> int | None:
         added, removed = [*row.split("\t", 2), "", ""][:2]
         n += int(added) if added.isdigit() else 0
         n += int(removed) if removed.isdigit() else 0
-    for p in W.git_paths(tree, "ls-files", "--others", "--exclude-standard") or ():
-        if p.startswith(".ddflow/"):
+    for p in GIT.files(tree, "untracked") or ():
+        if is_state(p):
             continue
         try:
             n += len((tree / p).read_bytes().splitlines())

@@ -23,17 +23,17 @@ from typing import Any
 from ..config import Config
 from ..core import flow as F
 from ..core.model import DONE, State
+from ..infra import git as GIT
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import flow as FS
 
 CLEAN, CONFLICT, FAILED, EMPTY = "clean", "conflict", "failed", "empty"
 NOT_READY, MANUAL = "not_ready", "manual"
-
-
-def _unmerged(tree: Path) -> list[str]:
-    r = W.git(tree, "diff", "--name-only", "--diff-filter=U")
-    return [ln for ln in r.out.splitlines() if ln.strip()] if r.ok else []
+#: Unknown is not "no conflicts": a half-done merge listed as clean would be committed over.
+_UNMERGED_UNKNOWN = (
+    "git could not list the unmerged paths, so the result is unknown: inspect the tree"
+)
 
 
 def apply(
@@ -96,7 +96,12 @@ def _cherry_pick(tree: Path, item_id: str, src, out: dict[str, Any]) -> None:
         out.update(status=EMPTY, reason=f"{src.id} landed no change to carry")
         return
     r = W.apply_3way(tree, patch.out + "\n")
-    conflicts = _unmerged(tree)
+    conflicts = GIT.unmerged(tree)
+    if conflicts is None:
+        # The tree is left as the apply made it, for the agent to inspect: a reset here
+        # could discard a conflict the listing failed to show.
+        out.update(status=FAILED, reason=_UNMERGED_UNKNOWN)
+        return
     if conflicts:
         out.update(status=CONFLICT, files=conflicts)
         return
@@ -131,9 +136,12 @@ def _forward_merge(
         f"forward-merge {source} (carries {src.port_of or src.id})\n\nItem: {item_id}",
         source,
     )
-    conflicts = _unmerged(tree)
+    conflicts = GIT.unmerged(tree)
     landed = src.landed_after or src.merged_sha
-    if conflicts:
+    if conflicts is None:
+        W.git(tree, "merge", "--abort")  # as the failed-merge branch below, and promotions
+        out.update(status=FAILED, reason=_UNMERGED_UNKNOWN)
+    elif conflicts:
         out.update(status=CONFLICT, files=conflicts)
     elif r.ok and landed and not W.git(tree, "merge-base", "--is-ancestor", landed, "HEAD").ok:
         # "Already up to date" is also r.ok. Checked, not assumed: a stale ref (a fetch
