@@ -64,6 +64,7 @@ from ...infra import fsio  # noqa: F401
 from ...infra import git as GIT  # noqa: F401
 from ...infra import proc as P  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
+from .. import cmdrunner  # noqa: F401
 from .defs import (  # noqa: F401
     _REQUIRED_WARNED,
     DEFAULT_GATES,
@@ -155,6 +156,7 @@ from .runner import (  # noqa: F401
     _missing_executable,
     _read_text,
     _run_spec,
+    _unavailable_evidence,
     classify_exit,
     gate_config_drift,
     run_command_gate,
