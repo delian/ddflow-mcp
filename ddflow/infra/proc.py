@@ -72,7 +72,7 @@ def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
     """
     if os.name == "posix":
         try:
-            os.killpg(p.pid, sig or signal.SIGKILL)
+            os.killpg(p.pid, signal.SIGKILL if sig is None else sig)
             return
         except (ProcessLookupError, PermissionError):
             pass  # gone already, or not ours: the direct child is all we can still reach
@@ -84,7 +84,7 @@ def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
                 timeout=TIMEOUTS["instant"],
             )
     with contextlib.suppress(OSError):
-        if sig is None:
+        if sig is None or sig == getattr(signal, "SIGKILL", None):
             p.kill()
         else:
             p.terminate()
