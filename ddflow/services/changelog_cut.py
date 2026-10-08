@@ -152,6 +152,7 @@ def _region(
                     f"({EW._begin(DOC, '<digest>')} ... {EW._end(DOC)}); "
                     f"--force does not repair or add markers"
                 )
+            EW._refuse_newer(rel, old, DOC, check=dry, diff=dry)
             b, e = begins[0], ends[0]
             current = old[b.end() + 1 : e.start()]
             if F.body_digest(current) != b.group("sha") and not force:
@@ -168,7 +169,13 @@ def _region(
             new_section = F.normalize(section)
             if rest and not rest.startswith(("\n", "\r\n")):
                 new_section += "\n"
-            new = old[: b.start()] + EW.region_text(DOC, unreleased) + "\n" + new_section + rest
+            new = (
+                old[: b.start()]
+                + EW.region_text(DOC, unreleased, EW.region_extra(old, DOC))
+                + "\n"
+                + new_section
+                + rest
+            )
             new = _relink(new, version, links)
             if dry:
                 return "diff"
