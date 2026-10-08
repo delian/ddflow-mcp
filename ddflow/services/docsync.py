@@ -221,7 +221,7 @@ def _grep(repo, patterns: list[str], pathspec: list[str]) -> list[tuple[str, int
 
 
 def _tracked_tokens(repo) -> set[str] | None:
-    names = G.git_paths(repo, "ls-files", "--cached")
+    names = G.files(repo, "tracked")
     if names is None:
         return None
     return set(TOKEN.findall("\n".join(names)))
