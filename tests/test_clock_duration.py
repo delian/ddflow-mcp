@@ -156,3 +156,8 @@ def test_an_mcp_timeout_beyond_a_double_is_capped_not_raised():
     assert MC._wait_timeout({"timeout": 10**400}) == MC.MCP_WAIT_MAX_S
     assert MC._wait_timeout({"timeout": 12}) == 12.0
     assert MC._wait_timeout({}) == MC.MCP_WAIT_DEFAULT_S
+
+
+def test_an_mcp_timeout_given_as_text_is_still_read_as_a_number():
+    assert MC._wait_timeout({"timeout": "120"}) == 120.0
+    assert MC._wait_timeout({"timeout": "99999"}) == MC.MCP_WAIT_MAX_S
