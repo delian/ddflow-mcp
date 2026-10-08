@@ -215,20 +215,36 @@ def test_the_command_line_numbers_a_version() -> None:
     assert bad.returncode == 1 and "unknown level" in bad.stderr
 
 
-def test_a_candidate_steps_from_the_newer_of_the_declared_version_and_the_last_release(
-    repo: Path,
-) -> None:
+def test_a_candidate_steps_from_the_release_the_impact_was_measured_against(repo: Path) -> None:
     commit(repo, "release 0.1.5")
     fragment(repo, "b", "breaking")
-    assert RI.candidate(repo) == "0.2.0"  # declared 0.1.5 == released 0.1.5: a minor step
+    assert RI.candidate(repo) == ("0.2.0", "minor")  # declared 0.1.5 is published: a minor step
     git(repo, "tag", "v0.6.0")  # published out of band; main still declares 0.1.5
     fragment(repo, "c", "breaking")
-    assert RI.candidate(repo) == "0.7.0", (
-        "the step is taken from the release the impact is measured from"
-    )
-    fragment(repo, "d", "additive")
-    declared(repo, "0.9.0")
-    assert RI.candidate(repo) == "0.10.0", "a declared version past the release is the start"
+    assert RI.candidate(repo) == ("0.7.0", "minor"), "the tag is the release it is measured from"
+
+
+def test_a_release_made_by_hand_is_the_base_even_without_a_release_commit(repo: Path) -> None:
+    commit(repo, "release 0.1.5")
+    fragment(repo, "b", "breaking")  # announced before the hand release below
+    declared(repo, "0.2.0")  # a person bumped, PyPI has it (CI published it as declared)
+    assert RI.candidate(repo) == ("0.2.1", "patch"), "0.2.0 already carries the breaking entry"
+    fragment(repo, "c", "breaking")
+    assert RI.candidate(repo) == ("0.3.0", "minor"), "a new breaking entry steps from 0.2.0"
+
+
+def test_a_candidate_with_nothing_to_compare_is_the_next_patch(tmp_path: Path) -> None:
+    r = tmp_path / "fresh"
+    (r / "ddflow").mkdir(parents=True)
+    (r / "ddflow" / "__init__.py").write_text('__version__ = "0.1.5"\n')
+    git(r, "init", "-q", "-b", "main")
+    git(r, "config", "user.email", "t@e.com")
+    git(r, "config", "user.name", "T")
+    git(r, "config", "commit.gpgsign", "false")
+    git(r, "add", "-A")
+    git(r, "commit", "-qm", "start")
+    # the declaring commit is the base; nothing changed since, so a patch
+    assert RI.candidate(r) == ("0.1.6", "patch")
 
 
 def test_the_command_line_takes_its_base_by_either_spelling_and_fails_cleanly(repo: Path) -> None:
@@ -254,15 +270,15 @@ def test_publish_bumps_by_the_declared_impact_not_always_by_patch() -> None:
     text = (ROOT / ".github" / "workflows" / "publish.yml").read_text()
     gate = text[text.index("  gate:") : text.index("  verify:")]
     assert "fetch-depth: 0" in gate, "the last release is found in history"
-    assert "release_impact.py level" in gate and "release_impact.py candidate" in gate
-    assert "bumped $level and committed" in gate
+    assert "release_impact.py candidate" in gate and "release_impact.py level" not in gate
+    assert "bumped to $version and committed" in gate
     # a candidate PyPI already holds moves on by patch, through the same helper
     assert 'release_impact.py next "$next" patch' in gate
     assert "uv run python" not in gate, "uv run without --frozen could rewrite uv.lock"
     assert 'c + 1}")\' "$next"' not in gate, "the hard-coded patch increment is gone"
     # a version published as declared must be a big enough step; a failing `base` is not a patch
     assert gate.count("declared_ok") >= 3 and "release_impact.py check" in gate
-    assert "could not read the declared impact" in gate
+    assert "could not number the release" in gate
 
 
 def test_release_sh_checks_the_impact_and_the_surface_before_the_suite() -> None:

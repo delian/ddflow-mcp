@@ -151,12 +151,10 @@ jobs:
               # would put a false release on main before the upload failed. Checked here,
               # before any commit. A taken candidate moves on by patch.
               # No release yet is a patch; any failure to read the impact stops the release
-              # rather than numbering it as a patch. The step is taken from the NEWER of the
-              # declared version and the last release (a `v*` tag publishes out of band).
-              level=$(uv run --frozen python scripts/release_impact.py level) || {
-                echo "::error::could not read the declared impact since the last release"; exit 1
-              }
-              echo "declared impact since the last release asks for a $level bump"
+              # rather than numbering it as a patch. `candidate` says the level it used on
+              # stderr (the log) and prints the number. The step is taken from the release the
+              # impact was measured against, which a `v*` tag can have moved past main's
+              # declared version (it publishes out of band).
               next=$(uv run --frozen python scripts/release_impact.py candidate) || {
                 echo "::error::could not number the release"; exit 1
               }
@@ -176,7 +174,7 @@ jobs:
               git commit -qam "release $version"
               # Refused if main moved since checkout: nothing has been published yet.
               git push origin "HEAD:${{ github.ref_name }}"
-              echo "bumped $level and committed to ${{ github.ref_name }} — publishing $version" ;;
+              echo "bumped to $version and committed to ${{ github.ref_name }} — publishing $version" ;;
             *)
               echo "::error::PyPI answered HTTP $code for ddflow-mcp $version; cannot tell whether it is released"
               exit 1 ;;

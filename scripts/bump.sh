@@ -35,8 +35,7 @@ case "$WHAT" in
   patch|minor|major)
     # The arithmetic lives in scripts/release_impact.py, which CI uses for the same steps:
     # one definition, so a manual bump and an automatic one cannot number differently.
-    NEW=$(python3 scripts/release_impact.py next "$CUR" "$WHAT") \
-      || { echo "cannot bump $CUR: not three numeric parts. Pass an exact version." >&2; exit 1; }
+    NEW=$(python3 scripts/release_impact.py next "$CUR" "$WHAT") || exit 1  # it says why
     ;;
   '' | -h | --help)
     sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'

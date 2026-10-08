@@ -42,6 +42,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 MANIFEST_DIR = "ddflow/templates/upgrade"
+#: What a project with no manifest (yet) has declared: nothing.
+EMPTY_MANIFEST = 'schema_version = 1\n\n[base]\nversion = "0.0.0"\n'
 PATCH, MINOR, MAJOR = "patch", "minor", "major"
 _RELEASE_SUBJECT = re.compile(r"^release (\d+\.\d+\.\d+)$")
 _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -65,9 +67,45 @@ def _git(*argv: str, cwd: Path | None = None) -> str:
     return r.stdout
 
 
-def last_release(cwd: Path | None = None) -> tuple[str, str] | None:
+def _newest(found: list[tuple[str, str]], cwd: Path | None = None) -> tuple[str, str] | None:
+    """Of ``(ref, version)`` pairs, the one latest in history (the others are its ancestors)."""
+    best: tuple[str, str] | None = None
+    for cand in found:
+        if best is None:
+            best = cand
+            continue
+        # cand is later than best when best is its ancestor
+        if (
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", best[0], cand[0]], cwd=cwd or ROOT
+            ).returncode
+            == 0
+        ):
+            best = cand
+    return best
+
+
+def version_commit(version: str, cwd: Path | None = None) -> str | None:
+    """The commit that last made ``version`` the declared `__version__` (the newest commit
+    that added the line), or None when no commit did."""
+    out = _git(
+        "log",
+        "-1",
+        "--format=%H",
+        f'-S__version__ = "{version}"',
+        "--",
+        "ddflow/__init__.py",
+        cwd=cwd,
+    ).strip()
+    return out or None
+
+
+def last_release(cwd: Path | None = None, *, published: str = "") -> tuple[str, str] | None:
     """``(git ref, version)`` of the most recent release reachable from HEAD, or None when
-    there has not been one: the newest of the latest `release X.Y.Z` commit and `v*` tag."""
+    there has not been one: the newest of the latest `release X.Y.Z` commit, the latest `v*`
+    tag and, when the caller knows ``published`` (a version PyPI has) is declared, the commit
+    that declared it -- a release a person made by hand and CI published as declared leaves
+    no `release` commit behind."""
     found: list[tuple[str, str]] = []
     log = _git("log", "-E", "--grep=^release [0-9]+\\.[0-9]+\\.[0-9]+$", "--format=%H %s", cwd=cwd)
     for line in log.splitlines():
@@ -84,17 +122,9 @@ def last_release(cwd: Path | None = None) -> tuple[str, str] | None:
         tag = ""
     if _VERSION.match(tag[1:]):
         found.append((tag, tag[1:]))
-    if not found:
-        return None
-    # Of the two, the one that is NOT an ancestor of the other is the later release.
-    best = found[0]
-    for cand in found[1:]:
-        ahead = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", best[0], cand[0]], cwd=cwd or ROOT
-        ).returncode
-        if ahead == 0:
-            best = cand
-    return best
+    if published and (commit := version_commit(published, cwd)):
+        found.append((commit, published))
+    return _newest(found, cwd)
 
 
 def manifest_at(ref: str | None, cwd: Path | None = None) -> Manifest:
@@ -103,8 +133,12 @@ def manifest_at(ref: str | None, cwd: Path | None = None) -> Manifest:
     where = cwd or ROOT
     UM = _um()
     if ref is None:
-        return UM.load(where / MANIFEST_DIR / "changes.toml")
-    text = _git("show", f"{ref}:{MANIFEST_DIR}/changes.toml", cwd=cwd)
+        path = where / MANIFEST_DIR / "changes.toml"
+        return UM.load(path) if path.is_file() else UM.parse(EMPTY_MANIFEST)
+    try:
+        text = _git("show", f"{ref}:{MANIFEST_DIR}/changes.toml", cwd=cwd)
+    except RuntimeError:  # the manifest did not exist yet at that ref: nothing was declared
+        return UM.parse(EMPTY_MANIFEST)
     names = _git("ls-tree", "--name-only", ref, f"{MANIFEST_DIR}/unreleased/", cwd=cwd).split()
     frags = [
         (Path(n).name, _git("show", f"{ref}:{n}", cwd=cwd)) for n in names if n.endswith(".toml")
@@ -187,17 +221,18 @@ def declared_version(cwd: Path | None = None) -> str:
     return m.group(1) if m else ""
 
 
-def candidate(cwd: Path | None = None) -> str:
-    """The version a release made now would be numbered: the declared impact's step from the
-    NEWER of the declared version and the last release. A `v*` tag publishes out of band and
-    never moves main's declared version, so the declared one can be the older of the two --
-    and the step must be taken from the release the impact was measured against."""
-    declared = declared_version(cwd)
-    last = last_release(cwd)
-    start = declared
-    if last is not None and _vkey(last[1]) > _vkey(declared):
-        start = last[1]
-    return next_version(start, level_since(last[0] if last else None, cwd))
+def candidate(cwd: Path | None = None) -> tuple[str, str]:
+    """``(version, level)`` a release made now would be numbered, for a declared version that
+    is ALREADY PUBLISHED (the bump path: PyPI has it). The step is the declared impact's, taken
+    from the release that impact was measured against -- the newest of the last `release`
+    commit, the last `v*` tag (published out of band; it never moves main's declared version)
+    and the commit that declared the published version (a hand release leaves no `release`
+    commit)."""
+    base = last_release(cwd, published=declared_version(cwd))
+    if base is None:
+        return next_version(declared_version(cwd), PATCH), PATCH
+    level = level_since(base[0], cwd)
+    return next_version(base[1], level), level
 
 
 def check(ref: str | None = None, cwd: Path | None = None) -> tuple[bool, str]:
@@ -253,7 +288,11 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "level":
             print(level_since(args.base))
         elif args.cmd == "candidate":
-            print(candidate())
+            version, level = candidate()
+            print(
+                f"declared impact since the last release asks for a {level} bump", file=sys.stderr
+            )
+            print(version)
         elif args.cmd == "next":
             print(next_version(args.version, args.level))
         else:
