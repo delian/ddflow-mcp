@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra.fsio import Managed, NewerContent, RegionError, Unreadable, read_json
+from .enforce import backup_edited
 
 #: What identifies OUR hook among the operator's: the subcommand it runs. Matched as a
 #: substring of the command, because the interpreter path in front of it varies.
@@ -276,9 +277,12 @@ def install(
                     raise SettingsError(f"{path}: the ddflow {event} hook: {exc}") from exc
                 if wanted == have and h.get("type") == "command":
                     return f"the ddflow {event} hook is already in {path}"
+                saved = ""
+                if region.state(have) == "edited":
+                    saved = backup_edited(repo, path, "command")
                 g["hooks"][i] = {**h, "type": "command", "command": wanted}
                 _write(path, data)
-                return f"updated the ddflow {event} hook in {path}"
+                return f"updated the ddflow {event} hook in {path}{saved}"
     groups.append({"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]})
     _write(path, data)
     if not purpose:

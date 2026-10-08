@@ -108,6 +108,25 @@ def test_a_broken_region_is_refused_not_guessed(repo):
     assert hook.read_text() == broken
 
 
+def test_force_replaces_a_hook_whose_region_is_broken(repo):
+    E.install(repo)
+    hook = _hook(repo)
+    hook.write_text(hook.read_text().replace("# ddflow:end hooks/pre-commit\n", ""))
+    assert "installed the ddflow pre-commit hook" in E.install(repo, force=True)
+    assert hook.read_text().count("ddflow:end hooks/pre-commit") == 1
+
+
+def test_bytes_that_are_not_utf8_around_the_region_are_never_rewritten(repo):
+    E.install(repo)
+    hook = _hook(repo)
+    raw = hook.read_bytes() + b"# caf\xe9\n"
+    hook.write_bytes(raw)
+    assert "not UTF-8" in E.install(repo)
+    assert "not UTF-8" in E.uninstall(repo)
+    assert hook.read_bytes() == raw
+    assert "installed the ddflow pre-commit hook" in E.install(repo, force=True)
+
+
 # -- the harness settings entry ----------------------------------------------------------
 
 
@@ -146,6 +165,22 @@ def test_a_harness_hook_from_before_the_stamp_is_upgraded_keeping_its_other_keys
     assert "updated the ddflow SessionStart hook" in _install_session_hook(repo)
     (entry,) = _entries(repo)
     assert entry["timeout"] == 9 and "ddflow:begin hooks/session-start" in entry["command"]
+
+
+def test_a_hand_edited_harness_hook_is_backed_up_before_it_is_rewritten(repo):
+    _install_session_hook(repo)
+    p = repo / ".claude" / "settings.json"
+    data = json.loads(p.read_text())
+    hook = data["hooks"]["SessionStart"][0]["hooks"][0]
+    hook["command"] = hook["command"].replace(
+        "hooks session-start", "hooks session-start --mine", 1
+    )
+    p.write_text(json.dumps(data))
+    edited = p.read_text()
+    assert "edited by hand" in _install_session_hook(repo)
+    copies = [c for c in (repo / ".ddflow" / "backups").rglob("settings.json") if c.is_file()]
+    assert copies and copies[0].read_text() == edited
+    assert "--mine" not in _entries(repo)[0]["command"]
 
 
 def test_an_older_ddflow_does_not_downgrade_a_newer_harness_hook(repo):
@@ -202,6 +237,16 @@ def test_an_older_ddflow_does_not_downgrade_a_newer_frozen_block(repo):
     refused = [a for a in actions if isinstance(a, Refused)]
     assert refused and "upgrade ddflow to >= " in refused[0]
     assert cfg.read_text() == newer
+
+
+def test_a_second_block_outside_the_stamped_region_is_named_as_such(repo):
+    _freeze(repo)
+    cfg = repo / ".pre-commit-config.yaml"
+    text = cfg.read_text()
+    legacy = text[text.index(L.HOOK_BEGIN) : text.index(L.HOOK_END) + len(L.HOOK_END) + 1]
+    cfg.write_text(text + legacy)
+    refused = [a for a in L.freeze(repo, ["a.md"]) if isinstance(a, Refused)]
+    assert refused and "outside it" in refused[0] and "stamped frozen-files hook" in refused[0]
 
 
 def test_a_hand_edited_frozen_block_is_backed_up_first(repo):

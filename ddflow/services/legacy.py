@@ -30,13 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..core import clock
 from ..core.digest import hasher
 from ..infra.fsio import Managed, NewerContent, RegionError, repo_rel
 from ..infra.tomlcfg import atomic_write, basic_string
 from .adopt import NATIVE_RULES, Refused, block_marker
-from .backups import make_backup
-from .enforce import UnreadableYaml, read_precommit_yaml
+from .enforce import UnreadableYaml, backup_edited, read_precommit_yaml
 
 #: Where the onboarding prompt looks for instructions that write an imported surface.
 #: The native list comes from `adopt.NATIVE_RULES` -- the same source `enforce.rulebooks`
@@ -402,7 +400,12 @@ def _arm_precommit(repo: Path, config: Path, paths: list[str]) -> str:
     except RegionError as exc:
         return Refused(f"{config.name}: {exc}; clean the block up by hand and re-run")
     begins, ends = outside.count(HOOK_BEGIN), outside.count(HOOK_END)
-    if begins != ends or begins > 1 or (state != "absent" and begins):
+    if state != "absent" and begins:
+        return Refused(
+            f"{config.name} has ddflow's stamped frozen-files hook and {begins} more "
+            f"begin marker(s) outside it, expected none; clean the block up by hand and re-run"
+        )
+    if begins != ends or begins > 1:
         # Replacing a half-deleted block by finding the first END would swallow whatever
         # sits between the orphan marker and the next block (rubber_duck on 276c2cbe).
         return Refused(
@@ -417,7 +420,7 @@ def _arm_precommit(repo: Path, config: Path, paths: list[str]) -> str:
         except NewerContent as exc:
             return Refused(f"{config.name}: {exc}")
         if state == "edited":
-            saved = _backup_edited(repo, config)
+            saved = backup_edited(repo, config, "frozen-files block")
         action = f"updated the frozen-files hook in {config.name}" + saved + _INSTALL_NOTE
     elif begins == 1:
         start = text.rfind("\n", 0, text.index(HOOK_BEGIN)) + 1
@@ -443,16 +446,6 @@ def _arm_precommit(repo: Path, config: Path, paths: list[str]) -> str:
         )
     atomic_write(config, new_text)
     return action + _superseded_note(repo, _remove_marked_tests(repo))
-
-
-def _backup_edited(repo: Path, config: Path) -> str:
-    """Copy a config whose managed block was edited by hand to `.ddflow/backups/` before
-    it is rewritten; the sentence that says where, or "" when it could not be saved."""
-    try:
-        where = make_backup(repo, [config], "", "", name=f"{clock.compact_at()}-frozen-hook-edited")
-    except OSError:
-        return ""
-    return f" (the block had been edited by hand; the original is in {where})"
 
 
 def _repos_item_indent(text: str) -> str:
