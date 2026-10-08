@@ -18,13 +18,13 @@ def load_toml_dir(
     rel_dir: Path,
     build: Callable[[str, dict[str, Any]], tuple[Any, list[str]]],
     mismatch: Callable[[Any], str],
-) -> tuple[list[tuple[str, Any]], list[str]]:
-    """([(id, built)], errors) for every `repo/rel_dir/*.toml`, in file-name order.
+) -> tuple[list[tuple[str, Any, str]], list[str]]:
+    """([(id, built, repo-relative path)], errors) for every `repo/rel_dir/*.toml`, in file-name order.
 
     `build(id, spec)` returns (the definition or None, the reasons it is None); `mismatch(
     declared_id)` is the message for a file whose own `id` differs from its name."""
     d = Path(repo) / rel_dir
-    out: list[tuple[str, Any]] = []
+    out: list[tuple[str, Any, str]] = []
     errors: list[str] = []
     if not d.is_dir():
         return out, errors
@@ -43,5 +43,5 @@ def load_toml_dir(
         if built is None:
             errors.append(f"{rel}: " + "; ".join(bad))
             continue
-        out.append((f.stem, built))
+        out.append((f.stem, built, rel))
     return out, errors

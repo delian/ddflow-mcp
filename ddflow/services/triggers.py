@@ -221,7 +221,7 @@ def load(repo: Path, jobs: dict[str, Any]) -> tuple[dict[str, Trigger], list[str
         build_one,
         lambda _: "its id differs from the file name; a trigger file is <id>.toml",
     )
-    return dict(loaded), errors
+    return {tid: trig for tid, trig, _ in loaded}, errors
 
 
 # -- the evaluator -------------------------------------------------------------------------

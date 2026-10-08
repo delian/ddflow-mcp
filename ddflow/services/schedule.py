@@ -238,9 +238,7 @@ def load_files(repo: Path) -> tuple[list[tuple[Schedule, str]], list[str]]:
         build,
         lambda jid: f"id {jid!r} differs from the file name; a job file is <id>.toml",
     )
-    return [
-        (job, f"file:{(SCHEDULES_DIR / (jid + '.toml')).as_posix()}") for jid, job in loaded
-    ], errors
+    return [(job, f"file:{rel}") for _, job, rel in loaded], errors
 
 
 def definitions(repo: Path, cfg: Config, st: State) -> Definitions:
