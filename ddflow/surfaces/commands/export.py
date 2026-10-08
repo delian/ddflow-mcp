@@ -8,12 +8,12 @@ run or nothing selected, 3 refused.
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import export as A
 from ...core import clock
 from ..context import NOTHING, OK, REFUSED, Ctx
+from ..render import emit_json
 
 
 def add_export_parser(sub) -> None:
@@ -87,7 +87,7 @@ VERBS = ("enable", "disable", "ack", "eject", "validate")
 def _list(c: Ctx, *, may_ack: bool = True) -> int:
     out = A.export_list(c.repo, c.requested_agent)
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     if out.exit:
         print(out.reason, file=sys.stderr)
@@ -132,7 +132,7 @@ def _list(c: Ctx, *, may_ack: bool = True) -> int:
 def _plain(out, c: Ctx) -> int:
     """One-line result of enable / disable / ack / eject."""
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     if out.exit:
         print(out.reason, file=sys.stderr)
@@ -146,7 +146,7 @@ def _plain(out, c: Ctx) -> int:
 def _validate(a, c: Ctx) -> int:
     out = A.export_validate(c.repo, a.target)
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     for r in out.data.get("results", []):
         if r["ok"]:
@@ -217,7 +217,7 @@ def cmd_export(a, c: Ctx) -> int:
         confirm=_confirm if interactive else None,
     )
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     results = out.data.get("results", [])
     if not results:

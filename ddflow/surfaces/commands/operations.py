@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import json
 import sys
 
 from ...api import operations as A
 from ...core import provenance as PV
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..render import emit_json
 
 
 def cmd_cleanup(a, c: Ctx) -> int:
     """Classify every ddflow worktree and branch; with --apply, land the safe ones."""
     out = A.cleanup(c.repo, apply=a.apply, agent=c.requested_agent)
     if c.json and not a.apply:
-        print(json.dumps(out.body(("trees", "stale_branches")), indent=2, default=str))
+        emit_json(out.body(("trees", "stale_branches")))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -49,7 +49,7 @@ def cmd_cadence(a, c: Ctx) -> int:
         c.out(f"recorded cadence run: {a.ran}", out.body(("cadence",)))
         return OK
     if c.json:
-        print(json.dumps(out.body("due"), indent=2))
+        emit_json(out.body("due"))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -63,7 +63,7 @@ def cmd_cadence(a, c: Ctx) -> int:
 def _import_verify(c: Ctx) -> int:
     out = A.import_verify(c.repo, agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     r = out.data["_render"]["report"]
     if out.exit == NOTHING:
@@ -160,7 +160,7 @@ def cmd_import(a, c: Ctx) -> int:
         )
         return OK
     if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
+        emit_json(out.body())
         return out.exit
     plan = out.data["_render"]["plan"]
     if out.exit == NOTHING:
@@ -209,7 +209,7 @@ def cmd_external(a, c: Ctx) -> int:
 
     out = AO.external_sync(c.repo, agent=c.requested_agent)
     if c.json:
-        print(json.dumps(out.body("observed"), indent=2, default=str))
+        emit_json(out.body("observed"))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -231,7 +231,7 @@ def cmd_pins(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(), indent=2))
+        emit_json(out.body())
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -265,7 +265,7 @@ def cmd_tests(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(), indent=2))
+        emit_json(out.body())
         return out.exit
     d = out.data
     if out.exit == NOTHING:
@@ -300,7 +300,7 @@ def cmd_precommit(a, c: Ctx) -> int:
     """A `.pre-commit-config.yaml` proposed for this repository's stacks."""
     out = A.precommit(c.repo, where=c.called_from, ddflow_cmd=a.ddflow_cmd, write=a.write)
     if c.json:  # a body for EVERY outcome, failure included, and the reason beside it
-        print(json.dumps(out.body(), indent=2))
+        emit_json(out.body())
         if out.exit != OK and out.reason:
             print(out.reason, file=sys.stderr)  # a bare `{}` and an exit code say nothing
         return out.exit
