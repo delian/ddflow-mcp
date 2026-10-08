@@ -169,8 +169,11 @@ def _hide_from_abbreviation(parser: argparse.ArgumentParser) -> None:
     matches = parser._get_option_tuples
 
     def visible(option_string: str) -> list[Any]:
+        found = matches(option_string)
+        if option_string[:2] != option_string[:1] * 2:
+            return found  # `-dv`: a short option with its value attached is not an abbreviation
         old = parser._compat_flags  # type: ignore[attr-defined]
-        return [m for m in matches(option_string) if m[1] not in old]
+        return [m for m in found if m[1] not in old]
 
     parser._get_option_tuples = visible  # type: ignore[method-assign]
 
