@@ -125,13 +125,19 @@ from .outcomes import (  # noqa: F401
     triage_line,
 )
 from .reviewers import (  # noqa: F401
+    _BIG_UNTRACKED,
+    _OURS,
     REVIEWER_GATES,
     _declared_family,
     _unapproved_reviewer,
+    _untracked_content_digest,
     family_of,
+    git_state,
+    git_state_change,
     is_reviewer_gate,
     reviewer_gates,
     reviewer_independence,
+    run_watching_git,
 )
 from .runner import (  # noqa: F401
     _RUN_FIELDS,
