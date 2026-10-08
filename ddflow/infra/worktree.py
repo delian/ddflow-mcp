@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import unidiff
 from ..core.flow import safe_name as _core_safe_name
 from ..infra import fsio
 from ..infra import git as G
@@ -669,61 +670,22 @@ def diff_covers_everything(
 
     A silent omission is the failure this guards -- and it is silent by construction,
     because a diff that is missing a file looks exactly like a diff of a change that
-    did not touch that file.
+    did not touch that file. The diff's files are read EXACTLY (`core.unidiff`), so `foo`
+    is never found in the header of a changed `foo bar`; `capture_diff` pins the `a/` and
+    `b/` prefixes, whatever `diff.noprefix` or `diff.mnemonicPrefix` say.
     """
     changed = _status_paths(tree, ignore_untracked)
     if changed is None:  # git could not say: never read as "nothing changed"
         return False, ["(git status failed: the diff cannot be checked)"]
-    headers = [ln for ln in diff.splitlines() if ln.startswith("diff --git ")]
+    shown = unidiff.touched_paths(diff)
+    # The diff text is decoded with errors="replace" (`_diff_text`), so a non-UTF-8 byte in
+    # a name is U+FFFD there but an escape in the status path: compare as the diff holds it.
     missing = [
         p
         for p in changed
-        if not any(
-            _in_diff_header(headers, spelled)
-            for spelled in (p, _c_quoted(p), _c_quoted(p, raw_high=True))
-        )
+        if p not in shown and os.fsencode(p).decode("utf-8", "replace") not in shown
     ]
     return (not missing), missing
-
-
-#: Bytes git prints as themselves in a quoted path: space up to (not including) DEL.
-_PRINTABLE_ASCII = (0x20, 0x7F)
-
-
-def _in_diff_header(headers: list[str], path: str) -> bool:
-    """Is ``path`` one side of a `diff --git a/<old> b/<new>` header line? Anchored at
-    both ends: never the tail of another path (`foo` in `sub/foo`), its head (`foo` in
-    `foo2`), or text inside a hunk. Git leaves a name with a space unquoted, so `foo` can
-    still match the header of `foo bar` when both changed and only `foo bar` is shown. `capture_diff` pins the `a/` and `b/`
-    prefixes, whatever `diff.noprefix` or `diff.mnemonicPrefix` say."""
-    olds = (f"diff --git a/{path} ", f'diff --git "a/{path}" ')
-    news = (f" b/{path}", f' "b/{path}"')
-    return any(h.startswith(olds) or h.endswith(news) for h in headers)
-
-
-_C_ESCAPES = {7: "a", 8: "b", 9: "t", 10: "n", 11: "v", 12: "f", 13: "r", 34: '"', 92: "\\"}
-
-
-def _c_quoted(path: str, *, raw_high: bool = False) -> str:
-    """``path`` as git spells it inside a quoted diff header (`quote_c_style`, with the
-    default `core.quotepath`): `"` and `\\` escaped, control and non-ASCII bytes as
-    `\\ooo` octal -- without the surrounding quotes. The status side is read raw with
-    `-z`, the diff side is not, so a name like `a"b` or `café` is matched in its quoted
-    form (B7ab10b58f2). ``raw_high``: as git spells it under `core.quotepath=false`,
-    which leaves bytes >= 0x80 as they are (`café\\"b`)."""
-    out: list[bytes] = []
-    for b in os.fsencode(path):
-        if b in _C_ESCAPES:
-            out.append(("\\" + _C_ESCAPES[b]).encode())
-        elif raw_high and b >= _PRINTABLE_ASCII[1] + 1:
-            out.append(bytes([b]))
-        elif not _PRINTABLE_ASCII[0] <= b < _PRINTABLE_ASCII[1]:
-            out.append(f"\\{b:03o}".encode())
-        else:
-            out.append(bytes([b]))
-    # Decoded as the diff text is (`_diff_text`: UTF-8, invalid bytes replaced), so a raw
-    # non-UTF-8 byte under `quotepath=false` compares equal to what the diff holds.
-    return b"".join(out).decode("utf-8", errors="replace")
 
 
 def _status_paths(tree: Path, ignore_untracked: bool) -> list[str] | None:
