@@ -4226,6 +4226,10 @@ the exports, so a secret in a prompt is never printed and cannot be searched for
 refuses patterns that can take exponential time (a variable-length repeat inside a repeat (unless the two together run at most 8 times), an
 alternation inside a repeat that can run over 8 times, back-references, more than two unbounded repeats, over 200
 characters) and looks at the first 2000 characters of each record under a 5 second budget.
+`ddflow rule search --regex` makes the same check and refuses the same patterns (exit 3, with the
+reason; an uncompilable pattern is a refusal too, not "no rules found"). The `like` lesson-search
+backend (SQLite without FTS5) now ranks with the same BM25 over lightly stemmed words (FTS5's own stemmer
+is close, not identical), best first, instead of returning the first rows a substring match met.
 Exit codes: 0 hits, 2 none ("No matches ..."), 3 a refused request. No MCP tool yet: it joins
 the consolidated read tool of the viewers phase; agents use `ddflow_recall` meanwhile.
 

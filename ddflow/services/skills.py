@@ -3,7 +3,7 @@
 Read-only inventory: only the name, a one-line description and a path are kept. Content is
 never copied into the brief -- the agent's own tooling loads the file when it is wanted.
 Ranking is BM25 over name + description (+ a bounded head of the body), by the search core's
-ranker (`searchcore/rank.py`), computed in memory because this inventory is tiny and has no index.
+ranker (`core/rank.py`), computed in memory because this inventory is tiny and has no index.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..core import textsim
-from .searchcore.rank import bm25
+from ..core.rank import bm25
 
 MAX_FILES = 200
 BODY_HEAD_CHARS = 1500

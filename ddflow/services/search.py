@@ -30,6 +30,7 @@ from typing import Any
 from ..config import Config
 from ..core import textsim
 from ..core.model import State
+from ..core.rank import tfidf
 from ..core.textcut import window
 from . import session_view as SV
 from . import viewers as V
@@ -37,7 +38,6 @@ from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 from .searchcore.hit import FuncSource, gather, register
 from .searchcore.hit import Hit as Doc
-from .searchcore.rank import tfidf
 from .searchcore.regexsafe import (  # noqa: F401 -- re-exported: the old import path
     MAX_BRANCH_REPS,
     MAX_OPEN_REPEATS,
