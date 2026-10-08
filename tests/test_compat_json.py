@@ -131,7 +131,7 @@ def test_the_declared_shape_is_the_shape_a_call_returns(repo):
         code, out, err = run_cli(repo, *argv)
         assert code == 0, (argv, out, err)
     server = Server(repo)
-    seen = {"array": 0, "object": 0}
+    seen = {"array": 0, "object": 0, "nested": 0}
     for tool, (_argv, arguments) in sorted(MIGRATED_WIRE_SHAPES.items()):
         spec = TOOLS[tool]
         shape = R.result_shape(spec.get("payload", ""), text=spec.get("text", False))
