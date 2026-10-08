@@ -412,7 +412,7 @@ def _line_of(text: str, command: str, after: int = 0) -> tuple[int, int]:
 
 
 def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
-    """Every deprecated or unknown reference in the project's adopted artifacts, in a stable
+    """Every deprecated, unknown or unchecked reference in the project's adopted artifacts, in a stable
     order (path, line)."""
     repo = Path(repo)
     out: list[Finding] = []
