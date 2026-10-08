@@ -125,7 +125,7 @@ def refuted_passes(state: State, item_ids: Iterable[str] | None = None) -> list[
 
 
 def refuted_line(row: dict[str, Any]) -> str:
-    """One row of `refuted_passes` as a line: ``T1.critic  2 refuted, 0 confirmed, 2 rounds``."""
+    """One row of `refuted_passes` as a line: ``T1.critic  2 refuted, 0 confirmed, 2 round(s)``."""
     rounds = row.get("rounds")
     tail = f", {rounds} round(s)" if rounds is not None else ""
     return f"{row['item']}.{row['gate']}  {row.get('refuted', 0)} refuted, {row.get('confirmed', 0)} confirmed{tail}"

@@ -288,7 +288,7 @@ def cmd_complete(a, c: Ctx) -> int:
                     k
                     for k in (
                         "export_refresh",
-                        "passed_on_refutation",
+                        "refuted_passes",
                         "progress",
                         "umbrellas_completed",
                         "umbrella_refused",
@@ -303,9 +303,7 @@ def cmd_complete(a, c: Ctx) -> int:
 
 def _refuted_text(data: dict) -> str:
     """The completion's gates passed on refutation (D-unify 5), one line each."""
-    return "".join(
-        f"\nPASSED ON REFUTATION: {line}" for line in data.get("passed_on_refutation", [])
-    )
+    return "".join(f"\nPASSED ON REFUTATION: {line}" for line in data.get("refuted_passes", []))
 
 
 def cmd_abandon(a, c: Ctx) -> int:

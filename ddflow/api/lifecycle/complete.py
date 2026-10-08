@@ -187,7 +187,7 @@ def complete(
 def _refuted_extra(st: State, item: str) -> dict[str, Any]:
     """D-unify 5: a gate passed on refutation is never silent in the completion result."""
     flagged = G.refuted_passes(st, [item])
-    return {"passed_on_refutation": [G.refuted_line(r) for r in flagged]} if flagged else {}
+    return {"refuted_passes": [G.refuted_line(r) for r in flagged]} if flagged else {}
 
 
 def _umbrella_children(st: State, it) -> list[str]:

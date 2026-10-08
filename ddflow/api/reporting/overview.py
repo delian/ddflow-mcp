@@ -201,7 +201,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         data["skipped_kinds"] = dict(st.skipped_kinds)
     flagged = G.refuted_passes(st)
     if flagged:  # D-unify 5: a pass on refutation is always visible; absent when there is none
-        data["passed_on_refutation"] = {
+        data["refuted_passes"] = {
             "gates": len(flagged),
             "items": len({r["item"] for r in flagged}),
             "list": "ddflow gate list --refuted",
