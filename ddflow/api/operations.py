@@ -23,7 +23,7 @@ from typing import Any
 from ..core import clock
 from ..core import outcome as O
 from ..core.plain import plain
-from ..services.schedule import done_counts
+from ..services.schedule import count_unit, done_counts
 from ._base import _load
 
 
@@ -128,9 +128,7 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         else:
             # A calendar cadence is timed by the run event's own timestamp; what it
             # records here is incidental.
-            result = str(
-                done_tasks if ran in ("integration_tests", "dedupe_sweep") else done_phases
-            )
+            result = str(done_tasks if count_unit(ran) == "tasks" else done_phases)
         log.append("cadence.ran", ran, {"result": result, "evidence": {"note": note}})
         return O.ok("cadence.ran", cadence=ran, due=[])
 

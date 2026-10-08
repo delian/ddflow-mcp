@@ -98,3 +98,16 @@ def test_a_non_numeric_last_result_reads_as_never_run_not_a_crash():
     due = {d["cadence"]: d for d in CA.count_due(st, cfg)}
     assert due["integration_tests"]["since"] == 12
     assert SV.count_at_last_run(st, "integration_tests") == 0
+
+
+def test_the_recorded_count_of_a_run_follows_the_one_table():
+    """`cadence --ran` writes the completion count of the pass's own unit, derived from
+    COUNT_PASSES rather than a second literal list of names (roborev 2205)."""
+    assert {n: SV.count_unit(n) for n, _k, _u in SV.COUNT_PASSES} == {
+        "integration_tests": "tasks",
+        "dedupe_sweep": "tasks",
+        "architecture_review": "phases",
+        "mutation_tests": "phases",
+        "lessons_pass": "phases",
+    }
+    assert SV.count_unit("bug_hunt") == ""

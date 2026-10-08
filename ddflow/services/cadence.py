@@ -1,4 +1,4 @@
-"""The lessons-compression cadence rule.
+"""The count-based due passes and the lessons-compression and export cadence rules.
 
 Derived from the log like every other cadence: the trigger is how much the lessons
 corpus has grown since the last recorded compression, so there is no state file to

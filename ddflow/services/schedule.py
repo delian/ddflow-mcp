@@ -110,6 +110,11 @@ def count_passes(st: State, cfg: Config) -> list[CountPass]:
     return out
 
 
+def count_unit(name: str) -> str:
+    """What the count pass `name` counts, "tasks" or "phases"; "" for a name that is not one."""
+    return next((COUNT_UNITS[key] for n, _knob, key in COUNT_PASSES if n == name), "")
+
+
 def count_at_last_run(st: State, name: str) -> int:
     """The completion count the LAST `cadence.ran` of `name` recorded. A malformed or
     absent `result` reads as 0 -- treating an unparseable record as "it never ran" errs
