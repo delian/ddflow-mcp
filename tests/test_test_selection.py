@@ -136,7 +136,7 @@ def test_ddflow_tests_lists_why_and_the_command(proj):
     assert code == OK, err
     assert "tests/test_a.py  -- imports pkg.a" in out
     assert "pytest -q -n 2 tests/test_a.py tests/test_b.py" in out
-    assert "The unit_tests gate still runs the whole suite" in out
+    assert "The unit_tests gate may run the whole suite; pass --item" in out
     code, out, _ = run_cli(proj, "--json", "tests")
     body = json.loads(out)
     assert {t["path"] for t in body["tests"]} == {"tests/test_a.py", "tests/test_b.py"}
