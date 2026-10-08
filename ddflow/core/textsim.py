@@ -45,10 +45,11 @@ from array import array
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
-from .digest import content_digest
+from .digest import content_digest, normalize_text
 
-#: Bumped whenever ``tokens`` or the weighting changes; ``index.db`` stores it.
-VERSION = 1
+#: Bumped whenever ``tokens``, the weighting or the record ``digest`` changes (2: redaction
+#: markers are one token in it); ``index.db`` stores it.
+VERSION = 2
 
 STOP = frozenset(
     """a an the and or but if then else of to in on at by for with from as is are was were
@@ -152,7 +153,7 @@ def content_words(toks: Iterable[str]) -> int:
 def digest(title: str, body: str = "") -> str:
     """Identity of a record's text up to case and whitespace: equal digests are the
     'identical text' D-no-duplicates records as a duplicate without asking."""
-    norm = " ".join(f"{title}\n{body}".casefold().split())
+    norm = normalize_text(f"{title}\n{body}")
     return content_digest(norm, "blake2b", size=10)
 
 
