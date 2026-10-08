@@ -3714,6 +3714,20 @@ ddflow can no longer read or write a project safely. An older ddflow writes what
 understands, preserves the rest, and is refused only on a direct conflict. The skew guard
 below is the current, version-based form of that refusal.
 
+**Aliases and deprecations.** A renamed command, command group, flag, MCP tool, tool argument
+or config key keeps working under its old name until 1.0 (D-compat). The new name is declared
+once in the command registry (`ddflow/surfaces/registry.py`: `aliases`, `tool_aliases`,
+`deprecated_since`, `removed_in` on `Command` and `Param`; `renamed_from` on a knob in
+`config_sections/`), and the declaration is refused if it names no release or lets the old
+name go before 1.0. An alias is hidden from `--help`, usage and `tools/list` and is always
+callable; the first use in a session says so in one line (`ddflow: command 'doc' is deprecated
+since 0.1.17; use 'docs' ...` on stderr for the CLI, a `note:` in the MCP result, a warning
+for a config key), and a second use says nothing. An old config key is read (the new key wins
+when both are set), and the next config write moves it to the new key, keeping comments; an
+old `config --set` key writes the new one. An unknown command, MCP tool or argument names the
+closest known one (`Did you mean 'ddflow_probe'?`). A command's alias is the same command to
+the parity test.
+
 ### The version stamp and the skew guard
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a

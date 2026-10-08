@@ -29,6 +29,8 @@ from collections.abc import Callable
 from dataclasses import MISSING, dataclass, field, fields
 from typing import Any
 
+from ._compat import MIN_REMOVED_IN, check_rename
+
 # --------------------------------------------------------------------------------------
 # Knob documentation lives beside the knob, in this dict, keyed "section.knob".
 # `ddflow config --explain` renders it.  A knob with no entry here fails a ratchet test
@@ -54,12 +56,20 @@ class Knob:
     outward: frozenset[str] = frozenset()
     #: "" for a valid value, else why not -- for a knob whose type is not the whole contract.
     check: Callable[[Any], str] | None = None
+    #: Earlier spellings of this knob, as full ``"section.knob"`` keys (D-compat): still read,
+    #: with a warning, and moved to this key on the next config write. Needs ``since``.
+    renamed_from: tuple[str, ...] = ()
+    #: The release that renamed it, and the earliest release the old key may stop working.
+    since: str = ""
+    removed_in: str = MIN_REMOVED_IN
 
 
 #: Every knob declared through `knob()`, by "section.knob", in declaration order.
 DECLARED: dict[str, Knob] = {}
 #: The module whose `declare()` registered each of them (a section declares only its own).
 DECLARED_IN: dict[str, str] = {}
+#: Old key -> (current key, since, removed_in) for every ``renamed_from`` (D-compat).
+RENAMED: dict[str, tuple[str, str, str]] = {}
 
 
 def knob(
@@ -71,6 +81,9 @@ def knob(
     strictest: tuple[str, str] | None = None,
     outward: frozenset[str] | set[str] = frozenset(),
     check: Callable[[Any], str] | None = None,
+    renamed_from: tuple[str, ...] | list[str] = (),
+    since: str = "",
+    removed_in: str = MIN_REMOVED_IN,
 ) -> Any:
     """A dataclass field that carries its knob declaration (see the module docstring).
     `factory` for a mutable default (a list or dict), as `field(default_factory=...)`."""
@@ -80,7 +93,23 @@ def knob(
         raise ValueError(f"strictest {strictest[0]!r} is not one of {choices}")
     if set(outward) - set(choices):
         raise ValueError(f"outward values {sorted(set(outward) - set(choices))} are not choices")
-    meta = {KNOB: Knob(doc, tuple(choices), strictest, frozenset(outward), check)}
+    if renamed_from:
+        check_rename("knob renamed_from", since, removed_in)
+        for old in renamed_from:
+            if old.count(".") != 1 or not all(old.split(".")):
+                raise ValueError(f"renamed_from {old!r} is not a 'section.knob' key")
+    meta = {
+        KNOB: Knob(
+            doc,
+            tuple(choices),
+            strictest,
+            frozenset(outward),
+            check,
+            tuple(renamed_from),
+            since,
+            removed_in,
+        )
+    }
     if factory is not MISSING:
         return field(default_factory=factory, metadata=meta)
     return field(default=default, metadata=meta)
@@ -100,6 +129,10 @@ def declare(section: str) -> Callable[[type], type]:
             KNOB_DOCS[key] = meta.doc
             DECLARED[key] = meta
             DECLARED_IN[key] = cls.__module__
+            for old in meta.renamed_from:
+                if old == key or old in RENAMED or old in DECLARED:
+                    raise ValueError(f"{old} is renamed_from of {key} but is also a live key")
+                RENAMED[old] = (key, meta.since, meta.removed_in)
         return cls
 
     return register
