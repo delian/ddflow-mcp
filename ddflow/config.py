@@ -19,13 +19,14 @@ import json
 import os
 import sys
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
-from .config_sections._docs import KNOB_DOCS, RENAMED, declared_tables
+from .config_sections._compat import is_source_tree, upgrade_advice
+from .config_sections._docs import DECLARED, KNOB_DOCS, RENAMED, declared_tables
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
     AgentConfig,
@@ -184,8 +185,22 @@ def parallel_range_problems(cfg: Config) -> list[tuple[str, str]]:
     return out
 
 
+#: The config FORMAT this code reads and writes: the optional top-level `format = N` of
+#: `.ddflow/config.toml` (D-compat 2). Raised only when a section's SHAPE changes in a way
+#: an older ddflow could not edit without losing something -- an added knob never raises it.
+#: A file with a higher `format` is read (what this version knows is applied) but not
+#: written (`format_problem`: exit 3, upgrade advice). A file with none is format 1.
+CONFIG_FORMAT = 1
+
 #: `Config` fields that are bookkeeping, not `[section]`s.
-_NOT_SECTIONS = ("sources", "unknown_knobs", "_fallback_notes", "_bad_values")
+_NOT_SECTIONS = (
+    "sources",
+    "unknown_knobs",
+    "ignored_members",
+    "file_format",
+    "_fallback_notes",
+    "_bad_values",
+)
 
 
 @dataclass
@@ -227,6 +242,13 @@ class Config:
     #: the strictest value was APPLIED instead, or which later layer overrode it
     #: (`fallback_entries` tells the two kinds apart). See `_apply`.
     unknown_knobs: list[str] = field(default_factory=list, repr=False)
+    #: Members of a checked list or table knob that a config FILE carried and this code does
+    #: not know (a newer release's `[dedupe].kinds` entry): ignored, the rest applied. One
+    #: note each, for stderr and `doctor`; never a failure (D-compat 2).
+    ignored_members: list[str] = field(default_factory=list, repr=False)
+    #: The `format = N` a file layer declared (0: none did); `CONFIG_FORMAT` is what this
+    #: code reads. A newer one is reported by `doctor` and refuses writes.
+    file_format: int = field(default=0, repr=False)
 
     #: For each enum knob that fell back to its strictest value, the (index in
     #: unknown_knobs, "key = 'bad'") of each note, so a later layer's value rewrites the
@@ -279,11 +301,13 @@ class Config:
         if envdata:
             cfg._apply(envdata, "env")
         if root is not None:
-            _warn_unknown(cfg.unknown_knobs, Path(root), cfg.fallback_entries())
+            _warn_unknown(
+                cfg.unknown_knobs, Path(root), cfg.fallback_entries(), cfg.ignored_members
+            )
         return cfg
 
     @classmethod
-    def check(cls, data: dict[str, Any]) -> None:
+    def check(cls, data: dict[str, Any], *, written: Iterable[str] | None = None) -> None:
         """Would this TOML load? Raises `ValueError` naming the first thing wrong.
 
         The semantic half of validation, which the write paths did not have. They
@@ -292,10 +316,19 @@ class Config:
         was written, and every later command failed to load the file. A writer that
         validates the state it is replacing has checked nothing.
 
+        ``written`` names what the caller is WRITING (dotted keys such as
+        ``lease.ttl_s``, or ``export.roadmap.mode``): those are judged strictly, an
+        unknown one a typo. Everything else in ``data`` is the file's existing content,
+        and is judged as `load` judges a file that may be newer than this code: a section,
+        knob or enum value this version does not know passes through (the writer leaves it
+        byte-identical), and a checked list's unknown member is ignored (D-compat 2). Without
+        ``written`` every key counts as written.
+
         Applied to a throwaway instance so a rejected fragment cannot leave a
         half-updated Config behind.
         """
-        cls()._apply(data, "check")
+        wrote = None if written is None else frozenset(written)
+        cls()._apply(data, "check", written=wrote)
 
     def _sections(self) -> list[str]:
         return [f.name for f in fields(self) if f.name not in _NOT_SECTIONS]
@@ -314,7 +347,14 @@ class Config:
     #: `tests/test_roborev_findings.py` asserts they do.
     _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion", "macro"})
 
-    def _apply(self, data: dict[str, Any], source: str, *, lenient: bool | None = None) -> None:
+    def _apply(
+        self,
+        data: dict[str, Any],
+        source: str,
+        *,
+        lenient: bool | None = None,
+        written: frozenset[str] | None = None,
+    ) -> None:
         # A key a config FILE carries that this code does not know is recorded and
         # skipped, never fatal. Several checkouts of one repository run different
         # versions of ddflow -- a worktree whose branch predates a knob runs its own,
@@ -324,13 +364,26 @@ class Config:
         # names every entry on stderr, `doctor` reports each as a problem, the WRITE
         # paths (source "check") still refuse an unknown key, and `load` passes
         # lenient=False where the file and the code are the same tree's.
+        #
+        # `written` (the write paths' validation only) says which keys the caller is
+        # WRITING: those stay strict, and every other key is judged as a file layer's
+        # are, so an older ddflow can change a setting it knows in a file that also holds
+        # a newer release's (B-uni-compat-config, D-compat 2).
         if lenient is None:
             lenient = source in ("file", "local")
+
+        def soft(key: str) -> bool:
+            """May `key` be skipped or tolerated rather than refused?"""
+            if lenient or written is None:
+                return lenient
+            return key not in written and not any(w.startswith(key + ".") for w in written)
+
         data = _migrate_renamed(data, source)
+        data = self._take_format(data, source, lenient)
         for sec, values in data.items():
             if sec in self._FOREIGN_TABLES:
                 continue
-            if sec not in self._sections() and lenient:
+            if sec not in self._sections() and soft(sec):
                 self.unknown_knobs.append(f"[{sec}]")
                 continue
             if sec not in self._sections():
@@ -354,54 +407,88 @@ class Config:
             target = getattr(self, sec)
             known = {f.name: f for f in fields(target)}
             knobs_only = (
-                self._apply_export_tables(values, lenient, source) if sec == "export" else values
+                self._apply_export_tables(values, soft, source) if sec == "export" else values
             )
             for knob, raw in knobs_only.items():
-                if knob not in known and lenient:
-                    self.unknown_knobs.append(f"{sec}.{knob}")
+                key = f"{sec}.{knob}"
+                if knob not in known and soft(key):
+                    self.unknown_knobs.append(key)
                     continue
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
-                value = _coerce_layer_knob(sec, knob, raw, known[knob].type, lenient)
-                written = value  # what THIS layer says, before any merge: what a note names
-                if f"{sec}.{knob}" == "schedule.signals" and isinstance(value, dict):
-                    # merged over the layers below, mark by mark (`merge_signals`)
-                    value = merge_signals(getattr(target, knob), value)
-                check = _KNOB_CHECKS.get(f"{sec}.{knob}")
-                if check and (why := check(value)):
-                    if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
-                        # A value this code does not know, in a file that may be NEWER
-                        # than the code (a later release's tier): recorded like an unknown
-                        # knob, so no command stops loading config -- and an enum knob
-                        # takes its STRICTEST value, not its default, so a typo in a
-                        # tightened setting fails closed (D-enum-fallback-strict).
-                        if f"{sec}.{knob}" not in _STRICT_FALLBACK:
-                            self._bad_values.append(len(self.unknown_knobs))
-                            self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
-                            continue
-                        bad, value = written, strictest(f"{sec}.{knob}", getattr(target, knob))
-                        # an earlier layer's note names what THIS layer wrote, not the
-                        # fallback; each bad value stays its own (true) report
-                        self._forget_fallback(
-                            f"{sec}.{knob}",
-                            f"the {source} value {bad!r}, itself unknown: {value!r} is in effect",
-                        )
-                        why = f" [{why}]" if f"{sec}.{knob}" == SIGNALS else ""  # a table: why
-                        head = f"{sec}.{knob} = {bad!r}{why}"
-                        self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
-                            (len(self.unknown_knobs), head)
-                        )
-                        self.unknown_knobs.append(
-                            f"{head} (not a value this ddflow knows; "
-                            f"in effect: {value!r}, the strictest)"
-                        )
-                        setattr(target, knob, value)
-                        self.sources[f"{sec}.{knob}"] = f"{source} (strictest fallback)"
-                        continue
-                    raise InvalidValue(f"invalid {sec}.{knob} = {value!r}: {why}")
-                self._forget_fallback(f"{sec}.{knob}", f"the {source} value {value!r}")
+                self._apply_knob(sec, knob, raw, source, soft(key))
+
+    def _take_format(self, data: dict[str, Any], source: str, lenient: bool) -> dict[str, Any]:
+        """``data`` without its top-level `format = N`, which is not a section. A file layer
+        declares the format it is written in; a non-integer or non-positive one is refused
+        (a typo), and a NEWER one is remembered (`file_format`) for `format_problem` and
+        `doctor`: its content is still read as far as this version understands it."""
+        if "format" not in data:
+            return data
+        raw = data["format"]
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+            if not lenient:
+                raise InvalidValue(f"invalid format = {raw!r}: must be an integer >= 1")
+            self._bad_values.append(len(self.unknown_knobs))
+            self.unknown_knobs.append(f"format = {raw!r}")
+            return {k: v for k, v in data.items() if k != "format"}
+        if source in ("file", "local", "check"):
+            self.file_format = max(self.file_format, raw)
+        return {k: v for k, v in data.items() if k != "format"}
+
+    def _apply_knob(self, sec: str, knob: str, raw: Any, source: str, lenient: bool) -> None:
+        """Coerce, check and set one KNOWN knob from ``source``; ``lenient`` says a value
+        this code does not know is tolerated (a file layer, or a key being kept as found)."""
+        target = getattr(self, sec)
+        key = f"{sec}.{knob}"
+        typ = next(f.type for f in fields(target) if f.name == knob)
+        value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
+        written = value  # what THIS layer says, before any merge: what a note names
+        if key == SIGNALS and isinstance(value, dict):
+            # merged over the layers below, mark by mark (`merge_signals`)
+            value = merge_signals(getattr(target, knob), value)
+        ignored: list[str] = []
+        if lenient and key in _MEMBER_FILTERS:
+            value, ignored = _MEMBER_FILTERS[key](value)
+            self.ignored_members.extend(
+                f"{key}: ignored {what} (not known to this ddflow)" for what in ignored
+            )
+        check = _KNOB_CHECKS.get(key)
+        if check and (why := check(value)):
+            if ignored:
+                # Nothing usable is left of a list a newer release wrote: the layer below
+                # keeps its value, and the note says so.
+                self.ignored_members.append(f"{key}: nothing usable left; the value below stays")
+                return
+            if lenient and key in _TOLERANT_VALUES:
+                # A value this code does not know, in a file that may be NEWER
+                # than the code (a later release's tier): recorded like an unknown
+                # knob, so no command stops loading config -- and an enum knob then
+                # takes its STRICTEST value, not its default, so a typo in a
+                # tightened setting fails closed (D-enum-fallback-strict).
+                if key not in _STRICT_FALLBACK:
+                    self._bad_values.append(len(self.unknown_knobs))
+                    self.unknown_knobs.append(f"{key} = {value!r}")
+                    return
+                bad, value = written, strictest(key, getattr(target, knob))
+                # an earlier layer's note names what THIS layer wrote, not the
+                # fallback; each bad value stays its own (true) report
+                self._forget_fallback(
+                    key, f"the {source} value {bad!r}, itself unknown: {value!r} is in effect"
+                )
+                why = f" [{why}]" if key == SIGNALS else ""  # a table: why
+                head = f"{key} = {bad!r}{why}"
+                self._fallback_notes.setdefault(key, []).append((len(self.unknown_knobs), head))
+                self.unknown_knobs.append(
+                    f"{head} (not a value this ddflow knows; in effect: {value!r}, the strictest)"
+                )
                 setattr(target, knob, value)
-                self.sources[f"{sec}.{knob}"] = source
+                self.sources[key] = f"{source} (strictest fallback)"
+                return
+            raise InvalidValue(f"invalid {key} = {value!r}: {why}")
+        self._forget_fallback(key, f"the {source} value {value!r}")
+        setattr(target, knob, value)
+        self.sources[key] = source
 
     def fallback_entries(self) -> set[str]:
         """The `unknown_knobs` entries that are strictest-fallback notes -- a value applied
@@ -426,13 +513,14 @@ class Config:
             self.unknown_knobs[i] = f"{head} (not a value this ddflow knows; overridden by {by})"
 
     def _apply_export_tables(
-        self, values: dict[str, Any], lenient: bool, source: str
+        self, values: dict[str, Any], soft: Callable[[str], bool], source: str
     ) -> dict[str, Any]:
         """Move the `[export.<doc>]` sub-tables into `export.tables`; return the plain knobs.
 
         A dict value under a name that is not an `[export]` knob is a document's table.
         Unknown keys inside one are skipped with a warning in a file (a newer release's
-        key) and refused when written (`config --set`), like unknown knobs elsewhere.
+        key) and refused when written (`config --set`), like unknown knobs elsewhere;
+        ``soft(key)`` says which of the two, per key.
         """
         knobs = {f.name for f in fields(self.export)}
         plain: dict[str, Any] = {}
@@ -443,7 +531,7 @@ class Config:
             clean = {}
             for key, val in v.items():
                 if key not in EXPORT_TABLE_KEYS:
-                    if lenient:
+                    if soft(f"export.{k}.{key}"):
                         self.unknown_knobs.append(f"export.{k}.{key}")
                         continue
                     raise ValueError(
@@ -451,7 +539,7 @@ class Config:
                     )
                 clean[key] = val
             if why := _export_table_problem(k, clean):
-                if lenient:  # a value a newer release defines: skipped, never fatal
+                if soft(f"export.{k}"):  # a value a newer release defines: skipped, never fatal
                     self._bad_values.append(len(self.unknown_knobs))
                     self.unknown_knobs.append(f"export.{k} ({why})")
                     continue
@@ -463,6 +551,8 @@ class Config:
     def as_dict(self) -> dict[str, Any]:
         out = dataclasses.asdict(self)
         out.pop("sources", None)
+        out.pop("ignored_members", None)
+        out.pop("file_format", None)
         out.pop("_fallback_notes", None)
         out.pop("_bad_values", None)
         return out
@@ -552,33 +642,42 @@ _WARNED: set[tuple[str, str]] = set()
 
 
 def _warn_unknown(
-    keys: list[str], root: Path, fallbacks: set[str] | frozenset[str] = frozenset()
+    keys: list[str],
+    root: Path,
+    fallbacks: set[str] | frozenset[str] = frozenset(),
+    ignored: list[str] | None = None,
 ) -> None:
     """Say, on stderr, which config keys this code skipped, and which unknown enum values
-    it replaced (each note names the value in effect: the strictest, or a later layer's).
+    it replaced (each note names the value in effect: the strictest, or a later layer's),
+    and which members of a checked list it ignored (``ignored``).
 
     Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
     load-and-skip so an older tree keeps working, but only `doctor` mentioned it, so
     every other command ran with the knob dropped and nobody was told. stderr, so
     `--json` output and MCP replies stay parseable.
     """
-    new = [k for k in keys if (str(root), k) not in _WARNED]
+    new = [k for k in [*keys, *(ignored or [])] if (str(root), k) not in _WARNED]
     if not new:
         return
     _WARNED.update((str(root), k) for k in new)
     # An enum knob's unknown value is not skipped: it is APPLIED as the knob's strictest
     # value (D-enum-fallback-strict), and saying "skipped" would read as "no effect".
     fell_back = [k for k in new if k in fallbacks]
-    skipped = [k for k in new if k not in fallbacks]
+    members = [k for k in new if k in (ignored or [])]
+    skipped = [k for k in new if k not in fallbacks and k not in members]
     what = []
     if skipped:
         what.append(f"{', '.join(skipped)}, which this ddflow does not know; skipped")
     if fell_back:
         what.append(f"{', '.join(fell_back)}; each such knob takes the value its note names")
+    if members:
+        what.append(f"{'; '.join(members)}; the rest of each is applied")
+    # How to catch up depends on how this ddflow is installed: a checkout merges main.
+    fix = "merge main into this tree" if is_source_tree() else upgrade_advice(kind="index")
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
         f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "
-        "than this code: merge main into this tree (or, if it is a typo, fix it; "
+        f"than this code: {fix} (or, if it is a typo, fix it; "
         "`ddflow doctor` lists each).",
         file=sys.stderr,
     )
@@ -675,6 +774,13 @@ _VALUE_CHECKS: dict[str, Callable[[Any], str]] = {**_DK}
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
     **{key: _one_of(allowed) for key, allowed in KNOB_CHOICES.items()},
     **_VALUE_CHECKS,
+}
+
+#: Checked list and table knobs whose set of MEMBERS grows with releases (`knob(members=)`):
+#: for a config FILE's value, the filter returns it without the members this code does not
+#: know, and what it dropped; they are noted (`Config.ignored_members`), never a failure.
+_MEMBER_FILTERS: dict[str, Callable[[Any], tuple[Any, list[str]]]] = {
+    key: meta.members for key, meta in DECLARED.items() if meta.members is not None
 }
 
 

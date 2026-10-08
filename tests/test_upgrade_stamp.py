@@ -25,6 +25,7 @@ from ddflow.core.events import (
 )
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
+from ddflow.services import install_info as II
 
 FIXTURE = Path(__file__).parent / "fixtures" / "upgrade" / "log-0.1.3.jsonl"
 
@@ -396,8 +397,12 @@ def test_doctor_advice_for_skipped_kinds_is_to_upgrade(repo: Path):
     stamp_newer(repo, "99.0.0", agent="future")
     _code, out, _err = run_cli(repo, "doctor")
     assert "future.kind x1" in out
-    assert "merge main" not in out
-    assert "Upgrade ddflow-mcp to >= 99.0.0" in out
+    # The remedy fits how this ddflow is installed (B-uni-compat-config): a source checkout
+    # merges main, an installed one upgrades its package.
+    if II.install_info().kind in ("source-tree", "editable"):
+        assert "Merge main" in out
+    else:
+        assert "Upgrade ddflow-mcp to >= 99.0.0" in out
 
 
 def test_status_json_carries_the_stamped_versions(repo: Path):

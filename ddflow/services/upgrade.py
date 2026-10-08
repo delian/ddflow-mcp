@@ -17,6 +17,7 @@ from typing import Any
 from ..core.events import is_older
 from ..core.model import State
 from ..infra.log import SEEN_MARKER, running_version
+from .install_info import upgrade_advice
 
 
 def last_seen_version(root: Path | str) -> str:
@@ -50,16 +51,20 @@ def skew_report(st: State, running: str = "") -> dict[str, Any]:
 
 def skipped_kinds_advice(st: State) -> str:
     """The remedy for events this code skipped: they come from a NEWER ddflow, so the fix
-    is to upgrade this one -- not to "merge main", which was advice for a source checkout."""
+    is to bring this one up to date the way it was installed (`install_info.upgrade_advice`:
+    a source checkout merges main, an installed ddflow upgrades its package)."""
     kinds = ", ".join(f"{k} x{n}" for k, n in sorted(st.skipped_kinds.items()))
-    highest = st.highest_version
-    target = f" >= {highest}" if highest else ""
     return (
         f"this log has events from a newer ddflow than this one ({running_version()}), "
-        f"skipped: {kinds}. Every number computed here is WITHOUT them. Upgrade "
-        f"ddflow-mcp{' to' + target if target else ''} "
-        f"(restart the MCP server after upgrading)"
+        f"skipped: {kinds}. Every number computed here is WITHOUT them. "
+        f"{_advice(st.highest_version)}"
     )
+
+
+def _advice(highest: str) -> str:
+    """`install_info.upgrade_advice`, capitalised: the sentence a note ends with."""
+    text = upgrade_advice(highest)
+    return text[:1].upper() + text[1:]
 
 
 def doctor_notes(st: State, running: str = "") -> list[str]:
@@ -72,7 +77,7 @@ def doctor_notes(st: State, running: str = "") -> list[str]:
         notes.append(
             f"ddflow {rep['running']} is OLDER than this log's highest stamp "
             f"({rep['highest']}): writes are refused unless [upgrade].skew allows them. "
-            f"Upgrade ddflow-mcp to >= {rep['highest']}"
+            f"{_advice(rep['highest'])}"
         )
     for o in rep["overrides"]:
         notes.append(

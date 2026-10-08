@@ -24,6 +24,14 @@ def _unit_interval(v: Any) -> str:
     return "" if ok else "must be a number between 0 and 1"
 
 
+def _kinds_members(v: Any) -> tuple[Any, list[str]]:
+    """`[dedupe].kinds` from a file: the kinds this ddflow knows, and a note for each other
+    (a newer release's record kind). A value that is not a list of words is left to the check."""
+    if not isinstance(v, list) or not all(isinstance(k, str) for k in v):
+        return v, []
+    return [k for k in v if k in DEDUPE_KINDS], [f"kind {k!r}" for k in v if k not in DEDUPE_KINDS]
+
+
 @declare("dedupe")
 @dataclass
 class DedupeConfig:
@@ -69,6 +77,7 @@ class DedupeConfig:
     )
     kinds: list[str] = knob(
         factory=lambda: list(DEDUPE_KINDS),
+        members=_kinds_members,
         doc="Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it. Default: bug, task, phase, lesson, decision, research, memory, rule. A rule (a file, not a log record) is checked on `rule add` and on a `rule edit` of its title or content against every other kind, and compared with the other rules by its own check; it is never offered as a candidate.",
         check=lambda v: (
             ""
