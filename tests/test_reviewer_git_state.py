@@ -73,3 +73,19 @@ def test_a_command_reviewer_that_applies_a_stash_did_not_review(tmp_path, monkey
     rev = R.Reviewer(name="r", kind="command", command="git stash apply -q; echo 'LGTM'")
     out, err = R._chat(rev, "sys", "user", 30)
     assert out == "" and "git state" in err
+
+
+def test_git_state_sees_an_untracked_file_rewritten(tmp_path):
+    repo = _repo_with_stash(tmp_path)
+    (repo / "scratch.txt").write_text("A")
+    before = git_state(repo)
+    (repo / "scratch.txt").write_text("B")
+    assert git_state(repo) != before
+
+
+def test_a_repository_the_tool_broke_is_a_change_not_a_pass():
+    from ddflow.services.gates.reviewers import git_state_change
+
+    state = {"head": "a", "status": "b"}
+    assert "unreadable" in git_state_change(state, None)
+    assert git_state_change(None, state) == "" and git_state_change(state, state) == ""
