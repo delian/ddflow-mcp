@@ -51,7 +51,7 @@ def test_every_tool_has_one_command_name():
 
 def test_no_object_result_declares_a_field_called_schema():
     """The tag is a top-level key of the body; a payload field of the same name would be
-    overwritten (or, with `tag_body`, left untagged)."""
+    overwritten."""
     for tool, spec in TOOLS.items():
         assert R.SCHEMA_KEY not in R.payload_fields(spec.get("payload", "")), tool
 
