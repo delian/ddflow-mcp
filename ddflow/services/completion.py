@@ -27,6 +27,7 @@ from pathlib import Path
 from ..config import Config
 from ..core.model import State
 from ..core.schedule import is_shared
+from . import changes as CH
 from . import gates as G
 
 
@@ -335,17 +336,16 @@ def changed_paths(repo: Path, it) -> list[str] | None:
     from . import testselect as TS
 
     if it.landed_before and it.landed_after:
-        out = W.git_paths(
-            repo, "diff", "--name-only", "--no-renames", it.landed_before, it.landed_after
+        return CH.changed_paths(
+            repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
         )
-        return None if out is None else sorted(out)
     base = it.base or W.default_branch(repo)
     path = W.load_path(repo, it.worktree) if it.worktree else None
     if path and path.is_dir():
         return TS.changed_files(path, base)
     # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
     if it.branch and W.rev(repo, it.branch):
-        out = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{base}...{it.branch}")
+        out = CH.changed_paths(repo, base, tip=it.branch, include=("committed",))
         # Empty is not "nothing changed" here: a branch already merged into its base, or
         # the base itself, diffs to nothing whatever the task did.
         return sorted(out) if out else None

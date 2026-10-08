@@ -23,6 +23,12 @@ Two answers, for two situations:
   unstaged and untracked -- optionally narrowed to a glob set. None when git cannot say:
   "could not tell" is never "nothing changed".
 
+- `changed_paths` / `base_changed`: what differs from a base -- committed, staged, in the
+  work tree, untracked -- as the ONE answer every "changed against the base" caller reads
+  (decision D-unify). A rename counts as both its paths unless the caller asks for git's
+  own rename detection. None / None when git cannot say: "could not tell" is never
+  "nothing changed".
+
 Paths are POSIX strings relative to the root, spelt as the filesystem spells them. A glob
 has `core.globs` meaning (git's ``:(glob)`` pathspec), so a path this module calls
 matching is one a claim or a docs allowlist would call matching.
@@ -193,3 +199,75 @@ def changed_since(
     pats, skip = list(patterns), list(exclude)
     found = {p for listing in listings for p in listing or ()}
     return sorted(p for p in found if matches(p, pats) and not any(globs.match(p, g) for g in skip))
+
+
+#: The four places a change can be, in the order `changed_paths` reads them.
+KINDS = ("committed", "staged", "worktree", "untracked")
+
+
+def changed_paths(
+    root: Path | str,
+    base: str = "",
+    *,
+    tip: str = "HEAD",
+    include: Iterable[str] | None = None,
+    renames: bool = False,
+    fork: bool = True,
+    pathspec: Iterable[str] = (),
+    literal: bool = False,
+    diff_filter: str = "",
+) -> list[str] | None:
+    """The paths that differ from ``base``, sorted, or None when git could not say.
+
+    ``include`` picks from `KINDS`: ``committed`` (``base`` to ``tip``: with ``fork``, what
+    ``tip`` did since it left ``base``, git's ``base...tip``; without, the two commits
+    compared as they are), ``staged`` (the index against HEAD), ``worktree`` (tracked
+    files, staged or not, against HEAD) and ``untracked`` (not ignored). The default is
+    every kind that applies: ``committed`` only when a ``base`` is given, and the three
+    tree kinds only when ``tip`` is HEAD. A rename is both its old and its new path
+    unless ``renames``. ``pathspec`` narrows (``literal``: names, not globs);
+    ``diff_filter`` is git's ``--diff-filter``.
+    """
+    kinds = _kinds(include, base, tip)
+    spec = list(pathspec)
+    tail = ["--", *spec] if spec else []
+    pre = ["--literal-pathspecs"] if literal else []
+    flags = ["--name-only"] if renames else ["--name-only", "--no-renames"]
+    if diff_filter:
+        flags.append(f"--diff-filter={diff_filter}")
+    diff = ("diff", *flags)
+    queries: dict[str, Callable[[], list[str] | None]] = {
+        "committed": lambda: G.paths(
+            root, *pre, *diff, *([f"{base}...{tip}"] if fork else [base, tip]), *tail
+        ),
+        "staged": lambda: G.paths(root, *pre, "diff", "--cached", *flags, *tail),
+        "worktree": lambda: G.paths(root, *pre, *diff, "HEAD", *tail),
+        "untracked": lambda: G.files(root, "untracked", pathspec=tuple(spec)),
+    }
+    found = [queries[k]() for k in kinds]
+    if any(q is None for q in found):
+        return None
+    return sorted({p for q in found for p in q or ()})
+
+
+def _kinds(include: Iterable[str] | None, base: str, tip: str) -> tuple[str, ...]:
+    """The kinds of change `changed_paths` reads: ``include``, or by default every kind
+    that applies (`committed` needs a base; the tree kinds need ``tip`` to be HEAD)."""
+    if include is None:
+        return tuple(
+            k for k in KINDS if (base or k != "committed") and (tip == "HEAD" or k == "committed")
+        )
+    kinds = tuple(include)
+    unknown = [k for k in kinds if k not in KINDS]
+    if unknown:
+        raise ValueError(f"unknown kind(s) of change {unknown!r}; expected from {KINDS}")
+    if "committed" in kinds and not base:
+        raise ValueError("a committed change is against a base: pass base")
+    return kinds
+
+
+def base_changed(root: Path | str, base: str, **kw) -> bool | None:
+    """Does the tree differ from ``base`` at all? None when git could not say -- never
+    False for a git failure. ``kw`` is `changed_paths`'."""
+    found = changed_paths(root, base, **kw)
+    return None if found is None else bool(found)
