@@ -11,7 +11,7 @@ shape. It is `{id, since_version, format_level, kinds}` plus four functions:
 - ``apply(ctx, findings)``  makes the changes (files only through `infra.fsio`) and returns
   CORRECTIVE events to append -- the log is append-only, a migration never edits a line.
   It raises `Unavailable` only BEFORE it writes anything (the runner reports `unavailable`);
-  once it has written, any failure is an ordinary exception (reported `failed`);
+  once it has written, a failure is an OSError or ValueError (reported `failed`);
 - ``verify(ctx)``  after apply: problems that remain, empty when the project is as the new
   release expects it.
 """
