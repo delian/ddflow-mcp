@@ -164,9 +164,9 @@ def test_emit_json_is_the_bytes_every_command_printed(capsys):
     assert capsys.readouterr().out == "[]\n"
 
 
-#: Command modules that still print their own JSON; the list may only shrink. `reporting.py`
-#: was held by another agent when the emitter landed.
-_OWN_JSON = {"reporting.py"}
+#: Modules that still print their own JSON; the list may only shrink. `reporting.py` and
+#: `cli.py` were held by another agent when the emitter landed.
+_OWN_JSON = {"reporting.py", "cli.py"}
 
 
 def test_no_command_module_prints_its_own_json():
@@ -174,13 +174,15 @@ def test_no_command_module_prints_its_own_json():
 
     root = Path(__file__).parents[1] / "ddflow" / "surfaces"
     own = []
-    for path in sorted([*(root / "commands").glob("*.py"), root / "context.py"]):
+    for path in sorted([*(root / "commands").glob("*.py"), root / "context.py", root / "cli.py"]):
         tree = ast.parse(path.read_text("utf-8"))
         if any(
             isinstance(n, ast.Call)
             and isinstance(n.func, ast.Attribute)
             and n.func.attr == "dumps"
-            and getattr(n.func.value, "id", "") == "json"
+            or isinstance(n, ast.ImportFrom)
+            and n.module == "json"
+            and any(a.name == "dumps" for a in n.names)
             for n in ast.walk(tree)
         ):
             own.append(path.name)
