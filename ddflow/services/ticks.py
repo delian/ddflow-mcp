@@ -232,14 +232,17 @@ def _claim(path: Path, due: list[Tick], now: float) -> list[Tick]:
     return won
 
 
-def _record(path: Path, t: Tick, result: TickResult, *, keep_running: bool = False) -> None:
-    """Write ``result`` as ``t``'s last outcome. ``keep_running``: leave a row another command
-    is running right now alone (a note about a tick must not end its claim)."""
+def _record(path: Path, t: Tick, result: TickResult, *, live_at: float | None = None) -> None:
+    """Write ``result`` as ``t``'s last outcome. ``live_at`` (the time of this pass): leave a
+    row another command is running RIGHT NOW alone -- a note about a tick must not end its
+    claim -- but not one whose claim has outlived its window (a command that died)."""
     with fsio.file_lock(path.with_name(LOCK), LOCK_WAIT_S):
         rows = _read(path)
         row = rows.get(t.name, {})
-        if keep_running and row.get("status") == RUNNING:
-            return
+        if live_at is not None and row.get("status") == RUNNING:
+            last = row.get("last_at")
+            if isinstance(last, int | float) and live_at - last < CLAIM_WINDOWS * t.budget_s:
+                return
         rows[t.name] = {
             **row,
             "status": result.status,
@@ -368,7 +371,7 @@ def _run_due(
         prior = rows.get(r.name, {})
         if (prior.get("status"), prior.get("detail")) != (r.status, r.detail):
             with contextlib.suppress(OSError, fsio.LockTimeout):
-                _record(path, by_name[r.name], r, keep_running=True)
+                _record(path, by_name[r.name], r, live_at=now)
     started = ctx.mono()
     stateful_due = [t for t in due if t.every_s > 0]
     claimed = {t.name for t in _claim(path, stateful_due, now)} if stateful_due else set()
