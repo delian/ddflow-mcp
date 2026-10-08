@@ -46,6 +46,14 @@ def _strings(data: dict[str, Any], key: str, default: list[str] | None = None) -
     raise ValueError(f"{key} must be a string or a list of strings, got {got!r}")
 
 
+def _tables(data: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    """``data[key]`` as a list of inline tables (a check is one), or a ValueError."""
+    got = data.get(key, [])
+    if isinstance(got, list) and all(isinstance(x, dict) for x in got):
+        return got
+    raise ValueError(f"{key} must be a list of tables, got {got!r}")
+
+
 def parse(text: str, spec: KindSpec) -> GuidanceRecord:
     """The record in an authored file. Raises ValueError, naming the problem, for a file
     that is not TOML, lacks an id, a title or text, or breaks the kind's lint."""
@@ -85,7 +93,7 @@ def parse(text: str, spec: KindSpec) -> GuidanceRecord:
         owner=data.get("owner", ""),
         review_by=data.get("review_by", ""),
         sources=_strings(data, "sources"),
-        checks=data.get("checks", []),
+        checks=_tables(data, "checks"),
         links=_strings(data, "links"),
         ext={k: data.get(k, default) for k, default in spec.extras},
     )
