@@ -45,6 +45,15 @@ class GateDef:
     #: globs cannot be judged, so every gate applies to it -- a gate is never dropped on a
     #: guess.
     applies_when: list[str] = field(default_factory=list)
+    #: What a bare pass must carry (`evidence_problems`): any of "report" (a report or
+    #: output digest), "link" (a record id whose item is this one) and "fields" (every
+    #: ``evidence_fields`` name filled in). Empty, the default, asks nothing more than
+    #: `gates.evidence_required` does. Only a PASS is held to it: a skip with a reason or
+    #: an unavailable outcome stays allowed.
+    requires_evidence: list[str] = field(default_factory=list)
+    #: Names a passing record must fill in with real content (not empty or boilerplate);
+    #: listing any implies the "fields" form.
+    evidence_fields: list[str] = field(default_factory=list)
     unavailable_exits: list[int] = field(default_factory=list)
     partial_exits: list[int] = field(default_factory=list)
     #: For tools whose exit code does not carry the verdict. `require_output`: a regex

@@ -17,7 +17,7 @@ caller remembered to pass the gate definitions (bug B279a0ebfc1).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -170,6 +170,7 @@ def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` tak
     by: str = "",
     reason: str = "",
     evidence: dict[str, Any] | None = None,
+    owner_of: Callable[[str], str | None] | None = None,
 ) -> None:
     """Record ``outcome`` for ``it``'s ``gate``, with ddflow's own measurement of ``tree``
     (the item's work; None when it cannot be told or the caller's evidence already carries
@@ -193,6 +194,7 @@ def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` tak
         evidence=evidence,
         gates=gates,
         measured=taken,
+        owner_of=owner_of,
     )
 
 
