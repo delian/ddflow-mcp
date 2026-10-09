@@ -56,6 +56,7 @@ from ...services import changes as CH  # noqa: F401
 from ...services import flowstate as FL  # noqa: F401
 from ...services import gates as G  # noqa: F401
 from ...services import leases as L  # noqa: F401
+from ...services import searchcore as SC  # noqa: F401
 from ...services.gates import measured as GM  # noqa: F401
 from .._base import _load  # noqa: F401
 from ._common import (  # noqa: F401
