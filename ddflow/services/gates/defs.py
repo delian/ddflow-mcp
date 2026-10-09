@@ -403,12 +403,14 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     return gates
 
 
-def required_gates(cfg: Config, gates: Mapping[str, GateDef] | None = None) -> frozenset[str]:
-    """The gates whose recorded outcome must be a pass: `[gates].required` (the one knob
-    that decides), plus any definition in `gates` flagged required, which `load_gates`
-    derives from that same knob. Every enforcement point asks this, not the knob."""
-    flagged = {g for g, d in (gates or {}).items() if d.required}
-    return frozenset(cfg.gates.required) | flagged
+def required_gates(cfg: Config, gates: Mapping[str, GateDef] | None = None) -> tuple[str, ...]:
+    """The gates whose recorded outcome must be a pass, in `[gates].required` order: the
+    knob that decides, plus any definition in `gates` flagged required (`load_gates`
+    derives that flag from the same knob, so for loaded definitions the two agree).
+    Every enforcement point asks this, not the knob."""
+    out = list(dict.fromkeys(cfg.gates.required))
+    out += [g for g, d in (gates or {}).items() if d.required and g not in out]
+    return tuple(out)
 
 
 def pipeline_for(item: Item, cfg: Config) -> list[str]:
@@ -457,4 +459,4 @@ def inert_requirements(cfg: Config) -> list[str]:
     Reported rather than raised at load time, because a config that is wrong in one
     field should still let `ddflow doctor` run and explain itself.
     """
-    return sorted(required_gates(cfg) - pipelined(cfg, running=True))
+    return sorted(set(required_gates(cfg)) - pipelined(cfg, running=True))
