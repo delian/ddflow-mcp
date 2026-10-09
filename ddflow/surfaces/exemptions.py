@@ -22,6 +22,7 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
+from .declared.reporting import COMMANDS as _REPORTING
 from .declared.review import COMMANDS as _REVIEW
 from .declared.rules import COMMANDS as _RULES
 from .declared.setup import COMMANDS as _SETUP
@@ -149,24 +150,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_board",
-        prose=True,
-        prose_reason="a rendered markdown board, meant to be shown or committed as-is",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_replay",
-        prose=True,
-        prose_reason="the reconstruction narrative; the whole output is the deliverable",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_render",
-        prose=True,
-        prose_reason="with --show it returns the rendered view itself, to read or commit",
-    ),
-    Command(
-        path=(),
         tool="ddflow_prompts",
         prose=True,
         prose_reason="with show it returns the template itself, which is the thing to read",
@@ -184,6 +167,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_RULES,
     *_REVIEW,
     *_SETUP,
+    *_REPORTING,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,

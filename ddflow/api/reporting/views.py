@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ...core import outcome as O
 from ...core import progress as PR
+from ...core.defaults import DEFAULT_RENDER_DIR
 from .._base import _load
 
 
@@ -87,7 +88,6 @@ _RENDERABLE = (
 )
 
 #: Where `render` writes its views when no directory is given.
-DEFAULT_RENDER_DIR = "docs/ddflow"
 
 
 def render(

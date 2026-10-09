@@ -8,22 +8,13 @@ from typing import Any
 
 from ..declared import lifecycle as L
 from ..declared import queue as Q
+from ..declared import reporting as R
 from ._common import (
     _api,
 )
 
 TOOLS: dict[str, dict[str, Any]] = {
-    "ddflow_show": {
-        "description": (
-            "Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared "
-            "globs, the lease and who holds it, the worktree path you can cd to, and "
-            "every gate's outcome with its evidence. Use it to check your own work "
-            "before calling ddflow_complete."
-        ),
-        "properties": {"id": ("string", "Item id (phase, task) or bug id.", True)},
-        "api": lambda repo, a, agent: _api().show(repo, a["id"], agent=agent),
-        "payload": "item",
-    },
+    "ddflow_show": R.BY_TOOL["ddflow_show"].tool_entry(),
     "ddflow_update": Q.BY_TOOL["ddflow_update"].tool_entry(),
     "ddflow_abandon": L.BY_TOOL["ddflow_abandon"].tool_entry(),
     "ddflow_remove": L.BY_TOOL["ddflow_remove"].tool_entry(),

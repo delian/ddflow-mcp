@@ -11,9 +11,9 @@ from ..commands.operations import cmd_import
 from ..commands.setup import cmd_companions, cmd_help, cmd_hooks, cmd_prompts, help_topics
 from ..commands.viewers_lists import register as register_list_viewers
 from ..commands.workflow import cmd_workflow
+from ..declared.reporting import BY_TOOL as REPORTING_BY_TOOL
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
 from ..registry import add_commands
-from ._common import _positive_int
 
 
 def register(s: argparse._SubParsersAction) -> None:
@@ -21,18 +21,7 @@ def register(s: argparse._SubParsersAction) -> None:
     # Handlers that live in `cli.py`; imported at call time, when `cli` is loaded.
     from ..cli import cmd_mcp
 
-    hi = s.add_parser("history", help="one timeline of everything that happened (exit 2 = nothing)")
-    hi.add_argument("--item", default="", help="restrict to one item")
-    hi.add_argument(
-        "--kind",
-        default="",
-        help="comma-separated event kinds or families: 'gate', 'lease.acquired', 'decision,bug'",
-    )
-    hi.add_argument("--since", default="", help="ISO timestamp lower bound")
-    hi.add_argument("--limit", type=int, default=40)
-    hi.add_argument("--agent", dest="log_agent", default="", help="only this agent's shard")
-    hi.add_argument("--tail", type=_positive_int, default=0, help="the last N events, oldest first")
-    hi.set_defaults(fn=cmd_history)
+    add_commands(s, [REPORTING_BY_TOOL["ddflow_history"]], handlers={("history",): cmd_history})
 
     wf = s.add_parser(
         "workflow",
