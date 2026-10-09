@@ -29,6 +29,7 @@ from ..core.slug import ascii_slug, claude_project_slug
 from ..infra.log import EventLog
 from .enforce import UnreadableYaml, read_precommit_yaml
 from .importer import Duplicate, Found
+from .similar import same_text, screen
 
 #: Where Claude Code roots its per-project state, and the name of the memory directory.
 MEMORY_DIRNAME = "memory"
@@ -207,10 +208,6 @@ def _as_record(f: Found) -> dict[str, str]:
     return {"id": f.ident, "kind": f.kind, "title": "", "body": f.body, "item": ""}
 
 
-def _normalize(text: str) -> str:
-    return " ".join(text.casefold().split())
-
-
 def propose(
     repo: Path,
     *,
@@ -242,25 +239,10 @@ def dedupe(found: list[Found], state: Any, cfg: Config) -> tuple[list[Found], li
     The check honours `[dedupe]` (kinds, `on_match`, thresholds) the way an add does:
     with `on_match = "off"` nothing is dropped, because the operator said not to check.
     """
-    from ..infra.store import similar_records
-    from . import similar
-
-    base = similar_records(state) if state is not None else []
-    index = similar.build(base)
-    kept: list[Found] = []
-    duplicates: list[Duplicate] = []
-    seen: dict[str, Found] = {}
-    for f in found:
-        hit = similar.first_duplicate(similar.assess(index, _as_record(f), cfg), cfg)
-        if hit is not None:
-            duplicates.append(Duplicate(f, hit.id, hit.score, "identical" in hit.flags, "queue"))
-            continue
-        key = _normalize(f.body)
-        if key in seen:
-            duplicates.append(Duplicate(f, seen[key].ident, 1.0, True, "import"))
-            continue
-        seen[key] = f
-        kept.append(f)
+    _, repeats = screen([_as_record(f) for f in found], state, cfg, fold_copies=True)
+    gone = {h.index: h for h in repeats}
+    kept = [f for i, f in enumerate(found) if i not in gone]
+    duplicates = [Duplicate(found[h.index], h.of, h.score, h.identical, h.where) for h in repeats]
     return kept, duplicates
 
 
@@ -309,8 +291,6 @@ def apply(
     they are reviving it.
     """
     from ..core.model import fold
-    from ..infra.store import similar_records
-    from . import similar
 
     cfg = cfg or Config.load(log.root)
     # The read-decide-append runs INSIDE the lock: a second onboarding run must not pass
@@ -323,13 +303,14 @@ def apply(
             state = fold(log.read_all(), strict=False)
         memories = getattr(state, "memories", {})
         id_text = {
-            mid: _normalize(m.text) for mid, m in memories.items() if getattr(m, "live", True)
+            mid: same_text(m.text) for mid, m in memories.items() if getattr(m, "live", True)
         }
         forgotten_ids = {mid: m for mid, m in memories.items() if not getattr(m, "live", True)}
-        text_forgotten = {_normalize(m.text): m for m in forgotten_ids.values()}
+        text_forgotten = {same_text(m.text): m for m in forgotten_ids.values()}
         texts = set(id_text.values())
-        queue = similar.build(similar_records(state))
-        for f in found:
+        # One pass over the queue for the whole list: the state does not change in the loop.
+        near = {h.index: h for h in screen([_as_record(f) for f in found], state, cfg)[1]}
+        for n, f in enumerate(found):
             limit = cfg.memory.max_chars
             if len(f.body) > limit:
                 out.append(
@@ -338,7 +319,7 @@ def apply(
                     f"({f.source})"
                 )
                 continue
-            key = _normalize(f.body)
+            key = same_text(f.body)
             if f.ident in id_text:
                 if id_text[f.ident] == key:
                     out.append(f"already remembered: {f.ident} [{f.title}]")
@@ -360,13 +341,13 @@ def apply(
             if key in texts:
                 out.append(f"already remembered: {f.ident} [{f.title}]")
                 continue
-            hit = similar.first_duplicate(similar.assess(queue, _as_record(f), cfg), cfg)
-            if hit is not None and hit.id != f.ident:
+            hit = near.get(n)
+            if hit is not None and hit.of != f.ident:
                 # The approved list normally comes from dedupe; a caller passing the raw
                 # scan must not slip a near-copy past the ask an add would raise
                 # (critic on 2c18772).
                 out.append(
-                    f"not recorded {f.ident}: reads like {hit.id} ({hit.score:.2f}); "
+                    f"not recorded {f.ident}: reads like {hit.of} ({hit.score:.2f}); "
                     f"approve it through dedupe/render, or record it by hand if it really "
                     f"is new"
                 )

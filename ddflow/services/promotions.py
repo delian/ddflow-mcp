@@ -25,6 +25,7 @@ from ..infra import git as GIT
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import flow as FS
+from .items import TaskDraft, add_task
 
 
 class PromotionError(ValueError):
@@ -77,19 +78,20 @@ def add(
     n = 1 + sum(1 for i in st.items.values() if i.promote_to == to)
     minted = IDS.make(cfg, "promotion", used=IDS.taken(st), env=F.safe_name(to), seq=n)
     pid = minted.id
-    log.append(
-        "task.added",
+    draft = TaskDraft(
         pid,
-        {
-            "title": f"Promote {frm} to {to}",
-            "body": f"Merge {frm} into {to} ({ahead} commit(s)), run the promotion "
-            f"pipeline, land it on {to}.",
-            "tags": ["promotion"],
-            "globs": [],
-            "promote_from": frm,
-            "promote_to": to,
-        },
+        title=f"Promote {frm} to {to}",
+        body=f"Merge {frm} into {to} ({ahead} commit(s)), run the promotion "
+        f"pipeline, land it on {to}.",
+        tags=["promotion"],
+        globs=[],
+        extra={"promote_from": frm, "promote_to": to},
     )
+    added = add_task(
+        log, st, cfg, draft, dedupe="a generated promotion; one open one per environment"
+    )
+    if not added.ok:
+        raise PromotionError(added.problem)
     return {"id": pid, "from": frm, "to": to, "ahead": ahead}
 
 
