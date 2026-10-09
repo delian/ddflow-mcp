@@ -12,7 +12,7 @@ from ...core.defaults import DEFAULT_NEXT_KIND, DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import GATE_OUTCOMES
 from ..argtypes import GLOBS_HELP, _Globs
 from ..registry import Command, Param, by_tool
-from ..tools._common import _api, _wait_timeout
+from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -192,7 +192,9 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "timeout",
                 type="number",
-                help="Seconds to wait (default 300, at most 1800: a client may time a tool call out, so call again to keep waiting). 0 asks without waiting.",
+                help=f"Seconds to wait (default {MCP_WAIT_DEFAULT_S}, at most {MCP_WAIT_MAX_S}: "
+                "a client may time a tool call out, so call again to keep waiting). 0 asks "
+                "without waiting.",
                 cli_help=f"seconds to wait (default {DEFAULT_WAIT_TIMEOUT_S}; 0 asks without waiting)",
             ),
             Param(
