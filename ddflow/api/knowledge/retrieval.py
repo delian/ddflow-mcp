@@ -10,6 +10,7 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import outcome as O
 from ...core.budget import RECALL_MAX_CHARS, Budget
+from ...infra.store import RECALL_SOURCES
 from ...services import contextpack as CP
 from .._base import _load
 from .lessons import _store
@@ -33,6 +34,26 @@ def _origin(st, table: str, ident):
     return None
 
 
+def _search_sources(store, query: str, sources: str, limit: int) -> dict[str, list[dict]]:
+    """The hits of every wanted source, in rank order, by table; a source with none is absent."""
+    want = csv_list(sources) or [t for t, _, _ in RECALL_SOURCES]
+    lowered = [w.lower() for w in want]
+    results: dict[str, list[dict]] = {}
+    for table, label, _why in RECALL_SOURCES:
+        if table not in want and label.lower() not in lowered:
+            continue
+        try:
+            hits = store.search(table, query, limit)
+        except Exception:
+            # One unreadable source must not take the whole recall down: the value is in
+            # the union, and "the lessons table is corrupt" is not a reason to withhold
+            # the decisions.
+            hits = []
+        if hits:
+            results[table] = hits
+    return results
+
+
 def recall(
     repo: Path,
     query: str,
@@ -53,26 +74,8 @@ def recall(
     have to learn the same thing twice. Both failures are invisible in the moment and
     obvious in the log.
     """
-    from ...infra.store import RECALL_SOURCES
-
     log, cfg, _st = _load(repo, agent)
-    store = _store(repo, log, cfg)
-    want = csv_list(sources) or [t for t, _, _ in RECALL_SOURCES]
-    lowered = [w.lower() for w in want]
-    results: dict[str, list[dict]] = {}
-    for table, label, _why in RECALL_SOURCES:
-        if table not in want and label.lower() not in lowered:
-            continue
-        try:
-            hits = store.search(table, query, limit)
-        except Exception:
-            # One unreadable source must not take the whole recall down: the value is in
-            # the union, and "the lessons table is corrupt" is not a reason to withhold
-            # the decisions.
-            hits = []
-        if hits:
-            results[table] = hits
-
+    results = _search_sources(_store(repo, log, cfg), query, sources, limit)
     labels = {table: label for table, label, _ in RECALL_SOURCES}
     # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
     # somebody's words, and a hit shown without its author reads as the tool's own.
@@ -92,9 +95,8 @@ def recall(
         Budget(max_chars, "chars"),
     )
     results = {t: [c.row for c in cs] for t, cs in cut.kept.items()}
-    wire = {t: [c.hit for c in cs] for t, cs in cut.kept.items()}
     data: dict[str, Any] = {
-        "results": wire,
+        "results": {t: [c.hit for c in cs] for t, cs in cut.kept.items()},
         "query": query,
         "searched": [t for t, _, _ in RECALL_SOURCES],
         "max_chars": max_chars,
