@@ -704,7 +704,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
             return refusal
         lost = [d for d in it.contested if defs and d["event"] != defs[0]["event"]]
         new_ids = csv_list(refile_as)
-        if refusal := _refile_problem(st, item, new_ids, lost):
+        if (refusal := _refile_problem(st, item, new_ids, lost)) is not None:
             return refusal
         losers = it.lease_losers(claims[0]) if claims else []
         data = _resolution(cfg, it, keep, defs, claims)
