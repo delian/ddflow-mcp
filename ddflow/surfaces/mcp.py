@@ -1141,6 +1141,10 @@ _VAR_DEFAULTS: dict[str, Any] = {
 }
 
 
+#: The readers `_instruction_vars` runs, in order; each is `api.surf_mcp.fill_<name>`.
+_FILLERS = ("rules_drift", "pipeline", "unit_test_todo", "reviewer_todo", "companions", "queue")
+
+
 def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     """Everything `mcp_instructions.md` can render from.
 
@@ -1171,20 +1175,14 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         cfg = Config.load(repo)
     except Exception:
         return v
-    s = _surf()
     # Each block is independent, and a failure in one must not cost the others: a
     # project with a bad reviewer block should still be told what is ready to work. The
     # rules surface goes first: it is the one fact that decides whether the agent has any
-    # project rules at all.
-    for fill in (
-        s.fill_rules_drift,
-        _fill_pipeline,
-        s.fill_unit_test_todo,
-        s.fill_reviewer_todo,
-        s.fill_companions,
-        s.fill_queue,
-    ):
+    # project rules at all. Each reader is looked up inside its own guard, so a domain
+    # layer that cannot even be imported costs its block and no other.
+    for name in _FILLERS:
         try:
+            fill = _fill_pipeline if name == "pipeline" else getattr(_surf(), "fill_" + name)
             fill(v, repo, cfg, agent)
         except Exception:
             pass

@@ -61,3 +61,36 @@ def test_engine_imports_without_the_template_engine(module: str) -> None:
     code = f"import sys; sys.path.insert(0, {str(ROOT)!r}); import {module}"
     run = subprocess.run([sys.executable, "-S", "-c", code], capture_output=True, text=True)
     assert run.returncode == 0, run.stderr[-800:]
+
+
+def test_handshake_readers_see_a_patched_service(tmp_path: Path, monkeypatch) -> None:
+    """The readers reach the services as modules: a name bound at import would not see a
+    test's (or an embedder's) replacement, and the failure-tolerance tests that patch a
+    service to raise would pass without ever raising (found by review of B-uc-mcp)."""
+    from ddflow.services import adopt
+
+    repo = _git_repo(tmp_path / "r")
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "config.toml").write_text("", "utf-8")
+    seen: list[Path] = []
+    monkeypatch.setattr(adopt, "rules_status", lambda r: seen.append(r) or [])
+    mcp._instruction_vars(repo)
+    assert seen == [repo]
+
+
+def test_an_unimportable_domain_layer_costs_only_its_blocks(tmp_path: Path, monkeypatch) -> None:
+    """`_surf()` failing (the api package cannot be imported) must not take the variables
+    that need no domain read down with it: the gate pipeline still comes from the config."""
+    repo = _git_repo(tmp_path / "r")
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "config.toml").write_text(
+        '[gates]\ntask_pipeline = ["implement"]\n', "utf-8"
+    )
+
+    def broken() -> None:
+        raise ImportError("no jinja2")
+
+    monkeypatch.setattr(mcp, "_surf", broken)
+    v = mcp._instruction_vars(repo)
+    assert set(v) == VARS
+    assert v["task_pipeline"] == ["implement"]

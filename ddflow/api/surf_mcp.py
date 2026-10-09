@@ -11,6 +11,9 @@ this module and neither decides anything:
   found -- the engine decides what a failure costs (nothing: a handshake that cannot
   answer is worse than one with a missing section).
 
+Services are reached as modules (`AD.rules_status`), not by name: a test that patches the
+service must reach the call, and a name bound at import would not see it.
+
 Imported by the engine on first use, never at module level: this module reaches the
 template engine (jinja2), and `scripts/bump.sh` imports `ddflow.surfaces.mcp` under an
 interpreter that has none.
@@ -26,15 +29,15 @@ from ..config import Config
 from ..core import progress as PR
 from ..core.model import State, fold
 from ..infra.log import EventLog
+from ..services import adopt as AD
 from ..services import companions as CO
+from ..services import gates as GA
 from ..services import importer as IM
 from ..services import leases as L
 from ..services import obligations as OB
 from ..services import prompts as P
-from ..services.adopt import rules_status
-from ..services.gates import load_gates
+from ..services import review as RV
 from ..services.macros import MacroError  # noqa: F401  (re-exported for the engine)
-from ..services.review import load_reviewers
 from . import identity
 from .lifecycle import plan_for
 
@@ -85,13 +88,13 @@ def fill_rules_drift(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> 
     `read_text` calls, and the one fact that decides if the agent has any rules at all."""
     v["rules_drift"] = [
         {"path": r.path, "state": r.state, "detail": r.render()}
-        for r in rules_status(repo)
+        for r in AD.rules_status(repo)
         if r.needs_attention
     ]
 
 
 def fill_unit_test_todo(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
-    ut = load_gates(repo, cfg).get("unit_tests")
+    ut = GA.load_gates(repo, cfg).get("unit_tests")
     if not ut or not ut.command or "set [gate.unit_tests]" in ut.command:
         v["setup_todo"].append(
             "No test command is configured. Set it with `ddflow_configure`: "
@@ -101,7 +104,7 @@ def fill_unit_test_todo(v: dict[str, Any], repo: Path, cfg: Config, agent: str) 
 
 
 def fill_reviewer_todo(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
-    if not load_reviewers(repo):
+    if not RV.load_reviewers(repo):
         v["setup_todo"].append(
             "No cross-family reviewer is configured, so the `critic` gate cannot "
             "run and `ddflow_complete` will refuse. Call "
