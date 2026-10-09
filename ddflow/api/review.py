@@ -737,12 +737,12 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
-def _order_refusal(log, cfg, st, item: str, gate: str, say) -> O.Outcome | None:
+def _order_refusal(log, cfg, st, item: str, gate: str, say, defs=None) -> O.Outcome | None:
     """The pipeline-order check, asked BEFORE the review is paid for (one run before
     `implement` reviews an empty diff): a refusal under `block`, else a note said."""
     if not item:
         return None
-    order = GR.check_order(log, cfg, st, item, gate, recording=True)
+    order = GR.check_order(log, cfg, st, item, gate, recording=True, defs=defs)
     if order.refusal:
         return O.refused(
             "review",
@@ -1459,11 +1459,11 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     return outcome
 
 
-def _early_refusal(full, force, delta, log, cfg, st, item: str, gate: str, say):
+def _early_refusal(full, force, delta, log, cfg, st, item: str, gate: str, say, defs=None):
     """The first reason to refuse before any work: contradicting flags, then the order. (Not
     `a or b`: a refusal is falsy.)"""
     conflict = _flag_conflict(full, force, delta, item, gate)
-    return conflict if conflict is not None else _order_refusal(log, cfg, st, item, gate, say)
+    return conflict if conflict is not None else _order_refusal(log, cfg, st, item, gate, say, defs)
 
 
 def _intent_missing(item: str, gate: str, how: str) -> O.Outcome:
@@ -1576,7 +1576,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             **extra,
         )
 
-    refused = _early_refusal(full, force, delta, log, cfg, st, item, gate, say)
+    refused = _early_refusal(full, force, delta, log, cfg, st, item, gate, say, gates)
     if refused is not None:
         return refused
 

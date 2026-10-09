@@ -71,12 +71,12 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     from ..services import prompts as P
 
     _log, cfg, st = _load(repo, agent)
+    gates = G.load_gates(repo, cfg)
     try:
-        s = G.status(st, cfg, item)
+        s = G.status(st, cfg, item, gates)
     except KeyError:
         return O.failed("gate.status", f"no such item {item!r}", id=item, text="")
 
-    gates = G.load_gates(repo, cfg)
     gd = gates.get(s.current)
     lines = [f"{item}: {'COMPLETE' if s.complete else 'next = ' + (s.current or '—')}", s.render()]
     if gd:
@@ -213,9 +213,11 @@ def verify(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
     )
 
 
-def _order_gate(log, cfg, st, item: str, gate: str, *, recording: bool) -> O.Outcome | list[str]:
+def _order_gate(
+    log, cfg, st, item: str, gate: str, *, recording: bool, defs=None
+) -> O.Outcome | list[str]:
     """`services.gates.measured.check_order` as an outcome: a refusal, or the gates ahead."""
-    order = R.check_order(log, cfg, st, item, gate, recording=recording)
+    order = R.check_order(log, cfg, st, item, gate, recording=recording, defs=defs)
     if order.refusal:
         return O.refused("gate", order.refusal, id=item, gate=gate, ahead=order.ahead)
     return order.ahead
@@ -320,7 +322,7 @@ def run(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    ordered = _order_gate(log, cfg, st, item, gate, recording=False)
+    ordered = _order_gate(log, cfg, st, item, gate, recording=False, defs=gates)
     if isinstance(ordered, O.Outcome):
         return ordered
 
@@ -622,7 +624,7 @@ def record(
         return resolved
     log, cfg, st, it, gdef, gates = resolved
 
-    ordered = _order_gate(log, cfg, st, item, gate, recording=True)
+    ordered = _order_gate(log, cfg, st, item, gate, recording=True, defs=gates)
     if isinstance(ordered, O.Outcome):
         return ordered
     # The `warn` note. Carried rather than printed, so the surface decides where it goes

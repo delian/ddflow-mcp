@@ -136,11 +136,16 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     if it is None or it.removed:
         return Verdict(item=item_id, blockers=[f"no such item {item_id!r}"])
 
-    s = G.status(state, cfg, item_id)
+    gdefs = G.load_gates(repo, cfg)
+    s = G.status(state, cfg, item_id, gdefs)
     v = Verdict(item=item_id, coverage_gaps=list(s.unavailable), kind=it.kind)
     required = G.required_gates(cfg)
 
-    missing = [g for g in s.pipeline if g in required and not it.gate_satisfied(g, True)]
+    missing = [
+        g
+        for g in s.pipeline
+        if g in required and g not in s.not_applicable and not it.gate_satisfied(g, True)
+    ]
     if missing:
         v.blockers.append(
             f"required gate(s) not passed: {', '.join(missing)} (current outcome: "
@@ -165,7 +170,6 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # omitted with no trace. An explicit `gate skip --reason` is still an outcome, so
     # the escape hatch is the auditable one rather than the invisible one.
     if cfg.gates.require_outcome and s.silent:
-        gdefs = G.load_gates(repo, cfg)
         human = [g for g in s.silent if g in gdefs and gdefs[g].is_human_gate]
         other = [g for g in s.silent if g not in human]
         if other:
@@ -218,7 +222,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         )
 
     # The project's own reviewer gates count, as their definitions declare (B0e1330bf74).
-    ok, why = G.reviewer_independence(state, cfg, item_id, model, G.load_gates(repo, cfg))
+    ok, why = G.reviewer_independence(state, cfg, item_id, model, gdefs)
     v.independence = why
     # Not for a PROMOTION: it authors nothing -- it moves work that was reviewed, with this
     # very check, as the tasks that produced it. Demanding an independent reviewer of a
