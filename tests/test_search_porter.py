@@ -170,7 +170,7 @@ def test_both_backends_return_the_same_rows_for_stem_family_queries(repo, log):
     if not _has_fts5():
         pytest.skip("this SQLite has no FTS5: only the fallback exists here")
     rows = {
-        "L1": ("Processes that run forever", "the daemon runs and keeps running"),
+        "L1": ("Daemon lifetimes", "the daemon runs forever"),
         "L2": ("Conditional approvals", "approve only if the conditions hold"),
         "L3": ("Ponies and caresses", "a pony caresses another"),
         "L4": ("Unrelated entry", "nothing here matches"),
