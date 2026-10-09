@@ -19,6 +19,8 @@ from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
 from .declared.answer import ANSWER_FLAG_EXEMPT
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
+from .declared.lifecycle import COMMANDS as _LIFECYCLE
+from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
 from .registry import (
     Command,
@@ -36,16 +38,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=("mcp",),
         reason="starts the MCP server itself; exposing it over MCP would be recursive",
-    ),
-    Command(
-        path=("approve",),
-        reason=(
-            "clears a HUMAN-approval gate, and the whole point is that the agent cannot. "
-            "A human checkpoint reachable from the MCP surface is not a human checkpoint "
-            "\u2014 it is a second `gate record` with a longer name. This exemption is the "
-            "feature, not an oversight, and `test_no_mcp_tool_can_clear_a_human_gate` "
-            "asserts it holds end to end rather than resting on this line."
-        ),
     ),
     Command(
         path=("version", "lint"),
@@ -124,7 +116,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         reason="covered by ddflow_reviewers_detect, which probes the same way",
     ),
     Command(path=("adopt",), reason="covered by ddflow_setup", via=("ddflow_setup",)),
-    Command(path=("init",), reason="covered by ddflow_setup", via=("ddflow_setup",)),
     Command(
         path=(),
         tool="ddflow_ci",
@@ -166,18 +157,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_gate_skip",
-        flag_exempt={
-            "--outcome": "a skip IS the outcome",
-            "--evidence": "a skipped gate produced none; that is what skipped means",
-            "--command": "nothing ran",
-            "--exit-code": "nothing ran",
-            "--output-file": "nothing ran",
-            "--model": "no reviewer performed it",
-        },
-    ),
-    Command(
-        path=(),
         tool="ddflow_import",
         flag_exempt={"--verify": "covered by ddflow_import_verify, its own tool"},
     ),
@@ -193,16 +172,6 @@ EXEMPTIONS: tuple[Command, ...] = (
             "--local": "a per-machine selection is the operator's, at a terminal",
             "--yes": "answers the terminal confirmation, which MCP has none of",
         },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_phase_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
-    ),
-    Command(
-        path=(),
-        tool="ddflow_task_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
     ),
     Command(
         path=(),
@@ -229,18 +198,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         tool="ddflow_board",
         prose=True,
         prose_reason="a rendered markdown board, meant to be shown or committed as-is",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_gate_status",
-        prose=True,
-        prose_reason="carries the next gate's INSTRUCTION, which is the useful half",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_gate_list",
-        prose=True,
-        prose_reason="one row per gate (or per gate passed on refutation), meant to be read as lines",
     ),
     Command(
         path=(),
@@ -310,6 +267,8 @@ DECLARATIONS: tuple[Command, ...] = (
     *EXEMPTIONS,
     *_KNOWLEDGE,
     *_RECORDS,
+    *_QUEUE,
+    *_LIFECYCLE,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,

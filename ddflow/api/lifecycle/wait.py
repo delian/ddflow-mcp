@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ...core import defaults as _DEFAULTS
 from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.clock import WAIT_MAX_S
@@ -28,7 +29,7 @@ from .reservations import (
 #: holders' remaining work, short enough that a forgotten wait does not hold a process
 #: for an afternoon. A caller that wants longer asks again, which also re-checks that
 #: waiting is still the right move.
-DEFAULT_WAIT_TIMEOUT_S = 600
+DEFAULT_WAIT_TIMEOUT_S = _DEFAULTS.DEFAULT_WAIT_TIMEOUT_S
 
 
 def _note_cap(say, capped: bool) -> None:

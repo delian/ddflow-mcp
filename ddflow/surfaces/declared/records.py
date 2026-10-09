@@ -40,6 +40,11 @@ COMMANDS: tuple[Command, ...] = (
         ),
         payload=("id", "verdict"),
         params=(
+            # `ddflow research add ...` as well as `ddflow research ...`: `lesson add`,
+            # `decision add` and `memory add` all take the verb, the MCP tool is
+            # `ddflow_research_add`, and the research gate's instruction says `research add`
+            # -- which this parser rejected as "unrecognized arguments: add" for every agent
+            # that followed it.
             Param(
                 "verb",
                 help="optional: `research add` = `research`",

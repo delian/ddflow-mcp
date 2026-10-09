@@ -261,6 +261,9 @@ class Param:
     #: command sharing the name is in one group.
     metavar: str | None = None
     exclusive: str | None = None
+    #: argparse's ``type`` when the tool's JSON type differs (``--exit-code`` is an int on
+    #: the command line and a string in the tool's schema).
+    cli_type: Callable[[str], Any] | None = None
     #: Earlier names that still work (D-compat): as a tool argument, and as the CLI flag
     #: ``--name`` spelled the way `option` is (a name starting with ``-`` is a CLI-only flag
     #: spelling taken as written). Hidden from help and the schema; needs ``deprecated_since``.
@@ -360,6 +363,8 @@ class Param:
             kwargs["type"] = int
         elif self.type == "number":
             kwargs["type"] = float
+        elif self.cli_type is not None:
+            kwargs["type"] = self.cli_type
         if self.choices is not None:
             kwargs["choices"] = list(self.choices)
         if self.default is not _UNSET:
@@ -491,6 +496,9 @@ class Command:
     tool_order: tuple[str, ...] = ()
     #: Attributes the CLI parser sets on every parse of this command, beside the handler.
     defaults: Mapping[str, Any] = field(default_factory=dict)
+    #: The tool is told where the caller stands (``called_from``), for a tool that creates
+    #: or lands a worktree (the engine reads ``wants_called_from`` from the table entry).
+    wants_called_from: bool = False
 
     def __post_init__(self) -> None:
         self._check_names()
@@ -584,6 +592,8 @@ class Command:
             entry["kind"] = self.kind
         if self.identify:
             entry["identify"] = True
+        if self.wants_called_from:
+            entry["wants_called_from"] = True
         if self.deprecated:
             entry["deprecated"] = dict(self.deprecated)
         if aliases := self.tool_alias_list():

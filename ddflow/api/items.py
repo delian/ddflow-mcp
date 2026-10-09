@@ -10,6 +10,7 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ..config import csv_list
+from ..core import defaults as _DEFAULTS
 from ..core import globspec as GS
 from ..core import ids as IDS
 from ..core import outcome as O
@@ -262,7 +263,7 @@ MIN_SPLIT_PARTS = 2
 #: Declared here and imported by the parser, not written twice. Duplicated, it became
 #: 100 in argparse and 0 in this layer — so every phase and task created over MCP was
 #: filed at the TOP priority while the CLI filed them in the middle, and nothing said so.
-DEFAULT_PRIORITY = 100
+DEFAULT_PRIORITY = _DEFAULTS.DEFAULT_PRIORITY
 
 
 def _line_frozen(st, it) -> str:
