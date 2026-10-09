@@ -260,7 +260,7 @@ class Item:
     #: Every outcome ever recorded for this item's gates, oldest first (B-uni-gate-record.5):
     #: what the review budget, the fire rates and the repeated-failure detector count,
     #: folded once instead of scanning the log for each. Internal: not part of the item's
-    #: wire form (`core.plain`).
+    #: wire form (`core.plain`), so a state snapshot would have to serialise it explicitly.
     gate_history: list[GateRun] = field(default_factory=list, metadata={"internal": True})
     #: The author's triage of a review's findings: gate -> finding digest -> {verdict,
     #: probe, n, severity, title, location, by, at}. Keyed by the DIGEST of the finding's

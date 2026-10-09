@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from ..config import Config
 from ..core.events import Event
-from ..core.model import State, fold
+from ..core.model import GATE_OUTCOMES, State
 from .schedule import count_at_last_run, count_passes
 
 #: Gate outcomes that mean "this gate said no". `skipped` is deliberately NOT here: a
@@ -61,17 +61,27 @@ def gate_rates(source: State | list[Event]) -> dict[str, GateRate]:
     """Per-gate outcome counts across the whole queue.
 
     From the folded state's `Item.gate_history` -- every outcome recorded, not the LAST
-    per gate that `Item.gates` keeps, because a rate needs the history. Given raw events
-    instead (a caller that has not moved to the state yet) it folds just the history out
-    of them, so both read one definition of "a recorded outcome": `started` and
-    `out_of_order` are not verdicts about the work.
+    per gate that `Item.gates` keeps, because a rate needs the history. A caller that has
+    only the raw events (`api/reporting/health.py` until it passes its state) gets the
+    same count from one pass over them: both read "a recorded outcome" as the gate events
+    whose kind is an outcome -- `started` and `out_of_order` are not verdicts about the
+    work.
     """
-    state = source if isinstance(source, State) else fold(source, strict=False)
     out: dict[str, GateRate] = {}
-    for item in state.items.values():
-        for run in item.gate_history:
-            rate = out.setdefault(run.gate or item.id, GateRate(run.gate or item.id))
-            rate.outcomes[run.outcome] = rate.outcomes.get(run.outcome, 0) + 1
+
+    def count(gate: str, outcome: str) -> None:
+        rate = out.setdefault(gate, GateRate(gate))
+        rate.outcomes[outcome] = rate.outcomes.get(outcome, 0) + 1
+
+    if isinstance(source, State):
+        for item in source.items.values():
+            for run in item.gate_history:
+                count(run.gate or item.id, run.outcome)
+        return out
+    for ev in source:
+        outcome = ev.kind.split(".", 1)[1] if ev.kind.startswith("gate.") else ""
+        if outcome in GATE_OUTCOMES:
+            count(ev.data.get("gate") or ev.subject, outcome)
     return out
 
 
