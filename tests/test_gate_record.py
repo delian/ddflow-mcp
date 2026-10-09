@@ -70,9 +70,20 @@ def test_a_review_outcome_carries_ddflows_measurement_of_the_tree(repo, tmp_path
     _reviewed_repo(repo, tmp_path)
     api.review(repo, gate="critic", item="T1", branch="feat")
 
-    ev = _item(repo).gates["critic"].evidence
-    assert ev.get("tree_sha"), ev
-    assert set(ev["diff_stat"]) >= {"files"}, ev
+    rec = _item(repo).gates["critic"]
+    assert rec.outcome == "passed", rec  # the reviewer found nothing, and that was recorded
+    assert rec.evidence.get("tree_sha"), rec.evidence
+    assert set(rec.evidence["diff_stat"]) >= {"files"}, rec.evidence
+
+
+def test_a_caller_standing_in_another_items_tree_is_not_measured(repo):
+    """`item_tree` answers (None, whose-tree-it-is) there, and `measure_tree(None)` is
+    nothing: another item's tree is never attributed to this one (bug Bbc9a7ee3f2)."""
+    from ddflow.services.gates import measured as GM
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert GM.measure_tree(repo, _item(repo), None) == {}
 
 
 def test_a_review_out_of_order_is_noted_and_recorded_under_warn(repo, tmp_path):
