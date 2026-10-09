@@ -355,7 +355,7 @@ def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outco
     for f in PR.detect(log.read_all(), st, cfg):
         if f.kind != "repeated_failure" or f.item != item or f.gate != gate:
             continue
-        if not f.tree_sha or G.tree_identity(cwd) != f.tree_sha:
+        if not G.is_tree(f.tree_sha, cwd):
             return None
         return O.refused(
             "gate.run",

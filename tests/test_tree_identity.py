@@ -208,3 +208,16 @@ def test_a_fingerprint_spelled_dirty_value_is_compared_as_a_fingerprint(adopted)
     _passed(adopted, {"command": "true", "exit": 0, "tree_sha": legacy})
     (adopted / "a.py").write_text("a = 2\n")
     assert [n.gate for n in _stale(adopted)] == ["unit_tests"]
+
+
+def test_is_tree_reads_both_spellings_and_nothing(adopted):
+    (adopted / "a.py").write_text("a = 1\n")
+    assert G.is_tree(G.tree_identity(adopted), adopted)
+    assert G.is_tree(G.tree_fingerprint(adopted), adopted)
+    assert not G.is_tree("", adopted)
+    (adopted / "a.py").write_text("a = 2\n")
+    assert not G.is_tree("0" * 12 + "+st:other", adopted)
+    _git(adopted, "add", "a.py")
+    _git(adopted, "commit", "-qm", "a")
+    legacy_clean = _git(adopted, "rev-parse", "HEAD")[:12] + "+" + G.LEGACY_CLEAN
+    assert G.is_tree(legacy_clean, adopted), "the pre-fix spelling of a clean tree"

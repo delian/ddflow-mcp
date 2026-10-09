@@ -262,6 +262,18 @@ def tree_identity(cwd: Path) -> str:
     return f"{head}+{manifest or _dirt(parts)}"
 
 
+def is_tree(tree_sha: str, cwd: Path) -> bool:
+    """Does the recorded ``tree_sha`` name the tree ``cwd`` holds now? Either spelling: a
+    `tree_identity`, or the fingerprint (clean or the pre-fix clean) an earlier ddflow
+    recorded -- so a streak of failures begun before the upgrade is still one streak."""
+    if not tree_sha:
+        return False
+    was = normal_fingerprint(tree_sha)
+    return was == normal_fingerprint(tree_identity(cwd)) or was == normal_fingerprint(
+        tree_fingerprint(cwd)
+    )
+
+
 def recorded_content(tree_sha: str, source_tree_field: str = "") -> str:
     """The content id a recorded identity names, or "" when it names none: the
     ``source_tree`` field an older gate recorded beside its fingerprint, else the ``st:...``
