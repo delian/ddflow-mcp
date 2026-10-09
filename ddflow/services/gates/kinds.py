@@ -1,10 +1,10 @@
 """Which gate pipeline an item of a kind runs: the lookup over the kind registry
-(`config_sections.kinds`) and `[gates].kind_pipelines`."""
+(`config_sections._kinds`) and `[gates].kind_pipelines`."""
 
 from __future__ import annotations
 
 from ...config import Config
-from ...config_sections.kinds import KINDS
+from ...config_sections._kinds import KINDS
 
 
 def kind_pipeline(cfg: Config, kind: str) -> list[str]:

@@ -7,7 +7,7 @@ import json
 import pytest
 
 from ddflow.config import Config
-from ddflow.config_sections.kinds import KINDS, kind_pipelines_problem
+from ddflow.config_sections._kinds import KINDS, kind_pipelines_problem
 from ddflow.core.model import Item
 from ddflow.services import workflow as WF
 from ddflow.services.gates import load_gates, pipeline_for, pipelined, pipelines
