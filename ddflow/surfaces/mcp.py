@@ -27,9 +27,12 @@ Notes on protocol handling:
 
 from __future__ import annotations
 
+import argparse
+import copy
 import json
 import os
 import sys
+import threading
 import time
 import traceback
 from collections.abc import Callable
@@ -38,7 +41,13 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from ddflow.core import agentname as AN
-from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
+from ddflow.core.outcome import EXIT_NAMES, NOTHING, OK, REFUSED, declared_exit, exit_for
+
+from ..config import Config
+from ..infra import harness_identity
+from ..infra import proc as PROC
+from ..infra.log import EventLog
+from ..infra.worktree import repo_root
 
 # The tool registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`;
 # this module routes between them. Every name below is re-exported so imports of
@@ -47,6 +56,7 @@ from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
 from . import mcp_protocol as protocol
 from . import registry as _REGISTRY
+from .mcp_bound import BOUNDS
 from .mcp_protocol import (  # noqa: F401
     CACHE_SCOPE,
     CACHE_TTL_MS,
@@ -147,6 +157,24 @@ def _result_declaration(name: str, spec: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _refusal_said(out: Any, payload_key: Any, body: Any, data: dict[str, Any]) -> dict[str, Any]:
+    """The fields that follow the `refusal` lead: what the operation said, in the tool's order."""
+    projected = isinstance(payload_key, tuple)
+    if not isinstance(body, dict):
+        # A string payload key names the one field the body was cut down to; unset, it is
+        # the null that used to lead. What the operation did say still rides along.
+        said = {k: v for k, v in data.items() if k != payload_key or v is not None}
+    else:
+        said = dict(body)
+        if projected:
+            # Declared keys the operation never set stay out (not invented as null) on
+            # exit 1 and 3; exit 2 keeps its declared keys. Everything else it said is added.
+            if out.exit != NOTHING:
+                said = {k: v for k, v in said.items() if k in data}
+            said.update({k: v for k, v in data.items() if k not in said})
+    return said
+
+
 def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
     """The JSON body of a call that did not do what was asked, led by WHY.
 
@@ -186,8 +214,6 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
     """
     if out.exit == 0 or isinstance(body, list):
         return body
-    from ..core.outcome import EXIT_NAMES, NOTHING, REFUSED
-
     data = {k: v for k, v in out.data.items() if not k.startswith("_")}
     scalar = not isinstance(body, dict)
     projected = isinstance(payload_key, tuple)
@@ -201,18 +227,7 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
             "exit": out.exit,
         }
     }
-    if scalar:
-        # A string payload key names the one field the body was cut down to; unset, it is
-        # the null that used to lead. What the operation did say still rides along.
-        said = {k: v for k, v in data.items() if k != payload_key or v is not None}
-    else:
-        said = dict(body)
-        if projected:
-            # Declared keys the operation never set stay out (not invented as null) on
-            # exit 1 and 3; exit 2 keeps its declared keys. Everything else it said is added.
-            if out.exit != NOTHING:
-                said = {k: v for k, v in said.items() if k in data}
-            said.update({k: v for k, v in data.items() if k not in said})
+    said = _refusal_said(out, payload_key, body, data)
     if "refusal" in said:
         key = "refusal_data"
         while key in said:  # never overwrite a field the operation also has
@@ -222,8 +237,6 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
 
 
 def _bounds() -> dict[str, Any]:
-    from .mcp_bound import BOUNDS
-
     return BOUNDS
 
 
@@ -342,9 +355,18 @@ def _identity() -> Any:
     """`api.identity`, imported on first use: a module-level import would pull the whole api
     layer (and its jinja2) into `import ddflow.surfaces.mcp`, which `scripts/bump.sh` runs
     under a bare interpreter."""
-    from ..api import identity
+    from ..api import identity  # deferred: the api package reaches jinja2
 
     return identity
+
+
+def _surf() -> Any:
+    """`api.surf_mcp`, imported on first use for the same reason as `_identity`: it reaches
+    the template engine, and everything the engine reads from the domain layers goes
+    through it."""
+    from ..api import surf_mcp  # deferred: reaches jinja2 (scripts/bump.sh has none)
+
+    return surf_mcp
 
 
 def _default_agent(repo: Path) -> tuple[str, str]:
@@ -355,8 +377,6 @@ def _default_agent(repo: Path) -> tuple[str, str]:
     reactions: the first was set deliberately by whatever spawned you, the second is a
     guess that every sibling in this tree will make identically.
     """
-    from ..config import Config
-
     # The EFFECTIVE default, not the tree-derived one. Reporting the tree name while
     # `DDFLOW_AGENT` was set made `ddflow_identify` misreport the single thing it
     # exists to make visible.
@@ -507,8 +527,6 @@ class Server:
         if not agent:
             # A server restarted under the same harness keeps what the agent declared
             # there, or its shell (which still reads the record) and it would split.
-            from ..infra import harness_identity
-
             self.agent = harness_identity.own(self.repo)
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
@@ -639,8 +657,6 @@ class Server:
 
     def _override_skew(self, reason: Any, agent: str) -> None:
         """Record the session-scoped skew override this call carries (`allow_older_version`)."""
-        from ..config import Config
-        from ..infra.log import EventLog
 
         if not isinstance(reason, str):
             raise ValueError("allow_older_version must be a string: the reason")
@@ -831,7 +847,6 @@ class Server:
             return _text(AN.refusal(want), error=True)
         self.agent = want
         # The same agent's shell commands take it too (Bfad021e8d9).
-        from ..infra import harness_identity
 
         shell = harness_identity.declare(self.repo, want)
         if want:
@@ -934,8 +949,6 @@ class Server:
         )
 
     def _m_prompts_list(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
-        from ..services import prompts as P
-
         return _ok(
             msg.get("id"),
             {
@@ -956,30 +969,31 @@ class Server:
                     # `all_commands`, not `COMMANDS`: operator-defined `[[macro]]`
                     # blocks are listed beside the shipped workflows, because a mode
                     # that has to be asked for by name is a mode nobody finds.
-                    for name, (title, desc, args) in sorted(P.all_commands(self.repo).items())
+                    for name, (title, desc, args) in sorted(
+                        _surf().prompt_commands(self.repo).items()
+                    )
                 ]
             },
         )
 
     def _m_prompts_get(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
-        from ..services import prompts as P
-
         mid = msg.get("id")
         params = msg.get("params") or {}
         name = params.get("name", "")
         args = params.get("arguments") or {}
-        known = P.all_commands(self.repo)
+        surf = _surf()
+        known = surf.prompt_commands(self.repo)
         if name not in known:
             return _err(
                 mid,
                 -32602,
                 f"unknown prompt {name!r}. Known: {', '.join(sorted(known))}"
-                + P.not_loaded_note(self.repo),
+                + surf.prompt_not_loaded_note(self.repo),
             )
         try:
             # The one rendering `ddflow prompts get` and the `ddflow_prompts` tool share.
-            text = P.render_command(name, self.repo, args)
-        except (P.TemplateError, _macro_error()) as exc:
+            text = surf.render_prompt(name, self.repo, args)
+        except (surf.TemplateError, surf.MacroError) as exc:
             return _err(mid, -32602, str(exc))
         return _ok(
             mid,
@@ -1063,11 +1077,6 @@ def _obligation_footer(server) -> str:
     and a broken courtesy must never turn a successful tool call into a failure.
     """
     try:
-        from ..config import Config
-        from ..core.model import fold
-        from ..infra.log import EventLog
-        from ..services import obligations as OB
-
         cfg = Config.load(server.repo)
         if not cfg.reinstruct.enabled:
             return ""
@@ -1077,8 +1086,7 @@ def _obligation_footer(server) -> str:
             return ""
         if now - server._last_footer_at < cfg.reinstruct.every_seconds:
             return ""
-        state = fold(EventLog(server.repo, log_cfg=cfg.log).read_all(), strict=False)
-        text = OB.footer(state, cfg, repo=server.repo, limit=cfg.reinstruct.max_items)
+        text = _surf().obligation_footer(server.repo, cfg)
         if not text:
             # Nothing to say. The counters are NOT reset: a quiet project should not have
             # to wait another twelve calls once something does come up.
@@ -1090,15 +1098,47 @@ def _obligation_footer(server) -> str:
         return ""
 
 
-def _macro_error() -> type[Exception]:
-    """`macros.MacroError`, fetched lazily so the tool table does not drag the service in."""
-    from ..services.macros import MacroError
-
-    return MacroError
-
-
 #: Keys a tool's payload carries only when the operation produced them.
 _OPTIONAL_KEYS = ("export_refresh", "ci", "progress", "guidance")
+
+
+_VAR_DEFAULTS: dict[str, Any] = {
+    "setup_todo": [],
+    "companions": [],
+    "missing_companions": [],
+    "unregistered_companions": [],
+    "uninstalled_companions": [],
+    # Seeded here, with every sibling, because the block that computes these sits
+    # AFTER the `if not adopted: return v` below -- so an unadopted repository got
+    # a variable set the template could not render, and the whole handshake became
+    # "ddflow's instruction template could not be loaded". The template guards the
+    # use (`{% if adopted %}`), but a guard is only as good as the engine's
+    # willingness to short-circuit, and one of the two did not. Defaults do not
+    # depend on which branch ran.
+    # The rules surface: present, stripped, drifted or gone. Seeded with its siblings
+    # so the unadopted path renders — the lesson B153 cost a broken handshake for every
+    # first-time user.
+    "rules_drift": [],
+    "unchecked_companions": [],
+    "actionable_companions": [],
+    "gate_gaps": [],
+    "recoverable": 0,
+    "ready": 0,
+    "running": 0,
+    "blocked": 0,
+    "open_bugs": 0,
+    "loops": 0,
+    "task_pipeline": [],
+    # Set by `_instructions` from the connection's tier; seeded here so the template's
+    # variable contract holds on every path.
+    "tool_tier_note": "",
+    "require_outcome": True,
+    "importable": 0,
+    "queue_is_empty": True,
+    "imported_total": 0,
+    "imported_no_globs": 0,
+    "imported_shipped_drift": 0,
+}
 
 
 def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
@@ -1116,241 +1156,45 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     `next` or `wait` would prune the same way.)
     """
     adopted = (repo / ".ddflow" / "config.toml").is_file()
-    v: dict[str, Any] = {
-        "adopted": adopted,
-        "setup_todo": [],
-        "companions": [],
-        "missing_companions": [],
-        "unregistered_companions": [],
-        "uninstalled_companions": [],
-        # Seeded here, with every sibling, because the block that computes these sits
-        # AFTER the `if not adopted: return v` below -- so an unadopted repository got
-        # a variable set the template could not render, and the whole handshake became
-        # "ddflow's instruction template could not be loaded". The template guards the
-        # use (`{% if adopted %}`), but a guard is only as good as the engine's
-        # willingness to short-circuit, and one of the two did not. Defaults do not
-        # depend on which branch ran.
-        # The rules surface: present, stripped, drifted or gone. Seeded with its siblings
-        # so the unadopted path renders — the lesson B153 cost a broken handshake for every
-        # first-time user.
-        "rules_drift": [],
-        "unchecked_companions": [],
-        "actionable_companions": [],
-        "gate_gaps": [],
-        "recoverable": 0,
-        "ready": 0,
-        "running": 0,
-        "blocked": 0,
-        "open_bugs": 0,
-        "loops": 0,
-        "task_pipeline": [],
-        # Set by `_instructions` from the connection's tier; seeded here so the template's
-        # variable contract holds on every path.
-        "tool_tier_note": "",
-        "require_outcome": True,
-        "importable": 0,
-        "queue_is_empty": True,
-        "imported_total": 0,
-        "imported_no_globs": 0,
-        "imported_shipped_drift": 0,
-    }
+    v: dict[str, Any] = copy.deepcopy(_VAR_DEFAULTS)
+    v["adopted"] = adopted
     # Cheap enough for a handshake: `glob` on a handful of known paths, no parsing.
     # The point is only to know whether to OFFER the import, not to do it.
     try:
-        from ..config import Config as _Cfg
-        from ..services import importer as IM
-
-        # The CONFIGURED sources: a project that moved its journal to a path the
-        # defaults do not know was told "nothing to import" about its whole history.
-        v["importable"] = len(IM._files(repo, IM.all_source_globs(_Cfg.load(repo))))
+        v["importable"] = _surf().importable_count(repo)
     except Exception:
         pass
     if not adopted:
         return v
 
     try:
-        from ..config import Config
-
         cfg = Config.load(repo)
     except Exception:
         return v
-    # Checked BEFORE the expensive blocks: two `read_text` calls, and it is the one fact
-    # that decides whether the agent has any project rules at all.
-    try:
-        from ..services.adopt import rules_status
+    s = _surf()
+    # Each block is independent, and a failure in one must not cost the others: a
+    # project with a bad reviewer block should still be told what is ready to work. The
+    # rules surface goes first: it is the one fact that decides whether the agent has any
+    # project rules at all.
+    for fill in (
+        s.fill_rules_drift,
+        _fill_pipeline,
+        s.fill_unit_test_todo,
+        s.fill_reviewer_todo,
+        s.fill_companions,
+        s.fill_queue,
+    ):
+        try:
+            fill(v, repo, cfg, agent)
+        except Exception:
+            pass
+    return v
 
-        v["rules_drift"] = [
-            {"path": r.path, "state": r.state, "detail": r.render()}
-            for r in rules_status(repo)
-            if r.needs_attention
-        ]
-    except Exception:
-        pass
+
+def _fill_pipeline(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
+    """The gate pipeline the template names, and whether a gate outcome is required."""
     v["task_pipeline"] = list(cfg.gates.task_pipeline)
     v["require_outcome"] = bool(cfg.gates.require_outcome)
-
-    # Each block is independent, and a failure in one must not cost the others: a
-    # project with a bad reviewer block should still be told what is ready to work.
-    try:
-        from ..services.gates import load_gates
-
-        ut = load_gates(repo, cfg).get("unit_tests")
-        if not ut or not ut.command or "set [gate.unit_tests]" in ut.command:
-            v["setup_todo"].append(
-                "No test command is configured. Set it with `ddflow_configure`: "
-                '`[gate.unit_tests]` / `command = "<your test command>"`. Until then '
-                "the unit_tests gate reports UNAVAILABLE and cannot pass."
-            )
-    except Exception:
-        pass
-    try:
-        from ..services.review import load_reviewers
-
-        if not load_reviewers(repo):
-            v["setup_todo"].append(
-                "No cross-family reviewer is configured, so the `critic` gate cannot "
-                "run and `ddflow_complete` will refuse. Call "
-                "`ddflow_reviewers_detect` with write=true — it finds a local model "
-                "server if one is running and records it in the git-ignored "
-                ".ddflow/local/reviewers.toml, never the committed config."
-            )
-    except Exception:
-        pass
-    try:
-        # `probe=False`: detection shells out, and the handshake is the one call an
-        # agent waits on before it can do anything at all. Registration state is read
-        # from config files and is free; whether the binary exists can wait for
-        # `ddflow_companions`, which is what the instruction tells it to call.
-        from ..services import companions as CO
-
-        statuses = CO.scan(repo, probe=False)
-        v["companions"] = [
-            {
-                "id": st.companion.id,
-                "title": st.companion.title,
-                "gates": list(st.companion.gates),
-                # Pre-joined, because `trim_blocks` eats the newline after a block tag:
-                # a nested `{% for %}` closed at the end of a content line takes that
-                # line's newline with it, and every bullet lands on one line. Both
-                # renderers agree on that, so it is the template's shape to avoid, not
-                # an engine difference to work around.
-                "gates_text": ", ".join(st.companion.gates) or "—",
-                "state": st.state,
-                "install": st.companion.install,
-                "url": st.companion.url,
-                "default": st.companion.default,
-                # The CLI JSON payload carries this; omitting it here meant the
-                # template could not tell a server from a command-line tool even if it
-                # wanted to -- the same CLI/MCP divergence, inside the fix for it.
-                "kind": st.companion.kind,
-                "usable": st.usable,
-                "is_gap": st.is_gap,
-                "is_unknown": st.is_unknown,
-                "advice": st.advice,
-            }
-            for st in statuses
-        ]
-        # Split by what the AGENT would have to DO about each, because the two need
-        # different permission from the operator: wiring up a server that is already
-        # on the machine is a config edit, while installing one runs an install
-        # command. Reporting them as one list made the instruction vague where it
-        # most needed to be specific.
-        # `is_gap`, not `state != "registered"`. An installed `cli` companion can never
-        # be "registered", so the old test put it in this list on every connection and
-        # the template told the agent -- as "something to DO" -- to register it. The
-        # agent obeys and gets a refusal, having been instructed by the server itself.
-        # Three buckets, because there are three different things to DO about them,
-        # and the template renders each separately. One list called
-        # "missing_companions" made the instruction say "install and register these"
-        # over a set that included a tool needing no registration and a tool nobody
-        # had looked for.
-        # Bucketed by ADVICE, not by state: with `probe=False` an mcp companion is
-        # definitely not registered and its install state is unknown, which is neither
-        # "one command away" nor "go install it". Splitting on `state` put it in no
-        # bucket, so the handshake computed three lists and dropped the only non-empty
-        # case on the floor.
-        by = {
-            a: [c for c in v["companions"] if c["advice"] == a and c["default"]]
-            for a in ("register", "install", "check")
-        }
-        v["unregistered_companions"] = by["register"]
-        v["uninstalled_companions"] = by["install"]
-        v["unchecked_companions"] = by["check"]
-        v["missing_companions"] = by["register"] + by["install"]
-        # ONE list for the template, because the proposal an agent makes is the same in
-        # all three cases -- tell the operator, give them the command, let them decide.
-        # Only the CLAIM about install state differs, and that is what `state_word`
-        # carries. Splitting them into three rendered blocks dropped the install
-        # command from the commonest case and left the agent nothing to act on.
-        by_id = {c["id"]: c for c in v["companions"]}
-        v["actionable_companions"] = [
-            {**by_id[st.companion.id], "state_word": word}
-            for st, word in CO.actionable(statuses, grouped=True)
-        ]
-        cover = CO.gate_coverage(repo, statuses, CO.coverage_gates(cfg))
-        v["gate_gaps"] = CO.gate_gaps(cover, statuses)
-    except Exception as exc:
-        # NOT `pass`. A broad catch here is right -- a malformed registry must not stop
-        # the handshake, and an agent with no instructions is worse than one with
-        # partial ones -- but swallowing it silently deleted the entire companions and
-        # gate-gap section, so "nobody could look" rendered as "no gaps". That is the
-        # unavailable-as-success class, inside the report whose whole purpose is to
-        # expose it.
-        v["setup_todo"].append(
-            f"The companion registry could not be read, so this handshake says nothing "
-            f"about which gates have a tool behind them: {exc}. Fix "
-            f".ddflow/companions.toml (or `ddflow companions`, which prints the same "
-            f"error) — until then, treat every gate as unserved rather than served."
-        )
-    try:
-        from ..api.lifecycle import plan_for
-        from ..core import progress as PR
-        from ..core.model import fold
-        from ..infra.log import EventLog
-        from ..services import importer as IM
-        from ..services import leases as L
-
-        # `identity.resolve`, not `cfg.agent.id or ""` -- the latter falls to the
-        # tree-derived default and reads neither DDFLOW_AGENT nor a declared name. The
-        # identity here decides which items `plan()` counts as "already mine", so with
-        # DDFLOW_AGENT set the handshake reported the connection's OWN claimed work as
-        # someone else's, at the one moment the agent is told what to do next. B88's
-        # sweep fixed two call sites and missed this one.
-        log = EventLog(repo, _identity().resolve(repo, cfg, agent).id, log_cfg=cfg.log)
-        events = log.read_all()
-        st = fold(events, strict=False)
-        # The ready set as `next` offers it (the waiters' reservation hold and the
-        # parallelism limit), not the bare scheduler's: the handshake is where an agent is
-        # told what to do next, so it must not promise an item `next` withholds.
-        p = plan_for(repo, log, cfg, st, purpose="view", agent=log.agent_id, events=events)
-        v["ready"], v["running"] = len(p.ready), len(p.running)
-        v["queue_is_empty"] = not st.items
-        # `rescan=False`: the queue-only half, which costs nothing because `st` is
-        # already folded. The source re-scan is ~0.65 s on a real corpus -- cheap for a
-        # command an operator typed, and not something to spend at every session start.
-        # What the handshake does instead is TELL the agent to run the full check, and
-        # only when the cheap half has already found something to act on.
-        iv = IM.verify_import(repo, st, rescan=False)
-        v["imported_total"] = iv.total
-        v["imported_no_globs"] = len(iv.no_globs)
-        v["imported_shipped_drift"] = len(iv.shipped_drift)
-        v["blocked"] = len(p.blocked)
-        v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
-        v["loops"] = len(PR.detect(events, st, cfg))
-        # Trees that may hold work: one per tree (path compared after `normpath`), not
-        # per item, and never a tree measured clean (B904edd649c). One that could not be
-        # measured (None) counts: `recover` says to treat it as containing work until
-        # someone has looked. A record with no tree is not a tree and is not counted.
-        v["recoverable"] = len(
-            {
-                os.path.normpath(r.worktree)
-                for r in L.scan(log, cfg, repo)
-                if r.worktree and r.salvageable is not False
-            }
-        )
-    except Exception:
-        pass
-    return v
 
 
 def _upgrade_line(repo: Path, agent: str) -> str:
@@ -1388,28 +1232,19 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
     mcp_instructions`). That is the difference between a tool whose behaviour you
     configure and one you have to fork.
     """
-    from ..services import prompts as P
-
     vars_ = _instruction_vars(repo, agent)
     vars_["tool_tier_note"] = tier_note(tier, names=False)
     overrides: dict[str, str] = {}
     if vars_["adopted"]:
         try:
-            from ..config import Config
-
-            # Read by NAME, not by handing `prompts.__dict__` to the resolver. The
-            # dead-knob ratchet greps for the knob being read and would have reported
-            # this one as documented-but-never-read — correctly, because a bulk dict
-            # pass is also how a knob gets renamed in config and silently stops working.
-            path = Config.load(repo).prompts.mcp_instructions
+            path = _surf().instructions_override(repo)
             if path:
                 overrides["mcp_instructions"] = path
         except Exception:
             pass
     try:
-        tmpl = P.resolve("mcp_instructions", repo, overrides)
-        text = P.render(tmpl, **vars_).strip()
-    except P.TemplateError as exc:
+        text = _surf().render_instructions(repo, overrides, vars_)
+    except _surf().TemplateError as exc:
         # A broken override must not silence the server: say what is wrong, in the one
         # place the operator will see it, and still hand over the essentials.
         text = (
@@ -1511,8 +1346,6 @@ def _worker_stderr(repo: Path):
 
     Inherited, a client that disconnected left the worker writing to a broken pipe, and
     a gate or reviewer child got SIGPIPE before the run could record its outcome."""
-    import subprocess
-
     local = repo / ".ddflow" / "local"
     log = local / "mcp-workers.log"
     try:
@@ -1523,7 +1356,7 @@ def _worker_stderr(repo: Path):
             return open(log, "w" if big else "a")  # the worker owns it
     except OSError as exc:
         print(f"ddflow mcp: worker log {log} unavailable ({exc})", file=sys.stderr)
-    return subprocess.DEVNULL
+    return PROC.DEVNULL
 
 
 def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], None], busy: int):
@@ -1534,11 +1367,6 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
     `notifications/cancelled` is deliberately NOT passed on: a review or gate a client
     stopped waiting for still finishes and records, which is the point (B9abc247444).
     """
-    import subprocess
-    import threading
-
-    from ..infra import proc as P
-
     mid = msg.get("id")
     name = (msg.get("params") or {}).get("name", "")
     if busy >= MAX_WORKERS:
@@ -1571,10 +1399,10 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
     }
     err = _worker_stderr(srv.repo)
     try:
-        p = P.popen(
+        p = PROC.popen(
             [sys.executable, "-c", "from ddflow.surfaces.mcp import _worker_main as m; m()"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdin=PROC.PIPE,
+            stdout=PROC.PIPE,
             stderr=err,
             text=True,
             env=env,
@@ -1587,7 +1415,7 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
         send(_ok(mid, _text(f"{name}: could not start its worker: {exc}", error=True)))
         return None
     finally:
-        if err is not subprocess.DEVNULL:
+        if err is not PROC.DEVNULL:
             err.close()  # the worker holds its own copy
 
     def relay() -> None:
@@ -1685,7 +1513,6 @@ def serve(
     outp = stdout or sys.stdout
     if offload is None:
         offload = stdin is None
-    import threading
 
     out_lock = threading.Lock()
 
@@ -1737,7 +1564,6 @@ def main(argv: list[str] | None = None) -> int:
     be the one that needs no configuration. ``DDFLOW_REPO`` overrides for clients that
     spawn servers from a fixed directory.
     """
-    import argparse
 
     ap = argparse.ArgumentParser(
         prog="ddflow-mcp",
@@ -1759,8 +1585,6 @@ def main(argv: list[str] | None = None) -> int:
 
     start = Path(args.repo) if args.repo else Path.cwd()
     try:
-        from ..infra.worktree import repo_root
-
         repo = repo_root(start)
     except Exception:
         # Not a git repository, or git is absent. Serve anyway: `ddflow_doctor` will
