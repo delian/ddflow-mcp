@@ -2449,7 +2449,7 @@ def check_item_trailer(
     # required both, and a waiver declared alone sat inert (cross-family reviewers,
     # three rounds).
     spelled = {k.lower(): k for k in (waivers or {})}
-    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)] or ["Item"]
+    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)]
     checked = [
         (canon.get(k.lower()) or spelled[k.lower()], v)
         for k, v in trailers
