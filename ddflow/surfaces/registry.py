@@ -289,6 +289,10 @@ class Param:
             raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
         if self.nargs is not None and not self.positional:
             raise ValueError(f"param {self.name!r}: nargs is for a positional")
+        if self.nargs not in (None, "?"):
+            raise ValueError(f"param {self.name!r}: only nargs='?' (optional) is supported")
+        if self.exclusive is not None and (self.required or self.positional):
+            raise ValueError(f"param {self.name!r}: a member of an exclusive group is optional")
         if self.positional and not self.required and self.nargs is None:
             # argparse refuses a missing positional, so the schema must say it is required.
             object.__setattr__(self, "required", True)
@@ -668,6 +672,7 @@ def add_commands(
             existing = _group_subparsers(subparsers, group)
             if existing is not None:
                 made[group] = existing
+                parsers[group] = subparsers.choices[group]
             else:
                 kw = {"help": groups[group]} if groups and group in groups else {}
                 gp = subparsers.add_parser(group, **kw)

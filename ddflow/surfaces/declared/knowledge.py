@@ -165,7 +165,7 @@ COMMANDS: tuple[Command, ...] = (
                 type="integer",
                 help="Total budget for the answer. The point of a budget is that recall is called at the START of work, where a long answer costs the context the work itself needs.",
                 cli_help="",
-                default=4000,
+                default=RECALL_MAX_CHARS,
             ),
         ),
         tool_order=("query", "limit", "max_chars", "sources"),

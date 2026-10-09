@@ -25,16 +25,17 @@ def test_budget_states_its_unit():
 
 def test_the_recall_default_is_4000_everywhere(monkeypatch):
     """It was 4000 in the API, the CLI parser, the MCP tool and the MCP bound; one constant
-    now serves all four, and the value is pinned here so a change of it is deliberate."""
+    now serves all four (the flag and the argument are one declaration), and the value is
+    pinned here so a change of it is deliberate."""
     from ddflow.api.knowledge import retrieval
     from ddflow.surfaces import mcp_bound
-    from ddflow.surfaces.parsers import knowledge as parser
-    from ddflow.surfaces.tools import reporting
+    from ddflow.surfaces.declared import knowledge as declared
+    from ddflow.surfaces.tools import TOOLS
 
     assert B.RECALL_MAX_CHARS == 4000
     assert inspect.signature(retrieval.recall).parameters["max_chars"].default == 4000
     assert mcp_bound.RECALL_BUDGET == 4000
-    assert "default=RECALL_MAX_CHARS" in inspect.getsource(parser)
+    assert "default=RECALL_MAX_CHARS" in inspect.getsource(declared)
 
     seen = {}
 
@@ -42,10 +43,10 @@ def test_the_recall_default_is_4000_everywhere(monkeypatch):
         def recall(self, repo, query, **kw):
             seen.update(kw)
 
-    monkeypatch.setattr(reporting, "_api", _Api)
-    reporting.TOOLS["ddflow_recall"]["api"](None, {"query": "q"}, "")
+    monkeypatch.setattr(declared, "_api", _Api)
+    TOOLS["ddflow_recall"]["api"](None, {"query": "q"}, "")
     assert seen["max_chars"] == 4000
-    reporting.TOOLS["ddflow_recall"]["api"](None, {"query": "q", "max_chars": 900}, "")
+    TOOLS["ddflow_recall"]["api"](None, {"query": "q", "max_chars": 900}, "")
     assert seen["max_chars"] == 900
 
 

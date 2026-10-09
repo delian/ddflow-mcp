@@ -267,6 +267,8 @@ def test_an_optional_positional_is_optional_on_both_surfaces():
     assert root.parse_args(["x", "add", "S"]).session == "S"
     with pytest.raises(ValueError, match="nargs is for a positional"):
         Param("p", nargs="?")
+    with pytest.raises(ValueError, match="only nargs='\\?'"):
+        Param("p", positional=True, nargs="+")  # argparse requires it; the schema would not
 
 
 def test_a_tool_may_require_what_the_flag_does_not():
@@ -295,6 +297,12 @@ def test_exclusive_parameters_share_one_group_and_metavar_is_kept():
         root.parse_args(["x", "--new", "--extends", "A"])
     sub = next(a for a in root._actions if isinstance(a, argparse._SubParsersAction)).choices["x"]
     assert "[--new | --extends ID]" in " ".join(sub.format_usage().split())
+
+
+def test_a_member_of_an_exclusive_group_is_optional():
+    for bad in ({"required": True}, {"positional": True}):
+        with pytest.raises(ValueError, match="exclusive group is optional"):
+            Param("p", exclusive="g", **bad)
 
 
 def test_tool_order_is_the_order_of_the_schema_not_of_the_help():
@@ -337,7 +345,13 @@ def test_a_group_is_listed_only_when_it_has_help_and_an_existing_group_is_joined
     help_ = root.format_help()
     assert "has a line" in help_ and "quiet" in help_.split("{")[1]  # in the choices...
     assert [c.dest for c in subs._choices_actions] == ["loud"]  # ...but only `loud` has a row
-    add_commands(subs, [Command(path=("quiet", "two"))])  # joins the group made before
+    old = R.Alias("command", "quiet-old", "quiet", "0.1.17")
+    add_commands(
+        subs,
+        [Command(path=("quiet", "two"))],  # joins the group made before
+        group_aliases={"quiet": (old,)},
+    )
+    assert root.parse_args(["quiet-old", "two"]).quiet_cmd == "two"
     assert root.parse_args(["quiet", "two"]).quiet_cmd == "two"
     assert root.parse_args(["quiet", "one"]).quiet_cmd == "one"
 
