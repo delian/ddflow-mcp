@@ -40,7 +40,7 @@ inside a token budget. Read it instead of the corpora, not in addition to them.
 agent's worktree frequently contains finished work that exists nowhere else. Inspect the
 named tree, salvage what is real, then `ddflow release <id>`. Never delete first.
 
-**If the brief opens with `ddflow upgraded A -> B: run ddflow upgrade --plan`**, ddflow was
+**If the brief opens with `Upgraded ddflow A -> B: run ddflow upgrade --plan`**, ddflow was
 upgraded since this project was last brought up to date (it says so once per version on this
 machine, and changes nothing). Run `ddflow upgrade --plan` [`ddflow_upgrade`]: it lists what
 would change by category and exits 1 while it has items. `ddflow upgrade --apply` applies
