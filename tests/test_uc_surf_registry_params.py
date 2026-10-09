@@ -64,3 +64,17 @@ def test_misdeclared_features_are_refused():
         Param("x", positional=True, nargs="?", const="c")
     with pytest.raises(ValueError, match="exclusive_required"):
         Param("x", exclusive_required=True)
+
+
+def test_two_members_may_both_ask_for_a_required_group_and_it_is_still_one_group():
+    p = _parser(
+        Param("a", exclusive="which", exclusive_required=True),
+        Param("b", exclusive="which", exclusive_required=True),
+    )
+    assert p.parse_args(["go", "--a", "1"]).a == "1"
+    assert p.parse_args(["go", "--b", "2"]).b == "2"
+
+
+def test_an_optional_value_flag_must_say_what_it_means_alone():
+    with pytest.raises(ValueError, match="needs a const"):
+        Param("apply", nargs="?")

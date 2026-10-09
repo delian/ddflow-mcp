@@ -310,6 +310,8 @@ class Param:
             raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
         if self.nargs is not None and not self.positional and self.nargs != "?":
             raise ValueError(f"param {self.name!r}: a flag takes nargs='?' (an optional value)")
+        if self.nargs == "?" and not self.positional and self.const is _UNSET:
+            raise ValueError(f"param {self.name!r}: a flag with nargs='?' needs a const")
         if self.const is not _UNSET and (self.positional or self.nargs != "?"):
             raise ValueError(f"param {self.name!r}: const goes with a flag's nargs='?'")
         if self.exclusive_required and self.exclusive is None:
@@ -644,10 +646,10 @@ class Command:
         if self.epilog:
             kwargs["epilog"] = self.epilog
         sub = subparsers.add_parser(self.path[-1], **kwargs)
+        required_groups = {p.exclusive for p in self.cli_params if p.exclusive_required}
         groups: dict[str, Any] = {
-            p.exclusive: sub.add_mutually_exclusive_group(required=True)
-            for p in self.cli_params
-            if p.exclusive and p.exclusive_required
+            name: sub.add_mutually_exclusive_group(required=True)
+            for name in sorted(n for n in required_groups if n)
         }
         for p in self.cli_params:
             p.add_to(sub, groups)
