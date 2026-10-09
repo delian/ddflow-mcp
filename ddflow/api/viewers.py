@@ -73,7 +73,7 @@ _TAKES: dict[str, frozenset[str]] = {
     "research": frozenset({"phase", "tag"}),
     "lesson": frozenset({"tag", "all"}),
     "session": frozenset({"id"}),
-    "search": frozenset({"query", "mode", "sources", "phase"}),
+    "search": frozenset({"query", "mode", "sources", "source", "phase"}),
 }
 
 #: What `view_read` answers: the list kinds, plus a text search.
@@ -98,6 +98,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     all: bool = False,
     mode: str = "ranked",
     sources: str = "",
+    source: str = "",
 ) -> O.Outcome:
     """The one read over every viewer (task|phase|bug|research|session|search): the same
     rows and shape as the CLI's `list` / `session list|show` / `search` with `--json`.
@@ -113,6 +114,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         "all": all,
         "mode": mode if mode != "ranked" else "",
         "sources": sources,
+        "source": source,
         "phase": phase,
         "item": item,
     }
@@ -128,7 +130,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     if kind == "session":
         return _read_session(repo, id, state, owner, since, limit)
     if kind == "search":
-        return _read_search(repo, query, mode, sources, state, phase, owner, since, limit)
+        return _read_search(repo, query, mode, sources, state, phase, owner, since, limit, source)
     if kind == "bug" and not state and not all:
         state = "open"
     if kind == "lesson" and not state and not all:
@@ -202,6 +204,7 @@ def _read_search(
     owner: str,
     since: str,
     limit: int,
+    source: str = "",
 ) -> O.Outcome:
     log, cfg, st = _load(repo)
     try:
@@ -210,9 +213,10 @@ def _read_search(
             log.read_all(),
             cfg,
             query,
-            S.Filters(sources, state, phase, owner, since),
+            S.Filters(sources, state, phase, owner, since, source),
             mode=mode,
             limit=limit,
+            repo=repo,
         )
     except S.SearchError as exc:
         return O.refused("view.search", str(exc), record_kind="search")

@@ -104,11 +104,13 @@ def test_search_sources_are_registered_and_cover_every_kind_in_order():
     from ddflow.services import search as S
     from ddflow.services.searchcore import registered
 
-    names = [src.name for src in registered() if src.name in {"records", "sessions", "log"}]
-    assert names == ["records", "sessions", "log"]
-    covered = {k for src in registered() for k in src.kinds}
-    assert set(S.SOURCES) <= covered
-    assert {k for src in registered() if src.name in names for k in src.kinds} == set(S.SOURCES)
+    names = [src.name for src in registered()]
+    assert names == S.source_names()
+    assert names == [
+        "records", "sessions", "prompts", "log", "rules", "skills", "agents", "jobs", "schedules"
+    ]  # fmt: skip
+    covered = [k for src in registered() for k in src.kinds]
+    assert sorted(covered) == sorted(S.SOURCES)  # every kind has exactly one owner
 
 
 def _rule(repo, rid="r-style", content="small functions"):
