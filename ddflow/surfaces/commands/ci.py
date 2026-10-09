@@ -11,37 +11,6 @@ from ..context import Ctx
 from ..render import emit_json
 
 
-def add_ci_parser(sub) -> None:
-    ci = sub.add_parser(
-        "ci", help="the CI parity gate: run the pre-push checks on the merge result"
-    )
-    ci.add_argument(
-        "verb",
-        nargs="?",
-        choices=["run", "status", "record"],
-        default="status",
-        help="run: check the merge result; status (default): what would run, and whether it can",
-    )
-    ci.add_argument("--ref", default="", help="run: the commit or item id (default: HEAD here)")
-    ci.add_argument(
-        "--base", default="", help="run: merge this branch in first (default [ci].base)"
-    )
-    ci.add_argument("--command", default="", help="run: use this instead of [ci].command")
-    ci.add_argument(
-        "--stage", default="pre-push", help="record: gate | merge | pre-push | schedule"
-    )
-    ci.add_argument(
-        "--result", choices=["passed", "failed"], default="", help="record: how it went"
-    )
-    ci.add_argument(
-        "--report",
-        default="",
-        help="record: file with the pre-commit output, parsed for the failing checks",
-    )
-    ci.add_argument("--sha", default="", help="record: the commit that was checked")
-    ci.set_defaults(fn=cmd_ci)
-
-
 def _here_or_head(repo: Path) -> str:
     """HEAD of the current directory when it is a worktree of THIS repository, else HEAD."""
     here = Path.cwd()
