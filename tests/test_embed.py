@@ -67,6 +67,7 @@ def test_nothing_to_embed_answers_without_starting_the_companion(tmp_path):
         ('print(\'{"model": "m", "vectors": [[NaN], [1.0]]}\')\n', "not finite"),
         ("print(json.dumps({'model': 'm', 'vectors': [['x'], [1.0]]}))\n", "not finite"),
         ("print(json.dumps({'model': 'm', 'vectors': [[True], [1.0]]}))\n", "not finite"),
+        ("print('{\"model\": \"m\", \"vectors\": [[1' + '0' * 400 + '], [1.0]]}')\n", "not finite"),
     ],
 )
 def test_a_companion_that_breaks_the_contract_is_unavailable_with_the_reason(tmp_path, body, why):
@@ -206,3 +207,13 @@ def test_model2vec_without_the_extra_is_unavailable_and_says_which(tmp_path, mon
     monkeypatch.setattr(E, "_StaticModel", None)
     got = E.embed(tmp_path, _cfg(model_dir=str(tmp_path)), ["a"])
     assert got.unavailable and "ddflow[rag]" in got.reason
+
+
+def test_a_request_larger_than_the_pipe_is_delivered_whole_across_ticks():
+    from ddflow.infra import proc as P
+
+    big = "x" * (1 << 20)  # many pipe buffers; the child starts reading only after a few ticks
+    got = P.run_shell(
+        "sleep 1.2; wc -c", timeout_s=30, stdin_text=big, on_tick=lambda: None, tick_s=0.3
+    )
+    assert got.code == 0 and got.out.strip() == str(len(big))
