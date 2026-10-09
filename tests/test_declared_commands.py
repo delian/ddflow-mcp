@@ -16,6 +16,7 @@ import pytest
 
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.declared import (
+    cadence,
     export,
     flow,
     hooks,
@@ -33,7 +34,7 @@ from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
 FAMILIES = (
-    knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow, memory, export,
+    knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow, memory, export, cadence,
 )  # fmt: skip
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
@@ -53,6 +54,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.flow",
         "ddflow.surfaces.declared.memory",
         "ddflow.surfaces.declared.export",
+        "ddflow.surfaces.declared.cadence",
         "ddflow.surfaces.tools.flow",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
