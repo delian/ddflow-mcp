@@ -349,3 +349,17 @@ def test_the_reporting_commands_keep_the_shapes_the_migration_found():
     assert build_parser().parse_args(["progress"]).id == ""
     assert "limit" in TOOLS["ddflow_progress"]["properties"]
     assert by["ddflow_board"].prose and by["ddflow_replay"].prose and by["ddflow_render"].prose
+
+
+def test_the_progress_limit_is_applied_to_the_rows_by_the_mcp_bound():
+    """`limit` is not forwarded to the api: the tool's body is the row array and the MCP layer
+    cuts it (`mcp_bound.bound_progress`), most effort first; 0 asks for all."""
+    from ddflow.surfaces.mcp_bound import BOUNDS
+
+    rows = [{"item": f"T{i}", "seconds": 100 - i} for i in range(40)]
+    cut, note = BOUNDS["ddflow_progress"](rows, {"limit": 3})
+    assert [r["item"] for r in cut] == ["T0", "T1", "T2"] and note
+    default, _ = BOUNDS["ddflow_progress"](rows, {})
+    assert len(default) == 25
+    everything, _ = BOUNDS["ddflow_progress"](rows, {"limit": 0})
+    assert len(everything) == 40
