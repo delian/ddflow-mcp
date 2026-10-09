@@ -27,11 +27,9 @@ from ddflow.surfaces.mcp import TOOLS
 #: so parity is checked against all tools whatever tier a server runs at; a tool a tier
 #: hides is still callable by name. `tests/test_mcp_tool_tiers.py` pins that.
 
-#: The exemptions are FIELDS of the command registry (`surfaces/exemptions.py`), and every
-#: table below is derived from them: command-level (`NOT_EXPOSED`, `ALIASES`), per-leaf
-#: (`LEAF_NOT_EXPOSED`, `LEAF_VIA`), per-flag (`FLAG_EXEMPTIONS`) and prose (`PROSE_TOOLS`).
-EXEMPT_WORDS = X.EXEMPT_WORDS
-ALIASES: dict[str, tuple[str, ...]] = X.COVERING_TOOLS
+#: The exemptions are FIELDS of the command registry (`surfaces/exemptions.py`: `reason`, `via`,
+#: `flag_exempt`, `prose_reason` on a `Command`), and this test reads the tables derived from
+#: them there. It keeps none of its own (`test_no_test_keeps_its_own_exemption_table`).
 
 
 def cli_commands() -> list[str]:
@@ -41,9 +39,9 @@ def cli_commands() -> list[str]:
 
 
 def covered(cmd: str) -> bool:
-    if cmd in EXEMPT_WORDS or (cmd,) in LEAF_VIA:
+    if cmd in X.EXEMPT_WORDS or (cmd,) in X.ROUTED_PATHS:
         return True
-    for alias in ALIASES.get(cmd, ()):
+    for alias in X.COVERING_TOOLS.get(cmd, ()):
         if alias in TOOLS:
             return True
     return any(t == f"ddflow_{cmd}" or t.startswith(f"ddflow_{cmd}_") for t in TOOLS)
@@ -77,15 +75,6 @@ def cli_leaves() -> list[tuple[str, ...]]:
     return sorted(out)
 
 
-#: Subcommand paths deliberately NOT exposed, each with its reason.
-LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = X.EXEMPT_PATHS
-
-#: Read-only viewer leaves served by ONE consolidated tool (a per-leaf tool would cost
-#: tools/list bytes for no capability): leaf -> (tool, the `kind` that selects it). Also
-#: `bug reopen`, which is `ddflow_bug_invalid` with `reopen=true`, not a tool of its own.
-LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = X.ROUTED_PATHS
-
-
 def _tool_stem(path: tuple[str, ...]) -> str:
     """A CLI path as a tool-name stem: `bug file-tasks` -> `bug_file_tasks`. ONE rule for
     both detectors (roborev, job 1296: normalising one and not the other left the flag
@@ -94,7 +83,7 @@ def _tool_stem(path: tuple[str, ...]) -> str:
 
 
 def leaf_covered(path: tuple[str, ...]) -> bool:
-    if path in LEAF_NOT_EXPOSED or path in LEAF_VIA:
+    if path in X.EXEMPT_PATHS or path in X.ROUTED_PATHS:
         return True
     joined = _tool_stem(path)
     return f"ddflow_{joined}" in TOOLS or any(t.startswith(f"ddflow_{joined}_") for t in TOOLS)
@@ -105,21 +94,21 @@ def test_every_cli_SUBCOMMAND_is_reachable_over_mcp():
     assert not missing, (
         "CLI subcommands with no MCP tool: "
         + ", ".join("`ddflow " + " ".join(p) + "`" for p in missing)
-        + ". Add a tool, or add an entry to LEAF_NOT_EXPOSED with the reason."
+        + ". Add a tool, or declare the leaf on a Command with a `reason=` (surfaces/exemptions.py)."
     )
 
 
 def test_the_leaf_exemptions_are_real_and_reasoned():
     live = set(cli_leaves())
-    stale = [p for p in LEAF_NOT_EXPOSED if p not in live]
+    stale = [p for p in X.EXEMPT_PATHS if p not in live]
     assert not stale, f"exemptions for subcommands that no longer exist: {stale}"
-    for path, reason in LEAF_NOT_EXPOSED.items():
+    for path, reason in X.EXEMPT_PATHS.items():
         assert len(reason) > 20, f"{path}: the exemption needs a real reason"
 
 
 def test_the_routed_leaves_are_real():
     live = set(cli_leaves())
-    stale = [p for p in LEAF_VIA if p not in live]
+    stale = [p for p in X.ROUTED_PATHS if p not in live]
     assert not stale, f"routes declared for subcommands that no longer exist: {stale}"
 
 
@@ -131,13 +120,13 @@ def test_every_cli_command_is_reachable_over_mcp():
     missing = [c for c in cli_commands() if not covered(c)]
     assert not missing, (
         f"CLI commands with no MCP tool: {missing}. An operator in a chat window "
-        f"cannot reach these at all. Add a tool, or add an entry to NOT_EXPOSED with "
-        f"the reason."
+        f"cannot reach these at all. Add a tool, or declare it with a `reason=` on its "
+        f"Command."
     )
 
 
 def test_the_exemption_list_only_shrinks():
-    stale = [c for c in EXEMPT_WORDS if c not in cli_commands()]
+    stale = [c for c in X.EXEMPT_WORDS if c not in cli_commands()]
     assert not stale, f"exemptions for commands that no longer exist: {stale}"
     for c in X.DECLARATIONS:
         if len(c.path) == 1 and c.reason:
@@ -147,7 +136,7 @@ def test_the_exemption_list_only_shrinks():
 
 
 def test_the_aliases_all_resolve():
-    for cmd, tools in ALIASES.items():
+    for cmd, tools in X.COVERING_TOOLS.items():
         assert cmd in cli_commands(), f"alias for a command that does not exist: {cmd}"
         for t in tools:
             assert t in TOOLS, f"{cmd} aliases {t}, which is not a tool"
@@ -203,14 +192,9 @@ def _cli_flags(argv: list[str]) -> set[str]:
     }
 
 
-#: CLI flags deliberately absent from an MCP tool, each with the reason. An entry here
-#: is a decision on the record; an omission that is NOT here is a divergence.
-FLAG_EXEMPTIONS: dict[tuple[str, str], str] = X.FLAG_EXEMPT
-
-
 def _tool_for(path: tuple[str, ...]) -> str | None:
-    if path in LEAF_VIA:
-        return LEAF_VIA[path][0]
+    if path in X.ROUTED_PATHS:
+        return X.ROUTED_PATHS[path][0]
     joined = _tool_stem(path)
     return f"ddflow_{joined}" if f"ddflow_{joined}" in TOOLS else None
 
@@ -226,7 +210,7 @@ def _pairs() -> list[tuple[str, tuple[str, ...]]]:
     """
     out = []
     for path in cli_leaves():
-        if path in LEAF_NOT_EXPOSED:
+        if path in X.EXEMPT_PATHS:
             continue
         tool = _tool_for(path)
         if tool:
@@ -252,24 +236,23 @@ def test_every_cli_flag_is_reachable_from_its_mcp_tool(tool, argv):
     missing = sorted(
         f
         for f in flags
-        if f.lstrip("-").replace("-", "_") not in props and (tool, f) not in FLAG_EXEMPTIONS
+        if f.lstrip("-").replace("-", "_") not in props and (tool, f) not in X.FLAG_EXEMPT
     )
     assert not missing, (
         f"{tool} cannot reach `ddflow {' '.join(argv)}` flag(s) {missing}. "
         f"Add the propert{'y' if len(missing) == 1 else 'ies'} and the argv entry, or "
-        f"record the omission in FLAG_EXEMPTIONS with its reason."
+        f"record the omission as `flag_exempt` on the Command, with its reason."
     )
 
 
 # -- JSON or prose, but decided rather than accidental --------------------------------
 
-#: Tools that deliberately return PROSE rather than JSON, each with the reason (the
-#: `prose_reason` of their declaration). The distinction is real: some tools hand the model
-#: an *instruction* or a document, and JSON-encoding a paragraph helps nobody. But it must be
-#: a decision, never an accident (`decision_add` returned JSON while `task_add` returned prose
-#: for no reason either could state). A tool prose for SOME arguments (`render --show`,
-#: `prompts show`) is declared too: prose is a shape it has.
-PROSE_TOOLS: dict[str, str] = X.PROSE_REASONS
+# Tools that deliberately return PROSE rather than JSON are declared with a `prose_reason`
+# (`X.PROSE_REASONS`). The distinction is real: some tools hand the model an *instruction* or a
+# document, and JSON-encoding a paragraph helps nobody. But it must be a decision, never an
+# accident (`decision_add` returned JSON while `task_add` returned prose for no reason either
+# could state). A tool prose for SOME arguments (`render --show`, `prompts show`) is declared
+# too: prose is a shape it has.
 
 
 def test_every_tool_is_explicitly_json_or_explicitly_prose():
@@ -288,11 +271,11 @@ def test_every_tool_is_explicitly_json_or_explicitly_prose():
         # KeyError dressed up as a parity finding.
         if "identify" in spec:
             continue
-        if not _returns_prose(name) or name in PROSE_TOOLS:
+        if not _returns_prose(name) or name in X.PROSE_REASONS:
             continue
         undeclared.append(name)
     assert not undeclared, (
-        f"{undeclared} return prose but are not in PROSE_TOOLS. Either add `--json` to "
+        f"{undeclared} return prose but have no `prose_reason` on their Command. Either add `--json` to "
         f"the argv — which is right for anything a caller parses — or record WHY prose "
         f"is the useful form here. An agent cannot tell which it will get."
     )
@@ -319,19 +302,53 @@ def _returns_prose(name: str) -> bool:
 
 
 def test_the_prose_list_only_describes_tools_that_exist():
-    stale = [n for n in PROSE_TOOLS if n not in TOOLS]
-    assert not stale, f"PROSE_TOOLS names tools that are gone: {stale}"
-    for name, reason in PROSE_TOOLS.items():
+    stale = [n for n in X.PROSE_REASONS if n not in TOOLS]
+    assert not stale, f"a prose_reason names tools that are gone: {stale}"
+    for name, reason in X.PROSE_REASONS.items():
         assert len(reason) > 20, f"{name}: the reason has to say something"
-        assert _returns_prose(name), f"{name} now emits JSON; drop it from PROSE_TOOLS"
+        assert _returns_prose(name), f"{name} now emits JSON; drop its `prose_reason`"
 
 
 def test_every_viewer_leaf_names_a_kind_ddflow_list_accepts():
     from ddflow.api.viewers import READ_KINDS
 
-    for path, (tool, kind) in LEAF_VIA.items():
+    for path, (tool, kind) in X.ROUTED_PATHS.items():
         assert tool in TOOLS, path
         if tool == "ddflow_list":
             assert kind in READ_KINDS, path
         else:  # a mode of another tool: `kind` names the argument that selects it
             assert kind in TOOLS[tool]["properties"], path
+
+
+#: The names the exemption tables had when they lived in the tests.
+_RETIRED_TABLES = frozenset(
+    {
+        "NOT_EXPOSED",
+        "LEAF_NOT_EXPOSED",
+        "LEAF_VIA",
+        "ALIASES",
+        "FLAG_EXEMPTIONS",
+        "PROSE_TOOLS",
+        "EXEMPT_WORDS",
+    }
+)
+
+
+def test_no_test_keeps_its_own_exemption_table():
+    """An exemption is a field of a Command (`reason`, `via`, `flag_exempt`, `prose_reason`),
+    declared beside it; a table of them in a test file would be a second place to forget."""
+    import ast
+
+    kept = []
+    for path in sorted(Path(__file__).parent.glob("test_*.py")):
+        for node in ast.parse(path.read_text("utf-8")).body:
+            targets = (
+                [node.target] if isinstance(node, ast.AnnAssign) else
+                node.targets if isinstance(node, ast.Assign) else []
+            )  # fmt: skip
+            kept += [
+                f"{path.name}: {t.id}"
+                for t in targets
+                if isinstance(t, ast.Name) and t.id in _RETIRED_TABLES
+            ]
+    assert not kept, f"exemption tables belong on the Command registry: {kept}"
