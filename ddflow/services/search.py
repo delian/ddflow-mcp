@@ -71,6 +71,13 @@ SOURCES = (
 )
 _RECORD_SOURCES = frozenset({"task", "phase", "bug", "research", "decision", "lesson"})
 _DEF_KINDS = frozenset({"rule", "skill", "agent", "schedule"})  # the definitions with a source
+_OWNER = {  # the source that holds each of those kinds, and jobs
+    "rule": "rules",
+    "skill": "skills",
+    "agent": "agents",
+    "schedule": "schedules",
+    "job": "jobs",
+}
 MODES = ("ranked", "exact", "regex")
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 200
@@ -146,16 +153,23 @@ def _session_docs(events: list, kinds: set[str]) -> list[Doc]:
     return out
 
 
-def _log_docs(events: list, kinds: set[str]) -> list[Doc]:
+def _log_docs(events: list, kinds: set[str], names: frozenset[str] = frozenset()) -> list[Doc]:
+    """The log rows. `names` is the selected sources (empty: all): a family's events are left
+    out only when the source that holds them is searched too."""
+
+    def held(kind: str) -> bool:
+        return kind in kinds and (not names or _OWNER[kind] in names)
+
     out = []
     for ev in events:
         head = ev.kind.split(".")[0]
         if head == "session" or head in kinds & _RECORD_SOURCES:
             continue  # a record source already holds what this event wrote
-        if head in ("job", "schedule") and head in kinds:
+        if head in ("job", "schedule") and held(head):
             continue  # the jobs and schedules sources do too
-        if head == "def" and ev.subject.partition(":")[0] in kinds & _DEF_KINDS:
-            continue  # and the rules, skills, agents and schedules ones, which are definitions
+        if head == "def" and ev.subject.partition(":")[0] in _DEF_KINDS:
+            if held(ev.subject.partition(":")[0]):
+                continue  # and the rules, skills, agents and schedules ones, which are definitions
         payload = json.dumps(ev.data or {}, ensure_ascii=False, sort_keys=True)
         out.append(
             Doc("log", ev.id, ev.kind, ev.ts, ev.agent, "", f"{ev.kind} {ev.subject} {payload}")
@@ -172,7 +186,12 @@ def _def_docs(st: State, def_kind: str, kind: str) -> list[Doc]:
         vals = [
             " ".join(map(str, v)) if isinstance(v, list | tuple) else v for v in rec.fields.values()
         ]
-        text = _join(rec.id, *(v for v in vals if isinstance(v, str | int | float)))
+        text = _join(
+            rec.id,
+            *(v for v in vals if isinstance(v, str | int | float)),
+            rec.reason,
+            rec.successor,
+        )
         out.append(Doc(kind, rec.id, rec.status, rec.updated_at or rec.at, rec.by, "", text))
     return out
 
@@ -266,6 +285,7 @@ class Ctx:
     events: list
     cfg: Config
     repo: Path | None = None
+    names: frozenset[str] = frozenset()  # the sources asked for; empty: all
 
 
 # The sources, in the order their rows are listed before ranking.
@@ -284,7 +304,7 @@ register(
 register(
     FuncSource("prompts", ("prompt",), lambda c, kinds: _session_docs(c.events, kinds & {"prompt"}))
 )
-register(FuncSource("log", ("log",), lambda c, kinds: _log_docs(c.events, kinds)))
+register(FuncSource("log", ("log",), lambda c, kinds: _log_docs(c.events, kinds, c.names)))
 register(FuncSource("rules", ("rule",), _rule_docs))
 register(FuncSource("skills", ("skill", "command"), _skill_docs))
 register(FuncSource("agents", ("agent",), _agent_docs))
@@ -300,7 +320,7 @@ def source_names() -> list[str]:
 def _docs(
     st: State, events: list, cfg: Config, kinds: set[str], repo: Path | None, names: set[str]
 ) -> list[Doc]:
-    ctx = Ctx(st, events, cfg, repo)
+    ctx = Ctx(st, events, cfg, repo, frozenset(names))
     out: list[Doc] = []
     for src in registered():
         if (not names or src.name in names) and kinds & set(src.kinds):

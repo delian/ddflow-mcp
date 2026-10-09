@@ -123,8 +123,9 @@ def test_a_rule_is_found_by_its_tag_and_not_twice_by_default(repo):
     code, body, _ = _search(repo, "zebra", "--source", "rules")
     assert code == 0 and [r["id"] for r in body["rows"]] == ["r-tagged"]
     _, body, _ = _search(repo, "r-tagged")
-    assert [r["kind"] for r in body["rows"]].count("rule") == 1
-    assert "log" not in [r["kind"] for r in body["rows"] if r["id"] == "r-tagged"]
+    assert [r["kind"] for r in body["rows"]] == ["rule"]  # not also its log event
+    _, body, _ = _search(repo, "r-tagged", "--source", "log")
+    assert body["rows"] and {r["kind"] for r in body["rows"]} == {"log"}  # the raw log is whole
 
 
 def test_instruction_files_are_rules_and_a_recorded_agent_is_not_listed_twice(full):
@@ -135,4 +136,13 @@ def test_instruction_files_are_rules_and_a_recorded_agent_is_not_listed_twice(fu
 
     assert def_record(full, "agent", "baker", {"role": "kneads sourdough"}).ok
     _, body, _ = _search(full, "sourdough", "--source", "agents")
+    assert [r["id"] for r in body["rows"]] == ["baker"]
+
+
+def test_a_retire_reason_is_found(full):
+    from ddflow.api.defs import def_record, def_retire
+
+    assert def_record(full, "agent", "baker", {"role": "kneads"}).ok
+    assert def_retire(full, "agent", "baker", reason="obsoleted by quokka bot").ok
+    _, body, _ = _search(full, "quokka", "--source", "agents", "--kind", "agent")
     assert [r["id"] for r in body["rows"]] == ["baker"]
