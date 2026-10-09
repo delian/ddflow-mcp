@@ -610,9 +610,9 @@ All four reach MCP — `ddflow_workflow`, `ddflow_workflow_pipeline`,
 item's kind to the pipeline it runs; each starts on `gates.task_pipeline` (a phase on
 `gates.phase_pipeline`), and `gates.kind_pipelines` replaces it for one kind, e.g.
 `{ doc = ["implement", "merge"] }`. A promotion task keeps `gates.promotion_pipeline`.
-`ddflow workflow` lists every kind that runs something other than the task pipeline, and
-`workflow --json` carries `kind_pipelines` for all of them; `workflow drop` and the
-undefined-gate check cover these pipelines too.
+`ddflow workflow --json` (and the `ddflow_workflow` MCP tool) carries `kind_pipelines`,
+every kind's effective pipeline; `workflow drop` and the undefined-gate and `applies_to`
+checks cover these pipelines too.
 
 Nothing is written until it is checked, and the order is the point: compose the change,
 validate the **result**, then replace the file atomically.
