@@ -288,6 +288,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("verify",),
         summary="re-derive the claims behind a done task, or sweep them all (exit 1 = one fails)",
         tool="ddflow_verify",
+        flag_exempt={"--all": "a sweep is what omitting `id` means"},
         description="Re-check a done task's claims; fails if one does not hold. No id: sweep all, worst first.",
         call=lambda repo, a, agent: _api().verify_tool(
             repo,
