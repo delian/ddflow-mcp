@@ -382,6 +382,9 @@ def _command_found(command: str, tree: Path) -> bool:
     if "/" in words[0]:
         prog = Path(words[0]) if Path(words[0]).is_absolute() else tree / words[0]
         return prog.is_file() and os.access(prog, os.X_OK)
+    # `shutil.which`, not `cmdrunner.executable_missing`: pre-commit does not run an entry
+    # through a shell, it execs `shlex.split(entry)`, so `FOO=bar tool` or a builtin like
+    # `cd` can never run there however the shell would read them (B-uni-cmdrunner.2).
     return shutil.which(words[0]) is not None
 
 
