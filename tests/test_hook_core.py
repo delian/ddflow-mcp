@@ -317,3 +317,8 @@ def test_install_harness_for_an_agent_without_a_writer_fails_and_says_so(repo):
     code, _out, err = run_cli(repo, "hooks", "install", "--harness", "cursor")
     assert code == 1 and "no hook writer for harness 'cursor' yet" in err
     assert not (repo / ".cursor").exists()
+
+
+def test_deeply_nested_input_is_malformed_not_a_crash():
+    p = hookio.normalize("claude", "prompt", "claude", "[" * 200_000)
+    assert p.malformed and p.raw == {} and p.prompt is None
