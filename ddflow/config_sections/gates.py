@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..core.kinds import kind_pipelines_problem
 from ._docs import declare, knob
 
 
@@ -42,6 +43,11 @@ class GatesConfig:
             "merge",
         ],
         doc="Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow). 'docs' reviews and updates the documentation for everything the phase changed, before it merges.",
+    )
+    kind_pipelines: dict[str, list[str]] = knob(
+        factory=dict,
+        doc='Per item-kind gate pipelines that replace the built-in one: a table from an item kind (task, phase, bug, doc, research, job) to its ordered gate ids, e.g. { doc = ["implement", "merge"] }. A kind not named here runs `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps `promotion_pipeline`. Empty by default, so every kind runs as before. `ddflow workflow` shows each kind\'s effective pipeline.',
+        check=kind_pipelines_problem,
     )
     required: list[str] = knob(
         factory=lambda: [

@@ -606,6 +606,14 @@ All four reach MCP — `ddflow_workflow`, `ddflow_workflow_pipeline`,
 *with the operator's agreement*. Their descriptions say to ask first and offer
 `dry_run`, because a pipeline governs every future item, not the one in hand.
 
+**A pipeline per item kind.** One registry (task, phase, bug, doc, research, job) maps an
+item's kind to the pipeline it runs; each starts on `gates.task_pipeline` (a phase on
+`gates.phase_pipeline`), and `gates.kind_pipelines` replaces it for one kind, e.g.
+`{ doc = ["implement", "merge"] }`. A promotion task keeps `gates.promotion_pipeline`.
+`ddflow workflow` lists every kind that runs something other than the task pipeline, and
+`workflow --json` carries `kind_pipelines` for all of them; `workflow drop` and the
+undefined-gate check cover these pipelines too.
+
 Nothing is written until it is checked, and the order is the point: compose the change,
 validate the **result**, then replace the file atomically.
 
@@ -916,7 +924,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 201 knobs.
+cadences, and the rest of the 202 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -4705,7 +4713,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 201): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 202): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5204,7 +5212,7 @@ declared once and persists — see
 
 ## Configuration
 
-201 knobs across 29 sections, every one documented in place and listed, with its default
+202 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5272,7 +5280,7 @@ given `--force`) and a test fails when it differs, so its count and defaults can
 long default is left to `ddflow config --explain`.
 
 <!-- ddflow:begin README/knobs sha=17b0958ca5fc -->
-<details><summary>All 201 knobs across 29 sections</summary>
+<details><summary>All 202 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5330,6 +5338,7 @@ long default is left to `ddflow config --explain`.
 | `gates.require_outcome` | `true` |  |
 | `gates.enforce_order` | `"warn"` | `warn` \| `block` \| `off` |
 | `gates.promotion_pipeline` | `["unit_tests", "merge"]` |  |
+| `gates.kind_pipelines` | `{}` |  |
 | `gates.rate_min_runs` | `5` |  |
 | `gates.rate_max_fail` | `0.9` |  |
 | `gates.evidence_required` | (long: see `ddflow config --explain`) |  |
