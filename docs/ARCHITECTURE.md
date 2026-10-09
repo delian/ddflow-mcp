@@ -156,20 +156,26 @@ existed only in prose — two `family_of` implementations, three TOML overlay lo
 dependency graph.
 
 ```
-surfaces/   cli.py, mcp.py                 argparse and JSON-RPC. No policy.
-api/        lifecycle/, items.py,          the application layer: ONE typed entry
-            gates.py, knowledge/           point per operation. Both surfaces call it.
-services/   gates/, leases.py,             the domain. Every operation returns an
-            review.py, flow.py,            Outcome. Nothing here prints.
-            sessions.py, importer.py
+surfaces/   cli.py, mcp.py, registry.py,   argparse and JSON-RPC. No policy. A command is
+            declared/, parsers/, tools/,   DATA (registry.Command); both surfaces are
+            records.py, mcp_protocol.py    generated from it.
+api/        lifecycle/, knowledge/,        the application layer: ONE typed entry
+            reporting/, items.py,          point per operation. Both surfaces call it.
+            gates.py, records.py
+services/   gates/, guidance/,             the domain. Every operation returns an
+            searchcore/, leases.py,        Outcome. Nothing here prints.
+            cmdrunner.py, ticks.py
 views/      human.py, markdown.py          one renderer per result kind. PEERS with
                                            services: one layer split by role (below).
-infra/      log.py, worktree.py,           disk, git, sqlite, subprocess, containers,
-            proc.py, store.py, tomlcfg.py  TOML.
+infra/      git.py, proc.py, fsio.py,      disk, git, sqlite, subprocess, containers,
+            log.py, worktree.py,           TOML, machine-local state.
+            tomlcfg.py, localstore.py
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
-            schedule.py, progress.py
-config.py                                  read by every layer; imports none of them
+            handlers/, defs.py, clock.py,
+            graph.py, globs.py, redact.py
+config.py, config_sections/                read by every layer; imports none of them
 ```
+
 
 **`core` is pure, and that is load-bearing.** `fold`, the scheduler, the loop detectors
 and the `Event` record itself have no I/O, which is why every readiness, gating and
@@ -223,14 +229,22 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `surfaces/mcp.py` | MCP stdio server |
 | `config.py` | documented knobs, TOML + env, and the one family map |
 
-One third-party dependency: **Jinja2**, for the prompt templates. It was zero until
-0.1.2 — `services/prompts.py` carries a standard-library fallback renderer so a stripped
-deployment still starts, and for as long as Jinja2 was undeclared that fallback was what
-CI and users actually ran while developers' ambient interpreters used the other one. Two
-engines, one of them untested, is how 0.1.1 shipped a handshake that rendered correctly
-for its authors and not for a new user. Declaring the dependency makes the language the
-templates are written in the language that is installed; the fallback remains as a
-tested, loud degraded path.
+**Dependencies.** Two runtime dependencies, both pure Python: **Jinja2** (the prompt and
+export templates) and **tomlkit** (config write-back that keeps comments and layout),
+declared in `pyproject.toml` and decided in `docs/ddflow/decisions/unify.md` (D-unify 1).
+Everything else is an optional extra, each imported in exactly one adapter module with a
+standard-library fallback, and a feature whose extra is absent is recorded `unavailable`,
+never silently downgraded and never passed:
+
+| Extra | Library | The one adapter | Fallback |
+|---|---|---|---|
+| `ddflow[search]` | rapidfuzz | `core/fuzzy.py` | difflib |
+| `ddflow[rag]` | model2vec, sqlite-vec | `services/embed.py` | BM25 only |
+| `ddflow[watch]` | watchfiles | not landed yet (declared in `pyproject.toml`) | polling |
+| `ddflow[mcp-sdk]` | mcp | not landed yet (declared in `pyproject.toml`) | the stdlib stdio engine |
+
+`services/prompts.py` still carries a standard-library fallback renderer so a stripped
+deployment starts; it is a tested, loud degraded path, not a second implementation.
 
 **`infra/proc.py` is 50 lines and exists for one reason.** ddflow runs as an MCP server
 over **stdio**: the JSON-RPC session is this process's stdin and stdout.
@@ -241,14 +255,88 @@ exits **zero**, with an empty stderr, and the client sees a closed stream with n
 explain it. All twelve call sites had this. `proc.run` defaults to `stdin=DEVNULL`, and a
 ratchet fails the suite if any module reaches for the stdlib directly.
 
+## Shared interfaces
+
+D-unify replaced one-off implementations with one module per concern. Each row names the
+module that owns the concern; a second implementation elsewhere is a bug, and a guard in
+`tests/test_architecture_guards.py` (baselines under `tests/guard_baselines/`) or an
+import-linter contract counts the stragglers and can only go down.
+
+| Concern | The one module | What it gives |
+|---|---|---|
+| git | `infra/git.py` | every git call: timeouts, status and path parsing, `GitResult` |
+| processes | `infra/proc.py` | `run`, `popen`, `spawn_shell`, `kill_group`: stdin detached, process group killed |
+| files | `infra/fsio.py` | `atomic_write`, `replace_text`, `file_lock`, `ensure_ignored_dir`, `repo_rel`, managed regions |
+| TOML writes | `infra/tomlcfg.py` | `upsert`, `remove`, `move_keys` (tomlkit), the overlay readers; `services/configwrite.py` validates then writes `config.toml` |
+| time | `core/clock.py` | the one timestamp parser and writer, durations, ages |
+| graphs | `core/graph.py` | closure, cycles, topological order, longest chains, transitive reduction |
+| globs | `core/globs.py` | one glob semantics (`match`, `inside`, `overlap`); `core/globspec.py` reads a list |
+| redaction | `core/redact.py` | one Redactor with named profiles, used by the log, views, exports and bug reports |
+| definition records | `core/defs.py`, `core/records.py` | the managed-definition record every kind shares; the fold's record dataclasses |
+| event evolution | `core/upcasters.py` | per-kind payload versions and the upcasters that read old events |
+| overlay loader | `services/overlay.py` | `OverlayLoader`: config path, then `.ddflow/<dir>/`, then shipped; eject, drift, validate |
+| machine-local state | `infra/localstore.py`, `services/slots.py`, `services/changes.py` | `LocalStore` (read, write, lock, trim `.ddflow/local`), counting-semaphore `Slots`, content-based `ChangeDetector` |
+| command registry | `surfaces/registry.py`, `surfaces/declared/` | `Command` and `Param`: one declaration generates the argparse parser, the MCP tool, its schema and the parity exemptions |
+| record surface | `api/records.py`, `surfaces/records.py` | `RecordKind`: the seven verbs (list, show, add, edit, remove, search, revise) on the CLI and MCP |
+| MCP protocol | `surfaces/mcp_protocol.py` | which protocol revisions are served and how a reply is shaped for each |
+| search | `services/searchcore/`, `services/search.py` | `SearchSource` registry, rankers (`core/rank.py`), bounded regex check; `ddflow search --source` |
+| context pack | `services/contextpack.py`, `services/embed.py` | ranked candidates cut to one budget, cited and fenced as data; the one `Embedder` |
+| approval | `services/approval.py` | approve-by-digest: `grant`, `check`, `use` |
+| command running | `services/cmdrunner.py` | `CommandRunner`: every operator-configured command, with timeouts and an `unavailable` outcome |
+| guidance | `services/guidance/` | one engine for rules and decisions: scope, resolve, inject, checks, waivers, review |
+| kind pipeline | `config_sections/_kinds.py`, `services/gates/kinds.py` | item kind to gate pipeline, `applies_when`, evidence rules |
+| item creation | `services/items.py` | `add_task`: the one way a task is created |
+| identity | `services/identity.py`, `core/agentname.py` | who is calling, and what an agent name may contain |
+| host | `infra/hostinfo.py`, `infra/signals.py` | this machine's names; load, memory and disk signals |
+| tree lifecycle | `infra/worktree.py`, `services/cleanup.py`, `services/tree_owner.py` | create, merge and remove worktrees; classify them; whose tree a command stands in |
+| cadence and triggers | `services/ticks.py`, `services/cadence.py`, `services/triggers.py`, `services/schedule.py` | opportunistic periodic work, count-based due passes, event triggers, scheduled definitions |
+| digest | `core/digest.py` | the one hashing and content-digest module |
+| text | `core/slug.py`, `core/textcut.py`, `core/budget.py` | slugs and safe names, the one clipper, the token and character budget |
+| config knobs | `config_sections/_docs.py` | `knob()` and `declare()`: a knob is declared once, on its field |
+| compatibility | `services/upgrade_plan.py`, `services/migrations/`, `services/repairs/` | `ddflow upgrade --plan`, versioned migrations and data repairs |
+
+## Adding a feature as data
+
+Each of these is a declaration; none needs a new branch in a surface, the fold or a
+renderer. The guards fail the suite if a change reintroduces the pattern by hand.
+
+- **A command.** Add a `Command(path=..., summary=..., tool=..., params=..., call=...)` to
+  the group's module under `surfaces/declared/` (`GROUPS` gives its help line). The CLI
+  parser and the MCP tool, with its schema, are generated; what a command deliberately does
+  not do on the other surface is a field (`surfaces/exemptions.py`), not a test table.
+  `python -m ddflow.surfaces.tool_table` rewrites the README tool table.
+- **A record kind.** Declare a `RecordKind` with `declare(...)` in `api/records.py` (name,
+  `def_kind`, fields, columns, filters, verbs). The def kind is registered in
+  `core/defs.py` (`DEF_KINDS`), which brings history, provenance, digest, replay and the
+  add-time duplicate check. `surfaces/records.py` generates the CLI verbs and MCP tool.
+- **A knob.** Add a field with `knob(default, doc=..., choices=..., strictest=...)` inside a
+  `@declare("<section>")` dataclass in `config_sections/`. The doc, enum check, strictest
+  fallback and `config --explain` row follow; a ratchet fails a knob declared twice.
+- **An asset** (a prompt, export template, doctype, schedule). Put the file under
+  `ddflow/templates/` and load it through an `OverlayLoader` (`services/overlay.py`) so a
+  project can override, eject and validate it; do not add a loader of your own.
+- **A tick.** `ticks.register(Tick(name, every_s=..., budget_s=..., target="pkg.mod:fn"))`
+  in `services/ticks.py`. It runs from `api._base._load` when due, is budgeted and cut,
+  and never raises into the command.
+- **A trigger.** Write `.ddflow/triggers/<id>.toml` (event, key, window, debounce,
+  cooldown, action); `services/triggers.py` validates and evaluates it and files the queue
+  item from its job's template. Count-based due passes belong in `services/cadence.py`.
+- **A search source.** `searchcore.register(FuncSource(name, kinds, fn))` returning `Hit`
+  rows, as `services/search.py` does for the log, rules, skills, agents, jobs and schedules.
+  `ddflow search --source` and the context pack pick it up.
+- **A pipeline.** Register an item kind in `config_sections/_kinds.py` (`KindSpec`), or
+  set `[gates].kind_pipelines.<kind>` in config; `services/gates/kinds.py` resolves the
+  gates, and `[gate.<id>] applies_when` narrows them by the files the item declares.
+
 ## What is deliberately absent
 
 - **No daemon.** Every command is a short-lived process. A daemon would be a second
   thing to crash, and its state would be the very thing the log already is.
-- **No embeddings.** BM25 ranked correctly on every probe query including a synonym-only
-  one ([R4](RESEARCH.md)). `lessons.search_backend` exists for when that stops being true.
-- **No MCP SDK dependency.** The stdio transport is ~200 lines of JSON-RPC. A portability
-  tool that only installs where a package index is reachable is not portable.
+- **No required embeddings.** BM25 ranked correctly on every probe query including a
+  synonym-only one ([R4](RESEARCH.md)). Local embeddings are the optional `ddflow[rag]`
+  extra, never downloaded at runtime, with BM25 as the fallback.
+- **No MCP SDK in core.** The stdio transport is stdlib JSON-RPC (`surfaces/mcp_protocol.py`).
+  The official SDK is the optional `ddflow[mcp-sdk]` extra, for a network transport only.
 - **No incremental projector.** An incremental updater is a second implementation of
   `fold` that can disagree with it, and a cache that silently disagrees with its source
   is worse than no cache. `rebuild` drops and re-derives; at 407k events/s it can afford to.
