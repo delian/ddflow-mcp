@@ -254,8 +254,11 @@ class Param:
     #: Not offered on the MCP surface / on the CLI.
     cli_only: bool = False
     mcp_only: bool = False
-    #: argparse's ``nargs`` of a positional (``"?"``: optional, so not required on MCP).
+    #: argparse's ``nargs`` (``"?"``: optional, so not required on MCP). On a flag, ``"?"``
+    #: makes its value optional: ``--apply`` alone is ``const``, ``--apply repairs`` is
+    #: ``repairs``, and left off it is ``default`` (``None``).
     nargs: str | None = None
+    const: Any = _UNSET
     #: Whether the MCP property is required when that differs from the CLI flag (a prompt's
     #: ``--text`` is read from stdin when absent; the tool has no stdin).
     tool_required: bool | None = None
@@ -264,6 +267,9 @@ class Param:
     #: command sharing the name is in one group.
     metavar: str | None = None
     exclusive: str | None = None
+    #: One member of an ``exclusive`` group says so: the group is required (exactly one of
+    #: its members must be given).
+    exclusive_required: bool = False
     #: argparse's ``type`` when the tool's JSON type differs (``--exit-code`` is an int on
     #: the command line and a string in the tool's schema).
     cli_type: Callable[[str], Any] | None = None
@@ -299,11 +305,15 @@ class Param:
             raise ValueError(f"param {self.name!r} is neither on the CLI nor on MCP")
 
     def _check_positional(self) -> None:
-        """What only a positional, an ``nargs`` or an exclusive group may be."""
+        """What only a positional, an ``nargs``, a ``const`` or an exclusive group may be."""
         if self.positional and self.default is not _UNSET and self.nargs not in OPTIONAL_NARGS:
             raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
-        if self.nargs is not None and not self.positional:
-            raise ValueError(f"param {self.name!r}: nargs is for a positional")
+        if self.nargs is not None and not self.positional and self.nargs != "?":
+            raise ValueError(f"param {self.name!r}: a flag takes nargs='?' (an optional value)")
+        if self.const is not _UNSET and (self.positional or self.nargs != "?"):
+            raise ValueError(f"param {self.name!r}: const goes with a flag's nargs='?'")
+        if self.exclusive_required and self.exclusive is None:
+            raise ValueError(f"param {self.name!r}: exclusive_required needs an exclusive group")
         if self.nargs not in (None, *OPTIONAL_NARGS):
             raise ValueError(f"param {self.name!r}: only nargs='?' or '*' (optional) is supported")
         if self.exclusive is not None and (self.required or self.positional):
@@ -372,6 +382,8 @@ class Param:
             kwargs["choices"] = list(self.choices)
         if self.default is not _UNSET:
             kwargs["default"] = self.default
+        if self.const is not _UNSET:
+            kwargs["const"] = self.const
         if self.metavar is not None:
             kwargs["metavar"] = self.metavar
         return kwargs
@@ -389,6 +401,8 @@ class Param:
                 kwargs["nargs"] = self.nargs
         else:
             args = (self.option,)
+            if self.nargs is not None:
+                kwargs["nargs"] = self.nargs
             if self.required:
                 kwargs["required"] = True
             if self.flag is not None:
@@ -630,7 +644,11 @@ class Command:
         if self.epilog:
             kwargs["epilog"] = self.epilog
         sub = subparsers.add_parser(self.path[-1], **kwargs)
-        groups: dict[str, Any] = {}
+        groups: dict[str, Any] = {
+            p.exclusive: sub.add_mutually_exclusive_group(required=True)
+            for p in self.cli_params
+            if p.exclusive and p.exclusive_required
+        }
         for p in self.cli_params:
             p.add_to(sub, groups)
         if self.handler is not None:
