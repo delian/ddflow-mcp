@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from ddflow.core import porter
+from ddflow.core import porter, textsim
 from ddflow.infra import store
 
 #: Word -> the stem FTS5's porter tokenizer gave it (SQLite 3.50.4), in the families the
@@ -70,6 +70,20 @@ def test_the_fallback_ranker_uses_it() -> None:
     assert store._fallback_words("a") == ["a"]
 
 
+def test_the_fallback_splits_words_as_fts5_does() -> None:
+    """Written down, so a build without FTS5 holds the line too: an underscore splits,
+    diacritics go, case folds, digits stay."""
+    assert store._fallback_words("adopt_existing") == ["adopt", "exist"]
+    assert store._fallback_words("Café RÉSUMÉS x1y2 foo-bar") == [
+        "cafe",
+        "resum",
+        "x1y2",
+        "foo",
+        "bar",
+    ]
+    assert textsim.fts_words("__init__ a.b/c") == ["init", "a", "b", "c"]
+
+
 def _fts5_stems(words: list[str]) -> dict[str, str] | None:
     """The running SQLite's own stem of each word, or None where it has no FTS5."""
     con = sqlite3.connect(":memory:")
@@ -104,3 +118,42 @@ def test_every_word_of_the_repository_stems_as_the_running_sqlite_stems_it() -> 
     wrong = [(w, fts[w], porter.stem(w)) for w in words if w in fts and fts[w] != porter.stem(w)]
     assert not wrong, f"{len(wrong)} words stem differently from FTS5; first: {wrong[:10]}"
     assert len(fts) > len(words) * 0.9, "FTS5 should have indexed (nearly) every word"
+
+
+def _lines() -> list[str]:
+    """Lines of the repository's own text, and the shapes a tokenizer tells apart: an
+    underscore, accents, a ligature, digits, other scripts, superscripts."""
+    root = Path(__file__).resolve().parents[1]
+    lines: set[str] = set()
+    for path in [
+        root / "README.md",
+        *sorted(root.glob("docs/**/*.md"))[:40],
+        *sorted(root.glob("ddflow/core/*.py")),
+    ]:
+        lines.update(
+            ln for ln in path.read_text("utf-8", errors="replace").splitlines() if ln.strip()
+        )
+    shapes = ["café résumé naïve", "foo_bar adopt_existing __init__", "x1y2 3d 2nd", "日本語 テスト",
+              "ﬁne ﬂow", "a-b c.d e/f", "Ünïcödé ÅNGSTRÖM", "αβγ δ", "тест слово", "n°1 ½ ²"]  # fmt: skip
+    return sorted(lines)[:8000] + shapes
+
+
+def test_every_line_splits_and_stems_into_the_terms_fts5_indexes() -> None:
+    lines = _lines()
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("create virtual table t using fts5(x, tokenize='porter')")
+    except sqlite3.OperationalError:
+        pytest.skip("this SQLite has no FTS5: the written-down cases above hold the line here")
+    con.executemany("insert into t(rowid, x) values (?, ?)", list(enumerate(lines, 1)))
+    con.execute("create virtual table v using fts5vocab(t, 'instance')")
+    indexed: dict[int, set[str]] = {}
+    for doc, term in con.execute("select doc, term from v"):
+        indexed.setdefault(doc, set()).add(term)
+    assert len(lines) > 1_000
+    wrong = [
+        (line[:60], sorted(mine ^ indexed.get(i, set()))[:5])
+        for i, line in enumerate(lines, 1)
+        if (mine := set(store._fallback_words(line))) != indexed.get(i, set())
+    ]
+    assert not wrong, f"{len(wrong)} lines tokenize differently from FTS5; first: {wrong[:5]}"

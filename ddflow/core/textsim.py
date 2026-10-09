@@ -41,6 +41,7 @@ from __future__ import annotations
 import functools
 import math
 import re
+import unicodedata
 from array import array
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -116,6 +117,7 @@ def _run(run: str) -> tuple[str, ...]:
 MIN_WORD_CHARS = 2
 _WORD = re.compile(r"\w+")
 _WORD_HYPHEN = re.compile(r"[\w-]+")
+_FTS_WORD = re.compile(r"[^\W_]+")
 
 
 def words(
@@ -130,6 +132,17 @@ def words(
     if fold:
         text = text.lower()
     return [w for w in (_WORD_HYPHEN if hyphens else _WORD).findall(text) if len(w) >= min_len]
+
+
+def fts_words(text: str) -> list[str]:
+    """The words FTS5's ``unicode61`` tokenizer (the one its ``porter`` wraps) makes of
+    ``text``: lower-cased, diacritics removed, split at every character that is not a letter
+    or a digit (an underscore splits, so ``adopt_existing`` is ``adopt`` and ``existing``).
+    What the FTS5-less fallback ranks on, so it sees the same words FTS5 indexes."""
+    folded = "".join(
+        c for c in unicodedata.normalize("NFD", text.lower()) if not unicodedata.combining(c)
+    )
+    return _FTS_WORD.findall(folded)
 
 
 def tokens(title: str, body: str = "") -> list[str]:
