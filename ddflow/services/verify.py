@@ -367,6 +367,10 @@ def check(
             )
         return Report(item_id, claims)
     pipeline = G.pipeline_for(st.items[item_id], cfg) if item_id in st.items else []
+    if pipeline:
+        # A gate that did not apply to the item's declared work was never owed an outcome.
+        off = G.not_applicable(st.items[item_id], pipeline, G.load_gates(repo, cfg))
+        pipeline = [g for g in pipeline if g not in off]
     claims = [
         _landed(repo, cfg, led),
         _declared(repo, led, tracked),

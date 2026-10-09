@@ -59,6 +59,7 @@ from typing import Any, NamedTuple  # noqa: F401
 from ...config import Config, _is_code_tree  # noqa: F401
 from ...core.bookkeeping import STATE_EXCLUDE, is_state  # noqa: F401
 from ...core.digest import content_digest, hasher  # noqa: F401
+from ...core.globs import overlap  # noqa: F401
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
 from ...core.records import GateOutcome  # noqa: F401
 from ...infra import fsio  # noqa: F401
@@ -113,7 +114,13 @@ from .evidence import (  # noqa: F401
     tree_identity,
     worktree_entries,
 )
-from .kinds import KINDS, kind_pipeline, kind_pipelines  # noqa: F401
+from .kinds import (  # noqa: F401
+    KINDS,
+    gate_applies,
+    kind_pipeline,
+    kind_pipelines,
+    not_applicable,
+)
 from .measured import (  # noqa: F401
     Order,
     _landed_if_only_untracked_differs,
@@ -137,7 +144,10 @@ from .outcomes import (  # noqa: F401
     GateStatus,
     StaleNote,
     _pass_mark,
+    _round_notes,
+    _triage_notes,
     _what_differs,
+    _with_outcome,
     approve,
     on_refutation,
     record,
