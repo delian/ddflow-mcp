@@ -241,7 +241,7 @@ cannot run is recorded `unavailable`, never passed:
 | Extra | Library | The one adapter | Fallback |
 |---|---|---|---|
 | `ddflow[search]` | rapidfuzz | `core/fuzzy.py` | difflib |
-| `ddflow[rag]` | model2vec, sqlite-vec | `services/embed.py` | BM25 only |
+| `ddflow[rag]` | model2vec (sqlite-vec is declared, not yet used) | `services/embed.py` | BM25 only |
 | `ddflow[watch]` | watchfiles | not landed yet (declared in `pyproject.toml`) | polling |
 | `ddflow[mcp-sdk]` | mcp | not landed yet (declared in `pyproject.toml`) | the stdlib stdio engine |
 
