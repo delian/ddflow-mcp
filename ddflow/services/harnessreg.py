@@ -272,8 +272,15 @@ def _validate(h: Harness, where: str) -> None:
         _validate_hooks(h.hooks, where)
     for name in ("plugin", "commands", "skills", "subagents", "worktrees"):
         sec = getattr(h, name)
-        if sec is not None and sec.none and any(v for k, v in vars(sec).items() if k != "none"):
+        if sec is None:
+            continue
+        has_values = any(v for k, v in vars(sec).items() if k != "none")
+        if sec.none and has_values:
             raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
+        if not sec.none and not has_values:
+            # An empty table is neither a fact nor a verified absence; leave the section out
+            # (NOT VERIFIED) or say `none = true`.
+            raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
 
 
 def parse(text: str, name: str) -> Harness:

@@ -95,7 +95,7 @@ def test_native_rules_match_the_table_they_replaced():
 
 
 def test_agent_commands_match_the_table_they_replaced():
-    assert adopt.AGENT_COMMANDS == _COMMANDS
+    assert list(adopt.AGENT_COMMANDS.items()) == list(_COMMANDS.items())
 
 
 def test_every_descriptor_loads_and_has_its_delta_doc():
@@ -161,6 +161,11 @@ def test_parse_accepts_a_minimal_descriptor():
         (lambda t: t.replace("rank = 99", 'rank = "99"'), "expected int"),
         (lambda t: t.replace("[mcp]", '[mcp]\ncolour = "red"'), "unknown key"),
         (lambda t: t + '\n[plugin]\nnone = true\nmanifest = "x"\n', "none = true and also"),
+        (lambda t: t + "\n[skills]\n", "is empty: omit it"),
+        (
+            lambda t: t.replace('[mcp]\npath = ".demo/mcp.json"\nshape = "mcpServers"', ""),
+            "expected a table",
+        ),
         (lambda t: t + '\n[hooks]\nstyle = "claude"\n', "needs file, normalizer, emitter"),
         (lambda t: t + '\n[hooks]\nstyle = "none"\nfile = "x"\n', "takes no file"),
         (
