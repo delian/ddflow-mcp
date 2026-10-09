@@ -22,6 +22,7 @@ HOMES = frozenset({"infra/proc.py", "services/cmdrunner.py"})
 
 #: `which` on the first element of an argv ddflow built itself (never an operator's line).
 EXEMPT = {
+    ("api/operations.py", "which(<command>[i])"): "pre-commit execs shlex.split(entry), no shell",
     ("infra/forge.py", "which(<command>[i])"): "argv[0] of a gh/glab call ddflow assembled",
     ("services/companions.py", "which(<command>[i])"): "a companion's own detect argv",
 }
@@ -132,8 +133,10 @@ def test_the_onboarding_run_keeps_its_old_codes(tmp_path):
     assert OT._run_bounded("sleep 30", tmp_path, 1)[0] is None
 
 
-def test_a_hook_entry_with_an_env_prefix_is_found(tmp_path):
+def test_a_hook_entry_is_judged_as_pre_commit_runs_it(tmp_path):
     from ddflow.api import operations as OP
 
-    assert OP._command_found("FOO=bar true", tmp_path)
+    # pre-commit execs the split entry: an env prefix names no program there.
+    assert not OP._command_found("FOO=bar true", tmp_path)
+    assert OP._command_found("true --x", tmp_path)
     assert not OP._command_found("ddflow-no-such-tool --x", tmp_path)
