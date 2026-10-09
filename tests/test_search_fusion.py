@@ -16,7 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ddflow.config import Config
-from ddflow.core import rank
+from ddflow.core import fuzzy, rank
 from ddflow.infra import store as S
 from ddflow.infra.store import Store, _has_fts5
 
@@ -58,11 +58,11 @@ def test_fuse_orders_by_reciprocal_rank_with_id_ties_and_a_limit():
 
 
 def test_rerank_lifts_the_closest_text_and_keeps_order_among_equals(monkeypatch):
-    monkeypatch.setattr(rank, "_fuzz", None)  # the stdlib path, whatever is installed
+    monkeypatch.setattr(fuzzy, "_fuzz", None)  # the stdlib path, whatever is installed
     cands = [("a", "unrelated words"), ("b", "claim the worktree"), ("c", "unrelated words")]
     assert rank.rerank("claim the worktree", cands, 3) == ["b", "a", "c"]
     assert rank.rerank("claim the worktree", cands, 1) == ["b"]
-    assert rank.similarity("same", "same") == 1.0
+    assert fuzzy.ratio("same", "same") == 1.0
 
 
 def test_rerank_uses_rapidfuzz_when_the_extra_is_installed(monkeypatch):
@@ -71,8 +71,9 @@ def test_rerank_uses_rapidfuzz_when_the_extra_is_installed(monkeypatch):
         def token_set_ratio(a, b):
             return 100.0 if b == "best" else 10.0
 
-    monkeypatch.setattr(rank, "_fuzz", Fake)
-    assert rank.similarity("q", "best") == 1.0 and rank.similarity("q", "x") == 0.1
+    monkeypatch.setattr(fuzzy, "_fuzz", Fake)
+    assert fuzzy.ratio("q", "best") == 1.0 and fuzzy.ratio("q", "x") == 0.1
+    assert fuzzy.available()
     assert rank.rerank("q", [("a", "x"), ("b", "best")], 2) == ["b", "a"]
 
 

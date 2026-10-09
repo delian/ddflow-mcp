@@ -6,22 +6,16 @@ Pure functions over token lists, so any source ranks the same way. FTS5's own BM
 ``substring_bm25`` is the trigram ranker where SQLite has no trigram tokenizer: a doc matches
 a term exactly when FTS5's trigram index would match it (the term occurs in the text, any
 case), so the candidate set is the same on every machine. ``rerank`` is the optional fuzzy
-step over a fused list: ``rapidfuzz`` when the ``[search]`` extra is installed, ``difflib``
-otherwise -- this is the one module that imports it.
+step over a fused list: rapidfuzz when the ``[search]`` extra is installed, ``difflib``
+otherwise (`core/fuzzy`, the extra's one adapter).
 """
 
 from __future__ import annotations
 
-import difflib
 import math
 from collections.abc import Iterable, Sequence
 
-try:  # the [search] extra; every caller works without it
-    from rapidfuzz import fuzz as _fuzz
-except ImportError:  # pragma: no cover - depends on the environment
-    _fuzz = None
-
-from . import textsim
+from . import fuzzy, textsim
 
 BM25_K1 = 1.5
 BM25_B = 0.75
@@ -110,19 +104,11 @@ def fuse(rankings: Iterable[Sequence[str]], limit: int, k: int = RRF_K) -> list[
     return sorted(fused, key=lambda i: (-fused[i], i))[:limit]
 
 
-def similarity(a: str, b: str) -> float:
-    """0..1 fuzzy likeness of two strings: rapidfuzz's token-set ratio when the [search]
-    extra is installed, else difflib's ratio."""
-    if _fuzz is not None:
-        return _fuzz.token_set_ratio(a, b) / 100.0
-    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-
 def rerank(query: str, candidates: Sequence[tuple[str, str]], limit: int) -> list[str]:
     """Reorder ``candidates`` (id, text), already best first, by fuzzy likeness to ``query``,
     keeping the incoming order among equal scores. The fused order is the relevance signal;
     this only lifts the text a person would call closest."""
     scored = [
-        (-similarity(query, text), pos, ident) for pos, (ident, text) in enumerate(candidates)
+        (-fuzzy.ratio(query, text), pos, ident) for pos, (ident, text) in enumerate(candidates)
     ]
     return [ident for _, _, ident in sorted(scored)][:limit]
