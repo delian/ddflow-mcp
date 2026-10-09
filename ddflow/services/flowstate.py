@@ -38,7 +38,9 @@ from ..core import flowparams as FP
 from ..core import flowsignals as FS
 from ..core.events import Event
 from ..core.model import State
+from ..core.schedule import LIMIT_UNAVAILABLE
 from ..infra import git as G
+from ..infra import proc as P
 from ..infra import signals as SIG
 from ..infra.fsio import atomic_write
 from .configwrite import LOCAL_DIR, ensure_local_dir
@@ -343,8 +345,6 @@ def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.
     try:
         return current_limit(FlowCtx(repo=Path(repo), cfg=cfg, state=state, events=events))
     except Exception as exc:  # never let the derived limit stop a command
-        from ..core.schedule import LIMIT_UNAVAILABLE
-
         try:
             start = FP.params(cfg).bounds()[1]  # (floor, start, ceiling)
         except Exception:
@@ -383,7 +383,6 @@ def doctor_notes(repo: Path) -> list[str]:
             f"the adaptive parallelism ring ({RING.as_posix()}) cannot be read -- auto holds "
             "at its start value"
         )
-    from ..infra import proc as P
 
     probe = G.run(repo, "check-ignore", "-q", RING.as_posix(), timeout=P.TIMEOUTS["instant"])
     ignored = 0 if probe.unavailable else probe.code  # cannot tell: say nothing
