@@ -1489,7 +1489,7 @@ def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | 
     return r.out_bytes if r.ok else None
 
 
-def _staged_noun(staged: dict, exports: dict, rules: dict) -> str:
+def _staged_noun(staged: dict, exports: dict) -> str:
     """What the refusal calls the staged generated files."""
     return (
         "generated view or document"
@@ -1623,7 +1623,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     rules = _staged_rule_files(repo, listed, tree)
     if not staged and not exports and not rules:
         return Verdict(OK, "")
-    noun = _staged_noun(staged, exports, rules)
+    noun = _staged_noun(staged, exports)
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     # The view is committed WITH a log, and must agree with THAT log -- not with the
