@@ -371,8 +371,7 @@ def _command_found(command: str, tree: Path) -> bool:
     pre-commit runs a hook's entry, so a relative path is read against it."""
     import os
     import shlex
-
-    from ..services import cmdrunner as CR
+    import shutil
 
     try:
         words = shlex.split(command)
@@ -383,9 +382,10 @@ def _command_found(command: str, tree: Path) -> bool:
     if "/" in words[0]:
         prog = Path(words[0]) if Path(words[0]).is_absolute() else tree / words[0]
         return prog.is_file() and os.access(prog, os.X_OK)
-    # Not `shutil.which(words[0])`: the shared check reads `VAR=x cmd` and shell builtins
-    # as the runner does, so a hook entry is judged as it will run.
-    return not CR.executable_missing(command)
+    # `shutil.which`, not `cmdrunner.executable_missing`: pre-commit does not run an entry
+    # through a shell, it execs `shlex.split(entry)`, so `FOO=bar tool` or a builtin like
+    # `cd` can never run there however the shell would read them (B-uni-cmdrunner.2).
+    return shutil.which(words[0]) is not None
 
 
 def _precommit_installed(repo: Path) -> bool | None:
@@ -429,9 +429,9 @@ def precommit(
     config they already have is exactly that decision.
     """
     import shlex
+    import shutil
 
     from ..infra import fsio
-    from ..services import cmdrunner as CR
     from ..services import enforce as E
     from ..services import precommit as PC
 
@@ -468,7 +468,7 @@ def precommit(
         "ddflow_cmd_recognised": "ddflow" in ddflow_cmd.lower(),
         # Programs the proposed hooks run from PATH that this machine lacks -> the stages
         # whose hooks would fail without them.
-        "missing": {p: st for p, st in prop.requires.items() if CR.executable_missing(p)},
+        "missing": {p: st for p, st in prop.requires.items() if shutil.which(p) is None},
         # ddflow's own git hooks, which `pre-commit install` would keep as <name>.legacy
         # and run beside the config's local hooks: remove them first.
         "ddflow_hooks_installed": [

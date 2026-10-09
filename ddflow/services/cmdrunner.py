@@ -277,9 +277,10 @@ class CommandRunner:
                 line, None if env is None else env.get("PATH", os.defpath)
             )
         ):
-            return Started(
-                None, _unavailable(line, MISSING, f"{missing!r} is not installed", missing=missing)
+            missing_run = _unavailable(
+                line, MISSING, f"{missing!r} is not installed", missing=missing
             )
+            return Started(None, self._clean(missing_run))
         try:
             proc = P.spawn_shell(
                 line,
