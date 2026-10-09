@@ -25,10 +25,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..core import ids as IDS
 from ..core.admission import is_shared
 from ..core.model import State
+from ..infra import worktree as W
 from . import changes as CH
 from . import gates as G
+from . import testselect as TS
+from .cadence import phase_overdue
 from .gates.evidence import tree_being_completed as _tree_being_completed
 
 
@@ -77,7 +81,6 @@ def fixes_of(state: State, item_id: str, cfg: Config | None = None) -> set[str]:
     here: `bug found --item <open fix task>` links a mere report to the task it was filed
     against, and completing fix-B297ede2447 closed four such reports nobody had fixed
     (B7bdcc6b212)."""
-    from ..core import ids as IDS
 
     it = state.items.get(item_id)
     named = set(it.fixes) if it is not None else set()
@@ -202,7 +205,6 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         # Periodic passes counted in phases (architecture review, mutation tests, lessons)
         # are the ones a phase close exists to run; task-counted ones stay advisory. Here,
         # not in `api.complete`, so the PR-merge settle path enforces it too.
-        from .cadence import phase_overdue
 
         v.blockers += phase_overdue(state, cfg)
 
@@ -299,16 +301,17 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
         for p in changed
         if is_shared(p, cfg.enforce.readme_code_globs) and not _is_test_or_doc_path(p)
     ]
-    if not code or any(_is_readme(p, cfg.enforce.readme_files) for p in changed):
+    readmes = _root_anchored(cfg.enforce.readme_files)
+    if not code or any(is_shared(p, readmes) for p in changed):
         return ""
     more = f" (+{len(code) - 3} more)" if len(code) > 3 else ""  # noqa: PLR2004
     return f"{README_REMEDY}. Changed: {', '.join(code[:3])}{more}."
 
 
-def _is_readme(path: str, files: list[str]) -> bool:
-    """Anchored at the root: git's slashless pattern matches at any depth, which made
-    `docs/README.md` count as the project's README."""
-    return is_shared(path, [f if f.startswith("/") else f"/{f}" for f in files])
+def _root_anchored(files: list[str]) -> list[str]:
+    """``files`` as root-anchored patterns: git's slashless pattern matches at any depth,
+    which made `docs/README.md` count as the project's README."""
+    return [f if f.startswith("/") else f"/{f}" for f in files]
 
 
 _DOC_SUFFIXES = (".md", ".rst", ".adoc", ".txt")
@@ -337,8 +340,6 @@ def _is_test_or_doc_path(path: str) -> bool:
 def changed_paths(repo: Path, it) -> list[str] | None:
     """The paths the item changed: what landed (`landed_before..landed_after`), or before
     it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\"."""
-    from ..infra import worktree as W
-    from . import testselect as TS
 
     if it.landed_before and it.landed_after:
         return CH.changed_paths(

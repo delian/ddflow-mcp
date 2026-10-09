@@ -32,6 +32,8 @@ from ..core import schedule
 from ..core.admission import glob_conflict
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
+from ..core.schedule import plan as _plan
+from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog
 
@@ -419,7 +421,6 @@ def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: flo
     take an item the scheduler would then also refuse. A refusal that recommends an
     impossible alternative is worse than one that recommends nothing.
     """
-    from ..core.schedule import plan as _plan
 
     refused = state.items.get(item_id)
     kind = refused.kind if refused else "task"
@@ -433,7 +434,6 @@ def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: flo
 def _remote_take(log: EventLog, cfg: Config, item_id: str, holder: str, now: float) -> str:
     """Win the remote claim ref or refuse the claim. Returns "fresh" for a new ref and
     "renewed" when we already held it."""
-    from ..infra import claimref as CR
 
     got = CR.take(log.root, cfg.flow.remote, item_id, holder, now + cfg.lease.ttl_s)
     if got.status == "held":
@@ -459,7 +459,6 @@ def _remote_renew(log: EventLog, cfg: Config, item_id: str, holder: str, now: fl
     successful renew re-takes it)."""
     if cfg.flow.claims != "remote":
         return ""
-    from ..infra import claimref as CR
 
     got = CR.renew(log.root, cfg.flow.remote, item_id, holder, now + cfg.lease.ttl_s)
     return (got.holder or "another clone") if got.status == "held" else ""
@@ -467,12 +466,9 @@ def _remote_renew(log: EventLog, cfg: Config, item_id: str, holder: str, now: fl
 
 def _remote_drop(log: EventLog, item_id: str, holder: str) -> None:
     """Best effort: a ref we fail to delete lapses with its expiry and is replaced then."""
-    from ..config import Config
 
     cfg = Config.load(log.root)
     if cfg.flow.claims == "remote":
-        from ..infra import claimref as CR
-
         CR.drop(log.root, cfg.flow.remote, item_id, holder)
 
 
