@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ..core import outcome as O
 from ..services import backfill as BF
@@ -56,6 +57,29 @@ def verify(
     return O.ok("verify", **data)
 
 
+def _file_sweep_bugs(repo: Path, st: Any, failing: list[Any], agent: str) -> list[str]:
+    """A bug per completion that does not hold, none where an open bug already says so."""
+    filed: list[str] = []
+    already = {
+        b.summary.split(" does not hold", 1)[0]
+        for b in st.bugs.values()
+        if not b.fixed_at and not b.invalid_at and b.summary.startswith(_BUG_PREFIX)
+    }
+    for rep in failing:
+        if f"{_BUG_PREFIX}{rep.item}" in already:
+            continue  # an open bug already says so
+        bad = "; ".join(f"{c.id}: {c.detail}" for c in rep.claims if c.status == V.FAIL)
+        out = bug_found(
+            repo,
+            summary=f"{_BUG_PREFIX}{rep.item} does not hold -- {bad}",
+            item=rep.item,
+            agent=agent,
+        )
+        if out.exit == O.OK:
+            filed.append(rep.item)
+    return filed
+
+
 def verify_sweep(
     repo: Path,
     *,
@@ -83,25 +107,7 @@ def verify_sweep(
     sw = V.sweep(repo, cfg, st, log.read_all(), items)
     data = sw.as_data(max(1, limit))
     failing = [r for _, r in sw.worst if r.failed]
-    filed: list[str] = []
-    if file_bugs:
-        already = {
-            b.summary.split(" does not hold", 1)[0]
-            for b in st.bugs.values()
-            if not b.fixed_at and not b.invalid_at and b.summary.startswith(_BUG_PREFIX)
-        }
-        for rep in failing:
-            if f"{_BUG_PREFIX}{rep.item}" in already:
-                continue  # an open bug already says so
-            bad = "; ".join(f"{c.id}: {c.detail}" for c in rep.claims if c.status == V.FAIL)
-            out = bug_found(
-                repo,
-                summary=f"{_BUG_PREFIX}{rep.item} does not hold -- {bad}",
-                item=rep.item,
-                agent=agent,
-            )
-            if out.exit == O.OK:
-                filed.append(rep.item)
+    filed = _file_sweep_bugs(repo, st, failing, agent) if file_bugs else []
     data["bugs_filed"] = filed
     if not items:
         return O.nothing("verify.sweep", "no completed tasks to verify", **data)
@@ -201,6 +207,29 @@ def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outc
     )
 
 
+def _tool_mode_refusal(
+    one: bool,
+    phase: str,
+    limit: int | None,
+    file_bugs: bool,
+    reopen: bool,
+    reason: str,
+    force: bool,
+    pack_: bool,
+    judge_: bool,
+) -> O.Outcome | None:
+    """Arguments that belong to the other mode, or to no mode, as a refusal."""
+    sweep_args = bool(phase) or limit is not None or file_bugs
+    one_args = reopen or bool(reason) or force or pack_ or judge_
+    if one and sweep_args:
+        return refuse_sweep_args()
+    if not one and one_args:
+        return refuse_sweep_args("reopen, reason, force, pack and judge need an id")
+    if (pack_ and judge_) or ((pack_ or judge_) and (reopen or reason or force)):
+        return refuse_sweep_args("pack or judge (one of them) takes an id and nothing else")
+    return None
+
+
 def verify_tool(  # noqa: PLR0913 -- the tool's own argument list
     repo: Path,
     *,
@@ -219,14 +248,12 @@ def verify_tool(  # noqa: PLR0913 -- the tool's own argument list
     that belong to the other mode are refused, never dropped (the CLI refuses the same
     combinations)."""
     one = bool(id)
-    sweep_args = bool(phase) or limit is not None or file_bugs
-    one_args = reopen or bool(reason) or force or pack_ or judge_
-    if one and sweep_args:
-        return refuse_sweep_args()
-    if not one and one_args:
-        return refuse_sweep_args("reopen, reason, force, pack and judge need an id")
-    if (pack_ and judge_) or ((pack_ or judge_) and (reopen or reason or force)):
-        return refuse_sweep_args("pack or judge (one of them) takes an id and nothing else")
+    if (
+        refusal := _tool_mode_refusal(
+            one, phase, limit, file_bugs, reopen, reason, force, pack_, judge_
+        )
+    ) is not None:
+        return refusal
     if not one:
         return verify_sweep(
             repo,

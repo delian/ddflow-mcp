@@ -26,6 +26,7 @@ from typing import Any
 from ..config import Config, ReviewConfig, csv_list
 from ..core import outcome as O
 from ..core.model import fold
+from ..infra import fsio
 from ..infra import git as G
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
@@ -120,6 +121,39 @@ def companions(repo: Path, *, no_probe: bool = False, agent: str = "") -> O.Outc
     return O.ok("companions", **data)
 
 
+def _verify_skipped(statuses: list[Any], chosen_ids: set[str], wanted: list[str]) -> list[dict]:
+    """Why each companion a verify run did not launch was left alone."""
+    return [
+        {
+            "id": st.companion.id,
+            "reason": "not an MCP server entry: nothing to launch"
+            if not st.companion.is_mcp
+            else (
+                "install state unknown (the probe could not tell); "
+                if st.installed is None
+                else "not registered with an agent and not detected as installed; "
+            )
+            + "name it with --id to launch it anyway",
+        }
+        for st in statuses
+        if st.companion.id not in chosen_ids and (st.companion.is_mcp or st.companion.id in wanted)
+    ]
+
+
+def _verify_outcome(rows: list[dict], skipped: list[dict]) -> O.Outcome:
+    """Exit code for a verify run: a fact beats a doubt beats nothing launched."""
+    data: dict[str, Any] = {"verified": rows, "skipped": skipped}
+    bad = [r["id"] for r in rows if r["state"] == "not_mcp"]
+    if bad:
+        return O.failed("companions.verified", f"not an MCP server: {', '.join(bad)}", **data)
+    if not rows:
+        return O.nothing("companions.verified", "no MCP companion to launch", **data)
+    unknown = [r["id"] for r in rows if r["state"] == "unknown"]
+    if unknown:
+        return O.nothing("companions.verified", f"could not tell: {', '.join(unknown)}", **data)
+    return O.ok("companions.verified", **data)
+
+
 def companions_verify(repo: Path, ids: str = "", *, agent: str = "") -> O.Outcome:
     """Launch each MCP companion and require an answer to a JSON-RPC `initialize`.
 
@@ -154,21 +188,7 @@ def companions_verify(repo: Path, ids: str = "", *, agent: str = "") -> O.Outcom
         else [st for st in mcp if st.registered_in or st.installed]
     )
     chosen_ids = {st.companion.id for st in chosen}
-    skipped = [
-        {
-            "id": st.companion.id,
-            "reason": "not an MCP server entry: nothing to launch"
-            if not st.companion.is_mcp
-            else (
-                "install state unknown (the probe could not tell); "
-                if st.installed is None
-                else "not registered with an agent and not detected as installed; "
-            )
-            + "name it with --id to launch it anyway",
-        }
-        for st in statuses
-        if st.companion.id not in chosen_ids and (st.companion.is_mcp or st.companion.id in wanted)
-    ]
+    skipped = _verify_skipped(statuses, chosen_ids, wanted)
     results = CO.verify(repo, sorted(chosen_ids))
     state_of = {True: "speaks_mcp", False: "not_mcp", None: "unknown"}
     rows = [
@@ -182,16 +202,7 @@ def companions_verify(repo: Path, ids: str = "", *, agent: str = "") -> O.Outcom
         }
         for v in results
     ]
-    data: dict[str, Any] = {"verified": rows, "skipped": skipped}
-    bad = [r["id"] for r in rows if r["state"] == "not_mcp"]
-    if bad:
-        return O.failed("companions.verified", f"not an MCP server: {', '.join(bad)}", **data)
-    if not rows:
-        return O.nothing("companions.verified", "no MCP companion to launch", **data)
-    unknown = [r["id"] for r in rows if r["state"] == "unknown"]
-    if unknown:
-        return O.nothing("companions.verified", f"could not tell: {', '.join(unknown)}", **data)
-    return O.ok("companions.verified", **data)
+    return _verify_outcome(rows, skipped)
 
 
 @dataclass
@@ -205,6 +216,86 @@ class Registration:
     dry_run: bool = False
 
 
+def _add_stopped(make: Any, reason: str, refused: list[str] | None = None) -> O.Outcome:
+    """The `companions.added` outcome for a request that wrote nothing."""
+    return make(
+        "companions.added", reason, actions=[], applied=False, written=0, refused=refused or []
+    )
+
+
+def _add_install_state(wanted: list[str], by_id: dict[str, Any], force: bool) -> O.Outcome | None:
+    """`is False` and `is None` are different refusals. Both block -- registering a launch
+    command that fails mid-task is the thing to avoid either way -- but "not installed
+    here" sent to an operator whose probe merely TIMED OUT makes them install something
+    they already have, and the install line then does nothing. Say which one it is."""
+    absent = [w for w in wanted if by_id[w].installed is False and not force]
+    untested = [w for w in wanted if by_id[w].installed is None and not force]
+    if not (absent or untested):
+        return None
+    parts = []
+    if absent:
+        parts.append(
+            f"not installed here: {', '.join(absent)}. Registering one would write a "
+            f"launch command that fails mid-task. Install it first "
+            f"({'; '.join(by_id[w].companion.install for w in absent)}), or --force if "
+            f"you are about to."
+        )
+    if untested:
+        parts.append(
+            f"could not tell whether these are installed: {', '.join(untested)} — "
+            + "; ".join(by_id[w].detail for w in untested)
+            + ". That is not the same as absent. Re-run, check by hand, or --force if "
+            "you know it is there."
+        )
+    return _add_stopped(O.refused, "\n".join(parts), absent + untested)
+
+
+def _add_refusal(statuses: list[Any], reg: Registration) -> tuple[list[str], O.Outcome | None]:
+    """The ids to register, or the outcome that says why none can be."""
+    by_id = {st.companion.id: st for st in statuses}
+    wanted = csv_list(reg.ids) or [
+        st.companion.id
+        for st in statuses
+        if st.companion.default and st.installed and st.companion.is_mcp  # servers only
+    ]
+    unknown_ids = [w for w in wanted if w not in by_id]
+    if unknown_ids:
+        return wanted, _add_stopped(
+            O.failed,
+            f"unknown companion(s): {', '.join(unknown_ids)}; known: {', '.join(by_id)}",
+        )
+    # The id is the server's key in an agent's config: `a.b` wrote [mcp_servers.a.b], a
+    # nested table, not a server (D-plain-keys, B7a1ed66cb9).
+    if bad := [
+        p
+        for w in wanted
+        if (p := bare_id_problem(w, "a companion id", "the agent's [mcp_servers.<id>] entry"))
+    ]:
+        return wanted, _add_stopped(
+            O.refused, "; ".join(bad), [w for w in wanted if bare_id_problem(w, "", "")]
+        )
+    not_servers = [w for w in wanted if not by_id[w].companion.is_mcp]
+    if not_servers:
+        return wanted, _add_stopped(
+            O.refused,
+            "not an MCP server: "
+            + "; ".join(
+                f"{w} is a {by_id[w].companion.kind} tool ({by_id[w].companion.install})"
+                for w in not_servers
+            )
+            + ". There is no MCP config entry to write. Install it and ddflow detects it; "
+            "`ddflow companions` shows it either way.",
+            not_servers,
+        )
+    if not wanted:
+        return wanted, _add_stopped(
+            O.nothing,
+            "nothing to add: no default MCP companion is installed on this machine. "
+            "`ddflow companions` lists them with their install commands.",
+        )
+    return wanted, _add_install_state(wanted, by_id, reg.force)
+
+
 def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = "") -> O.Outcome:
     """Register companion servers with an agent's MCP config.
 
@@ -216,97 +307,10 @@ def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = 
     statuses = _scan(repo, probe=True)
     if isinstance(statuses, O.Outcome):
         return statuses
+    wanted, stopped = _add_refusal(statuses, reg)
+    if stopped is not None:
+        return stopped
     by_id = {st.companion.id: st for st in statuses}
-
-    wanted = csv_list(reg.ids) or [
-        st.companion.id
-        for st in statuses
-        if st.companion.default and st.installed and st.companion.is_mcp  # servers only
-    ]
-    unknown_ids = [w for w in wanted if w not in by_id]
-    if unknown_ids:
-        return O.failed(
-            "companions.added",
-            f"unknown companion(s): {', '.join(unknown_ids)}; known: {', '.join(by_id)}",
-            actions=[],
-            applied=False,
-            written=0,
-            refused=[],
-        )
-    # The id is the server's key in an agent's config: `a.b` wrote [mcp_servers.a.b], a
-    # nested table, not a server (D-plain-keys, B7a1ed66cb9).
-
-    if bad := [
-        p
-        for w in wanted
-        if (p := bare_id_problem(w, "a companion id", "the agent's [mcp_servers.<id>] entry"))
-    ]:
-        return O.refused(
-            "companions.added",
-            "; ".join(bad),
-            actions=[],
-            applied=False,
-            written=0,
-            refused=[w for w in wanted if bare_id_problem(w, "", "")],
-        )
-    not_servers = [w for w in wanted if not by_id[w].companion.is_mcp]
-    if not_servers:
-        return O.refused(
-            "companions.added",
-            "not an MCP server: "
-            + "; ".join(
-                f"{w} is a {by_id[w].companion.kind} tool ({by_id[w].companion.install})"
-                for w in not_servers
-            )
-            + ". There is no MCP config entry to write. Install it and ddflow detects it; "
-            "`ddflow companions` shows it either way.",
-            actions=[],
-            applied=False,
-            written=0,
-            refused=not_servers,
-        )
-    if not wanted:
-        return O.nothing(
-            "companions.added",
-            "nothing to add: no default MCP companion is installed on this machine. "
-            "`ddflow companions` lists them with their install commands.",
-            actions=[],
-            applied=False,
-            written=0,
-            refused=[],
-        )
-
-    # `is False` and `is None` are different refusals. Both block -- registering a launch
-    # command that fails mid-task is the thing to avoid either way -- but "not installed
-    # here" sent to an operator whose probe merely TIMED OUT makes them install something
-    # they already have, and the install line then does nothing. Say which one it is.
-    absent = [w for w in wanted if by_id[w].installed is False and not reg.force]
-    untested = [w for w in wanted if by_id[w].installed is None and not reg.force]
-    if absent or untested:
-        parts = []
-        if absent:
-            parts.append(
-                f"not installed here: {', '.join(absent)}. Registering one would write a "
-                f"launch command that fails mid-task. Install it first "
-                f"({'; '.join(by_id[w].companion.install for w in absent)}), or --force if "
-                f"you are about to."
-            )
-        if untested:
-            parts.append(
-                f"could not tell whether these are installed: {', '.join(untested)} — "
-                + "; ".join(by_id[w].detail for w in untested)
-                + ". That is not the same as absent. Re-run, check by hand, or --force if "
-                "you know it is there."
-            )
-        return O.refused(
-            "companions.added",
-            "\n".join(parts),
-            actions=[],
-            applied=False,
-            written=0,
-            refused=absent + untested,
-        )
-
     agents = csv_list(reg.agents) or ["claude"]
     results = [
         CO.register(repo, by_id[w].companion, ag, dry_run=reg.dry_run)
@@ -1369,7 +1373,7 @@ def prompts(
                 skipped.append(str(dst))
                 continue
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(tmpl.text, "utf-8")
+            fsio.replace_text(dst, tmpl.text)
             written.append(str(dst))
         return O.ok(
             "prompts",

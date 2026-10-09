@@ -181,6 +181,69 @@ def _filters(
     return R.Filters(**{k: v for k, v in given.items() if v not in ("", 0, None)})
 
 
+def _check_modes(
+    doc: str, all_docs: bool, diff: bool, check: bool, update: bool, out: str, template: str
+) -> None:
+    """Refuse a combination of export flags that cannot mean one thing."""
+    if bool(doc) == all_docs:
+        raise ExportError(
+            "name one document (ddflow export <doc>) or pass --all for the selected set",
+            EXIT_REFUSED,
+        )
+    # --out is also the TARGET of a --diff or --check (compare against that file), so it
+    # only conflicts with the two comparisons being asked for at once, or with --update.
+    if (diff and check) or ((diff or check) and update) or (update and out):
+        raise ExportError(
+            "--diff, --check and --update are alternatives (--out names the file for any of them)",
+            EXIT_REFUSED,
+        )
+    if all_docs and (out or template):
+        raise ExportError("--out and --template name one document, not --all", EXIT_REFUSED)
+    if template and (update or (out and not (diff or check))):
+        raise ExportError(
+            "--template renders once for review (print, --diff, --check) and never writes; "
+            "put the template in [export.<doc>].template to write with it",
+            EXIT_REFUSED,
+        )
+
+
+def _render_docs(
+    repo: Path,
+    cfg: Config,
+    q: Any,
+    docs: list[str],
+    flt: Any,
+    tmpl: Any,
+    cap: int,
+    fenced: bool,
+    act: tuple[bool, bool, bool, str, bool, Confirm | None],
+) -> list[ops.Result]:
+    """One result per selected document; a document that cannot be made does not stop the
+    rest."""
+    diff, check, update, out, force, confirm = act
+    results: list[ops.Result] = []
+    for d in docs:
+        try:
+            spec = ops.spec_for(cfg, d, filters=flt, writing=bool(diff or check or update or out))
+            if not (diff or check or update or out):
+                results.append(
+                    ops.print_doc(repo, cfg, q, spec, max_bytes=cap, template=tmpl, fenced=fenced)
+                )
+            else:
+                results.append(_act(repo, cfg, q, spec, tmpl, diff, check, out, force, confirm))
+        except ExportError as exc:
+            results.append(
+                ops.Result(
+                    d,
+                    action="refused" if exc.code == EXIT_REFUSED else "failed",
+                    code=exc.code,
+                    message=str(exc),
+                    text=getattr(exc, "diff", ""),
+                )
+            )
+    return results
+
+
 def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the filters are the core vocabulary
     repo: Path,
     doc: str = "",
@@ -208,27 +271,7 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
 ) -> O.Outcome:
     """Print, diff, check or write one document or the selected set (see the module doc)."""
     try:
-        if bool(doc) == all_docs:
-            raise ExportError(
-                "name one document (ddflow export <doc>) or pass --all for the selected set",
-                EXIT_REFUSED,
-            )
-        # --out is also the TARGET of a --diff or --check (compare against that file), so it
-        # only conflicts with the two comparisons being asked for at once, or with --update.
-        if (diff and check) or ((diff or check) and update) or (update and out):
-            raise ExportError(
-                "--diff, --check and --update are alternatives (--out names the file for "
-                "any of them)",
-                EXIT_REFUSED,
-            )
-        if all_docs and (out or template):
-            raise ExportError("--out and --template name one document, not --all", EXIT_REFUSED)
-        if template and (update or (out and not (diff or check))):
-            raise ExportError(
-                "--template renders once for review (print, --diff, --check) and never writes; "
-                "put the template in [export.<doc>].template to write with it",
-                EXIT_REFUSED,
-            )
+        _check_modes(doc, all_docs, diff, check, update, out, template)
         flt = _filters(
             since=since, version=version, phase=phase or item, status=status,
             limit=limit, tag=tag, session=session,
@@ -253,30 +296,9 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
             )
         q = ops.load(repo, cfg)
         tmpl = ops.adhoc_template(doc, template, base or Path.cwd()) if template else None
-        results = []
-        for d in docs:
-            try:
-                spec = ops.spec_for(
-                    cfg, d, filters=flt, writing=bool(diff or check or update or out)
-                )
-                if not (diff or check or update or out):
-                    results.append(
-                        ops.print_doc(
-                            repo, cfg, q, spec, max_bytes=cap, template=tmpl, fenced=fenced
-                        )
-                    )
-                else:
-                    results.append(_act(repo, cfg, q, spec, tmpl, diff, check, out, force, confirm))
-            except ExportError as exc:
-                results.append(
-                    ops.Result(
-                        d,
-                        action="refused" if exc.code == EXIT_REFUSED else "failed",
-                        code=exc.code,
-                        message=str(exc),
-                        text=getattr(exc, "diff", ""),
-                    )
-                )
+        results = _render_docs(
+            repo, cfg, q, docs, flt, tmpl, cap, fenced, (diff, check, update, out, force, confirm)
+        )
     except ExportError as exc:
         return O.Outcome("export", {"results": []}, exc.code, str(exc))
     except ValueError as exc:  # a config that does not load
@@ -322,6 +344,31 @@ def _act(
 MCP_CEILING = 60_000
 
 
+def _tool_refusal(
+    doc: str, every: bool, write: bool, path: str, diff: bool, check: bool
+) -> O.Outcome | None:
+    """The argument combinations an MCP export refuses: an argument is never silently
+    dropped."""
+    if not doc and not every:
+        return O.refused("export", "write, path, diff and check need a doc (or all)", results=[])
+    if write and not path:
+        return O.refused(
+            "export", "write=true needs path: a repo-relative file to write", results=[]
+        )
+    if path and not (write or diff or check):
+        return O.refused(
+            "export",
+            "path without write=true writes nothing; pass write=true to write it, or diff/check "
+            "to compare it",
+            results=[],
+        )
+    if write and (diff or check):
+        return O.refused("export", "write, diff and check are alternatives", results=[])
+    if every and path:
+        return O.refused("export", "path names one document, not all", results=[])
+    return None
+
+
 def export_tool(repo: Path, a: dict[str, Any], agent: str = "") -> O.Outcome:
     """The `ddflow_export` tool: its arguments are the CLI's flags, plus ``write`` + ``path``.
 
@@ -338,48 +385,38 @@ def export_tool(repo: Path, a: dict[str, Any], agent: str = "") -> O.Outcome:
     doc, every = str(a.get("doc") or ""), bool(a.get("all"))
     write, path = bool(a.get("write")), str(a.get("path") or "")
     diff, check = bool(a.get("diff")), bool(a.get("check"))
-    if not doc and not every:
-        if write or path or diff or check:  # an argument is never silently dropped
-            return O.refused(
-                "export", "write, path, diff and check need a doc (or all)", results=[]
-            )
+    if not doc and not every and not (write or path or diff or check):
         return export_list(repo, agent)
-    if write and not path:
-        return O.refused(
-            "export", "write=true needs path: a repo-relative file to write", results=[]
-        )
-    if path and not (write or diff or check):
-        return O.refused(
-            "export",
-            "path without write=true writes nothing; pass write=true to write it, or diff/check "
-            "to compare it",
-            results=[],
-        )
-    if write and (diff or check):
-        return O.refused("export", "write, diff and check are alternatives", results=[])
-    if every and path:
-        return O.refused("export", "path names one document, not all", results=[])
-    mb = a.get("max_bytes")
+    if (refusal := _tool_refusal(doc, every, write, path, diff, check)) is not None:
+        return refusal
     return export(
         repo,
         doc,
         all_docs=every,
-        since=str(a.get("since") or ""),
-        version=str(a.get("version") or ""),
-        phase=str(a.get("phase") or ""),
-        item=str(a.get("item") or ""),
-        status=str(a.get("status") or ""),
-        limit=int(a.get("limit") or 0),
-        tag=str(a.get("tag") or ""),
-        session=str(a.get("session") or ""),
-        max_bytes=None if mb is None else int(mb),
         diff=diff,
         check=check,
         update=write and not path,
         out=path,
         ceiling=MCP_CEILING,
         fenced=True,
+        **_tool_filters(a),
     )
+
+
+def _tool_filters(a: dict[str, Any]) -> dict[str, Any]:
+    """The filter and size arguments of an MCP export, as `export` keywords."""
+    mb = a.get("max_bytes")
+    return {
+        "since": str(a.get("since") or ""),
+        "version": str(a.get("version") or ""),
+        "phase": str(a.get("phase") or ""),
+        "item": str(a.get("item") or ""),
+        "status": str(a.get("status") or ""),
+        "limit": int(a.get("limit") or 0),
+        "tag": str(a.get("tag") or ""),
+        "session": str(a.get("session") or ""),
+        "max_bytes": None if mb is None else int(mb),
+    }
 
 
 def _tool_action(repo: Path, a: dict[str, Any], act: str, agent: str) -> O.Outcome:
