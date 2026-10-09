@@ -17,6 +17,7 @@ from __future__ import annotations
 from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
+from .declared.cadence import COMMANDS as _CADENCE
 from .declared.export import COMMANDS as _EXPORT
 from .declared.flow import COMMANDS as _FLOW
 from .declared.hooks import COMMANDS as _HOOKS
@@ -76,6 +77,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_SETUP,
     *_REPORTING,
     *_EXPORT,
+    *_CADENCE,
     *_MEMORY,
     *_FLOW,
     *_HOOKS,

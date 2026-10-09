@@ -10,6 +10,7 @@ from ..commands.bisect import cmd_bisect
 from ..commands.export import cmd_export
 from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit, cmd_tests
 from ..commands.setup import cmd_config, cmd_upgrade
+from ..declared.cadence import COMMANDS as COMMANDS_CADENCE
 from ..declared.export import BY_TOOL as EXPORT_BY_TOOL
 from ..declared.setup import COMMANDS as SETUP_COMMANDS
 from ..registry import add_commands
@@ -83,25 +84,7 @@ def register(s: argparse._SubParsersAction) -> None:
         handlers={("export",): cmd_export, ("bisect",): cmd_bisect},
     )
 
-    cd = s.add_parser("cadence", help="which periodic passes are due (exit 2 = none)")
-    cd.add_argument("--ran", default="")
-    cd.add_argument("--note", default="")
-    cd.set_defaults(fn=cmd_cadence)
-
-    pn = s.add_parser(
-        "pins",
-        help="which text of an instruction file a test pins, before you compress it",
-    )
-    pn.add_argument("document", help="the instruction file, e.g. AGENTS.md")
-    pn.add_argument("--tests", default="", help="comma-separated test dirs (default: tests,test)")
-    pn.add_argument(
-        "--min-needle",
-        type=int,
-        default=None,
-        help="shortest literal that counts as a pin (default 12)",
-    )
-    pn.add_argument("--top", type=int, default=10, help="how many free stretches to show")
-    pn.set_defaults(fn=cmd_pins)
+    add_commands(s, COMMANDS_CADENCE, handlers={("cadence",): cmd_cadence, ("pins",): cmd_pins})
 
     add_commands(
         s,
