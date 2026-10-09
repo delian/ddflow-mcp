@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import lifecycle as L
+from ..declared import queue as Q
 from ..declared import records as R
 from ._common import _answer, _api
 
@@ -153,46 +155,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
-    "ddflow_resolve": {
-        "description": (
-            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rivals, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it stays only in the log. Refused (exit 3) when not contested."
-        ),
-        "properties": {
-            "id": ("string", "The contested item.", True),
-            "keep": (
-                "string",
-                "Event id (or a 6+ character prefix), agent, or lease holder to keep.",
-                True,
-            ),
-            "refile_as": (
-                "string",
-                "Comma-separated new ids, one per definition NOT kept, in `show` order: "
-                "each is re-added under its new id in the same transaction.",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent: _api().resolve(
-            repo, a["id"], keep=a["keep"], refile_as=a.get("refile_as", "") or "", agent=agent
-        ),
-        "payload": ("id", "kept_definition", "kept_holder", "lost", "refiled", "released"),
-    },
-    "ddflow_unblock": {
-        "description": (
-            "Release a BLOCKED item -- and every blocked item beneath it -- back into "
-            "the queue, so `next` can offer them again. The inverse of ddflow_block, and "
-            "how deferred work, or a whole archived section an import landed as blocked, "
-            "becomes work once the OPERATOR says so: pass a phase id to release its "
-            "section. Do not release held work on your own judgement. Returns "
-            "nothing-to-do (exit 2) when nothing there is blocked."
-        ),
-        "properties": {
-            "id": ("string", "Item id.", True),
-            "note": ("string", "Why it is work again (who decided, and when).", False),
-        },
-        "api": lambda repo, a, agent: _api().unblock(
-            repo, a["id"], note=a.get("note", "") or "", agent=agent
-        ),
-        "payload": ("id", "was", "released"),
-    },
+    "ddflow_resolve": Q.BY_TOOL["ddflow_resolve"].tool_entry(),
+    "ddflow_unblock": L.BY_TOOL["ddflow_unblock"].tool_entry(),
     "ddflow_session_start": R.BY_TOOL["ddflow_session_start"].tool_entry(),
 }
