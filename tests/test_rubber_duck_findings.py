@@ -377,9 +377,9 @@ def test_both_search_backends_agree_on_the_shortest_usable_term(repo):
 
     # both backends take their terms from textsim.words with the same minimum, so a
     # two-character term is usable in both and a one-character term in neither
-    assert S._like_terms("a db") == ["db"]
+    assert S._terms("a db") == ["db"]
     assert S._fts_query("a db") == '"db"'
-    assert S._like_terms("x") == [] and S._fts_query("x") == ""
+    assert S._terms("x") == [] and S._fts_query("x") == ""
 
 
 # -- 10. fold survives an event that would make an item its own ancestor --------------

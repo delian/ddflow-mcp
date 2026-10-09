@@ -43,7 +43,7 @@ from ..config import Config
 from ..core import digest as D
 from ..core import textsim
 from ..core.model import State, fold
-from ..core.rank import bm25
+from ..core.rank import TRIGRAM_MIN, bm25, fuse, rerank, substring_bm25
 from ..core.textcut import clip
 from ..infra.log import EventLog, _flock
 
@@ -130,6 +130,28 @@ def _has_fts5() -> bool:
         return any("FTS5" in r[0] for r in c.execute("pragma compile_options"))
 
 
+def _has_trigram() -> bool:
+    """Does this SQLite's FTS5 have the ``trigram`` tokenizer (3.34+)? Probed, not assumed."""
+    with closing(sqlite3.connect(":memory:")) as c:
+        try:
+            c.execute("create virtual table t using fts5(a, tokenize='trigram')")
+        except sqlite3.OperationalError:
+            return False
+        return True
+
+
+#: The columns each searchable table is ranked on, by both rankers and the trigram index.
+_SEARCH_COLS: dict[str, tuple[str, ...]] = {
+    "lessons": ("title", "rule", "why", "how", "tags"),
+    "decisions": ("title", "context", "decision", "consequences", "alternatives"),
+    "research": ("question", "claim", "probe", "verdict"),
+    "bugs": ("summary", "lesson"),
+    "prompts": ("text",),
+    "items": ("title", "body", "tags"),
+    "memories": ("text", "tags"),
+}
+
+
 class Store:
     def __init__(self, root: Path, cfg: Config | None = None) -> None:
         self.root = Path(root)
@@ -138,6 +160,9 @@ class Store:
         # `index.db-*` line every adopted project's `.ddflow/.gitignore` already has).
         self.path = self.root / ".ddflow" / f"index.db-{code_fingerprint()}"
         self.fts = _has_fts5() and self.cfg.lessons.search_backend == "fts5"
+        #: The trigram index beside each FTS5 table; without it the same ranking is
+        #: computed in Python (`rank.substring_bm25`), over the same candidates.
+        self.trigram = self.fts and _has_trigram()
 
     def _ensure_dir(self) -> None:
         """Create `.ddflow/` only when something is actually about to be written.
@@ -219,6 +244,13 @@ class Store:
             create virtual table if not exists memories_fts using fts5(
                 id unindexed, text, tags, tokenize='porter unicode61');
             """)
+        if self.trigram:
+            for table in _SEARCH_COLS:
+                con.execute(
+                    # bandit B608: `table` is a key of the fixed `_SEARCH_COLS`.
+                    f"create virtual table if not exists {table}_tri using fts5("  # nosec B608
+                    "id unindexed, text, tokenize='trigram')"
+                )
         con.execute("insert or replace into meta values('schema', ?)", (str(SCHEMA),))
 
     def stale(self, log: EventLog) -> bool:
@@ -238,6 +270,11 @@ class Store:
         if row.get("schema") != str(SCHEMA):
             return True
         if row.get("similar_version") != str(textsim.VERSION):
+            return True
+        # An index built where SQLite had no trigram tokenizer has no `_tri` tables filled;
+        # read where it has one, it would rank on empty tables. A change of capability is
+        # a rebuild.
+        if row.get("trigram", "0") != ("1" if self.trigram else "0"):
             return True
         # `EventLog.mark()` is O(shards); the old comparison called `read_all()` to
         # decide whether `read_all()` was needed, which is the shape of the problem
@@ -422,6 +459,8 @@ class Store:
             _insert_memories(con, state, self.fts)
             _insert_bugs(con, state, self.fts)
             _insert_sessions(con, state, self.fts)
+            if self.trigram:
+                _fill_trigram(con)
             _insert_similar(con, similar_records(state))
             for name, runs in state.cadences.items():
                 for r in runs:
@@ -441,8 +480,8 @@ class Store:
                 (str(high),),
             )
             con.execute(
-                "insert or replace into meta values('built_at', ?), ('fts', ?)",
-                (str(time.time()), "1" if self.fts else "0"),
+                "insert or replace into meta values('built_at', ?), ('fts', ?), ('trigram', ?)",
+                (str(time.time()), "1" if self.fts else "0", "1" if self.trigram else "0"),
             )
             con.execute("COMMIT")
         finally:
@@ -513,86 +552,123 @@ class Store:
         )
 
     # -- search ---------------------------------------------------------------------
-    def search(self, table: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Rank ``table`` against ``query``. BM25 when FTS5 exists, LIKE otherwise.
+    def search(
+        self, table: str, query: str, limit: int = 5, *, rerank_by_likeness: bool = False
+    ) -> list[dict[str, Any]]:
+        """Rank ``table`` against ``query``: BM25 over the porter words fused (reciprocal
+        rank) with a trigram BM25 over the substrings, best first.
+
+        Both lists exist on every machine. Where SQLite has FTS5 they come from its indexes;
+        where it has none (or no trigram tokenizer) the same lists are computed in Python
+        over the same columns and the same query terms. The substring list is identical in
+        its candidates everywhere; the WORD list is not: FTS5's porter stemmer and
+        `textsim.stem` agree on plurals and -ed/-ing, not on every word.
+        ``rerank_by_likeness`` additionally reorders the fused top by fuzzy likeness to the
+        query (`rank.rerank`: rapidfuzz when installed, else difflib).
 
         The user query is passed through ``_fts_query``, which strips FTS operator
         characters and ORs the terms. Raw user text reaching an FTS5 MATCH is a syntax
         error waiting to happen — an unbalanced quote or a bare ``-`` raises, and a
         search that throws on a normal question is a search nobody uses.
         """
-        cols = {
-            "lessons": ("title", "rule", "why", "how"),
-            "decisions": ("title", "context", "decision", "consequences", "alternatives"),
-            "research": ("question", "claim", "probe"),
-            "bugs": ("summary", "lesson"),
-            "prompts": ("text",),
-            "items": ("title", "body"),
-            "memories": ("text", "tags"),
-        }[table]
+        cols = _SEARCH_COLS[table]
+        pool = max(limit * _POOL, _POOL_MIN)
+        terms = _terms(query)
+        if not terms:  # nothing to rank on, on every machine
+            return []
         with closing(self.connect()) as con:
             self.init(con)
+            scan: tuple[list[str], list[dict[str, Any]], list[str]] | None = None
+
+            def scanned() -> tuple[list[str], list[dict[str, Any]], list[str]]:
+                nonlocal scan
+                if scan is None:
+                    rows = [dict(r) for r in con.execute(f"select * from {table}")]  # nosec B608
+                    keys = [_row_key(table, r, n) for n, r in enumerate(rows)]
+                    if table == "prompts":  # the id the FTS path gives a prompt, too
+                        rows = [{**r, "id": k} for r, k in zip(rows, keys, strict=True)]
+                    scan = (keys, rows, [" ".join(str(r.get(c) or "") for c in cols) for r in rows])
+                return scan
+
+            def python_rankings(which: str) -> list[str]:
+                keys, _, texts = scanned()
+                if which == "bm25":
+                    score = bm25(
+                        [_fallback_words(t) for t in texts],
+                        _fallback_words(" ".join(terms)),
+                    )
+                else:
+                    score = substring_bm25(texts, terms)
+                return [keys[i] for i in sorted(score, key=lambda i: (-score[i], keys[i]))][:pool]
+
+            lists: list[list[str]] = []
             if self.fts:
-                q = _fts_query(query)
-                if not q:
-                    return []
-                try:
-                    rows = con.execute(
-                        # bandit B608: `table` is a fixed `cols` key (`cols[table]` raises
-                        # for anything else), and every value is a bound `?`.
-                        f"select f.id as id, bm25({table}_fts) as score "  # nosec B608
-                        f"from {table}_fts f where {table}_fts match ? "
-                        f"order by score limit ?",
-                        (q, limit),
-                    ).fetchall()
-                except sqlite3.OperationalError:
-                    rows = []
-                if rows:
-                    ids = [r["id"] for r in rows]
-                    scores = {r["id"]: r["score"] for r in rows}
-                    if table == "prompts":
-                        out = []
-                        for ident in ids:
-                            # `<session>#p<seq>` or `<session>#n<seq>` — the letter says
-                            # whether it was the operator speaking or the agent noting.
-                            sess, _, tail = ident.partition("#")
-                            role, digits = (
-                                (tail[:1], tail[1:]) if tail[:1].isalpha() else ("p", tail)
-                            )
-                            seq = int(digits or 0) + _LETTER_OFFSET.get(role, 0)
-                            r2 = con.execute(
-                                "select * from prompts where session=? and seq=?",
-                                (sess, seq),
-                            ).fetchone()
-                            if r2:
-                                row = dict(r2)
-                                row["id"] = ident
-                                out.append(row)
-                        out.sort(key=lambda r: scores.get(r["id"], 0.0))
-                        return out
-                    ph = ",".join("?" * len(ids))
-                    # bandit B608: only `?` placeholders are interpolated, and `table`
-                    # passed the `cols[table]` lookup above.
-                    sql = f"select * from {table} where id in ({ph})"  # nosec B608
-                    full = con.execute(sql, ids).fetchall()
-                    out = [dict(r) for r in full]
-                    out.sort(key=lambda r: scores.get(r["id"], 0.0))
-                    return out
-            # The fallback ranks with the same BM25 the search core uses (`core/rank`) over
-            # the words FTS5 would see: split by `textsim.words`, lower-cased, no stop words
-            # removed (FTS5 keeps them), lightly stemmed. The stemmer is `textsim.stem`, an
-            # approximation of FTS5's porter tokenizer: they agree on plurals and -ed/-ing,
-            # not on every word. It replaces a substring LIKE that returned the first rows
-            # it met. A term is usable at the same minimum length FTS5 uses.
-            qtoks = _fallback_words(" ".join(_like_terms(query)))
-            if not qtoks:
-                return []
-            # bandit B608: `table` passed the `cols[table]` lookup above; no value is interpolated.
-            rows = [dict(r) for r in con.execute(f"select * from {table}")]  # nosec B608
-            docs = [_fallback_words(" ".join(str(r.get(c) or "") for c in cols)) for r in rows]
-            scores = bm25(docs, qtoks)
-            order = sorted(scores, key=lambda i: (-scores[i], str(rows[i].get("id", ""))))
-            return [rows[i] for i in order[:limit]]
+                lists = [self._fts_ranking(con, f"{table}_fts", _fts_query(query), pool)]
+                lists.append(
+                    self._fts_ranking(con, f"{table}_tri", _tri_query(terms), pool)
+                    if self.trigram
+                    else python_rankings("trigram")
+                )
+            from_fts = any(lists)
+            if not from_fts:
+                # No FTS5, or it found nothing: both rankers over every row, in Python.
+                lists = [python_rankings("bm25"), python_rankings("trigram")]
+            top = fuse(lists, pool if rerank_by_likeness else limit)
+            if from_fts:
+                hits = self._fetch(con, table, top)
+            else:
+                keys, rows, _ = scanned()
+                by_key = dict(zip(keys, rows, strict=True))
+                hits = {i: by_key[i] for i in top}
+            ordered = [hits[i] for i in top if i in hits]
+            if rerank_by_likeness and ordered:
+                cands = [
+                    (i, " ".join(str(hits[i].get(c) or "") for c in cols)) for i in top if i in hits
+                ]
+                ordered = [hits[i] for i in rerank(query, cands, limit)]
+            return ordered[:limit]
+
+    @staticmethod
+    def _fts_ranking(con, index: str, match: str, limit: int) -> list[str]:
+        """Ids of the FTS5 table ``index`` matching ``match``, best BM25 first; empty for no
+        expression, no such table or one FTS5 refuses."""
+        if not match:
+            return []
+        try:
+            rows = con.execute(
+                # bandit B608: `index` is `<key of _SEARCH_COLS>_fts` or `_tri`, built here.
+                f"select id from {index} where {index} match ? "  # nosec B608
+                f"order by bm25({index}), id limit ?",
+                (match, limit),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+        return [r["id"] for r in rows]
+
+    @staticmethod
+    def _fetch(con, table: str, ids: list[str]) -> dict[str, dict[str, Any]]:
+        """The rows for FTS ids. A prompt's id is ``<session>#<role letter><seq>``, which
+        names its row by (session, seq) -- the letter says whether the operator spoke or the
+        agent noted."""
+        out: dict[str, dict[str, Any]] = {}
+        if table == "prompts":
+            for ident in ids:
+                sess, _, tail = ident.partition("#")
+                role, digits = (tail[:1], tail[1:]) if tail[:1].isalpha() else ("p", tail)
+                seq = int(digits or 0) + _LETTER_OFFSET.get(role, 0)
+                r = con.execute("select * from prompts where session=? and seq=?", (sess, seq))
+                row = r.fetchone()
+                if row:
+                    out[ident] = {**dict(row), "id": ident}
+            return out
+        if not ids:
+            return out
+        ph = ",".join("?" * len(ids))
+        # bandit B608: only `?` placeholders are interpolated, and `table` is a key of
+        # `_SEARCH_COLS`.
+        for r in con.execute(f"select * from {table} where id in ({ph})", ids):  # nosec B608
+            out[r["id"]] = dict(r)
+        return out
 
     def query(self, sql: str, args: tuple = ()) -> list[dict[str, Any]]:
         with closing(self.connect()) as con:
@@ -607,12 +683,38 @@ def _fts_query(text: str) -> str:
     character inert; ORing is what makes a multi-word question behave like a
     relevance query instead of a conjunction that matches nothing.
     """
-    terms = textsim.words(text, min_len=MIN_TERM_CHARS)
-    return " OR ".join(f'"{t}"' for t in terms[:_FTS_TERMS])
+    return " OR ".join(f'"{t}"' for t in _terms(text))
 
 
-#: How many terms of a query reach FTS5, and how many reach the LIKE fallback.
-_FTS_TERMS, _LIKE_TERMS = 12, 8
+def _tri_query(terms: list[str]) -> str:
+    """The FTS5 expression for the trigram index: each term as a quoted substring, ORed.
+    Terms under three characters match nothing there, so they are left out."""
+    return " OR ".join(f'"{t}"' for t in terms if len(t) >= TRIGRAM_MIN)
+
+
+def _row_key(table: str, row: dict[str, Any], n: int) -> str:
+    """A row's id in the fallback ranking: its ``id``, or a prompt's ``<session>#<letter><seq>``
+    -- the FTS id -- so both paths fuse and break ties on the same key."""
+    if table != "prompts":
+        return str(row.get("id", n))
+    role = str(row.get("role") or "prompt")
+    return f"{row.get('session', '')}#{role[0]}{int(row.get('seq', 0)) - _ROLE_OFFSET.get(role, 0)}"
+
+
+def _fill_trigram(con) -> None:
+    """Copy each table's ranked text from its porter FTS5 table into the trigram one."""
+    for table, cols in _SEARCH_COLS.items():
+        text = " || ' ' || ".join(f"coalesce({c}, '')" for c in cols)
+        con.execute(
+            # bandit B608: names come from the fixed `_SEARCH_COLS`.
+            f"insert into {table}_tri(id, text) select id, {text} from {table}_fts"  # nosec B608
+        )
+
+
+#: How many terms of a query reach any ranker.
+_FTS_TERMS = 12
+#: Each ranker is asked for this many times the wanted hits (at least `_POOL_MIN`) before fusion.
+_POOL, _POOL_MIN = 4, 20
 
 
 def _fallback_words(text: str) -> list[str]:
@@ -620,9 +722,10 @@ def _fallback_words(text: str) -> list[str]:
     return [textsim.stem(w) for w in textsim.words(text, min_len=1, fold=True)]
 
 
-def _like_terms(query: str) -> list[str]:
-    """The terms of the LIKE fallback: the same words FTS5 would be asked for, fewer."""
-    return textsim.words(query, min_len=MIN_TERM_CHARS)[:_LIKE_TERMS]
+def _terms(query: str) -> list[str]:
+    """The terms every ranker is asked for, on every machine: the query's words of at least
+    ``MIN_TERM_CHARS``, the first ``_FTS_TERMS`` of them."""
+    return textsim.words(query, min_len=MIN_TERM_CHARS)[:_FTS_TERMS]
 
 
 #: What `recall` searches, in the order a reader should weigh them. Decisions first
