@@ -59,6 +59,14 @@ def test_sources_are_chosen_by_table_or_by_label(proj):
     assert list(SC.search_sources(store, "retry", "lessons", 3)) == ["lessons"]
     assert list(SC.search_sources(store, "retry", "DECISION", 3)) == ["decisions"]
     assert SC.search_sources(store, "retry", "nosuch", 3) == {}
+
+
+def test_a_source_named_in_any_case_is_selected(proj):
+    """B89a8871f00: `--sources LESSONS` selected nothing while `lessons` and `lesson` did --
+    the table name was compared case-sensitively and the label case-insensitively."""
+    store = _store_of(proj)
+    for spelled in ("lessons", "LESSONS", "Lessons", "lesson", "LESSON"):
+        assert list(SC.search_sources(store, "retry", spelled, 3)) == ["lessons"], spelled
     assert SC.search_table(store, "lessons", "retry", 3) == store.search("lessons", "retry", 3)
 
 
@@ -111,7 +119,9 @@ def _searching_calls(path: Path) -> list[int]:
     for n in ast.walk(ast.parse(path.read_text())):
         if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
             continue
-        first = n.args[0] if n.args else None
+        first = (
+            n.args[0] if n.args else next((k.value for k in n.keywords if k.arg == "table"), None)
+        )
         names_a_table = isinstance(first, ast.Constant) and first.value in TABLES
         on_a_store = "store" in ast.unparse(n.func.value).lower()
         if (
