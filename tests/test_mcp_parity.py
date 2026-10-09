@@ -20,7 +20,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ddflow.surfaces import exemptions as X
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.exemptions import EXEMPTIONS
 from ddflow.surfaces.mcp import TOOLS
 
 #: EXEMPTION: the `[mcp].tools` tier (core | standard | all) changes what `tools/list`
@@ -140,11 +139,11 @@ def test_every_cli_command_is_reachable_over_mcp():
 def test_the_exemption_list_only_shrinks():
     stale = [c for c in EXEMPT_WORDS if c not in cli_commands()]
     assert not stale, f"exemptions for commands that no longer exist: {stale}"
-    for c in EXEMPTIONS:
+    for c in X.DECLARATIONS:
         if len(c.path) == 1 and c.reason:
             assert len(c.reason) > 20, f"{c.path}: the exemption needs a real reason"
-        if c.path and not (c.reason or c.via):
-            raise AssertionError(f"{c.path}: a declaration with neither a reason nor a route")
+        if c.path and not c.tool and not (c.reason or c.via):
+            raise AssertionError(f"{c.path}: a command with no tool, no reason and no route")
 
 
 def test_the_aliases_all_resolve():
