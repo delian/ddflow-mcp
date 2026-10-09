@@ -1016,7 +1016,7 @@ def _macro_error() -> type[Exception]:
 
 
 #: Keys a tool's payload carries only when the operation produced them.
-_OPTIONAL_KEYS = ("export_refresh", "ci", "progress")
+_OPTIONAL_KEYS = ("export_refresh", "ci", "progress", "guidance")
 
 
 def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
