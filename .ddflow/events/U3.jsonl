@@ -5021,3 +5021,6 @@
 {"agent":"U3","data":{"at":1791538585.7269402,"holder":"U3"},"id":"e155ec4a5b74f8223bce0913c","kind":"lease.renewed","lamport":48661,"schema":1,"subject":"6g-memory.2-cadence","ts":"2026-10-09T09:36:25.844254Z"}
 {"agent":"U3","data":{"at":1791538687.3975816,"holder":"U3"},"id":"ef48052483c027a67e499d511","kind":"lease.renewed","lamport":48672,"schema":1,"subject":"6g-memory.2-cadence","ts":"2026-10-09T09:38:07.508733Z"}
 {"agent":"U3","data":{"at":1791538709.6218343,"holder":"U3"},"id":"ed8e4574e34149ead7c5fc303","kind":"lease.renewed","lamport":48673,"schema":1,"subject":"6g-memory.2-cadence","ts":"2026-10-09T09:38:29.738535Z"}
+{"agent":"U3","data":{"at":1791538833.377792,"holder":"U3"},"id":"e28259415a274a50988c670bb","kind":"lease.renewed","lamport":48686,"schema":1,"subject":"6g-memory.2-cadence","ts":"2026-10-09T09:40:33.479604Z"}
+{"agent":"U3","data":{"at":1791538957.5070634,"holder":"U3"},"id":"e85eaa8026b1cc316fa12f013","kind":"lease.renewed","lamport":48690,"schema":1,"subject":"6g-memory.2-cadence","ts":"2026-10-09T09:42:37.629519Z"}
+{"agent":"U3","data":{"at":1791538989.7043498,"holder":"U3"},"id":"ea99eb6ce57a7b956ab0a785b","kind":"lease.renewed","lamport":48697,"schema":1,"subject":"6g-memory.2-cadence","ts":"2026-10-09T09:43:09.866548Z"}
