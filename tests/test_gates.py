@@ -298,7 +298,7 @@ def test_the_tree_sha_changes_when_an_ALREADY_DIRTY_file_is_edited_again(repo):
     *Found by the cross-family critic on 87d5fbb, CONFIRMED, then reproduced here:
     two writes to one tracked file produced one fingerprint.*
     """
-    from ddflow.services.gates import GateDef, run_command_gate, tree_fingerprint
+    from ddflow.services.gates import GateDef, run_command_gate, tree_identity
 
     tracked = repo / "tracked.py"
     tracked.write_text("original\n")
@@ -319,7 +319,7 @@ def test_the_tree_sha_changes_when_an_ALREADY_DIRTY_file_is_edited_again(repo):
         "so a gate that passed on the old content reads as fresh evidence"
     )
     # and directly, without the gate machinery in between
-    assert tree_fingerprint(repo) == after
+    assert tree_identity(repo) == after
 
 
 def test_stale_evidence_reports_a_same_file_re_edit(repo):
