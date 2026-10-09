@@ -26,6 +26,7 @@ from pathlib import Path
 from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
+from . import harnessreg as HR
 from . import install_info as _INSTALL
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -85,75 +86,15 @@ class AgentTarget:
         return bool(self.config) and self.shape != SHAPE_NONE
 
 
-#: Every harness ddflow can adopt a project into. Each path and shape is taken from that
-#: product's OWN documentation (`docs/RESEARCH.md` R15) -- never from the family
-#: resemblance between them, because a wrong key is valid JSON that the agent silently
-#: ignores, which looks exactly like success.
+#: Every harness ddflow can adopt a project into: a VIEW over the descriptors in
+#: `ddflow/harnesses/<id>.toml` (`services/harnessreg`), where each path and shape carries the
+#: reason it was chosen. Each is taken from that product's OWN documentation
+#: (`docs/RESEARCH.md` R15, R-hx) -- never from the family resemblance between them, because a
+#: wrong key is valid JSON that the agent silently ignores, which looks exactly like success.
+#: An agent with no project-level MCP file has `config == ""` and `SHAPE_NONE`: a verified
+#: absence, with the manual step named in its delta doc.
 AGENT_TARGETS: dict[str, AgentTarget] = {
-    "claude": AgentTarget("claude-code.md", ".mcp.json", SHAPE_MCP_SERVERS),
-    "gemini": AgentTarget("gemini-cli.md", ".gemini/settings.json", SHAPE_MCP_SERVERS),
-    "codex": AgentTarget("codex-cli.md", ".codex/config.toml", SHAPE_TOML),
-    # GitHub Copilot's OWN surface, separate from VS Code's. The CLI searches upward for
-    # `.mcp.json` and also reads `.github/mcp.json`, which is the one meant to be
-    # committed and shared, so that is the one written. Its entries carry `type: "local"`
-    # and a `tools` allowlist. This used to point at `.vscode/mcp.json`, which is VS
-    # Code's file and is now the `vscode` target -- adopt BOTH to cover both surfaces.
-    "copilot": AgentTarget("github-copilot.md", ".github/mcp.json", SHAPE_COPILOT),
-    # VS Code's built-in MCP support, which any VS Code agent uses -- not Copilot-specific.
-    # Top-level key is `servers`, NOT `mcpServers`, and entries name their transport.
-    "vscode": AgentTarget("vscode.md", ".vscode/mcp.json", SHAPE_SERVERS),
-    # Kilo Code. Its CLI is an opencode fork and reads opencode's shape: `mcp`, NOT
-    # `mcpServers`. This was SHAPE_MCP_SERVERS until a probe against Kilo 7.2.20 showed
-    # that file listing "No MCP servers configured" -- valid JSON, silently ignored.
-    "kilo": AgentTarget("kilo-cline.md", ".kilo/kilo.json", SHAPE_OPENCODE),
-    "cursor": AgentTarget("cursor.md", ".cursor/mcp.json", SHAPE_MCP_SERVERS),
-    # Kimi Code CLI. Project-level `.kimi-code/mcp.json` takes precedence over the
-    # user-level copy. NOT a repo-root `.mcp.json`: secondary write-ups say it reuses
-    # Claude's file and the official docs do not, so only the official docs count.
-    "kimi": AgentTarget("kimi-code.md", ".kimi-code/mcp.json", SHAPE_MCP_SERVERS),
-    # opencode. `command` is ONE array including the arguments, and `enabled` is explicit.
-    "opencode": AgentTarget("opencode.md", "opencode.json", SHAPE_OPENCODE),
-    # ZCode, Zhipu's coding agent and how GLM is driven. Nests under `mcp` -> `servers`.
-    "glm": AgentTarget("zcode-glm.md", ".zcode/config.json", SHAPE_MCP_DOT_SERVERS),
-    # Qwen Code CLI, a Gemini CLI fork: same settings shape, its own directory. Its
-    # default context file is QWEN.md, and it reads AGENTS.md when present.
-    "qwen": AgentTarget("qwen-code.md", ".qwen/settings.json", SHAPE_MCP_SERVERS),
-    # Google Antigravity. Workspace MCP is `.agents/mcp_config.json`; rules may be
-    # AGENTS.md, GEMINI.md, or `.agents/rules/`.
-    "antigravity": AgentTarget("antigravity.md", ".agents/mcp_config.json", SHAPE_MCP_SERVERS),
-    # Devin CLI. `.devin/mcp_config.json` is the git-tracked project scope (a
-    # `.local.json` sibling exists for secrets and is gitignored). CLOUD Devin sessions
-    # are configured in the web UI instead, which no repo file can do.
-    "devin": AgentTarget("devin.md", ".devin/mcp_config.json", SHAPE_MCP_SERVERS),
-    # Qodo Command reads an `mcp.json` at the project root. The Qodo Gen IDE plugin keeps
-    # its own per-user config, which is the manual half named in the delta.
-    "qodo": AgentTarget("qodo.md", "mcp.json", SHAPE_MCP_SERVERS),
-    # Tabnine Agent. Project scope SHALLOW-MERGES over user and system scopes.
-    "tabnine": AgentTarget("tabnine.md", ".tabnine/agent/settings.json", SHAPE_MCP_SERVERS),
-    # --- Supported, but with NO project-level MCP file to write. -------------------
-    # Each of these is a verified absence, not an unresearched gap: the delta doc says
-    # where the operator must add the server by hand, and AGENTS.md still carries the
-    # workflow.
-    #
-    # Aider has no MCP client support at all, and no AGENTS.md convention -- it loads a
-    # read-only context file named by `read:` in `.aider.conf.yml`.
-    "aider": AgentTarget("aider.md", "", SHAPE_NONE),
-    # Cline's MCP settings are a single GLOBAL file; its project surface is rules only.
-    "cline": AgentTarget("cline.md", "", SHAPE_NONE),
-    # Windsurf/Cascade is now Devin Desktop; its docs state a global config only.
-    "windsurf": AgentTarget("windsurf.md", "", SHAPE_NONE),
-    # Replit configures MCP entirely in the web UI, and its instruction file is replit.md.
-    "replit": AgentTarget("replit.md", "", SHAPE_NONE),
-    # OpenHands' primary path is Settings -> MCP in the UI. A `config.toml` `[mcp]`
-    # `stdio_servers` array still exists and its own docs call it development-only, so
-    # it is documented in the delta rather than written here.
-    "openhands": AgentTarget("openhands.md", "", SHAPE_NONE),
-    # Goose keeps extensions in a user-level YAML; its project surface is `.goosehints`,
-    # and it reads AGENTS.md as well.
-    "goose": AgentTarget("goose.md", "", SHAPE_NONE),
-    # Sourcegraph Cody is Enterprise-only since 2025-07-23 and is configured through the
-    # editor's own settings, under a `cody.mcpServers` key rather than a repo file.
-    "cody": AgentTarget("cody.md", "", SHAPE_NONE),
+    h.id: AgentTarget(h.delta, h.mcp.path, h.mcp.shape) for h in HR.load()
 }
 
 
@@ -196,43 +137,13 @@ class NativeRule:
 #: Absent from this map means the agent reads `AGENTS.md` directly — which is most of them,
 #: and is the whole reason `AGENTS.md` is the canonical surface.
 NATIVE_RULES: dict[str, NativeRule] = {
-    # Precedence is Team Rules > Project Rules > User Rules > .cursorrules > AGENTS.md, so
-    # a project rule is what actually binds and AGENTS.md is the fallback it is.
-    "cursor": NativeRule(
-        ".cursor/rules/ddflow.mdc",
-        FORM_WHOLE,
-        "Cursor ranks project rules ABOVE AGENTS.md, so AGENTS.md alone is outranked",
-    ),
-    # QWEN.md is Qwen Code's default context file. It reads AGENTS.md when present, but the
-    # default is what an unconfigured checkout uses.
-    "qwen": NativeRule(
-        "QWEN.md", FORM_BLOCK, "QWEN.md is Qwen Code's DEFAULT context file, not AGENTS.md"
-    ),
-    # Cline's project surface is a rules directory; its MCP config is global-only.
-    "cline": NativeRule(
-        ".clinerules/ddflow.md", FORM_BLOCK, "Cline reads .clinerules/, not AGENTS.md"
-    ),
-    "tabnine": NativeRule(
-        ".tabnine/guidelines/ddflow.md",
-        FORM_BLOCK,
-        "Tabnine Agent reads .tabnine/guidelines/*.md, not AGENTS.md",
-    ),
-    # Replit's own convention, and it must be at the project root.
-    "replit": NativeRule(
-        "replit.md", FORM_BLOCK, "Replit reads replit.md at the project root, not AGENTS.md"
-    ),
-    # Goose reads AGENTS.md *and* .goosehints by default; the hints file is the one that is
-    # committed and the one CONTEXT_FILE_NAMES cannot silently drop.
-    "goose": NativeRule(
-        ".goosehints", FORM_BLOCK, "Goose reads .goosehints as well, and it is committed"
-    ),
-    # Aider auto-discovers NOTHING. Without a `read:` entry it never sees the rules at all,
-    # which makes this the most load-bearing entry in the map.
-    "aider": NativeRule(
-        ".aider.conf.yml",
-        FORM_AIDER,
-        "Aider loads only what `read:` names — it discovers no instruction file at all",
-    ),
+    h.id: NativeRule(
+        h.instructions.native_path, h.instructions.native_form, h.instructions.native_why
+    )
+    for h in sorted(
+        (h for h in HR.load() if h.instructions is not None and h.instructions.native_path),
+        key=lambda h: h.instructions.native_rank,  # type: ignore[union-attr]
+    )
 }
 
 # The per-project text, deliberately SHORT.
@@ -1145,7 +1056,7 @@ def _install_prompt_hooks(repo: Path, agents: list[str]) -> list[str]:
 #: already reaches every client; this is for a harness whose loop primitive (Claude Code's
 #: `/loop`) takes a slash command, so `/implement` can hand the workflow to it unattended.
 AGENT_COMMANDS: dict[str, dict[str, str]] = {
-    "claude": {".claude/commands/implement.md": "commands/claude/implement.md"},
+    h.id: dict(h.commands.files) for h in HR.load() if h.commands is not None and h.commands.files
 }
 
 #: The line that marked a command file as ddflow's own before the stamped grammar. A file

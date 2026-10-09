@@ -1,0 +1,55 @@
+id = "copilot"
+rank = 3
+family = "copilot"
+delta = "github-copilot.md"
+
+[mcp]
+path = ".github/mcp.json"
+shape = "copilot"
+note = "Copilot's own surface, separate from VS Code's. The CLI also reads .github/mcp.json, the one meant to be committed and shared; entries carry type local and a tools allowlist. Adopt `vscode` as well to cover VS Code."
+
+[instructions]
+reads = [".github/copilot-instructions.md", ".github/instructions/**/*.instructions.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "copilot"
+file = ".github/hooks/ddflow.json"
+normalizer = "copilot"
+emitter = "copilot"
+block = "json"
+session_id = "sessionId"
+inject = ["session_start"]
+
+[hooks.events]
+session_start = "sessionStart"
+prompt = "userPromptSubmitted"
+pre_tool = "preToolUse"
+post_tool = "postToolUse"
+pre_compact = "preCompact"
+stop = "agentStop"
+session_end = "sessionEnd"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin.json"
+
+[commands]
+dir = ".claude/commands"
+format = "markdown"
+
+[skills]
+dir = ".github/skills"
+
+[subagents]
+dir = ".github/agents"
+
+[worktrees]
+dir = "<repo>.worktrees"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.github.com/en/copilot/reference/hooks-reference"]
+record = "R-hx-copilot"
+unverified = ["session id env var", "MCP prompts as commands"]

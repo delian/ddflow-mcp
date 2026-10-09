@@ -1,0 +1,51 @@
+id = "codex"
+rank = 2
+family = "codex"
+delta = "codex-cli.md"
+
+[mcp]
+path = ".codex/config.toml"
+shape = "toml.mcp_servers"
+
+[instructions]
+reads = ["AGENTS.md", "AGENTS.override.md"]
+agents_md = "yes"
+claude_md = "config"
+
+[hooks]
+style = "claude"
+file = ".codex/hooks.json"
+normalizer = "codex"
+emitter = "codex"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+pre_compact = "PreCompact"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin.json"
+
+[commands]
+dir = "~/.codex/prompts"
+format = "markdown"
+
+[skills]
+dir = ".agents/skills"
+
+[subagents]
+dir = ".codex/agents"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://developers.openai.com/codex/hooks", "https://developers.openai.com/codex/mcp"]
+record = "R-hx-codex"
+unverified = ["session id env var", "CLI worktree"]

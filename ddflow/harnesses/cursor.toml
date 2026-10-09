@@ -1,0 +1,58 @@
+id = "cursor"
+rank = 6
+family = "cursor"
+delta = "cursor.md"
+
+[mcp]
+path = ".cursor/mcp.json"
+shape = "mcpServers"
+
+[instructions]
+reads = [".cursor/rules/*.mdc", "AGENTS.md"]
+agents_md = "yes"
+claude_md = "nv"
+native_rank = 0
+native_path = ".cursor/rules/ddflow.mdc"
+native_form = "whole"
+native_why = "Cursor ranks project rules ABOVE AGENTS.md, so AGENTS.md alone is outranked"
+
+[hooks]
+style = "cursor"
+file = ".cursor/hooks.json"
+normalizer = "cursor"
+emitter = "cursor"
+block = "exit2"
+session_id = "conversation_id"
+inject = ["session_start"]
+
+[hooks.events]
+session_start = "sessionStart"
+prompt = "beforeSubmitPrompt"
+pre_tool = "preToolUse"
+post_tool = "postToolUse"
+pre_compact = "preCompact"
+stop = "stop"
+session_end = "sessionEnd"
+
+[plugin]
+mechanism = "plugin"
+manifest = ".cursor-plugin/plugin.json"
+
+[commands]
+dir = ".cursor/commands"
+format = "markdown"
+
+[skills]
+dir = ".cursor/skills"
+
+[subagents]
+dir = ".cursor/agents"
+
+[worktrees]
+dir = "~/.cursor/worktrees"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://cursor.com/docs/hooks"]
+record = "R-hx-cursor"
+unverified = ["CLI hook coverage", "MCP instructions"]

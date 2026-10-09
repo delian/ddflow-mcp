@@ -1,0 +1,14 @@
+id = "qodo"
+rank = 13
+family = "qodo"
+delta = "qodo.md"
+
+[mcp]
+path = "mcp.json"
+shape = "mcpServers"
+note = "Qodo Command reads an mcp.json at the project root. The Qodo Gen IDE plugin keeps its own per-user config."
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.qodo.ai/agentic-toolbox/cli"]
+unverified = ["MCP shape", "hooks", "instructions"]

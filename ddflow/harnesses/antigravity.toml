@@ -1,0 +1,45 @@
+id = "antigravity"
+rank = 11
+family = "antigravity"
+delta = "antigravity.md"
+
+[mcp]
+path = ".agents/mcp_config.json"
+shape = "mcpServers"
+note = "Workspace MCP is .agents/mcp_config.json; rules may be AGENTS.md, GEMINI.md or .agents/rules/."
+
+[instructions]
+reads = ["AGENTS.md", "GEMINI.md", ".agents/rules/*.md"]
+agents_md = "yes"
+claude_md = "no"
+
+[hooks]
+style = "antigravity"
+file = ".agents/hooks.json"
+normalizer = "antigravity"
+emitter = "antigravity"
+block = "json"
+session_id = "conversationId"
+inject = ["prompt"]
+
+[hooks.events]
+prompt = "PreInvocation"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+stop = "Stop"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin.json"
+
+[skills]
+dir = ".agents/skills"
+
+[subagents]
+dir = ".agents/agents"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://antigravity.google/docs/hooks"]
+record = "R-hx-antigravity"
+unverified = ["MCP instructions", "worktree dir", "exit code 2"]

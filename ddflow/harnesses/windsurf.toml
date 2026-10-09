@@ -1,0 +1,47 @@
+id = "windsurf"
+rank = 17
+family = "devin"
+delta = "windsurf.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "Windsurf/Cascade is now Devin Desktop; its docs state a global MCP config only."
+
+[instructions]
+reads = [".devin/rules/*.md", ".windsurf/rules/*.md", "AGENTS.md"]
+agents_md = "yes"
+claude_md = "no"
+
+[hooks]
+style = "cascade"
+file = ".devin/hooks.json"
+normalizer = "cascade"
+emitter = "cascade"
+block = "exit2"
+session_id = "trajectory_id"
+inject = []
+
+[hooks.events]
+prompt = "pre_user_prompt"
+pre_tool = "pre_run_command"
+stop = "post_cascade_response"
+
+[plugin]
+none = true
+
+[commands]
+dir = ".devin/workflows"
+format = "markdown"
+
+[skills]
+dir = ".devin/skills"
+
+[worktrees]
+dir = "~/.windsurf/worktrees"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.devin.ai/desktop/cascade/hooks"]
+record = "R-hx-windsurf"
+unverified = ["project MCP file"]

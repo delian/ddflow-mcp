@@ -1,0 +1,61 @@
+id = "qwen"
+rank = 10
+family = "gemini-cli"
+delta = "qwen-code.md"
+
+[mcp]
+path = ".qwen/settings.json"
+shape = "mcpServers"
+note = "A Gemini CLI fork: same settings shape, its own directory. Default context file is QWEN.md; it reads AGENTS.md when present."
+
+[instructions]
+reads = ["QWEN.md", "AGENTS.md", ".qwen/rules/*.md"]
+agents_md = "yes"
+claude_md = "nv"
+native_rank = 1
+native_path = "QWEN.md"
+native_form = "block"
+native_why = "QWEN.md is Qwen Code's DEFAULT context file, not AGENTS.md"
+
+[hooks]
+style = "claude"
+file = ".qwen/settings.json"
+normalizer = "claude"
+emitter = "claude"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+pre_compact = "PreCompact"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[plugin]
+mechanism = "extension"
+manifest = "qwen-extension.json"
+
+[commands]
+dir = ".qwen/commands"
+format = "markdown"
+
+[skills]
+dir = ".qwen/skills"
+
+[subagents]
+dir = ".qwen/agents"
+
+[worktrees]
+dir = ".qwen/worktrees"
+
+[env]
+session_id = ["QWEN_CODE_SESSION_ID"]
+
+[verified]
+date = "2026-10-09"
+sources = ["https://github.com/QwenLM/qwen-code/tree/main/docs/users"]
+record = "R-hx-qwen"
