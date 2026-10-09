@@ -270,14 +270,15 @@ def _validate(h: Harness, where: str) -> None:
         _validate_instructions(h.instructions, where)
     if h.hooks is not None:
         _validate_hooks(h.hooks, where)
-    for name in ("plugin", "commands", "skills", "subagents", "worktrees"):
+    for name in ("plugin", "commands", "skills", "subagents", "worktrees", "env"):
         sec = getattr(h, name)
         if sec is None:
             continue
         has_values = any(v for k, v in vars(sec).items() if k != "none")
-        if sec.none and has_values:
+        none = getattr(sec, "none", False)  # [env] has no verified-absence form
+        if none and has_values:
             raise DescriptorError(f"{where}: [{name}] says none = true and also gives values")
-        if not sec.none and not has_values:
+        if not none and not has_values:
             # An empty table is neither a fact nor a verified absence; leave the section out
             # (NOT VERIFIED) or say `none = true`.
             raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
