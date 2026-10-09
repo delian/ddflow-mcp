@@ -15,6 +15,7 @@ from ...core.schedule import needs_tree
 from ...infra import worktree as W
 from ...services import leases as L
 from .._base import _load
+from .planning import alternatives_offer
 from .reservations import _reserved_for, _reserved_msg
 
 
@@ -230,6 +231,7 @@ def claim(
             note=note,
             force=force,
             resources=csv_list(resources) or None,
+            offer=alternatives_offer(repo, log, cfg),
         )
     except L.LeaseError as exc:
         reason = str(exc)
