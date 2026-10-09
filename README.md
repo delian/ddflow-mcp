@@ -2150,6 +2150,30 @@ answer says "semantic ranking unavailable (...); BM25 order kept". `ddflow docto
 carries one `embedder:` note saying what is configured, or that nothing is (it does not run
 the companion).
 
+### One path for guidance: rules and decisions reach you ranked, budgeted and fenced
+
+The project's rules (the definitions in the log) and decisions reach an agent through four
+doors -- `ddflow brief`, `ddflow claim`, `ddflow gate status` and the review gates -- and all
+four ask `services/guidance/inject.py`. It selects the live guidance that governs the item
+(its files, its tags, the gate), ranks it, packs it, and fences every body as data with who
+recorded it:
+
+- **Rank:** pinned first -- guidance that applies to all work (no globs, categories or gates)
+  -- then by how hard it binds (`block`, `warn`, `advisory`), how specific its scope is (the
+  gate, then the files, then a category, then everything) and its priority; ties by id.
+- **Pinned is never trimmed.** `claim`, `gate status` and the reviewers' block spend a budget
+  (a quarter of `[session].brief_max_tokens`) on the *unpinned* guidance only, in rank order,
+  folding repeated text, quoting a long body to 600 characters and ending with one line that
+  names what was cut. The brief keeps its own hard cap: pinned guidance leads its section, so
+  a section's cut from the bottom reaches it last.
+- **`ddflow claim`** prints the block under the worktree lines (and `ddflow_claim` carries it
+  as `guidance`) only when something governs the item; **`ddflow gate status`** adds the
+  guidance for the current gate; **the brief** lists decisions in this order and adds a
+  `## Project rules` entry for each rule that governs the item's files.
+- **Review gates** send the block with the diff, headed "Project guidance to check this change
+  against". The reviewer is told to check the change against each item and cite its id
+  (`[D-example]`) in a finding it violates.
+
 ### Who wrote it: provenance and the data fence
 
 Everything `brief`, `recall` and the import preview show you from the project's memory is
