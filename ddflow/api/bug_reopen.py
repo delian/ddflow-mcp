@@ -16,6 +16,7 @@ from ..core import outcome as O
 from ..core.model import ABANDONED, DONE, fold
 from ..services.completion import fixes_of
 from ._base import _load
+from .knowledge import _file_fix_task
 
 
 def _fix_task_after(st, cfg, bug) -> str:
@@ -98,7 +99,6 @@ def refile_reported(log, cfg, item: str, bugs: list[str]) -> dict[str, str]:
     filed twice. Returns {bug: fix task}; nothing under `[bugs] file_task = false`."""
     if not bugs or not cfg.bugs.file_task:
         return {}
-    from .knowledge import _file_fix_task
 
     out: dict[str, str] = {}
     with log.transaction():

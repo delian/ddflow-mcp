@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..services import completion as CM
 from ._base import _load
 
 
@@ -16,7 +17,6 @@ def completion_verdict(repo: Path, item: str, *, model: str = "") -> O.Outcome:
     and an agent that can only ask by *attempting* learns the answer by causing the
     thing it was checking for.
     """
-    from ..services import completion as CM
 
     _log, cfg, st = _load(repo)
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
