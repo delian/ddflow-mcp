@@ -48,7 +48,6 @@ import shlex  # noqa: F401
 import shutil  # noqa: F401
 import socket  # noqa: F401
 import sys  # noqa: F401
-import tempfile  # noqa: F401
 import time  # noqa: F401
 import tomllib  # noqa: F401
 from collections.abc import Callable, Iterable, Mapping  # noqa: F401
