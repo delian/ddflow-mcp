@@ -11,6 +11,7 @@ from ...core import globspec as GS
 from ...core import ids as IDS
 from ...core import outcome as O
 from ...core.model import fold
+from ...services.items import TaskDraft, add_task
 from .._base import _load
 
 BUG_SCOPES = ("project", "ddflow")
@@ -276,19 +277,24 @@ def _file_fix_task(
         f"`ddflow complete {tid} --regression-test <test>` closes the bug with the task "
         f"(or `ddflow bug fixed {bug_id} --regression-test <test>` first)."
     )
-    data = {
-        "parent": parent,
-        "title": full_title,
-        "needs": [],
-        "globs": GS.parse(globs) if globs else list(src.globs if src else []),
-        "body": body,
-        "tags": [tag],
-        "priority": src.priority if src else DEFAULT_PRIORITY,
-        "line": src.line if src else "",
-        "fixes": [bug_id],
-    }
-    log.append("task.added", tid, data)
-    st.items[tid] = Item(id=tid, kind="task", title=full_title, parent=parent, fixes=[bug_id])
+    draft = TaskDraft(
+        tid,
+        parent=parent,
+        title=full_title,
+        needs=[],
+        globs=GS.parse(globs) if globs else list(src.globs if src else []),
+        body=body,
+        tags=[tag],
+        priority=src.priority if src else DEFAULT_PRIORITY,
+        line=src.line if src else "",
+        extra={"fixes": [bug_id]},
+    )
+    # readd: a REMOVED `fix-<bug>` comes back with the new definition, as it always did
+    added = add_task(
+        log, st, cfg, draft, dedupe="the fix task of a bug that was itself just checked", readd=True
+    )
+    if not added.ok:  # the globs were checked by the caller; an id has no colon
+        raise ValueError(added.problem)
     return {"fix_task": tid, "filed": True, "phase_made": phase_made}
 
 
