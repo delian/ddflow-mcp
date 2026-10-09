@@ -33,8 +33,8 @@ from ..infra import tomlcfg as TC
 # `reviewer_trust.agent_marker` and friends keep working.
 from . import approval as AP
 from . import identity as ID
-from .approval import HARNESS_MARKERS, agent_marker  # noqa: F401
 from .approval import os_user as _user
+from .identity import HARNESS_MARKERS, agent_marker  # noqa: F401
 
 #: The fields that decide WHO is reviewing and what it is called. A change to any of
 #: them is a different reviewer; a change to a tuning knob (max_tokens, hedge, gates)
