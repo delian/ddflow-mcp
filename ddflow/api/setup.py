@@ -15,6 +15,7 @@ load-bearing as anything in the pipeline:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,7 @@ from ..config import csv_list
 from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..services import backups as BK
+from ..services import hookio as HI
 from ..services import identity as ID
 from ..services import upgrade_apply as UA
 from ..services import upgrade_plan as UP
@@ -822,8 +824,6 @@ class _HookResult:
 def _synth_stdin(p) -> str:
     """The payload as the existing handlers read it: the dialect-independent facts
     (`session_id`, `source`) laid over the agent's own JSON."""
-    import json
-
     raw = dict(p.raw)
     if p.session_id:
         raw["session_id"] = p.session_id
@@ -888,8 +888,6 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
     """`ddflow hooks run <event> --harness <id>`: normalize the agent's JSON, run the event's
     handler, shape the reply. ALWAYS exit 0 and never raise: a failing hook blocks, in some
     agents, the very turn it observes. Every problem becomes a `note` for stderr."""
-    from ..services import hookio as HI
-
     handler = _HOOK_HANDLERS.get(event)
     if handler is None:
         return O.ok(
