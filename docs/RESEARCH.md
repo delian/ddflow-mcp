@@ -1644,17 +1644,21 @@ raw markdown or source, not from a summary.
    Qwen, Devin, Kimi, OpenHands, Tabnine, Cursor (`additional_context`), Copilot CLI
    (sessionStart JSON), Copilot VS Code (`additionalContext` on SessionStart) and the
    Copilot cloud agent (sessionStart). It does not exist for Grok Build (SessionStart stdout is
-   discarded), Windsurf Cascade, Crush, Goose, Roo, Aider; opencode, Kilo and Amp need a
+   discarded), Windsurf Cascade, Crush, Antigravity (no SessionStart event), grok-cli
+   (hook context not wired into the model), Roo, Aider; Goose is documented as
+   unsupported but the banner path is NOT VERIFIED; opencode, Kilo and Amp need a
    plugin. The ladder must therefore reach MCP `instructions` (Claude, Codex, Gemini,
    Qwen, Crush, opencode, Kilo) and then instruction text.
 2. **Prompt-time injection.** Works on Claude, Codex, Gemini and Tabnine (BeforeAgent),
    Qwen, Devin, Kimi, OpenHands, Cline and Amp's plugin. Copilot CLI drops the output; Cursor's
-   beforeSubmitPrompt and Grok's UserPromptSubmit cannot inject. Prompt CAPTURE (the
+   beforeSubmitPrompt, Grok's UserPromptSubmit, Copilot VS Code's UserPromptSubmit,
+   Windsurf Cascade's pre_user_prompt and Goose's UserPromptSubmit cannot inject. Prompt CAPTURE (the
    hook only reads stdin) is still possible wherever a prompt event exists.
 3. **Identity.** Most agents give a session id on hook stdin; env vars exist only for
    Claude (`CLAUDE_CODE_SESSION_ID`), Gemini (hooks), Qwen (`QWEN_CODE_SESSION_ID`),
    Goose (`AGENT_SESSION_ID`), Crush and Grok (hooks only). Copilot CLI, Codex, Cursor,
-   opencode and Kilo expose no env var, so identity there rests on `ddflow_identify`.
+   opencode and Kilo have NO DOCUMENTED env var (Copilot and Codex are NV, not proven
+   absent), so identity there rests on stdin ids and `ddflow_identify`.
 4. **MCP shape.** Four shapes cover most file-based agents: `mcpServers` (the majority),
    `servers` (VS Code), `mcp` with array `command` and `environment` (opencode, Kilo),
    TOML `[mcp_servers.N]` (Codex, Grok Build); plus Goose YAML `extensions`, Amp
