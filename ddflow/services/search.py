@@ -71,7 +71,10 @@ SOURCES = (
 )
 _RECORD_SOURCES = frozenset({"task", "phase", "bug", "research", "decision", "lesson"})
 _DEF_KINDS = frozenset({"rule", "skill", "agent", "schedule"})  # the definitions with a source
-_OWNER = {  # the source that holds each of those kinds, and jobs
+_OWNER = {  # the source that holds each kind that also leaves events in the log
+    **dict.fromkeys(_RECORD_SOURCES, "records"),
+    "session": "sessions",
+    "prompt": "prompts",
     "rule": "rules",
     "skill": "skills",
     "agent": "agents",
@@ -163,14 +166,18 @@ def _log_docs(events: list, kinds: set[str], names: frozenset[str] = frozenset()
     out = []
     for ev in events:
         head = ev.kind.split(".")[0]
-        if head == "session" and (not names or names & {"sessions", "prompts"}):
-            continue  # the sessions and prompts sources hold what these events wrote
-        if head in kinds & _RECORD_SOURCES and (not names or "records" in names):
-            continue  # a record source already holds what this event wrote
-        if head in ("job", "schedule") and held(head):
-            continue  # the jobs and schedules sources do too
-        if head == "def" and ev.subject.partition(":")[0] in _DEF_KINDS:
-            if held(ev.subject.partition(":")[0]):
+        if head == "session":
+            if held("prompt" if ev.kind == "session.prompt" else "session"):
+                continue  # the sessions and prompts sources hold what these events wrote
+        elif head in _RECORD_SOURCES:
+            if held(head):
+                continue  # a record source already holds what this event wrote
+        elif head in ("job", "schedule"):
+            if held(head):
+                continue  # the jobs and schedules sources do too
+        elif head == "def":
+            kind = ev.subject.partition(":")[0]
+            if kind in _DEF_KINDS and held(kind):
                 continue  # and the rules, skills, agents and schedules ones, which are definitions
         payload = json.dumps(ev.data or {}, ensure_ascii=False, sort_keys=True)
         out.append(

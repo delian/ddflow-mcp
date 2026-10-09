@@ -161,3 +161,14 @@ def test_the_raw_log_is_whole_when_it_is_the_only_source(full):
     assert {r["kind"] for r in body["rows"]} == {"log"}  # the task's creation event is here
     _, body, _ = _search(full, "zirconium")
     assert {r["kind"] for r in body["rows"]} == {"task"}  # and not repeated beside the task
+
+
+def test_the_log_is_whole_whichever_way_it_is_reached(full):
+    # no source or kind selects the sessions or prompts: their events are the log's to give
+    for argv in (("--kind", "log"), ("--source", "log"), ("--source", "prompts,log")):
+        _, body, _ = _search(full, "cardamom", *argv)
+        assert {r["kind"] for r in body["rows"]} == {"log"}, argv
+    _, body, _ = _search(full, "cardamom")
+    assert {r["kind"] for r in body["rows"]} == {"session"}  # held by its source, not repeated
+    _, body, _ = _search(full, "paprika", "--source", "sessions,log")
+    assert {r["kind"] for r in body["rows"]} == {"log"}  # prompts are not that source's
