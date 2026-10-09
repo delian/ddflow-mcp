@@ -1,9 +1,10 @@
-"""The MCP tool registry: every tool `surfaces/mcp.py` serves, split by domain.
+"""The MCP tool registry: every tool `surfaces/mcp.py` serves.
 
-`TOOLS` is assembled here from one module per domain, in the order the single table used
-to hold them; `surfaces/mcp.py` (the JSON-RPC engine) imports and re-exports it, so
-`from ddflow.surfaces.mcp import TOOLS` keeps working. A new tool goes into the module
-for its domain, and into a tier in `tools/tiers.py`.
+`TOOLS` is generated here from the declarations (`surfaces/declared/`) and the few
+hand-written entries of this package, in the order of `tools/order.py`; `surfaces/mcp.py`
+(the JSON-RPC engine) imports and re-exports it, so `from ddflow.surfaces.mcp import TOOLS`
+keeps working. A new tool is declared, named in `tools/order.py` and put in a tier in
+`tools/tiers.py`.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     name: DECLARED[name].tool_entry() if name in DECLARED else HAND_WRITTEN[name]
     for name in TOOL_ORDER
 }
-if len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
+if len(TOOL_ORDER) != len(set(TOOL_ORDER)) or len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
     raise RuntimeError("tools/order.py lists a tool twice or leaves one out")
 
 #: The add tools: each takes the answer to the duplicate check (`api/_dedupe.py`).
