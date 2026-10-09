@@ -220,14 +220,13 @@ def test_a_gate_timestamp_loses_only_a_utc_fraction():
     assert at("2026-10-01T21:29:42.5+05:00") == "2026-10-01T21:29:42.5+05:00"
 
 
-def test_recall_budget_counts_the_returned_json_and_keeps_the_first_hit():
+def test_recall_bound_only_drops_the_raw_records():
+    """The budget moved into the API's context pack (tests/test_context_pack.py); the bound
+    keeps every hit it is given and says it left the raw records out."""
     hit = {"id": 1, "kind": "K", "headline": "h", "body": "b" * 300, "raw": {"x": "y" * 900}}
     body = {"a": [dict(hit), dict(hit)], "b": [dict(hit)]}
     out, note = B.bound_recall(body, {"max_chars": 1})
-    assert [len(v) for v in out.values()] == [1, 0], "the first hit survives any budget"
-    assert "truncated: showing 1 of 3" in note
-    out, note = B.bound_recall(body, {"max_chars": 100_000})
-    assert sum(len(v) for v in out.values()) == 3 and "truncated" not in note
+    assert [len(v) for v in out.values()] == [2, 1] and "raw record" in note
     assert all("raw" not in h for v in out.values() for h in v)
 
 
