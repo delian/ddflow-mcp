@@ -20,6 +20,7 @@ from ddflow.surfaces.declared import (
     hooks,
     knowledge,
     lifecycle,
+    memory,
     queue,
     records,
     reporting,
@@ -30,7 +31,9 @@ from ddflow.surfaces.declared import (
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow)
+FAMILIES = (
+    knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow, memory,
+)  # fmt: skip
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -47,6 +50,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.reporting",
         "ddflow.surfaces.declared.hooks",
         "ddflow.surfaces.declared.flow",
+        "ddflow.surfaces.declared.memory",
         "ddflow.surfaces.tools.flow",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
@@ -77,6 +81,7 @@ def test_every_add_command_carries_the_duplicate_check_answer():
         "ddflow_research_add",
         "ddflow_phase_add",
         "ddflow_task_add",
+        "ddflow_memory_add",
     }
     for command in adds:
         at = command.params.index(ANSWER_PARAMS[0])
@@ -93,6 +98,7 @@ def test_the_answer_flags_exclude_each_other_on_every_add_command():
         ["research", "--question", "q", "--verdict", "THEORETICAL", "--new", "--check"],
         ["phase", "add", "P1", "--new", "--extends", "P0"],
         ["task", "add", "T1", "--related", "T0", "--duplicate-of", "T2"],
+        ["memory", "add", "fact", "--new", "--extends", "M1"],
     ):
         with pytest.raises(SystemExit) as stop:
             parser.parse_args(argv)

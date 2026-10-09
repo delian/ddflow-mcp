@@ -17,11 +17,11 @@ from __future__ import annotations
 from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
-from .declared.answer import ANSWER_FLAG_EXEMPT
 from .declared.flow import COMMANDS as _FLOW
 from .declared.hooks import COMMANDS as _HOOKS
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
+from .declared.memory import COMMANDS as _MEMORY
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
 from .declared.reporting import COMMANDS as _REPORTING
@@ -79,11 +79,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_memory_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
-    ),
-    Command(
-        path=(),
         tool="ddflow_bisect",
         flag_exempt={
             "--glob": "where candidates come from stays the default tests/**/test_*.py over MCP; an agent names `candidates` when the suite lives elsewhere (tools/list byte budget)",
@@ -111,6 +106,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_MEMORY,
     *_FLOW,
     *_HOOKS,
     *_lists.COMMANDS,
