@@ -36,6 +36,7 @@ from .gates import (
     pipelines,
     required_gates,
 )
+from .gates.kinds import kind_pipelines
 
 #: A command gate with no registered mutation has never been shown able to go red.
 #: Advisory, not a defect: `ddflow gate verify` is how you find out, and a project may
@@ -84,6 +85,8 @@ class WorkflowView:
     task_pipeline: list[str] = field(default_factory=list)
     phase_pipeline: list[str] = field(default_factory=list)
     promotion_pipeline: list[str] = field(default_factory=list)
+    #: item kind -> the pipeline it runs (`[gates].kind_pipelines` over the built-ins).
+    kind_pipelines: dict[str, list[str]] = field(default_factory=dict)
     gates: list[GateView] = field(default_factory=list)
     #: knob -> (value, where it came from). Straight from `Config.explain`, so a reader
     #: can tell a deliberate choice from a default nobody has touched.
@@ -145,7 +148,9 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
     out: list[Finding] = []
     # Only the pipelines that run here: a project with no environments never runs the
     # promotion pipeline, and a problem in it there would be noise.
-    for kind, pipeline in pipelines(cfg, running=True).items():
+    for name, pipeline in pipelines(cfg, running=True).items():
+        kind = name.removeprefix("kind:")
+        where = f"gates.kind_pipelines.{kind}" if name != kind else f"{name}_pipeline"
         if not pipeline:
             # The editor already refuses `workflow pipeline task ""` as "a project with
             # no checks at all". Saying nothing about the same state when READING it is
@@ -154,7 +159,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
             out.append(
                 Finding(
                     PROBLEM,
-                    f"{kind}_pipeline",
+                    where,
                     f"no gates at all, so nothing checks a {kind} before it completes. "
                     f"The editor refuses to WRITE this; reading it has to say the same.",
                 )
@@ -163,7 +168,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
             out.append(
                 Finding(
                     PROBLEM,
-                    f"{kind}_pipeline",
+                    where,
                     f"{gid!r} appears twice. A gate carries ONE outcome, so the second "
                     f"position can never be satisfied separately -- and the report "
                     f"de-duplicates, so nothing showed you it was there.",
@@ -176,7 +181,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
             out.append(
                 Finding(
                     PROBLEM,
-                    f"{kind}_pipeline",
+                    where,
                     f"{gid!r} has no gate definition."
                     + (f" Did you mean {near[0]!r}?" if near else "")
                     + f" Every {kind} that enters this pipeline will block on it "
@@ -207,10 +212,13 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
     for kind, pipeline in (
         ("task", cfg.gates.task_pipeline),
         ("phase", cfg.gates.phase_pipeline),
+        *((k, ids) for k, ids in cfg.gates.kind_pipelines.items()),
     ):
+        # `applies_to` names the two scopes; every kind but a phase is task-like.
+        scope = "phase" if kind == "phase" else "task"
         for gid in pipeline:
             g = gates.get(gid)
-            if g is None or g.applies_to in ("", "both", kind):
+            if g is None or g.applies_to in ("", "both", scope):
                 continue
             out.append(
                 Finding(
@@ -421,7 +429,12 @@ def describe(
 ) -> WorkflowView:
     """The rules in force here, joined into one answer."""
     task, phase, promotion = pipeline_lists(cfg)
-    v = WorkflowView(task_pipeline=task, phase_pipeline=phase, promotion_pipeline=promotion)
+    v = WorkflowView(
+        task_pipeline=task,
+        phase_pipeline=phase,
+        promotion_pipeline=promotion,
+        kind_pipelines=kind_pipelines(cfg),
+    )
     sources = {k: s for k, _val, s, _doc in cfg.explain()}
     values = {k: val for k, val, _s, _doc in cfg.explain()}
     v.rules = {k: (values.get(k), sources.get(k, "default")) for k in RULE_KEYS if k in values}

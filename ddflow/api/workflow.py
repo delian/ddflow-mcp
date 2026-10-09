@@ -52,6 +52,7 @@ def show(repo: Path) -> O.Outcome:
         "task_pipeline": v.task_pipeline,
         "phase_pipeline": v.phase_pipeline,
         "promotion_pipeline": v.promotion_pipeline,
+        "kind_pipelines": v.kind_pipelines,
         "gates": [_plain(g) for g in v.gates],
         "rules": {k: {"value": val, "source": src} for k, (val, src) in v.rules.items()},
         "reviewers": v.reviewers,
@@ -250,12 +251,18 @@ def drop(repo: Path, item: str, *, dry_run: bool = False, agent: str = "") -> O.
     removed: list[str] = []
     # Every pipeline, promotion included (B7f0b7c8839): walking task and phase only left
     # a promotion-only gate in place and called it "in neither pipeline".
+    kinds = {k: list(v) for k, v in cfg.gates.kind_pipelines.items()}
     for which, ids in G.pipelines(cfg).items():
         current = list(ids)
         if item in current:
             current.remove(item)
-            pairs.append((f"gates.{which}_pipeline", current))
+            if which.startswith("kind:"):
+                kinds[which.removeprefix("kind:")] = current
+            else:
+                pairs.append((f"gates.{which}_pipeline", current))
             removed.append(which)
+    if kinds != cfg.gates.kind_pipelines:
+        pairs.append(("gates.kind_pipelines", kinds))
     if item in cfg.gates.required:
         pairs.append(("gates.required", [g for g in cfg.gates.required if g != item]))
         removed.append("required")
