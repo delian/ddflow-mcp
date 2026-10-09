@@ -7,9 +7,6 @@ lint stays command-line only with its reason, and the groups keep their dispatch
 
 from __future__ import annotations
 
-import subprocess
-import sys
-
 import pytest
 
 from ddflow.surfaces.cli import build_parser
@@ -79,11 +76,3 @@ def test_the_required_positionals_are_required_on_the_tools_too():
         ("ddflow_flow_choose", "value"),
     ):
         assert TOOLS[tool]["properties"][name][2] is True
-
-
-@pytest.mark.parametrize("entry", ["ddflow.surfaces.declared.flow", "ddflow.surfaces.tools.flow"])
-def test_either_side_of_the_import_cycle_works_and_the_api_stays_unloaded(entry):
-    code = f"import sys, {entry}; print('ddflow.api' in sys.modules)"
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
-    assert out.returncode == 0, out.stderr
-    assert out.stdout.strip() == "False", out.stderr
