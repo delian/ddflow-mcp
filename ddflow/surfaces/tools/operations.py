@@ -6,61 +6,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import reporting as R
 from ..declared import setup as ST
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
-    "ddflow_replay": {
-        "description": (
-            "Reconstruct the project's whole decision history from the log: every "
-            "operator prompt in order, every architectural decision, every research "
-            "verdict, every lesson, and the shape of the queue. This is what rebuilds "
-            "the project if the code is lost — it reproduces the DECISIONS, not the "
-            "bytes."
-        ),
-        "properties": {
-            "out": ("string", "Write a recovery kit to this directory.", False),
-            "verify": (
-                "boolean",
-                "Re-resolve every recorded commit sha against this repository and report the ones that are gone: a reconstruction citing unresolvable shas is a narrative, not a record.",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent: _api().replay(
-            repo, out_dir=a.get("out", "") or "", verify=bool(a.get("verify")), agent=agent
-        ),
-        "payload": "text",
-        "text": True,
-        "kind": "replay",
-    },
-    "ddflow_render": {
-        "description": (
-            "Regenerate the human-readable markdown views (queue, lessons, the "
-            "one-paragraph lessons summary, research) under docs/ddflow/."
-        ),
-        "properties": {
-            "out": ("string", "Directory for the generated views (default: docs/ddflow).", False),
-            "show": (
-                "string",
-                "Print ONE view instead of writing files: lessons, lessons-summary, "
-                "research, or board. "
-                "This is what the ddflow:// resources are served from.",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent: _api().render(
-            repo,
-            show=a.get("show", "") or "",
-            out_dir=a.get("out") or _api().DEFAULT_RENDER_DIR,
-            agent=agent,
-        ),
-        # Two shapes, both pre-existing: `--show` returned the DOCUMENT and without it
-        # the answer was the list of files written. A predicate, because which one it
-        # is cannot be known until the call.
-        "payload": lambda a: "text" if a.get("show") else ("files",),
-        "text": lambda a: bool(a.get("show")),
-        "kind": "render",
-    },
+    "ddflow_replay": R.BY_TOOL["ddflow_replay"].tool_entry(),
+    "ddflow_render": R.BY_TOOL["ddflow_render"].tool_entry(),
     "ddflow_list": {
         "description": (
             "Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. "
@@ -100,48 +52,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
-    "ddflow_rebuild": {
-        "description": (
-            "Re-derive the search index from the event log. The index is a "
-            "disposable cache; this is never a data-loss operation."
-        ),
-        "properties": {},
-        "api": lambda repo, a, agent: _api().rebuild(repo, agent=agent),
-        "payload": ("events", "items"),
-    },
-    "ddflow_history": {
-        "description": (
-            "ONE timeline of everything that happened: claims, releases, gates, bugs, "
-            "decisions, lessons, completions. Other views say what is true now; this says "
-            "how it got that way.\n\n"
-            "Filter with `item` (one task's life), `kind` (a family: 'gate', "
-            "'lease.acquired', 'decision,bug'), `since`, `by_agent`. Exit 2 means nothing "
-            "matched: an answer, not a failure."
-        ),
-        "properties": {
-            "item": ("string", "Restrict to one item's timeline.", False),
-            "kind": (
-                "string",
-                "Comma-separated event kinds or families: 'gate', 'lease.acquired', "
-                "'decision,bug'.",
-                False,
-            ),
-            "since": ("string", "ISO timestamp lower bound.", False),
-            "limit": ("integer", "Most recent N entries (default 40).", False),
-            "tail": ("integer", "Last N entries, oldest first (overrides limit).", False),
-            "by_agent": ("string", "Only this agent's events.", False),
-        },
-        "api": lambda repo, a, agent: _api().history(
-            repo,
-            item=a.get("item", "") or "",
-            kind=a.get("kind", "") or "",
-            since=a.get("since", "") or "",
-            limit=int(a.get("limit") or 40),
-            agent=agent,
-            by_agent=a.get("by_agent", "") or "",
-            tail=int(a.get("tail") or 0),
-        ),
-        "payload": ("total", "shown", "events"),
-    },
+    "ddflow_rebuild": R.BY_TOOL["ddflow_rebuild"].tool_entry(),
+    "ddflow_history": R.BY_TOOL["ddflow_history"].tool_entry(),
     "ddflow_import": ST.BY_TOOL["ddflow_import"].tool_entry(),
 }

@@ -658,7 +658,7 @@ def cmd_history(a, c: Ctx) -> int:
         since=a.since or "",
         limit=a.limit,
         agent=c.requested_agent,
-        by_agent=getattr(a, "log_agent", "") or "",
+        by_agent=getattr(a, "by_agent", "") or "",
         tail=getattr(a, "tail", 0) or 0,
     )
     if c.json:
