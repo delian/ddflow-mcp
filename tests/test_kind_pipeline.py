@@ -515,3 +515,21 @@ def test_review_selects_its_reviewers_through_the_dispatch(repo, monkeypatch):
     out = AR.review(repo, item="T1", gate="critic")
     assert chosen == ["critic"]
     assert "No reviewer is configured" in out.data["text"], out.data
+
+
+def test_review_says_what_the_pool_and_route_stages_decided(repo, monkeypatch):
+    from ddflow.api import review as AR
+    from ddflow.services import review as R
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    monkeypatch.setattr(
+        R.ReviewerDispatch,
+        "select",
+        lambda self, reviewers, gate, gdef=None: R.Selected(
+            [], agent="reviewer-agent", notes=["a: not independent of the author"]
+        ),
+    )
+    said: list[str] = []
+    AR.review(repo, item="T1", gate="critic", on_progress=said.append)
+    assert "→ a: not independent of the author" in said and "→ routed to reviewer-agent" in said

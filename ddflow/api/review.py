@@ -1459,6 +1459,14 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     return outcome
 
 
+def _say_selection(selected, say) -> None:
+    """What the pool and route stages decided, said: a skipped candidate is never silent."""
+    for line in selected.notes:
+        say(f"→ {line}")
+    if selected.agent:
+        say(f"→ routed to {selected.agent}")
+
+
 def _early_refusal(full, force, delta, log, cfg, st, item: str, gate: str, say, defs=None):
     """The first reason to refuse before any work: contradicting flags, then the order. (Not
     `a or b`: a refusal is falsy.)"""
@@ -1583,6 +1591,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     dispatch = R.ReviewerDispatch()
     selected = dispatch.select(R.load_reviewers(repo), gate, gates.get(gate))
     revs = selected.reviewers
+    _say_selection(selected, say)
     if not revs:
         return unavailable(
             f"No reviewer is configured for gate {gate!r}. "
