@@ -15,11 +15,11 @@ import sys
 import pytest
 
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.declared import knowledge, records
+from ddflow.surfaces.declared import knowledge, lifecycle, queue, records
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records)
+FAMILIES = (knowledge, records, queue, lifecycle)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -28,6 +28,8 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
     [
         "ddflow.surfaces.declared.knowledge",
         "ddflow.surfaces.declared.records",
+        "ddflow.surfaces.declared.queue",
+        "ddflow.surfaces.declared.lifecycle",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -48,16 +50,19 @@ def test_a_tool_is_declared_once_and_the_table_serves_the_declaration():
             assert list(TOOLS[command.tool]["properties"]) == list(command.properties())
 
 
-def test_every_add_command_carries_the_duplicate_check_answer_last():
+def test_every_add_command_carries_the_duplicate_check_answer():
     adds = [c for c in DECLARED if c.tool in ADD_TOOLS]
     assert {c.tool for c in adds} == {
         "ddflow_lesson_add",
         "ddflow_decision_add",
         "ddflow_bug_found",
         "ddflow_research_add",
+        "ddflow_phase_add",
+        "ddflow_task_add",
     }
     for command in adds:
-        assert command.params[-len(ANSWER_PARAMS) :] == ANSWER_PARAMS
+        at = command.params.index(ANSWER_PARAMS[0])
+        assert command.params[at : at + len(ANSWER_PARAMS)] == ANSWER_PARAMS
         assert list(command.properties())[-2:] == ["relation", "check_only"]
 
 
@@ -68,6 +73,8 @@ def test_the_answer_flags_exclude_each_other_on_every_add_command():
         ["decision", "add", "--title", "t", "--decision", "d", "--check", "--new"],
         ["bug", "found", "--summary", "s", "--related", "B1", "--duplicate-of", "B2"],
         ["research", "--question", "q", "--verdict", "THEORETICAL", "--new", "--check"],
+        ["phase", "add", "P1", "--new", "--extends", "P0"],
+        ["task", "add", "T1", "--related", "T0", "--duplicate-of", "T2"],
     ):
         with pytest.raises(SystemExit) as stop:
             parser.parse_args(argv)
@@ -123,3 +130,53 @@ def test_the_commands_declared_without_a_tool_keep_their_parity_exemption():
     assert X.ROUTED_PATHS[("search",)] == ("ddflow_list", "search")
     assert "--distinct" in {f for (t, f) in X.FLAG_EXEMPT if t == "ddflow_link"}
     assert "ddflow_lesson_verify" in X.PROSE_REASONS
+
+
+def test_a_task_lists_its_own_arguments_first_on_the_tool_though_its_flags_follow_the_answer():
+    """The order of the flags in `task add --help` and of the tool's properties differ; the
+    goldens pin both, this names the one that is easy to lose."""
+    props = list(TOOLS["ddflow_task_add"]["properties"])
+    assert props[:3] == ["id", "phase", "parent"] and props[-2:] == ["relation", "check_only"]
+
+
+def test_the_gate_flags_that_differ_by_surface():
+    parser = build_parser()
+    ns = parser.parse_args(["gate", "record", "I", "G", "--exit-code", "3"])
+    assert ns.exit_code == 3 and ns.outcome == "passed"  # an int on the command line...
+    assert (
+        TOOLS["ddflow_gate_record"]["properties"]["exit_code"][0] == "string"
+    )  # ...a string on MCP
+    assert TOOLS["ddflow_gate_record"]["properties"]["outcome"][2] is True  # required on MCP only
+    assert parser.parse_args(["gate", "skip", "I", "G"]).reason == ""  # optional here...
+    assert TOOLS["ddflow_gate_skip"]["properties"]["reason"][2] is True  # ...required there
+    assert parser.parse_args(["gate", "status", "I"]).gate == ""  # the dispatcher's default
+    with pytest.raises(SystemExit):
+        parser.parse_args(["gate", "record", "I", "G", "--outcome", "bogus"])
+
+
+def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
+    asking = {c.tool for c in DECLARED if c.wants_called_from}
+    assert asking <= {n for n, spec in TOOLS.items() if spec.get("wants_called_from")}
+    assert asking == {
+        "ddflow_claim",
+        "ddflow_heartbeat",
+        "ddflow_gate_run",
+        "ddflow_gate_record",
+        "ddflow_merge",
+    }
+
+
+def test_the_defaults_the_declarations_read_are_the_ones_the_api_uses():
+    from ddflow.api import items
+    from ddflow.api import lifecycle as api_lifecycle
+    from ddflow.core import defaults
+
+    assert items.DEFAULT_PRIORITY is defaults.DEFAULT_PRIORITY
+    assert api_lifecycle.DEFAULT_NEXT_KIND is defaults.DEFAULT_NEXT_KIND
+    assert api_lifecycle.DEFAULT_WAIT_TIMEOUT_S is defaults.DEFAULT_WAIT_TIMEOUT_S
+    ns = build_parser().parse_args(["task", "add", "T"])
+    assert ns.priority == defaults.DEFAULT_PRIORITY
+    assert build_parser().parse_args(["next"]).kind == defaults.DEFAULT_NEXT_KIND
+    wait = next(c for c in lifecycle.COMMANDS if c.path == ("wait",))
+    timeout = next(p for p in wait.params if p.name == "timeout")
+    assert str(defaults.DEFAULT_WAIT_TIMEOUT_S) in timeout.cli_help

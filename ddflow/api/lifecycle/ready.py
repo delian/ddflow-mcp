@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...core import defaults as _DEFAULTS
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.model import REVIEW
@@ -23,7 +24,7 @@ from .reservations import WAITABLE
 #: `ddflow_next` returned an empty queue on every call. The CLI kept working because
 #: argparse supplied "task" and the MCP path no longer went through argparse. A default
 #: that lives only in the parser is a default the typed layer silently drops.
-DEFAULT_NEXT_KIND = "task"
+DEFAULT_NEXT_KIND = _DEFAULTS.DEFAULT_NEXT_KIND
 
 #: `brief` scans for recoverable work unless told not to. On by default because the one
 #: moment an agent most needs to know a previous agent crashed mid-task is the moment it
