@@ -158,3 +158,35 @@ def test_every_line_splits_and_stems_into_the_terms_fts5_indexes() -> None:
         if (mine := set(store._fallback_words(line))) != indexed.get(i, set())
     ]
     assert not wrong, f"{len(wrong)} lines tokenize differently from FTS5; first: {wrong[:5]}"
+
+
+def test_both_backends_return_the_same_rows_for_stem_family_queries(repo, log):
+    """Through the store, query side and document side: a query is stemmed by the same
+    function as the rows it ranks, so `running` finds `runs` and `conditions` find
+    `conditional` on a build without FTS5 exactly as with it."""
+    from ddflow.config import Config
+    from ddflow.infra.store import _has_fts5
+
+    if not _has_fts5():
+        pytest.skip("this SQLite has no FTS5: only the fallback exists here")
+    rows = {
+        "L1": ("Processes that run forever", "the daemon runs and keeps running"),
+        "L2": ("Conditional approvals", "approve only if the conditions hold"),
+        "L3": ("Ponies and caresses", "a pony caresses another"),
+        "L4": ("Unrelated entry", "nothing here matches"),
+    }
+    for rid, (title, rule) in rows.items():
+        log.append("lesson.recorded", rid, {"title": title, "rule": rule})
+    found: dict[str, dict[str, list[str]]] = {}
+    for backend in ("fts5", "like"):
+        cfg = Config.load()
+        cfg.lessons.search_backend = backend
+        st = store.Store(repo, cfg)
+        st.rebuild(log)
+        found[backend] = {
+            q: sorted(r["id"] for r in st.search("lessons", q, 10))
+            for q in ("running", "runs", "condition", "conditionally", "pony", "caressing", "zzzqq")
+        }
+    assert found["fts5"] == found["like"], found
+    assert found["like"]["running"] == ["L1"] and found["like"]["condition"] == ["L2"]
+    assert found["like"]["caressing"] == ["L3"] and found["like"]["zzzqq"] == []
