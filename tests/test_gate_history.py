@@ -75,6 +75,18 @@ def test_rates_count_the_history_and_agree_with_the_raw_events():
     }
 
 
+def test_both_rates_paths_name_a_gate_less_outcome_after_its_item():
+    """An outcome event with no `gate` is counted under the item's id on both paths."""
+    evs = [
+        _ev(1, "task.added", "T", {}),
+        _ev(2, "gate.failed", "T", {}),
+        _ev(3, "gate.passed", "T", {"gate": ""}),
+    ]
+    want = {"T": {"failed": 1, "passed": 1}}
+    assert {g: r.outcomes for g, r in RT.gate_rates(evs).items()} == want
+    assert {g: r.outcomes for g, r in RT.gate_rates(fold(evs, strict=False)).items()} == want
+
+
 def test_progress_reads_gate_runs_from_the_history():
     evs = _log()
     w = PR.work(evs, fold(evs, strict=False))["T"]
