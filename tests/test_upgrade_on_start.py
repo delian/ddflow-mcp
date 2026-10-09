@@ -122,7 +122,7 @@ def test_an_unknown_switch_counts_as_the_strictest(old: Path) -> None:
 def test_the_surface_follows_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
     assert US.surface({}) == "mcp"
     assert US.surface({US.CONTAINER_ENV: "1"}) == "container"
-    for no in ("0", "false", "No", "true", "yes", " ", ""):
+    for no in ("0", "false", "No", "true", "yes", " 1 ", " ", ""):
         assert US.surface({US.CONTAINER_ENV: no}) == "mcp", no
 
 
