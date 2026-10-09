@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 from ddflow.services import harnessreg, hookio
-from ddflow.surfaces.parsers import workflow as parsers
 
 
 def _run(repo: Path, *argv: str, stdin: str = "") -> tuple[int, str, str]:
@@ -50,8 +49,12 @@ def _prompts(repo: Path) -> list[dict]:
 # --- the registry and the tables agree ---------------------------------------------------
 
 
-def test_the_parser_accepts_exactly_the_canonical_events():
-    assert parsers._HOOK_EVENTS == harnessreg.CANONICAL_EVENTS
+def test_the_run_help_names_exactly_the_canonical_events(repo):
+    """The parser may not import `harnessreg` (a surface reaches services through the API only),
+    so its help text lists the events by hand; this pins the list to the registry's."""
+    _code, out, _err = run_cli(repo, "hooks", "run", "--help")
+    listed = " ".join(out.split("the lifecycle event:")[1].split("options:")[0].split())
+    assert tuple(n.strip() for n in listed.split(",")) == harnessreg.CANONICAL_EVENTS
 
 
 def test_every_command_hook_descriptor_resolves_to_a_normalizer_and_an_emitter():

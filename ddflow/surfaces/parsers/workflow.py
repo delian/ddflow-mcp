@@ -17,19 +17,6 @@ from ..declared.reporting import BY_TOOL as REPORTING_BY_TOOL
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
 from ..registry import add_commands
 
-#: The canonical lifecycle events `ddflow hooks run` documents. Written out here, not read from
-#: `services.harnessreg`, because the parser is built on EVERY invocation and a surface may not
-#: import a service; `tests/test_hook_core.py` pins it equal to `harnessreg.CANONICAL_EVENTS`.
-_HOOK_EVENTS = (
-    "session_start",
-    "prompt",
-    "pre_tool",
-    "post_tool",
-    "pre_compact",
-    "stop",
-    "session_end",
-)
-
 
 def register(s: argparse._SubParsersAction) -> None:
     """Add the workflow subcommands to `s`, the root `ddflow` subparsers."""
@@ -193,7 +180,7 @@ def register(s: argparse._SubParsersAction) -> None:
         default="",
         # No `choices`: argparse would exit 2 on an event a newer or older agent config names,
         # and exit 2 BLOCKS in Claude Code and Codex. The handler says it is unknown on stderr.
-        help="the lifecycle event: " + ", ".join(_HOOK_EVENTS),
+        help="the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact, stop, session_end",
     )
     hkr.add_argument(
         "--harness",
