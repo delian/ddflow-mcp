@@ -55,7 +55,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.memory",
         "ddflow.surfaces.declared.export",
         "ddflow.surfaces.declared.cadence",
-        "ddflow.surfaces.tools.flow",
+        "ddflow.surfaces.tools.order",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -246,7 +246,7 @@ def test_rule_answers_exclude_each_other_and_a_bare_rule_lists():
             parser.parse_args(argv)
         assert stop.value.code == 2, argv
     ns = parser.parse_args(["rule"])
-    assert (ns.rule_cmd, ns.tag, ns.scope) == ("list", "", "") and ns.fn.__name__ == "cmd_rule"
+    assert (ns.rule_cmd, ns.tag, ns.scope) == ("list", "", "") and ns.fn.__name__ == "fn"
     assert parser.parse_args(["rule", "add", "--id", "r", "--title", "t"]).priority is None
 
 

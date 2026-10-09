@@ -1,7 +1,7 @@
 """The job and memory commands, declared once: ``job run|add|list|end`` and
 ``memory add|list|forget``, with the tools they have.
 
-`surfaces/parsers/jobs.py` registers their command-line halves and `surfaces/tools/jobs.py`
+`surfaces/parsers/jobs.py` registers their command-line halves and `surfaces/tools/__init__.py`
 takes their MCP entries (D-unify 4, B-uni-cmd-migrate.6g-memory). Their handlers stay in
 `surfaces/commands/knowledge.py`; the parser supplies them by path.
 """

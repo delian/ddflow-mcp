@@ -27,7 +27,9 @@ def register(s: argparse._SubParsersAction) -> None:
     # `ddflow rule` alone lists them.
     ru = s.choices["rule"]
     next(a for a in ru._actions if isinstance(a, argparse._SubParsersAction)).required = False
-    ru.set_defaults(fn=cliexec.handler(BY_TOOL["ddflow_rule_list"]), tag="", scope="")
+    ru.set_defaults(
+        fn=cliexec.handler(BY_TOOL["ddflow_rule_list"]), rule_cmd="list", tag="", scope=""
+    )
 
     add_commands(s, [_REVIEW_BY_TOOL["ddflow_verify"]], handlers={("verify",): cmd_verify})
     add_commands(s, [_EXPORT_BY_TOOL["ddflow_ci"]], handlers={("ci",): cmd_ci})

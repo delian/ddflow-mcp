@@ -8,47 +8,56 @@ for its domain, and into a tier in `tools/tiers.py`.
 
 from __future__ import annotations
 
+from itertools import chain
 from typing import Any
 
+from ..declared import cadence as _cadence
+from ..declared import export as _export
+from ..declared import flow as _flow
+from ..declared import hooks as _hooks
+from ..declared import knowledge as _knowledge
+from ..declared import lifecycle as _lifecycle
+from ..declared import memory as _memory
+from ..declared import queue as _queue
+from ..declared import records as _records
+from ..declared import reporting as _reporting
+from ..declared import review as _review
+from ..declared import rules as _rules
+from ..declared import setup as _setup
+from ..registry import by_tool
 from ..vocabulary import provide
-from . import (
-    companions,
-    decisions,
-    flow,
-    items,
-    jobs,
-    knowledge,
-    lifecycle,
-    maintenance,
-    operations,
-    queue,
-    records,
-    reporting,
-    rules,
-    setup,
-    workflow,
-)
+from . import items, operations
+from . import lifecycle as brief
+from . import reporting as onboarding
+from .order import TOOL_ORDER
 
-#: Tool surface. Each entry maps an MCP tool onto an argv the CLI already understands,
-#: so there is exactly one implementation of every operation.
-#: (description, {property: (json_type, description, required)}, argv builder)
-TOOLS: dict[str, dict[str, Any]] = {
-    **lifecycle.TOOLS,
-    **flow.TOOLS,
-    **queue.TOOLS,
-    **knowledge.TOOLS,
-    **reporting.TOOLS,
-    **decisions.TOOLS,
+#: Every declared command, by tool name.
+DECLARED = by_tool(
+    chain.from_iterable(
+        f.COMMANDS
+        for f in (
+            _knowledge, _records, _queue, _lifecycle, _rules, _review, _setup, _reporting,
+            _hooks, _flow, _memory, _export, _cadence,
+        )
+    )
+)  # fmt: skip
+
+#: The hand-written entries: tools no declaration covers yet (their families migrate them).
+HAND_WRITTEN: dict[str, dict[str, Any]] = {
+    **brief.TOOLS,
     **operations.TOOLS,
-    **workflow.TOOLS,
-    **companions.TOOLS,
-    **records.TOOLS,
-    **maintenance.TOOLS,
-    **setup.TOOLS,
     **items.TOOLS,
-    **jobs.TOOLS,
-    **rules.TOOLS,
+    **onboarding.TOOLS,
 }
+
+#: Tool surface, in `TOOL_ORDER`. Each entry maps an MCP tool onto the api call that serves it
+#: (description, {property: (json_type, description, required)}, api, payload).
+TOOLS: dict[str, dict[str, Any]] = {
+    name: DECLARED[name].tool_entry() if name in DECLARED else HAND_WRITTEN[name]
+    for name in TOOL_ORDER
+}
+if len(TOOLS) != len(DECLARED) + len(HAND_WRITTEN):
+    raise RuntimeError("tools/order.py lists a tool twice or leaves one out")
 
 #: The add tools: each takes the answer to the duplicate check (`api/_dedupe.py`).
 ADD_TOOLS = (
