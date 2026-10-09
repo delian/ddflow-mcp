@@ -195,7 +195,12 @@ def cmd_recall(a, c: Ctx) -> int:
         agent=c.requested_agent,
     )
     if c.json:
-        emit_json(out.body("results"))
+        body = out.body("results")
+        if out.data.get("pack", {}).get("truncated"):
+            # A cut answer says so in the body too: a reader of the JSON must not take the
+            # packed hits for all of them. A string, not a list: it is no source.
+            body = {**body, "truncated": out.data["pack"]["note"]}
+        emit_json(body)
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
@@ -218,6 +223,8 @@ def cmd_recall(a, c: Ctx) -> int:
     if pack["truncated"]:
         print(f"      … truncated at {out.data['max_chars']} chars (--max-chars to raise)")
         return OK
+    if pack["duplicates"]:
+        print(f"      … {pack['note']}")
     print(
         "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
         "unless the operator says otherwise; a lesson is advice; a past prompt is "

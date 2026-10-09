@@ -28,13 +28,11 @@ def test_the_recall_default_is_4000_everywhere(monkeypatch):
     now serves all four (the flag and the argument are one declaration), and the value is
     pinned here so a change of it is deliberate."""
     from ddflow.api.knowledge import retrieval
-    from ddflow.surfaces import mcp_bound
     from ddflow.surfaces.declared import knowledge as declared
     from ddflow.surfaces.tools import TOOLS
 
     assert B.RECALL_MAX_CHARS == 4000
     assert inspect.signature(retrieval.recall).parameters["max_chars"].default == 4000
-    assert mcp_bound.RECALL_BUDGET == 4000
     assert "default=RECALL_MAX_CHARS" in inspect.getsource(declared)
 
     seen = {}
@@ -133,8 +131,33 @@ def test_recall_enforces_its_budget_once_for_the_cli_and_the_mcp_tool(repo):
     narrow = json.loads(
         run_cli(repo, "--json", "recall", "pack budget", "--limit", "6", "--max-chars", "900")[1]
     )
-    n = lambda body: sum(len(v) for k, v in body.items() if k != "schema")  # noqa: E731
+
+    def n(body):
+        return sum(len(v) for v in body.values() if isinstance(v, list))
+
     assert n(wide) == 6 and 1 <= n(narrow) < 6, "the JSON surface obeys max_chars too"
+    assert "truncated" not in wide and narrow["truncated"].startswith("truncated: showing")
     code, out, _ = run_cli(repo, "recall", "pack budget", "--limit", "6", "--max-chars", "900")
     assert code == 0 and "truncated at 900 chars" in out
     assert out.count("[L-p") == n(narrow), "the CLI prints exactly what the API kept"
+
+
+def test_a_folded_repeat_is_said_on_the_cli_too(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from ddflow.core import outcome as O
+    from ddflow.surfaces.commands import knowledge as K
+
+    row = {"id": "L1", "title": "same words", "rule": "alike"}
+    data = {
+        "results": {"lessons": []},
+        "max_chars": 4000,
+        "pack": {"truncated": False, "duplicates": 1, "note": "1 repeated hit(s) folded into the first"},
+        "_render": {"results": {"lessons": [row]}, "sources": (("lessons", "LESSON", "why"),)},
+    }  # fmt: skip
+    monkeypatch.setattr(K.A, "recall", lambda *a, **k: O.Outcome(kind="recall", data=data))
+    args = SimpleNamespace(query="q", sources="", limit=3, max_chars=4000)
+    ctx = SimpleNamespace(repo=None, json=False, requested_agent="")
+    assert K.cmd_recall(args, ctx) == 0
+    out = capsys.readouterr().out
+    assert "… 1 repeated hit(s) folded into the first" in out and "Recall is a prompt" in out

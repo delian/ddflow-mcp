@@ -22,7 +22,6 @@ import copy
 import re
 from typing import Any
 
-from ..core.budget import RECALL_MAX_CHARS
 from ..core.textcut import clip
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
@@ -33,9 +32,6 @@ ROWS_SHOWN = 25
 #: Characters of a decision's `decision` text kept in the list; `ddflow_decision_show`
 #: has it whole, with the context and the alternatives.
 DECISION_TEXT_SHOWN = 400
-#: `ddflow_recall`'s answer budget when the caller names none -- the same 4000 the
-#: tool has always advertised and the CLI's renderer applies.
-RECALL_BUDGET = RECALL_MAX_CHARS
 #: The evidence keys every gate record carries that identify the tree, not the outcome.
 GATE_BOILERPLATE = (
     "diff_stat",

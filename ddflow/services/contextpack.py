@@ -32,6 +32,7 @@ from typing import Any
 from ..core import provenance as PV
 from ..core import textsim
 from ..core.budget import Budget
+from ..infra.store import summarise_row
 
 
 @dataclass(frozen=True)
@@ -67,8 +68,6 @@ def candidate(table: str, label: str, row: dict) -> Candidate:
     body travels inside the fence and the headline outside it is only the id and the
     provenance sentence.
     """
-    from ..infra.store import summarise_row
-
     head, body = summarise_row(table, row)
     hit: dict[str, Any] = {"id": row.get("id"), "kind": label, "headline": head, "body": body}
     origin = PV.hit_origin(table, row)
