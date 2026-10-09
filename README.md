@@ -2439,9 +2439,13 @@ out each gate record's tree ids and merge bookkeeping and cuts any gate or triag
 `ddflow_decision_list` (newest; no context or alternatives, decision text clipped to 400
 characters, `ddflow_decision_show` has one whole) return 25 rows, `limit` raises it and `limit=0`
 is all, and a second content block states the cut; `ddflow_recall` drops each hit's raw
-record and keeps hits within `max_chars` (default 4000, counted as the JSON returned), one per kind in
-turn, and says so when it cut any. MCP bodies are
-compact JSON. `--json` on the CLI is the whole, indented body in every case. On this repository
+record; MCP bodies are
+compact JSON. `--json` on the CLI is the whole, indented body in every case. **`recall` enforces `max_chars` (default 4000) once, in the API, for the CLI, `--json` and MCP
+alike**: hits are taken one per source in turn so no source is crowded out, counted by the
+headline and fenced body a reader is shown, the first hit is always kept whole, a hit that does
+not fit is skipped, and a hit whose text repeats one already kept (same words up to case and
+whitespace) is folded into it; what the budget or the fold left out is stated (the MCP result's
+second block, the CLI's `… truncated at N chars` line). On this repository
 that took `next` from 38 KB to 3.9 KB, `show` of a finished task from 8.9 KB to 4.1 KB,
 `recall` from 51 KB to 4.1 KB, `decision_list` from 54 KB to 18 KB and `progress` from
 158 KB to 8.4 KB. `doctor` and `status` also say when the log holds events from a **newer
