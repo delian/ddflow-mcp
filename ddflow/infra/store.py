@@ -41,7 +41,7 @@ from ddflow import FORMAT_LEVEL, __version__
 
 from ..config import Config
 from ..core import digest as D
-from ..core import textsim
+from ..core import porter, textsim
 from ..core.model import State, fold
 from ..core.rank import TRIGRAM_MIN, bm25, fuse, rerank, substring_bm25
 from ..core.textcut import clip
@@ -718,8 +718,9 @@ _POOL, _POOL_MIN = 4, 20
 
 
 def _fallback_words(text: str) -> list[str]:
-    """The words the FTS5-less fallback ranks on: every word, lower-cased and stemmed."""
-    return [textsim.stem(w) for w in textsim.words(text, min_len=1, fold=True)]
+    """The words the FTS5-less fallback ranks on: every word, lower-cased and stemmed the way
+    FTS5's porter tokenizer stems it, so a query returns the same rows without FTS5."""
+    return [porter.stem(w) for w in textsim.words(text, min_len=1, fold=True)]
 
 
 def _terms(query: str) -> list[str]:
