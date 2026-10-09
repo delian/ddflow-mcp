@@ -201,3 +201,18 @@ def test_both_backends_return_the_same_rows_for_stem_family_queries(repo, log):
     assert found["fts5"] == found["like"], found
     assert found["like"]["running"] == ["L1"] and found["like"]["condition"] == ["L2"]
     assert found["like"]["caressing"] == ["L3"] and found["like"]["zzzqq"] == []
+
+
+def test_every_short_word_over_the_letters_the_rules_look_at_stems_as_fts5_stems_it() -> None:
+    """All strings of up to four letters over the vowels, y and the consonants the suffix
+    rules mention (70,000 words): the corner cases of a rule table live in short words
+    (``ated``, ``izing``, ``sses``) that a corpus of real text rarely holds."""
+    import itertools
+
+    alphabet = "aeiouybzdlstgnrx"
+    words = ["".join(t) for n in range(1, 5) for t in itertools.product(alphabet, repeat=n)]
+    fts = _fts5_stems(words)
+    if fts is None:
+        pytest.skip("this SQLite has no FTS5: the written-down stems above hold the line here")
+    wrong = [(w, fts[w], porter.stem(w)) for w in words if w in fts and fts[w] != porter.stem(w)]
+    assert len(words) > 60_000 and not wrong, wrong[:10]
