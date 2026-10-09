@@ -8,6 +8,7 @@ import json
 import stat
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -166,8 +167,8 @@ def test_the_shell_runner_feeds_stdin_only_when_asked():
 class _FakeModel:
     """Stands in for model2vec's StaticModel: the real one needs a model on disk."""
 
-    rows: list = []
-    loaded: list = []
+    rows: ClassVar[list] = []
+    loaded: ClassVar[list] = []
 
     @classmethod
     def from_pretrained(cls, path):
