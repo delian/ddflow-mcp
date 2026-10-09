@@ -482,6 +482,9 @@ class Server:
         #: Old names (aliases) this connection has already been told are deprecated: said
         #: once per session (D-compat).
         self._notices = _REGISTRY.Notices()
+        #: The stale-server note (`_stale_footer`): said once, looked for once a minute.
+        self._stale_said = False
+        self._stale_checked_at = 0.0
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
         self.agent = agent
@@ -858,9 +861,9 @@ class Server:
                     out["content"].append({"type": "text", "text": deprecation_note(name, retired)})
                 for alias in self._notices.fresh(used):
                     out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
-                note = _obligation_footer(self)
-                if note:
-                    out["content"].append({"type": "text", "text": note})
+                for note in (_obligation_footer(self), _stale_footer(self)):
+                    if note:
+                        out["content"].append({"type": "text", "text": note})
                 return _ok(mid, out)
 
             # No argv fallback. Every tool declares `api`, `ARGV_TOOLS_CEILING` is 0, and
@@ -967,6 +970,31 @@ def _modern_identify_note(agent: str) -> str:
         f"({AS_AGENT} wins when both are given). A request that names nobody is "
         f"attributed to the tree-derived default. This request: {who!r}."
     )
+
+
+#: How often a running server looks at the installed package and the log's stamps.
+_STALE_CHECK_EVERY_S = 60.0
+
+
+def _stale_footer(server) -> str:
+    """``restart the server`` once, when this process runs older code than the installed package
+    or the project's log (`services.upgrade_notice.stale_server_note`), else "".
+
+    A server is a long-lived process: one started before an upgrade keeps answering with the old
+    code, and nothing else tells the caller. Checked at most once a minute (the installed version
+    is read from disk), said once, and swallows everything -- a courtesy, never a failure."""
+    if server._stale_said:
+        return ""
+    now = time.time()
+    if now - server._stale_checked_at < _STALE_CHECK_EVERY_S:
+        return ""
+    server._stale_checked_at = now
+    try:
+        note = _api().stale_server_note(server.repo, agent=server.agent)
+    except Exception:
+        return ""
+    server._stale_said = bool(note)
+    return note
 
 
 def _obligation_footer(server) -> str:
@@ -1271,6 +1299,16 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     return v
 
 
+def _upgrade_line(repo: Path, agent: str) -> str:
+    """The upgrade notice for the handshake, set off by a blank line, or "". Said once per
+    machine per version (`services.upgrade_notice`); a courtesy that can never fail a connect."""
+    try:
+        notice = _api().upgrade_notice(repo, agent=agent)
+    except Exception:
+        return ""
+    return f"\n\n{notice}" if notice else ""
+
+
 def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
     """What the client injects into the model's context on connect.
 
@@ -1308,7 +1346,7 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
             pass
     try:
         tmpl = P.resolve("mcp_instructions", repo, overrides)
-        return P.render(tmpl, **vars_).strip()
+        return P.render(tmpl, **vars_).strip() + _upgrade_line(repo, agent)
     except P.TemplateError as exc:
         # A broken override must not silence the server: say what is wrong, in the one
         # place the operator will see it, and still hand over the essentials.
