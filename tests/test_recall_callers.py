@@ -59,9 +59,6 @@ def test_sources_are_chosen_by_table_or_by_label(proj):
     assert list(SC.search_sources(store, "retry", "DECISION", 3)) == ["decisions"]
     assert SC.search_sources(store, "retry", "nosuch", 3) == {}
     assert SC.search_table(store, "lessons", "retry", 3) == store.search("lessons", "retry", 3)
-    assert SC.search_table(store, "lessons", "retry", 3, rerank_by_likeness=True) == (
-        store.search("lessons", "retry", 3, rerank_by_likeness=True)
-    )
 
 
 def test_a_source_that_cannot_be_read_does_not_withhold_the_others(proj, monkeypatch):
@@ -107,25 +104,28 @@ def test_the_matcher_refuses_a_missing_index_instead_of_answering_from_stale_wei
 
 
 def _searching_calls(path: Path) -> list[int]:
-    """The lines of ``path`` that call ``.search(<table name>, ...)``, a Store's ranking."""
-    tree = ast.parse(path.read_text())
-    return [
-        n.lineno
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == "search"
-        and n.args
-        and isinstance(n.args[0], ast.Constant)
-        and isinstance(n.args[0].value, str)
-        and n.args[0].value in {t for t, _, _ in RECALL_SOURCES}
-    ]
+    """The lines of ``path`` that call ``.search(...)`` on a store (a name or a call that
+    says "store") or ``open_store(...)``, the duplicate check's matcher."""
+    out = []
+    for n in ast.walk(ast.parse(path.read_text())):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
+            continue
+        on_a_store = "store" in ast.unparse(n.func.value).lower()
+        if (n.func.attr == "search" and on_a_store) or n.func.attr == "open_store":
+            out.append(n.lineno)
+    return out
 
 
-def test_no_api_function_asks_a_store_to_search_on_its_own():
-    callers = [
-        *sorted((ROOT / "api" / "knowledge").glob("*.py")),
-        ROOT / "api" / "decisions.py",
-        ROOT / "api" / "lifecycle" / "brief.py",
-    ]
-    assert {p.name: _searching_calls(p) for p in callers if _searching_calls(p)} == {}
+#: The only modules that may reach the index: the store, the core and the matcher itself.
+HOMES = {"infra/store.py", "services/searchcore/indexed.py", "services/similar.py"}
+
+
+def test_nothing_outside_the_core_asks_a_store_to_search_on_its_own():
+    callers = {}
+    for path in sorted(ROOT.rglob("*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in HOMES:
+            continue
+        if lines := _searching_calls(path):
+            callers[rel] = lines
+    assert callers == {}

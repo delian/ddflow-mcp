@@ -21,12 +21,8 @@ def tables() -> tuple[str, ...]:
     return tuple(t for t, _, _ in RECALL_SOURCES)
 
 
-def search_table(
-    store: Store, table: str, query: str, limit: int, *, rerank_by_likeness: bool = False
-) -> list[dict[str, Any]]:
+def search_table(store: Store, table: str, query: str, limit: int) -> list[dict[str, Any]]:
     """The best ``limit`` rows of one index table for ``query``, best first."""
-    if rerank_by_likeness:
-        return store.search(table, query, limit, rerank_by_likeness=True)
     return store.search(table, query, limit)
 
 
