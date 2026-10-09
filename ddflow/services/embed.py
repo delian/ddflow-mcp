@@ -141,9 +141,15 @@ def _vector(raw: Any) -> tuple[float, ...] | None:
         return None
     out: list[float] = []
     for x in raw:
-        if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+        if isinstance(x, bool) or not isinstance(x, (int, float)):
             return None
-        out.append(float(x))
+        try:
+            value = float(x)  # an integer too large for a float is OverflowError, not a number
+        except OverflowError:
+            return None
+        if not math.isfinite(value):
+            return None
+        out.append(value)
     return tuple(out)
 
 
