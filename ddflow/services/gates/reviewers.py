@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from ...config import Config
+from ...config import Config, family_for, router_set
 from ...core.bookkeeping import STATE_EXCLUDE
 from ...core.digest import content_digest, hasher
 from ...core.model import State
@@ -18,8 +18,6 @@ from .defs import DEFAULT_GATES, GateDef
 def family_of(model: str, cfg: Config) -> str:
     """This project's view of a model's family: `[agent].families`, which defaults to
     the shipped map. ``""`` means "not recognised" — see `config.family_for`."""
-    from ...config import family_for
-
     return family_for(model, cfg.agent.families)
 
 
@@ -94,8 +92,6 @@ def reviewer_independence(
     even when every reviewer passed, because agreement among models trained on the same
     distribution measures shared priors, not correctness.
     """
-    from ...config import router_set
-
     it = state.items.get(item_id)
     if not it:
         return False, f"no such item {item_id}"

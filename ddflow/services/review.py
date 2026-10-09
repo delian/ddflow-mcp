@@ -66,11 +66,9 @@ WELL_KNOWN_ENDPOINTS: tuple[tuple[str, str], ...] = (
 )
 
 
-def family_of(model: str) -> str:
-    """Delegates to `config.family_for`. Kept as a name because it reads better at the
-    call sites here, and because `Reviewer.resolved_family` is the natural home for the
-    "declared family wins over guessed family" rule."""
-    return family_for(model)
+#: The old name for `config.family_for` (the one implementation; `gates.family_of` is the same
+#: question asked with a project's `[agent].families`). Callers and tests import it from here.
+family_of = family_for
 
 
 #: Ready-made settings for the providers people actually use. `ddflow reviewers add
