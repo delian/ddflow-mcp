@@ -42,3 +42,14 @@ def test_a_definition_flagged_required_is_required(cfg):
 def test_the_progress_review_gates_are_declared_reviewer_gates():
     """core/progress cannot read definitions; its constant must stay inside them."""
     assert PR.REVIEW_GATES <= set(G.reviewer_gates(None))
+
+
+def test_a_gate_table_required_flag_never_reaches_the_definition(repo, cfg, capsys):
+    """`[gate.<id>] required` is popped by the loader (B4d206ede45): it never was
+    enforced, so deriving the flag from the knob drops nothing that worked before."""
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "gates.toml").write_text("[gate.extra]\nrequired = true\n", "utf-8")
+    cfg2 = dataclasses.replace(cfg, gates=dataclasses.replace(cfg.gates, required=[]))
+    gates = G.load_gates(repo, cfg2)
+    assert not gates["extra"].required and "extra" not in G.required_gates(cfg2, gates)
+    assert "does not read" in capsys.readouterr().err
