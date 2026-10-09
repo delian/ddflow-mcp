@@ -174,10 +174,14 @@ WRITERS_EXEMPT: dict[str, str] = {
     "de-duplicated by the trigger's dedupe key (one open remediation per key)",
     "services/promotions.py:add": "a generated 'Promote X to Y' task; one open promotion per "
     "environment is enforced instead",
+    "services/items.py:add_task": "the one task writer: every caller passes the settled check "
+    "or the reason there is none, and this scan follows the calls to it",
+    "services/importer.py:_add_imported_tasks": "tasks carry dependencies, so the plan does "
+    "not withhold one (`_dedupe_found` checks the knowledge kinds)",
     "services/importer.py:apply_import": "the plan was de-duplicated against the queue with "
     "the same engine and [dedupe] thresholds (`_dedupe_found`) before apply",
     "services/importer_harness.py:apply": "each fact is checked with similar.assess / "
-    "first_duplicate before it is written",
+    "screen before it is written",
     "api/defs.py:_write_record": "def_record calls it after check_add; def_record_unchecked is "
     "for a writer that ran its own check first (rule add: rules and every other kind)",
 }
@@ -257,6 +261,21 @@ def test_every_event_kind_is_checked_or_exempt_with_a_reason():
     assert all(len(r) > 20 for r in EXEMPT.values())
 
 
+def _appended_kind(call: ast.AST) -> str:
+    """The CHECKED kind ``call`` writes, or "": a literal `log.append("<kind>", ...)`, or a
+    call of `add_task`, the one task writer (B-uni-item-create), which writes `task.added`
+    and demands the check or the reason there is none."""
+    if not isinstance(call, ast.Call):
+        return ""
+    fn = call.func
+    name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+    if name == "add_task":
+        return "task.added"
+    if name == "append" and call.args and isinstance(call.args[0], ast.Constant):
+        return call.args[0].value if call.args[0].value in CHECKED else ""
+    return ""
+
+
 def _appenders() -> dict[str, set[str]]:
     """function ("path:name") -> the CHECKED kinds it appends as a literal, with whether
     its own body calls check_add."""
@@ -268,15 +287,8 @@ def _appenders() -> dict[str, set[str]]:
             if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
             for call in ast.walk(fn):
-                if (
-                    isinstance(call, ast.Call)
-                    and isinstance(call.func, ast.Attribute)
-                    and call.func.attr == "append"
-                    and call.args
-                    and isinstance(call.args[0], ast.Constant)
-                    and call.args[0].value in CHECKED
-                ):
-                    out.setdefault(f"{rel}:{fn.name}", set()).add(call.args[0].value)
+                if _appended_kind(call):
+                    out.setdefault(f"{rel}:{fn.name}", set()).add(_appended_kind(call))
     return out
 
 

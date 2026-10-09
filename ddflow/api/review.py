@@ -644,7 +644,7 @@ def reviewers_detect(
             # `family =` keeps that) -- and NOT written into the block: a written `family`
             # wins over `[agent].families` for good, and here it would only be a guess
             # (B98650136a8).
-            fam = family_for(m, cfg.agent.families) or R.family_of(m)
+            fam = family_for(m, cfg.agent.families) or family_for(m)
             rows.append({"url": url, "label": label, "model": m, "family": fam})
             # `reviewer_block` writes through tomlcfg.value, not "{m}": a model name is
             # whatever the endpoint reported, and a quote in it broke the block (Bb11e7a8186).

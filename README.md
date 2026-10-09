@@ -1043,13 +1043,13 @@ irreversible:
 $ git push origin main           # that is the whole release
 ```
 
-**Every push to main that changes shipped code releases, with the PATCH version bumped.**
-Major and minor move only when you move them.
+**Every push to main that changes shipped code releases, numbered by the impact its changes declare.**
+A patch unless the upgrade manifest declares a breaking change (then a minor while ddflow is 0.x); major moves only when you move it.
 "Shipped" means `ddflow/`, `pyproject.toml`, `uv.lock`, `Dockerfile`,
 `docker-entrypoint.sh`, `.dockerignore`, `server.json`, `server.template.json` or `README.md` (the PyPI page, and
 the line the registry verifies): a push of other docs, tests or the ddflow event log
 releases nothing, because PyPI keeps every version forever and one identical to the last
-is noise nobody can withdraw. CI runs `scripts/bump.sh patch`, commits `release 0.1.2` to
+is noise nobody can withdraw. CI runs `scripts/bump.sh` at the level `scripts/release_impact.py` reads from the manifest, commits `release 0.1.2` to
 main, publishes PyPI, Docker Hub, ghcr.io and the MCP registry, then creates `v0.1.2` and
 a GitHub release — **last**, and only once every publish succeeded, because a tag pointing
 at a half-release is worse than no tag: it looks authoritative.
@@ -1058,7 +1058,7 @@ at a half-release is worse than no tag: it looks authoritative.
 it and the next push is refused until you `git pull`.
 
 How the gate picks the version: it publishes the declared version if PyPI does not have it
-yet, and bumps patch only if it does. So moving major or minor is yours to do —
+yet, and bumps (by the declared impact: patch, or minor for a `breaking` entry while 0.x) only if it does. Moving to an exact version, or major, is yours to do —
 
 ```console
 $ scripts/bump.sh minor          # 0.1.4 -> 0.2.0 (or: major, or an exact 1.0.0)
@@ -1071,8 +1071,10 @@ The same rule makes a release that failed *before* its PyPI upload retry its num
 the next push. One that failed after it — Docker Hub, ghcr.io, the MCP registry — does
 not: PyPI has the number, so the next push moves past it; re-run that run's failed jobs
 from the Actions page instead. A bump never lands on a number PyPI already holds (a `v*`
-tag can publish one out of band): CI skips to the next free patch before it commits
-anything. The bump is pushed to main *before* anything publishes: a push that
+tag can publish one out of band): CI takes the next free number at the declared level
+(moving on by patch when that one is taken) before it commits anything. `scripts/release.sh` refuses a declared version that is a smaller step than the manifest's
+`impact = "breaking"` entries ask for, and a surface change (a command, flag, tool, argument, knob or
+event kind gone) that the previous release's snapshot shows and nothing declares, with the options. The bump is pushed to main *before* anything publishes: a push that
 loses a race with another commit fails the run and publishes nothing, where pushed last it
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
@@ -4376,7 +4378,9 @@ definition.
 Every evaluation that finds a condition met is an event: `trigger.fired` (with the items
 it filed, the key, the hop and the definition's digest) or `trigger.suppressed` with the
 reason -- `disabled`, `debounce`, `cooldown`, `open` (the key's remediation is still open),
-`max_open`, `hop_limit`, `breaker` or `global_cap` (at most `[triggers].max_fires_per_hour`
+`max_open`, `hop_limit`, `breaker`, `item_refused` (the item it would file fails the checks every
+new task passes, e.g. `action.phase` names no phase: nothing is filed, the detail says why; a `--dry-run` does not predict it) or
+`global_cap` (at most `[triggers].max_fires_per_hour`
 fires in any rolling hour across every trigger: default 10, an integer from 0 to 200, the
 fire history the log keeps; 0 stops every trigger without disabling one; a bad value in a
 config file falls back to 0, the strictest, and `config --set` refuses it) -- and each run

@@ -16,11 +16,12 @@
 # and re-reads the result. The OCI tag was the one that used to get left behind: a `:0.1.0`
 # while everything else moved publishes a manifest pointing at the PREVIOUS image.
 #
-# CI RUNS `patch` FOR YOU. `.github/workflows/publish.yml` bumps the patch version on every
-# push to main that changes shipped code, commits 'release X.Y.Z' to main, and publishes.
-# MAJOR AND MINOR ARE YOURS: run `minor`, `major` or an exact version by hand, commit and
-# push. publish.yml releases a declared version PyPI does not have yet AS IS, instead of
-# bumping it again, and the automatic patches continue from there.
+# CI BUMPS FOR YOU, BY IMPACT. `.github/workflows/publish.yml` bumps the version on every push
+# to main that changes shipped code -- a patch, or a minor when the upgrade manifest declares a
+# breaking change while ddflow is 0.x (`scripts/release_impact.py`) -- commits 'release X.Y.Z'
+# to main, and publishes. MAJOR, AND ANY EXACT VERSION, ARE YOURS: run `major` or an exact
+# version by hand, commit and push. publish.yml releases a declared version PyPI does not
+# have yet AS IS, instead of bumping it again, and the automatic bumps continue from there.
 #
 # No re-lock: uv.lock records no version for this project.
 set -eu
@@ -32,22 +33,10 @@ CUR=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
 WHAT="${1:-}"
 case "$WHAT" in
   patch|minor|major)
-    NEW=$(python3 - "$CUR" "$WHAT" <<'PY'
-import sys
-cur, part = sys.argv[1], sys.argv[2]
-bits = cur.split(".")
-if len(bits) != 3 or not all(b.isdigit() for b in bits):
-    sys.exit(f"cannot bump {cur!r}: not three numeric parts. Pass an exact version.")
-major, minor, patch = (int(b) for b in bits)
-if part == "major":
-    major, minor, patch = major + 1, 0, 0
-elif part == "minor":
-    minor, patch = minor + 1, 0
-else:
-    patch += 1
-print(f"{major}.{minor}.{patch}")
-PY
-    ) ;;
+    # The arithmetic lives in scripts/release_impact.py, which CI uses for the same steps:
+    # one definition, so a manual bump and an automatic one cannot number differently.
+    NEW=$(python3 scripts/release_impact.py next "$CUR" "$WHAT") || exit 1  # it says why
+    ;;
   '' | -h | --help)
     sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
     printf '\ncurrent version: %s\n' "$CUR"
