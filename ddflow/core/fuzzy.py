@@ -22,6 +22,7 @@ def available() -> bool:
 
 def ratio(a: str, b: str) -> float:
     """0..1 fuzzy likeness of two strings."""
+    a, b = a.lower(), b.lower()  # both backends compare without case
     if _fuzz is not None:
         return _fuzz.token_set_ratio(a, b) / 100.0
-    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+    return difflib.SequenceMatcher(None, a, b).ratio()
