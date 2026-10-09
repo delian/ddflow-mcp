@@ -31,9 +31,13 @@ def _pct_of(n: PR.Tally) -> str:
     return _pct(n.done, n.live)
 
 
-def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
+def report(
+    st: State, cfg: Config, item: str = "", *, mode: str = "", plan: S.Plan | None = None
+) -> str:
     """The block, or "" when the mode is off. `item` names the item just completed: its
-    phase is the one shown as current."""
+    phase is the one shown as current. `plan` is the offer `next` would make (the caller
+    asks `api.lifecycle.plan_for`, which a service may not import); without one the block
+    plans the queue's shape alone, with no reservations and no parallelism limit."""
     mode = mode or cfg.session.progress_after_complete
     if mode == "off":
         return ""
@@ -64,7 +68,7 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
         )
     if phase:
         lines.append(f"Phase {phase}: {_pct_of(PR.phase_tally(st, phase))}")
-    plan = S.plan(st, cfg)
+    plan = plan or S.plan(st, cfg)
     ready = [it.id for it in plan.ready[:NEXT_SHOWN]]
     if ready:
         lines.append("Next: " + ", ".join(ready))

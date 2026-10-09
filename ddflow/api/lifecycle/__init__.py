@@ -121,7 +121,7 @@ from .merge import (  # noqa: F401
     merge,
     record_item_removed,
 )
-from .planning import PURPOSES, plan_for  # noqa: F401
+from .planning import PURPOSES, alternatives_offer, plan_for  # noqa: F401
 from .ready import (  # noqa: F401
     _PREFIX_SHOWN,
     DEFAULT_CHECK_RECOVERY,

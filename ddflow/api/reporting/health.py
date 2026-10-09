@@ -265,13 +265,13 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     problems with advice attached is what an operator and an agent both want.
     """
     from ...core import progress as PR
-    from ...core.schedule import plan
     from ...infra import container as CT
     from ...infra.store import Store
     from ...services import leases as L
     from ...services import workflow as WF
     from ...services.gates import load_gates
     from ...views import human
+    from ..lifecycle.planning import plan_for
 
     log, cfg, st = _load(repo, agent)
     # One read of the whole log serves the data repairs and every pass below (the warm
@@ -331,7 +331,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     notes.extend(UP.doctor_notes(st))
     notes.extend(fold_problem_notes(st))
 
-    p = plan(st, cfg, agent=log.agent_id)
+    p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
     # B191: a merge brought in a rival definition or a rival claim. Every state, not only
     # open ones -- a finished item whose other definition was dropped is still lost work.
