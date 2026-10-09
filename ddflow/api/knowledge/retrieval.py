@@ -106,6 +106,8 @@ def recall(
             "duplicates": cut.duplicates,
             "truncated": cut.truncated,
             "note": cut.note(),
+            "cut_note": cut.cut_note(),
+            "fold_note": cut.fold_note(),
             "cited": list(cut.cited),
         },
         "_render": {"results": results, "sources": RECALL_SOURCES},

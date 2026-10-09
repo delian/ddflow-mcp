@@ -152,7 +152,7 @@ def test_a_folded_repeat_is_said_on_the_cli_too(monkeypatch, capsys):
     data = {
         "results": {"lessons": []},
         "max_chars": 4000,
-        "pack": {"truncated": False, "duplicates": 1, "note": "1 repeated hit(s) folded into the first"},
+        "pack": {"truncated": False, "duplicates": 1, "cut_note": "", "fold_note": "1 repeated hit(s) folded into the first"},
         "_render": {"results": {"lessons": [row]}, "sources": (("lessons", "LESSON", "why"),)},
     }  # fmt: skip
     monkeypatch.setattr(K.A, "recall", lambda *a, **k: O.Outcome(kind="recall", data=data))
@@ -161,3 +161,28 @@ def test_a_folded_repeat_is_said_on_the_cli_too(monkeypatch, capsys):
     assert K.cmd_recall(args, ctx) == 0
     out = capsys.readouterr().out
     assert "… 1 repeated hit(s) folded into the first" in out and "Recall is a prompt" in out
+
+
+def test_a_cut_and_a_fold_are_both_said_and_the_json_names_each(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from ddflow.core import outcome as O
+    from ddflow.surfaces.commands import knowledge as K
+
+    row = {"id": "L1", "title": "t", "rule": "r"}
+    pack = {
+        "truncated": True, "duplicates": 2, "cut_note": "truncated: showing 1 of 5 hits within max_chars=9",
+        "fold_note": "2 repeated hit(s) folded into the first",
+    }  # fmt: skip
+    data = {
+        "results": {"lessons": [{"id": "L1", "kind": "LESSON"}]}, "max_chars": 9, "pack": pack,
+        "_render": {"results": {"lessons": [row]}, "sources": (("lessons", "LESSON", "why"),)},
+    }  # fmt: skip
+    monkeypatch.setattr(K.A, "recall", lambda *a, **k: O.Outcome(kind="recall", data=data))
+    args = SimpleNamespace(query="q", sources="", limit=3, max_chars=9)
+    assert K.cmd_recall(args, SimpleNamespace(repo=None, json=False, requested_agent="")) == 0
+    out = capsys.readouterr().out
+    assert "… 2 repeated hit(s) folded" in out and "truncated at 9 chars" in out
+    assert K.cmd_recall(args, SimpleNamespace(repo=None, json=True, requested_agent="")) == 0
+    body = __import__("json").loads(capsys.readouterr().out)
+    assert body["truncated"] == pack["cut_note"] and body["folded"] == pack["fold_note"]
