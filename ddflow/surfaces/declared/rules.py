@@ -31,7 +31,7 @@ COMMANDS: tuple[Command, ...] = (
                     content=a.get("content", "") or "",
                     tags=_list_or_none(a, "tags") or [],
                     scope=a.get("scope", "project") or "project",
-                    priority=int(a.get("priority", 50) or 50),
+                    priority=50 if a.get("priority") is None else int(a["priority"]),
                     globs=_list_or_none(a, "globs") or [],
                 ),
                 agent=agent,
@@ -144,7 +144,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             **(
                 {
-                    "priority": int(a.get("priority") or 50),
+                    "priority": int(a["priority"]),
                 }
                 if a.get("priority") is not None
                 else {}

@@ -225,3 +225,17 @@ def test_the_rule_tools_keep_their_deprecated_arguments_accepted_but_unadvertise
         assert set(entry["deprecated"]) == old and old <= set(entry["properties"])
         command = next(c for c in DECLARED if c.tool == tool)
         assert not old & set(command.input_schema()["properties"])
+
+
+def test_a_rule_priority_of_zero_over_mcp_is_stored_as_zero_like_the_command_line(repo):
+    """`int(a.get("priority", 50) or 50)` read a 0 as absent, on add and on edit, while
+    `ddflow rule add --priority 0` stored it: the same call ranked a rule differently."""
+    add, edit, show = (TOOLS[f"ddflow_rule_{v}"]["api"] for v in ("add", "edit", "show"))
+    out = add(repo, {"id": "r-zero", "title": "t", "content": "c", "priority": 0}, "agent")
+    assert out.exit == 0, out.reason
+    assert show(repo, {"id": "r-zero"}, "agent").data["priority"] == 0
+    add(repo, {"id": "r-edit", "title": "u", "content": "d", "priority": 80}, "agent")
+    assert edit(repo, {"id": "r-edit", "priority": 0}, "agent").exit == 0
+    assert show(repo, {"id": "r-edit"}, "agent").data["priority"] == 0
+    add(repo, {"id": "r-dflt", "title": "v", "content": "e"}, "agent")
+    assert show(repo, {"id": "r-dflt"}, "agent").data["priority"] == 50
