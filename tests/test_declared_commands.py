@@ -398,7 +398,6 @@ def test_the_export_family_carries_its_own_parity_exemptions():
     for name, command in tools.items():
         assert TOOLS[name]["api"] is command.call
         assert not any(c.tool == name for c in X.EXEMPTIONS)
-    assert not any(c.flag_exempt for c in X.EXEMPTIONS if c.tool in tools)
     omitted = {(t, f) for (t, f) in X.FLAG_EXEMPT if t in tools}
     assert omitted == {(t, f) for t, c in tools.items() for f in c.flag_exempt}
     assert ("ddflow_bisect", "--glob") in omitted and ("ddflow_ci", "--sha") in omitted
