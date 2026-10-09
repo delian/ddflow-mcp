@@ -3845,6 +3845,37 @@ old `config --set` key writes the new one. An unknown command, MCP tool or argum
 closest known one (`Did you mean 'ddflow_probe'?`). A command's alias is the same command to
 the parity test.
 
+### Upgrading a project: the whole picture
+
+A project is brought up to a newer ddflow in three steps, and ddflow does only the first on its own.
+
+1. **Silent: it tells you, once.** After ddflow is upgraded, the brief and the MCP handshake
+   print one line, `Upgraded ddflow A -> B: run ddflow upgrade --plan`, once per version on this
+   machine for this project. With the shipped `[upgrade].auto = "check"` the only file that
+   writes is the git-ignored `.ddflow/local/upgrade-notice.json`. `"safe"` also refreshes
+   ddflow's own files (hooks, driver docs, rules blocks) after a backup; `"off"` says nothing.
+2. **Read-only: you look.** `ddflow upgrade --plan` lists what would change, by category, and
+   writes nothing.
+3. **Consented: you apply.** `ddflow upgrade --apply` does what the plan lists after saving what
+   it rewrites. Anything an operator set by hand (a config value, a hand-edited driver doc) is
+   never changed without `--confirm KEY --reason WHY`, which is recorded in the log.
+
+**Undo and downgrade.** The log is append-only, so an upgrade is never undone by deleting events.
+`ddflow upgrade --restore [NAME]` puts back the files a backup holds (the default `local` backup,
+or the opt-in git `snapshot` tag: see "Backups: local or snapshot" above), and `git revert` of
+the commit that holds the upgrade's changes does the same for committed files. Going back to an
+older ddflow *binary* is a different matter: once a newer ddflow has stamped the log, the older
+one reads it but its writes are refused with the version to upgrade to (the skew guard,
+below), unless the operator passes `--allow-older-version` for that session.
+
+**Two versions at once.** Teammates on different ddflow versions share one log. Each agent
+appends to its own shard under `.ddflow/events/`, the shards are merged by union
+(`merge=union` in `.gitattributes`), and the version stamp is an event like any other, so the
+highest stamp wins on every clone: after the first upgraded clone's shard arrives, an older
+ddflow can still read and `ddflow upgrade --plan`, but its writes are refused until it is
+upgraded. Two clones that each ran `--apply` before merging both appended an `upgrade.applied`
+event; the union keeps both, every step was idempotent, and the plan on the merged log is empty.
+
 ### The version stamp and the skew guard
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
