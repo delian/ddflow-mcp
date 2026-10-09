@@ -441,3 +441,97 @@ def test_a_blank_attached_output_is_not_a_report(text, blank):
 
     gate = _gate(requires_evidence=["report"])
     assert (evidence_problems(gate, output_evidence(text), "X") != []) is blank
+
+
+# ---- ReviewerDispatch: reviewer pool, then route, then context pack --------------------
+
+
+def _revs():
+    from ddflow.services.review import Reviewer
+
+    return [
+        Reviewer(name="a", gates=["critic"]),
+        Reviewer(name="b", gates=["critic", "rubber_duck"]),
+        Reviewer(name="off", gates=["critic"], enabled=False),
+        Reviewer(name="c", gates=["standards"]),
+    ]
+
+
+@pytest.mark.parametrize("gate", ["critic", "rubber_duck", "standards", "bug_hunt", ""])
+def test_the_default_dispatch_selects_what_reviewers_for_always_did(gate):
+    """Pinned over the whole grid: the default pool is `reviewers_for`, the default route
+    leaves it alone, and no agent or note appears."""
+    from ddflow.services import review as R
+
+    revs = _revs()
+    got = R.ReviewerDispatch().select(revs, gate, gdef=None)
+    assert got.reviewers == R.reviewers_for(revs, gate)
+    assert got.agent == "" and got.notes == []
+
+
+def test_the_stages_are_replaceable_and_run_pool_then_route():
+    from ddflow.services import review as R
+
+    order = []
+
+    def pool(reviewers, gate):
+        order.append("pool")
+        return R.Selected([r for r in reviewers if r.name == "b"], notes=["a: not independent"])
+
+    def route(selected, gdef):
+        order.append("route")
+        return R.Selected(selected.reviewers, agent="reviewer-agent", notes=selected.notes)
+
+    got = R.ReviewerDispatch(pool=pool, route=route).select(_revs(), "critic")
+    assert order == ["pool", "route"]
+    assert [r.name for r in got.reviewers] == ["b"]
+    assert got.agent == "reviewer-agent" and got.notes == ["a: not independent"]
+
+
+def test_pack_runs_the_layers_in_order_and_is_the_identity_with_none():
+    from ddflow.services.review import ReviewerDispatch
+
+    assert ReviewerDispatch.pack("ctx", []) == "ctx"
+    assert ReviewerDispatch.pack("ctx", [lambda c: c + "|findings", lambda c: c + "|guidance"]) == (
+        "ctx|findings|guidance"
+    )
+
+
+def test_review_selects_its_reviewers_through_the_dispatch(repo, monkeypatch):
+    """`ddflow review` has no second way to pick reviewers: when the dispatch selects
+    nobody, the gate is recorded unavailable whatever `[[reviewer]]` lists."""
+    from ddflow.api import review as AR
+    from ddflow.services import review as R
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    chosen = []
+
+    def select(self, reviewers, gate, gdef=None):
+        chosen.append(gate)
+        return R.Selected([])
+
+    monkeypatch.setattr(R.ReviewerDispatch, "select", select)
+    out = AR.review(repo, item="T1", gate="critic")
+    assert chosen == ["critic"]
+    assert "No reviewer is configured" in out.data["text"], out.data
+
+
+def test_review_says_what_the_pool_and_route_stages_decided(repo, monkeypatch):
+    from ddflow.api import review as AR
+    from ddflow.services import review as R
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    monkeypatch.setattr(
+        R.ReviewerDispatch,
+        "select",
+        lambda self, reviewers, gate, gdef=None: R.Selected(
+            [], agent="reviewer-agent", notes=["a: not independent of the author"]
+        ),
+    )
+    said: list[str] = []
+    out = AR.review(repo, item="T1", gate="critic", on_progress=said.append)
+    # the skip reaches a caller that subscribed to no progress too
+    assert "a: not independent of the author" in out.data["text"], out.data
+    assert "→ a: not independent of the author" in said and "→ route: reviewer-agent" in said

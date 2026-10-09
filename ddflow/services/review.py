@@ -437,6 +437,69 @@ def reviewers_for(reviewers: list[Reviewer], gate: str) -> list[Reviewer]:
     return [r for r in reviewers if r.enabled and gate in r.gates]
 
 
+# -- dispatch: who reviews a gate, how it is routed, what they are told ----------------
+
+
+@dataclass(frozen=True)
+class Selected:
+    """The reviewers a gate goes to, after the pool and route stages.
+
+    ``agent`` is the named subagent the gate is routed to ("" when none is); ``notes``
+    say why a candidate was left out (a member that would not be independent of the
+    author, an endpoint at its concurrency limit), so a skip is never silent."""
+
+    reviewers: list[Reviewer]
+    agent: str = ""
+    notes: list[str] = field(default_factory=list)
+
+
+Pool = Callable[[list[Reviewer], str], Selected]
+Route = Callable[[Selected, Any], Selected]
+Layer = Callable[[str], str]
+
+
+def pool_enabled(reviewers: list[Reviewer], gate: str) -> Selected:
+    """The pool stage today: every enabled reviewer that lists ``gate``, in config order."""
+    return Selected(reviewers_for(reviewers, gate))
+
+
+def route_unrouted(selected: Selected, gdef: Any) -> Selected:
+    """The route stage today: no gate names an agent, so the pool goes through unchanged."""
+    return selected
+
+
+@dataclass(frozen=True)
+class ReviewerDispatch:
+    """The one path from a gate to its reviewers: reviewer pool, then route, then context
+    pack (D-unify kind-pipeline).
+
+    Three stages, each a plain callable the task that owns it replaces -- the reviewer
+    pool (spill and failover between independent endpoints), the route to a named
+    subagent (`[gate.X] agent`), the rules a gate's prompt carries -- so none of them adds
+    a fourth way to pick a reviewer or build a review prompt. The defaults are what
+    `ddflow review` did before the stages existed:
+
+    * ``pool(reviewers, gate)`` picks the candidates (`pool_enabled`);
+    * ``route(selected, gdef)`` routes them (`route_unrouted`);
+    * ``pack(context, layers)`` runs the prompt context through each layer in order (the
+      previous findings of a re-review, then the project guidance that governs the item).
+    """
+
+    pool: Pool = field(default_factory=lambda: pool_enabled)
+    route: Route = field(default_factory=lambda: route_unrouted)
+
+    def select(self, reviewers: list[Reviewer], gate: str, gdef: Any = None) -> Selected:
+        """Pool, then route."""
+        return self.route(self.pool(reviewers, gate), gdef)
+
+    @staticmethod
+    def pack(context: str, layers: list[Layer]) -> str:
+        """``context`` after each layer in turn (unchanged when there are none)."""
+        for layer in layers:
+            context = layer(context)
+        return context
+
+
 # -- probing ---------------------------------------------------------------------------
 
 
