@@ -1301,8 +1301,8 @@ def _same_reviewers(repo: Path, gates: list[str]) -> bool:
     """Is every gate served by the same reviewers? A combined review runs the FIRST gate's,
     so a gate with a reviewer of its own must not be recorded from another gate's (or as
     unavailable because the first gate has none)."""
-    revs = RV.load_reviewers(repo)
-    names = [sorted(r.name for r in RV.reviewers_for(revs, g)) for g in gates]
+    revs, dispatch = RV.load_reviewers(repo), RV.ReviewerDispatch()
+    names = [sorted(r.name for r in dispatch.select(revs, g).reviewers) for g in gates]
     return all(n == names[0] for n in names)
 
 
@@ -1580,7 +1580,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     if refused is not None:
         return refused
 
-    revs = R.reviewers_for(R.load_reviewers(repo), gate)
+    dispatch = R.ReviewerDispatch()
+    selected = dispatch.select(R.load_reviewers(repo), gate, gates.get(gate))
+    revs = selected.reviewers
     if not revs:
         return unavailable(
             f"No reviewer is configured for gate {gate!r}. "
@@ -1633,8 +1635,13 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         return _intent_missing(item, gate, how)
 
     revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
-    context = _with_previous_findings(context, log, it, item, gate, say, kind=kind, rerun=prior)
-    context = _with_guidance(context, cfg, st, item, gate, say)
+    context = dispatch.pack(
+        context,
+        [
+            lambda c: _with_previous_findings(c, log, it, item, gate, say, kind=kind, rerun=prior),
+            lambda c: _with_guidance(c, cfg, st, item, gate, say),
+        ],
+    )
 
     keeps: dict[str, _ReplyFile] = {}
     overrides = P.overrides_from(cfg)
