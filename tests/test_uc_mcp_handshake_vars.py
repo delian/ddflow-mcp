@@ -102,4 +102,15 @@ def test_every_named_reader_exists() -> None:
     from ddflow.api import surf_mcp
 
     for name in mcp._FILLERS:
-        assert name == "pipeline" or callable(getattr(surf_mcp, "fill_" + name)), name
+        assert name == "pipeline" or callable(surf_mcp.READERS[name]), name
+
+
+def test_a_broken_companion_registry_is_reported_not_swallowed(tmp_path: Path) -> None:
+    """The one reader that says so when it fails: "nobody could look" must not render as
+    "no gaps" (the unavailable-as-success class)."""
+    repo = _git_repo(tmp_path / "r")
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "config.toml").write_text("", "utf-8")
+    (repo / ".ddflow" / "companions.toml").write_text("this is [not toml\n", "utf-8")
+    v = mcp._instruction_vars(repo)
+    assert any("companion registry could not be read" in line for line in v["setup_todo"])
