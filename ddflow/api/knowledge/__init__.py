@@ -22,6 +22,7 @@ exists because the record is worthless without it:
 from __future__ import annotations
 
 import ast  # noqa: F401
+import dataclasses  # noqa: F401
 import re  # noqa: F401
 from dataclasses import dataclass  # noqa: F401
 from pathlib import Path  # noqa: F401
@@ -29,16 +30,36 @@ from typing import Any  # noqa: F401
 
 import ddflow.api._dedupe as DD  # noqa: F401
 
+from ...api.items import DEFAULT_PRIORITY  # noqa: F401
 from ...config import Config, csv_list  # noqa: F401
 from ...core import globspec as GS  # noqa: F401
 from ...core import ids as IDS  # noqa: F401
 from ...core import outcome as O  # noqa: F401
+from ...core import provenance as PV  # noqa: F401
 from ...core.budget import RECALL_MAX_CHARS, Budget  # noqa: F401
 from ...core.events import parse_changelog  # noqa: F401
-from ...core.model import LINK_RELATIONS, fold  # noqa: F401
-from ...infra.store import RECALL_SOURCES  # noqa: F401
+from ...core.flow import FEATURE, branch_kind  # noqa: F401
+from ...core.model import (  # noqa: F401  # noqa: F401
+    ABANDONED,
+    DONE,
+    LINK_RELATIONS,
+    OPEN,
+    Item,
+    fold,
+)
+from ...infra import worktree as W  # noqa: F401
+from ...infra.store import (
+    RECALL_SOURCES,  # noqa: F401
+    Store,  # noqa: F401
+    similar_records,  # noqa: F401
+)
 from ...services import contextpack as CP  # noqa: F401
+from ...services import gates as G  # noqa: F401
+from ...services import inventory as INV  # noqa: F401
 from ...services import searchcore as SC  # noqa: F401
+from ...services import sessions as S  # noqa: F401
+from ...services import similar as sim  # noqa: F401
+from ...services.completion import fixes_of  # noqa: F401
 from ...services.items import TaskDraft, add_task  # noqa: F401
 from .._base import _load  # noqa: F401
 from .bug_close import (  # noqa: F401
