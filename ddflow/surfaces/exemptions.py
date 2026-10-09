@@ -17,6 +17,7 @@ from __future__ import annotations
 from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
+from .declared.export import COMMANDS as _EXPORT
 from .declared.flow import COMMANDS as _FLOW
 from .declared.hooks import COMMANDS as _HOOKS
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
@@ -47,43 +48,11 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_ci",
-        flag_exempt={
-            "--stage": "`ci record` is for the pre-push hook script, which has a shell and no MCP session",
-            "--result": "`ci record`: see --stage",
-            "--report": "`ci record`: see --stage",
-            "--sha": "`ci record`: see --stage",
-        },
-    ),
-    Command(
-        path=(),
         tool="ddflow_list",
         flag_exempt={
             "--kind": "carried by `sources`: `kind` selects the viewer",
             "--exact": "carried by `mode`=exact",
             "--regex": "carried by `mode`=regex",
-        },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_export",
-        flag_exempt={
-            "--update": "MCP writes with write=true plus a repo-relative path",
-            "--out": "MCP: write=true plus path (the same path-safety rules)",
-            "--force": "overriding hand-edit protection is the operator's, at a terminal",
-            "--template": "an agent never feeds the renderer an arbitrary file",
-            "--lock": "the operator's veto: a person at a terminal locks a document",
-            "--local": "a per-machine selection is the operator's, at a terminal",
-            "--yes": "answers the terminal confirmation, which MCP has none of",
-        },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_bisect",
-        flag_exempt={
-            "--glob": "where candidates come from stays the default tests/**/test_*.py over MCP; an agent names `candidates` when the suite lives elsewhere (tools/list byte budget)",
-            "--repeat": "re-running each probe is a terminal-side choice for a flaky pollution (tools/list byte budget)",
-            "--max-runs": "the run budget is the operator's, set at a terminal; the default 200 bounds an agent's call (tools/list byte budget)",
         },
     ),
     Command(
@@ -106,6 +75,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_EXPORT,
     *_MEMORY,
     *_FLOW,
     *_HOOKS,
