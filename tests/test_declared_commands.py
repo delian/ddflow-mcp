@@ -15,11 +15,20 @@ import sys
 import pytest
 
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, review, rules, setup
+from ddflow.surfaces.declared import (
+    knowledge,
+    lifecycle,
+    queue,
+    records,
+    reporting,
+    review,
+    rules,
+    setup,
+)
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle, rules, review, setup)
+FAMILIES = (knowledge, records, queue, lifecycle, rules, review, setup, reporting)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -33,6 +42,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.rules",
         "ddflow.surfaces.declared.review",
         "ddflow.surfaces.declared.setup",
+        "ddflow.surfaces.declared.reporting",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -314,3 +324,28 @@ def test_import_doctor_and_upgrade_keep_their_flags_and_their_tool_exemptions():
     assert build_parser().parse_args(["doctor", "--upgrade"]).upgrade is True
     up = build_parser().parse_args(["upgrade", "--apply"])  # the hand-written half
     assert up.apply == "all" and "ddflow_upgrade" in TOOLS
+
+
+def test_the_reporting_commands_keep_the_shapes_the_migration_found():
+    """What the declarations carry that a generated parser or tool entry could lose."""
+    by = reporting.BY_TOOL
+    assert [c.path for c in reporting.COMMANDS] == [
+        ("replay",), ("recover",), ("progress",), ("loops",), ("cleanup",), ("rebuild",),
+        ("render",), ("board",), ("show",), ("status",), ("history",),
+    ]  # fmt: skip
+    # `render` is text only with `show`: the table holds the predicate, not a flag
+    entry = TOOLS["ddflow_render"]
+    assert entry["text"]({"show": "board"}) is True and entry["text"]({}) is False
+    assert entry["payload"]({"show": "board"}) == "text" and entry["payload"]({}) == ("files",)
+    # `history`: the flag is `--agent`, the argument `by_agent`, the metavar the old one
+    parsed = build_parser().parse_args(["history", "--agent", "someone", "--tail", "3"])
+    assert (parsed.by_agent, parsed.tail, parsed.limit) == ("someone", 3, 40)
+    assert list(TOOLS["ddflow_history"]["properties"]) == [
+        "item", "kind", "since", "limit", "tail", "by_agent",
+    ]  # fmt: skip
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["history", "--tail", "0"])  # positive only, as before
+    # `progress` takes its id optionally on the command line and a `limit` only as a tool
+    assert build_parser().parse_args(["progress"]).id == ""
+    assert "limit" in TOOLS["ddflow_progress"]["properties"]
+    assert by["ddflow_board"].prose and by["ddflow_replay"].prose and by["ddflow_render"].prose
