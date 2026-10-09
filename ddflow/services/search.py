@@ -70,6 +70,7 @@ SOURCES = (
     "schedule",
 )
 _RECORD_SOURCES = frozenset({"task", "phase", "bug", "research", "decision", "lesson"})
+_DEF_KINDS = frozenset({"rule", "skill", "agent", "schedule"})  # the definitions with a source
 MODES = ("ranked", "exact", "regex")
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 200
@@ -151,6 +152,10 @@ def _log_docs(events: list, kinds: set[str]) -> list[Doc]:
         head = ev.kind.split(".")[0]
         if head == "session" or head in kinds & _RECORD_SOURCES:
             continue  # a record source already holds what this event wrote
+        if head in ("job", "schedule") and head in kinds:
+            continue  # the jobs and schedules sources do too
+        if head == "def" and ev.subject.partition(":")[0] in kinds & _DEF_KINDS:
+            continue  # and the rules, skills, agents and schedules ones, which are definitions
         payload = json.dumps(ev.data or {}, ensure_ascii=False, sort_keys=True)
         out.append(
             Doc("log", ev.id, ev.kind, ev.ts, ev.agent, "", f"{ev.kind} {ev.subject} {payload}")
@@ -164,7 +169,10 @@ def _def_docs(st: State, def_kind: str, kind: str) -> list[Doc]:
     for rec in st.defs.values():
         if rec.kind != def_kind:
             continue
-        text = _join(rec.id, *(v for v in rec.fields.values() if isinstance(v, str | int | float)))
+        vals = [
+            " ".join(map(str, v)) if isinstance(v, list | tuple) else v for v in rec.fields.values()
+        ]
+        text = _join(rec.id, *(v for v in vals if isinstance(v, str | int | float)))
         out.append(Doc(kind, rec.id, rec.status, rec.updated_at or rec.at, rec.by, "", text))
     return out
 
@@ -178,27 +186,35 @@ def _rule_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
                 continue
             text = _join(r.id, r.title, r.content, " ".join(r.tags))
             out.append(Doc("rule", r.id, "active", r.updated.isoformat(), "", "", text))
+        # the instruction files other tools read (.cursor/rules, .kilo, CLAUDE.md, AGENTS.md)
+        out += [
+            Doc("rule", e.path, "active", "", "", "", _join(e.path, e.text))
+            for e in SK.inventory(c.repo)
+            if e.kind == "rule"
+        ]
     return out
 
 
 def _skill_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
     out = [d for d in _def_docs(c.st, "skill", "skill") if "skill" in kinds]
     if c.repo is not None:
+        have = {d.id for d in out}
         for e in SK.inventory(c.repo):
-            if e.kind in kinds and e.kind in ("skill", "command"):
+            if e.kind in kinds and e.kind in ("skill", "command") and e.name not in have:
                 out.append(Doc(e.kind, e.name, "active", "", "", "", _join(e.name, e.text)))
     return out
 
 
 def _agent_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
     out = _def_docs(c.st, "agent", "agent")
+    have = {d.id for d in out}
     if c.repo is not None:
         for p in sorted((c.repo / ".claude" / "agents").glob("*.md")):
             try:
                 body = p.read_text("utf-8", errors="replace")
             except OSError:
                 continue
-            if body.strip():
+            if body.strip() and p.stem not in have:
                 out.append(Doc("agent", p.stem, "active", "", "", "", _join(p.stem, body[:4000])))
     return out
 
@@ -323,7 +339,7 @@ class Filters:
     phase: str = ""
     agent: str = ""
     since: str = ""
-    sources: str = ""
+    source: str = ""
 
     def given(self) -> dict[str, str]:
         mine = {
@@ -332,14 +348,14 @@ class Filters:
             "phase": self.phase,
             "agent": self.agent,
             "since": self.since,
-            "source": self.sources,
+            "source": self.source,
         }
         return {k: v for k, v in mine.items() if v}
 
 
 def _source_names(f: Filters) -> set[str]:
     """The sources asked for (empty: every one); an unknown name is refused."""
-    wanted = {k.strip().lower() for k in f.sources.split(",") if k.strip()}
+    wanted = {k.strip().lower() for k in f.source.split(",") if k.strip()}
     known = source_names()
     bad = sorted(wanted - set(known))
     if bad:
