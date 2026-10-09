@@ -1,0 +1,7 @@
+# The `ignore_imports` of .importlinter contract `surfaces-through-api` whose source is ddflow.surfaces.commands.setup.
+# See tests/test_architecture_guards.py: entries only shrink, never grow.
+ignore_imports = [
+    "ddflow.surfaces.commands.setup -> ddflow.infra.worktree",
+    "ddflow.surfaces.commands.setup -> ddflow.services.adopt",
+    "ddflow.surfaces.commands.setup -> ddflow.services.help",
+]
