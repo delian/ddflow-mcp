@@ -47,10 +47,13 @@ from ..config import family_for
 from ..core import unidiff
 from ..core.digest import content_digest
 from ..infra import proc as P
-from ..services.gates import _missing_executable
+from ..services import cmdrunner as CR
+from ..services.cmdrunner import Declared
 from ..services.gates.reviewers import git_state, git_state_change
 
 REVIEWED, ERROR, UNAVAILABLE, PARTIAL = 0, 1, 2, 3
+
+_RUNNER = CR.CommandRunner()
 
 #: Endpoints probed by `ddflow reviewers detect`, with the label each usually means.
 #: Ordered by how likely they are to be a local inference server rather than something
@@ -698,35 +701,27 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     cmd = rev.command.replace("{model}", rev.model)
     if not cmd.strip():
         return "", "kind='command' but no `command` is configured"
-    # `gates._missing_executable`, not a second implementation of it. The copy here
-    # inspected only `cmd[:1]` for shell characters, so `FOO=bar claude -p` split to a
-    # head of `FOO=bar` and reported a false UNAVAILABLE; it had no builtin allowlist;
-    # and it let `shlex.split`'s ValueError on an unbalanced quote escape a function
-    # whose entire contract is to turn every way of not-reviewing into a reported one.
-    missing = _missing_executable(cmd, {**os.environ, **rev.env}.get("PATH"))
-    if missing:
-        return "", (
-            f"executable {missing!r} is not on PATH -- the reviewer could not run. "
-            f"This is NOT a clean review."
-        )
+    # The installed-check and the process-group start are `CommandRunner.start`'s, not a
+    # second implementation of them (the copy that was here once mis-read `FOO=bar claude`
+    # as a missing `FOO=bar`, had no builtin allowlist and let an unbalanced quote escape a
+    # function whose contract is to turn every way of not-reviewing into a reported one).
+    env = {**os.environ, **rev.env}
     # A reviewer must leave git as it found it (B5ce30dd94d); its cwd is this process's.
     state_before = git_state(os.getcwd())
-    try:
-        # Its own process group, so a timeout or a winning copy kills the reviewer the
-        # shell started, not just the shell.
-        p = P.popen(
-            cmd,
-            # bandit B604: a CLI reviewer IS a shell command line the operator configured.
-            shell=True,  # nosec B604
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env={**os.environ, **rev.env},
-            start_new_session=True,
-        )
-    except (OSError, ValueError) as exc:
-        return "", f"could not execute: {exc}"
+    started = _RUNNER.start(
+        Declared(cmd, f"reviewer {rev.name!r} command"),
+        env=env,
+        stdin=P.PIPE,
+    )
+    if started.unavailable is not None:
+        run = started.unavailable
+        if run.kind == CR.MISSING:
+            return "", (
+                f"executable {run.missing!r} is not on PATH -- the reviewer could not run. "
+                f"This is NOT a clean review."
+            )
+        return "", run.reason
+    p = started.proc
     _attach_to_running(p)
     try:
         stdout, stderr = p.communicate(f"{system}\n\n{user}", timeout=timeout_s)
@@ -1320,18 +1315,18 @@ def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
     cmd = spec.command.replace("{model}", rev.model)
     if on_log:
         on_log(f"starting {rev.name}: {cmd}")
-    try:
-        proc = P.popen(
-            cmd,
-            # bandit B604: a reviewer's start command IS a shell command line the operator
-            # configured.
-            shell=True,  # nosec B604
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
+    started = _RUNNER.start(
+        Declared(cmd, f"reviewer {rev.name!r} launch command"),
+        stdout=P.DEVNULL,
+        stderr=P.DEVNULL,
+        check_installed=False,
+    )
+    if started.unavailable is not None:
+        return (
+            False,
+            f"could not start {cmd!r}: {started.unavailable.reason.removeprefix('could not execute: ')}",
         )
-    except (OSError, ValueError) as exc:
-        return False, f"could not start {cmd!r}: {exc}"
+    proc = started.proc
 
     deadline = _time.monotonic() + spec.ready_timeout_s
     while _time.monotonic() < deadline:
