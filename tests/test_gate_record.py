@@ -111,6 +111,17 @@ def test_a_review_in_order_is_not_noted(repo, tmp_path):
     assert "comes after" not in out.data["text"]
 
 
+def test_a_review_of_an_id_no_item_has_is_recorded_not_a_traceback(repo, tmp_path):
+    """The record path takes the id the caller gave, as it always did: an id that names no
+    item is recorded unmeasured (the fold makes the item), it does not crash the review."""
+    _reviewed_repo(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="NOPE", branch="feat", intent="add x.py")
+
+    assert out.exit == 0, out
+    assert "recorded NOPE.critic = passed" in out.data["text"]
+    assert _item(repo, "NOPE").gates["critic"].outcome == "passed"
+
+
 # -- merge -------------------------------------------------------------------------------
 
 

@@ -1414,8 +1414,8 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
 
 
 def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
-    repo, log, cfg, st, it, gate: str, outcome: str, called_from, gates, say,
-    *, best, results, keeps, extra_evidence, scope,
+    repo, log, cfg, st, it, item: str, gate: str, outcome: str,
+    *, called_from, gates, say, best, results, keeps, extra_evidence, scope,
 ) -> str:  # fmt: skip
     """Write the review's outcome against ``it`` and say so; the outcome recorded (a pass
     over untriaged findings of an earlier round is held, see `_hold`)."""
@@ -1431,10 +1431,10 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     _record(
-        repo, log, cfg, st, it.id, gate, outcome, called_from, gates,
+        repo, log, cfg, st, item, gate, outcome, called_from, gates,
         reason=reason, evidence=evidence, by=best.model,
     )  # fmt: skip
-    say(f"\nrecorded {it.id}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})")
+    say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})")
     _say_triage_scope(say, results, best)
     return outcome
 
@@ -1661,8 +1661,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     }[best.status]
     if item:
         outcome = _record_review(
-            repo, log, cfg, st, it, gate, outcome, called_from, gates, say,
-            best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            repo, log, cfg, st, it, item, gate, outcome,
+            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
             scope=(taken, kind, done, forced, how, len(diff)),
         )  # fmt: skip
 
