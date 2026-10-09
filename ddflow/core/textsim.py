@@ -41,6 +41,7 @@ from __future__ import annotations
 import functools
 import math
 import re
+import unicodedata
 from array import array
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -116,6 +117,11 @@ def _run(run: str) -> tuple[str, ...]:
 MIN_WORD_CHARS = 2
 _WORD = re.compile(r"\w+")
 _WORD_HYPHEN = re.compile(r"[\w-]+")
+_FTS_WORD = re.compile(r"[^\W_]+")
+_ONE_ACCENT = 2  # a letter and one combining mark
+#: The case folds FTS5 applies that ``str.lower`` does not (micro sign, long s, final sigma, dotted
+#: capital I); ß stays ß in FTS5, so ``casefold`` is not used.
+_FTS_FOLD = str.maketrans({"\u00b5": "\u03bc", "\u017f": "s", "\u03c2": "\u03c3", "\u0130": "i"})
 
 
 def words(
@@ -130,6 +136,30 @@ def words(
     if fold:
         text = text.lower()
     return [w for w in (_WORD_HYPHEN if hyphens else _WORD).findall(text) if len(w) >= min_len]
+
+
+def _unaccent(ch: str) -> str:
+    """``ch`` without its diacritics when it is an ASCII letter carrying them (``é`` -> ``e``,
+    ``ñ`` -> ``n``; one accent: FTS5 keeps ``ǟ``, a letter with two, whole); every other character as it is. Narrower than "drop all combining marks"
+    on purpose: FTS5 keeps ``ё``, a Greek letter with its tonos and a Hangul syllable whole,
+    and dropping their marks (or decomposing them) would put the fallback further from it."""
+    d = unicodedata.normalize("NFD", ch)
+    if len(d) == _ONE_ACCENT and d[0].isascii() and d[0].isalpha() and unicodedata.combining(d[1]):
+        return d[0]
+    return ch
+
+
+def fts_words(text: str) -> list[str]:
+    """The words FTS5's ``unicode61`` tokenizer (the one its ``porter`` wraps) makes of
+    ``text``: lower-cased, the diacritics of Latin letters removed, split at every character
+    that is not a letter or a digit (an underscore splits, so ``adopt_existing`` is ``adopt``
+    and ``existing``). What the FTS5-less fallback ranks on, so it sees the words FTS5
+    indexes. Exact for ASCII, Latin-1 and Latin Extended-A text and for the common scripts
+    (checked against FTS5 in tests/test_search_porter.py); the few characters FTS5 folds by its
+    own tables beyond those few folds, private-use code points and scripts newer than this
+    Python's Unicode may still split differently.
+    """
+    return _FTS_WORD.findall("".join(map(_unaccent, text.translate(_FTS_FOLD).lower())))
 
 
 def tokens(title: str, body: str = "") -> list[str]:

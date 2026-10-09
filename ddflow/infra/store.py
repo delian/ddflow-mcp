@@ -41,7 +41,7 @@ from ddflow import FORMAT_LEVEL, __version__
 
 from ..config import Config
 from ..core import digest as D
-from ..core import textsim
+from ..core import porter, textsim
 from ..core.model import State, fold
 from ..core.rank import TRIGRAM_MIN, bm25, fuse, rerank, substring_bm25
 from ..core.textcut import clip
@@ -560,9 +560,11 @@ class Store:
 
         Both lists exist on every machine. Where SQLite has FTS5 they come from its indexes;
         where it has none (or no trigram tokenizer) the same lists are computed in Python
-        over the same columns and the same query terms. The substring list is identical in
-        its candidates everywhere; the WORD list is not: FTS5's porter stemmer and
-        `textsim.stem` agree on plurals and -ed/-ing, not on every word.
+        over the same columns and the same query terms. Both lists are identical in their
+        candidates everywhere: the substring list by construction, the WORD list because the
+        fallback splits words as FTS5's unicode61 tokenizer does (`textsim.fts_words`) and
+        stems them as its porter tokenizer does (`core.porter`), each checked against FTS5 (for ASCII,
+        Latin and the common scripts; see `textsim.fts_words` for what can still differ).
         ``rerank_by_likeness`` additionally reorders the fused top by fuzzy likeness to the
         query (`rank.rerank`: rapidfuzz when installed, else difflib).
 
@@ -718,8 +720,9 @@ _POOL, _POOL_MIN = 4, 20
 
 
 def _fallback_words(text: str) -> list[str]:
-    """The words the FTS5-less fallback ranks on: every word, lower-cased and stemmed."""
-    return [textsim.stem(w) for w in textsim.words(text, min_len=1, fold=True)]
+    """The words the FTS5-less fallback ranks on: every word, lower-cased and stemmed the way
+    FTS5's porter tokenizer stems it, so a query returns the same rows without FTS5."""
+    return [porter.stem(w) for w in textsim.fts_words(text)]
 
 
 def _terms(query: str) -> list[str]:
