@@ -35,7 +35,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from ddflow.core import agentname as AN
 from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
@@ -450,6 +450,22 @@ RESOURCES: tuple[Resource, ...] = (
 RESOURCE_BY_URI: dict[str, Resource] = {r.uri: r for r in RESOURCES}
 
 
+@dataclass
+class _Call:
+    """What one checked `tools/call` carries from `_m_tools_call` to `_call_api`."""
+
+    name: str
+    spec: dict[str, Any]
+    args: dict[str, Any]
+    agent: str
+    per_call: str
+    params: dict[str, Any]
+    modern: bool
+    allow_older: Any
+    retired: dict[str, str]
+    used: Any
+
+
 class Server:
     """One connection. Which, deliberately, is not the same thing as one agent.
 
@@ -669,285 +685,323 @@ class Server:
         return protocol.discover(_instructions(self.repo, self.agent, self.tier))
 
     def _dispatch(self, msg: dict[str, Any], *, modern: bool = False) -> dict[str, Any] | None:
+        """Answer one JSON-RPC message: the method's own handler, else `method not found`.
+
+        One handler per method (`_METHODS`), each taking the message and the era it was
+        sent in. The era is the message's own; only `_structured` falls back on the
+        protocol a legacy connection negotiated at `initialize`."""
         method = msg.get("method", "")
+        handler = self._METHODS.get(method) if isinstance(method, str) else None
+        if handler is None:
+            return _err(msg.get("id"), -32601, f"method not found: {method}")
+        return handler(self, msg, modern)
+
+    def _m_initialize(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        params = msg.get("params") or {}
+        want = params.get("protocolVersion", "")
+        self.protocol = protocol.legacy_version(want)
+        ci = params.get("clientInfo")
+        self.client_info = dict(ci) if isinstance(ci, dict) else {}
+        return _ok(
+            msg.get("id"),
+            protocol.initialize_result(
+                self.protocol, _instructions(self.repo, self.agent, self.tier)
+            ),
+        )
+
+    def _m_silent(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        """`notifications/initialized` and `notifications/cancelled`: nothing is answered."""
+        return None
+
+    def _m_ping(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        return _ok(msg.get("id"), {})
+
+    def _m_tools_list(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        advertised = tier_tools(self.tier)
+        return _ok(
+            msg.get("id"),
+            {
+                "tools": [
+                    {
+                        "name": n,
+                        "description": s["description"],
+                        "inputSchema": _schema(s),
+                        **(_result_declaration(n, s) if self._structured(modern) else {}),
+                    }
+                    for n, s in sorted(TOOLS.items())
+                    if n in advertised
+                ]
+            },
+        )
+
+    def _m_tools_call(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        """`tools/call`: check the call (`_check_call`), then identify or run the tool."""
         mid = msg.get("id")
-        if method == "initialize":
-            params = msg.get("params") or {}
-            want = params.get("protocolVersion", "")
-            self.protocol = protocol.legacy_version(want)
-            ci = params.get("clientInfo")
-            self.client_info = dict(ci) if isinstance(ci, dict) else {}
-            return _ok(
+        params = msg.get("params") or {}
+        args = params.get("arguments") or {}
+        allow_older: Any = None
+        if ALLOW_OLDER in args:
+            args = dict(args)
+            allow_older = args.pop(ALLOW_OLDER)
+        name, spec, args, used, clash = _resolve_call(params.get("name", ""), args)
+        problem = self._check_call(name, spec, args, clash)
+        if problem:
+            return _ok(mid, _text(problem, error=True))
+        # An argument kept only for callers of an older release: dropped here, so no api
+        # lambda sees it, and said once in the reply (`deprecation_note`).
+        retired = {n: why for n, why in (spec.get("deprecated") or {}).items() if n in args}
+        if retired:
+            args = {k: v for k, v in args.items() if k not in retired}
+        # The per-call identity, stripped BEFORE the tool sees its arguments so no
+        # api lambda has to know it exists. Validated with the same rule as a
+        # declaration: it becomes a log shard filename either way.
+        agent, per_call, args, bad = self._caller(params, args, modern)
+        if bad:
+            return _ok(mid, _text(bad, error=True))
+        # The typed path, when this tool has one. No argv, no re-parsing, no
+        # scraping stdout, and no swapping process-global streams -- which is what
+        # made the string path non-reentrant. `api` is where a protocol adapter
+        # belongs: above the domain, beside the other surface, not THROUGH it.
+        if spec.get("identify") and modern:
+            return _ok(mid, _text(_modern_identify_note(agent)))
+        if spec.get("identify"):
+            return _ok(mid, self._identify(args))
+        if "api" in spec:
+            return self._call_api(
                 mid,
-                protocol.initialize_result(
-                    self.protocol, _instructions(self.repo, self.agent, self.tier)
+                _Call(
+                    name, spec, args, agent, per_call, params, modern, allow_older, retired, used
                 ),
             )
-        if method in ("notifications/initialized", "notifications/cancelled"):
-            return None
-        if method == "ping":
-            return _ok(mid, {})
-        if method == "tools/list":
-            advertised = tier_tools(self.tier)
-            return _ok(
-                mid,
-                {
-                    "tools": [
-                        {
-                            "name": n,
-                            "description": s["description"],
-                            "inputSchema": _schema(s),
-                            **(_result_declaration(n, s) if self._structured(modern) else {}),
-                        }
-                        for n, s in sorted(TOOLS.items())
-                        if n in advertised
-                    ]
-                },
-            )
-        if method == "tools/call":
-            params = msg.get("params") or {}
-            name = params.get("name", "")
-            args = params.get("arguments") or {}
-            allow_older: Any = None
-            if ALLOW_OLDER in args:
-                args = dict(args)
-                allow_older = args.pop(ALLOW_OLDER)
-            name, spec, args, used, clash = _resolve_call(name, args)
-            if spec is None:
-                return _ok(
-                    mid,
-                    _text(
-                        f"unknown tool {name!r}. Available: {', '.join(sorted(TOOLS))}"
-                        + _REGISTRY.unknown_tool_hint(TOOLS, name),
-                        error=True,
-                    ),
-                )
-            if clash:
-                return _ok(mid, _text(f"bad arguments: {clash}", error=True))
-            missing = [
-                n for n, (_t, _d, req) in spec["properties"].items() if req and not args.get(n)
-            ]
-            if missing:
-                return _ok(
-                    mid, _text(f"missing required argument(s): {', '.join(missing)}", error=True)
-                )
-            # An argument this tool does not have is an ERROR, not something to drop.
-            # Every schema here declares `additionalProperties: false` and nothing
-            # enforced it, so a caller passing `id="D1"` to a tool with no `id` got a
-            # success and a decision under a generated id — then `supersedes: D1`
-            # pointed at nothing. Silence at an API boundary is the silent-knob-drop
-            # class, and an agent cannot see it at all: it has only the reply.
-            known = _properties(spec)
-            unknown = sorted(set(args) - set(known))
-            if unknown:
-                return _ok(
-                    mid,
-                    _text(
-                        f"unknown argument(s) for {name}: {', '.join(unknown)}. "
-                        f"Known: {', '.join(sorted(set(known) - set(spec.get('deprecated') or {})))}"
-                        + _REGISTRY.unknown_arg_hint(
-                            set(known) - set(spec.get("deprecated") or {}), unknown
-                        ),
-                        error=True,
-                    ),
-                )
-            # An argument kept only for callers of an older release: dropped here, so no api
-            # lambda sees it, and said once in the reply (`deprecation_note`).
-            retired = {n: why for n, why in (spec.get("deprecated") or {}).items() if n in args}
-            if retired:
-                args = {k: v for k, v in args.items() if k not in retired}
-            # The per-call identity, stripped BEFORE the tool sees its arguments so no
-            # api lambda has to know it exists. Validated with the same rule as a
-            # declaration: it becomes a log shard filename either way.
-            agent, per_call, args, bad = self._caller(params, args, modern)
-            if bad:
-                return _ok(mid, _text(bad, error=True))
-            # The typed path, when this tool has one. No argv, no re-parsing, no
-            # scraping stdout, and no swapping process-global streams -- which is what
-            # made the string path non-reentrant. `api` is where a protocol adapter
-            # belongs: above the domain, beside the other surface, not THROUGH it.
-            if spec.get("identify") and modern:
-                return _ok(mid, _text(_modern_identify_note(agent)))
-            if spec.get("identify"):
-                want = args.get("agent", "")
-                if not isinstance(want, str):
-                    return _ok(mid, _text("agent must be a string", error=True))
-                want = want.strip()
-                # A name that is not usable as a log shard filename is refused HERE,
-                # where the agent can read the reason and retry, rather than at the
-                # first write -- by which point the caller believes it is identified.
-                if want and not AN.is_valid(want):
-                    return _ok(mid, _text(AN.refusal(want), error=True))
-                self.agent = want
-                # The same agent's shell commands take it too (Bfad021e8d9).
-                from ..infra import harness_identity
+        # No argv fallback. Every tool declares `api`, `ARGV_TOOLS_CEILING` is 0, and
+        # `test_every_tool_has_exactly_one_dispatch_mechanism` requires exactly one
+        # mechanism per tool — so a tool arriving here has NO dispatch, which is a
+        # packaging fault rather than a caller error. Said plainly instead of falling
+        # through to a path that no longer exists.
+        return _ok(
+            mid,
+            _text(
+                f"{name} declares no dispatch mechanism. This is a ddflow bug, not a "
+                f"problem with the call.",
+                error=True,
+            ),
+        )
 
-                shell = harness_identity.declare(self.repo, want)
-                if want:
-                    detail = "declared on this connection" + (
-                        f"; {shell}: pass --agent to the CLI" if shell else ", and for its shell"
-                    )
-                else:
-                    want_who, detail = _default_agent(self.repo)
-                    who = want_who
-                    detail = f"not declared; {detail}"
-                who = want or who
-                note = ""
-                if not want and detail.endswith("working tree"):
-                    note = (
-                        " Every agent in this tree derives the SAME name, so if you are "
-                        "one of several here, declare one."
-                    )
-                if not want and shell:
-                    note += f" Its shell may still use the previous name ({shell})."
-                return _ok(
-                    mid,
-                    _text(
-                        f"identified as {who!r} ({detail}). Claims, gate outcomes and "
-                        f"reviews on this connection are attributed to it.{note}"
-                    ),
+    @staticmethod
+    def _check_call(name: str, spec: Any, args: dict[str, Any], clash: Any) -> str:
+        """Why a `tools/call` cannot be run as asked ("" when it can): an unknown tool, a
+        clashing spelling, a missing required argument, or an argument the tool lacks."""
+        if spec is None:
+            return f"unknown tool {name!r}. Available: {', '.join(sorted(TOOLS))}" + (
+                _REGISTRY.unknown_tool_hint(TOOLS, name)
+            )
+        if clash:
+            return f"bad arguments: {clash}"
+        missing = [n for n, (_t, _d, req) in spec["properties"].items() if req and not args.get(n)]
+        if missing:
+            return f"missing required argument(s): {', '.join(missing)}"
+        # An argument this tool does not have is an ERROR, not something to drop.
+        # Every schema here declares `additionalProperties: false` and nothing
+        # enforced it, so a caller passing `id="D1"` to a tool with no `id` got a
+        # success and a decision under a generated id — then `supersedes: D1`
+        # pointed at nothing. Silence at an API boundary is the silent-knob-drop
+        # class, and an agent cannot see it at all: it has only the reply.
+        known = _properties(spec)
+        unknown = sorted(set(args) - set(known))
+        if unknown:
+            return (
+                f"unknown argument(s) for {name}: {', '.join(unknown)}. "
+                f"Known: {', '.join(sorted(set(known) - set(spec.get('deprecated') or {})))}"
+                + _REGISTRY.unknown_arg_hint(
+                    set(known) - set(spec.get("deprecated") or {}), unknown
                 )
-            if "api" in spec:
-                try:
-                    if allow_older is not None:
-                        self._override_skew(allow_older, agent)
-                    result = self._invoke(spec, args, agent, per_call, params)
-                except Exception as exc:
-                    # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
-                    # class declaring exit 3 -- is a result to act on, not a failed call;
-                    # an undeclared Key/Type/ValueError is a malformed call; anything else
-                    # is a bug, answered as an internal error below.
-                    code = exit_for(exc)
-                    if code == REFUSED:
-                        return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
-                    if declared_exit(exc) is None and isinstance(
-                        exc, (KeyError, TypeError, ValueError)
-                    ):
-                        return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-                    if code is None:
-                        raise
-                    failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
-                    body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
-                    return _ok(mid, _text(body, error=failed, meta={"exit": code}))
-                # `text` may be a bool or a predicate on the arguments: `render`
-                # returns a document with `--show` and a file list without it, and which
-                # it is cannot be known until the call.
-                # Both may be a value or a predicate on the arguments: `render` returns
-                # a document with `--show` and a file list without it, and which it is
-                # cannot be known until the call. Resolved together so the two can never
-                # disagree -- a text encoding over a tuple payload is a TypeError.
-                wants_text = spec.get("text", False)
-                payload = spec.get("payload", "")
-                if callable(wants_text):
-                    wants_text = wants_text(args)
-                if callable(payload):
-                    payload = payload(args)
-                out = _outcome_result(
-                    result,
-                    payload,
-                    as_text=bool(wants_text),
-                    bound=_bounds().get(name),
-                    args=args,
-                    command=_REGISTRY.command_name(name),
-                    structured=self._structured(modern)
-                    and "outputSchema" in _result_declaration(name, spec),
-                )
-                # The footer goes on LAST, after the reason block, so it never comes between
-                # a caller and the answer it asked for — `content[0]` is still the body and
-                # `jtool`-style consumers are untouched.
-                if name == "ddflow_help" and (tiered := tier_note(self.tier)):
-                    out["content"].append({"type": "text", "text": tiered})
-                if retired:
-                    out["content"].append({"type": "text", "text": deprecation_note(name, retired)})
-                for alias in self._notices.fresh(used):
-                    out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
-                for note in (_obligation_footer(self), _stale_footer(self)):
-                    if note:
-                        out["content"].append({"type": "text", "text": note})
-                return _ok(mid, out)
+            )
+        return ""
 
-            # No argv fallback. Every tool declares `api`, `ARGV_TOOLS_CEILING` is 0, and
-            # `test_every_tool_has_exactly_one_dispatch_mechanism` requires exactly one
-            # mechanism per tool — so a tool arriving here has NO dispatch, which is a
-            # packaging fault rather than a caller error. Said plainly instead of falling
-            # through to a path that no longer exists.
-            return _ok(
-                mid,
-                _text(
-                    f"{name} declares no dispatch mechanism. This is a ddflow bug, not a "
-                    f"problem with the call.",
-                    error=True,
-                ),
-            )
-        if method == "resources/list":
-            return _ok(mid, {"resources": [r.listing() for r in RESOURCES]})
-        if method == "resources/read":
-            uri = (msg.get("params") or {}).get("uri", "")
-            resource = RESOURCE_BY_URI.get(uri)
-            if resource is None:
-                return _err(mid, -32602, f"unknown resource {uri!r}")
-            return _ok(
-                mid,
-                {
-                    "contents": [
-                        {"uri": uri, "mimeType": resource.mime, "text": resource.read(self.repo)}
-                    ]
-                },
-            )
-        if method == "prompts/list":
-            from ..services import prompts as P
+    def _identify(self, args: dict[str, Any]) -> dict[str, Any]:
+        """`ddflow_identify` on a legacy connection: declare who this connection is."""
+        want = args.get("agent", "")
+        if not isinstance(want, str):
+            return _text("agent must be a string", error=True)
+        want = want.strip()
+        # A name that is not usable as a log shard filename is refused HERE,
+        # where the agent can read the reason and retry, rather than at the
+        # first write -- by which point the caller believes it is identified.
+        if want and not AN.is_valid(want):
+            return _text(AN.refusal(want), error=True)
+        self.agent = want
+        # The same agent's shell commands take it too (Bfad021e8d9).
+        from ..infra import harness_identity
 
-            return _ok(
-                mid,
-                {
-                    "prompts": [
-                        {
-                            "name": name,
-                            "title": title,
-                            "description": desc,
-                            "arguments": [
-                                {
-                                    "name": arg,
-                                    "description": f"Optional: narrow the workflow to {arg}.",
-                                    "required": False,
-                                }
-                                for arg in args
-                            ],
-                        }
-                        # `all_commands`, not `COMMANDS`: operator-defined `[[macro]]`
-                        # blocks are listed beside the shipped workflows, because a mode
-                        # that has to be asked for by name is a mode nobody finds.
-                        for name, (title, desc, args) in sorted(P.all_commands(self.repo).items())
-                    ]
-                },
+        shell = harness_identity.declare(self.repo, want)
+        if want:
+            detail = "declared on this connection" + (
+                f"; {shell}: pass --agent to the CLI" if shell else ", and for its shell"
             )
-        if method == "prompts/get":
-            from ..services import prompts as P
+        else:
+            want_who, detail = _default_agent(self.repo)
+            who = want_who
+            detail = f"not declared; {detail}"
+        who = want or who
+        note = ""
+        if not want and detail.endswith("working tree"):
+            note = (
+                " Every agent in this tree derives the SAME name, so if you are "
+                "one of several here, declare one."
+            )
+        if not want and shell:
+            note += f" Its shell may still use the previous name ({shell})."
+        return _text(
+            f"identified as {who!r} ({detail}). Claims, gate outcomes and "
+            f"reviews on this connection are attributed to it.{note}"
+        )
 
-            params = msg.get("params") or {}
-            name = params.get("name", "")
-            args = params.get("arguments") or {}
-            known = P.all_commands(self.repo)
-            if name not in known:
-                return _err(
-                    mid,
-                    -32602,
-                    f"unknown prompt {name!r}. Known: {', '.join(sorted(known))}"
-                    + P.not_loaded_note(self.repo),
-                )
-            try:
-                # The one rendering `ddflow prompts get` and the `ddflow_prompts` tool share.
-                text = P.render_command(name, self.repo, args)
-            except (P.TemplateError, _macro_error()) as exc:
-                return _err(mid, -32602, str(exc))
-            return _ok(
+    def _call_api(self, mid: Any, call: _Call) -> dict[str, Any]:
+        """Run a tool's typed `api` and shape its reply, footers last."""
+        name, spec, args, agent = call.name, call.spec, call.args, call.agent
+        try:
+            if call.allow_older is not None:
+                self._override_skew(call.allow_older, agent)
+            result = self._invoke(spec, args, agent, call.per_call, call.params)
+        except Exception as exc:
+            # One table with the CLI (`exit_for`, B5f3a650c40). A refusal -- a
+            # class declaring exit 3 -- is a result to act on, not a failed call;
+            # an undeclared Key/Type/ValueError is a malformed call; anything else
+            # is a bug, answered as an internal error below.
+            code = exit_for(exc)
+            if code == REFUSED:
+                return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
+            if declared_exit(exc) is None and isinstance(exc, (KeyError, TypeError, ValueError)):
+                return _ok(mid, _text(f"bad arguments: {exc}", error=True))
+            if code is None:
+                raise
+            failed = code not in (OK, NOTHING)  # 2 is "nothing", not an error
+            body = f"{type(exc).__name__}: {exc}"  # as the CLI prints it
+            return _ok(mid, _text(body, error=failed, meta={"exit": code}))
+        # `text` may be a bool or a predicate on the arguments: `render`
+        # returns a document with `--show` and a file list without it, and which
+        # it is cannot be known until the call.
+        # Both may be a value or a predicate on the arguments: `render` returns
+        # a document with `--show` and a file list without it, and which it is
+        # cannot be known until the call. Resolved together so the two can never
+        # disagree -- a text encoding over a tuple payload is a TypeError.
+        wants_text = spec.get("text", False)
+        payload = spec.get("payload", "")
+        if callable(wants_text):
+            wants_text = wants_text(args)
+        if callable(payload):
+            payload = payload(args)
+        out = _outcome_result(
+            result,
+            payload,
+            as_text=bool(wants_text),
+            bound=_bounds().get(name),
+            args=args,
+            command=_REGISTRY.command_name(name),
+            structured=self._structured(call.modern)
+            and "outputSchema" in _result_declaration(name, spec),
+        )
+        # The footer goes on LAST, after the reason block, so it never comes between
+        # a caller and the answer it asked for — `content[0]` is still the body and
+        # `jtool`-style consumers are untouched.
+        if name == "ddflow_help" and (tiered := tier_note(self.tier)):
+            out["content"].append({"type": "text", "text": tiered})
+        if call.retired:
+            out["content"].append({"type": "text", "text": deprecation_note(name, call.retired)})
+        for alias in self._notices.fresh(call.used):
+            out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
+        for note in (_obligation_footer(self), _stale_footer(self)):
+            if note:
+                out["content"].append({"type": "text", "text": note})
+        return _ok(mid, out)
+
+    def _m_resources_list(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        return _ok(msg.get("id"), {"resources": [r.listing() for r in RESOURCES]})
+
+    def _m_resources_read(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        mid = msg.get("id")
+        uri = (msg.get("params") or {}).get("uri", "")
+        resource = RESOURCE_BY_URI.get(uri)
+        if resource is None:
+            return _err(mid, -32602, f"unknown resource {uri!r}")
+        return _ok(
+            mid,
+            {
+                "contents": [
+                    {"uri": uri, "mimeType": resource.mime, "text": resource.read(self.repo)}
+                ]
+            },
+        )
+
+    def _m_prompts_list(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        from ..services import prompts as P
+
+        return _ok(
+            msg.get("id"),
+            {
+                "prompts": [
+                    {
+                        "name": name,
+                        "title": title,
+                        "description": desc,
+                        "arguments": [
+                            {
+                                "name": arg,
+                                "description": f"Optional: narrow the workflow to {arg}.",
+                                "required": False,
+                            }
+                            for arg in args
+                        ],
+                    }
+                    # `all_commands`, not `COMMANDS`: operator-defined `[[macro]]`
+                    # blocks are listed beside the shipped workflows, because a mode
+                    # that has to be asked for by name is a mode nobody finds.
+                    for name, (title, desc, args) in sorted(P.all_commands(self.repo).items())
+                ]
+            },
+        )
+
+    def _m_prompts_get(self, msg: dict[str, Any], modern: bool) -> dict[str, Any] | None:
+        from ..services import prompts as P
+
+        mid = msg.get("id")
+        params = msg.get("params") or {}
+        name = params.get("name", "")
+        args = params.get("arguments") or {}
+        known = P.all_commands(self.repo)
+        if name not in known:
+            return _err(
                 mid,
-                {
-                    "description": known[name][1],
-                    "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
-                },
+                -32602,
+                f"unknown prompt {name!r}. Known: {', '.join(sorted(known))}"
+                + P.not_loaded_note(self.repo),
             )
-        return _err(mid, -32601, f"method not found: {method}")
+        try:
+            # The one rendering `ddflow prompts get` and the `ddflow_prompts` tool share.
+            text = P.render_command(name, self.repo, args)
+        except (P.TemplateError, _macro_error()) as exc:
+            return _err(mid, -32602, str(exc))
+        return _ok(
+            mid,
+            {
+                "description": known[name][1],
+                "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
+            },
+        )
+
+    #: Method name -> handler: what `_dispatch` looks a message up in.
+    _METHODS: ClassVar[dict[str, Callable[..., dict[str, Any] | None]]] = {
+        "initialize": _m_initialize,
+        "notifications/initialized": _m_silent,
+        "notifications/cancelled": _m_silent,
+        "ping": _m_ping,
+        "tools/list": _m_tools_list,
+        "tools/call": _m_tools_call,
+        "resources/list": _m_resources_list,
+        "resources/read": _m_resources_read,
+        "prompts/list": _m_prompts_list,
+        "prompts/get": _m_prompts_get,
+    }
 
 
 def _meta_agent(params: dict[str, Any]) -> tuple[str, str]:
