@@ -435,7 +435,7 @@ def cmd_bug(a, c: Ctx) -> int:
         lesson_title=getattr(a, "lesson_title", "") or "",
         lesson_rule=getattr(a, "lesson_rule", "") or "",
         changelog=getattr(a, "changelog", "") or "",
-        verify_regression=not getattr(a, "skip_verify", False),
+        verify_regression=not getattr(a, "skip_regression_verify", False),
         verify_reason=getattr(a, "verify_reason", "") or "",
         agent=c.requested_agent,
     )

@@ -35,6 +35,7 @@ from ..api import records as R
 from ..core import outcome as O
 from . import dedupe_flags
 from .context import Ctx
+from .declared.answer import ANSWER_CLI_PARAMS
 from .registry import AS_AGENT, Alias, Command, Param, add_commands
 from .render import emit_json
 
@@ -139,38 +140,9 @@ def _common(name: str, kind: R.RecordKind) -> Param:
 
 def _answer_params() -> tuple[Param, ...]:
     """The CLI's duplicate-check flags: `dedupe_flags.add_flags` spelled as parameters, with
-    its help text (`tests/test_record_surface.py` compares the two, so they cannot drift)."""
-    return (
-        Param(
-            "new",
-            type="boolean",
-            help="answer a possible-duplicate refusal: this is a different record, file it",
-            cli_only=True,
-        ),
-        Param(
-            "extends",
-            help="answer it: this adds to record ID -- appended to ID while it is open and "
-            "unclaimed, else filed as a new record linked to it",
-            cli_only=True,
-        ),
-        Param(
-            "duplicate_of",
-            help="answer it: this is the same thing as record ID (handled like --extends)",
-            cli_only=True,
-        ),
-        Param(
-            "related",
-            help="answer it: a different record that is related to ID; linked both ways",
-            cli_only=True,
-        ),
-        Param(
-            "check",
-            type="boolean",
-            help="dry run: print the existing records this would be refused as a duplicate "
-            "of and write nothing (exit 0 with candidates, 2 with none)",
-            cli_only=True,
-        ),
-    )
+    its help text (`tests/test_record_surface.py` compares the two, so they cannot drift). Not
+    exclusive on the parser: `_handler` refuses two with a message that names them."""
+    return tuple(dataclasses.replace(p, exclusive=None) for p in ANSWER_CLI_PARAMS)
 
 
 def _verb_params(kind: R.RecordKind, verb: str) -> tuple[Param, ...]:

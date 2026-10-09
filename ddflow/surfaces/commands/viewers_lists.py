@@ -8,14 +8,15 @@ the parser wiring in one place so `cli.py` needs a single `register` call.
 
 from __future__ import annotations
 
-import argparse
 import sys
 from typing import Any
 
 from ...api import phase_progress, view_list
 from ...services import viewers as V
 from ..context import NOTHING, OK, Ctx
+from ..registry import Command, Param, add_commands
 from ..render import emit_json
+from .viewers_search import COMMAND as SEARCH
 
 _HELP = {
     "state": "only rows in this state",
@@ -36,24 +37,34 @@ _LISTS = {
 _SHARED_FLAGS = ("state", "phase", "tag", "owner", "since")
 
 
-def _add_filters(p: argparse.ArgumentParser, kind: str) -> None:
+def _filter_params(kind: str) -> tuple[Param, ...]:
+    """The list flags of ``kind``: the filters its engine takes, the limit, and what only
+    bugs and lessons have."""
     # `None` defaults, so `research add --state x` (a list flag on the add form) is
     # detectable and refused instead of silently dropped.
-    for flag in _SHARED_FLAGS:
+    out = [
         # The engine calls the leaseholder filter `agent`; the CLI cannot, because the
         # global `--agent` (identity) is mirrored onto every subparser under that name.
-        if ("agent" if flag == "owner" else flag) in V._FILTERS[kind]:
-            p.add_argument(f"--{flag}", default=None, help=_HELP[flag])
-    p.add_argument(
-        "--limit", type=int, default=None, help=f"most rows to show (default {V.DEFAULT_LIMIT})"
+        Param(flag, default=None, help=_HELP[flag])
+        for flag in _SHARED_FLAGS
+        if ("agent" if flag == "owner" else flag) in V._FILTERS[kind]
+    ]
+    out.append(
+        Param(
+            "limit",
+            type="integer",
+            default=None,
+            help=f"most rows to show (default {V.DEFAULT_LIMIT})",
+        )
     )
     if kind == "bug":
-        p.add_argument("--all", action="store_true", help="include fixed and invalid bugs")
-        p.add_argument(
-            "--item", default=None, help="only bugs filed in or against this queue item id"
+        out.append(Param("all", type="boolean", help="include fixed and invalid bugs"))
+        out.append(
+            Param("item", default=None, help="only bugs filed in or against this queue item id")
         )
     if kind == "lesson":
-        p.add_argument("--all", action="store_true", help="include superseded lessons")
+        out.append(Param("all", type="boolean", help="include superseded lessons"))
+    return tuple(out)
 
 
 def _line(kind: str, r: dict[str, Any]) -> str:
@@ -129,23 +140,30 @@ def cmd_list(a, c: Ctx) -> int:
     return OK
 
 
+#: `<kind> list` for the kinds whose group another module declares: the CLI half of `ddflow_list`.
+COMMANDS = tuple(
+    Command(
+        path=(kind, "list"),
+        summary=f"list {_LISTS[kind]}",
+        params=_filter_params(kind),
+        handler=cmd_list,
+        defaults={"list_kind": kind},
+        via=("ddflow_list", kind),
+    )
+    for kind in ("task", "phase", "bug", "lesson")
+)
+
+
 def register(s) -> None:
     """Add `list` to the task, phase, bug, lesson and research parsers already on `s`, and
     the sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
-    from .viewers_search import register as register_search
-
-    register_search(s)
-    for kind in ("task", "phase", "bug", "lesson"):
-        group = s.choices[kind]
-        sub = next(x for x in group._actions if isinstance(x, argparse._SubParsersAction))
-        lp = sub.add_parser("list", help=f"list {_LISTS[kind]}")
-        _add_filters(lp, kind)
-        lp.set_defaults(fn=cmd_list, list_kind=kind)
+    add_commands(s, [SEARCH, *COMMANDS])
     rs = s.choices["research"]
     verb = next(x for x in rs._actions if x.dest == "verb")
     verb.choices = ["add", "list"]
     verb.help = "optional: `research add` = `research`; `research list` lists the notes"
-    _add_filters(rs, "research")
+    for param in _filter_params("research"):
+        param.add_to(rs)
     # `list` needs neither field, so argparse cannot require them for the verb-less form.
     required = [x for x in rs._actions if x.required and x.option_strings]
     for x in required:

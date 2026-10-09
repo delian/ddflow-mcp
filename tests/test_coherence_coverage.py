@@ -350,9 +350,16 @@ def test_every_cli_verb_that_records_text_is_classified():
 
 
 def _tool_api_source(name: str) -> str:
-    for path in sorted((PKG / "surfaces" / "tools").glob("*.py")):
+    """The source of tool ``name``'s ``api``: from its table entry, or from the ``call`` of
+    the `Command` that declares it (`surfaces/declared/`)."""
+    for path in sorted((PKG / "surfaces").glob("*/*.py")):
         tree = ast.parse(path.read_text("utf-8"))
         for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Command":
+                kw = {k.arg: k.value for k in node.keywords}
+                tool = kw.get("tool")
+                if isinstance(tool, ast.Constant) and tool.value == name and "call" in kw:
+                    return ast.unparse(kw["call"])
             if not isinstance(node, ast.Dict):
                 continue
             for k, v in zip(node.keys, node.values, strict=False):
