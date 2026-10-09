@@ -70,6 +70,16 @@ def test_status_counts_ready_the_way_next_offers_it(proj):
     )
 
 
+def test_the_handshake_counts_ready_the_way_next_offers_it(proj):
+    """The MCP session handshake (`_instruction_vars`) shares `next`'s hold on TC."""
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    v = _instruction_vars(proj, C)
+    assert v["ready"] == len(_offered(proj, C)), (
+        "the handshake called ready an item next withholds for the waiter in line"
+    )
+
+
 def test_the_progress_block_names_what_next_would_offer(proj):
     log, cfg = EventLog(proj, C), Config.load(proj)
     st = fold(log.read_all(), strict=False)
