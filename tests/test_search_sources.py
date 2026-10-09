@@ -73,8 +73,8 @@ def test_each_source_is_found_by_default_and_by_name(full, word, source, kind, r
 
 
 def test_source_selects_only_that_source(full):
-    _, body, _ = _search(full, "gourd", "--source", "records")
-    assert body == {} or not body.get("rows")
+    code, body, _ = _search(full, "gourd", "--source", "records")
+    assert code == 2 and body["rows"] == []  # ran, found nothing: the rule is not a record
     _, body, _ = _search(full, "gourd cardamom", "--source", "rules,sessions")
     assert {r["kind"] for r in body["rows"]} == {"rule", "session"}
     assert body["filters"] == {"source": "rules,sessions"}
