@@ -28,6 +28,7 @@ from ..services import backups as BK
 from ..services import hookio as HI
 from ..services import identity as ID
 from ..services import upgrade_apply as UA
+from ..services import upgrade_notice as UN
 from ..services import upgrade_plan as UP
 from ._base import _load
 
@@ -655,6 +656,12 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     except Exception as exc:
         parts += [f"_(cadence check failed: {exc})_", ""]
     try:
+        notice = _upgrade_notice(repo, agent)
+        if notice:
+            parts += [notice, ""]
+    except Exception as exc:
+        parts += [f"_(upgrade notice failed: {exc})_", ""]
+    try:
         out = brief(repo, check_recovery=True, agent=agent)
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:
@@ -666,6 +673,21 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
         "call; `ddflow_memory_add` records a fact about this machine for the next session._",
     ]
     return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
+
+
+def _upgrade_notice(repo: Path, agent: str) -> str:
+    """The one-line upgrade notice (`services.upgrade_notice`), or "" when none is due: said
+    once per machine per version, whichever surface asks first."""
+    log, cfg, st = _load(repo, agent)
+    return UN.line(repo, log, cfg, st, agent=agent)
+
+
+def stale_server_note(repo: Path, *, agent: str = "") -> str:
+    """``restart the server`` when the running ddflow is older than the installed package or
+    than the highest version in this project's log, else "". For the MCP server, which says it
+    once per connection (`services.upgrade_notice.stale_server_note`)."""
+    _log, _cfg, st = _load(repo, agent)
+    return UN.stale_server_note(st, installed=UN.installed_version())
 
 
 def _companion_lines(repo: Path) -> list[str]:

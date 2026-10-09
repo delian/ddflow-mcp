@@ -177,6 +177,7 @@ from .setup import (
     help_topic,
     hooks,
     prompts,
+    stale_server_note,
     upgrade,
 )
 from .setup import companions as companions_list
@@ -318,6 +319,7 @@ __all__ = [
     "show",
     "similar",
     "split",
+    "stale_server_note",
     "status",
     "task_add",
     "unblock",
