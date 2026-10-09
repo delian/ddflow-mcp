@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -392,13 +393,22 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     for gid, spec in tomlcfg.overlay_table(committed, "gate", GateDef, lenient=lenient).items():
         if spec.get("human") and gid in gates:
             gates[gid].human = True
-    for gid in cfg.gates.required:
-        if gid in gates:
-            gates[gid].required = True
+    # `[gates].required` decides (B4d206ede45); a definition's own flag is derived from
+    # it, a built-in default included, so `GateDef.required` and `required_gates` agree.
+    for gid, gdef in gates.items():
+        gdef.required = gid in cfg.gates.required
     for gid in cfg.gates.evidence_required:
         if gid in gates:
             gates[gid].evidence = True
     return gates
+
+
+def required_gates(cfg: Config, gates: Mapping[str, GateDef] | None = None) -> frozenset[str]:
+    """The gates whose recorded outcome must be a pass: `[gates].required` (the one knob
+    that decides), plus any definition in `gates` flagged required, which `load_gates`
+    derives from that same knob. Every enforcement point asks this, not the knob."""
+    flagged = {g for g, d in (gates or {}).items() if d.required}
+    return frozenset(cfg.gates.required) | flagged
 
 
 def pipeline_for(item: Item, cfg: Config) -> list[str]:
@@ -447,4 +457,4 @@ def inert_requirements(cfg: Config) -> list[str]:
     Reported rather than raised at load time, because a config that is wrong in one
     field should still let `ddflow doctor` run and explain itself.
     """
-    return sorted(set(cfg.gates.required) - pipelined(cfg, running=True))
+    return sorted(required_gates(cfg) - pipelined(cfg, running=True))
