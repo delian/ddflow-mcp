@@ -16,64 +16,6 @@ from ..context import NOTHING, OK, REFUSED, Ctx
 from ..render import emit_json
 
 
-def add_export_parser(sub) -> None:
-    """Register `export` on the top-level subparsers (called by `cli.build_parser`)."""
-    p = sub.add_parser(
-        "export",
-        help="documents generated from the log: list, print, enable, disable, --diff, --check, --update",
-    )
-    p.add_argument(
-        "doc",
-        nargs="?",
-        default="",
-        help="the document kind; omit to list the kinds. Or a verb: enable <doc>, disable <doc>, "
-        "ack, eject <doc>, validate [<doc>]",
-    )
-    p.add_argument("target", nargs="?", default="", help="the document, after a verb")
-    p.add_argument("--path", default="", help="enable: the target file (repo-relative)")
-    p.add_argument("--mode", default="", help="enable: whole, region or append")
-    p.add_argument("--local", action="store_true", help="enable/disable: this machine only")
-    p.add_argument(
-        "--lock", action="store_true", help="disable: the operator's veto; agents cannot enable it"
-    )
-    p.add_argument("--all", action="store_true", help="act on the selected documents")
-    for flag, what in (
-        ("--since", "entries at or after this date (YYYY-MM-DD or a timestamp prefix)"),
-        ("--version", "one release (the changelog kind: X or vX, or unreleased)"),
-        ("--phase", "one phase"),
-        ("--item", "one item (the bugs document filters it as a phase)"),
-        ("--status", "one status, e.g. open or fixed"),
-        ("--tag", "one tag"),
-        ("--session", "one session id"),
-    ):
-        p.add_argument(flag, default="", help=what)
-    p.add_argument("--limit", type=int, default=0, help="at most N entries")
-    p.add_argument(
-        "--max-bytes",
-        type=int,
-        default=None,
-        help="size cap for printing (default [export].max_bytes)",
-    )
-    p.add_argument(
-        "--template", default="", help="render once with this template file; writes nothing"
-    )
-    p.add_argument("--diff", action="store_true", help="show what a write would change")
-    p.add_argument(
-        "--check",
-        action="store_true",
-        help="exit 1 if the target is not what a write would produce",
-    )
-    p.add_argument(
-        "--update", action="store_true", help="write the configured target (asks on a terminal)"
-    )
-    p.add_argument("--out", default="", help="write to this repo-relative path instead")
-    p.add_argument(
-        "--force", action="store_true", help="overwrite a hand-edited or unmarked target"
-    )
-    p.add_argument("--yes", action="store_true", help="with --update: do not ask on a terminal")
-    p.set_defaults(fn=cmd_export)
-
-
 def _confirm(rel: str, diff: str) -> bool:
     sys.stdout.write(diff if diff.endswith("\n") else diff + "\n")
     sys.stdout.write(f"Write {rel}? [y/N] ")
