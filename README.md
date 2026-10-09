@@ -12,7 +12,7 @@ the log is destroyed, the project's decision history rebuilds from the log alone
 
 **Two dependencies beyond `python3` and `git`** (Jinja2, for the prompt templates, see
 [Extending it by writing text, not code](#extending-it-by-writing-text-not-code); and
-tomlkit, which edits `.ddflow/config.toml` without losing its comments). Works with Claude Code, Gemini CLI,
+tomlkit, which edits `.ddflow/config.toml` without losing its comments). Everything else is an optional extra with a standard-library fallback: `ddflow[search]` (rapidfuzz), `ddflow[watch]` (watchfiles), `ddflow[rag]` (model2vec, sqlite-vec) and `ddflow[mcp-sdk]` (the MCP SDK, network transport only); a feature whose extra is absent is reported `unavailable`, never passed. Works with Claude Code, Gemini CLI,
 Codex, Copilot, Cursor, Kimi, opencode, Aider, a CI job, a Makefile, or a human at a
 terminal — over a CLI
 and an MCP server that are the same implementation.
