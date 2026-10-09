@@ -11,6 +11,7 @@ from typing import Any, NamedTuple
 
 from ...core.records import GateOutcome
 from ...infra import fsio
+from ...infra import worktree as W
 from .. import cmdrunner
 from .defs import GateDef
 from .evidence import diff_stat, digest, tree_identity
@@ -254,10 +255,9 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     recorded as a test failure (bug B8ea7a90aea). The config-knob half of the same
     class warns "merge main" from `config._warn_unknown`.
     """
-    # Function-level: the package re-exports every top-level name of its areas, so a module
-    # bound here would have to be re-exported too (tests/test_module_splits.py).
+    # Function-level: the package re-exports every top-level name of its areas, and
+    # `tomlcfg` is not one of them (tests/test_module_splits.py).
     from ...infra import tomlcfg
-    from ...infra import worktree as W
 
     try:
         primary = W.repo_root(tree)
