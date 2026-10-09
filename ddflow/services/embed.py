@@ -112,7 +112,7 @@ def _parse(stdout: str, want: int) -> Embedding:
     """The companion's output, held to the contract."""
     try:
         body = json.loads(stdout)
-    except ValueError:
+    except (ValueError, RecursionError):  # not JSON, or nested past the recursion limit
         return _unavailable("the embedder did not print JSON", COMPANION)
     if not isinstance(body, dict):
         return _unavailable("the embedder's JSON is not an object", COMPANION)

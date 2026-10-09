@@ -272,7 +272,8 @@ def _shell_group(
     thread (a long gate renews its lease that way; see `run_command_gate`).
     Output is captured unless ``capture_output=False`` or ``stdout``/``stderr`` say
     otherwise; the other keywords go to `popen` (stdin stays /dev/null unless ``input`` is
-    given: that text is written once, with the first wait, and the pipe then closed).
+    given: that text is handed to the first wait, which writes it across as many ticks as the child
+    takes to read it, and then closes the pipe).
     On timeout the TimeoutExpired carries everything the command wrote, as
     `subprocess.run`'s does (a resumed `communicate` returns all it accumulated).
     """
