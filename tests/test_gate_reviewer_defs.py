@@ -15,8 +15,8 @@ from ddflow.services.gates.defs import DEFAULT_GATES
 
 def test_required_gates_is_the_knob_and_the_definitions_follow_it(repo, cfg):
     gates = G.load_gates(repo, cfg)
-    assert G.required_gates(cfg) == frozenset(cfg.gates.required)
-    assert G.required_gates(cfg, gates) == frozenset(cfg.gates.required)
+    assert G.required_gates(cfg) == tuple(cfg.gates.required), "knob order, not hash order"
+    assert G.required_gates(cfg, gates) == G.required_gates(cfg), "loaded definitions agree"
     assert {g for g, d in gates.items() if d.required} == set(cfg.gates.required)
 
 
