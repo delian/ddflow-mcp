@@ -125,3 +125,25 @@ def test_no_surface_asks_the_bare_scheduler(proj):
         # the only bare call left is progress_line's fallback when the caller passes no plan
         text = text.replace("plan = plan if plan is not None else S.plan(st, cfg)", "")
         assert "plan(st, cfg" not in text and "S.plan(" not in text, rel
+
+
+def test_the_alternatives_keep_nexts_order_and_stop_at_five(repo):
+    """Six ready tasks whose id order disagrees with their priority order: the refused
+    claimant is told the first five `next` would offer, in its order."""
+    from ddflow.api.lifecycle import alternatives_offer, plan_for
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "R", "--globs", "r/*")
+    for i, (name, prio) in enumerate(
+        (("a1", 1), ("m5", 5), ("m4", 4), ("m3", 3), ("m2", 2), ("m1", 6))
+    ):
+        run_cli(repo, "task", "add", name, "--globs", f"g{i}/*", "--priority", str(prio))
+    log, cfg = EventLog(repo, C), Config.load(repo)
+    cfg.schedule.max_parallel_tasks = 99
+    st = fold(log.read_all(), strict=False)
+    offered = [
+        i.id for i in plan_for(repo, log, cfg, st, purpose="offer", agent=C).ready if i.id != "R"
+    ]
+    got = alternatives_offer(repo, log, cfg)(st, "R", C, time.time())
+    assert got == offered[:5] and len(offered) > 5
+    assert got != sorted(offered)[:5], "the fixture must make id order differ from next's order"
