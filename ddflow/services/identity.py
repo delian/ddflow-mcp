@@ -6,8 +6,7 @@ the log's agent from its own copy of the precedence: an explicit declaration, th
 `DDFLOW_AGENT` (only while the config value is just its default), then `[agent].id`, then the
 tree-derived default. `open_log` is the shared "resolve, then open the log as that agent"
 step, and `bind` writes an identity that differs from the config's back into it, with the
-layer that won, so `config --explain` names it. The MCP surface still resolves through
-`infra.log` until B-uni-identity.3-resolver.4-mcp moves it here.
+layer that won, so `config --explain` names it. The MCP surface asks it too, through `api.identity`.
 
 Carrying this clone's leases across the B190 identity upgrade.
 
@@ -46,7 +45,7 @@ from typing import NamedTuple
 from ..config import Config
 from ..core.model import Lease, State, fold
 from ..infra import worktree as W
-from ..infra.log import EventLog, bare_agent_id, clone_suffix_since, resolve_agent_id
+from ..infra.log import EventLog, bare_agent_id, clone_suffix_since, default_agent_id
 from . import leases as L
 
 
@@ -59,11 +58,37 @@ class AgentId(NamedTuple):
 
 
 def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> AgentId:
-    """The identity a write will carry. ``declared`` is what the caller EXPLICITLY asked
-    for (`--agent`, `as_agent`, a harness declaration) and "" for nothing: passing a
-    resolved value back in makes it look explicit, which is how `config --explain` once
-    blamed the environment for a variable nobody had set."""
-    return AgentId(*resolve_agent_id(root, cfg, declared))
+    """The identity a write will carry, and WHICH LAYER produced it.
+
+    Four layers, in order: an explicit declaration (`declared`: `--agent`, `as_agent`, a
+    harness's `ddflow_identify`), `DDFLOW_AGENT` (only while `[agent].id` is just its
+    default), `[agent].id` in config, and the tree-derived default. ``declared`` is what the
+    caller EXPLICITLY asked for and "" for nothing: passing a resolved value back in makes it
+    look explicit, which is how `config --explain` once blamed the environment for a variable
+    nobody had set.
+
+    The layer is returned rather than inferred, because inferring it by comparing the result
+    against each candidate is wrong whenever two candidates agree: with `DDFLOW_AGENT` unset
+    and no `[agent].id`, the derived name differs from `cfg.agent.id` (`""`), so a
+    value-comparison recorded the source as `env`. ``cfg`` is optional so callers below the
+    config layer can still ask.
+
+    The typed MCP path once called `EventLog(repo, "")`, which falls straight to the derived
+    default and read neither the env var nor the config, so one connection's `ddflow_claim`
+    and `ddflow_update` wrote into different shards (B88). One encoding, asked by every
+    surface, is the fix.
+    """
+    if declared:
+        return AgentId(declared, "explicit")
+    env = os.environ.get("DDFLOW_AGENT", "")
+    if cfg is not None:
+        if env and getattr(cfg, "sources", {}).get("agent.id", "default") == "default":
+            return AgentId(env, "env")
+        if getattr(getattr(cfg, "agent", None), "id", ""):
+            return AgentId(cfg.agent.id, "config")
+    elif env:
+        return AgentId(env, "env")
+    return AgentId(default_agent_id(root), "derived")
 
 
 #: Environment variables an agent harness sets in the shells it runs, so a command it
