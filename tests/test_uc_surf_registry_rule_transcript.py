@@ -32,7 +32,7 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
         "70",
         "--globs",
         "a/*.py, b/*.py",
-    ),  # fmt: skip
+    ),
     ("--json", "rule", "add", "--id", "r-c", "--title", "Layers", "--content", "api over services"),
     ("rule", "add", "--id", "r-dup", "--title", "Tests again", "--content", _CONTENT),
     ("--json", "rule", "add", "--id", "r-dup", "--title", "Tests again", "--content", _CONTENT),
@@ -48,7 +48,7 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
         "--content",
         _CONTENT,
         "--check",
-    ),  # fmt: skip
+    ),
     (
         "rule",
         "add",
@@ -60,7 +60,7 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
         _CONTENT,
         "--related",
         "r-a",
-    ),  # fmt: skip
+    ),
     (
         "rule",
         "add",
@@ -72,7 +72,7 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
         _CONTENT,
         "--extends",
         "r-a",
-    ),  # fmt: skip
+    ),
     ("rule", "add", "--id", "r-y", "--title", "Tests once more", "--content", _CONTENT, "--new"),
     ("rule", "add", "--id", "r-b", "--title", "Naming", "--content", "again"),
     ("rule", "add", "--title", "No id"),
