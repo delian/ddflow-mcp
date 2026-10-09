@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.start_timeout_s"
+new = "10.0"
+why = "Seconds a starting MCP server or container spends on the upgrade-at-start work before it serves anyway and reports the rest as pending."
+impact = "additive"

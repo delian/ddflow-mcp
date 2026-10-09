@@ -34,6 +34,16 @@ ENV DDFLOW_REPO=/repo \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Upgrade at start (decisions D-self-upgrade 5, D-upgrade-on-mcp-connect). When the image is
+# NEWER than the project it serves (the project's stamp, log, index and instruction files), the
+# server compares them before answering: it rebuilds the derived stores, applies the
+# non-destructive categories (hooks, instructions) with a backup first, and proposes the rest
+# to the operator in the handshake and the first brief. It never refuses to start, gives up
+# after `[upgrade].start_timeout_s` seconds, and only reports on a read-only mount. An OLDER
+# image than the project writes nothing (the skew guard). The switch for one run:
+#   docker run -e DDFLOW_UPGRADE_ON_START=check|safe|off ...   (default: [upgrade].on_start = safe)
+# `check` only proposes; `off` skips the whole thing.
+
 # tini as PID 1; the entrypoint fixes identity and then execs the server.
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/ddflow-entrypoint"]
 CMD ["ddflow-mcp"]
