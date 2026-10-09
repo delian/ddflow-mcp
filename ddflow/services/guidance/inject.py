@@ -27,6 +27,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from ...core import provenance as PV
+from ...core import textsim
 from ...core.budget import Budget
 from ...core.model import State
 from ...core.schedule import shared_globs
@@ -77,11 +78,12 @@ def rank_key(a: Applies) -> tuple:
 def origin_of(rec: GuidanceRecord) -> PV.Origin:
     """Who wrote ``rec``, for its fence: as `provenance.decision_origin` reads a decision."""
     by = str(rec.provenance.get("by", ""))
+    decided_by = str(rec.ext.get("decided_by", ""))
     if "imported" in rec.tags:
         return PV.Origin(PV.IMPORTED, by, ", ".join(rec.sources))
-    if str(rec.ext.get("decided_by", "")).strip().lower() == PV.OPERATOR:
+    if decided_by.strip().lower() == PV.OPERATOR:
         return PV.Origin(PV.OPERATOR, by)
-    return PV.Origin(PV.AGENT, by)
+    return PV.Origin(PV.AGENT, by or (decided_by if decided_by != PV.AGENT else ""))
 
 
 def collect(state: State) -> list[GuidanceRecord]:
@@ -199,7 +201,15 @@ def _fit(
     got = pack({"guidance": [_candidate(a) for a in rest]}, Budget(left, budget.unit))
     taken = {c.id for c in got.kept.get("guidance", [])}
     kept = [a for a in rest if a.record.id in taken]
-    return kept, [a.record.id for a in rest if a.record.id not in taken], got.duplicates
+    # `pack` folds a repeat by not keeping it; a repeat is not "cut to the budget".
+    seen = {_text_key(a) for a in kept}
+    cut = [a.record.id for a in rest if a.record.id not in taken and _text_key(a) not in seen]
+    return kept, cut, got.duplicates
+
+
+def _text_key(a: Applies) -> str:
+    """The identity `pack` folds repeats by."""
+    return textsim.digest(a.record.title, a.record.body)
 
 
 def _cut_line(trimmed: list[str]) -> str:
