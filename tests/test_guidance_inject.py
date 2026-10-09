@@ -1,6 +1,6 @@
 """One injection path for guidance (B-uni-guidance-inject): rules and decisions reach the
 brief, the claim and the gate prompts -- review gates included -- through the same ranked,
-budgeted, fenced pack, and pinned ("always") guidance is never trimmed."""
+budgeted, fenced pack, and pinned guidance (an always-scope rule that blocks) is never trimmed."""
 
 from __future__ import annotations
 
@@ -72,12 +72,12 @@ def test_guidance_that_does_not_govern_is_not_handed_over():
 
 def test_pinned_guidance_is_never_trimmed_whatever_the_budget():
     records = [
-        rec("pin-a", body="always " * 200, enf="block"),
-        rec("pin-b", body="also always " * 200, ext={"pinned": True}, globs=["ddflow/**"]),
+        rec("pin-a", kind="rule", body="always " * 200, enf="block"),
+        rec("pin-b", kind="rule", body="also always " * 200, enf="block"),
         rec("mine", globs=["ddflow/**"], body="files only"),
     ]
     got = GI.inject(records, budget=Budget(1, "chars"), **WORK)
-    assert ids(got) == ["pin-a", "pin-b"]  # all of both, whole (one a block, one marked)
+    assert ids(got) == ["pin-a", "pin-b"]  # all of both, whole
     assert "always " * 200 in got.text.replace("  ", " ") or got.text.count("always") >= 400
     assert got.trimmed == ("mine",) and "1 more cut to the budget: mine" in got.text
 
@@ -316,14 +316,26 @@ def test_a_dozen_project_wide_decisions_do_not_fill_every_claim_Bf7879835fd():
     """Bf7879835fd: scope `always` was treated as pinned, so every claim and gate status
     printed every decision that merely names no files. They rank first and spend the budget."""
     wide = [rec(f"D-wide-{i:02d}", body="project wide " * 60, enf="warn") for i in range(12)]
-    blocker = rec("D-must", body="never skip the tests " * 5, enf="block")
+    blocker = rec("r-must", kind="rule", body="never skip the tests " * 5, enf="block")
     got = GI.inject([*wide, blocker], budget=Budget(400, "chars"), **WORK)
-    assert got.pinned == ("D-must",) and ids(got)[0] == "D-must"  # a blocking rule stays whole
+    assert got.pinned == ("r-must",) and ids(got)[0] == "r-must"  # a blocking rule stays whole
     assert len(got.shown) < 13 and got.trimmed  # the rest were cut, and named
     assert "more cut to the budget" in got.text and len(got.text) < 3000
-    marked = GI.inject(
-        [rec("D-pin", body="x " * 400, ext={"pinned": True}), *wide],
-        budget=Budget(1, "chars"),
-        **WORK,
+
+
+def test_an_always_scope_rule_that_blocks_is_pinned_through_the_real_log(repo):
+    """The reachable producer of a pin today: a rule file that says `enforcement = "block"`,
+    recorded in the log by `rule sync`."""
+    rules = repo / ".ddflow" / "rules"
+    rules.mkdir(parents=True)
+    (rules / "r-tests-first.toml").write_text(
+        'id = "r-tests-first"\ntitle = "Tests first"\nenforcement = "block"\n\nwrite the failing test first\n',
+        encoding="utf-8",
     )
-    assert marked.pinned == ("D-pin",) and "x " * 399 + "x" in marked.text
+    assert run_cli(repo, "rule", "sync")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "ddflow/infra/log.py")[0] == 0
+    )
+    _log, cfg, st = _load(repo, "a1")
+    got = GI.for_item(cfg, st, "T1")
+    assert got.pinned == ("r-tests-first",) and "(rule, block, pinned)" in got.text
