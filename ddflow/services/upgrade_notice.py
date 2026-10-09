@@ -114,12 +114,18 @@ def line(repo: Path, log: Any, cfg: Config, st: State, *, agent: str = "") -> st
         if policy == "off" or not (Path(repo) / ".ddflow").is_dir():
             return ""  # off, or a directory ddflow never adopted: writing a marker would adopt it
         running = running_version()
-        if not version_key(running) or noticed_version(repo) == running:
+        told = noticed_version(repo)
+        # A marker at THIS version or a NEWER one: a long-lived MCP server still running
+        # pre-upgrade code must neither repeat the line nor move the marker backwards.
+        if not version_key(running) or (told and not is_older(told, running)):
             return ""
+        # Claim the version BEFORE the (slow) plan is built: the hook and the MCP handshake
+        # start together after an upgrade, and the later of two readers of an empty marker
+        # would say it twice. The final mark below only adds what was said.
+        _mark(repo, running, "")
         plan = UP.build(repo, log, cfg, st, running=running)
         project = str(plan.get("project_version", ""))
         if plan["up_to_date"] or not _behind(project, running):
-            _mark(repo, running, "")
             return ""
         said = ""
         if policy == "safe":
