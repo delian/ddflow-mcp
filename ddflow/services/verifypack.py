@@ -17,6 +17,8 @@ from ..config import Config
 from ..core import provenance as PV
 from ..core.events import Event
 from ..core.model import State
+from ..infra.worktree import git
+from . import backfill as BF
 from . import ledger as LG
 from . import verify as V
 
@@ -31,7 +33,6 @@ _QUESTION = (
 
 
 def _stat(repo: Path, sha: str) -> list[str]:
-    from ..infra.worktree import git
 
     if not sha:
         return []
@@ -70,9 +71,26 @@ def _data(kind: str, ident: str, text: str) -> str:
     return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN))
 
 
-def _data_block(kind: str, ident: str, text: str) -> str:
-    """Multi-line free text as DATA: the fence keeps its line breaks."""
-    return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN), inline=False)
+def _landed(repo: Path, led: dict, item_id: str) -> list[str]:
+    """The lines under "What landed": the files, the tests among them and git's stat."""
+    d = led["done"]
+    if not d["files_known"]:
+        return ["- UNKNOWN: no landing could be found, so what changed is not known"]
+    out = [f"- {d['files_total']} file(s) changed, {len(d['tests'])} of them tests"]
+    out += [f"  - {_data('path', item_id, f)}" for f in d["files"][:12]]
+    out += [
+        "- tests: " + ", ".join(_data("path", item_id, t) for t in d["tests"][:8])
+        if d["tests"]
+        else "- tests: NONE touched"
+    ]
+    stat = _stat(repo, led["sha"])
+    if stat:
+        # git's stat lines are paths: record text like the lists above, so fenced too
+        out += [
+            "",
+            PV.fence("diff-stat", item_id, "\n".join(stat), PV.Origin(PV.UNKNOWN), inline=False),
+        ]
+    return out
 
 
 def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: str) -> str | None:
@@ -81,12 +99,10 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
     if led is None:
         return None
     # Reconstructed landings are included (flagged), so the verifier sees what verify saw.
-    from . import backfill as BF
 
     led = BF.apply(repo, st, led, item_id)
     rep = V.check(repo, cfg, st, events, item_id)
     it = st.items[item_id]
-    d = led["done"]
     out = [
         f"# Verify the completion of {item_id}",
         "",
@@ -139,20 +155,7 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
     if led["amendments"]:
         out.append(f"- amended {len(led['amendments'])} time(s) after completion")
     out += ["", "## What landed", ""]
-    if d["files_known"]:
-        out.append(f"- {d['files_total']} file(s) changed, {len(d['tests'])} of them tests")
-        out += [f"  - {_data('path', item_id, f)}" for f in d["files"][:12]]
-        out += [
-            "- tests: " + ", ".join(_data("path", item_id, t) for t in d["tests"][:8])
-            if d["tests"]
-            else "- tests: NONE touched"
-        ]
-        stat = _stat(repo, led["sha"])
-        if stat:
-            # git's stat lines are paths: record text like the lists above, so fenced too
-            out += ["", _data_block("diff-stat", item_id, "\n".join(stat))]
-    else:
-        out.append("- UNKNOWN: no landing could be found, so what changed is not known")
+    out += _landed(repo, led, item_id)
     if led.get("backfill"):
         out.append(
             f"- _reconstructed after the fact: {led['backfill']['how']}_"
