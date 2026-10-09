@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ddflow.config import Config
@@ -91,3 +93,28 @@ def test_default_config_adds_no_kind_entries_to_pipelines(tmp_path):
     assert not [
         f for f in WF.check(cfg, load_gates(tmp_path, cfg)) if "kind_pipelines" in f.subject
     ]
+
+
+def test_drop_writes_kind_pipelines_only_when_one_is_configured(repo):
+    """`workflow drop` edits a kind's own pipeline and leaves an untouched project's
+    `kind_pipelines` unwritten (the built-in kinds are not overrides)."""
+    from conftest import run_cli
+
+    assert run_cli(repo, "workflow", "drop", "dedupe")[0] == 0
+    assert "kind_pipelines" not in (repo / ".ddflow" / "config.toml").read_text()
+    assert (
+        run_cli(
+            repo,
+            "config",
+            "--set",
+            "gates.kind_pipelines",
+            '{ doc = ["implement", "bug_hunt", "merge"] }',
+        )[0]
+        == 0
+    )
+    assert run_cli(repo, "workflow", "drop", "bug_hunt")[0] == 0
+    data = json.loads(run_cli(repo, "--json", "workflow")[1])
+    assert data["kind_pipelines"]["doc"] == ["implement", "merge"]
+    assert (
+        run_cli(repo, "config", "--set", "gates.kind_pipelines", '{ docs = ["merge"] }')[0] != 0
+    ), "an unregistered kind is refused"
