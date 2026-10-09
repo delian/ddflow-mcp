@@ -29,6 +29,7 @@ from ..services import gates as GD
 from ..services import review as RV
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ..services.gates import measured as GR
+from ..services.guidance import inject as GI
 from ._base import _load
 from .gates import item_tree
 
@@ -1214,6 +1215,25 @@ def _log_started(log, it, item: str, gate: str) -> None:
         log.append("gate.started", item, {"gate": gate})
 
 
+def _with_guidance(context: str, cfg, st, item: str, gate: str, say: Callable[[str], None]) -> str:
+    """``context`` with the project's guidance that governs the item at this gate, fenced as
+    data, and the reviewer told to verify the change against it and cite the id of one it
+    violates (B-uni-guidance-inject). Unchanged when nothing governs the item."""
+    found = GI.for_item(
+        cfg,
+        st,
+        item,
+        gate=gate,
+        budget=GI.door_budget(cfg),
+        verify=True,
+        heading="## Project guidance to check this change against",
+    )
+    if not found.text:
+        return context
+    say(f"→ {len(found.shown)} piece(s) of guidance sent with the diff: {', '.join(found.cited)}")
+    return f"{context}\n\n{found.text}".strip() if context else found.text.strip()
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -1614,6 +1634,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 
     revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
     context = _with_previous_findings(context, log, it, item, gate, say, kind=kind, rerun=prior)
+    context = _with_guidance(context, cfg, st, item, gate, say)
 
     keeps: dict[str, _ReplyFile] = {}
     overrides = P.overrides_from(cfg)

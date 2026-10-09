@@ -58,13 +58,16 @@ from ...services import gates as G  # noqa: F401
 from ...services import leases as L  # noqa: F401
 from ...services import searchcore as SC  # noqa: F401
 from ...services.gates import measured as GM  # noqa: F401
+from ...services.guidance import inject as GI  # noqa: F401
 from .._base import _load  # noqa: F401
 from ._common import (  # noqa: F401
     _require,
 )
 from .brief import (  # noqa: F401
     _REFUTED_SHOWN,
+    _governing,
     _refuted_line,
+    _rules_block,
     _waiting_on_you,
     brief,
 )
