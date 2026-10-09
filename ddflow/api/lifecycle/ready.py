@@ -9,21 +9,12 @@ from typing import Any
 
 from ...core import outcome as O
 from ...core import progress as PR
+from ...core.defaults import DEFAULT_NEXT_KIND
 from ...core.model import REVIEW
 from ...core.plain import plain
 from .._base import _load
 from .planning import plan_for
 from .reservations import WAITABLE
-
-#: What `next` offers when nobody says otherwise. TASKS, because a phase is an umbrella
-#: and "work on P1" is not an instruction anyone can act on.
-#:
-#: Defaulted HERE as well as in argparse, and that duplication is the point: this function
-#: was first written with `kind=""`, which `plan()` matches against no item at all, so
-#: `ddflow_next` returned an empty queue on every call. The CLI kept working because
-#: argparse supplied "task" and the MCP path no longer went through argparse. A default
-#: that lives only in the parser is a default the typed layer silently drops.
-DEFAULT_NEXT_KIND = "task"
 
 #: `brief` scans for recoverable work unless told not to. On by default because the one
 #: moment an agent most needs to know a previous agent crashed mid-task is the moment it
