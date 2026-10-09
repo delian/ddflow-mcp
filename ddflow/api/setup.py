@@ -30,6 +30,7 @@ from ..services import identity as ID
 from ..services import upgrade_apply as UA
 from ..services import upgrade_notice as UN
 from ..services import upgrade_plan as UP
+from ..services import upgrade_start as US
 from ._base import _load
 
 
@@ -677,6 +678,27 @@ def upgrade_notice(repo: Path, *, agent: str = "") -> str:
         return ""
     log, cfg, st = _load(repo, agent)
     return UN.line(repo, log, cfg, st, agent=agent)
+
+
+#: The start report per project, for the life of this process: a handshake (`initialize`,
+#: `server/discover`) can be asked for more than once, the start check is made once.
+_START_REPORTS: dict[str, str] = {}
+
+
+def upgrade_start(repo: Path, *, agent: str = "", surface: str = "") -> str:
+    """The upgrade-at-start report (`services.upgrade_start.start`) as text, "" when there is
+    nothing to say: for the MCP handshake, which asks once per process. It never raises and
+    never adopts a directory ddflow was not set up in."""
+    if not (repo / ".ddflow").is_dir():
+        return ""
+    key = str(Path(repo).resolve())
+    if key not in _START_REPORTS:
+        try:
+            log, cfg, st = _load(repo, agent)
+            _START_REPORTS[key] = US.start(repo, log, cfg, st, agent=agent, surf=surface)["text"]
+        except Exception as exc:  # an unreadable log must not fail a start
+            _START_REPORTS[key] = f"the upgrade check at start failed ({exc}); serving anyway."
+    return _START_REPORTS[key]
 
 
 def stale_server_note(repo: Path, *, agent: str = "") -> str:

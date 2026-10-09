@@ -1354,10 +1354,14 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
 
 
 def _upgrade_line(repo: Path, agent: str) -> str:
-    """The upgrade notice for the handshake, set off by a blank line, or "". Said once per
-    version on this machine, per project (`services.upgrade_notice`); a courtesy that can never fail a connect."""
+    """What the handshake says about an upgrade, set off by a blank line, or "".
+
+    First the start report (`services.upgrade_start`, `[upgrade].on_start`): ddflow newer than
+    the project -> what the start did and the proposal the operator is asked about. Else the
+    one-line notice, said once per version on this machine, per project
+    (`services.upgrade_notice`). A courtesy that can never fail a connect."""
     try:
-        notice = _api().upgrade_notice(repo, agent=agent)
+        notice = _api().upgrade_start(repo, agent=agent) or _api().upgrade_notice(repo, agent=agent)
     except Exception:
         return ""
     return f"\n\n{notice}" if notice else ""

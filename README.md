@@ -925,7 +925,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 202 knobs.
+cadences, and the rest of the 204 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3896,6 +3896,24 @@ A project is brought up to a newer ddflow in three steps, and ddflow does only t
    it rewrites. Anything an operator set by hand (a config value, a hand-edited driver doc) is
    never changed without `--confirm KEY --reason WHY`, which is recorded in the log.
 
+**On connect and on container start.** A starting `ddflow mcp` server (and the container that runs
+it) does not wait for the brief: it compares its version with the project's stamp and, when it is
+newer, acts per `[upgrade].on_start` (`safe` default, `check`, `off`; the environment variable
+`DDFLOW_UPGRADE_ON_START` overrides it for one run, e.g. `docker run -e
+DDFLOW_UPGRADE_ON_START=check`; an unknown value counts as `check`). `safe` rebuilds the derived
+stores (the sqlite index) and, **in a container only** (running the newer image is the operator's
+choice), applies the hooks and instructions categories after a backup. On an MCP connect outside a
+container nothing else is applied without the operator: the handshake instructions and the first
+brief carry the PLAN as a question (`ddflow ... newer than this project ... pending ... Ask the
+operator`), and only on their yes does the agent call `ddflow_upgrade` with `apply`. Config values
+anyone set and every item marked for the operator still wait for `confirm` and `reason`. The start
+never refuses to serve: errors become a line in the report, work past `[upgrade].start_timeout_s`
+(10 s) is left pending, a read-only or foreign-owned project is reported and not written, and a
+runtime OLDER than the project writes nothing and says `restart` (the skew guard). The outcome is
+kept in the git-ignored `.ddflow/local/upgrade-start.json`; it replaces the one-line notice for
+that version. A server that was already running when ddflow was upgraded says `restart the
+server` in its replies.
+
 **Undo and downgrade.** The log is append-only, so an upgrade is never undone by deleting events.
 `ddflow upgrade --restore [NAME]` puts back the files a backup holds (the default `local` backup,
 or the opt-in git `snapshot` tag: see "Backups: local or snapshot" above), and `git revert` of
@@ -5348,8 +5366,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=64b34d720ac2 -->
-<details><summary>All 202 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=2e1c53c9d893 -->
+<details><summary>All 204 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5512,6 +5530,8 @@ long default is left to `ddflow config --explain`.
 | `upgrade.backup_keep` | `10` |  |
 | `upgrade.config_changes` | `"agent"` | `agent` \| `ask` \| `operator` |
 | `upgrade.auto` | `"check"` | `off` \| `check` \| `safe` |
+| `upgrade.on_start` | `"safe"` | `off` \| `check` \| `safe` |
+| `upgrade.start_timeout_s` | `10.0` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
