@@ -182,6 +182,19 @@ def test_recall_drops_raw_records_and_keeps_within_budget_saying_so(repo):
     assert "raw" in next(v for k, v in cli.items() if k != "schema")[0]
 
 
+def test_recall_over_mcp_keeps_one_hit_under_any_budget_and_says_it_cut(repo):
+    """The budget is the API's now (tests/test_context_pack.py); over MCP a budget smaller
+    than any hit still answers with the first one, and the cut is the second block."""
+    run_cli(repo, "init")
+    for i in range(4):
+        run_cli(repo, "decision", "add", "--id", f"D{i}", "--title", f"tiny budget {i}",
+                "--decision", "tiny budget " + "w" * 200)  # fmt: skip
+    r = _call(repo, "ddflow_recall", query="tiny budget", limit=4, max_chars=1)
+    hits = [h for k, v in _body(r).items() if k != "schema" for h in v]
+    assert len(hits) == 1 and "raw" not in hits[0]
+    assert "truncated: showing 1 of 4 hits within max_chars=1" in r["content"][1]["text"]
+
+
 def test_mcp_json_is_compact(repo):
     _gated(repo)
     text = _call(repo, "ddflow_show", id="T1")["content"][0]["text"]

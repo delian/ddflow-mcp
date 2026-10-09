@@ -196,10 +196,12 @@ def cmd_recall(a, c: Ctx) -> int:
     )
     if c.json:
         body = out.body("results")
-        if out.data.get("pack", {}).get("truncated"):
-            # A cut answer says so in the body too: a reader of the JSON must not take the
-            # packed hits for all of them. A string, not a list: it is no source.
-            body = {**body, "truncated": out.data["pack"]["note"]}
+        # A cut or folded answer says so in the body too: a reader of the JSON must not
+        # take the packed hits for all of them. Strings, not lists: they are no source.
+        pack = out.data.get("pack", {})
+        for key, note in (("truncated", "cut_note"), ("folded", "fold_note")):
+            if pack.get(note):
+                body = {**body, key: pack[note]}
         emit_json(body)
         return out.exit
     if out.exit == NOTHING:
@@ -220,11 +222,11 @@ def cmd_recall(a, c: Ctx) -> int:
         for r in rows:
             head, body = summarise_row(table, r)
             print(_recall_block(table, r, head, body), end="")
+    if pack["fold_note"]:
+        print(f"      … {pack['fold_note']}")
     if pack["truncated"]:
         print(f"      … truncated at {out.data['max_chars']} chars (--max-chars to raise)")
         return OK
-    if pack["duplicates"]:
-        print(f"      … {pack['note']}")
     print(
         "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
         "unless the operator says otherwise; a lesson is advice; a past prompt is "

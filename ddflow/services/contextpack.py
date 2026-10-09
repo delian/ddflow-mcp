@@ -107,17 +107,24 @@ class Pack:
         """True when the budget (not a duplicate) left a hit out."""
         return self.shown + self.duplicates < self.total
 
+    def cut_note(self) -> str:
+        """What the budget left out; '' when it left nothing out."""
+        if not self.truncated:
+            return ""
+        return (
+            f"truncated: showing {self.shown} of {self.total - self.duplicates} hits "
+            f"within max_chars={self.budget.limit}"
+        )
+
+    def fold_note(self) -> str:
+        """What the duplicate check folded away; '' when it folded nothing."""
+        if not self.duplicates:
+            return ""
+        return f"{self.duplicates} repeated hit(s) folded into the first"
+
     def note(self) -> str:
-        """The statement of what was left out; '' when nothing was."""
-        parts = []
-        if self.truncated:
-            parts.append(
-                f"truncated: showing {self.shown} of {self.total - self.duplicates} hits "
-                f"within max_chars={self.budget.limit}"
-            )
-        if self.duplicates:
-            parts.append(f"{self.duplicates} repeated hit(s) folded into the first")
-        return "; ".join(parts)
+        """Both statements together; '' when nothing was left out."""
+        return "; ".join(n for n in (self.cut_note(), self.fold_note()) if n)
 
 
 def pack(
