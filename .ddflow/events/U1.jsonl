@@ -4313,3 +4313,4 @@
 {"agent":"U1","data":{"at":1791549763.8086004,"holder":"U1"},"id":"e4d02e20702c6d2702904fe6d","kind":"lease.renewed","lamport":49256,"schema":1,"subject":"B-upgrade.6-notice","ts":"2026-10-09T12:42:43.927214Z"}
 {"agent":"U1","data":{"at":1791549888.8473508,"holder":"U1"},"id":"e0ed5aa71e1b8d5f64ee940ba","kind":"lease.renewed","lamport":49262,"schema":1,"subject":"B-upgrade.6-notice","ts":"2026-10-09T12:44:48.976088Z"}
 {"agent":"U1","data":{"at":1791549965.1588373,"holder":"U1"},"id":"ecb213e41bac48c0e4a712d57","kind":"lease.renewed","lamport":49273,"schema":1,"subject":"B-upgrade.6-notice","ts":"2026-10-09T12:46:05.283337Z"}
+{"agent":"U1","data":{"at":1791550013.1947522,"holder":"U1"},"id":"e2087690de9f3c79368380e54","kind":"lease.renewed","lamport":49284,"schema":1,"subject":"B-upgrade.6-notice","ts":"2026-10-09T12:46:53.312189Z"}
