@@ -3,8 +3,12 @@
 
 Machine-local state (`.ddflow/local`: caches, queues, signal rings, reports) grew a store
 per feature, each with its own lock, its own half-atomic write, no format field and its
-own retention. This module is the primitive they move onto, slice by slice; nothing calls it
-yet. It gives:
+own retention. This module is the primitive new stores start on (the docs-index update queue
+is the first planned consumer of `queue_*`). The existing stores (ticks, upgrade notice, quota,
+waits, flowstate's append-only ring, slots' flock-only files) were measured and NOT moved: each
+pins a flat on-disk shape (`ticks.json`'s top-level `ticks`, the notice marker's `version`) that
+an older ddflow reads, which the `schema`/`data` envelope below would break, and a flat mode
+would add more code than the move removes. It gives:
 
 * a **document** -- one JSON value in one file, replaced atomically (`fsio.atomic_write`),
   stamped with a schema number and the writer's version, read-modify-written under a lock;
