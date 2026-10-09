@@ -29,8 +29,9 @@ from ..core.digest import content_digest
 from ..core.events import canonical
 from ..infra import tomlcfg as TC
 
-# The person-only checks are the approval primitive's (B-uni-approval); re-exported so
-# `reviewer_trust.agent_marker` and friends keep working.
+# The person-only checks are the approval primitive's (B-uni-approval) and the agent marker
+# rule is services.identity's; re-exported so `reviewer_trust.agent_marker` and friends
+# keep working.
 from . import approval as AP
 from . import identity as ID
 from .approval import os_user as _user
