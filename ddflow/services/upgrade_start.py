@@ -291,21 +291,30 @@ def start(
             text=f"the upgrade check at start failed ({exc}); serving anyway. "
             "Run `ddflow upgrade --plan`.",
         )
-    if report["text"] and _writable(repo):
+    if _writable(repo) and (report["text"] or (repo / MARKER).exists()):
+        # An empty report is saved too when a marker exists: the project caught up (the
+        # operator applied the upgrade by hand), so the old proposal must not be replayed.
         _save(repo, report)
-        UN.told(repo, running, report["text"])  # the one-line notice would only repeat it
+        if report["text"]:
+            UN.told(repo, running, report["text"])  # the one-line notice would only repeat it
     return report
 
 
 def take_for_brief(repo: Path) -> str:
-    """The recorded start report, once, for the first brief; "" when none or already given."""
+    """The recorded start report, once, for the first brief; "" when none or already given.
+
+    A marker that cannot be rewritten (a read-only store) still delivers the text: the cost
+    is that the next brief repeats it, not that the operator is never told."""
     try:
         data = _read(repo)
         text = str(data.get("text", ""))
         if not text or data.get("briefed"):
             return ""
-        data["briefed"] = True
-        fsio.atomic_write(Path(repo) / MARKER, json.dumps(data) + "\n")
-        return text
     except Exception:
         return ""
+    try:
+        data["briefed"] = True
+        fsio.atomic_write(Path(repo) / MARKER, json.dumps(data) + "\n")
+    except Exception:
+        pass
+    return text

@@ -239,6 +239,70 @@ def test_an_unreadable_project_does_not_fail_the_handshake(
     assert "serving anyway" in _instructions(old, "starter")
 
 
+def test_a_proposal_the_operator_already_applied_is_not_replayed(old: Path) -> None:
+    """Review finding: the marker survived a start that found the project current."""
+    _start(old, "mcp")
+    assert (old / LOCAL / "upgrade-start.json").is_file()
+    run_cli(old, "upgrade", "--apply", "--reason", "by hand")  # the CLI, not the start
+    log, cfg, st = _load(old, "starter")
+    st.upgrades = [{"to": "99.0.0"}]  # the project is now at (or past) the running version
+    rep = US.start(old, log, cfg, st, surf="mcp", environ={})
+    assert rep["status"] == US.CURRENT
+    assert US.take_for_brief(old) == ""
+
+
+def test_the_brief_still_delivers_when_the_marker_cannot_be_rewritten(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _start(old, "mcp")
+
+    def refuse(*a, **k):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(US.fsio, "atomic_write", refuse)
+    assert "newer than this project" in US.take_for_brief(old)
+
+
+def test_a_failing_start_report_does_not_silence_the_one_line_notice(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.api import setup as S
+    from ddflow.surfaces.mcp import _instructions
+
+    S._START_REPORTS.clear()
+    monkeypatch.setattr(S.US, "start", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(S, "upgrade_start", lambda *a, **k: (_ for _ in ()).throw(OSError("y")))
+    from ddflow import api
+
+    monkeypatch.setattr(api, "upgrade_start", S.upgrade_start)
+    assert "Upgraded ddflow" in _instructions(old, "starter")
+
+
+def test_two_handshakes_at_once_make_one_start_check(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+
+    from ddflow.api import setup as S
+
+    S._START_REPORTS.clear()
+    calls: list[int] = []
+
+    def slow(*a, **k):
+        calls.append(1)
+        time.sleep(0.3)
+        return {"text": "once"}
+
+    monkeypatch.setattr(S.US, "start", slow)
+    out: list[str] = []
+    threads = [threading.Thread(target=lambda: out.append(S.upgrade_start(old))) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert out == ["once"] * 4 and len(calls) == 1
+
+
 def test_the_image_documents_the_switch() -> None:
     text = (ROOT / "Dockerfile").read_text()
     assert "DDFLOW_UPGRADE_ON_START" in text

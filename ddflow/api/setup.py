@@ -16,6 +16,7 @@ load-bearing as anything in the pipeline:
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -683,6 +684,7 @@ def upgrade_notice(repo: Path, *, agent: str = "") -> str:
 #: The start report per project, for the life of this process: a handshake (`initialize`,
 #: `server/discover`) can be asked for more than once, the start check is made once.
 _START_REPORTS: dict[str, str] = {}
+_START_LOCK = threading.Lock()  #: two handshakes at once make one start check, not two
 
 
 def upgrade_start(repo: Path, *, agent: str = "", surface: str = "") -> str:
@@ -692,13 +694,16 @@ def upgrade_start(repo: Path, *, agent: str = "", surface: str = "") -> str:
     if not (repo / ".ddflow").is_dir():
         return ""
     key = str(Path(repo).resolve())
-    if key not in _START_REPORTS:
-        try:
-            log, cfg, st = _load(repo, agent)
-            _START_REPORTS[key] = US.start(repo, log, cfg, st, agent=agent, surf=surface)["text"]
-        except Exception as exc:  # an unreadable log must not fail a start
-            _START_REPORTS[key] = f"the upgrade check at start failed ({exc}); serving anyway."
-    return _START_REPORTS[key]
+    with _START_LOCK:
+        if key not in _START_REPORTS:
+            try:
+                log, cfg, st = _load(repo, agent)
+                _START_REPORTS[key] = US.start(repo, log, cfg, st, agent=agent, surf=surface)[
+                    "text"
+                ]
+            except Exception as exc:  # an unreadable log must not fail a start
+                _START_REPORTS[key] = f"the upgrade check at start failed ({exc}); serving anyway."
+        return _START_REPORTS[key]
 
 
 def stale_server_note(repo: Path, *, agent: str = "") -> str:
