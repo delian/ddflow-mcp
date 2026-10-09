@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from ..config import Config
 from ..core.events import Event
-from ..core.model import State
+from ..core.model import State, fold
 from .schedule import count_at_last_run, count_passes
 
 #: Gate outcomes that mean "this gate said no". `skipped` is deliberately NOT here: a
@@ -57,22 +57,21 @@ class GateRate:
         return self.failed / self.runs if self.runs else 0.0
 
 
-def gate_rates(events: list[Event]) -> dict[str, GateRate]:
-    """Per-gate outcome counts, from the raw log.
+def gate_rates(source: State | list[Event]) -> dict[str, GateRate]:
+    """Per-gate outcome counts across the whole queue.
 
-    Raw events rather than folded state, because `State.gates` keeps the LAST outcome per
-    item and a rate needs the history. The same reason `progress.work` reads events.
+    From the folded state's `Item.gate_history` -- every outcome recorded, not the LAST
+    per gate that `Item.gates` keeps, because a rate needs the history. Given raw events
+    instead (a caller that has not moved to the state yet) it folds just the history out
+    of them, so both read one definition of "a recorded outcome": `started` and
+    `out_of_order` are not verdicts about the work.
     """
+    state = source if isinstance(source, State) else fold(source, strict=False)
     out: dict[str, GateRate] = {}
-    for ev in events:
-        if not ev.kind.startswith("gate.") or ev.kind == "gate.started":
-            continue
-        outcome = ev.kind.split(".", 1)[1]
-        if outcome == "out_of_order":
-            continue  # a pipeline-order complaint, not a verdict about the work
-        gate = ev.data.get("gate") or ev.subject
-        rate = out.setdefault(gate, GateRate(gate))
-        rate.outcomes[outcome] = rate.outcomes.get(outcome, 0) + 1
+    for item in state.items.values():
+        for run in item.gate_history:
+            rate = out.setdefault(run.gate or item.id, GateRate(run.gate or item.id))
+            rate.outcomes[run.outcome] = rate.outcomes.get(run.outcome, 0) + 1
     return out
 
 
