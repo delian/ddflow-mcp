@@ -1503,7 +1503,13 @@ def _staged_noun(staged: dict, exports: dict) -> str:
 
 
 def _unrecorded_log_lines(
-    repo: Path, log: EventLog, tree: Path | None, noun: str, staged: dict, exports: dict
+    repo: Path,
+    log: EventLog,
+    tree: Path | None,
+    noun: str,
+    staged: dict,
+    exports: dict,
+    rules: dict,
 ) -> list[str]:
     """Why the event log a staged generated file must agree with is not fully staged
     (empty when it is)."""
@@ -1548,7 +1554,7 @@ def _unrecorded_log_lines(
             if exports
             else []
         ),
-        "    git add " + " ".join(shlex.quote(p) for p in sorted({**staged, **exports})),
+        "    git add " + " ".join(shlex.quote(p) for p in sorted({**staged, **exports, **rules})),
     ]
 
 
@@ -1632,7 +1638,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
     # be fully staged: then the log on disk IS the committed log, and the comparison
     # below is exact.
-    probe_lines = _unrecorded_log_lines(repo, log, tree, noun, staged, exports)
+    probe_lines = _unrecorded_log_lines(repo, log, tree, noun, staged, exports, rules)
     if probe_lines:
         return _verdict(mode, probe_lines)
     # Config from the FILES, as `ddflow render` writes with: env overrides belong to
@@ -2424,6 +2430,8 @@ def check_item_trailer(
     """
     if merging:
         return Verdict(OK, "")
+    if not keys and not waivers:
+        keys = ["Item"]  # the default the missing-trailer message names must also match
     canon = {k.lower(): k for k in keys}
     words = {k.lower(): list(v) for k, v in (waivers or {}).items()}
     trailers = _trailers(message)
