@@ -670,8 +670,8 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
 
 
 def upgrade_notice(repo: Path, *, agent: str = "") -> str:
-    """The one-line upgrade notice (`services.upgrade_notice.line`) or "": said once per machine
-    per version, whichever surface asks first. For the MCP handshake; the brief says it itself."""
+    """The one-line upgrade notice (`services.upgrade_notice.line`) or "": said once per version on this
+    machine, whichever surface asks first. For the MCP handshake; the brief says it itself."""
     log, cfg, st = _load(repo, agent)
     return UN.line(repo, log, cfg, st, agent=agent)
 

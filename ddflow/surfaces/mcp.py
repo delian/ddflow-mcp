@@ -1346,15 +1346,17 @@ def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
             pass
     try:
         tmpl = P.resolve("mcp_instructions", repo, overrides)
-        return P.render(tmpl, **vars_).strip() + _upgrade_line(repo, agent)
+        text = P.render(tmpl, **vars_).strip()
     except P.TemplateError as exc:
         # A broken override must not silence the server: say what is wrong, in the one
         # place the operator will see it, and still hand over the essentials.
-        return (
+        text = (
             f"ddflow's instruction template could not be loaded: {exc}\n\n"
             "Call `ddflow_brief` for the state of the queue, and `ddflow_prompts` to "
             "inspect the template configuration."
         )
+    # After the try, not in it: a broken template is exactly when the upgrade may be why.
+    return text + _upgrade_line(repo, agent)
 
 
 def _resolve_call(
