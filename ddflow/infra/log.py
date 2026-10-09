@@ -66,6 +66,7 @@ from ..core.slug import safe_filename
 from . import fsio
 from . import git as G
 from . import hostinfo as H
+from . import paths as P
 
 __all__ = [
     "PROVENANCE_KINDS",
@@ -507,11 +508,8 @@ def _toplevel(path: str) -> str:
 
 
 def _common_dir(path: str) -> str:
-    r = G.run(path, "rev-parse", "--git-common-dir", timeout=G.PROBE_TIMEOUT)
-    if not r.ok or not r.out:
-        return ""
-    p = Path(r.out)
-    return str((Path(path) / p).resolve() if not p.is_absolute() else p.resolve())
+    found = P.common_dir(path)
+    return str(found) if found else ""
 
 
 def default_agent_id(fallback_root: Path | str | None = None) -> str:

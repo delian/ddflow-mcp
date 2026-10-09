@@ -25,6 +25,7 @@ from ..core import outcome as O
 from ..core.model import SCHEDULE_FIELDS, Schedule, fold
 from ..services import schedule as SV
 from ..services import triggers as TR
+from ..services.items import TaskDraft, add_task
 from ._base import _load
 
 
@@ -232,7 +233,9 @@ def trigger_evaluate(
     OUTSIDE the append lock, as a claim's do (`EventLog.decide_then_append`); under the lock a
     few `stat` calls prove the log did not grow, and only if it did is everything read
     and decided again -- with NOW taken again -- before anything is written. A dry run
-    takes no lock: its answer is what a run would decide from the log as it was read."""
+    takes no lock: its answer is what a run would decide from the log as it was read, except
+    that a fire the item checks refuse (`item_refused`) is only found out when a run applies
+    it."""
     log, cfg, _st = _load(repo, agent)
     given = TR.ts(now) if now else None
     if now and given is None:
@@ -261,7 +264,7 @@ def trigger_evaluate(
         else:
             with log.decide_then_append(decide) as decided:
                 at, st, defs, trigs, errors, decisions = decided
-                _apply(log, st, defs, trigs, decisions, at, errors)
+                _apply(log, cfg, st, defs, trigs, decisions, at, errors)
     except _Unreadable as exc:  # raised before anything is written
         return O.failed(
             "trigger.evaluated",
@@ -278,11 +281,25 @@ def trigger_evaluate(
     return O.ok("trigger.evaluated", **data)
 
 
-def _apply(log, st, defs, trigs, decisions, at, errors) -> None:
+def _apply(log, cfg, st, defs, trigs, decisions, at, errors) -> None:
     """Write what `decisions` decided: each fire's item and `trigger.fired`, each
     suppression, then the run. The caller holds the log lock."""
     taken = set(st.items)
     for d in decisions:
+        item = None
+        if d.fire:
+            trig = trigs[d.trigger]
+            item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
+            taken.add(item["id"])
+            added = add_task(
+                log,
+                st,
+                cfg,
+                TaskDraft.from_data(item["id"], item["data"]),
+                dedupe="a trigger's remediation; one open per dedupe key",
+            )
+            if not added.ok:  # e.g. `action.phase` names no phase: nothing was filed
+                d.fire, d.reason, d.detail = False, "item_refused", added.problem
         if not d.fire:
             log.append(
                 "trigger.suppressed",
@@ -291,9 +308,6 @@ def _apply(log, st, defs, trigs, decisions, at, errors) -> None:
             )
             continue
         trig = trigs[d.trigger]
-        item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
-        taken.add(item["id"])
-        log.append("task.added", item["id"], item["data"])
         log.append(
             "trigger.fired",
             d.trigger,

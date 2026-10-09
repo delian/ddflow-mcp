@@ -179,6 +179,20 @@ def test_emit_json_is_the_bytes_every_command_printed(capsys):
     assert capsys.readouterr().out == "[]\n"
 
 
+def test_a_command_run_in_process_does_not_tag_the_next_body(repo, capsys):
+    """`main` sets the schema command of its run and puts it back (B17d6b31810): a body
+    printed after an in-process command carried that command's tag, e.g. rule_search@1."""
+    import json as _json
+
+    from ddflow.surfaces.cli import main
+    from ddflow.surfaces.render import emit_json
+
+    main(["--repo", str(repo), "--json", "rule", "search", "anything"])
+    capsys.readouterr()
+    emit_json({"a": 1})
+    assert _json.loads(capsys.readouterr().out) == {"a": 1}
+
+
 def test_no_command_module_prints_its_own_json():
     import ast
 
