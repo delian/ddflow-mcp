@@ -57,7 +57,8 @@ def _rules_block(governing) -> str:
 def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
     """The decisions that govern the item, ranked by the one injection path (pinned first,
     then enforcement, scope specificity and priority), and the rules text with the project's
-    own rules that govern its files added.
+    own rules that govern its files LEADING it (the pointer line follows, so a trim from
+    the bottom reaches the pointer first).
 
     The brief stays inside ``session.brief_max_tokens`` (B1472311a63), so what the other
     doors guarantee -- pinned guidance never trimmed -- holds here as order: pinned leads its
@@ -67,7 +68,7 @@ def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
     found = GI.for_item(cfg, st, item)
     block = _rules_block(found)
     decisions = [st.decisions[r.id] for r in found.records("decision")]
-    return decisions, (rules + "\n\n" + block).strip() if block else rules
+    return decisions, (block + "\n\n" + rules).strip() if block else rules
 
 
 _REFUTED_SHOWN = 5

@@ -38,20 +38,20 @@ def ids(inj):
 
 def test_rank_is_pinned_then_enforcement_then_specificity_then_priority_then_id():
     records = [
-        rec("z-advice", globs=["ddflow/**"], enf="advisory", prio=90),
-        rec("b-block-globs", globs=["ddflow/**"], enf="block", prio=10),
-        rec("a-block-gate", gates=["critic"], enf="block", prio=10),
-        rec("c-warn", globs=["ddflow/**"], enf="warn", prio=99),
+        rec("a-advice", globs=["ddflow/**"], enf="advisory", prio=90),
+        rec("a-block-globs", globs=["ddflow/**"], enf="block", prio=10),
+        rec("z-block-gate", gates=["critic"], enf="block", prio=10),
+        rec("z-warn", globs=["ddflow/**"], enf="warn", prio=99),
         rec("pin-advice", enf="advisory", prio=1),
         rec("pin-block", enf="block", prio=1),
-        rec("d-warn-lower", globs=["ddflow/**"], enf="warn", prio=5),
+        rec("a-warn-lower", globs=["ddflow/**"], enf="warn", prio=5),
     ]
     got = GI.inject(records, gate="critic", **WORK)
     assert ids(got) == [
         "pin-block", "pin-advice",  # pinned first, the stronger of them first
-        "a-block-gate", "b-block-globs",  # a block: the gate's own before the files'
-        "c-warn", "d-warn-lower",  # a warning: higher priority first
-        "z-advice",
+        "z-block-gate", "a-block-globs",  # a block: the gate's own before the files'
+        "z-warn", "a-warn-lower",  # a warning: higher priority first
+        "a-advice",
     ]  # fmt: skip
     assert got.pinned == ("pin-block", "pin-advice")
 
@@ -82,14 +82,14 @@ def test_pinned_guidance_is_never_trimmed_whatever_the_budget():
 
 def test_the_budget_bounds_the_rest_in_rank_order_and_names_what_it_cut():
     records = [
-        rec(f"d{i}", globs=["ddflow/**"], body=f"decision number {i} " * 8, prio=90 - i)
+        rec(f"d{8 - i}", globs=["ddflow/**"], body=f"decision number {i} " * 8, prio=90 - i)
         for i in range(8)
     ]
     big = GI.inject(records, **WORK)
     one = GI.inject(records, budget=Budget(260, "chars"), **WORK)
     assert len(big.shown) == 8 and not big.trimmed
-    assert 0 < len(one.shown) < 8 and ids(one) == [f"d{i}" for i in range(len(one.shown))]
-    assert list(one.trimmed) == [f"d{i}" for i in range(len(one.shown), 8)]
+    assert 0 < len(one.shown) < 8 and ids(one) == [f"d{8 - i}" for i in range(len(one.shown))]
+    assert list(one.trimmed) == [f"d{8 - i}" for i in range(len(one.shown), 8)]
     assert f"{len(one.trimmed)} more cut to the budget" in one.text
     # a long body is quoted to BODY_CHARS and says so
     long = GI.inject([rec("long", globs=["ddflow/**"], body="word " * 400)], **WORK)
@@ -156,8 +156,10 @@ def test_the_log_supplies_rules_and_decisions_to_one_path(repo):
 
 def test_the_brief_leads_with_pinned_guidance_and_adds_the_rules(repo):
     setup(repo)
+    (repo / "AGENTS.md").write_text("project instructions\n", encoding="utf-8")
     out = run_cli(repo, "brief", "--item", "T1")[1]
     assert "## Project rules" in out and 'kind="rule" id="r-naming"' in out
+    assert out.index('id="r-naming"') < out.index("See `AGENTS.md`")  # the pointer is trimmed first
     assert out.index('id="D-all"') < out.index('id="D-infra"')
 
 
