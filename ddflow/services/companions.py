@@ -994,3 +994,17 @@ def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> di
             if g in cover:
                 cover[g].append(st.companion.id)
     return cover
+
+
+def gate_gaps(cover: dict[str, list[str]], statuses: list[Status]) -> list[str]:
+    """Gates with no companion behind them, from `gate_coverage`.
+
+    A gate is only a GAP if every companion that could serve it is known absent: one whose
+    install state is unknown (``usable is None``, an unprobed cli tool) leaves its gates
+    unjudged, since "we did not look" is not "nothing is there" -- reporting `rules` as
+    unserved on the strength of not having checked told the agent a gate had nothing
+    behind it with the tool on the PATH. The one definition behind `companions`
+    (``uncovered_gates``) and the MCP handshake (``gate_gaps``).
+    """
+    unknown = {g for st in statuses if st.usable is None for g in st.companion.gates}
+    return [g for g, ids in cover.items() if not ids and g not in unknown]
