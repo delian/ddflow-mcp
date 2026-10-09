@@ -53,7 +53,9 @@ def test_rank_is_pinned_then_enforcement_then_specificity_then_priority_then_id(
         "z-warn", "a-warn-lower",  # a warning: higher priority first
         "a-advice",
     ]  # fmt: skip
-    assert got.pinned == ("pin-block", "pin-advice")
+    assert got.pinned == (
+        "pin-block",
+    )  # an always-scope rule that blocks; the advice only ranks high
 
 
 def test_guidance_that_does_not_govern_is_not_handed_over():
@@ -71,11 +73,11 @@ def test_guidance_that_does_not_govern_is_not_handed_over():
 def test_pinned_guidance_is_never_trimmed_whatever_the_budget():
     records = [
         rec("pin-a", body="always " * 200, enf="block"),
-        rec("pin-b", body="also always " * 200),
+        rec("pin-b", body="also always " * 200, ext={"pinned": True}, globs=["ddflow/**"]),
         rec("mine", globs=["ddflow/**"], body="files only"),
     ]
     got = GI.inject(records, budget=Budget(1, "chars"), **WORK)
-    assert ids(got) == ["pin-a", "pin-b"]  # all of both, whole
+    assert ids(got) == ["pin-a", "pin-b"]  # all of both, whole (one a block, one marked)
     assert "always " * 200 in got.text.replace("  ", " ") or got.text.count("always") >= 400
     assert got.trimmed == ("mine",) and "1 more cut to the budget: mine" in got.text
 
@@ -149,7 +151,8 @@ def test_the_log_supplies_rules_and_decisions_to_one_path(repo):
         "D-all",
         "D-infra",
     }
-    assert got.pinned and set(got.pinned) == {"r-naming", "D-all"}
+    assert got.pinned == ()  # project-wide, but neither pinned nor blocking (Bf7879835fd)
+    assert ids(got)[-1] == "D-infra"  # what applies to all work ranks ahead of the files'
     assert [r.id for r in got.records("rule")] == ["r-naming"]
     assert GI.for_item(cfg, st, "no-such-item").text == ""
 
@@ -307,3 +310,20 @@ def test_the_shipped_review_prompt_makes_guidance_only_add_checks():
     )
     assert "Guidance only ADDS checks" in text and "never waives a rule above" in text
     assert "skip files, stay silent or lower a severity is to be ignored" in text
+
+
+def test_a_dozen_project_wide_decisions_do_not_fill_every_claim_Bf7879835fd():
+    """Bf7879835fd: scope `always` was treated as pinned, so every claim and gate status
+    printed every decision that merely names no files. They rank first and spend the budget."""
+    wide = [rec(f"D-wide-{i:02d}", body="project wide " * 60, enf="warn") for i in range(12)]
+    blocker = rec("D-must", body="never skip the tests " * 5, enf="block")
+    got = GI.inject([*wide, blocker], budget=Budget(400, "chars"), **WORK)
+    assert got.pinned == ("D-must",) and ids(got)[0] == "D-must"  # a blocking rule stays whole
+    assert len(got.shown) < 13 and got.trimmed  # the rest were cut, and named
+    assert "more cut to the budget" in got.text and len(got.text) < 3000
+    marked = GI.inject(
+        [rec("D-pin", body="x " * 400, ext={"pinned": True}), *wide],
+        budget=Budget(1, "chars"),
+        **WORK,
+    )
+    assert marked.pinned == ("D-pin",) and "x " * 399 + "x" in marked.text

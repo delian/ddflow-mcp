@@ -2158,14 +2158,16 @@ four ask `services/guidance/inject.py`. It selects the live guidance that govern
 (its files, its tags, the gate), ranks it, packs it, and fences every body as data with who
 recorded it:
 
-- **Rank:** pinned first -- guidance that applies to all work (no globs, categories or gates)
-  -- then by how hard it binds (`block`, `warn`, `advisory`), how specific its scope is (the
-  gate, then the files, then a category, then everything) and its priority; ties by id.
-- **Pinned is never trimmed.** `claim`, `gate status` and the reviewers' block spend a budget
-  (a quarter of `[session].brief_max_tokens`) on the *unpinned* guidance only, in rank order,
-  folding repeated text, quoting a long body to 600 characters and ending with one line that
-  names what was cut. The brief keeps its own hard cap: pinned guidance leads its section, so
-  a section's cut from the bottom reaches it last.
+- **Rank:** pinned first, then guidance that applies to all work (no globs, categories or
+  gates), then by how hard it binds (`block`, `warn`, `advisory`), how specific its scope is
+  (the gate, then the files, then a category) and its priority; ties by id.
+- **Pinned is never trimmed.** Pinned means explicitly pinned, or an always-scope rule that
+  `block`s -- not merely a decision that names no files, or a project with a dozen of them
+  would get a page at every claim. `claim`, `gate status` and the reviewers' block spend a
+  budget (a quarter of `[session].brief_max_tokens`) on the *unpinned* guidance only, in rank
+  order, folding repeated text, quoting a long body to 600 characters and ending with one line
+  that names what was cut. The brief keeps its own hard cap: what ranks first leads its
+  section, so a section's cut from the bottom reaches it last.
 - **`ddflow claim`** prints the block under the worktree lines (and `ddflow_claim` carries it
   as `guidance`) only when something governs the item; **`ddflow gate status`** adds the
   guidance for the current gate; **the brief** lists decisions in this order and adds a
