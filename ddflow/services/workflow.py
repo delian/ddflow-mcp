@@ -172,7 +172,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
         for gid in pipeline:
             if gid in gates:
                 continue
-            near = [g for g in sorted(gates) if g.startswith(gid[:3]) or gid.startswith(g[:3])]
+            near = similar_gates(gid, gates)
             out.append(
                 Finding(
                     PROBLEM,
@@ -364,6 +364,42 @@ def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:
     return out + [Finding(PROBLEM, "config", p) for p in macro_problems(root)]
 
 
+def pipeline_lists(cfg: Config) -> tuple[list[str], list[str], list[str]]:
+    """``(task, phase, promotion)`` pipelines as every view names them: the promotion one
+    only where it runs (no ``flow.environments``, no promotion; Bc0cd05d0c5). The one
+    reading `describe` and the workflow overview share (the MCP handshake may not import
+    services; its task pipeline is this list's first)."""
+    return (
+        list(cfg.gates.task_pipeline),
+        list(cfg.gates.phase_pipeline),
+        list(pipelines(cfg, running=True).get("promotion", [])),
+    )
+
+
+def similar_gates(gid: str, known: Any) -> list[str]:
+    """Defined gate ids that a mistyped ``gid`` plausibly meant, sorted: a shared three
+    letter start either way round. What `check` and the pipeline editor both suggest."""
+    return [g for g in sorted(known) if g.startswith(gid[:3]) or gid.startswith(g[:3])]
+
+
+def apply_gate_table(
+    gates: dict[str, GateDef], table: dict[str, Any], *, only: tuple[str, ...] | None = None
+) -> dict[str, GateDef]:
+    """``gates`` with a candidate ``[gate.*]`` table laid over it: what `load_gates` would
+    return if that text were on disk. ``only`` limits the fields applied (and
+    then only to gates already defined). Mutates and returns ``gates``; otherwise a gate
+    the table names that is not defined yet is created."""
+    for gid, spec in (table or {}).items():
+        if only is not None and gid not in gates:
+            continue
+        g = gates.get(gid) or GateDef(id=gid)
+        for name, value in (spec if isinstance(spec, dict) else {}).items():
+            if (only is None or name in only) and hasattr(g, name):
+                setattr(g, name, value)
+        gates[gid] = g
+    return gates
+
+
 def _gate_kind(g) -> str:
     """`undefined` | `human` | `command` | `agent`. One definition, used by every
     surface that names a gate's kind."""
@@ -384,13 +420,8 @@ def describe(
     state: Any = None,
 ) -> WorkflowView:
     """The rules in force here, joined into one answer."""
-    v = WorkflowView(
-        task_pipeline=list(cfg.gates.task_pipeline),
-        phase_pipeline=list(cfg.gates.phase_pipeline),
-        # Only where it runs: without `flow.environments` no promotion exists, and naming
-        # the pipeline advertised gates nothing ever passes through (Bc0cd05d0c5).
-        promotion_pipeline=pipelines(cfg, running=True).get("promotion", []),
-    )
+    task, phase, promotion = pipeline_lists(cfg)
+    v = WorkflowView(task_pipeline=task, phase_pipeline=phase, promotion_pipeline=promotion)
     sources = {k: s for k, _val, s, _doc in cfg.explain()}
     values = {k: val for k, val, _s, _doc in cfg.explain()}
     v.rules = {k: (values.get(k), sources.get(k, "default")) for k in RULE_KEYS if k in values}
