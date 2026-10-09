@@ -1195,17 +1195,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
             for st, word in CO.actionable(statuses, grouped=True)
         ]
         cover = CO.gate_coverage(repo, statuses, CO.coverage_gates(cfg))
-        # A gate is only a GAP if every companion that could serve it is known absent.
-        # With `probe=False` the cli companions are all `None`, so a plain "no ids"
-        # test reported `rules` as unserved on every connection even with the tool on
-        # the PATH -- telling the agent a gate has nothing behind it on the strength of
-        # not having checked.
-        unknown_for: dict[str, bool] = {}
-        for st in statuses:
-            if st.usable is None:
-                for g in st.companion.gates:
-                    unknown_for[g] = True
-        v["gate_gaps"] = [g for g, ids in cover.items() if not ids and not unknown_for.get(g)]
+        v["gate_gaps"] = CO.gate_gaps(cover, statuses)
     except Exception as exc:
         # NOT `pass`. A broad catch here is right -- a malformed registry must not stop
         # the handshake, and an agent with no instructions is worse than one with
