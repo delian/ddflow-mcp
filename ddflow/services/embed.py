@@ -122,13 +122,18 @@ def _parse(stdout: str, want: int) -> Embedding:
     if not isinstance(raw, list) or len(raw) != want:
         got = len(raw) if isinstance(raw, list) else "none"
         return _unavailable(f"the embedder returned {got} vectors for {want} texts", COMPANION)
-    vectors = tuple(_vector(v) for v in raw)
-    if any(v is None for v in vectors):
-        return _unavailable("the embedder returned a vector that is not finite numbers", COMPANION)
-    sizes = {len(v) for v in vectors if v is not None}
-    if sizes == {0} or len(sizes) != 1:
-        return _unavailable("the embedder's vectors are empty or of different lengths", COMPANION)
-    return Embedding(True, tuple(v for v in vectors if v is not None), model, COMPANION)
+    return _checked([_vector(v) for v in raw], model, COMPANION)
+
+
+def _checked(rows: list[tuple[float, ...] | None], model: str, backend_: str) -> Embedding:
+    """Vectors held to the one contract, whichever backend made them: finite numbers, not
+    empty, all the same length."""
+    if any(r is None for r in rows):
+        return _unavailable("the embedder returned a vector that is not finite numbers", backend_)
+    vectors = tuple(r for r in rows if r is not None)
+    if len({len(v) for v in vectors}) != 1 or not vectors[0]:
+        return _unavailable("the embedder's vectors are empty or of different lengths", backend_)
+    return Embedding(True, vectors, model, backend_)
 
 
 def _vector(raw: Any) -> tuple[float, ...] | None:
@@ -153,13 +158,12 @@ def _model2vec(cfg: Config, texts: list[str]) -> Embedding:
             MODEL2VEC,
         )
     try:
-        vectors = _StaticModel.from_pretrained(str(path)).encode(texts)
-        rows = tuple(_vector([float(x) for x in row]) for row in vectors)
+        encoded = _StaticModel.from_pretrained(str(path)).encode(texts)
+        rows = [_vector([float(x) for x in row]) for row in encoded]
     except Exception as exc:  # the model's own trouble: report it, do not crash a recall
         return _unavailable(f"model2vec failed: {exc}", MODEL2VEC)
-    if any(r is None for r in rows):
-        return _unavailable("model2vec returned a vector that is not finite numbers", MODEL2VEC)
-    return Embedding(True, tuple(r for r in rows if r is not None), path.name, MODEL2VEC)
+    # The resolved path, not the directory's name: two models may share a name.
+    return _checked(rows, str(path.resolve()), MODEL2VEC)
 
 
 def cosine(a: Sequence[float], b: Sequence[float]) -> float:

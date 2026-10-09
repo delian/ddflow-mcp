@@ -161,3 +161,47 @@ def test_the_shell_runner_feeds_stdin_only_when_asked():
         "cat; sleep 30", timeout_s=1, stdin_text="x", on_tick=lambda: None, tick_s=0.2
     )
     assert slow.timed_out and slow.out == "x"  # the text went in once; a resumed wait takes none
+
+
+class _FakeModel:
+    """Stands in for model2vec's StaticModel: the real one needs a model on disk."""
+
+    rows: list = []
+    loaded: list = []
+
+    @classmethod
+    def from_pretrained(cls, path):
+        cls.loaded.append(path)
+        return cls()
+
+    def encode(self, texts):
+        return [self.rows[i % len(self.rows)] for i, _ in enumerate(texts)]
+
+
+def test_model2vec_is_held_to_the_same_contract_and_names_the_model_by_its_path(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(E, "_StaticModel", _FakeModel)
+    here = tmp_path / "m"
+    here.mkdir()
+    cfg = _cfg(model_dir=str(here))
+    _FakeModel.rows = [[1.0, 0.0], [0.0, 1.0]]
+    got = E.embed(tmp_path, cfg, ["a", "b"])
+    assert got.ok and got.backend == E.MODEL2VEC and got.model == str(here.resolve())
+    other = tmp_path / "x" / "m"  # same directory name, another model
+    other.mkdir(parents=True)
+    assert E.embed(tmp_path, _cfg(model_dir=str(other)), ["a"]).model != got.model
+    for bad in ([[]], [[1.0], [1.0, 2.0]], [[float("nan")]]):
+        _FakeModel.rows = bad
+        assert E.embed(tmp_path, cfg, ["a", "b"]).unavailable
+    _FakeModel.rows = [[1.0]]
+    _FakeModel.loaded.clear()
+    missing = E.embed(tmp_path, _cfg(model_dir=str(tmp_path / "gone")), ["a"])
+    assert missing.unavailable and "never downloaded" in missing.reason
+    assert _FakeModel.loaded == []  # a path that is not a directory never reaches the loader
+
+
+def test_model2vec_without_the_extra_is_unavailable_and_says_which(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "_StaticModel", None)
+    got = E.embed(tmp_path, _cfg(model_dir=str(tmp_path)), ["a"])
+    assert got.unavailable and "ddflow[rag]" in got.reason
