@@ -299,6 +299,19 @@ def test_exclusive_parameters_share_one_group_and_metavar_is_kept():
     assert "[--new | --extends ID]" in " ".join(sub.format_usage().split())
 
 
+def test_the_command_line_type_wins_over_the_schema_type():
+    cmd = Command(
+        path=("x",),
+        tool="ddflow_x",
+        params=(Param("code", cli_type=int), Param("secs", type="number", cli_type=int)),
+    )
+    root = _root()
+    add_commands(root.add_subparsers(dest="cmd", required=True), [cmd])
+    ns = root.parse_args(["x", "--code", "3", "--secs", "4"])
+    assert (ns.code, ns.secs) == (3, 4) and isinstance(ns.secs, int)
+    assert cmd.properties()["code"][0] == "string" and cmd.properties()["secs"][0] == "number"
+
+
 def test_a_member_of_an_exclusive_group_is_optional():
     for bad in ({"required": True}, {"positional": True}):
         with pytest.raises(ValueError, match="exclusive group is optional"):

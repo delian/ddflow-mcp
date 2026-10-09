@@ -359,12 +359,12 @@ class Param:
             kwargs["action"] = "store_true"
         elif self.repeat:
             kwargs["action"] = "append"
-        if self.type == "integer":
+        if self.cli_type is not None:
+            kwargs["type"] = self.cli_type
+        elif self.type == "integer":
             kwargs["type"] = int
         elif self.type == "number":
             kwargs["type"] = float
-        elif self.cli_type is not None:
-            kwargs["type"] = self.cli_type
         if self.choices is not None:
             kwargs["choices"] = list(self.choices)
         if self.default is not _UNSET:

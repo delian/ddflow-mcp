@@ -180,3 +180,24 @@ def test_the_defaults_the_declarations_read_are_the_ones_the_api_uses():
     wait = next(c for c in lifecycle.COMMANDS if c.path == ("wait",))
     timeout = next(p for p in wait.params if p.name == "timeout")
     assert str(defaults.DEFAULT_WAIT_TIMEOUT_S) in timeout.cli_help
+
+
+@pytest.mark.parametrize("tool", ["ddflow_phase_add", "ddflow_task_add"])
+def test_a_priority_of_zero_over_mcp_is_filed_as_zero_like_the_command_line(repo, tool):
+    """`int(a.get("priority") or DEFAULT)` read a 0 as absent: the tool filed it at 100 while
+    `ddflow task add --priority 0` filed it at 0, so the same call ranked differently."""
+    import json
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conftest import run_cli
+
+    out = TOOLS[tool]["api"](repo, {"id": "Z0", "title": "t", "priority": 0}, "agent")
+    assert out.exit == 0, out.reason
+    code, shown, err = run_cli(repo, "show", "Z0", "--json")
+    assert code == 0, err
+    assert json.loads(shown)["priority"] == 0
+    default = TOOLS[tool]["api"](repo, {"id": "Z1", "title": "t"}, "agent")
+    assert default.exit == 0, default.reason
+    assert json.loads(run_cli(repo, "show", "Z1", "--json")[1])["priority"] == 100
