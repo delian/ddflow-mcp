@@ -2161,8 +2161,8 @@ recorded it:
 - **Rank:** pinned first, then guidance that applies to all work (no globs, categories or
   gates), then by how hard it binds (`block`, `warn`, `advisory`), how specific its scope is
   (the gate, then the files, then a category) and its priority; ties by id.
-- **Pinned is never trimmed.** Pinned means explicitly pinned, or an always-scope rule that
-  `block`s -- not merely a decision that names no files, or a project with a dozen of them
+- **Pinned is never trimmed.** Pinned means an always-scope rule that `block`s (a way to pin a
+  decision explicitly is a later task's) -- not merely a decision that names no files, or a project with a dozen of them
   would get a page at every claim. `claim`, `gate status` and the reviewers' block spend a
   budget (a quarter of `[session].brief_max_tokens`) on the *unpinned* guidance only, in rank
   order, folding repeated text, quoting a long body to 600 characters and ending with one line

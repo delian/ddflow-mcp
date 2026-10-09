@@ -9,7 +9,7 @@ its own budget and its own idea of what to cite. This is the one path they share
 2. **Rank.** Pinned first, then what applies to all work (scope ``always``), then by how hard
    it binds (block, warn, advisory), how specific its scope is (a gate, then files, then a
    category) and its priority; ties by id.
-3. **Pack.** PINNED guidance -- explicitly pinned, or an always-scope rule that BLOCKS -- is
+3. **Pack.** PINNED guidance -- an always-scope rule that BLOCKS -- is
    never trimmed, whatever the budget. (Merely naming no files is not a pin: a project with a
    dozen such decisions would get a page of them at every claim.) The rest goes through the
    context pack
@@ -68,11 +68,11 @@ def always(rec: GuidanceRecord) -> bool:
 
 
 def pinned(rec: GuidanceRecord) -> bool:
-    """Guidance handed over whole, whatever the budget: one that is explicitly PINNED
-    (``ext["pinned"]``, B-dec-pinned) or an always-scope rule that BLOCKS. A project with a
-    dozen decisions that merely name no files must not get a page of them at every claim
-    (Bf7879835fd): those are ranked first and spend the budget like the rest."""
-    return bool(rec.ext.get("pinned")) or (always(rec) and rec.enforcement == "block")
+    """Guidance handed over whole, whatever the budget: an always-scope record that BLOCKS.
+    A project with a dozen decisions that merely name no files must not get a page of them
+    at every claim (Bf7879835fd): those are ranked first and spend the budget like the
+    rest. A way to pin a decision explicitly is B-dec-pinned's, and extends this function."""
+    return always(rec) and rec.enforcement == "block"
 
 
 def rank_key(a: Applies) -> tuple:
