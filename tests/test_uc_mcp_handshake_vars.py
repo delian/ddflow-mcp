@@ -94,3 +94,12 @@ def test_an_unimportable_domain_layer_costs_only_its_blocks(tmp_path: Path, monk
     v = mcp._instruction_vars(repo)
     assert set(v) == VARS
     assert v["task_pipeline"] == ["implement"]
+
+
+def test_every_named_reader_exists() -> None:
+    """A stale name in `_FILLERS` would be swallowed by the per-reader guard and silently
+    cost that block: the names are checked here, where a typo fails loudly."""
+    from ddflow.api import surf_mcp
+
+    for name in mcp._FILLERS:
+        assert name == "pipeline" or callable(getattr(surf_mcp, "fill_" + name)), name
