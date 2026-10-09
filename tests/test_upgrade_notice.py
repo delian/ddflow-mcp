@@ -1,7 +1,7 @@
 """B-upgrade.6-notice: the session-start upgrade notice and the `[upgrade].auto` policy.
 
 Decision D-upgrade-auto-check: after ddflow is upgraded, the first session start on a machine
-says so in ONE line -- once per machine per version -- and with the shipped default writes
+says so in ONE line -- once per version on this machine -- and with the shipped default writes
 nothing. `safe` also applies the non-destructive categories (hooks, instructions) after a
 backup; `off` says nothing. The project here is one a real ddflow 0.1.3 built
 (tests/fixtures/releases/0.1.3), so the running ddflow is genuinely newer than the project.
@@ -58,7 +58,7 @@ def test_the_notice_appears_once_not_twice(old: Path) -> None:
     first = _start(old)
     assert LINE in first and "ddflow upgrade --plan" in first
     assert first.count(LINE) == 1
-    assert LINE not in _start(old), "said once per machine per version"
+    assert LINE not in _start(old), "said once per version on this machine"
     marker = json.loads((old / ".ddflow" / "local" / "upgrade-notice.json").read_text())
     assert marker["version"] and LINE in marker["said"]
 
@@ -203,6 +203,7 @@ def test_a_broken_instruction_template_still_carries_the_notice(old: Path) -> No
     text = Server(old)._dispatch({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})[
         "result"
     ]["instructions"]
+    assert "could not be loaded" in text, "the fallback path was taken"
     assert LINE in text
 
 
