@@ -63,3 +63,27 @@ def plan_for(
         hold=_reservation_hold(repo, st, cfg, me, now),
         parallel=FL.limit_for(repo, cfg, st, log.read_all if events is None else events),
     )
+
+
+def alternatives_offer(repo: Path, log, cfg: Config):
+    """What a refused claim names as "you could take instead": the first five of the offer
+    `next` makes now, in its order, for the items of the refused item's kind, minus the
+    refused one. Handed to
+    `services.leases.acquire(offer=...)`, which cannot compute it (it needs the repository
+    for the waiters' reservations and the load). Computed only when a claim is refused."""
+
+    def offer(state: State, item_id: str, holder: str, now: float) -> list[str]:
+        refused = state.items.get(item_id)
+        p = plan_for(
+            repo,
+            log,
+            cfg,
+            state,
+            purpose="offer",
+            kind=refused.kind if refused else "task",
+            agent=holder,
+            now=now,
+        )
+        return [it.id for it in p.ready if it.id != item_id][:5]  # in `next`'s own order
+
+    return offer
