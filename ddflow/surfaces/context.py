@@ -81,7 +81,7 @@ class Ctx:
         # two surfaces wrote the same connection's events under different identities.
         #: What the caller EXPLICITLY asked for, "" when it asked for nothing. Kept
         #: separate from the resolved id because passing the resolved value back into
-        #: `resolve_agent_id` makes it look explicit — which is how `config --explain`
+        #: `ID.resolve` makes it look explicit — which is how `config --explain`
         #: came to report `[explicit]` for an identity nobody had set anywhere.
         self.requested_agent = args.agent or ""
         harness = ""
