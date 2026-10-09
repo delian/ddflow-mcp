@@ -367,7 +367,8 @@ def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:
 def pipeline_lists(cfg: Config) -> tuple[list[str], list[str], list[str]]:
     """``(task, phase, promotion)`` pipelines as every view names them: the promotion one
     only where it runs (no ``flow.environments``, no promotion; Bc0cd05d0c5). The one
-    reading `describe`, the workflow overview and the MCP handshake share."""
+    reading `describe` and the workflow overview share (the MCP handshake may not import
+    services; its task pipeline is this list's first)."""
     return (
         list(cfg.gates.task_pipeline),
         list(cfg.gates.phase_pipeline),
