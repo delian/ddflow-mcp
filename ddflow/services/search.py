@@ -255,9 +255,10 @@ def _job_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
 
 def _schedule_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
     out = _def_docs(c.st, "schedule", "schedule")
+    have = {d.id for d in out}
     if c.repo is not None:
         for jid, d in sorted(SCH.definitions(c.repo, c.cfg, c.st).jobs.items()):
-            if d.source == SCH.SOURCE_CADENCE:
+            if d.source == SCH.SOURCE_CADENCE or jid in have:
                 continue  # the built-in [cadence] passes are config defaults, not definitions
             j = d.job
             text = _join(

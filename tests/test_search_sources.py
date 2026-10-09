@@ -146,3 +146,11 @@ def test_a_retire_reason_is_found(full):
     assert def_retire(full, "agent", "baker", reason="obsoleted by quokka bot").ok
     _, body, _ = _search(full, "quokka", "--source", "agents", "--kind", "agent")
     assert [r["id"] for r in body["rows"]] == ["baker"]
+
+
+def test_a_schedule_recorded_both_ways_is_listed_once(full):
+    from ddflow.api.defs import def_record
+
+    assert def_record(full, "schedule", "nightly-tamarind", {"title": "again"}).ok
+    _, body, _ = _search(full, "tamarind", "--source", "schedules")
+    assert [r["id"] for r in body["rows"]] == ["nightly-tamarind"]
