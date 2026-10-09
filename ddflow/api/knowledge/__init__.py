@@ -38,6 +38,7 @@ from ...core.events import parse_changelog  # noqa: F401
 from ...core.model import LINK_RELATIONS, fold  # noqa: F401
 from ...infra.store import RECALL_SOURCES  # noqa: F401
 from ...services import contextpack as CP  # noqa: F401
+from ...services import searchcore as SC  # noqa: F401
 from ...services.items import TaskDraft, add_task  # noqa: F401
 from .._base import _load  # noqa: F401
 from .bug_close import (  # noqa: F401

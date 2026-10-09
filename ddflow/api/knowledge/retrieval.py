@@ -12,6 +12,7 @@ from ...core import outcome as O
 from ...core.budget import RECALL_MAX_CHARS, Budget
 from ...infra.store import RECALL_SOURCES
 from ...services import contextpack as CP
+from ...services import searchcore as SC
 from .._base import _load
 from .lessons import _store
 
@@ -34,24 +35,8 @@ def _origin(st, table: str, ident):
     return None
 
 
-def _search_sources(store, query: str, sources: str, limit: int) -> dict[str, list[dict]]:
-    """The hits of every wanted source, in rank order, by table; a source with none is absent."""
-    want = csv_list(sources) or [t for t, _, _ in RECALL_SOURCES]
-    lowered = [w.lower() for w in want]
-    results: dict[str, list[dict]] = {}
-    for table, label, _why in RECALL_SOURCES:
-        if table not in want and label.lower() not in lowered:
-            continue
-        try:
-            hits = store.search(table, query, limit)
-        except Exception:
-            # One unreadable source must not take the whole recall down: the value is in
-            # the union, and "the lessons table is corrupt" is not a reason to withhold
-            # the decisions.
-            hits = []
-        if hits:
-            results[table] = hits
-    return results
+#: The old name of the sources search, which moved to the search core.
+_search_sources = SC.search_sources
 
 
 def recall(
@@ -75,7 +60,7 @@ def recall(
     obvious in the log.
     """
     log, cfg, _st = _load(repo, agent)
-    results = _search_sources(_store(repo, log, cfg), query, sources, limit)
+    results = SC.search_sources(_store(repo, log, cfg), query, sources, limit)
     labels = {table: label for table, label, _ in RECALL_SOURCES}
     # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
     # somebody's words, and a hit shown without its author reads as the tool's own.
@@ -162,7 +147,7 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     # The policy engine with the add-time switch forced on and the kinds narrowed.
     dd = dataclasses.replace(cfg.dedupe, on_match="ask", kinds=scope)
     scoped = dataclasses.replace(cfg, dedupe=dd)
-    with sim.open_store(store) as matcher:
+    with SC.matcher(store) as matcher:
         found = sim.assess(matcher, {"kind": scope[0], "title": text, "body": ""}, scoped)
         # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
         cands = [c for c in found.candidates if c.kind in scope]

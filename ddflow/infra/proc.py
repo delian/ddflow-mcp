@@ -176,6 +176,7 @@ def run_shell(
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 0,
     merge_stderr: bool = False,
+    stdin_text: str | None = None,
 ) -> ShellResult:
     """Run an operator's shell line to completion and report how it ended.
 
@@ -187,7 +188,9 @@ def run_shell(
     started is ``could_not_run`` with the reason in ``err``. (A bad ``on_tick``/``tick_s``
     pair is the caller's bug and still raises ValueError, and an exception raised BY
     ``on_tick`` is not the command's trouble: the group is killed and that exception
-    reaches the caller as it was, never as ``could_not_run`` or ``timed_out``.)
+    reaches the caller as it was, never as ``could_not_run`` or ``timed_out``.) With
+    ``stdin_text`` the command is fed that text on stdin and then sees end of file (a
+    companion that takes a JSON request); without it stdin stays /dev/null.
     """
     if on_tick is not None and tick_s <= 0:
         raise ValueError("run_shell: on_tick needs tick_s > 0, or it would never be called")
@@ -217,6 +220,7 @@ def run_shell(
             timeout=timeout_s,
             on_tick=tick if on_tick is not None else None,
             tick_s=tick_s,
+            input=stdin_text,
             **kwargs,
         )
     except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
@@ -251,6 +255,7 @@ def _shell_group(
     timeout: float | None,
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 0,
+    input: str | None = None,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess:
     """`run(command, shell=True, capture_output=True, timeout=...)` whose timeout kills
@@ -266,8 +271,9 @@ def _shell_group(
     ``on_tick`` is called every ``tick_s`` seconds while the command runs, on THIS
     thread (a long gate renews its lease that way; see `run_command_gate`).
     Output is captured unless ``capture_output=False`` or ``stdout``/``stderr`` say
-    otherwise; the other keywords go to `popen` (stdin stays /dev/null). There is no
-    ``input=``: no caller feeds one, and resuming a write across ticks is not supported.
+    otherwise; the other keywords go to `popen` (stdin stays /dev/null unless ``input`` is
+    given: that text is handed to the first wait, which writes it across as many ticks as the child
+    takes to read it, and then closes the pipe).
     On timeout the TimeoutExpired carries everything the command wrote, as
     `subprocess.run`'s does (a resumed `communicate` returns all it accumulated).
     """
@@ -278,6 +284,8 @@ def _shell_group(
         kwargs.setdefault("stderr", PIPE)
     if os.name == "posix":
         kwargs["start_new_session"] = True
+    if input is not None:
+        kwargs["stdin"] = PIPE
     p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
     deadline = None if timeout is None else time.monotonic() + timeout
     try:
@@ -286,11 +294,12 @@ def _shell_group(
             if on_tick is not None:
                 wait = tick_s if wait is None else min(tick_s, wait)
             try:
-                out, err = p.communicate(timeout=wait)
+                out, err = p.communicate(input=input, timeout=wait)
                 return subprocess.CompletedProcess(command, p.returncode, out, err)
             except subprocess.TimeoutExpired:
                 if deadline is not None and time.monotonic() >= deadline:
                     raise
+                input = None  # already handed to communicate(); a resumed wait takes none
                 if on_tick is not None:
                     on_tick()
     except subprocess.TimeoutExpired:
