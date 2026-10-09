@@ -18,6 +18,7 @@ from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
 from .declared.answer import ANSWER_FLAG_EXEMPT
+from .declared.hooks import COMMANDS as _HOOKS
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.queue import COMMANDS as _QUEUE
@@ -46,55 +47,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=("version", "lint"),
         reason="the release lint runs inside ddflow_version_cut (also with dry_run), and its waiver is the operator's decision, from the CLI; a tool of its own would cost every client's tools/list for a check only a release-maker runs",
-    ),
-    Command(
-        path=("hooks", "status"), reason="covered by ddflow_hooks, whose action argument selects it"
-    ),
-    Command(
-        path=("hooks", "install"),
-        reason="covered by ddflow_hooks, whose action argument selects it",
-    ),
-    Command(
-        path=("hooks", "uninstall"),
-        reason="covered by ddflow_hooks, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "list"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "show"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "eject"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "get"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(path=("companions", "list"), reason="covered by ddflow_companions"),
-    Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
-    Command(
-        path=("hooks", "session-start"),
-        reason="invoked BY the Claude Code SessionStart hook to put the brief into a new session; over MCP that is ddflow_brief",
-    ),
-    Command(
-        path=("hooks", "pre-compact"),
-        reason="invoked by Claude Code's own PreCompact hook with its JSON on stdin; an agent never calls it, and the record it writes is a session note (ddflow_session_note)",
-    ),
-    Command(
-        path=("hooks", "prompt"),
-        reason="invoked BY the harness's prompt hook with the prompt's JSON on stdin; an agent records its own words with ddflow_session_prompt",
-    ),
-    Command(
-        path=("hooks", "check-msg"),
-        reason="invoked BY the installed commit-msg hook with the message being committed; it is not something an agent calls",
-    ),
-    Command(
-        path=("hooks", "check-commit"),
-        reason="invoked BY the installed git hook, inside the commit that is being checked; it is not something an agent calls",
     ),
     Command(
         path=(),
@@ -148,12 +100,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         prose=True,
         prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
     ),
-    Command(
-        path=(),
-        tool="ddflow_prompts",
-        prose=True,
-        prose_reason="with show it returns the template itself, which is the thing to read",
-    ),
 )
 
 #: Every declaration about the two surfaces' differences: these, and those a migrated command
@@ -168,6 +114,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_HOOKS,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,
