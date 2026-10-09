@@ -325,15 +325,9 @@ def _owner(table):
         ),
         (
             {"requires_evidence": ["report"]},
-            {"output_digest": "ab", "output_bytes": 1, "tail": "\n"},
+            {"output_digest": "ab", "output_bytes": 1, "output_blank": True},
             None,
             False,
-        ),
-        (
-            {"requires_evidence": ["report"]},
-            {"output_digest": "ab", "output_bytes": 9000, "tail": "\n\n"},
-            None,
-            True,  # the tail is not the whole output: something came before it
         ),
         ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "X"}, True),
         ({"requires_evidence": ["link"]}, {"link": ["R2", "R1"]}, {"R1": "X"}, True),
@@ -434,3 +428,13 @@ def test_a_record_linked_to_another_item_does_not_satisfy_a_link(repo):
     gate = _gate(requires_evidence=["link"])
     assert evidence_problems(gate, {"link": rid}, "T1", owner) == []
     assert evidence_problems(gate, {"link": rid}, "T2", owner) != []
+
+
+@pytest.mark.parametrize(
+    "text,blank",
+    [("", True), ("\n", True), (" " * 10000, True), ("\u00a0" * 50, True), ("ok\n", False)],
+)
+def test_output_evidence_marks_a_blank_output_and_only_then(text, blank):
+    from ddflow.services.gates.runner import output_evidence
+
+    assert (output_evidence(text).get("output_blank") is True) is blank
