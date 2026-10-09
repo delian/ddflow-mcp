@@ -212,3 +212,13 @@ def test_a_gate_in_scope_is_waited_on_as_before(repo):
     run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
     out = run_cli(repo, "gate", "status", "T1")[1]
     assert "not applicable" not in out and "[ ] dedupe" in out, out
+
+
+def test_brief_and_verify_leave_out_a_gate_that_does_not_apply(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    run_cli(repo, "config", "--set", "gate.bug_hunt.applies_when", '["src/**"]')
+    out = run_cli(repo, "brief", "--item", "T1")[1]
+    remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
+    assert "dedupe" not in remaining and "bug_hunt" in remaining, remaining
