@@ -12,37 +12,8 @@ import sys
 from ...api import view_read
 from ...services import search as S
 from ..context import NOTHING, OK, REFUSED, Ctx
+from ..registry import Command, Param
 from ..render import emit_json
-
-
-def register(s) -> None:
-    p = s.add_parser(
-        "search",
-        help="search tasks, phases, bugs, research, decisions, lessons, sessions, prompts "
-        "and the log (exit 2 = no match)",
-    )
-    p.add_argument("query", help="the text to look for")
-    mode = p.add_mutually_exclusive_group()
-    mode.add_argument("--exact", action="store_true", help="case-insensitive substring, not ranked")
-    mode.add_argument(
-        "--regex", action="store_true", help="a regular expression (unsafe ones are refused)"
-    )
-    p.add_argument(
-        "--kind",
-        default="",
-        help=f"comma-separated sources to search (default all): {', '.join(S.SOURCES)}",
-    )
-    p.add_argument("--state", default="", help="only hits in this state")
-    p.add_argument("--phase", default="", help="only hits under this phase id")
-    p.add_argument(
-        "--owner",
-        default="",
-        help="only hits by this agent (lease holder, session or event agent); "
-        "not --agent, which is who YOU are",
-    )
-    p.add_argument("--since", default="", help="only hits dated at or after this ISO date")
-    p.add_argument("--limit", type=int, default=S.DEFAULT_LIMIT, help="most hits to show")
-    p.set_defaults(fn=cmd_search)
 
 
 def view_head(c: Ctx, out) -> int | None:
@@ -92,3 +63,43 @@ def cmd_search(a, c: Ctx) -> int:
     if d["note"]:
         print(f"\n({d['note']})")
     return OK
+
+
+#: `ddflow search`: the CLI half of `ddflow_list` for `search`.
+COMMAND = Command(
+    path=("search",),
+    summary="search tasks, phases, bugs, research, decisions, lessons, sessions, prompts "
+    "and the log (exit 2 = no match)",
+    params=(
+        Param("query", positional=True, help="the text to look for"),
+        Param(
+            "exact",
+            type="boolean",
+            help="case-insensitive substring, not ranked",
+            exclusive="mode",
+        ),
+        Param(
+            "regex",
+            type="boolean",
+            help="a regular expression (unsafe ones are refused)",
+            exclusive="mode",
+        ),
+        Param(
+            "kind",
+            default="",
+            help=f"comma-separated sources to search (default all): {', '.join(S.SOURCES)}",
+        ),
+        Param("state", default="", help="only hits in this state"),
+        Param("phase", default="", help="only hits under this phase id"),
+        Param(
+            "owner",
+            default="",
+            help="only hits by this agent (lease holder, session or event agent); "
+            "not --agent, which is who YOU are",
+        ),
+        Param("since", default="", help="only hits dated at or after this ISO date"),
+        Param("limit", type="integer", default=S.DEFAULT_LIMIT, help="most hits to show"),
+    ),
+    handler=cmd_search,
+    via=("ddflow_list", "search"),
+)

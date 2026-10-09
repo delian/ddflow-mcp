@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import records as R
 from ._common import _answer, _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -193,15 +194,5 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id", "was", "released"),
     },
-    "ddflow_session_start": {
-        "description": "Open a session for provenance logging. Returns the session id.",
-        "properties": {
-            "model": ("string", "Your model id.", False),
-            "tool": ("string", "Your harness, e.g. 'claude-code'.", False),
-        },
-        "api": lambda repo, a, agent: _api().session_start(
-            repo, model=a.get("model", "") or "", tool=a.get("tool", "") or "", agent=agent
-        ),
-        "payload": ("session",),
-    },
+    "ddflow_session_start": R.BY_TOOL["ddflow_session_start"].tool_entry(),
 }
