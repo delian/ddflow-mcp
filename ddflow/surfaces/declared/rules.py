@@ -219,7 +219,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().rule_search(
             repo,
             a["query"],
-            limit=int(a.get("limit", 10) or 10),
+            limit=10 if a.get("limit") is None else int(a["limit"]),
             exact=bool(a.get("exact")),
             regex=bool(a.get("regex")),
             tag=a.get("tag") or None,

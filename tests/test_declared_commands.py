@@ -239,3 +239,15 @@ def test_a_rule_priority_of_zero_over_mcp_is_stored_as_zero_like_the_command_lin
     assert show(repo, {"id": "r-edit"}, "agent").data["priority"] == 0
     add(repo, {"id": "r-dflt", "title": "v", "content": "e"}, "agent")
     assert show(repo, {"id": "r-dflt"}, "agent").data["priority"] == 50
+
+
+def test_a_rule_search_limit_of_zero_over_mcp_returns_nothing_like_the_command_line(repo):
+    """`int(a.get("limit", 10) or 10)` read a 0 as absent and returned ten rows; the command
+    line passed the 0 on."""
+    add, search = (TOOLS[f"ddflow_rule_{v}"]["api"] for v in ("add", "search"))
+    for i in range(3):
+        assert (
+            add(repo, {"id": f"r-{i}", "title": "naming", "content": "naming rule"}, "a").exit == 0
+        )
+    assert search(repo, {"query": "naming", "limit": 0}, "a").data["count"] == 0
+    assert search(repo, {"query": "naming"}, "a").data["count"] == 3
