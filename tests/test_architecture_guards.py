@@ -26,7 +26,9 @@ directory), so absence means no baselines.
 `<counter>.toml` holds the number of the other counters (`unreferenced_functions.toml`
 also the functions kept unreferenced on purpose), and `importlinter-<contract>.toml` one
 contract's `ignore_imports` allowlist, which this module joins back into the contract
-before import-linter runs. This module changes only when a guard is added or what it
+before import-linter runs (for surfaces-through-api, subprocess-home and fsio-home a
+directory `importlinter-<contract>/<dotted source module>.toml`, one file per module,
+deleted when the module reaches zero; a "home" entry stays in its module's file). This module changes only when a guard is added or what it
 measures changes.
 
 Counted on the source with `ast`, never by running anything, so the guard is the same on
@@ -59,7 +61,8 @@ PKG = ROOT / "ddflow"
 #: `<counter>.toml`: lower it in the same change that removes the sites (the failure
 #: message prints the exact value), never raise it. The functions kept unreferenced on
 #: purpose are in `unreferenced_functions.toml`, each contract's import allowlist in
-#: `importlinter-<contract>.toml`.
+#: `importlinter-<contract>.toml` (a directory of one file per source module for the
+#: SPLIT_CONTRACTS).
 BASELINES = ROOT / "tests" / "guard_baselines"
 
 #: The one module each pattern belongs in. Sites there are the interface, not a violation.
@@ -444,11 +447,38 @@ def _kept_unreferenced() -> dict[str, str]:
     return kept
 
 
-def _allowlist(contract: str) -> list[str]:
-    """The `ignore_imports` entries of one `.importlinter` contract."""
-    entries = _read_baseline(f"importlinter-{contract}", {"ignore_imports"})["ignore_imports"]
+#: The contracts whose allowlist is a directory `importlinter-<contract>/<dotted source
+#: module>.toml`, so tasks shrinking different modules never edit one file. The others
+#: stay one file, `importlinter-<contract>.toml`.
+SPLIT_CONTRACTS = frozenset({"surfaces-through-api", "subprocess-home", "fsio-home"})
+
+
+def _entries(path: Path) -> list[str]:
+    rel = path.relative_to(ROOT)
+    assert path.is_file(), f"{rel} is missing: every guard reads its baseline from its own file"
+    data = tomllib.loads(path.read_text("utf-8"))
+    assert set(data) == {"ignore_imports"}, (
+        f"{rel} holds {sorted(data)}; it must hold exactly ignore_imports"
+    )
+    entries = data["ignore_imports"]
     assert isinstance(entries, list) and all(isinstance(e, str) for e in entries), entries
     return entries
+
+
+def _allowlist(contract: str) -> list[str]:
+    """The `ignore_imports` entries of one `.importlinter` contract. A split contract's
+    come from one file per source module (absent once the module reached zero)."""
+    if contract not in SPLIT_CONTRACTS:
+        return _entries(_baseline_path(f"importlinter-{contract}"))
+    directory = BASELINES / f"importlinter-{contract}"
+    out: list[str] = []
+    for path in sorted(directory.glob("*.toml")) if directory.is_dir() else ():
+        entries = _entries(path)
+        assert entries, f"{path.relative_to(ROOT)} is empty: a module with no entries has no file"
+        wrong = [e for e in entries if e.split(" -> ")[0] != path.stem]
+        assert not wrong, f"{path.relative_to(ROOT)} holds entries of other modules: {wrong}"
+        out += entries
+    return out
 
 
 def _hint(kind: str) -> str:
@@ -539,10 +569,9 @@ def _contracts(
 
 
 def _two_homes(contract: str) -> str:
-    return (
-        f".importlinter lists ignore_imports for {contract}: move them to "
-        f"{_baseline_path(f'importlinter-{contract}').relative_to(ROOT)}, their one home"
-    )
+    home = f"tests/guard_baselines/importlinter-{contract}"
+    home += "/<source module>.toml" if contract in SPLIT_CONTRACTS else ".toml"
+    return f".importlinter lists ignore_imports for {contract}: move them to {home}, their one home"
 
 
 def _joined_importlinter(directory: Path) -> Path:
@@ -585,7 +614,8 @@ def test_import_contracts(tmp_path: Path) -> None:
     assert proc.returncode == 0, (
         "an architecture contract in .importlinter is broken. Fix the import, or -- when "
         "a refactor moved an allowed import -- move its ignore_imports entry in "
-        "tests/guard_baselines/importlinter-<contract>.toml; never add one for new code.\n" + output
+        "tests/guard_baselines/importlinter-<contract>[/<source module>].toml; never add one for new code.\n"
+        + output
     )
     # Exit 0 already means "every contract it loaded was kept"; this says it loaded them all.
     assert f"Contracts: {len(contracts)} kept, 0 broken." in output, output
@@ -706,12 +736,13 @@ def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> No
     contracts = _contracts()
     # A per-module counter's directory exists while some module still has sites.
     expected = {f"{k}.toml" for k in COUNTERS if k not in PER_MODULE} | {
-        f"importlinter-{c}.toml" for c in contracts
+        f"importlinter-{c}.toml" for c in contracts if c not in SPLIT_CONTRACTS
     }
+    split = {f"importlinter-{c}" for c in contracts if c in SPLIT_CONTRACTS}
     present = {p.name for p in BASELINES.iterdir() if not p.name.startswith(".")}
-    assert present - set(PER_MODULE) == expected, (
+    assert present - set(PER_MODULE) - split == expected, (
         f"missing: {sorted(expected - present)}; "
-        f"read by no guard: {sorted(present - expected - set(PER_MODULE))}"
+        f"read by no guard: {sorted(present - expected - set(PER_MODULE) - split)}"
     )
     modules = {_dotted(p) for p in _modules()}
     for kind in COUNTERS:
@@ -724,6 +755,23 @@ def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> No
     for contract, section in contracts.items():
         _allowlist(contract)
         assert "ignore_imports" not in section, _two_homes(contract)
+
+
+def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
+    """The loader reads `importlinter-<contract>/<module>.toml`, joins them, and refuses
+    an entry filed under another module's name; a missing directory is an empty list."""
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "BASELINES", tmp_path / "guard_baselines")
+    directory = tmp_path / "guard_baselines" / "importlinter-fsio-home"
+    assert _allowlist("fsio-home") == []
+    directory.mkdir(parents=True)
+    (directory / "ddflow.a.toml").write_text('ignore_imports = ["ddflow.a -> tempfile"]\n')
+    (directory / "ddflow.b.toml").write_text('ignore_imports = ["ddflow.b -> fcntl"]\n')
+    assert _allowlist("fsio-home") == ["ddflow.a -> tempfile", "ddflow.b -> fcntl"]
+    (directory / "ddflow.b.toml").write_text('ignore_imports = ["ddflow.c -> fcntl"]\n')
+    with pytest.raises(AssertionError, match="other modules"):
+        _allowlist("fsio-home")
 
 
 def test_a_per_module_ratchet_compares_each_module_with_its_own_file() -> None:

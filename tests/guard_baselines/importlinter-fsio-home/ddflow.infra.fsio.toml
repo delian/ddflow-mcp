@@ -1,0 +1,6 @@
+# The `ignore_imports` of .importlinter contract `fsio-home` whose source is ddflow.infra.fsio.
+# See tests/test_architecture_guards.py: entries only shrink, never grow.
+# home: permanent, the one module allowed to own this import.
+ignore_imports = [
+    "ddflow.infra.fsio -> fcntl",
+]
