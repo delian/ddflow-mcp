@@ -168,6 +168,21 @@ def triage_line(counts: dict[str, int]) -> str:
     )
 
 
+def _with_outcome(rows: list[tuple[str, str]], *outcomes: str) -> list[str]:
+    """The gates of ``rows`` whose recorded outcome is one of ``outcomes``."""
+    return [g for g, o in rows if o in outcomes]
+
+
+def _round_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
+    """gate -> its "1 full round, 2 delta rounds" line, for the gates `ddflow review` ran."""
+    return {g: line for g, _o in rows if (line := rounds_line(it, g))}
+
+
+def _triage_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
+    """gate -> its review's triage line, for the gates whose recorded review has findings."""
+    return {g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))}
+
+
 def status(
     state: State, cfg: Config, item_id: str, defs: Mapping[str, GateDef] | None = None
 ) -> GateStatus:
@@ -185,9 +200,9 @@ def status(
     required = required_gates(cfg)
     settled = {g: g in na or it.gate_satisfied(g, g in required) for g in gates}
     done = [g for g in gates if settled[g] and g not in na]
-    blocked = [g for g, o in rows if o == "failed"]
-    unavail = [g for g, o in rows if o in ("unavailable", "partial")]
-    skipped = [g for g, o in rows if o == "skipped"]
+    blocked = _with_outcome(rows, "failed")
+    unavail = _with_outcome(rows, "unavailable", "partial")
+    skipped = _with_outcome(rows, "skipped")
     current = next((g for g in gates if not settled[g]), "")
     complete = all(settled.values())
     return GateStatus(
@@ -201,10 +216,8 @@ def status(
         complete=complete,
         rows=rows,
         silent=[g for g, o in rows if not o and g not in na],
-        triage={
-            g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))
-        },
-        rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
+        triage=_triage_notes(it, rows),
+        rounds=_round_notes(it, rows),
         not_applicable=na,
     )
 
