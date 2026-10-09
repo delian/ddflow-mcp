@@ -6,10 +6,13 @@ its own budget and its own idea of what to cite. This is the one path they share
 
 1. **Select.** The live guidance among the project's rules (the definitions in the log) and
    decisions that governs the work (`resolve`): the item's files, the gate, the item's tags.
-2. **Rank.** Pinned first, then by how hard it binds (block, warn, advisory), how specific its
-   scope is (a gate, then files, then a category, then everything) and its priority; ties by id.
-3. **Pack.** PINNED guidance -- whatever applies to all work (scope ``always``) -- is never
-   trimmed, whatever the budget. The rest goes through the context pack
+2. **Rank.** Pinned first, then what applies to all work (scope ``always``), then by how hard
+   it binds (block, warn, advisory), how specific its scope is (a gate, then files, then a
+   category) and its priority; ties by id.
+3. **Pack.** PINNED guidance -- an always-scope rule that BLOCKS -- is
+   never trimmed, whatever the budget. (Merely naming no files is not a pin: a project with a
+   dozen such decisions would get a page of them at every claim.) The rest goes through the
+   context pack
    (`services.contextpack.pack`): duplicates folded by text, cut to the budget's remainder
    in rank order, every kept hit cited by ``kind:id``.
 4. **Fence.** Every body is somebody's words and travels inside the provenance fence
@@ -58,16 +61,27 @@ VERIFY = (
 CITE = "Cite an item's id when you rely on it."
 
 
-def pinned(rec: GuidanceRecord) -> bool:
-    """Guidance that applies to all work: handed over whole, whatever the budget."""
+def always(rec: GuidanceRecord) -> bool:
+    """Guidance that applies to all work (no files, category or gate): it ranks ahead of
+    guidance scoped to something, but is not for that reason immune to the budget."""
     return rec.scope.always
 
 
+def pinned(rec: GuidanceRecord) -> bool:
+    """Guidance handed over whole, whatever the budget: an always-scope record that BLOCKS.
+    A project with a dozen decisions that merely name no files must not get a page of them
+    at every claim (Bf7879835fd): those are ranked first and spend the budget like the
+    rest. A way to pin a decision explicitly is B-dec-pinned's, and extends this function."""
+    return always(rec) and rec.enforcement == "block"
+
+
 def rank_key(a: Applies) -> tuple:
-    """Sort key, best first: pinned, enforcement, scope specificity, priority, then id."""
+    """Sort key, best first: pinned, applies to all work, enforcement, scope specificity,
+    priority, then id."""
     rec = a.record
     return (
         not pinned(rec),
+        not always(rec),
         ENFORCEMENT_RANK.get(rec.enforcement, len(ENFORCEMENT_RANK)),
         SPECIFICITY.get(a.reason, len(SPECIFICITY)),
         -rec.priority,
