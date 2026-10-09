@@ -15,9 +15,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ..config import ID_PREFIXES, Config, id_problem
+from ..config import ID_PREFIXES, Config, IdsConfig, id_problem
 from .digest import content_digest
 from .events import ID_MINTING_KINDS
+from .model import fold
 
 
 def auto_id(prefix: str, *parts: str) -> str:
@@ -43,12 +44,6 @@ def auto_id(prefix: str, *parts: str) -> str:
     return prefix + content_digest(seed, "blake2b", size=5)
 
 
-def _hash(parts: tuple[str, ...] | list[str]) -> str:
-    """`auto_id`'s ten hex digits, without its prefix: blake2b over the parts salted
-    with a nanosecond clock."""
-    return auto_id("", *parts)
-
-
 def _token_value(kind: str, token: str, fields: dict[str, Any]) -> str:
     if token == "prefix" and "prefix" in fields:
         return str(fields["prefix"])
@@ -57,7 +52,7 @@ def _token_value(kind: str, token: str, fields: dict[str, Any]) -> str:
             raise ValueError(f"{{prefix}} is not defined for {kind} ids")
         return ID_PREFIXES[kind]
     if token == "hash":
-        return _hash(tuple(fields.get("hash_parts", ())))
+        return auto_id("", *fields.get("hash_parts", ()))
     if token == "time":
         at = fields.get("time")
         return time.strftime("%Y%m%dT%H%M%S", time.gmtime(time.time() if at is None else at))
@@ -189,8 +184,6 @@ def next_seq(template: str, used: Any, **fields: Any) -> int:
 
 
 def _default(kind: str) -> str:
-    from ..config import IdsConfig
-
     return str(getattr(IdsConfig(), kind))
 
 
@@ -332,8 +325,6 @@ def used_now(log: Any) -> Callable[[], dict[str, str]]:
     """`taken` of the log as it is NOW, for `confirm` under the log's lock (lazy)."""
 
     def read() -> dict[str, str]:
-        from .model import fold
-
         events = log.read_all()
         return taken(fold(events, strict=False), events)
 

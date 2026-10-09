@@ -30,6 +30,7 @@ from ..core.model import BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
 from . import flowcontrol as FC
 from .admission import Clash, conflicts, glob_conflict, is_shared, shared_globs  # noqa: F401
 from .flow import FEATURE, branch_kind, stack_base, unknown_line
+from .flowparams import params
 from .globs import inside as path_in_glob  # noqa: F401  (re-exported)
 from .globs import overlap as globs_overlap  # noqa: F401  (re-exported)
 from .graph import closure, find_cycles, longest_chains
@@ -904,8 +905,6 @@ def parallel_line(
         return (
             f"parallel: {limit} (auto: unavailable, holding the start value -- {parallel.reason})"
         )
-    from .flowparams import params
-
     ceiling = params(cfg).bounds()[2]
     by = parallel.limited_by
     if parallel.admit_paused:

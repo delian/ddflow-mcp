@@ -7,11 +7,11 @@ from typing import Any
 
 from ...config import csv_list
 from ...core import outcome as O
+from ...services import sessions as S
 from .._base import _load
 
 
 def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "") -> O.Outcome:
-    from ...services import sessions as S
 
     log, cfg, _st = _load(repo, agent)
     return O.ok("session.started", session=S.start(log, cfg, model=model, agent_tool=tool))
@@ -34,7 +34,6 @@ def session_prompt(
     reason to refuse: the latest open session is used, else an implicit one is opened,
     and `how` says which.
     """
-    from ...services import sessions as S
 
     if not (text or "").strip():
         return O.failed(
@@ -53,7 +52,6 @@ def session_prompt(
 def session_note(
     repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
 ) -> O.Outcome:
-    from ...services import sessions as S
 
     if not (text or "").strip():
         return O.failed("session.note", _EMPTY_SESSION_TEXT.format(what="note"), session=session)
@@ -65,14 +63,12 @@ def session_note(
 
 def session_adopt_orphans(repo: Path, *, agent: str = "") -> O.Outcome:
     """Attach prompts and notes recorded with no session id to the nearest session."""
-    from ...services import sessions as S
 
     log, _cfg, _st = _load(repo, agent)
     return O.ok("session.adopted", adopted=S.adopt_orphans(log))
 
 
 def session_end(repo: Path, session: str, *, summary: str = "", agent: str = "") -> O.Outcome:
-    from ...services import sessions as S
 
     log, _cfg, _st = _load(repo, agent)
     S.end(log, session, summary=summary)

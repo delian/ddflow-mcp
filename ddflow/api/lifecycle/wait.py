@@ -14,8 +14,12 @@ from ...core.clock import WAIT_MAX_S
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
+from ...core.schedule import plan
+from ...infra.log import EventLog
+from ...services import waits as WT
 from .._base import _load
 from ._common import _require
+from .planning import plan_for
 from .ready import DEFAULT_NEXT_KIND
 from .reservations import (
     WAITABLE,
@@ -135,15 +139,11 @@ def _judge_any(
     st, cfg, me: str, phase: str, kind: str, now: float, live, repo: Path | None = None
 ) -> dict[str, Any]:
     """`_judge_wait` for "anything": the same ready set `next` offers."""
-    from ...core.schedule import plan
 
     others = {i: lz for i, lz in live.items() if lz.holder != me}
     if repo is None:
         p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
     else:
-        from ...infra.log import EventLog
-        from .planning import plan_for
-
         # The same offer `next` makes: what is reserved for a waiter in line is not ready,
         # under the limit `next` plans with. The log is read lazily, as `next` reads it,
         # so the rates are re-read here too.
@@ -257,7 +257,6 @@ def wait(
     wait again. A queue that reserved on wake would need the waiter to be alive to use
     the reservation, which is the crash-recovery problem leases already solve.
     """
-    from ...services import waits as WT
 
     timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
     capped = timeout > WAIT_MAX_S
