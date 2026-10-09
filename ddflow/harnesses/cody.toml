@@ -1,0 +1,14 @@
+id = "cody"
+rank = 21
+family = "cody"
+delta = "cody.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "Cody is Enterprise-only since 2025-07-23 and is configured through the editor's own settings (cody.mcpServers), not a repo file."
+
+[verified]
+date = "2026-10-09"
+sources = ["https://sourcegraph.com/docs/cody/clients/install-cli"]
+unverified = ["everything: Free/Pro discontinued, Enterprise only"]

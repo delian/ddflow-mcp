@@ -1,0 +1,54 @@
+id = "goose"
+rank = 20
+family = "goose"
+delta = "goose.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "Goose keeps extensions in a user-level YAML; its project surface is .goosehints, and it reads AGENTS.md as well."
+
+[instructions]
+reads = ["AGENTS.md", ".goosehints"]
+agents_md = "yes"
+claude_md = "config"
+native_rank = 5
+native_path = ".goosehints"
+native_form = "block"
+native_why = "Goose reads .goosehints as well, and it is committed"
+
+[hooks]
+style = "claude"
+file = ".agents/plugins/ddflow/hooks/hooks.json"
+normalizer = "goose"
+emitter = "goose"
+block = "exit2"
+session_id = "session_id"
+inject = []
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin.json"
+
+[skills]
+dir = ".agents/skills"
+
+[worktrees]
+none = true
+
+[env]
+session_id = ["AGENT_SESSION_ID"]
+
+[verified]
+date = "2026-10-09"
+sources = ["https://goose-docs.ai/docs/guides/context-engineering/hooks/"]
+record = "R-hx-goose"
+unverified = ["hook banner reaching the model", "project MCP file"]

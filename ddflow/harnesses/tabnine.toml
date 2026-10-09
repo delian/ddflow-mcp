@@ -1,0 +1,41 @@
+id = "tabnine"
+rank = 14
+family = "gemini-cli"
+delta = "tabnine.md"
+
+[mcp]
+path = ".tabnine/agent/settings.json"
+shape = "mcpServers"
+note = "Project scope SHALLOW-MERGES over user and system scopes."
+
+[instructions]
+reads = ["TABNINE.md", ".tabnine/guidelines/*.md"]
+agents_md = "config"
+claude_md = "nv"
+native_rank = 3
+native_path = ".tabnine/guidelines/ddflow.md"
+native_form = "block"
+native_why = "Tabnine Agent reads .tabnine/guidelines/*.md, not AGENTS.md"
+
+[hooks]
+style = "gemini"
+file = ".tabnine/agent/settings.json"
+normalizer = "gemini"
+emitter = "gemini"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "BeforeAgent"
+pre_tool = "BeforeTool"
+post_tool = "AfterTool"
+pre_compact = "PreCompress"
+stop = "AfterAgent"
+session_end = "SessionEnd"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.tabnine.com/main/getting-started/tabnine-cli.md"]
+unverified = ["native AGENTS.md"]

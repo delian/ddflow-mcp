@@ -1,0 +1,23 @@
+id = "replit"
+rank = 18
+family = "replit"
+delta = "replit.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "Replit configures MCP entirely in the web UI; its instruction file is replit.md."
+
+[instructions]
+reads = ["replit.md"]
+agents_md = "nv"
+claude_md = "nv"
+native_rank = 4
+native_path = "replit.md"
+native_form = "block"
+native_why = "Replit reads replit.md at the project root, not AGENTS.md"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.replit.com/replitai/replit-dot-md"]
+unverified = ["hooks", "worktree"]

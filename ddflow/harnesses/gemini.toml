@@ -1,0 +1,57 @@
+id = "gemini"
+rank = 1
+family = "gemini-cli"
+delta = "gemini-cli.md"
+
+[mcp]
+path = ".gemini/settings.json"
+shape = "mcpServers"
+
+[instructions]
+reads = ["GEMINI.md"]
+agents_md = "config"
+claude_md = "no"
+
+[hooks]
+style = "gemini"
+file = ".gemini/settings.json"
+normalizer = "gemini"
+emitter = "gemini"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "BeforeAgent"
+pre_tool = "BeforeTool"
+post_tool = "AfterTool"
+pre_compact = "PreCompress"
+stop = "AfterAgent"
+session_end = "SessionEnd"
+
+[plugin]
+mechanism = "extension"
+manifest = "gemini-extension.json"
+
+[commands]
+dir = ".gemini/commands"
+format = "toml"
+
+[skills]
+dir = ".gemini/skills"
+
+[subagents]
+dir = ".gemini/agents"
+
+[worktrees]
+dir = ".gemini/worktrees"
+
+[env]
+session_id = ["GEMINI_SESSION_ID"]
+
+[verified]
+date = "2026-10-09"
+sources = ["https://github.com/google-gemini/gemini-cli/tree/main/docs/hooks"]
+record = "R-hx-gemini"
+unverified = ["bash-tool session id env"]
