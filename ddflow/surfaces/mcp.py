@@ -484,7 +484,7 @@ class Server:
         self._notices = _REGISTRY.Notices()
         #: The stale-server note (`_stale_footer`): said once, looked for once a minute.
         self._stale_said = False
-        self._stale_checked_at = 0.0
+        self._stale_checked_at = float("-inf")
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
         self.agent = agent
@@ -985,7 +985,7 @@ def _stale_footer(server) -> str:
     is read from disk), said once, and swallows everything -- a courtesy, never a failure."""
     if server._stale_said:
         return ""
-    now = time.time()
+    now = time.monotonic()  # not the wall clock: a clock stepped back must not mute the note
     if now - server._stale_checked_at < _STALE_CHECK_EVERY_S:
         return ""
     server._stale_checked_at = now

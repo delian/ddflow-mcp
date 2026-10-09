@@ -41,8 +41,8 @@ agent's worktree frequently contains finished work that exists nowhere else. Ins
 named tree, salvage what is real, then `ddflow release <id>`. Never delete first.
 
 **If the brief opens with `Upgraded ddflow A -> B: run ddflow upgrade --plan`**, ddflow was
-upgraded since this project was last brought up to date (it says so once per version on this
-machine, and changes nothing). Run `ddflow upgrade --plan` [`ddflow_upgrade`]: it lists what
+upgraded since this project was last brought up to date (by default it only says so, once per version
+on this machine for this project). Run `ddflow upgrade --plan` [`ddflow_upgrade`]: it lists what
 would change by category and exits 1 while it has items. `ddflow upgrade --apply` applies
 them after a backup; a config value anyone set, and every item marked for the operator, waits
 for `--confirm KEY --reason WHY`: ask the operator, do not guess. `[upgrade].auto = safe`

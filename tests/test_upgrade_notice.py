@@ -63,7 +63,7 @@ def test_the_notice_appears_once_not_twice(old: Path) -> None:
     assert marker["version"] and LINE in marker["said"]
 
 
-def test_check_writes_nothing(old: Path) -> None:
+def test_check_applies_nothing(old: Path) -> None:
     before = _totals(old)
     status = subprocess.run(
         ["git", "-C", str(old), "status", "--porcelain"], capture_output=True, text=True
@@ -204,3 +204,24 @@ def test_a_broken_instruction_template_still_carries_the_notice(old: Path) -> No
         "result"
     ]["instructions"]
     assert LINE in text
+
+
+def test_a_stale_server_neither_repeats_the_line_nor_moves_the_marker_back(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A server started before the upgrade still runs the OLD code: its version is older than
+    the one the marker holds."""
+    import ddflow
+
+    assert LINE in _start(old)
+    marker = old / ".ddflow" / "local" / "upgrade-notice.json"
+    told = json.loads(marker.read_text())["version"]
+    monkeypatch.setattr(ddflow, "__version__", "0.0.2")
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    cfg = Config.load(old)
+    log = EventLog(old, log_cfg=cfg.log)
+    assert UN.line(old, log, cfg, fold(log.read_all(), strict=False)) == ""
+    assert json.loads(marker.read_text())["version"] == told, "the marker never moves back"
