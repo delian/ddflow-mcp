@@ -78,6 +78,25 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
     return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
 
 
+#: How much of the end of a command's output the log keeps as evidence.
+OUTPUT_TAIL_CHARS = 2000
+
+
+def output_evidence(text: str) -> dict[str, Any]:
+    """What a gate keeps about the OUTPUT of its command: a digest of all of it (so the
+    output can be checked against a kept copy), its size, the tail, and the suite's own
+    verdict lines from ALL of it -- a gate that reruns its failures ends on the rerun's
+    "112 passed", and the tail alone hid the first pass's "115 failed" (bug Bac392907b1).
+    One builder for a command ddflow ran and for output an agent recorded
+    (`record --output-file`): they used to be two copies."""
+    return {
+        "output_digest": digest(text),
+        "output_bytes": len(text),
+        "tail": text[-OUTPUT_TAIL_CHARS:],
+        "summary": summary_lines(text),
+    }
+
+
 def run_command_gate(
     gdef: GateDef,
     cwd: Path,
@@ -159,13 +178,7 @@ def run_command_gate(
         "command": gdef.command,
         "exit": p.code,
         "elapsed_s": round(p.elapsed_s, 1),
-        "output_digest": digest(out),
-        "output_bytes": len(out),
-        "tail": out[-2000:],
-        # The suite's own verdict lines from ALL of it: a gate that reruns its failures
-        # ends on the rerun's "112 passed", and the tail alone hid the first pass's
-        # "115 failed" (bug Bac392907b1).
-        "summary": summary_lines(out),
+        **output_evidence(out),
         # WHICH tree this is evidence about. Without it "the tests passed" names
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe

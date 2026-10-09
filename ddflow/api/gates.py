@@ -720,13 +720,9 @@ def record(
             txt = Path(evidence.output_file).read_text("utf-8", errors="replace")
         except OSError as exc:
             return O.failed("gate.record", f"--output-file unreadable: {exc}", id=item, gate=gate)
-        ev["output_digest"] = G.digest(txt)
-        ev["output_bytes"] = len(txt)
-        ev["tail"] = txt[-2000:]
-        # WHERE the digested output is, so the digest can be checked against it, and
-        # the verdict lines from all of it rather than the tail (bug Bac392907b1).
+        ev.update(G.output_evidence(txt))
+        # WHERE the digested output is, so the digest can be checked against it.
         ev["output_file"] = evidence.output_file
-        ev["summary"] = G.summary_lines(txt)
 
     if not skip and gate == "docs" and it.kind == "phase" and result == "passed":
         warning = _docs_gate_export(repo, cfg, ev, warning)
