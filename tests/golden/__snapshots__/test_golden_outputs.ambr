@@ -1756,6 +1756,24 @@
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
+      rag.command = ''   [default]
+          The embedder companion: a command (a shell line, run like every operator
+          command, in the repository root) that reads {"texts": ["...", ...]} as JSON
+          on stdin and prints {"model": "<model id>", "vectors": [[...], ...]} on
+          stdout, one vector per text, all the same length. The model id is how stored
+          vectors are told apart from a different model's. Empty (default): none. A
+          call that times out, exits non-zero, prints anything else or returns the
+          wrong number of vectors is `unavailable` with the reason, never a partial
+          answer. This runs a program, so set it in the git-ignored local file
+          (`config --set rag.command ... --local`).
+      rag.model_dir = ''   [default]
+          A LOCAL model2vec model directory, used in-process when `[rag].command` is
+          empty and the `ddflow[rag]` extra (model2vec) is installed. ddflow never
+          downloads a model: a path that is not a directory makes the embedder
+          `unavailable`. Empty (default): none.
+      rag.timeout_s = 60   [default]
+          Seconds one embedding call (the companion command) may take before it is
+          `unavailable` (default 60, 1 to 600).
   
     ''',
   )

@@ -37,6 +37,7 @@ from ..core.model import known_kinds
 from ..core.redact import redact_argv
 from ..core.textcut import clip, whole_marks
 from . import install_info as _install
+from . import searchcore as SC
 from .redact_report import redactor
 
 #: The only configuration values a report may carry: scalar behaviour switches and
@@ -247,7 +248,7 @@ def local_candidates(repo: Path, cfg: Config, log) -> Callable[[str], list[dict[
         )
         store = Store(repo, cfg)
         store.ensure(log)
-        with sim.open_store(store) as matcher:
+        with SC.matcher(store) as matcher:
             found = sim.assess(matcher, {"kind": kinds[0], "title": title, "body": ""}, scoped)
         return [{"id": c.id, "kind": c.kind, "score": c.score} for c in found.candidates]
 

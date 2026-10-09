@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "rag.command"
+new = "\"\""
+why = "The embedder companion command ([rag].command): reads {\"texts\": [...]} as JSON on stdin and prints {\"model\", \"vectors\"}; empty by default, so nothing changes until it is set."
+impact = "additive"

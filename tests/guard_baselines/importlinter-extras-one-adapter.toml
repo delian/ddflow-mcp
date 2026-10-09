@@ -11,4 +11,5 @@
 # adds its one home entry here, e.g. `ddflow.services.searchcore.fuzzy -> rapidfuzz`.
 ignore_imports = [
     "ddflow.core.fuzzy -> rapidfuzz",  # home: the [search] extra's one adapter
+    "ddflow.services.embed -> model2vec",  # home: the [rag] extra's one adapter
 ]
