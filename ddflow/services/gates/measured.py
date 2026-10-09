@@ -17,6 +17,7 @@ caller remembered to pass the gate definitions (bug B279a0ebfc1).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -53,22 +54,29 @@ class Order:
         return f"NOTE: {order_note(self.ahead, gate)} Recording anyway ([gates].enforce_order = '{policy}')."
 
 
-def gates_ahead_of(st: State, cfg: Config, item_id: str, gate: str) -> list[str]:
+def gates_ahead_of(
+    st: State,
+    cfg: Config,
+    item_id: str,
+    gate: str,
+    defs: Mapping[str, GateDef] | None = None,
+) -> list[str]:
     """Pipeline gates BEFORE ``gate`` that have no outcome yet.
 
     The order in `gates.task_pipeline` is not decoration: a rubber-duck review recorded
     before `implement` reviewed an empty diff, and a `merge` recorded before `unit_tests`
-    merged something nobody tested.
+    merged something nobody tested. A gate that does not apply to the item (``defs``,
+    `applies_when`) is not ahead of anything.
     """
     try:
-        s = status(st, cfg, item_id)
+        s = status(st, cfg, item_id, defs)
     except KeyError:
         return []
     if gate not in s.pipeline:
         return []
     before = s.pipeline[: s.pipeline.index(gate)]
     it = st.items.get(item_id)
-    return [g for g in before if it and not it.gate_outcome(g)]
+    return [g for g in before if it and not it.gate_outcome(g) and g not in s.not_applicable]
 
 
 def order_note(ahead: list[str], gate: str) -> str:
@@ -79,7 +87,14 @@ def order_note(ahead: list[str], gate: str) -> str:
 
 
 def check_order(
-    log: EventLog, cfg: Config, st: State, item: str, gate: str, *, recording: bool
+    log: EventLog,
+    cfg: Config,
+    st: State,
+    item: str,
+    gate: str,
+    *,
+    recording: bool,
+    defs: Mapping[str, GateDef] | None = None,
 ) -> Order:
     """Enforce `gates.enforce_order`, and RECORD the violation (``recording``) either way.
 
@@ -88,7 +103,7 @@ def check_order(
     `block` or `off` is a judgement about how often this fires, and for as long as it only
     printed, that judgement had no evidence behind it either way.
     """
-    ahead = gates_ahead_of(st, cfg, item, gate)
+    ahead = gates_ahead_of(st, cfg, item, gate, defs)
     if not ahead or cfg.gates.enforce_order == "off":
         return Order()
     if cfg.gates.enforce_order == "block":

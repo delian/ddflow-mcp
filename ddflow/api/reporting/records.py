@@ -128,6 +128,7 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     from ...services import gates as G
 
     _log, cfg, st = _load(repo, agent)
+    defs = G.load_gates(repo, cfg)
     it = st.items.get(item)
     if it is None and item in st.bugs:
         return _show_bug(st, st.bugs[item])
@@ -148,10 +149,10 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             **addenda(st, item),
             **({"ledger": LG.summary(led)} if led else {}),
         },
-        gates=plain(G.status(st, cfg, item)),
+        gates=plain(G.status(st, cfg, item, defs)),
         _render={
             "item": it,
-            "gate_status": G.status(st, cfg, item),
+            "gate_status": G.status(st, cfg, item, defs),
             "addenda": addenda(st, item),
         },
     )

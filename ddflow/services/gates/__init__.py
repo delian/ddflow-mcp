@@ -113,7 +113,13 @@ from .evidence import (  # noqa: F401
     tree_identity,
     worktree_entries,
 )
-from .kinds import KINDS, kind_pipeline, kind_pipelines  # noqa: F401
+from .kinds import (  # noqa: F401
+    KINDS,
+    gate_applies,
+    kind_pipeline,
+    kind_pipelines,
+    not_applicable,
+)
 from .measured import (  # noqa: F401
     Order,
     _landed_if_only_untracked_differs,

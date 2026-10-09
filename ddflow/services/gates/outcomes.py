@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import getpass
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,7 @@ from .evidence import (
     tree_fingerprint,
     worktree_entries,
 )
+from .kinds import not_applicable
 
 
 @dataclass
@@ -46,10 +47,18 @@ class GateStatus:
     triage: dict[str, str] = field(default_factory=dict)
     #: gate -> "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed.
     rounds: dict[str, str] = field(default_factory=dict)
+    #: gate -> why it does not apply to this item (`[gate.<id>] applies_when`). Such a gate
+    #: stays in ``pipeline`` and ``rows`` and is shown, but nothing waits on it: it is not
+    #: ``current``, not ``silent`` and does not hold ``complete`` back.
+    not_applicable: dict[str, str] = field(default_factory=dict)
 
     def render(self) -> str:
         return "\n".join(
-            f"  [{OUTCOME_MARK.get(o, ' ')}] {g}"
+            (
+                f"  [-] {g}  -- not applicable: {self.not_applicable[g]}"
+                if g in self.not_applicable
+                else f"  [{OUTCOME_MARK.get(o, ' ')}] {g}"
+            )
             + (f"  -- {self.triage[g]}" if g in self.triage else "")
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             for g, o in self.rows
@@ -159,16 +168,23 @@ def triage_line(counts: dict[str, int]) -> str:
     )
 
 
-def status(state: State, cfg: Config, item_id: str) -> GateStatus:
-    """Where is this item in its pipeline, and what is the next thing to do?"""
+def status(
+    state: State, cfg: Config, item_id: str, defs: Mapping[str, GateDef] | None = None
+) -> GateStatus:
+    """Where is this item in its pipeline, and what is the next thing to do?
+
+    ``defs`` are the gate definitions (`load_gates`): with them a gate whose
+    `applies_when` does not cover the item's declared work is reported in
+    ``not_applicable`` and waited on by nothing. Without them every gate applies."""
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
     gates = pipeline_for(it, cfg)
+    na = not_applicable(it, gates, defs)
     rows = [(g, it.gate_outcome(g)) for g in gates]
     required = required_gates(cfg)
-    settled = {g: it.gate_satisfied(g, g in required) for g in gates}
-    done = [g for g in gates if settled[g]]
+    settled = {g: g in na or it.gate_satisfied(g, g in required) for g in gates}
+    done = [g for g in gates if settled[g] and g not in na]
     blocked = [g for g, o in rows if o == "failed"]
     unavail = [g for g, o in rows if o in ("unavailable", "partial")]
     skipped = [g for g, o in rows if o == "skipped"]
@@ -184,11 +200,12 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         skipped=skipped,
         complete=complete,
         rows=rows,
-        silent=[g for g, o in rows if not o],
+        silent=[g for g, o in rows if not o and g not in na],
         triage={
             g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))
         },
         rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
+        not_applicable=na,
     )
 
 
