@@ -11,6 +11,8 @@ from ..commands.operations import cmd_import
 from ..commands.setup import cmd_companions, cmd_help, cmd_hooks, cmd_prompts, help_topics
 from ..commands.viewers_lists import register as register_list_viewers
 from ..commands.workflow import cmd_workflow
+from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
+from ..registry import add_commands
 from ._common import _positive_int
 
 
@@ -86,33 +88,7 @@ def register(s: argparse._SubParsersAction) -> None:
     )
     hp.set_defaults(fn=cmd_help)
 
-    im = s.add_parser(
-        "import",
-        help="propose the existing project's work, lessons and decisions (exit 2 = nothing)",
-    )
-    im.add_argument("--apply", action="store_true", help="write them; default is a dry run")
-    im.add_argument(
-        "--verify",
-        action="store_true",
-        help="report what was already imported and whether it is still true: source "
-        "drift, vanished source files, and the globs and decisions the import left for "
-        "a human (exit 1 = findings, 2 = nothing imported)",
-    )
-    im.add_argument(
-        "--include-done",
-        action="store_true",
-        help="also import already-ticked items, as completed. Off by default: a "
-        "finished history is not a queue.",
-    )
-    im.add_argument(
-        "--max-tasks",
-        type=int,
-        default=0,
-        help="refuse to propose more tasks than this. 0 (the default) uses "
-        "[importer] max_tasks from the config, which ships at 200. A bigger number is "
-        "usually a whole history rather than a queue.",
-    )
-    im.set_defaults(fn=cmd_import)
+    add_commands(s, [SETUP_BY_TOOL["ddflow_import"]], handlers={("import",): cmd_import})
 
     co = s.add_parser(
         "companions",

@@ -10,37 +10,17 @@ from ..commands.bisect import add_bisect_parser
 from ..commands.export import add_export_parser
 from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit, cmd_tests
 from ..commands.setup import cmd_config, cmd_upgrade
+from ..declared.setup import COMMANDS as SETUP_COMMANDS
+from ..registry import add_commands
 
 
 def register(s: argparse._SubParsersAction) -> None:
     """Add the maintenance subcommands to `s`, the root `ddflow` subparsers."""
-    cf = s.add_parser("config", help="print every knob, its value and its source")
-    cf.add_argument("--explain", action="store_true")
-    cf.add_argument("--filter", default="")
-    cf.add_argument(
-        "--set",
-        default="",
-        help="edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'",
+    add_commands(
+        s,
+        [c for c in SETUP_COMMANDS if c.path == ("config",)],
+        handlers={("config",): cmd_config},
     )
-    cf.add_argument(
-        "value",
-        nargs="*",
-        default=[],
-        help="the value, when --set is used; or `KEY VALUE` with no --set "
-        "(ddflow config review.max_rounds 0 --local)",
-    )
-    cf.add_argument(
-        "--append-toml",
-        default="",
-        help="append this TOML to .ddflow/config.toml (validated first)",
-    )
-    cf.add_argument(
-        "--local",
-        action="store_true",
-        help="write --set/--append-toml to the git-ignored .ddflow/local/config.toml: "
-        "this machine's endpoints, hosts, key variables and sizing, never committed",
-    )
-    cf.set_defaults(fn=cmd_config)
 
     up = s.add_parser(
         "upgrade",
