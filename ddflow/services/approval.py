@@ -23,7 +23,6 @@ the host, ``human``), not impossible: an agent with a shell can run the command.
 from __future__ import annotations
 
 import getpass
-import os
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -31,33 +30,11 @@ from typing import Any
 from ..core.digest import content_digest
 from ..core.model import fold
 from ..infra import hostinfo as H
-
-#: Environment variables an agent harness sets in the shells it runs, so a command it
-#: runs is known not to come from a person at their own terminal. Only the ones known
-#: for certain: Claude Code exports CLAUDECODE=1. Another harness is recognised by
-#: `--agent` or `DDFLOW_AGENT`, which ddflow's own setup has it pass.
-HARNESS_MARKERS = ("CLAUDECODE",)
+from .identity import HARNESS_MARKERS, agent_marker  # noqa: F401  (their home is services.identity)
 
 
 class ApprovalRefused(ValueError):
     """An approval asked for under an agent identity, or with nothing to approve."""
-
-
-def agent_marker(requested_agent: str = "") -> str:
-    """Why this invocation is an agent's, or ``""`` when nothing says it is.
-
-    An explicit `--agent`, `DDFLOW_AGENT`, or a harness's own marker. A person at their
-    own terminal sets none of them; an agent that unsets all three is the shell edit the
-    decision accepts it cannot stop.
-    """
-    if requested_agent:
-        return f"--agent {requested_agent}"
-    if os.environ.get("DDFLOW_AGENT"):
-        return f"DDFLOW_AGENT={os.environ['DDFLOW_AGENT']}"
-    for var in HARNESS_MARKERS:
-        if os.environ.get(var):
-            return f"{var} is set (an agent harness's shell)"
-    return ""
 
 
 def refusal(why: str) -> str:

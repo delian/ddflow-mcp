@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
-from ..services.gates import pipelines
+from ..services import workflow as WF
 from ._base import _load
 from .lifecycle.planning import plan_for
 
@@ -28,19 +28,19 @@ def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
         if i.kind == "task":
             tasks[i.state] = tasks.get(i.state, 0) + 1
     bugs = _bugs(st)
-    promotion = pipelines(cfg, running=True).get("promotion", [])
+    task_pipeline, phase_pipeline, promotion = WF.pipeline_lists(cfg)
 
     overview = {
         "workflow": {
             "model": cfg.flow.model,
             "integration": cfg.flow.integration,
             "max_parallel_tasks": cfg.schedule.max_parallel_tasks,
-            "task_pipeline": list(cfg.gates.task_pipeline),
-            "phase_pipeline": list(cfg.gates.phase_pipeline),
+            "task_pipeline": task_pipeline,
+            "phase_pipeline": phase_pipeline,
             # Only where it runs, as `ddflow workflow` shows it (B726755d8f7).
             "promotion_pipeline": promotion,
         },
-        "workflow_diagram": _diagram(list(cfg.gates.task_pipeline), promotion),
+        "workflow_diagram": _diagram(task_pipeline, promotion),
         "rules": _rules(repo),
         "decisions": _decisions(st),
         "active_work": {

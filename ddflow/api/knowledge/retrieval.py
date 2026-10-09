@@ -9,37 +9,16 @@ import ddflow.api._dedupe as DD
 
 from ...config import csv_list
 from ...core import outcome as O
-from ...core.budget import RECALL_MAX_CHARS
+from ...core.budget import RECALL_MAX_CHARS, Budget
+from ...infra.store import RECALL_SOURCES
+from ...services import contextpack as CP
 from .._base import _load
 from .lessons import _store
 
 
 def _wire_hit(table: str, label: str, r: dict) -> dict:
-    """One hit as the `--json` / MCP body carries it.
-
-    A decision, lesson, memory or recorded prompt/note is somebody's words: its headline
-    and body travel inside the data fence with the author and trust (`core/provenance.py`,
-    `hit_origin`, the same answer the CLI block gives), and the headline outside it is
-    only the id and the provenance sentence. JSON quoting is not a fence --
-    an agent reads the string, not the quotes -- so this is the surface that matters most.
-    """
-    from ...core import provenance as PV
-    from ...infra.store import summarise_row
-
-    head, body = summarise_row(table, r)
-    hit: dict[str, Any] = {"id": r.get("id"), "kind": label, "headline": head, "body": body}
-    origin = PV.hit_origin(table, r)
-    if origin is not None:
-        kind = PV.hit_kind(table, r)
-        # A prompt's headline is ddflow's own label (date, `operator asked:`, `SESSION
-        # SUMMARY (sid):`), never the record's text, so it stays outside the fence.
-        label = f" {head}" if table == "prompts" and head else ""
-        hit["headline"] = f"{r.get('id')}{label} ({origin.label()})"
-        hit["body"] = PV.fence(kind, str(r.get("id")), head + (f": {body}" if body else ""), origin)
-        if r.get("provenance"):
-            hit["provenance"] = r["provenance"]
-    hit["raw"] = r
-    return hit
+    """One hit as the `--json` / MCP body carries it (see `contextpack.candidate`)."""
+    return CP.candidate(table, label, r).hit
 
 
 def _origin(st, table: str, ident):
@@ -53,6 +32,26 @@ def _origin(st, table: str, ident):
     if table == "memories" and ident in st.memories:
         return PV.memory_origin(st.memories[ident])
     return None
+
+
+def _search_sources(store, query: str, sources: str, limit: int) -> dict[str, list[dict]]:
+    """The hits of every wanted source, in rank order, by table; a source with none is absent."""
+    want = csv_list(sources) or [t for t, _, _ in RECALL_SOURCES]
+    lowered = [w.lower() for w in want]
+    results: dict[str, list[dict]] = {}
+    for table, label, _why in RECALL_SOURCES:
+        if table not in want and label.lower() not in lowered:
+            continue
+        try:
+            hits = store.search(table, query, limit)
+        except Exception:
+            # One unreadable source must not take the whole recall down: the value is in
+            # the union, and "the lessons table is corrupt" is not a reason to withhold
+            # the decisions.
+            hits = []
+        if hits:
+            results[table] = hits
+    return results
 
 
 def recall(
@@ -75,26 +74,8 @@ def recall(
     have to learn the same thing twice. Both failures are invisible in the moment and
     obvious in the log.
     """
-    from ...infra.store import RECALL_SOURCES
-
     log, cfg, _st = _load(repo, agent)
-    store = _store(repo, log, cfg)
-    want = csv_list(sources) or [t for t, _, _ in RECALL_SOURCES]
-    lowered = [w.lower() for w in want]
-    results: dict[str, list[dict]] = {}
-    for table, label, _why in RECALL_SOURCES:
-        if table not in want and label.lower() not in lowered:
-            continue
-        try:
-            hits = store.search(table, query, limit)
-        except Exception:
-            # One unreadable source must not take the whole recall down: the value is in
-            # the union, and "the lessons table is corrupt" is not a reason to withhold
-            # the decisions.
-            hits = []
-        if hits:
-            results[table] = hits
-
+    results = _search_sources(_store(repo, log, cfg), query, sources, limit)
     labels = {table: label for table, label, _ in RECALL_SOURCES}
     # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
     # somebody's words, and a hit shown without its author reads as the tool's own.
@@ -104,14 +85,31 @@ def recall(
             o = _origin(_st, table, r.get("id"))
             if o is not None:
                 r["provenance"] = {"trust": o.trust, "by": o.by, "source": o.source}
-    wire = {
-        table: [_wire_hit(table, labels[table], r) for r in rows] for table, rows in results.items()
-    }
+    # One budget, enforced here for every caller (`services/contextpack.py`): the CLI prints
+    # and the MCP tool returns what the pack kept.
+    cut = CP.pack(
+        {
+            table: [CP.candidate(table, labels[table], r) for r in rows]
+            for table, rows in results.items()
+        },
+        Budget(max_chars, "chars"),
+    )
+    results = {t: [c.row for c in cs] for t, cs in cut.kept.items()}
     data: dict[str, Any] = {
-        "results": wire,
+        "results": {t: [c.hit for c in cs] for t, cs in cut.kept.items()},
         "query": query,
         "searched": [t for t, _, _ in RECALL_SOURCES],
         "max_chars": max_chars,
+        "pack": {
+            "shown": cut.shown,
+            "total": cut.total,
+            "duplicates": cut.duplicates,
+            "truncated": cut.truncated,
+            "note": cut.note(),
+            "cut_note": cut.cut_note(),
+            "fold_note": cut.fold_note(),
+            "cited": list(cut.cited),
+        },
         "_render": {"results": results, "sources": RECALL_SOURCES},
     }
     if not results:
@@ -121,7 +119,9 @@ def recall(
             f"Searched: {', '.join(t for t, _, _ in RECALL_SOURCES)}.",
             **data,
         )
-    return O.ok("recall", **data)
+    # What the budget or the duplicate check left out is said where a caller reads it: the
+    # MCP result's second block. The CLI prints its own line under the records.
+    return O.Outcome(kind="recall", data=data, reason=cut.note())
 
 
 def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Outcome:

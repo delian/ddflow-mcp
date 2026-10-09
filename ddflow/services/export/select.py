@@ -39,11 +39,9 @@ def _is_agent(requested_agent: str, via_mcp: bool) -> str:
     """Why this call is an agent's, or "" for a person at a terminal. The MCP surface is
     always an agent; a CLI call is one under --agent, DDFLOW_AGENT or a harness's marker
     (the rule ``reviewers approve`` uses)."""
-    if via_mcp:
-        return "the MCP surface"
-    from ..reviewer_trust import agent_marker
+    from ..identity import is_agent
 
-    return agent_marker(requested_agent)
+    return is_agent(requested_agent, via_mcp)
 
 
 def _locked(st: State, doc: str) -> dict[str, Any] | None:

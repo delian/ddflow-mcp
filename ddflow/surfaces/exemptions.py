@@ -17,9 +17,11 @@ from __future__ import annotations
 from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
-from .declared.answer import ANSWER_FLAG_EXEMPT
+from .declared.flow import COMMANDS as _FLOW
+from .declared.hooks import COMMANDS as _HOOKS
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
+from .declared.memory import COMMANDS as _MEMORY
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
 from .declared.reporting import COMMANDS as _REPORTING
@@ -42,59 +44,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=("mcp",),
         reason="starts the MCP server itself; exposing it over MCP would be recursive",
-    ),
-    Command(
-        path=("version", "lint"),
-        reason="the release lint runs inside ddflow_version_cut (also with dry_run), and its waiver is the operator's decision, from the CLI; a tool of its own would cost every client's tools/list for a check only a release-maker runs",
-    ),
-    Command(
-        path=("hooks", "status"), reason="covered by ddflow_hooks, whose action argument selects it"
-    ),
-    Command(
-        path=("hooks", "install"),
-        reason="covered by ddflow_hooks, whose action argument selects it",
-    ),
-    Command(
-        path=("hooks", "uninstall"),
-        reason="covered by ddflow_hooks, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "list"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "show"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "eject"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(
-        path=("prompts", "get"),
-        reason="covered by ddflow_prompts, whose action argument selects it",
-    ),
-    Command(path=("companions", "list"), reason="covered by ddflow_companions"),
-    Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
-    Command(
-        path=("hooks", "session-start"),
-        reason="invoked BY the Claude Code SessionStart hook to put the brief into a new session; over MCP that is ddflow_brief",
-    ),
-    Command(
-        path=("hooks", "pre-compact"),
-        reason="invoked by Claude Code's own PreCompact hook with its JSON on stdin; an agent never calls it, and the record it writes is a session note (ddflow_session_note)",
-    ),
-    Command(
-        path=("hooks", "prompt"),
-        reason="invoked BY the harness's prompt hook with the prompt's JSON on stdin; an agent records its own words with ddflow_session_prompt",
-    ),
-    Command(
-        path=("hooks", "check-msg"),
-        reason="invoked BY the installed commit-msg hook with the message being committed; it is not something an agent calls",
-    ),
-    Command(
-        path=("hooks", "check-commit"),
-        reason="invoked BY the installed git hook, inside the commit that is being checked; it is not something an agent calls",
     ),
     Command(
         path=(),
@@ -130,11 +79,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_memory_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
-    ),
-    Command(
-        path=(),
         tool="ddflow_bisect",
         flag_exempt={
             "--glob": "where candidates come from stays the default tests/**/test_*.py over MCP; an agent names `candidates` when the suite lives elsewhere (tools/list byte budget)",
@@ -147,12 +91,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         tool="ddflow_brief",
         prose=True,
         prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_prompts",
-        prose=True,
-        prose_reason="with show it returns the template itself, which is the thing to read",
     ),
 )
 
@@ -168,6 +106,9 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_MEMORY,
+    *_FLOW,
+    *_HOOKS,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,

@@ -21,12 +21,12 @@ from typing import Any
 from ..core import outcome as O
 from ..core.plain import plain as _plain
 from ..services import gates as G
+from ..services import workflow as WF
 from ..services.configwrite import KeyRefused, SetPairs, apply_edit, gate_id_problem
 from ._base import _load
 
 
 def _view(repo: Path):
-    from ..services import workflow as WF
     from ..services.gates import load_gates
     from ..services.review import load_reviewers
 
@@ -106,7 +106,7 @@ def pipeline(
     if unknown:
         # BEFORE writing. An unknown id in a pipeline is permanent, silent damage:
         # every item entering it blocks forever and `gate record` refuses the id.
-        near = {u: [g for g in sorted(known) if g.startswith(u[:3])] for u in unknown}
+        near = {u: WF.similar_gates(u, known) for u in unknown}
         hint = "; ".join(
             f"{u!r}" + (f" (did you mean {near[u][0]!r}?)" if near[u] else "") for u in unknown
         )

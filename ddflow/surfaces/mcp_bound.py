@@ -19,11 +19,9 @@ the body carries its own `truncated` field.
 from __future__ import annotations
 
 import copy
-import json
 import re
 from typing import Any
 
-from ..core.budget import RECALL_MAX_CHARS
 from ..core.textcut import clip
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
@@ -34,9 +32,6 @@ ROWS_SHOWN = 25
 #: Characters of a decision's `decision` text kept in the list; `ddflow_decision_show`
 #: has it whole, with the context and the alternatives.
 DECISION_TEXT_SHOWN = 400
-#: `ddflow_recall`'s answer budget when the caller names none -- the same 4000 the
-#: tool has always advertised and the CLI's renderer applies.
-RECALL_BUDGET = RECALL_MAX_CHARS
 #: The evidence keys every gate record carries that identify the tree, not the outcome.
 GATE_BOILERPLATE = (
     "diff_stat",
@@ -218,39 +213,17 @@ def bound_decisions(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
 
 
 def bound_recall(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
-    """`ddflow_recall`: each hit's id, kind, headline and body -- not the raw record --
-    within `max_chars` (default 4000, counted as the JSON returned), taken one per kind in
-    turn so no source is crowded out; the first hit overall is always kept."""
+    """`ddflow_recall`: each hit's id, kind, headline and body -- not the raw record. The
+    budget (`max_chars`, default 4000) is enforced once, in the API's context pack, so what
+    arrives here is already within it; the outcome's reason says what that left out."""
     if not isinstance(body, dict):
         return body, None
-    try:
-        budget = int(args.get("max_chars") or RECALL_BUDGET)
-    except (TypeError, ValueError):
-        budget = RECALL_BUDGET
-    total = sum(len(v) for v in body.values() if isinstance(v, list))
-    out: dict[str, list] = {k: [] for k, v in body.items() if isinstance(v, list)}
-    used = 0
-    depth = max((len(v) for v in body.values() if isinstance(v, list)), default=0)
-    for rank in range(depth):
-        for kind, hits in body.items():
-            if not isinstance(hits, list) or rank >= len(hits):
-                continue
-            hit = {k: v for k, v in hits[rank].items() if k != "raw"}
-            size = len(json.dumps(hit, default=str))
-            # The budget is the size of what is returned. The very first hit is kept
-            # whatever it costs, so a tiny budget still answers.
-            if used and used + size > budget:
-                continue
-            out[kind].append(hit)
-            used += size
-    shown = sum(len(v) for v in out.values())
-    note = "each hit's raw record is left out (its id is in the hit)"
-    if shown < total:
-        note = (
-            f"truncated: showing {shown} of {total} hits within max_chars={budget}; {note}. "
-            f"Raise max_chars for more."
-        )
-    return out, note
+    out = {
+        k: [{f: v for f, v in hit.items() if f != "raw"} for hit in hits]
+        for k, hits in body.items()
+        if isinstance(hits, list)
+    }
+    return out, "each hit's raw record is left out (its id is in the hit)"
 
 
 def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:

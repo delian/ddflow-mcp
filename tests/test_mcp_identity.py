@@ -222,7 +222,7 @@ def test_both_dispatch_paths_honour_DDFLOW_AGENT_on_an_UNDECLARED_connection(rep
     So with `DDFLOW_AGENT` set — which the demo harnesses do — `ddflow_claim` wrote as
     `alpha` and `ddflow_update` wrote as the directory name, on the same connection,
     into different shards. Two encodings of one precedence, which is the
-    duplicate-then-drift shape; there is now one, in `infra.log.effective_agent_id`.
+    duplicate-then-drift shape; there is now one, in `services.identity.resolve`.
 
     *Found by roborev on 031313a, CONFIRMED, reproduced before this test was written.*
     """
@@ -350,17 +350,17 @@ def test_config_explain_names_the_layer_that_actually_set_the_identity(repo, mon
 def test_the_resolver_reports_which_layer_won(repo, monkeypatch):
     """Returned, not inferred — the property that makes the above possible."""
     from ddflow.config import Config
-    from ddflow.infra.log import resolve_agent_id
+    from ddflow.services.identity import resolve
 
     run_cli(repo, "init")
     cfg = Config.load(repo)
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
-    assert resolve_agent_id(repo, cfg)[1] == "derived"
-    assert resolve_agent_id(repo, cfg, "declared-name") == ("declared-name", "explicit")
+    assert resolve(repo, cfg).source == "derived"
+    assert tuple(resolve(repo, cfg, "declared-name")) == ("declared-name", "explicit")
     monkeypatch.setenv("DDFLOW_AGENT", "alpha")
-    assert resolve_agent_id(repo, cfg) == ("alpha", "env")
+    assert tuple(resolve(repo, cfg)) == ("alpha", "env")
     # and an explicit declaration still beats it
-    assert resolve_agent_id(repo, cfg, "mine")[1] == "explicit"
+    assert resolve(repo, cfg, "mine").source == "explicit"
 
 
 # -- per CALL: subagents that share their parent's connection ------------------------
