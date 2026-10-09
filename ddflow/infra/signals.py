@@ -24,6 +24,7 @@ the roots are and how often to sample.
 
 from __future__ import annotations
 
+import ctypes
 import os
 import re
 import shutil
@@ -94,15 +95,15 @@ def _linux_memory() -> float:
 
 
 def _run(cmd: list[str], timeout: float) -> str:
-    try:
-        done = P.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
-    except P.TimeoutExpired as exc:
-        raise Unavailable(f"{cmd[0]} timed out after {timeout:g}s") from exc
-    except OSError as exc:
-        raise Unavailable(f"{cmd[0]} could not run: {exc}") from exc
+    done = P.capture(cmd, timeout=timeout)
+    if done.timed_out:
+        raise Unavailable(f"{cmd[0]} timed out after {timeout:g}s") from done.error
+    if isinstance(done.error, OSError):
+        raise Unavailable(f"{cmd[0]} could not run: {done.error}") from done.error
+    done.unwrap()
     if done.returncode != 0:
         raise Unavailable(f"{cmd[0]} exited {done.returncode}")
-    return done.stdout or ""
+    return done.stdout
 
 
 def _macos_memory(timeout: float) -> float:
@@ -121,7 +122,6 @@ def _macos_memory(timeout: float) -> float:
 
 def _windows_memory() -> tuple[float, float]:
     """(available, total) physical bytes from GlobalMemoryStatusEx."""
-    import ctypes
 
     class MemoryStatusEx(ctypes.Structure):
         _fields_ = [
