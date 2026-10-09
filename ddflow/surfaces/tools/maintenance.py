@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..declared import records as R
-from ..vocabulary import sources
+from ..declared import setup as ST
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -65,56 +65,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         # -- and is `null` when the settings file could not be read.
         "payload": ("installed", "policy", "session_hook", "trailer_hook"),
     },
-    "ddflow_upgrade": {
-        "description": (
-            "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`), returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. `restore` undoes an apply. Plan exit: 0 up to date, 1 items."
-        ),
-        "properties": {
-            "plan": ("boolean", "Dry run (default); false applies all.", False),
-            "apply": ("string", "Categories to apply: all, or a comma list.", False),
-            "confirm": ("array", "With apply: keys the operator accepts (needs reason).", False),
-            "reason": ("string", "Why they accept it.", False),
-            "backup": ("string", "local, snapshot or none.", False),
-            "snapshot": ("boolean", "apply: git snapshot backup.", False),
-            "restore": ("string", "Undo: backup name or latest; alone.", False),
-        },
-        "api": lambda repo, a, agent: _api().upgrade(
-            repo,
-            plan=a.get("plan") if isinstance(a.get("plan"), bool) else None,
-            apply=str(a.get("apply") or ""),
-            confirm=[str(x) for x in (a.get("confirm") or [])],
-            reason=str(a.get("reason") or ""),
-            backup=str(a.get("backup") or ""),
-            snapshot=bool(a.get("snapshot")),
-            restore=str(a.get("restore") or ""),
-            agent=agent,
-        ),
-        # The plan's fields; an apply also carries what it did (`applied`) and a restore what
-        # it put back (`restored`), so the body is the same parsed value as the CLI's `--json`.
-        "payload": lambda a: (
-            _api().setup.UPGRADE_RESTORE_PAYLOAD
-            if a.get("restore")
-            else _api().setup.UPGRADE_APPLY_PAYLOAD
-            if (a.get("apply") or a.get("plan") is False)
-            else _api().setup.UPGRADE_PAYLOAD
-        ),
-    },
-    "ddflow_doctor": {
-        "description": (
-            "Integrity and health check: log corruption, dependency cycles, "
-            "unknown dependencies, orphaned worktrees, stale index."
-        ),
-        "properties": {},
-        "api": lambda repo, a, agent: _api().doctor(
-            repo, agent=agent, parser=sources()[0], tools=sources()[1]
-        ),
-        # PROSE, as it has always been: a list of problems with advice attached is
-        # what an operator and an agent both want, and `views/human.py` renders it once
-        # for both.
-        "payload": "text",
-        "text": True,
-        "kind": "doctor",
-    },
+    "ddflow_upgrade": ST.BY_TOOL["ddflow_upgrade"].tool_entry(),
+    "ddflow_doctor": ST.BY_TOOL["ddflow_doctor"].tool_entry(),
     "ddflow_cadence": {
         "description": (
             "Which periodic whole-repo passes are due — integration tests, "

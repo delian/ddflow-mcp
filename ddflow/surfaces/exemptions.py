@@ -24,6 +24,7 @@ from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
 from .declared.review import COMMANDS as _REVIEW
 from .declared.rules import COMMANDS as _RULES
+from .declared.setup import COMMANDS as _SETUP
 from .registry import (
     Command,
     covering_tools,
@@ -75,11 +76,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(path=("companions", "list"), reason="covered by ddflow_companions"),
     Command(path=("companions", "add"), reason="covered by ddflow_companions_add"),
     Command(
-        path=("config",),
-        reason="covered by ddflow_configure, which reads and writes the same knobs",
-        via=("ddflow_configure",),
-    ),
-    Command(
         path=("hooks", "session-start"),
         reason="invoked BY the Claude Code SessionStart hook to put the brief into a new session; over MCP that is ddflow_brief",
     ),
@@ -99,7 +95,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         path=("hooks", "check-commit"),
         reason="invoked BY the installed git hook, inside the commit that is being checked; it is not something an agent calls",
     ),
-    Command(path=("adopt",), reason="covered by ddflow_setup", via=("ddflow_setup",)),
     Command(
         path=(),
         tool="ddflow_ci",
@@ -112,22 +107,12 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_doctor",
-        flag_exempt={"--upgrade": "the same as `ddflow upgrade`, which is `ddflow_upgrade`"},
-    ),
-    Command(
-        path=(),
         tool="ddflow_list",
         flag_exempt={
             "--kind": "carried by `sources`: `kind` selects the viewer",
             "--exact": "carried by `mode`=exact",
             "--regex": "carried by `mode`=regex",
         },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_import",
-        flag_exempt={"--verify": "covered by ddflow_import_verify, its own tool"},
     ),
     Command(
         path=(),
@@ -176,24 +161,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_doctor",
-        prose=True,
-        prose_reason="a health report written to be read, with remedies in prose",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_configure",
-        prose=True,
-        prose_reason="prints every knob with its documentation and its source",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_setup",
-        prose=True,
-        prose_reason="a checklist of what it wrote and what to do next",
-    ),
-    Command(
-        path=(),
         tool="ddflow_render",
         prose=True,
         prose_reason="with --show it returns the rendered view itself, to read or commit",
@@ -216,6 +183,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_LIFECYCLE,
     *_RULES,
     *_REVIEW,
+    *_SETUP,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,
