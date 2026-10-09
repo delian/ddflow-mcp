@@ -148,7 +148,7 @@ def parse_stdin(stdin: str) -> dict[str, Any]:
     """The hook's stdin as an object; ``{}`` for empty, invalid or non-object input."""
     try:
         data = json.loads(stdin) if stdin.strip() else {}
-    except ValueError:
+    except (ValueError, RecursionError):  # deeply nested input is a RecursionError
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -156,7 +156,7 @@ def parse_stdin(stdin: str) -> dict[str, Any]:
 def _is_empty_object(stdin: str) -> bool:
     try:
         return json.loads(stdin) == {}
-    except ValueError:
+    except (ValueError, RecursionError):
         return False
 
 
