@@ -1141,7 +1141,7 @@ _VAR_DEFAULTS: dict[str, Any] = {
 }
 
 
-#: The readers `_instruction_vars` runs, in order; each is `api.surf_mcp.fill_<name>`.
+#: The readers `_instruction_vars` runs, in order; each is `api.surf_mcp.READERS[<name>]` (`pipeline` is the engine's own).
 _FILLERS = ("rules_drift", "pipeline", "unit_test_todo", "reviewer_todo", "companions", "queue")
 
 
@@ -1182,7 +1182,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     # layer that cannot even be imported costs its block and no other.
     for name in _FILLERS:
         try:
-            fill = _fill_pipeline if name == "pipeline" else getattr(_surf(), "fill_" + name)
+            fill = _fill_pipeline if name == "pipeline" else _surf().READERS[name]
             fill(v, repo, cfg, agent)
         except Exception:
             pass

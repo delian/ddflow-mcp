@@ -233,3 +233,13 @@ def fill_queue(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
     v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
     v["loops"] = len(PR.detect(events, st, cfg))
     v["recoverable"] = _recoverable(log, cfg, repo)
+
+
+#: The handshake readers by the name the engine's `_FILLERS` gives them.
+READERS = {
+    "rules_drift": fill_rules_drift,
+    "unit_test_todo": fill_unit_test_todo,
+    "reviewer_todo": fill_reviewer_todo,
+    "companions": fill_companions,
+    "queue": fill_queue,
+}
