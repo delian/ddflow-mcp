@@ -2736,6 +2736,21 @@ already has a recorded outcome always applies, and so does every gate of an item
 declares no globs: a gate is never left out for want of information. It is a gate field,
 not a knob -- empty by default, so a project that never sets it sees no change.
 
+### A pass that must name its evidence
+
+`[gate.<id>] requires_evidence = ["report", "link"]` and `evidence_fields = ["intent",
+"edge cases"]` refuse a bare pass: `gate record ... --outcome passed` fails, listing every
+unmet form at once, unless the evidence carries what the gate asks for. **report** -- an
+output digest (attach the output with `--output-file`; an empty or whitespace-only file
+does not count) or a `report_digest`; **link** -- a
+record id (a research note) whose item is this one, so a note filed against another item
+does not count; **fields** -- every `evidence_fields` name filled in with real content (an
+empty value, `n/a`, `none` or `LGTM` counts as missing). Listing `evidence_fields` implies
+the fields form. Only a pass is held to it -- a skip with a reason or `unavailable` stays
+available -- and, as with `applies_when`, these are gate fields, not knobs: empty by
+default, so a project that sets none sees no change. A requirement ddflow cannot check
+(a `link` where no record can be resolved) is not met rather than assumed.
+
 ### When the exit code is not the verdict
 
 Some tools say "I could not run" or "I only did part of it" with an exit code, and some
