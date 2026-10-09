@@ -323,6 +323,18 @@ def _owner(table):
             None,
             True,
         ),
+        (
+            {"requires_evidence": ["report"]},
+            {"output_digest": "ab", "output_bytes": 1, "tail": "\n"},
+            None,
+            False,
+        ),
+        (
+            {"requires_evidence": ["report"]},
+            {"output_digest": "ab", "output_bytes": 9000, "tail": "\n\n"},
+            None,
+            True,  # the tail is not the whole output: something came before it
+        ),
         ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "X"}, True),
         ({"requires_evidence": ["link"]}, {"link": ["R2", "R1"]}, {"R1": "X"}, True),
         ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "OTHER"}, False),
