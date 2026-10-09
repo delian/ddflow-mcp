@@ -38,6 +38,7 @@ with `--agent <bare id>` (`as_agent` over MCP), the workaround B205 was filed wi
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import NamedTuple
@@ -63,6 +64,37 @@ def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> 
     resolved value back in makes it look explicit, which is how `config --explain` once
     blamed the environment for a variable nobody had set."""
     return AgentId(*resolve_agent_id(root, cfg, declared))
+
+
+#: Environment variables an agent harness sets in the shells it runs, so a command it
+#: runs is known not to come from a person at their own terminal. Only the ones known
+#: for certain: Claude Code exports CLAUDECODE=1. Another harness is recognised by
+#: `--agent` or `DDFLOW_AGENT`, which ddflow's own setup has it pass.
+HARNESS_MARKERS = ("CLAUDECODE",)
+
+
+def agent_marker(requested_agent: str = "") -> str:
+    """Why this invocation is an agent's, or ``""`` when nothing says it is.
+
+    An explicit `--agent`, `DDFLOW_AGENT`, or a harness's own marker. A person at their
+    own terminal sets none of them; an agent that unsets all three is the shell edit the
+    decision accepts it cannot stop.
+    """
+    if requested_agent:
+        return f"--agent {requested_agent}"
+    if os.environ.get("DDFLOW_AGENT"):
+        return f"DDFLOW_AGENT={os.environ['DDFLOW_AGENT']}"
+    for var in HARNESS_MARKERS:
+        if os.environ.get(var):
+            return f"{var} is set (an agent harness's shell)"
+    return ""
+
+
+def is_agent(requested_agent: str = "", via_mcp: bool = False) -> str:
+    """Why this call is an agent's, or "" for a person at a terminal. The MCP surface is
+    always an agent; a CLI call is one under `--agent`, `DDFLOW_AGENT` or a harness's
+    marker (the rule ``reviewers approve`` and the export enable use)."""
+    return "the MCP surface" if via_mcp else agent_marker(requested_agent)
 
 
 def bind(cfg: Config, who: AgentId) -> None:

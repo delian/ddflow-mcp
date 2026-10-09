@@ -454,3 +454,45 @@ def test_open_log_opens_as_the_resolved_agent_and_can_bind_the_config(adopted, m
     assert (cfg.agent.id, cfg.sources["agent.id"]) == ("envy", "env")
     log2, who2 = ID.open_log(adopted, _cfg(adopted), "flagged")
     assert (log2.agent_id, who2.source) == ("flagged", "explicit")
+
+
+@pytest.mark.parametrize(
+    ("requested", "env", "want"),
+    [
+        ("alpha", {"DDFLOW_AGENT": "beta", "CLAUDECODE": "1"}, "--agent alpha"),
+        ("", {"DDFLOW_AGENT": "beta", "CLAUDECODE": "1"}, "DDFLOW_AGENT=beta"),
+        ("", {"CLAUDECODE": "1"}, "CLAUDECODE is set (an agent harness's shell)"),
+        ("", {}, ""),
+    ],
+)
+def test_agent_marker_answers_the_same_for_every_caller(monkeypatch, requested, env, want):
+    """One marker rule behind approval, reviewer_trust and the export enable."""
+    from ddflow.services import approval as AP
+    from ddflow.services import identity as ID
+    from ddflow.services import reviewer_trust as RT
+
+    for var in ("DDFLOW_AGENT", *ID.HARNESS_MARKERS):
+        monkeypatch.delenv(var, raising=False)
+    for var, value in env.items():
+        monkeypatch.setenv(var, value)
+    assert ID.agent_marker(requested) == want
+    assert AP.agent_marker(requested) == RT.agent_marker(requested) == want
+    assert export_select._is_agent(requested, False) == want
+    assert ID.is_agent(requested, False) == want
+    assert ID.is_agent(requested, True) == "the MCP surface"
+
+
+def test_only_services_identity_defines_or_reads_the_agent_marker():
+    """A private copy of the rule drifts: the harness variable, the function name and the
+    marker table each appear only in services/identity (and its two re-exports)."""
+    root = Path(__file__).resolve().parents[1] / "ddflow"
+    reexports = {"services/approval.py", "services/reviewer_trust.py"}
+    for token, allowed in (
+        ("CLAUDECODE", {"services/identity.py"}),
+        ("def agent_marker", {"services/identity.py"}),
+        ("HARNESS_MARKERS", {"services/identity.py"} | reexports),
+    ):
+        homes = {
+            p.relative_to(root).as_posix() for p in root.rglob("*.py") if token in p.read_text()
+        }
+        assert homes <= allowed, (token, homes - allowed)
