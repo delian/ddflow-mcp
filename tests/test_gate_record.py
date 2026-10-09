@@ -30,7 +30,9 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _reviewed_repo(repo: Path, tmp_path: Path, config_extra: str = "") -> Path:
+def _reviewed_repo(
+    repo: Path, tmp_path: Path, config_extra: str = "", *, worktrees: bool = False
+) -> Path:
     """A command reviewer that finds nothing, and a branch `feat` with one change."""
     prompts = tmp_path / "prompts"
     prompts.mkdir()
@@ -41,7 +43,7 @@ def _reviewed_repo(repo: Path, tmp_path: Path, config_extra: str = "") -> Path:
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(
-        "[worktree]\nenabled = false\n"
+        f"[worktree]\nenabled = {str(worktrees).lower()}\n"
         f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
         'model = "gemini-2.5-pro"\nhedge = 1\ngates = ["critic", "rubber_duck"]\n' + config_extra
     )
@@ -76,14 +78,42 @@ def test_a_review_outcome_carries_ddflows_measurement_of_the_tree(repo, tmp_path
     assert set(rec.evidence["diff_stat"]) >= {"files"}, rec.evidence
 
 
-def test_a_caller_standing_in_another_items_tree_is_not_measured(repo):
-    """`item_tree` answers (None, whose-tree-it-is) there, and `measure_tree(None)` is
-    nothing: another item's tree is never attributed to this one (bug Bbc9a7ee3f2)."""
-    from ddflow.services.gates import measured as GM
+def _standing_in_t2(repo: Path) -> Path:
+    """T2 claimed with its worktree; the path a caller in it would stand in."""
+    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T2")
+    assert code == 0, err
+    return Path(json.loads(out)["worktree"])
+
+
+def test_a_gate_recorded_from_another_items_tree_is_not_measured(repo):
+    """Bbc9a7ee3f2: T2's tree must not be attributed to T1 -- nor make T1's bare pass look
+    evidenced. Recorded all the same, with the note."""
+    import ddflow.api.gates as AG
 
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    assert GM.measure_tree(repo, _item(repo), None) == {}
+    t2 = _standing_in_t2(repo)
+
+    out = AG.record(
+        repo, "T1", "implement", outcome="passed", evidence=AG.Evidence(note="done"), called_from=t2
+    )
+
+    assert out.exit == 0, out
+    assert "T2's worktree" in out.data["warning"], out.data["warning"]
+    ev = _item(repo, "T1").gates["implement"].evidence
+    assert "tree_sha" not in ev and "diff_stat" not in ev, ev
+
+
+def test_a_review_recorded_from_another_items_tree_is_not_measured(repo, tmp_path):
+    _reviewed_repo(repo, tmp_path, worktrees=True)
+    t2 = _standing_in_t2(repo)
+
+    api.review(repo, gate="critic", item="T1", branch="feat", called_from=t2)
+
+    rec = _item(repo).gates["critic"]
+    assert rec.outcome == "passed", rec
+    assert "tree_sha" not in rec.evidence and "diff_stat" not in rec.evidence, rec.evidence
 
 
 def test_a_review_out_of_order_is_noted_and_recorded_under_warn(repo, tmp_path):
