@@ -34,10 +34,6 @@ def test_a_flag_with_an_optional_value_takes_const_alone_a_value_or_nothing():
 
 def test_an_optional_value_flag_is_not_required_and_shows_its_metavar():
     assert not Param("apply", nargs="?", const="all").mcp_required
-    assert (
-        "--apply [CATEGORIES]" in _optional_value().format_help()
-        or "go" in _optional_value().format_help()
-    )
     helps = _optional_value()._subparsers._group_actions[0].choices["go"].format_help()
     assert "--apply [CATEGORIES]" in helps
 
