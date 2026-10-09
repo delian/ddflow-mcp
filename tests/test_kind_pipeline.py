@@ -81,3 +81,13 @@ def test_workflow_view_shows_each_kind():
 )
 def test_knob_check(value, ok):
     assert (kind_pipelines_problem(value) == "") is ok
+
+
+def test_default_config_adds_no_kind_entries_to_pipelines(tmp_path):
+    """The built-in kinds are not `kind:` pipelines: only `[gates].kind_pipelines` entries
+    are, so an untouched project reports each pipeline's problems once, as before."""
+    cfg = Config()
+    assert not [k for k in pipelines(cfg) if k.startswith("kind:")]
+    assert not [
+        f for f in WF.check(cfg, load_gates(tmp_path, cfg)) if "kind_pipelines" in f.subject
+    ]
