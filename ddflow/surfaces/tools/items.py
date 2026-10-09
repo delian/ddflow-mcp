@@ -1,6 +1,6 @@
-"""MCP tools: one item: show, update, abandon, remove, release, wait, block.
+"""MCP tools: external sync (the one hand-written entry of the old per-item module).
 
-One slice of the `TOOLS` registry, assembled in `surfaces/tools/__init__.py`."""
+Hand-written entries merged into `TOOLS` in `surfaces/tools/__init__.py`."""
 
 from __future__ import annotations
 

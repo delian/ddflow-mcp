@@ -1,6 +1,6 @@
-"""MCP tools: the loop: brief, next, claim, heartbeat, the gates, complete, merge.
+"""MCP tools: brief (hand-written; the loop's tools are declared in `declared/lifecycle.py`).
 
-One slice of the `TOOLS` registry, assembled in `surfaces/tools/__init__.py`."""
+Hand-written entries merged into `TOOLS` in `surfaces/tools/__init__.py`."""
 
 from __future__ import annotations
 

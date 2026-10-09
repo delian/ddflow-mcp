@@ -1,6 +1,6 @@
-"""MCP tools: reading the queue and finding things: recover, board, recall, status, identity.
+"""MCP tools: onboard and identify (hand-written; the rest are declared).
 
-One slice of the `TOOLS` registry, assembled in `surfaces/tools/__init__.py`."""
+Hand-written entries merged into `TOOLS` in `surfaces/tools/__init__.py`."""
 
 from __future__ import annotations
 
