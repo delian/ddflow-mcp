@@ -222,3 +222,19 @@ def test_brief_and_verify_leave_out_a_gate_that_does_not_apply(repo):
     out = run_cli(repo, "brief", "--item", "T1")[1]
     remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
     assert "dedupe" not in remaining and "bug_hunt" in remaining, remaining
+
+
+def test_a_gate_with_a_recorded_outcome_always_applies(repo):
+    """Work already done is never hidden: a failed outcome keeps its gate in play even
+    where `applies_when` no longer covers the item, and it is not reported as N/A."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import gates as G
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "gate", "record", "T1", "dedupe", "--outcome", "failed", "--reason", "x")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    cfg = Config.load(repo)
+    s = G.status(fold(EventLog(repo).read_all()), cfg, "T1", G.load_gates(repo, cfg))
+    assert "dedupe" not in s.not_applicable and s.blocked_by == ["dedupe"]
