@@ -36,6 +36,7 @@ from ...core import outcome as O  # noqa: F401
 from ...core.budget import RECALL_MAX_CHARS  # noqa: F401
 from ...core.events import parse_changelog  # noqa: F401
 from ...core.model import LINK_RELATIONS, fold  # noqa: F401
+from ...services.items import TaskDraft, add_task  # noqa: F401
 from .._base import _load  # noqa: F401
 from .bug_close import (  # noqa: F401
     NOTHING_TO_REMOVE,
