@@ -12,6 +12,7 @@ from ..config import Config
 from ..core.model import State, fold
 from ..infra.log import EventLog
 from ..services import identity as ID
+from ..services.choices import overlay
 
 
 def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
@@ -35,7 +36,6 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
         st = fold(log.read_all(), strict=False)
     # Workflow choices recorded in the log fill in wherever the config file is silent --
     # HERE, once, so every operation reads `cfg.flow.*` and sees the same answer.
-    from ..services.choices import overlay
 
     overlay(cfg, st)
     _run_ticks(repo, log, cfg, st)

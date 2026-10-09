@@ -10,14 +10,18 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ..config import csv_list
+from ..core import flow as F
 from ..core import globspec as GS
 from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.defaults import DEFAULT_PRIORITY
-from ..core.model import fold
+from ..core.flow import line_order
+from ..infra import worktree as W
+from ..services import choices as CH
 from ..services import items as IT
 from ..services import leases as L
 from ._base import _load
+from .lifecycle import _worktree_held_by
 
 
 @dataclass
@@ -87,7 +91,7 @@ def _update_and_rebind(repo: Path, log, cfg, item: str, fields: dict, path: str)
     every one does: a refused field edit rebinds nothing, a refused rebind sets no field.
     """
     with log.transaction():
-        st = fold(log.read_all(), strict=False)
+        st = L._fold(log)
         it = st.items[item]
         target = _rebind_target(repo, cfg, st, it, path, log.agent_id)
         if isinstance(target, O.Outcome):
@@ -113,9 +117,6 @@ def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
     be merged or recovered apart), and for an item whose LIVE lease another agent holds
     -- moving someone's work out from under them is theirs to do.
     """
-
-    from ..infra import worktree as W
-    from .lifecycle import _worktree_held_by
 
     if not path.strip():
         # Not "here": an empty `$WT` would otherwise rebind to wherever the shell is.
@@ -248,12 +249,6 @@ def _dropped(it, globs: list[str] | None) -> list[str]:
     return [g for g in dict.fromkeys(before) if g not in globs]
 
 
-def _fresh(log):
-    """The state to decide an add from, read UNDER the append lock: two agents filing the
-    same id at once must not both see it free."""
-    return fold(log.read_all(), strict=False)
-
-
 #: Splitting into one piece is a rename, not a split.
 MIN_SPLIT_PARTS = 2
 
@@ -286,7 +281,6 @@ def _line_frozen(st, it) -> str:
 def _bad_line(cfg, line: str) -> str:
     """Why ``line`` names no release line, or "". A typo'd line must not silently mean
     'the current line' -- the fix would land on the wrong major and nothing would say so."""
-    from ..core.flow import line_order
 
     known = line_order(cfg)
     if line in known:
@@ -329,7 +323,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     if bad:
         return O.failed("phase.added", bad, id=item)
     with log.transaction():
-        st = _fresh(log)
+        st = L._fold(log)
         taken = IT.taken(st, item, readd=readd)
         if taken:
             return O.refused("phase.added", taken, id=item)
@@ -367,7 +361,6 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
 
 def _port_of_lines(st, cfg, port_of: str, wanted: list[str]) -> tuple[list[str], str]:
     """The lines a follow-up to ``port_of`` must reach (B180), or the reason it cannot."""
-    from ..core import flow as F
 
     if wanted:
         return wanted, "--port-of takes its lines from that fix: drop --line/--lines"
@@ -382,6 +375,55 @@ def _port_of_lines(st, cfg, port_of: str, wanted: list[str]) -> tuple[list[str],
     family = [origin, *(o for o in st.items.values() if o.port_of == origin.id and not o.removed)]
     lines = (F.effective_line(st, o) or cfg.flow.current_line for o in family)
     return list(dict.fromkeys(lines)), ""
+
+
+def _wanted_lines(st, cfg, line: str, lines: str, port_of: str) -> tuple[list[str], str]:
+    """The release lines an added task must reach, or the reason it cannot."""
+    wanted = csv_list(lines) or ([line] if line else [])
+    if port_of:
+        wanted, bad = _port_of_lines(st, cfg, port_of, wanted)
+        if bad:
+            return [], bad
+    for ln in wanted:
+        if bad := _bad_line(cfg, ln):
+            return [], bad
+    return wanted, ""
+
+
+def _add_ports(
+    log, st, cfg, base, plan, title: str, tags: str, readd: bool
+) -> tuple[list[str], str]:
+    """Write one port task per other release line of ``plan``: (their ids, the problem)."""
+    item = base.id
+    ports: list[str] = []
+    for ln, frm in plan.ports if plan else []:
+        source = item if frm < 0 else ports[frm]
+        pid = f"{item}@{ln}"
+        port = replace(
+            base,
+            id=pid,
+            title=f"{title or item} (port to {ln})",
+            needs=[source],
+            line=ln,
+            tags=[*csv_list(tags), "port"],
+            extra={
+                "port_of": item,
+                "port_from": source,
+                "port_strategy": plan.strategy,
+            },
+        )
+        added = IT.add_task(
+            log,
+            st,
+            cfg,
+            port,
+            dedupe="a port of the fix just checked: one per release line",
+            readd=readd,
+        )
+        if not added.ok:
+            return ports, added.problem
+        ports.append(pid)
+    return ports, ""
 
 
 def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
@@ -423,8 +465,6 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     (``api._dedupe``): ``new``, or ``extends`` / ``duplicate_of`` / ``related`` a record.
     ``answer`` is one bundled parameter, not three (BACKLOG B179).
     """
-    from ..core import flow as F
-    from ..services import choices as CH
 
     base = IT.TaskDraft(
         item,
@@ -441,17 +481,11 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     bad = IT.missing_parent(st, parent)
     if bad:
         return O.failed("task.added", bad, id=item)
-    wanted = csv_list(lines) or ([line] if line else [])
-    if port_of:
-        wanted, bad = _port_of_lines(st, cfg, port_of, wanted)
-        if bad:
-            return O.failed("task.added", bad, id=item)
-    for ln in wanted:
-        bad = _bad_line(cfg, ln)
-        if bad:
-            return O.failed("task.added", bad, id=item)
+    wanted, bad = _wanted_lines(st, cfg, line, lines, port_of)
+    if bad:
+        return O.failed("task.added", bad, id=item)
     with log.transaction():
-        st = _fresh(log)
+        st = L._fold(log)
         taken = IT.taken(st, item, readd=readd)
         if taken:
             return O.refused("task.added", taken, id=item)
@@ -485,34 +519,9 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         if not added.ok:
             return (O.refused if added.refused else O.failed)("task.added", added.problem, id=item)
         DD.after_add(log, cfg, item, chk)
-        ports: list[str] = []
-        for ln, frm in plan.ports if plan else []:
-            source = item if frm < 0 else ports[frm]
-            pid = f"{item}@{ln}"
-            port = replace(
-                base,
-                id=pid,
-                title=f"{title or item} (port to {ln})",
-                needs=[source],
-                line=ln,
-                tags=[*csv_list(tags), "port"],
-                extra={
-                    "port_of": item,
-                    "port_from": source,
-                    "port_strategy": plan.strategy,
-                },
-            )
-            added = IT.add_task(
-                log,
-                st,
-                cfg,
-                port,
-                dedupe="a port of the fix just checked: one per release line",
-                readd=readd,
-            )
-            if not added.ok:
-                return O.failed("task.added", added.problem, id=item)
-            ports.append(pid)
+        ports, bad = _add_ports(log, st, cfg, base, plan, title, tags, readd)
+        if bad:
+            return O.failed("task.added", bad, id=item)
         # Giving a task its first child turns it into an umbrella: its lease is released
         # (`split` does the same), see `IT.release_umbrella`.
         released = IT.release_umbrella(
@@ -555,6 +564,103 @@ def _options(it) -> str:
     return "; ".join(rows)
 
 
+def _kept_contestants(it, item: str, keep: str) -> tuple[list, list, O.Outcome | None]:
+    """(definitions, claims, refusal): the contestants ``keep`` names, or why it names no
+    single one."""
+    defs = _contestants(it.contested, keep, "agent")
+    claims = _contestants(it.lease_candidates(), keep, "holder")
+    if not defs and not claims:
+        return (
+            [],
+            [],
+            O.failed(
+                "item.resolved",
+                f"--keep {keep!r} names none of {item}'s contestants: {_options(it)}",
+                id=item,
+            ),
+        )
+    if len(defs) > 1 or len(claims) > 1:
+        return (
+            [],
+            [],
+            O.failed(
+                "item.resolved",
+                f"--keep {keep!r} names more than one contestant; give an event id: {_options(it)}",
+                id=item,
+            ),
+        )
+    if defs and claims:
+        # One token naming a definition AND a claim -- an agent that both filed and
+        # claimed it, or a prefix of both ids -- would settle two separate questions
+        # at once. Only a full event id says which one was meant.
+        if keep == defs[0]["event"]:
+            claims = []
+        elif keep == claims[0]["event"]:
+            defs = []
+        else:
+            return (
+                [],
+                [],
+                O.refused(
+                    "item.resolved",
+                    f"--keep {keep!r} names both a definition ({defs[0]['event']}) and a "
+                    f"claim ({claims[0]['event']}) of {item}. Settle them one at a time: "
+                    f"`--keep {defs[0]['event']}` keeps that definition, "
+                    f"`--keep {claims[0]['event']}` keeps that claim.",
+                    id=item,
+                ),
+            )
+    return defs, claims, None
+
+
+def _refile_problem(st, item: str, new_ids: list[str], lost: list) -> O.Outcome | None:
+    """The refusal when ``--refile-as`` does not fit the losing definitions, else None."""
+    if new_ids and len(new_ids) != len(lost):
+        return O.failed(
+            "item.resolved",
+            f"--refile-as gives {len(new_ids)} id(s) for {len(lost)} losing "
+            f"definition(s) of {item}; give one per definition not kept.",
+            id=item,
+        )
+    for nid in new_ids:
+        bad = IT.bad_id(nid) or IT.taken(st, nid, readd=False)
+        if bad:
+            return O.failed("item.resolved", bad, id=item)
+    return None
+
+
+def _resolution(cfg, it, keep: str, defs: list, claims: list) -> dict[str, Any]:
+    """The payload of the `item.resolved` event: what was kept."""
+    data: dict[str, Any] = {"kind": it.kind, "keep": keep, "at": time.time()}
+    if defs:
+        data["definition"] = defs[0]
+    if claims:
+        data["claim"] = claims[0]
+        # The TTL a kept claim that had lapsed runs its fresh window on: a recorded
+        # expiry zeroed the claim's own, and a window of 0 s is dead on arrival.
+        data["ttl_s"] = cfg.lease.ttl_s
+    return data
+
+
+def _apply_resolution(
+    log, item: str, it, data: dict, losers: list, claims: list, lost: list, new_ids: list[str]
+) -> None:
+    """Write the releases, the `item.resolved` event and the refiled losers."""
+    # Releases FIRST: folded before the resolution, each withdraws a losing claim,
+    # and the resolution then re-applies the kept one whichever was displayed.
+    for h in losers:
+        L.release_claim(
+            log,
+            item,
+            holder=h["holder"],
+            event=h["event"],
+            note=f"lost the contest for {item}: {claims[0]['holder']} keeps it",
+        )
+    log.append("item.resolved", item, data)
+    for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
+        log.append(f"{it.kind}.added", nid, d["data"])
+
+
 def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str = "") -> O.Outcome:
     """Settle a contested item: keep one definition and/or one claim, recorded as an event.
 
@@ -581,7 +687,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
 
     log, cfg, _st = _load(repo, agent)
     with log.transaction():
-        st = _fresh(log)
+        st = L._fold(log)
         it = st.items.get(item)
         if it is None or it.removed:
             gone = " (it was removed from the queue)" if it is not None else ""
@@ -593,72 +699,16 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
                 f"changes an item; `ddflow release` gives up a claim.",
                 id=item,
             )
-        defs = _contestants(it.contested, keep, "agent")
-        claims = _contestants(it.lease_candidates(), keep, "holder")
-        if not defs and not claims:
-            return O.failed(
-                "item.resolved",
-                f"--keep {keep!r} names none of {item}'s contestants: {_options(it)}",
-                id=item,
-            )
-        if len(defs) > 1 or len(claims) > 1:
-            return O.failed(
-                "item.resolved",
-                f"--keep {keep!r} names more than one contestant; give an event id: {_options(it)}",
-                id=item,
-            )
-        if defs and claims:
-            # One token naming a definition AND a claim -- an agent that both filed and
-            # claimed it, or a prefix of both ids -- would settle two separate questions
-            # at once. Only a full event id says which one was meant.
-            if keep == defs[0]["event"]:
-                claims = []
-            elif keep == claims[0]["event"]:
-                defs = []
-            else:
-                return O.refused(
-                    "item.resolved",
-                    f"--keep {keep!r} names both a definition ({defs[0]['event']}) and a "
-                    f"claim ({claims[0]['event']}) of {item}. Settle them one at a time: "
-                    f"`--keep {defs[0]['event']}` keeps that definition, "
-                    f"`--keep {claims[0]['event']}` keeps that claim.",
-                    id=item,
-                )
+        defs, claims, refusal = _kept_contestants(it, item, keep)
+        if refusal is not None:
+            return refusal
         lost = [d for d in it.contested if defs and d["event"] != defs[0]["event"]]
         new_ids = csv_list(refile_as)
-        if new_ids and len(new_ids) != len(lost):
-            return O.failed(
-                "item.resolved",
-                f"--refile-as gives {len(new_ids)} id(s) for {len(lost)} losing "
-                f"definition(s) of {item}; give one per definition not kept.",
-                id=item,
-            )
-        for nid in new_ids:
-            bad = IT.bad_id(nid) or IT.taken(st, nid, readd=False)
-            if bad:
-                return O.failed("item.resolved", bad, id=item)
+        if refusal := _refile_problem(st, item, new_ids, lost):
+            return refusal
         losers = it.lease_losers(claims[0]) if claims else []
-        data: dict[str, Any] = {"kind": it.kind, "keep": keep, "at": time.time()}
-        if defs:
-            data["definition"] = defs[0]
-        if claims:
-            data["claim"] = claims[0]
-            # The TTL a kept claim that had lapsed runs its fresh window on: a recorded
-            # expiry zeroed the claim's own, and a window of 0 s is dead on arrival.
-            data["ttl_s"] = cfg.lease.ttl_s
-        # Releases FIRST: folded before the resolution, each withdraws a losing claim,
-        # and the resolution then re-applies the kept one whichever was displayed.
-        for h in losers:
-            L.release_claim(
-                log,
-                item,
-                holder=h["holder"],
-                event=h["event"],
-                note=f"lost the contest for {item}: {claims[0]['holder']} keeps it",
-            )
-        log.append("item.resolved", item, data)
-        for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
-            log.append(f"{it.kind}.added", nid, d["data"])
+        data = _resolution(cfg, it, keep, defs, claims)
+        _apply_resolution(log, item, it, data, losers, claims, lost, new_ids)
     # Outside the lock: each released claim's remote ref goes too, and the kept holder
     # takes the ref a displaced contestant did not hold (Bd45d1ad60e).
     L.settle_remote(
@@ -678,6 +728,37 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
         refiled=new_ids,
         released=[h["holder"] for h in losers],
     )
+
+
+def _plan_split(cfg, st, it, specs: list[str]) -> tuple[list[tuple[str, str]], O.Outcome | None]:
+    """[(id, title)] for every part of a split, or the refusal: every child is resolved
+    and validated BEFORE anything is appended."""
+    item = it.id
+    planned: list[tuple[str, str]] = []
+    for i, spec in enumerate(specs, 1):
+        sub_id, _, title = spec.partition("=")
+        # the parent's own spelling: an existing id is not re-checked (render check=False)
+        sub_id = sub_id.strip() or IDS.render(cfg, "split_child", check=False, parent=item, seq=i)
+        if sub_id in st.items:
+            return [], O.failed(
+                "task.split", f"{sub_id} already exists; choose another id", id=item, created=[]
+            )
+        bad = IT.bad_id(sub_id)
+        if bad:
+            return [], O.failed("task.split", bad, id=item, created=[])
+        if sub_id in [p for p, _ in planned]:
+            return [], O.failed(
+                "task.split",
+                f"{sub_id} given twice in one split; each part needs its own id",
+                id=item,
+                created=[],
+            )
+        if sub_id == item:
+            return [], O.failed(
+                "task.split", f"{sub_id} cannot be its own sub-task", id=item, created=[]
+            )
+        planned.append((sub_id, title.strip() or f"{it.title} (part {i})"))
+    return planned, None
 
 
 def split(
@@ -734,30 +815,9 @@ def split(
     # `--into X=one --into X=two` appended two `task.added` events for one id, `fold`
     # merged them, and the split reported two children while producing one whose title was
     # silently the second spec's.
-    planned: list[tuple[str, str]] = []
-    for i, spec in enumerate(specs, 1):
-        sub_id, _, title = spec.partition("=")
-        # the parent's own spelling: an existing id is not re-checked (render check=False)
-        sub_id = sub_id.strip() or IDS.render(cfg, "split_child", check=False, parent=item, seq=i)
-        if sub_id in st.items:
-            return O.failed(
-                "task.split", f"{sub_id} already exists; choose another id", id=item, created=[]
-            )
-        bad = IT.bad_id(sub_id)
-        if bad:
-            return O.failed("task.split", bad, id=item, created=[])
-        if sub_id in [p for p, _ in planned]:
-            return O.failed(
-                "task.split",
-                f"{sub_id} given twice in one split; each part needs its own id",
-                id=item,
-                created=[],
-            )
-        if sub_id == item:
-            return O.failed(
-                "task.split", f"{sub_id} cannot be its own sub-task", id=item, created=[]
-            )
-        planned.append((sub_id, title.strip() or f"{it.title} (part {i})"))
+    planned, refusal = _plan_split(cfg, st, it, specs)
+    if refusal is not None:
+        return refusal
 
     created: list[str] = []
     for i, (sub_id, title) in enumerate(planned, 1):
