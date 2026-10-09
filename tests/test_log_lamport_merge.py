@@ -23,6 +23,7 @@ import pytest
 
 from ddflow.api import reporting
 from ddflow.infra import log as L
+from ddflow.services import identity as ID
 from tests.conftest import run_cli
 
 
@@ -189,8 +190,8 @@ def test_deriving_an_id_does_not_create_ddflow_in_an_unadopted_repo(repo: Path, 
 def test_explicit_and_env_ids_are_not_suffixed(repo: Path, monkeypatch):
     (repo / ".ddflow").mkdir()
     monkeypatch.setenv("DDFLOW_AGENT", "alpha")
-    assert L.resolve_agent_id(repo) == ("alpha", "env")
-    assert L.resolve_agent_id(repo, declared="beta") == ("beta", "explicit")
+    assert tuple(ID.resolve(repo)) == ("alpha", "env")
+    assert tuple(ID.resolve(repo, declared="beta")) == ("beta", "explicit")
     assert os.listdir(repo / ".ddflow") == []
 
 

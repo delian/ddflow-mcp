@@ -77,8 +77,6 @@ __all__ = [
     "canonical",
     "clear_parse_cache",
     "default_agent_id",
-    "effective_agent_id",
-    "resolve_agent_id",
     "utcnow",
 ]
 
@@ -639,52 +637,6 @@ def _clone_suffix(root: Path) -> str:
         return path.read_text("utf-8").strip()
     except OSError:
         return ""
-
-
-def resolve_agent_id(root: Path | str, cfg: Any = None, declared: str = "") -> tuple[str, str]:
-    """(identity, WHICH LAYER produced it). See :func:`effective_agent_id`.
-
-    The layer is returned rather than inferred, because inferring it by comparing the
-    result against each candidate is wrong whenever two candidates agree: with
-    `DDFLOW_AGENT` unset and no `[agent].id`, the derived name differs from
-    `cfg.agent.id` (`""`), so a value-comparison recorded the source as `env` and
-    `ddflow config --explain` told an operator the environment was responsible for a
-    variable nothing had set. An operator debugging identity is precisely the person
-    who cannot afford that.
-    """
-    if declared:
-        return declared, "explicit"
-    env = os.environ.get("DDFLOW_AGENT", "")
-    if cfg is not None:
-        if env and getattr(cfg, "sources", {}).get("agent.id", "default") == "default":
-            return env, "env"
-        if getattr(getattr(cfg, "agent", None), "id", ""):
-            return cfg.agent.id, "config"
-    elif env:
-        return env, "env"
-    return default_agent_id(root), "derived"
-
-
-def effective_agent_id(root: Path | str, cfg: Any = None, declared: str = "") -> str:
-    """The identity a write will actually carry, resolved in ONE place.
-
-    There are four layers -- an explicit declaration (`--agent`, or `ddflow_identify`
-    on an MCP connection), `DDFLOW_AGENT`, `[agent].id` in config, and the tree-derived
-    default -- and until this function existed, only `cli.Ctx.__init__` knew all four.
-
-    The typed MCP path did not go through `Ctx`. It called `EventLog(repo, "")`, which
-    falls straight to `default_agent_id()` and reads neither the env var nor the
-    config. So with `DDFLOW_AGENT=alpha` set -- which the demo harnesses do --
-    `ddflow_claim` wrote as `alpha` down the argv path while `ddflow_update` wrote as
-    the tree name down the typed one, into a different shard, on the same connection.
-    `ddflow_identify` with no argument reported the tree name too, so the one tool whose
-    job is to make identity visible misreported it.
-
-    Two encodings of one precedence is the duplicate-then-drift shape; the fix is one
-    encoding, called from both. `cfg` is optional so callers below the config layer can
-    still ask.
-    """
-    return resolve_agent_id(root, cfg, declared)[0]
 
 
 #: Transaction depth per (pid, lock path), NOT per EventLog instance.

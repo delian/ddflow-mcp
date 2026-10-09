@@ -338,6 +338,15 @@ def _outcome_result(
     return result
 
 
+def _identity() -> Any:
+    """`api.identity`, imported on first use: a module-level import would pull the whole api
+    layer (and its jinja2) into `import ddflow.surfaces.mcp`, which `scripts/bump.sh` runs
+    under a bare interpreter."""
+    from ..api import identity
+
+    return identity
+
+
 def _default_agent(repo: Path) -> tuple[str, str]:
     """(identity, where it came from) for a connection that declared none.
 
@@ -351,13 +360,12 @@ def _default_agent(repo: Path) -> tuple[str, str]:
     # The EFFECTIVE default, not the tree-derived one. Reporting the tree name while
     # `DDFLOW_AGENT` was set made `ddflow_identify` misreport the single thing it
     # exists to make visible.
-    from ..infra.log import resolve_agent_id
 
     try:
         cfg = Config.load(repo)
     except Exception:
         cfg = None
-    who, layer = resolve_agent_id(repo, cfg)
+    who, layer = _identity().resolve(repo, cfg)
     return who, {
         "env": "from DDFLOW_AGENT",
         "config": "from [agent].id in config",
@@ -613,12 +621,12 @@ class Server:
     def _override_skew(self, reason: Any, agent: str) -> None:
         """Record the session-scoped skew override this call carries (`allow_older_version`)."""
         from ..config import Config
-        from ..infra.log import EventLog, effective_agent_id
+        from ..infra.log import EventLog
 
         if not isinstance(reason, str):
             raise ValueError("allow_older_version must be a string: the reason")
         cfg = Config.load(self.repo)
-        log = EventLog(self.repo, effective_agent_id(self.repo, cfg, agent), log_cfg=cfg.log)
+        log = EventLog(self.repo, _identity().resolve(self.repo, cfg, agent).id, log_cfg=cfg.log)
         log.override_skew(reason)
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
@@ -1213,17 +1221,17 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         from ..core import progress as PR
         from ..core.model import fold
         from ..core.schedule import plan
-        from ..infra.log import EventLog, effective_agent_id
+        from ..infra.log import EventLog
         from ..services import importer as IM
         from ..services import leases as L
 
-        # `effective_agent_id`, not `cfg.agent.id or ""` -- the latter falls to the
+        # `identity.resolve`, not `cfg.agent.id or ""` -- the latter falls to the
         # tree-derived default and reads neither DDFLOW_AGENT nor a declared name. The
         # identity here decides which items `plan()` counts as "already mine", so with
         # DDFLOW_AGENT set the handshake reported the connection's OWN claimed work as
         # someone else's, at the one moment the agent is told what to do next. B88's
         # sweep fixed two call sites and missed this one.
-        log = EventLog(repo, effective_agent_id(repo, cfg, agent), log_cfg=cfg.log)
+        log = EventLog(repo, _identity().resolve(repo, cfg, agent).id, log_cfg=cfg.log)
         events = log.read_all()
         st = fold(events, strict=False)
         p = plan(st, cfg, agent=log.agent_id)
