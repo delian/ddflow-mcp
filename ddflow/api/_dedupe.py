@@ -30,13 +30,25 @@ from typing import Any
 from ..config import Config
 from ..core import outcome as O
 from ..core import textsim
+from ..infra.store import Store, similar_records
 from ..services import searchcore as SC
+from ..services import similar as sim
 
 #: What an add can be answered with. ``new``: not a duplicate, record it. The others point
 #: at an existing record (``Answer.target``).
 RELATIONS = ("new", "extends", "duplicate_of", "related")
 #: Words listed to explain one match: enough to see why, few enough to read at a glance.
 SHARED_WORDS = 5
+
+
+def split_answer(spec: str) -> tuple[str, str]:
+    """(relation, target) of an answer spec; ("", "") when empty. ``duplicate`` and ``dup``
+    are ``duplicate_of``."""
+    words = (spec or "").replace(":", " ").replace("=", " ").split()
+    if not words:
+        return "", ""
+    rel = {"duplicate": "duplicate_of", "dup": "duplicate_of"}.get(words[0], words[0])
+    return rel, " ".join(words[1:])
 
 
 @dataclass(frozen=True)
@@ -55,11 +67,7 @@ class Answer:
         """``new``, ``extends X``, ``duplicate_of X`` (also ``duplicate X``), ``related X``;
         a colon or equals sign may stand for the space. Empty is no answer. Anything else
         keeps its relation so ``problem`` can say what is wrong with it."""
-        words = (spec or "").replace(":", " ").replace("=", " ").split()
-        if not words:
-            return cls()
-        rel = {"duplicate": "duplicate_of", "dup": "duplicate_of"}.get(words[0], words[0])
-        return cls(rel, " ".join(words[1:]))
+        return cls(*split_answer(spec))
 
     def __bool__(self) -> bool:
         return bool(self.relation)
@@ -198,7 +206,6 @@ def rows(st, matcher, cands, text: str, *, grace_s: int = 0) -> list[dict[str, A
     """Candidates as a person reads them: what it is, where it stands, how close it
     scored and which words it shares. One implementation for ``similar`` and the add
     check, so the two show the same thing."""
-    from ..infra.store import similar_records
 
     n, df = matcher.doc_freq(textsim.tokens(text))
     records = {r["id"]: r for r in similar_records(st)}
@@ -273,8 +280,6 @@ class Record:
 
 def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[dict], str]:
     """(assessment, candidate rows, why the check could not run)."""
-    from ..infra.store import Store
-    from ..services import similar as sim
 
     dd = cfg.dedupe
     if dd.on_match == "off" or rec.kind not in dd.kinds:
