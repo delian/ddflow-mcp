@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ._docs import declare, knob
-from .kinds import kind_pipelines_problem
+from ._kinds import kind_pipelines_problem
 
 
 @declare("gates")
