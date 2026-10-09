@@ -5,15 +5,12 @@ the work it declares (`[gate.<id>] applies_when`)."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING
+from typing import Any
 
 from ...config import Config
 from ...config_sections._kinds import KINDS
 from ...core.globs import overlap
 from ...core.model import Item
-
-if TYPE_CHECKING:
-    from .defs import GateDef
 
 
 def kind_pipeline(cfg: Config, kind: str) -> list[str]:
@@ -32,7 +29,7 @@ def kind_pipelines(cfg: Config) -> dict[str, list[str]]:
     return {name: kind_pipeline(cfg, name) for name in KINDS}
 
 
-def gate_applies(gdef: GateDef | None, item: Item) -> str:
+def gate_applies(gdef: Any, item: Item) -> str:
     """Why ``gdef`` does NOT apply to ``item``, or ``""`` when it does.
 
     The predicate behind `[gate.<id>] applies_when`: a gate with path patterns applies
@@ -52,7 +49,7 @@ def gate_applies(gdef: GateDef | None, item: Item) -> str:
 
 
 def not_applicable(
-    item: Item, pipeline: Iterable[str], gates: Mapping[str, GateDef] | None
+    item: Item, pipeline: Iterable[str], gates: Mapping[str, Any] | None
 ) -> dict[str, str]:
     """Gate -> why it does not apply, for the ``pipeline`` gates ``item`` does not run.
 
