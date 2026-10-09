@@ -224,6 +224,18 @@ class Release:
 
 
 @dataclass
+class GateRun:
+    """One recorded gate outcome, kept for good: `Item.gates` holds only the LAST one per
+    gate, and a re-claim, a skip or a delta replaces it. The log's `started` and
+    `out_of_order` events are not outcomes and are not here."""
+
+    gate: str
+    outcome: str
+    at: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Item:
     """A phase or a task. One class, because every rule about scheduling,
     leasing, gating and recovery is identical for both — only the pipeline differs.
@@ -245,6 +257,11 @@ class Item:
     state: str = OPEN
     lease: Lease | None = None
     gates: dict[str, GateRecord] = field(default_factory=dict)
+    #: Every outcome ever recorded for this item's gates, oldest first (B-uni-gate-record.5):
+    #: what the review budget, the fire rates and the repeated-failure detector count,
+    #: folded once instead of scanning the log for each. Internal: not part of the item's
+    #: wire form (`core.plain`), so a state snapshot would have to serialise it explicitly.
+    gate_history: list[GateRun] = field(default_factory=list, metadata={"internal": True})
     #: The author's triage of a review's findings: gate -> finding digest -> {verdict,
     #: probe, n, severity, title, location, by, at}. Keyed by the DIGEST of the finding's
     #: text and kept apart from `gates`, which a re-review replaces wholesale: a triage
@@ -336,6 +353,10 @@ class Item:
     def terminal(self) -> bool:
         """Finished with: done or abandoned. The one test for "nothing more to do here"."""
         return self.state in (DONE, ABANDONED)
+
+    def runs_of(self, gate: str) -> list[GateRun]:
+        """The gate's recorded outcomes, oldest first."""
+        return [r for r in self.gate_history if r.gate == gate]
 
     def gate_outcome(self, gate: str) -> str:
         rec = self.gates.get(gate)
