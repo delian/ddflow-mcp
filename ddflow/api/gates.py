@@ -32,37 +32,13 @@ from ..core.model import GateOutcome
 from ..core.plain import plain
 from ..services import gates as G
 from ..services import testselect as TS
+from ..services.gates import measured as R
 from ..services.gates.reviewers import run_watching_git
 from ._base import _load
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
 OUTCOME_EXIT = {o.value: o.exit for o in GateOutcome}
-
-
-def _gates_ahead_of(st, cfg, item_id: str, gate: str) -> list[str]:
-    """Pipeline gates BEFORE ``gate`` that have no outcome yet.
-
-    The order in `gates.task_pipeline` is not decoration: a rubber-duck review recorded
-    before `implement` reviewed an empty diff, and a `merge` recorded before `unit_tests`
-    merged something nobody tested.
-    """
-    try:
-        s = G.status(st, cfg, item_id)
-    except KeyError:
-        return []
-    if gate not in s.pipeline:
-        return []
-    before = s.pipeline[: s.pipeline.index(gate)]
-    it = st.items.get(item_id)
-    return [g for g in before if it and not it.gate_outcome(g)]
-
-
-def _order_note(ahead: list[str], gate: str) -> str:
-    return (
-        f"{gate} comes after {', '.join(ahead)} in the pipeline, and "
-        f"{'none of those have' if len(ahead) > 1 else 'that one has not'} run yet."
-    )
 
 
 def _resolve(repo: Path, item: str, gate: str, agent: str):
@@ -226,30 +202,11 @@ def verify(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
 
 
 def _order_gate(log, cfg, st, item: str, gate: str, *, recording: bool) -> O.Outcome | list[str]:
-    """Enforce `gates.enforce_order`, and RECORD the violation either way."""
-    ahead = _gates_ahead_of(st, cfg, item, gate)
-    if not ahead or cfg.gates.enforce_order == "off":
-        return []
-    if cfg.gates.enforce_order == "block":
-        return O.refused(
-            "gate",
-            f"{_order_note(ahead, gate)}\nThe order is the point: reviewing a change "
-            f"before it is implemented reviews nothing. Run them in order, or set "
-            f"[gates].enforce_order = 'warn'.",
-            id=item,
-            gate=gate,
-            ahead=ahead,
-        )
-    if recording:
-        # Recorded, not just printed. Whether "warn" should become "block" or "off" is a
-        # judgement about how often this fires, and for as long as it only ever printed,
-        # that judgement had no evidence behind it either way.
-        log.append(
-            "gate.out_of_order",
-            item,
-            {"gate": gate, "ahead": ahead, "policy": cfg.gates.enforce_order},
-        )
-    return ahead
+    """`services.gates.measured.check_order` as an outcome: a refusal, or the gates ahead."""
+    order = R.check_order(log, cfg, st, item, gate, recording=recording)
+    if order.refusal:
+        return O.refused("gate", order.refusal, id=item, gate=gate, ahead=order.ahead)
+    return order.ahead
 
 
 def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
@@ -276,7 +233,7 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     return renew
 
 
-def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
+def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
     """(where ``it``'s work is, or None; the other item whose tree the caller is in, or "").
 
     Its tree. For a TASK claimed without one, the linked worktree the caller stands in
@@ -304,44 +261,9 @@ def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path 
     return repo, ""
 
 
-def _measure(repo: Path, it, wt: Path | None) -> dict:
-    """What ddflow measures for a recorded gate: the item's tree. Once the item has
-    landed and its tree was kept, a tree that differs from what landed ONLY by untracked
-    files (scratch that never landed) is measured as what landed: those files made every
-    gate recorded after the merge read as stale at complete (Bb47a48b173). Any other
-    difference -- work committed or edited after the landing -- is kept, so complete
-    still reports it."""
-    if not wt:
-        return {}
-    measured = {"tree_sha": G.tree_identity(wt), "diff_stat": G.diff_stat(wt)}
-    measured.update(_landed_if_only_untracked_differs(repo, it, wt))
-    return measured
-
-
-def _landed_if_only_untracked_differs(repo: Path, it, wt: Path) -> dict:
-    """`tree_sha` of the landed commit when ``wt`` holds exactly that content plus untracked
-    files; {} otherwise (not landed, the same already, or a real change)."""
-    from ..services.completion import _tree_being_completed
-
-    if not (it.landed_after or it.merged_sha):
-        return {}
-    _cwd, landed = _tree_being_completed(repo, it)
-    source = G.commit_source_tree(repo, landed) if landed else ""
-    if not source or source == G.source_tree(wt):
-        return {}
-    entries = G.worktree_entries(wt)
-    if entries is None:
-        return {}
-    untracked = set(G._untracked_paths(wt))
-    tracked_only = {p: e for p, e in entries.items() if p not in untracked}
-    if G.content_id(tracked_only) != source:
-        return {}  # the tree changed beyond scratch: let complete say so
-    return {"tree_sha": f"{landed[:12]}+clean"}
-
-
 def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     """(the directory a command gate runs in, or None; whose tree the caller is in)."""
-    return (repo, "") if gdef.cwd != "worktree" else _item_tree(repo, cfg, st, it, called_from)
+    return (repo, "") if gdef.cwd != "worktree" else item_tree(repo, cfg, st, it, called_from)
 
 
 def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outcome | None:
@@ -378,7 +300,7 @@ def run(
     Refuses a human gate (nothing to run) and an agent gate (ddflow cannot perform it)
     with exit 2 and the instruction, rather than pretending to have run something.
 
-    A worktree gate runs where the item's work is (`_item_tree`).
+    A worktree gate runs where the item's work is (`item_tree`).
     """
 
     resolved = _resolve(repo, item, gate, agent)
@@ -425,7 +347,7 @@ def run(
             f"is not its: run the gate from the worktree it is worked in, or set "
             f"[worktree].enabled = false if the primary is where you work."
         ) + " Recording UNAVAILABLE."
-        G.record(log, cfg, item, gate, "unavailable", reason=reason, gates=gates)
+        R.record_measured(log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates)
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
     if repeated is not None:
@@ -458,7 +380,8 @@ def run(
         reason = f"`{gdef.command}` exited {ev.get('exit')}" + (
             f": {tail.splitlines()[-1][:160]}" if tail else ""
         )
-    G.record(log, cfg, item, gate, result, reason=reason, evidence=ev, gates=gates)
+    # Unmeasured here: `run_command_gate` measured the tree the command ran on.
+    R.record_measured(log, cfg, repo, it, gate, result, reason=reason, evidence=ev, gates=gates)
     data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
     exit_code = OUTCOME_EXIT[result]
     if exit_code == O.OK:
@@ -694,12 +617,7 @@ def record(
     # -- and so it is not silently lost, which is exactly what happened when this moved
     # out of `cmd_gate`: the api computed `ahead` and threw it away, and
     # `test_recording_a_gate_out_of_order_says_so` caught it on the full suite.
-    warning = (
-        f"NOTE: {_order_note(ordered, gate)} Recording anyway "
-        f"([gates].enforce_order = '{cfg.gates.enforce_order}')."
-        if ordered
-        else ""
-    )
+    warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
 
     result = "skipped" if skip else outcome
     ev: dict[str, Any] = {}
@@ -732,7 +650,7 @@ def record(
         # `critic` and `standards` are all agent gates recorded through this branch. The
         # feature missed its own motivating case.
         # Where the item's work is (B8be9373cf5): from its worktree, not the primary.
-        wt, held = _item_tree(repo, cfg, st, it, called_from)
+        wt, held = item_tree(repo, cfg, st, it, called_from)
         if held:
             # Recorded all the same: an agent gate is the agent's assertion, and an
             # orchestrator records gates for many items from wherever it stands. Only the
@@ -749,9 +667,6 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
-        measured = _measure(repo, it, wt)
-    else:
-        measured = {}
 
     vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
     if vetted.refusal:
@@ -762,17 +677,18 @@ def record(
     warning = " ".join(filter(None, [warning, note]))
 
     try:
-        G.record(
+        R.record_measured(
             log,
             cfg,
-            item,
+            repo,
+            it,
             gate,
             result,
             reason=reason,
             evidence=ev or None,
             gates=gates,
             by=by,
-            measured=measured,
+            tree=wt,
         )
     except ValueError as exc:
         if gdef is not None and gdef.is_human_gate:

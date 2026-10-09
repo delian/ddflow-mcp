@@ -28,7 +28,9 @@ from ..infra import worktree as W
 from ..services import gates as GD
 from ..services import review as RV
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
+from ..services.gates import measured as GR
 from ._base import _load
+from .gates import item_tree
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -734,6 +736,42 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
+def _order_refusal(log, cfg, st, item: str, gate: str, say) -> O.Outcome | None:
+    """The pipeline-order check, asked BEFORE the review is paid for (one run before
+    `implement` reviews an empty diff): a refusal under `block`, else a note said."""
+    if not item:
+        return None
+    order = GR.check_order(log, cfg, st, item, gate, recording=True)
+    if order.refusal:
+        return O.refused(
+            "review",
+            order.refusal,
+            id=item,
+            gate=gate,
+            outcome="",
+            findings=[],
+            how="",
+            text=order.refusal,
+        )
+    if note := order.note(gate, cfg.gates.enforce_order):
+        say(note)
+    return None
+
+
+def _record(
+    repo, log, cfg, st, item: str, gate: str, outcome: str, called_from, gates, **kw
+) -> None:
+    """A review's outcome through the one measured record path: ddflow's own measurement of
+    the item's tree beside what the reviewer said. An id no item has is recorded unmeasured,
+    as it always was; a caller standing in another item's tree is not measured either."""
+    it = st.items.get(item)
+    if it is None:
+        GD.record(log, cfg, item, gate, outcome, gates=gates, **kw)
+        return
+    wt, _held = item_tree(repo, cfg, st, it, called_from)
+    GR.record_measured(log, cfg, repo, it, gate, outcome, gates=gates, tree=wt, **kw)
+
+
 def _round_evidence(head, kind, done, status, forced, deltas=0) -> dict[str, Any]:
     """The round bookkeeping a recorded review carries: kind, the running count of full
     rounds and of delta rounds (kept apart: `gate status` shows both), the head it
@@ -1318,10 +1356,18 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
     if rec is not None and (rec.evidence or {}).get("review_id") == rid:
         for g in asked[1:]:
             ev = {**rec.evidence, **_rounds_for(st.items[item], g, rec.evidence)}
+            # a copy of the first gate's record, its measurement included
             GD.record(
-                log, cfg, item, g, rec.outcome,
-                by=rec.by, reason=rec.reason, evidence=ev, gates=gates,
-            )  # fmt: skip
+                log,
+                cfg,
+                item,
+                g,
+                rec.outcome,
+                by=rec.by,
+                reason=rec.reason,
+                evidence=ev,
+                gates=gates,
+            )
             say(f"recorded {item}.{g} = {rec.outcome} (the same combined review {rid})")
     elif item and out.data.get("outcome") == "unavailable":
         # No review happened (no reviewer, an empty diff): each gate says so, not only the
@@ -1365,6 +1411,70 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
         "by_gate": {g: o.data for g, o in zip(asked, outs, strict=True)},
     }
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
+
+
+def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
+    repo, log, cfg, st, it, item: str, gate: str, outcome: str,
+    *, called_from, gates, say, best, results, keeps, extra_evidence, scope,
+) -> str:  # fmt: skip
+    """Write the review's outcome against ``it`` and say so; the outcome recorded (a pass
+    over untriaged findings of an earlier round is held, see `_hold`)."""
+    taken, kind, done, forced, how, diff_chars = scope
+    evidence = {
+        **best.evidence(),
+        "diff_source": how,
+        "diff_chars": diff_chars,
+        **_round_evidence(taken, kind, done, best.status, forced, _delta_rounds(it, gate)),
+        **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
+        **(extra_evidence or {}),
+    }
+    held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
+    outcome, reason = _hold(outcome, _reason_of(best), held, say)
+    _record(
+        repo, log, cfg, st, item, gate, outcome, called_from, gates,
+        reason=reason, evidence=evidence, by=best.model,
+    )  # fmt: skip
+    say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})")
+    _say_triage_scope(say, results, best)
+    return outcome
+
+
+def _early_refusal(full, force, delta, log, cfg, st, item: str, gate: str, say):
+    """The first reason to refuse before any work: contradicting flags, then the order. (Not
+    `a or b`: a refusal is falsy.)"""
+    conflict = _flag_conflict(full, force, delta, item, gate)
+    return conflict if conflict is not None else _order_refusal(log, cfg, st, item, gate, say)
+
+
+def _intent_missing(item: str, gate: str, how: str) -> O.Outcome:
+    return O.failed(
+        "review",
+        "--intent is required: the reviewer flags where the diff and the stated "
+        "intent disagree, so without it there is nothing to disagree with.",
+        id=item,
+        gate=gate,
+        outcome="",
+        findings=[],
+        how=how,
+        text="",
+    )
+
+
+def _flag_conflict(full: bool, force: bool, delta: bool, item: str, gate: str) -> O.Outcome | None:
+    """`--full`/`--force` against `--delta`: a full round and a delta contradict each other."""
+    if not ((full or force) and delta):
+        return None
+    flag = "--full" if full else "--force"
+    return O.failed(
+        "review",
+        f"{flag} and --delta contradict each other: {flag} is a full round, --delta "
+        "reviews only what changed since the reviewed head.",
+        id=item,
+        gate=gate,
+        outcome="",
+        findings=[],
+        text="",
+    )
 
 
 def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
@@ -1427,24 +1537,14 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 
     log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
-    if (full or force) and delta:
-        return O.failed(
-            "review",
-            f"{'--full' if full else '--force'} and --delta contradict each other: "
-            f"{'--full' if full else '--force'} is a full round, --delta reviews only what "
-            "changed since the reviewed head.",
-            id=item,
-            gate=gate,
-            outcome="",
-            findings=[],
-            text="",
-        )
 
     def unavailable(reason: str, **extra) -> O.Outcome:
         """Record it, then report it. An unrecorded UNAVAILABLE is indistinguishable
         from a gate nobody ran, which is how "we reviewed it" becomes true on paper."""
         if item:
-            G.record(log, cfg, item, gate, "unavailable", reason=reason, gates=gates)
+            _record(
+                repo, log, cfg, st, item, gate, "unavailable", called_from, gates, reason=reason
+            )
         return O.nothing(
             "review",
             reason,
@@ -1455,6 +1555,10 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             text=reason,
             **extra,
         )
+
+    refused = _early_refusal(full, force, delta, log, cfg, st, item, gate, say)
+    if refused is not None:
+        return refused
 
     revs = R.reviewers_for(R.load_reviewers(repo), gate)
     if not revs:
@@ -1506,17 +1610,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 
     intent = intent or _item_intent(it)
     if not intent:
-        return O.failed(
-            "review",
-            "--intent is required: the reviewer flags where the diff and the stated "
-            "intent disagree, so without it there is nothing to disagree with.",
-            id=item,
-            gate=gate,
-            outcome="",
-            findings=[],
-            how=how,
-            text="",
-        )
+        return _intent_missing(item, gate, how)
 
     revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
     context = _with_previous_findings(context, log, it, item, gate, say, kind=kind, rerun=prior)
@@ -1566,38 +1660,11 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         R.ERROR: "unavailable",
     }[best.status]
     if item:
-        evidence = {
-            **best.evidence(),
-            "diff_source": how,
-            "diff_chars": len(diff),
-            **_round_evidence(
-                taken,
-                kind,
-                done,
-                best.status,
-                forced,
-                _delta_rounds(it, gate),
-            ),
-            **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
-            **(extra_evidence or {}),
-        }
-        held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
-        outcome, reason = _hold(outcome, _reason_of(best), held, say)
-        G.record(
-            log,
-            cfg,
-            item,
-            gate,
-            outcome,
-            reason=reason,
-            evidence=evidence,
-            gates=gates,
-            by=best.model,
-        )
-        say(
-            f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})"
-        )
-        _say_triage_scope(say, results, best)
+        outcome = _record_review(
+            repo, log, cfg, st, it, item, gate, outcome,
+            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            scope=(taken, kind, done, forced, how, len(diff)),
+        )  # fmt: skip
 
     data: dict[str, Any] = {
         "id": item,
