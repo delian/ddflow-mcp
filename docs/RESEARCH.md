@@ -1506,3 +1506,202 @@ tool call rather than only at the handshake. This does NOT revisit B80 — `clie
 still the harness, so every subagent of one harness reports the same string, which is the
 exact collapse `ddflow_identify` exists to prevent. Recorded so nobody reads the per-call
 availability as a solution to it.
+
+## R-hx — Capability matrix for every coding agent ddflow adopts (2026-10-09)
+
+**Question.** For each coding agent ddflow targets, what are the MCP config path and
+shape, instruction files, lifecycle hooks, plugin mechanism, commands, skills and
+subagent dirs, MCP `instructions`/prompts support, worktree dir and headless entry?
+This is the data the harness descriptors (B-hx-descriptor) and the hook core
+(B-hx-hook-core) are built from. Starting points: R41a0cc059c and R-agent-compat.
+
+**Claim.** The hook systems of the agents that have one are expressible as a small number
+of styles: (A) the Claude shape `{hooks:{Event:[{matcher,hooks:[{type:command}]}]}}` with
+snake_case stdin carrying `session_id` (Claude, Codex, Qwen, Kimi, Devin, OpenHands,
+Copilot PascalCase form, Grok Build); (B) Gemini nesting with different event names
+(Gemini, Tabnine); (C) own shape: Copilot camelCase, Cursor, Cline, Windsurf Cascade,
+Antigravity, Goose, Crush; (D) in-process plugins with no command hooks (opencode, Kilo,
+Amp). Session start context injection works natively on a subset only, so the fallback
+ladder (hook > plugin > MCP first call > MCP instructions > instruction text) is needed.
+
+**Falsifier.** An agent whose hook contract cannot be written as one of a style, an event
+map, a stdin normalizer and an output emitter; or an agent with a command hook that
+injects context at prompt time that the matrix marks NONE.
+
+**Probe.** Raw vendor docs and repos fetched 2026-10-09 (URLs per agent below); local
+probes where a binary was on PATH. `which claude codex gemini qwen opencode kilo
+cursor-agent aider goose amp crush grok copilot cline` found only `claude` and `kilo`:
+
+```console
+$ claude --version
+2.1.285 (Claude Code)
+$ kilo --version
+7.2.20
+$ kilo mcp --help        # add, list|ls, auth, logout, debug  (add is an interactive wizard)
+$ kilo agent --help      # create, list
+$ kilo run --help        # --command --continue -s --fork -m --agent --format default|json -f --auto --dangerously-skip-permissions
+$ kilo debug paths       # config ~/.config/kilo  data ~/.local/share/kilo  state ~/.local/state/kilo
+$ claude mcp add --help  # -s local|user|project, -e K=V, --transport stdio|http|sse, `--` required
+```
+
+Legend: V = read on a primary page, S = source tree, NV = NOT VERIFIED, NONE = documented
+as absent. A summarising fetch tool mis-stated one Claude fact (it denied
+`CLAUDE_CODE_SESSION_ID`); the raw env-vars page shows it, so every row below comes from
+raw markdown or source, not from a summary.
+
+### Matrix 1 — MCP and instructions
+
+| Agent | MCP project file (key) | MCP user file | stdio entry | Add by CLI | AGENTS.md | CLAUDE.md | Own instruction file |
+|---|---|---|---|---|---|---|---|
+| Claude Code | `.mcp.json` (`mcpServers`) | `~/.claude.json` | `{type,command,args,env}` | `claude mcp add -s ... -- cmd` | since 2.1.277, only if no CLAUDE.md (or `@AGENTS.md`) | native | `.claude/rules/*.md` |
+| Copilot CLI | `.mcp.json`, `.github/mcp.json` (`mcpServers`) | `~/.copilot/mcp-config.json` | `{type:"local",command,args,env,tools}` | `copilot mcp add` | yes | yes | `.github/copilot-instructions.md`, `.github/instructions/**` |
+| Copilot VS Code | `.vscode/mcp.json` (`servers`), `.mcp.json` | user profile `mcp.json` | `{command,args}` | UI only | yes (`chat.useAgentsMdFile`) | yes | same as CLI |
+| Copilot cloud agent | repo settings UI (`mcpServers`, `tools`+`type` required) | NONE | `{type,command,args,env,tools}`; secrets `COPILOT_MCP_*` | UI | yes (nearest) | root only | same |
+| Codex CLI | `.codex/config.toml` (`[mcp_servers.N]`, trusted projects) | `~/.codex/config.toml` | `command,args,env,env_vars,cwd` | `codex mcp add` | native, override file | only via `project_doc_fallback_filenames` | `AGENTS.override.md` |
+| Gemini CLI | `.gemini/settings.json` (`mcpServers`) | `~/.gemini/settings.json` | `{command,args,env,cwd,timeout,trust}` | `gemini mcp add` | only via `context.fileName` | no | `GEMINI.md` |
+| Qwen Code | `.qwen/settings.json` (`mcpServers`) | `~/.qwen/settings.json` | `{command,args,cwd,env,timeout}` | `qwen mcp add` | yes | NV | `QWEN.md`, `.qwen/rules/` |
+| opencode | `opencode.json` (`mcp`) | `~/.config/opencode/opencode.json` | `{type:"local",command:[...],environment}` | `opencode mcp add` (wizard) | primary | fallback if no AGENTS.md | `instructions:[globs]` |
+| Kilo CLI/VS Code | `kilo.json`, `.kilo/kilo.json` (`mcp`) | `~/.config/kilo/kilo.json` | opencode shape | `kilo mcp add` (wizard, V by probe) | primary | also supported | `.kilo/rules` |
+| Cursor | `.cursor/mcp.json` (`mcpServers`) | `~/.cursor/mcp.json` | `{command,args,env,envFile}` | `agent mcp` has no add | yes (root, nested) | CLI yes, IDE NV | `.cursor/rules/*.mdc` |
+| Windsurf (Devin Desktop) Cascade | NV | `~/.config/devin/mcp_config.json` | `{command,args,env}` | edit file | yes | no | `.devin/rules`, `.windsurf/rules` |
+| Devin CLI / Devin Local | `.devin/mcp_config.json` (`mcpServers`) | `~/.config/devin/mcp_config.json` | `{command,args,env}` | `devin mcp add -s` | yes | yes | `.devin/rules/*.md` |
+| Antigravity | `.agents/mcp_config.json` (`mcpServers`) | `~/.gemini/config/mcp_config.json` | `{command,args,env,cwd}`; remote `serverUrl` | `/mcp` overlay only | yes (or GEMINI.md) | no (stated) | `.agents/rules/*.md` |
+| Cline | NV (none documented) | CLI `~/.cline/data/settings/cline_mcp_settings.json` | `{command,args,env,disabled,autoApprove}` | `cline mcp add` | yes | no | `.clinerules/` |
+| Roo Code (shut down 2026-05-15) | `.roo/mcp.json` (`mcpServers`) | `mcp_settings.json` | `{command,args,cwd,env,alwaysAllow}` | NONE | yes | no | `.roo/rules/` |
+| Aider | NONE | NONE | NONE | NONE | not read | not read | `--read` / `.aider.conf.yml read:` |
+| Goose | NV | `~/.config/goose/config.yaml` (`extensions:`) | YAML `{cmd,args,envs,type:stdio}` | `goose configure`, `--with-extension` | yes | no (`CONTEXT_FILE_NAMES`) | `.goosehints` |
+| Amp | `.amp/settings.json` (`amp.mcpServers`; needs `amp mcp approve`) | `~/.config/amp/settings.json` | `{command,args,env}` | `amp mcp add` | yes | fallback | `AGENT.md` |
+| Crush | `.crush.json`/`crush.json` (`mcp`), `crushrc` builtin | `~/.config/crush/` | JSON field names NV | crushrc `mcp add` | yes | yes | `CRUSH.md` |
+| Grok Build | `.grok/config.toml` (`[mcp_servers.N]`), `.mcp.json` | `~/.grok/config.toml` | `command,args,env,enabled,startup_timeout_sec` | `grok mcp add -- cmd` | yes | yes | `.grok/rules/` |
+| grok-cli (superagent-ai) | NONE (user file only) | `~/.grok/user-settings.json` `mcp.servers[]` | `{id,label,enabled,transport,command,args,env}` | `/mcps` TUI | yes | NV | NONE |
+| Kimi Code | NV | `~/.kimi/mcp.json` | `{command,args,env}` | `kimi mcp add` | yes | NV | NONE |
+| GLM (ZCode) | NV | NV | NV | NV | NV | NV | NV |
+| Qodo / Tabnine | Tabnine `.tabnine/agent/settings.json`; Qodo NV | `~/.tabnine/agent/settings.json` | `{command,args,env,cwd}` | `tabnine mcp add` | Tabnine via `context.fileName` | NV | `TABNINE.md` |
+| OpenHands | NV | `~/.openhands/mcp.json` | `{command,args,env}` | `openhands mcp add` | yes | yes | skills in `.agents/skills` |
+| Replit | UI, remote HTTPS only | NONE | NONE | UI | NV | NV | `replit.md` |
+| Cody | NV | NV | NV | NV | NV | NV | `.sourcegraph/*.rule.md` (NV) |
+
+### Matrix 2 — hooks
+
+| Agent | Hooks? | Config file | Events usable by a bridge | Session id | Context injection | Block |
+|---|---|---|---|---|---|---|
+| Claude Code | yes, 33 events | `.claude/settings.json`, `settings.local.json`, plugin `hooks/hooks.json` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop, SessionEnd | stdin `session_id`; env `CLAUDE_CODE_SESSION_ID` | stdout text or `hookSpecificOutput.additionalContext` on SessionStart, UserPromptSubmit (10k cap) | exit 2, `decision:block` |
+| Codex CLI | yes, 12 events | `.codex/hooks.json`, `.codex/config.toml`; trust review needed | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop, SessionEnd | stdin `session_id` | stdout text / `additionalContext` on SessionStart, UserPromptSubmit | exit 2, `decision`, `permissionDecision` |
+| Gemini CLI | yes, 11 events | `hooks` in settings.json | SessionStart, BeforeAgent, BeforeTool, AfterTool, PreCompress, SessionEnd | stdin `session_id`; env `GEMINI_SESSION_ID` | JSON only `hookSpecificOutput.additionalContext` (SessionStart, BeforeAgent) | exit 2, `decision` |
+| Copilot CLI | yes, 14 events (camelCase; PascalCase switches to Claude payload) | `.github/hooks/*.json`, `~/.copilot/hooks/` | sessionStart, userPromptSubmitted, preToolUse, postToolUse, preCompact, agentStop, sessionEnd | stdin `sessionId`; no env | only sessionStart, subagentStart, postToolUse; userPromptSubmitted output DROPPED | preToolUse JSON (fail-closed), agentStop `decision` |
+| Copilot VS Code | yes (Preview), 8 events, no SessionEnd | `.github/hooks/*.json`, `.claude/settings.json` (flag) | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop | stdin `session_id` optional | `additionalContext` on PreToolUse, PostToolUse, SessionStart | exit 2 |
+| Copilot cloud agent | yes | `.github/hooks/*.json` default branch | sessionStart, userPromptSubmitted, preToolUse, postToolUse, agentStop, sessionEnd | NV | sessionStart | preToolUse (ask = deny) |
+| Qwen Code | yes, 24 events | `hooks` in `.qwen/settings.json` (trusted folder) | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop, SessionEnd | stdin `session_id`; env `QWEN_CODE_SESSION_ID` (process) | stdout text SessionStart; `additionalContext` UserPromptSubmit | exit 2, `decision` |
+| opencode | NO command hooks; JS plugin | `.opencode/plugins/*.ts`, `plugin:[]` | `event` (session.created/idle/compacted), `chat.message`, `tool.execute.before/after`, `shell.env` | `sessionID` argument | `experimental.chat.system.transform` (`output.system`), `chat.message` parts | throw in `tool.execute.before` |
+| Kilo | NO command hooks; same plugin API | `.kilo/plugin/`, `plugin:[]` | as opencode | `sessionID` | as opencode | throw |
+| Cursor | yes, 21 events (camelCase) | `.cursor/hooks.json`; also reads `.claude/settings.json` | sessionStart, beforeSubmitPrompt, preToolUse, postToolUse, preCompact, stop, sessionEnd | stdin `conversation_id`; `session_id` on start/end | sessionStart `additional_context`, postToolUse; beforeSubmitPrompt cannot; CLI coverage NV (forum: shell hooks only) | exit 2, `permission:deny` |
+| Windsurf Cascade | yes, 12 events, no session/compact/stop | `.devin/hooks.json`, `~/.codeium/windsurf/hooks.json` | pre_user_prompt, pre_run_command, post_cascade_response | stdin `trajectory_id` | NONE | exit 2 on pre_* only |
+| Devin CLI / Local | yes, 8 events (Claude shape) | `.devin/hooks.v1.json`, `.devin/config.json`, `.claude/settings.json` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionEnd | stdin `session_id` | `hookSpecificOutput.additionalContext` on SessionStart, UserPromptSubmit, PostToolUse | exit 2, `decision` |
+| Antigravity | yes, 5 events | `.agents/hooks.json`, `~/.gemini/config/hooks.json` | PreToolUse, PostToolUse, PreInvocation, PostInvocation, Stop | stdin `conversationId` | PreInvocation `injectSteps`; no SessionStart/prompt event | `decision` field |
+| Cline (CLI) | yes, file hooks (extension and CLI differ) | `.cline/hooks/<Name>`, `.clinerules/hooks/<Name>` | prompt_submit, tool_call, tool_result, agent_start, agent_end | stdin `taskId` | `contextModification` (next request, 50KB) | `cancel:true` |
+| Roo Code | PreToolUse/PostToolUse existed; config NV | NV | NV | NV | NV | NV |
+| Aider | NONE | - | - | - | - | - |
+| Goose | yes, 12 events (Open Plugins) | `<plugin>/hooks/hooks.json` under `.agents/plugins/` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionEnd | stdin `session_id` | NOT SUPPORTED (banner unverified) | exit 2, `decision` on PreToolUse, Stop |
+| Amp | NO command hooks; TS plugin | `.amp/plugins/` | `session.start`, `agent.start`, `tool.call`, `tool.result`, `agent.end` | `event.thread.id` | `agent.start` returns `{message}` | `tool.call` reject |
+| Crush | yes, PreToolUse only | `hooks` in `crush.json` | PreToolUse | stdin `session_id`; env `CRUSH_SESSION_ID` | `context` field in stdout JSON | exit 2, `decision:deny` |
+| Grok Build | yes, 15 events (Claude + Cursor names) | `.grok/hooks/*.json`, `.claude/settings.json`, `~/.grok/config.toml`; needs folder trust | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop, SessionEnd | stdin `sessionId`; env `GROK_SESSION_ID` | `additionalContext` on PreToolUse/PostToolUse only; UserPromptSubmit and SessionStart stdout DISCARDED | exit 2, `decision` |
+| grok-cli | yes, 17 events, user-level file only | `~/.grok/user-settings.json` | PreToolUse acted on; others fire-and-forget | stdin `session_id` optional | not wired into the model (source) | exit 2 on PreToolUse |
+| Kimi Code | yes, 13 events (beta) | `~/.kimi/config.toml` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop, SessionEnd | stdin `session_id` | stdout added to context (exit 0) | exit 2 |
+| Tabnine | yes, Gemini-style 11 events; CLI in maintenance | `hooks` in settings.json | SessionStart, BeforeAgent, BeforeTool, AfterTool, PreCompress, SessionEnd | stdin `session_id` implied | `additionalContext` | exit 2, deny |
+| OpenHands | yes, 6 events | `.openhands/hooks.json` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionEnd | stdin `session_id` | `additionalContext` | exit 2, `decision` |
+| GLM, Qodo, Replit, Cody | NV (treat as NONE for planning) | - | - | - | - | - |
+
+### Matrix 3 — plugins, commands, skills, subagents, MCP instructions and prompts, worktree, headless
+
+| Agent | Plugin | Commands | Skills dir | Subagents dir | MCP `instructions` shown | MCP prompts as commands | Worktree | Headless |
+|---|---|---|---|---|---|---|---|---|
+| Claude Code | `.claude-plugin/plugin.json`; skills, commands, agents, hooks, MCP | `.claude/commands/*.md` | `.claude/skills` | `.claude/agents/*.md` | yes (2048 char cap) | yes `/mcp__srv__prompt` | `claude -w` -> `.claude/worktrees/<name>` | `claude -p`, `--session-id`, `--output-format json` |
+| Copilot CLI | `copilot plugin ...`; `plugin.json` | `.claude/commands`, skills | `.github/skills`, `.agents/skills`, `.claude/skills` | `.github/agents/*.agent.md` | only allowlisted unless flag | NV | `copilot -w` -> `<repo>.worktrees/` | `copilot -p`, `--output-format json` |
+| Copilot VS Code | agent plugins (Claude/Copilot formats) | `.github/prompts/*.prompt.md` | `.github/skills`, `.claude/skills` | `.github/agents`, `.claude/agents` | NV | yes `/server.prompt` | Agents window only | NV |
+| Copilot cloud agent | NV | NONE | `.github/skills` | `.github/agents` | NV (tools only; prompts unsupported) | no | NONE (ephemeral `/workspace`) | always; `COPILOT_AGENT_PROMPT` |
+| Codex CLI | `plugin.json`; skills + MCP (+ hooks) | `~/.codex/prompts` (deprecated) | `.agents/skills` | `.codex/agents/*.toml` | yes | NV | NONE in CLI (app only) | `codex exec`, `--json` thread id |
+| Gemini CLI | extensions `gemini-extension.json`; MCP, commands, hooks, skills, agents | `.gemini/commands/*.toml` | `.gemini/skills`, `.agents/skills` | `.gemini/agents/*.md` | yes | yes `/prompt` | `gemini -w` (experimental) -> `.gemini/worktrees/` | `gemini -p`, `stream-json` init has id |
+| Qwen Code | extensions `qwen-extension.json`; converts Claude/Gemini | `.qwen/commands/*.md` | `.qwen/skills` | `.qwen/agents/*.md` | yes (source) | yes | `qwen --worktree` -> `.qwen/worktrees/` | `qwen -p` |
+| opencode | JS plugins (tools, hooks, config) | `.opencode/commands/*.md` | `.opencode/skills`, `.claude/skills`, `.agents/skills` | `.opencode/agents/*.md` | yes (source) | yes | experimental service, no flag | `opencode run` |
+| Kilo | npm plugins; `kilo plugin` | `.kilo/command/*.md` | `.kilo/skills`, `~/.claude/skills` (V by probe) | `.kilo/agent/*.md` | yes (source) | yes (source) | VS Code Agent Manager: `.kilo/worktrees/`; no CLI flag | `kilo run --auto --format json` |
+| Cursor | `.cursor-plugin/plugin.json` or Agent Plugins | `.cursor/commands` (legacy) | `.cursor/skills`, `.agents/skills` | `.cursor/agents`, `.claude/agents` | NV | NV | `agent -w` -> `~/.cursor/worktrees/<repo>/<name>` | `agent -p --output-format json` |
+| Windsurf / Devin Local | Devin CLI `devin plugins`; Cascade NONE | Cascade `.devin/workflows/*.md`; CLI skills | `.devin/skills`, `.windsurf/skills`, `.agents/skills` | CLI `.devin/agents/*.md` | NV | CLI yes | Cascade `~/.windsurf/worktrees/<repo>/` | `devin -p` |
+| Antigravity | `plugin.json`; MCP, hooks, skills, agents, rules | workflows (deprecated 2026-10-19), skills | `.agents/skills` | `.agents/agents/*.md` | NV | NV | IDE only, dir NV | `agy -p`, `conversation_id` in JSON |
+| Cline | SDK/CLI plugins only | workflows `.cline/workflows` | `.cline/skills`, `.agents/skills`, `.claude/skills` | `.cline/agents` (CLI) | NV | NV | `cline --worktree` -> `~/.cline/worktrees/` | `cline --json`, `--id` |
+| Roo Code | NONE | `.roo/commands/*.md` | `.roo/skills` | custom modes `.roomodes` | NV | NV | settings UI | NV |
+| Aider | NONE | built-in only | NONE | NONE | n/a | n/a | NONE | `aider -m ... --yes-always` |
+| Goose | `goose plugin install`; skills + hooks | recipes via `slash_commands` | `.agents/skills`, `.goose/skills`, `.claude/skills` | recipes, no dir | likely yes (source) | NV | NONE | `goose run -t`, `--output-format json`; env `AGENT_SESSION_ID` |
+| Amp | TS plugin `.amp/plugins/` | `.agents/commands` (removal planned) | `.agents/skills` | automatic only | NV | NV | runners only | `amp -x`; no session env |
+| Crush | NONE found | `.crush/commands/*.md` (source) | `.crush/skills`, `.claude/skills`, `.agents/skills` | NONE | yes (`<mcp-instructions>`) | palette entries | NONE | `crush run` |
+| Grok Build | plugins: skills, commands, agents, hooks, MCP | `.grok/commands/*.md` | `.grok/skills`, `.agents/skills`, `.claude/skills` | `.grok/agents/*.md` | NV | NV | `grok -w` -> `~/.grok/worktrees/<repo>/<name>` | `grok -p`, `--output-format json`, `--yolo`, `--trust` |
+| grok-cli | NONE | NV | `.agents/skills` | `subAgents` in user settings | NV | NV | NONE | `grok -p`, `--format json` |
+| Kimi / Devin CLI / Tabnine / OpenHands | see sheets | - | Devin: `.devin/skills` | Devin: `.devin/agents` | NV | Devin: yes | NONE found | Kimi `--print`; Devin `-p`; OpenHands `--headless` |
+
+### What this changes for the design
+
+1. **Session start context.** Native hook injection exists for Claude, Codex, Gemini,
+   Qwen, Devin, Kimi, OpenHands, Tabnine, Cursor (`additional_context`) and Copilot CLI
+   (sessionStart JSON). It does not exist for Grok Build (SessionStart stdout is
+   discarded), Windsurf Cascade, Crush, Goose, Roo, Aider; opencode, Kilo and Amp need a
+   plugin. The ladder must therefore reach MCP `instructions` (Claude, Codex, Gemini,
+   Qwen, Crush, opencode, Kilo) and then instruction text.
+2. **Prompt-time injection.** Works only on Claude, Codex, Gemini (BeforeAgent), Qwen,
+   Devin, OpenHands, Cline and Amp's plugin. Copilot CLI drops the output; Cursor's
+   beforeSubmitPrompt and Grok's UserPromptSubmit cannot inject. Prompt CAPTURE (the
+   hook only reads stdin) is still possible wherever a prompt event exists.
+3. **Identity.** Most agents give a session id on hook stdin; env vars exist only for
+   Claude (`CLAUDE_CODE_SESSION_ID`), Gemini (hooks), Qwen (`QWEN_CODE_SESSION_ID`),
+   Goose (`AGENT_SESSION_ID`), Crush and Grok (hooks only). Copilot CLI, Codex, Cursor,
+   opencode and Kilo expose no env var, so identity there rests on `ddflow_identify`.
+4. **MCP shape.** Four shapes cover the file-based agents: `mcpServers` (the majority),
+   `servers` (VS Code), `mcp` with array `command` and `environment` (opencode, Kilo),
+   TOML `[mcp_servers.N]` (Codex, Grok Build); plus Goose YAML `extensions`, Amp
+   `amp.mcpServers`, Crush `mcp`. Matches the shapes `adopt.AGENT_TARGETS` already has,
+   except `amp`, `goose`, `crush`, `grok` which it lacks.
+5. **Trust gates.** Project config is inert until trusted: Claude `.mcp.json` approval,
+   Codex hooks hash review and trusted projects, Grok folder trust, Amp `mcp approve`,
+   Qwen trusted folders, Copilot CLI folder trust, Devin workspace trust. Headless
+   conformance runs must pass the trust flag or they report `unavailable`.
+6. **Facts that changed since the older notes.** Windsurf is now Devin Desktop (Cascade
+   plus Devin Local sharing a harness with Devin CLI); Roo Code was shut down 2026-05-15
+   (fork ZooCode, not researched); sst/opencode moved to anomalyco/opencode; block/goose
+   moved to aaif-goose/goose; Crush's primary config is a `crushrc` script with JSON
+   deprecated; Antigravity workflows stop 2026-10-19; Amp deprecates custom commands;
+   Tabnine CLI is in maintenance until 2026-12-31; Cody Free/Pro are discontinued.
+
+### Still NOT VERIFIED (open probes; none of these CLIs is on this machine)
+
+Copilot session-id env var; Codex session-id env var and CLI worktree; Cursor CLI hook
+coverage and IDE CLAUDE.md; Cline project-level MCP file; Goose project MCP file and
+hook context injection; Amp hook-free session id; Crush stdio JSON field names; Grok
+Build UserPromptSubmit/SessionStart payload field names and MCP instructions; GLM
+(ZCode) entirely (docs at zcode.z.ai not fetched); Qodo, Replit and Cody hooks; Roo hook
+format; MCP `instructions` for Cursor, Windsurf, Antigravity, Cline, Amp. B-ac-matrix
+does the live probes; the descriptor must carry NV as an explicit value, not a guess.
+
+### Sources (opened 2026-10-09)
+
+Claude: code.claude.com/docs/en/{hooks,mcp,memory,plugins-reference,skills,sub-agents,worktrees,headless,env-vars}.md.
+Copilot: docs.github.com (github/docs content: hooks-reference, add-mcp-servers,
+add-custom-instructions, cli-plugin-reference, configure-mcp-servers) and
+microsoft/vscode-docs (agent-customization, DateApproved 2026-10-07).
+Codex: developers.openai.com/codex/{mcp,hooks,plugins,skills,subagents,noninteractive,custom-prompts}.md and
+guides/agents-md.md. Gemini: github.com/google-gemini/gemini-cli docs/{hooks,tools/mcp-server,cli/*,extensions/reference}.md.
+Qwen: github.com/QwenLM/qwen-code docs/users and source. opencode:
+github.com/anomalyco/opencode packages/web docs and packages/plugin. Kilo:
+github.com/Kilo-Org/kilocode packages/kilo-docs and local `kilo` 7.2.20. Cursor:
+cursor.com/docs/{mcp,hooks,rules,skills,subagents,cli,configuration/worktrees}.
+Devin/Windsurf: docs.devin.ai/{desktop/cascade,cli}/*. Antigravity:
+antigravity.google/docs/{mcp,rules,hooks,plugins,skills,subagents,cli/headless}.
+Cline: docs.cline.bot and github.com/cline/cline (.clinerules/hooks/README.md, sdk/examples/hooks).
+Roo: docs.roocode.com. Aider: aider.chat/docs. Goose: goose-docs.ai. Amp: ampcode.com/docs.
+Crush: github.com/charmbracelet/crush docs/ and source. Grok Build:
+github.com/xai-org/grok-build user guide, docs.x.ai/build/*, x.ai/news/grok-build-cli.
+grok-cli: github.com/superagent-ai/grok-cli source. Kimi: moonshotai.github.io/kimi-cli.
+Tabnine: docs.tabnine.com. OpenHands: docs.openhands.dev. Replit: docs.replit.com.
+
+**Verdict: CONFIRMED** for the claim's structure (every documented hook contract fits
+style + event map + normalizer + emitter; none contradicted it), with the NV list above
+as the explicitly unverified remainder. The falsifier was looked for and not found:
+the closest case is Goose (hook runs but context injection is unsupported), which is
+the ladder's job, not a contract mismatch.
