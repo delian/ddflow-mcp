@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.kind_pipelines"
+new = "{}"
+why = "Per item-kind gate pipelines (task, phase, bug, doc, research, job) that replace the built-in one; a kind not named runs task_pipeline (phase_pipeline for a phase)."
+impact = "additive"

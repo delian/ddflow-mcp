@@ -10,6 +10,7 @@ from pathlib import Path
 from ...config import Config, _is_code_tree
 from ...core.model import Item
 from ...infra import proc as P
+from .kinds import kind_pipeline
 
 # Exit vocabulary lives in ONE place: `cli.py`. It used to be declared here too, with a
 # different third name for the same code, and nothing imported this copy.
@@ -417,11 +418,13 @@ def required_gates(cfg: Config, gates: Mapping[str, GateDef] | None = None) -> t
 def pipeline_for(item: Item, cfg: Config) -> list[str]:
     if item.promote_to:
         return list(cfg.gates.promotion_pipeline)
-    return list(cfg.gates.phase_pipeline if item.kind == "phase" else cfg.gates.task_pipeline)
+    return kind_pipeline(cfg, item.kind)
 
 
 def pipelines(cfg: Config, *, running: bool = False) -> dict[str, list[str]]:
     """Every gate pipeline, by name (`task`, `phase`, `promotion`, ...).
+
+    A kind with its own pipeline in `gates.kind_pipelines` appears as ``kind:<name>``.
 
     Derived from the `gates.*_pipeline` fields rather than listed: naming task and phase
     missed `promotion_pipeline` -- where a deploy sign-off belongs -- so a gate required
@@ -437,6 +440,10 @@ def pipelines(cfg: Config, *, running: bool = False) -> dict[str, list[str]]:
         for f in fields(cfg.gates)
         if f.name.endswith("_pipeline")
     }
+    # A kind's own pipeline (`[gates].kind_pipelines`) runs gates too, so it is one of
+    # these: a required gate only a document pipeline names is not inert.
+    for kind, ids in cfg.gates.kind_pipelines.items():
+        out[f"kind:{kind}"] = list(ids)
     if running and not cfg.flow.environments:
         out.pop("promotion", None)
     return out
