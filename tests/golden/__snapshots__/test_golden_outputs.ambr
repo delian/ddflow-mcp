@@ -220,6 +220,8 @@
   tuple(
     0,
     '''
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -274,6 +276,8 @@
   tuple(
     0,
     '''
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -329,6 +333,8 @@
   tuple(
     0,
     '''
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      
       ## Open workflow choices
       
       Nobody has decided these for this project. Ask the operator if you can; if they do not care, choose what suits the project with `ddflow flow choose <knob> <value> --reason ...`. Left alone, the default shown is applied the first time it matters and followed from then on.
@@ -1426,6 +1432,24 @@
           bad value makes the operator decide every config change); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
+      upgrade.auto = 'check'   [default]
+          What ddflow does when it finds itself upgraded (decision D-upgrade-auto-
+          check): the running version is newer than the one the project was last
+          brought up to and `ddflow upgrade --plan` has items. `check` (default): the
+          brief (so the SessionStart hook too) and the MCP instructions say so in ONE
+          line, `Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan`, once per
+          version on this machine for this project (a git-ignored marker,
+          `.ddflow/local/upgrade-notice.json`, is the only thing written). `safe`: the
+          same line, after applying the plan's non-destructive categories (`hooks` and
+          `instructions`) with a backup first (`[upgrade].backup`); config defaults,
+          migrations, repairs and features stay the operator's. `off`: no notice, no
+          write. A running MCP server whose code is older than the installed package
+          or the log's highest stamp also says `restart the server`, once (not
+          governed by this knob). An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'check', the strictest (a bad
+          value still notices but applies nothing); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest

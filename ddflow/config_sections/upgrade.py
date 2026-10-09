@@ -14,6 +14,8 @@ UPGRADE_SKEW_POLICIES = ("refuse", "warn", "off")
 UPGRADE_BACKUPS = ("local", "snapshot", "none")
 #: What `[upgrade].config_changes` accepts (decision D-upgrade-config-changes).
 UPGRADE_CONFIG_CHANGES = ("agent", "ask", "operator")
+#: What `[upgrade].auto` accepts (decision D-upgrade-auto-check).
+UPGRADE_AUTO = ("off", "check", "safe")
 
 
 @declare("upgrade")
@@ -44,4 +46,11 @@ class UpgradeConfig:
         doc="Who may apply an upgrade's config change (decision D-upgrade-config-changes). `agent` (default): an agent applies a change to a knob the project never set (it takes the new default; the plan, the notice and `upgrade.applied` always list it), while a value anyone set -- in a config layer, with `ddflow config` -- is never changed without the operator: `ddflow upgrade --apply` refuses it (exit 3) unless `--confirm KNOB --reason WHY` is passed. `ask`: every config change waits for `--confirm`, so the agent asks the operator first. `operator`: the same, and the plan marks each as the operator's to apply.",
         choices=UPGRADE_CONFIG_CHANGES,
         strictest=("operator", "a bad value makes the operator decide every config change"),
+    )
+
+    auto: str = knob(
+        "check",
+        doc="What ddflow does when it finds itself upgraded (decision D-upgrade-auto-check): the running version is newer than the one the project was last brought up to and `ddflow upgrade --plan` has items. `check` (default): the brief (so the SessionStart hook too) and the MCP instructions say so in ONE line, `Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan`, once per version on this machine for this project (a git-ignored marker, `.ddflow/local/upgrade-notice.json`, is the only thing written). `safe`: the same line, after applying the plan's non-destructive categories (`hooks` and `instructions`) with a backup first (`[upgrade].backup`); config defaults, migrations, repairs and features stay the operator's. `off`: no notice, no write. A running MCP server whose code is older than the installed package or the log's highest stamp also says `restart the server`, once (not governed by this knob).",
+        choices=UPGRADE_AUTO,
+        strictest=("check", "a bad value still notices but applies nothing"),
     )

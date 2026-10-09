@@ -13,6 +13,7 @@ from ...core.budget import Budget, approx_tokens
 from ...services import gates as G
 from ...services import leases as L
 from ...services import searchcore as SC
+from ...services import upgrade_notice as UN
 from ...services.guidance import inject as GI
 from .._base import _load
 from .heartbeat import _waiters
@@ -212,6 +213,10 @@ def brief(
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
     text += _refuted_line(st)
+    if notice := UN.line(repo, log, cfg, st, agent=agent):
+        # One line, once per version on this machine (D-upgrade-auto-check): FIRST, so the hook,
+        # `ddflow brief` and `ddflow_brief` all lead with it whichever is asked first.
+        text = notice + "\n\n" + text
     if item and item in st.items:
         pr = st.items[item].pr
         if pr is not None and pr.review == "changes_requested" and pr.feedback:
