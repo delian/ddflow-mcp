@@ -256,6 +256,11 @@ def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
             run_cli(repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "test")
     s = G.status(fold(EventLog(repo).read_all()), cfg, "T1", G.load_gates(repo, cfg))
     assert s.complete and s.silent == [] and list(s.not_applicable) == ["dedupe"]
-    run_cli(repo, "complete", "T1", "--force", "--reason", "test")
-    out = run_cli(repo, "verify", "T1")[1]
+    assert run_cli(repo, "complete", "T1", "--force", "--reason", "test")[0] == 0
+    code, out, err = run_cli(repo, "verify", "T1")
+    assert code in (0, 1), out + err  # a completed item: verified or flagged, not "not completed"
     assert "never run and never skipped" not in out, out
+    from ddflow.services import completion as CM
+
+    st = fold(EventLog(repo).read_all())
+    assert not [b for b in CM.verdict(st, cfg, "T1", repo=repo).blockers if "dedupe" in b]
