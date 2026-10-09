@@ -483,11 +483,16 @@ def test_agent_marker_answers_the_same_for_every_caller(monkeypatch, requested, 
 
 
 def test_only_services_identity_defines_or_reads_the_agent_marker():
-    """A private copy of the rule (a second env-var check) is how the callers drifted."""
+    """A private copy of the rule drifts: the harness variable, the function name and the
+    marker table each appear only in services/identity (and its two re-exports)."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    homes = {
-        p.relative_to(root).as_posix()
-        for p in root.rglob("*.py")
-        if "CLAUDECODE" in p.read_text() or "def agent_marker" in p.read_text()
-    }
-    assert homes == {"services/identity.py"}, homes
+    reexports = {"services/approval.py", "services/reviewer_trust.py"}
+    for token, allowed in (
+        ("CLAUDECODE", {"services/identity.py"}),
+        ("def agent_marker", {"services/identity.py"}),
+        ("HARNESS_MARKERS", {"services/identity.py"} | reexports),
+    ):
+        homes = {
+            p.relative_to(root).as_posix() for p in root.rglob("*.py") if token in p.read_text()
+        }
+        assert homes <= allowed, (token, homes - allowed)
