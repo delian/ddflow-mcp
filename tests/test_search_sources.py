@@ -111,3 +111,28 @@ def test_file_sources_yield_only_recorded_definitions_without_a_repo(full):
     # the rule is a recorded definition; the skill, command, agent and schedule files and the
     # merged schedule view need the repository
     assert [(d.kind, d.id) for d in docs] == [("rule", "r-gourd")]
+
+
+def test_a_rule_is_found_by_its_tag_and_not_twice_by_default(repo):
+    run_cli(repo, "init")
+    code, _, err = run_cli(
+        repo, "rule", "add", "--id", "r-tagged", "--title", "Tagged", "--content", "x",
+        "--tags", "zebra", "--new",
+    )  # fmt: skip
+    assert code == 0, err
+    code, body, _ = _search(repo, "zebra", "--source", "rules")
+    assert code == 0 and [r["id"] for r in body["rows"]] == ["r-tagged"]
+    _, body, _ = _search(repo, "r-tagged")
+    assert [r["kind"] for r in body["rows"]].count("rule") == 1
+    assert "log" not in [r["kind"] for r in body["rows"] if r["id"] == "r-tagged"]
+
+
+def test_instruction_files_are_rules_and_a_recorded_agent_is_not_listed_twice(full):
+    _write(full, ".cursor/rules/naming.mdc", "Name things plainly. Cursor turnip rule.\n")
+    code, body, _ = _search(full, "turnip", "--source", "rules")
+    assert code == 0 and [r["kind"] for r in body["rows"]] == ["rule"]
+    from ddflow.api.defs import def_record
+
+    assert def_record(full, "agent", "baker", {"role": "kneads sourdough"}).ok
+    _, body, _ = _search(full, "sourdough", "--source", "agents")
+    assert [r["id"] for r in body["rows"]] == ["baker"]
