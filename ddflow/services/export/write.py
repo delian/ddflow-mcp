@@ -55,6 +55,8 @@ from pathlib import Path, PurePosixPath
 from ...core.version import running as running_version
 from ...infra import tomlcfg
 from ...infra.fsio import NewerContent
+from ..configwrite import Guards, SetPairs, apply_edit
+from ..shared_files import committed_append_only
 from . import frame as F
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
@@ -433,8 +435,6 @@ def append_entries(
 def register_append_only(repo: Path | str, rel: str) -> bool:
     """Add ``rel`` to the committed ``[lease].append_only_globs`` (and its ``merge=union``
     line). True if it was added, False if already there."""
-    from ..configwrite import Guards, SetPairs, apply_edit
-    from ..shared_files import committed_append_only
 
     have = committed_append_only(Path(repo))
     if rel in have:

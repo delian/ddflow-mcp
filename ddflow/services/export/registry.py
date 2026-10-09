@@ -21,6 +21,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from ...core.digest import content_digest
 from ...core.version import running as running_version
+from ...infra.paths import templates_dir
 from ..prompts import Template
 from .frame import DEFAULT_MAX_BYTES, frame, normalize, one_line, truncate
 from .query import EXIT_REFUSED, ExportError, Query
@@ -499,8 +500,6 @@ def shipped_digest(kind: str, builtin: Path | None = None) -> str:
 def shipped_template(kind: str, builtin: Path | None = None) -> Template:
     """The shipped default for ``kind``, ignoring any override (what eject copies)."""
     if builtin is None:
-        from ...infra.paths import templates_dir
-
         builtin = templates_dir() / "export"
     path = builtin / f"{kind}.md.j2"
     if not path.is_file():
