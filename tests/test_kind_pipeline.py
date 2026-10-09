@@ -294,3 +294,119 @@ def test_a_phase_override_replaces_the_phase_line_instead_of_adding_one(repo):
     out = run_cli(repo, "workflow")[1]
     assert out.count("A phase passes through") == 1, out
     assert "A phase passes through: research, merge" in out, out
+
+
+# ---- requires_evidence: a bare pass is refused where the evidence names none ----------
+
+
+def _owner(table):
+    return table.get
+
+
+@pytest.mark.parametrize(
+    "gate,evidence,owners,ok",
+    [
+        ({}, {}, None, True),  # nothing required: nothing asked
+        ({"requires_evidence": ["report"]}, {}, None, False),
+        ({"requires_evidence": ["report"]}, {"output_digest": "abc"}, None, True),
+        ({"requires_evidence": ["report"]}, {"report_digest": "abc"}, None, True),
+        ({"requires_evidence": ["report"]}, {"output_digest": "  "}, None, False),
+        ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "X"}, True),
+        ({"requires_evidence": ["link"]}, {"link": ["R2", "R1"]}, {"R1": "X"}, True),
+        ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "OTHER"}, False),
+        ({"requires_evidence": ["link"]}, {"link": "R9"}, {"R1": "X"}, False),
+        ({"requires_evidence": ["link"]}, {}, {"R1": "X"}, False),
+        ({"requires_evidence": ["link"]}, {"link": "R1"}, None, False),  # cannot be resolved
+        ({"evidence_fields": ["intent"]}, {"fields": {"intent": "make it so"}}, None, True),
+        ({"evidence_fields": ["intent"]}, {"intent": "make it so"}, None, True),
+        ({"evidence_fields": ["intent"]}, {"fields": {"intent": "LGTM"}}, None, False),
+        ({"evidence_fields": ["intent"]}, {"fields": {"intent": "  "}}, None, False),
+        ({"evidence_fields": ["intent"]}, {}, None, False),
+    ],
+)
+def test_evidence_problems_grid(gate, evidence, owners, ok):
+    from ddflow.services.gates import evidence_problems
+
+    owner = None if owners is None else _owner(owners)
+    assert (evidence_problems(_gate(**gate), evidence, "X", owner) == []) is ok
+
+
+def test_every_missing_field_is_listed_at_once():
+    from ddflow.services.gates import evidence_problems
+
+    gate = _gate(evidence_fields=["intent", "edge cases", "verification"])
+    (why,) = evidence_problems(gate, {"fields": {"intent": "x"}}, "X")
+    assert "edge cases, verification" in why and "intent" not in why
+
+
+def test_an_unknown_form_is_reported_not_ignored():
+    from ddflow.services.gates import evidence_problems
+
+    (why,) = evidence_problems(_gate(requires_evidence=["reprot"]), {}, "X")
+    assert "reprot" in why and "report, link, fields" in why
+
+
+def test_only_a_pass_is_held_to_the_requirement(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "config", "--set", "gate.dedupe.requires_evidence", '["report"]')
+    code, out, err = run_cli(
+        repo, "gate", "record", "T1", "dedupe", "--outcome", "passed", "--evidence", "looked"
+    )
+    assert code != 0 and "cannot pass without a report" in out + err, out + err
+    assert run_cli(repo, "gate", "skip", "T1", "dedupe", "--reason", "n/a here")[0] == 0
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "dedupe",
+        "--outcome",
+        "unavailable",
+        "--reason",
+        "tool down",
+    )
+    assert code == 0, out + err
+
+
+def test_a_report_attached_as_output_passes(repo, tmp_path):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "config", "--set", "gate.dedupe.requires_evidence", '["report"]')
+    report = tmp_path / "report.txt"
+    report.write_text("0 findings\n")
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "dedupe",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "checked",
+        "--output-file",
+        str(report),
+    )
+    assert code == 0, out + err
+
+
+def test_a_record_linked_to_another_item_does_not_satisfy_a_link(repo):
+    """The `link` form resolves through the research notes of the folded state."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services.gates import evidence_problems, record_owner
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "u", "--globs", "src/b.py")
+    run_cli(
+        repo, "research", "--item", "T1", "--question", "q", "--claim", "c", "--verdict",
+        "THEORETICAL", "--probe", "none possible", "--new",
+    )  # fmt: skip
+    st = fold(EventLog(repo).read_all())
+    (rid,) = list(st.research)
+    owner = record_owner(st)
+    gate = _gate(requires_evidence=["link"])
+    assert evidence_problems(gate, {"link": rid}, "T1", owner) == []
+    assert evidence_problems(gate, {"link": rid}, "T2", owner) != []
