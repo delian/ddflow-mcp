@@ -236,8 +236,8 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
         if outcome == "started":
             return
         r = rec(subj)
-        r.gate_outcomes.setdefault(d.get("gate", "?"), []).append(outcome)
-        r.add_gate_run(d.get("gate", "?"), outcome, d.get("evidence"))
+        # What the item's gates said is `Item.gate_history`, read in `work` once the pass
+        # is over; only the attempt's own tallies are counted as events go by.
         att = open_attempt.get(subj)
         if att:
             att.gates_run += 1
@@ -293,6 +293,9 @@ def work(events: list[Event], state: State) -> dict[str, ItemWork]:
         it = state.items.get(item_id)
         if it:
             r.state, r.kind, r.title = it.state, it.kind, it.title
+            for run in it.gate_history:
+                r.gate_outcomes.setdefault(run.gate or "?", []).append(run.outcome)
+                r.add_gate_run(run.gate or "?", run.outcome, run.evidence)
     return out
 
 

@@ -24,6 +24,8 @@ from pathlib import Path
 
 from ..infra import proc as P
 from ..infra import worktree as W
+from . import cmdrunner as CR
+from .cmdrunner import Declared
 from .gates import testcmd as TC
 from .gates.testcmd import Runner
 
@@ -36,6 +38,7 @@ _TAIL = 2000
 _KNOWN = 50
 #: The shell's own "command not found" exit code.
 _NOT_FOUND = 127
+_RUNNER = CR.CommandRunner()
 
 
 @dataclass
@@ -136,8 +139,18 @@ def _run_bounded(command: str, cwd: Path, timeout: int) -> tuple[int | None, str
     workers) keeps the pipes open -- the bound is not enforced and orphans keep running
     against a tree that is about to be deleted (rubber_duck on 4e5160bb).
     """
-    r = P.run_shell(command, timeout_s=timeout, cwd=cwd, merge_stderr=True)
-    return (None if r.timed_out or r.could_not_run else r.code), r.out
+    # The operator accepted this detected command: that acceptance is its declaration. The
+    # shell's own 127 is the caller's `_NOT_FOUND`, so no up-front installed-check.
+    run = _RUNNER.run(
+        Declared(command, "onboarding: the detected test command the operator accepted"),
+        timeout_s=timeout,
+        cwd=cwd,
+        merge_stderr=True,
+        check_installed=False,
+    )
+    if run.kind == CR.NOT_FOUND:
+        return run.code, run.out
+    return (run.code if run.ran else None), run.out
 
 
 def live_test(repo: Path) -> Proposal | None:

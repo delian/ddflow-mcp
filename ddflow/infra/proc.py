@@ -61,6 +61,31 @@ def popen(*args: Any, **kwargs: Any) -> subprocess.Popen:
     return subprocess.Popen(*args, **kwargs)
 
 
+def spawn_shell(
+    command: str,
+    *,
+    env: dict[str, str] | None = None,
+    cwd: Any = None,
+    stdin: Any = subprocess.DEVNULL,
+    stdout: Any = subprocess.PIPE,
+    stderr: Any = subprocess.PIPE,
+) -> subprocess.Popen:
+    """Start an operator's shell line without waiting: text mode, a session of its own (so
+    `kill_group` reaches everything it started), stdin detached unless ``stdin`` says
+    otherwise. The streaming counterpart of `run_shell`; may raise OSError/ValueError."""
+    return subprocess.Popen(
+        command,
+        shell=True,  # nosec B602 B604 -- the operator's configured shell line
+        cwd=cwd,
+        env=env,
+        stdin=stdin,
+        stdout=stdout,
+        stderr=stderr,
+        text=True,
+        start_new_session=True,
+    )
+
+
 def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
     """Signal ``p`` AND everything it started: its whole process group (``sig``; SIGKILL when None,
     SIGTERM to ask it to stop first). SIGKILL is named only on POSIX: Windows has no such signal.
