@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.on_start"
+new = "\"safe\""
+why = "What a starting MCP server or container does when ddflow is newer than the project: safe (default; rebuild derived stores, in a container also apply hooks and instructions after a backup, propose the rest), check (propose only) or off."
+impact = "additive"

@@ -16,6 +16,8 @@ UPGRADE_BACKUPS = ("local", "snapshot", "none")
 UPGRADE_CONFIG_CHANGES = ("agent", "ask", "operator")
 #: What `[upgrade].auto` accepts (decision D-upgrade-auto-check).
 UPGRADE_AUTO = ("off", "check", "safe")
+#: What `[upgrade].on_start` accepts (decision D-self-upgrade 5).
+UPGRADE_ON_START = ("off", "check", "safe")
 
 
 @declare("upgrade")
@@ -53,4 +55,15 @@ class UpgradeConfig:
         doc="What ddflow does when it finds itself upgraded (decision D-upgrade-auto-check): the running version is newer than the one the project was last brought up to and `ddflow upgrade --plan` has items. `check` (default): the brief (so the SessionStart hook too) and the MCP instructions say so in ONE line, `Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan`, once per version on this machine for this project (a git-ignored marker, `.ddflow/local/upgrade-notice.json`, is the only thing written). `safe`: the same line, after applying the plan's non-destructive categories (`hooks` and `instructions`) with a backup first (`[upgrade].backup`); config defaults, migrations, repairs and features stay the operator's. `off`: no notice, no write. A running MCP server whose code is older than the installed package or the log's highest stamp also says `restart the server`, once (not governed by this knob).",
         choices=UPGRADE_AUTO,
         strictest=("check", "a bad value still notices but applies nothing"),
+    )
+
+    on_start: str = knob(
+        "safe",
+        doc="What a starting `ddflow mcp` server or container does when the running ddflow is NEWER than the one this project was last brought up to (decisions D-self-upgrade 5 and D-upgrade-on-mcp-connect). It never refuses to start and never waits longer than `start_timeout_s`: it serves and leaves what it did not finish as pending. `safe` (default): rebuild the derived stores (the sqlite index), and in a CONTAINER (the operator chose to run the newer image) apply the plan's non-destructive categories (`hooks` and `instructions`) with a backup first; on an MCP connect outside a container nothing else is applied without the operator, so the handshake PROPOSES the plan and says how to apply it once the operator agrees. `check`: no write at all, the proposal only. `off`: nothing. What was done and what waits is in the handshake instructions and the first brief; a read-only or foreign-owned project is reported, never written. A separate switch, `DDFLOW_UPGRADE_ON_START` (`off`, `check` or `safe`; not the generic knob override below), overrides this knob for one run, e.g. `docker run -e DDFLOW_UPGRADE_ON_START=check`; an unknown value in THAT switch counts as `check` instead of being refused, so a container still starts.",
+        choices=UPGRADE_ON_START,
+        strictest=("check", "a bad value proposes the upgrade and writes nothing"),
+    )
+    start_timeout_s: float = knob(
+        10.0,
+        doc="Seconds a starting MCP server or container spends on the `on_start` work before it serves anyway and reports the rest as pending (decision D-self-upgrade 5: bounded time, never a failed start). 0 or less skips the work entirely.",
     )

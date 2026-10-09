@@ -180,6 +180,7 @@ from .setup import (
     stale_server_note,
     upgrade,
     upgrade_notice,
+    upgrade_start,
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
@@ -327,6 +328,7 @@ __all__ = [
     "update",
     "upgrade",
     "upgrade_notice",
+    "upgrade_start",
     "verify_item",
     "verify_sweep",
     "verify_tool",

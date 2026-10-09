@@ -16,6 +16,7 @@ load-bearing as anything in the pipeline:
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,7 @@ from ..services import identity as ID
 from ..services import upgrade_apply as UA
 from ..services import upgrade_notice as UN
 from ..services import upgrade_plan as UP
+from ..services import upgrade_start as US
 from ._base import _load
 
 
@@ -679,6 +681,31 @@ def upgrade_notice(repo: Path, *, agent: str = "") -> str:
     return UN.line(repo, log, cfg, st, agent=agent)
 
 
+#: The start report per project, for the life of this process: a handshake (`initialize`,
+#: `server/discover`) can be asked for more than once, the start check is made once.
+_START_REPORTS: dict[str, str] = {}
+_START_LOCK = threading.Lock()  #: two handshakes at once make one start check, not two
+
+
+def upgrade_start(repo: Path, *, agent: str = "", surface: str = "") -> str:
+    """The upgrade-at-start report (`services.upgrade_start.start`) as text, "" when there is
+    nothing to say: for the MCP handshake, which asks once per process. It never raises and
+    never adopts a directory ddflow was not set up in."""
+    if not (repo / ".ddflow").is_dir():
+        return ""
+    key = str(Path(repo).resolve())
+    with _START_LOCK:
+        if key in _START_REPORTS:
+            return _START_REPORTS[key]
+        try:
+            log, cfg, st = _load(repo, agent)
+            text = US.start(repo, log, cfg, st, agent=agent, surf=surface)["text"]
+        except Exception as exc:  # an unreadable log must not fail a start -- nor stick
+            return f"the upgrade check at start failed ({exc}); serving anyway."
+        _START_REPORTS[key] = text
+        return text
+
+
 def stale_server_note(repo: Path, *, agent: str = "") -> str:
     """``restart the server`` when the running ddflow is older than the installed package or
     than the highest version in this project's log, else "". For the MCP server, which says it
@@ -1197,6 +1224,7 @@ def _upgrade_apply(
         )
     except ValueError as exc:
         return O.failed("upgrade", str(exc))
+    _START_REPORTS.pop(str(Path(repo).resolve()), None)  # the proposal it made is stale now
     log, cfg, st = _load(repo, agent)  # the plan that is left, judged on what is on disk now
     data = UP.build(repo, log, cfg, st)
     data["applied"] = {k: done[k] for k in _APPLIED_FIELDS}
@@ -1213,6 +1241,9 @@ def _upgrade_restore(repo: Path, name: str, agent: str) -> O.Outcome:
         return O.refused("upgrade", str(exc))
     except (LookupError, OSError, ValueError) as exc:
         return O.failed("upgrade", str(exc))
+    _START_REPORTS.pop(
+        str(Path(repo).resolve()), None
+    )  # what it proposed was judged on the old files
     log, cfg, st = _load(repo, agent)
     BK.prune(repo, cfg.upgrade.backup_keep)  # the safety copy it just made counts too
     data = UP.build(repo, log, cfg, st)
