@@ -154,3 +154,10 @@ def test_a_schedule_recorded_both_ways_is_listed_once(full):
     assert def_record(full, "schedule", "nightly-tamarind", {"title": "again"}).ok
     _, body, _ = _search(full, "tamarind", "--source", "schedules")
     assert [r["id"] for r in body["rows"]] == ["nightly-tamarind"]
+
+
+def test_the_raw_log_is_whole_when_it_is_the_only_source(full):
+    _, body, _ = _search(full, "zirconium", "--source", "log")
+    assert {r["kind"] for r in body["rows"]} == {"log"}  # the task's creation event is here
+    _, body, _ = _search(full, "zirconium")
+    assert {r["kind"] for r in body["rows"]} == {"task"}  # and not repeated beside the task

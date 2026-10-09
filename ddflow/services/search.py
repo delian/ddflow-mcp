@@ -163,7 +163,9 @@ def _log_docs(events: list, kinds: set[str], names: frozenset[str] = frozenset()
     out = []
     for ev in events:
         head = ev.kind.split(".")[0]
-        if head == "session" or head in kinds & _RECORD_SOURCES:
+        if head == "session" and (not names or names & {"sessions", "prompts"}):
+            continue  # the sessions and prompts sources hold what these events wrote
+        if head in kinds & _RECORD_SOURCES and (not names or "records" in names):
             continue  # a record source already holds what this event wrote
         if head in ("job", "schedule") and held(head):
             continue  # the jobs and schedules sources do too

@@ -1851,23 +1851,26 @@
 # ---
 # name: test_help[ddflow search]
   '''
-  usage: ddflow search [-h] [--exact | --regex] [--kind KIND] [--state STATE] [--phase PHASE] [--owner OWNER] [--since SINCE] [--limit LIMIT] query
+  usage: ddflow search [-h] [--exact | --regex] [--kind KIND] [--source SOURCE] [--state STATE] [--phase PHASE] [--owner OWNER] [--since SINCE] [--limit LIMIT] query
   
   positional arguments:
-    query          the text to look for
+    query            the text to look for
   
   options:
-    -h, --help     show this help message and exit
-    --exact        case-insensitive substring, not ranked
-    --regex        a regular expression (unsafe ones are refused)
-    --kind KIND    comma-separated sources to search (default all): task, phase, bug, research,
-                   decision, lesson, session, prompt, log
-    --state STATE  only hits in this state
-    --phase PHASE  only hits under this phase id
-    --owner OWNER  only hits by this agent (lease holder, session or event agent); not --agent,
-                   which is who YOU are
-    --since SINCE  only hits dated at or after this ISO date
-    --limit LIMIT  most hits to show
+    -h, --help       show this help message and exit
+    --exact          case-insensitive substring, not ranked
+    --regex          a regular expression (unsafe ones are refused)
+    --kind KIND      comma-separated kinds of row to search (default all): task, phase, bug,
+                     research, decision, lesson, session, prompt, log, rule, skill, command, agent,
+                     job, schedule
+    --source SOURCE  comma-separated sources to search (default all): records, sessions, prompts,
+                     log, rules, skills, agents, jobs, schedules
+    --state STATE    only hits in this state
+    --phase PHASE    only hits under this phase id
+    --owner OWNER    only hits by this agent (lease holder, session or event agent); not --agent,
+                     which is who YOU are
+    --since SINCE    only hits dated at or after this ISO date
+    --limit LIMIT    most hits to show
   
   '''
 # ---
@@ -2424,7 +2427,8 @@
       hooks               install/inspect the enforcement git hook and the Claude Code session hook
       mcp                 run the MCP stdio server over this repository
       search              search tasks, phases, bugs, research, decisions, lessons, sessions,
-                          prompts and the log (exit 2 = no match)
+                          prompts, rules, skills, agents, jobs, schedules and the log (exit 2 = no
+                          match)
   
   options:
     -h, --help            show this help message and exit
