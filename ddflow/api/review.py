@@ -320,7 +320,7 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int]) -> str:
     spot-check it. A finding still without a verdict holds the gate where it is, and the
     answer says how to finish: settle it, or ask the operator for one more round."""
     cap = cfg.review.max_rounds
-    used = _rounds_used(log, it.id, gate)
+    used = _rounds_used(it, gate)
     rec = it.gates.get(gate)
     if cap <= 0 or used < cap or rec is None or rec.outcome == "passed":
         return ""
@@ -402,7 +402,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
 
     if kind != "delta" or status not in (R.REVIEWED, R.PARTIAL):
         return 0
-    ev["delta_from"] = _last_head(log, it.id, gate)
+    ev["delta_from"] = _last_head(it, gate)
     rec = it.gates.get(gate) if it else None
     prior = dict(rec.evidence) if rec and rec.evidence else {}
     kept = list(prior.get("chunk_findings") or [])
@@ -763,49 +763,48 @@ def _round_evidence(head, kind, done, status, forced, deltas=0) -> dict[str, Any
     return ev
 
 
-def _full_rounds(log, item: str, gate: str) -> int:
-    """Full review rounds already recorded for `item`'s `gate`, counted from the log.
+def _review_runs(it, gate: str) -> list:
+    """The gate's recorded outcomes on ``it`` (an Item or None), oldest first: its
+    `gate_history`, folded once, in place of a scan of the log for each question."""
+    return it.runs_of(gate) if it is not None else []
 
-    Counted from the EVENTS, not the gate's current record: a later delta, a manual
+
+def _full_rounds(it, gate: str) -> int:
+    """Full review rounds already recorded for ``it``'s ``gate``.
+
+    Counted from the gate's HISTORY, not its current record: a later delta, a manual
     `gate skip`/`record` or a re-claim replaces that record's evidence, and the budget
     must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
     count: a refused round, an errored one, a delta and a `--chunk` re-run are not.
     """
     return sum(
         1
-        for e in log.read_all()
-        if e.subject == item
-        and e.kind.startswith("gate.")
-        and e.data.get("gate") == gate
-        and (e.data.get("evidence") or {}).get("review_kind") == "full"
-        and not _settled_pass(e)
+        for r in _review_runs(it, gate)
+        if r.evidence.get("review_kind") == "full" and not _settled_pass(r)
     )
 
 
-def _delta_rounds(log, item: str, gate: str) -> int:
-    """Delta rechecks already recorded for `item`'s `gate` (counted from the log, like
-    `_full_rounds`): only ones that reached a reviewer."""
+def _delta_rounds(it, gate: str) -> int:
+    """Delta rechecks already recorded for ``it``'s ``gate`` (counted from its history,
+    like `_full_rounds`): only ones that reached a reviewer."""
     return sum(
         1
-        for e in log.read_all()
-        if e.subject == item
-        and e.kind.startswith("gate.")
-        and e.data.get("gate") == gate
-        and (e.data.get("evidence") or {}).get("review_kind") == "delta"
-        and (e.data.get("evidence") or {}).get("status") in ("REVIEWED", "PARTIAL")
-        and not _settled_pass(e)
+        for r in _review_runs(it, gate)
+        if r.evidence.get("review_kind") == "delta"
+        and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
+        and not _settled_pass(r)
     )
 
 
-def _settled_pass(e) -> bool:
+def _settled_pass(run) -> bool:
     """A pass `_settle_after_cap` recorded: it carries the settled review's evidence,
     `review_kind` included, but is no review round (roborev on 1e5dab6e)."""
-    return bool((e.data.get("evidence") or {}).get("passed_on_refutation"))
+    return bool(run.evidence.get("passed_on_refutation"))
 
 
-def _rounds_used(log, item: str, gate: str) -> int:
+def _rounds_used(it, gate: str) -> int:
     """Every review round of ``gate`` the budget counts: full and delta alike."""
-    return _full_rounds(log, item, gate) + _delta_rounds(log, item, gate)
+    return _full_rounds(it, gate) + _delta_rounds(it, gate)
 
 
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
@@ -844,19 +843,19 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
-    delta = _wants_delta(repo, cfg, log, it, a, say)
-    kind = _kind(repo, cfg, log, item, gate, a["chunks"], delta, a["commit"], a["base"])
-    done = _full_rounds(log, item, gate) if item else 0
+    delta = _wants_delta(repo, cfg, it, a, say)
+    kind = _kind(repo, cfg, it, item, gate, a["chunks"], delta, a["commit"], a["base"])
+    done = _full_rounds(it, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
     if kind in ("full", "delta") and item:
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
-        used = _rounds_used(log, item, gate)
+        used = _rounds_used(it, gate)
         why, forced = _budget(cfg, item, gate, used, a["force"], a["reason"], say)
     if why:
         return kind, done, forced, diff, how, why, None
     if delta:
-        diff, how, why = _delta_scope(repo, it, log, gate, a["branch"], cfg.worktree.base_ref or "")
+        diff, how, why = _delta_scope(repo, it, gate, a["branch"], cfg.worktree.base_ref or "")
     elif a["commit"]:
         diff, how = commit_diff(repo, a["commit"])
     else:
@@ -870,7 +869,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     return kind, done, forced, diff, how, why, rerun
 
 
-def _wants_delta(repo, cfg, log, it, a, say) -> bool:
+def _wants_delta(repo, cfg, it, a, say) -> bool:
     """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (off
     unless a project turns it on, decision D-gate-economy 3) so does a plain review of a
     gate that already has a recorded one.
@@ -887,7 +886,7 @@ def _wants_delta(repo, cfg, log, it, a, say) -> bool:
     if not it or not (explicit or (plain and cfg.review.delta_default)):
         return False
     item, gate = a["item"], a["gate"]
-    last = _last_review(log, item, gate)
+    last = _last_review(it, gate)
     head = str(last.get("reviewed_head") or "")
     if not head:
         return explicit  # --delta says "run the full review first"; a plain review just is one
@@ -935,7 +934,7 @@ def _with_previous_findings(
     """
     if kind != "full" or rerun or it is None:
         return context
-    found = _last_review(log, item, gate).get("chunk_findings")
+    found = _last_review(it, gate).get("chunk_findings")
     if not found:
         return context
     mine = it.triage.get(gate, {})
@@ -968,30 +967,23 @@ def _with_previous_findings(
     return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)
 
 
-def _last_review(log, item: str, gate: str) -> dict:
-    """The evidence of the gate's latest `ddflow review`, read from the LOG (the head and
-    its status): a re-claim or `gate skip` replaces the gate's current record."""
-    for e in reversed(log.read_all()):
-        if e.subject == item and e.kind.startswith("gate.") and e.data.get("gate") == gate:
-            ev = e.data.get("evidence") or {}
-            if ev.get("reviewed_head"):
-                return ev
+def _last_review(it, gate: str) -> dict:
+    """The evidence of the gate's latest `ddflow review`, read from its history (the head
+    and its status): a re-claim or `gate skip` replaces the gate's current record."""
+    for r in reversed(_review_runs(it, gate)):
+        if r.evidence.get("reviewed_head"):
+            return r.evidence
     return {}
 
 
-def _last_head(log, item: str, gate: str) -> str:
-    """The head the gate's latest `ddflow review` covered, read from the LOG: a re-claim,
-    `gate skip` or `gate record` replaces the gate's current evidence, and a delta must
-    stay possible after any of them (the count survives them too)."""
-    for e in reversed(log.read_all()):
-        if e.subject == item and e.kind.startswith("gate.") and e.data.get("gate") == gate:
-            head = (e.data.get("evidence") or {}).get("reviewed_head")
-            if head:
-                return str(head)
-    return ""
+def _last_head(it, gate: str) -> str:
+    """The head the gate's latest `ddflow review` covered, read from its history: a
+    re-claim, `gate skip` or `gate record` replaces the gate's current evidence, and a
+    delta must stay possible after any of them (the count survives them too)."""
+    return str(_last_review(it, gate).get("reviewed_head") or "")
 
 
-def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
+def _kind(repo, cfg, it, item, gate, chunks, delta, commit, base) -> str:
     """full | delta | chunk: what the round is. A full and a delta round both count
     against `[review].max_rounds`; only a full one is numbered (`round`).
 
@@ -1007,7 +999,7 @@ def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
     if delta:
         return "delta"
     ref = commit or base
-    head = _last_head(log, item, gate) if ref and item else ""
+    head = _last_head(it, gate) if ref and item else ""
     if not head:
         return "full"
     if W.git(repo, "merge-base", "--is-ancestor", head, ref).ok:
@@ -1042,10 +1034,10 @@ def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
     return _budget_refusal(item, gate, done, cap), ""
 
 
-def _delta_scope(repo, it, log, gate, branch, base: str = "") -> tuple[str, str, str]:
+def _delta_scope(repo, it, gate, branch, base: str = "") -> tuple[str, str, str]:
     """(diff, how, why not) for `--delta`: the item's own changes since the recorded
     review's head -- never what a merge brought in from ``base`` (Bccf6d1aec7)."""
-    head = _last_head(log, it.id, gate) if it else ""
+    head = _last_head(it, gate)
     if not head:
         return (
             "",
@@ -1242,7 +1234,7 @@ def _review_gates(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     plain = not (args["chunks"] or args["delta"] or args["commit"] or args["base"])
     alike = all(g in _LENSES for g in asked) and _same_reviewers(repo, asked)
     lines = _changed_lines(cfg, st, args) if plain and alike and under > 0 else 0
-    if 0 < lines < under and not _any_out_of_rounds(log, cfg, item, asked, args):
+    if 0 < lines < under and not _any_out_of_rounds(cfg, st.items.get(item), asked, args):
         return _review_combined(asked, args, lines, under, log, cfg)
     return _review_each(asked, args)
 
@@ -1275,13 +1267,13 @@ def _changed_lines(cfg, st, args: dict[str, Any]) -> int:
     return n
 
 
-def _any_out_of_rounds(log, cfg, item: str, gates: list[str], args: dict[str, Any]) -> bool:
+def _any_out_of_rounds(cfg, it, gates: list[str], args: dict[str, Any]) -> bool:
     """Would a full round of any of ``gates`` be refused? Then none is combined."""
-    if not item:
+    if it is None:
         return False
     quiet = lambda _line: None  # noqa: E731 -- the gate's own run says it, if it comes to that
     return any(
-        _budget(cfg, item, g, _rounds_used(log, item, g), args["force"], args["reason"], quiet)[0]
+        _budget(cfg, it.id, g, _rounds_used(it, g), args["force"], args["reason"], quiet)[0]
         for g in gates
     )
 
@@ -1325,7 +1317,7 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
     gates = GD.load_gates(args["repo"], cfg)
     if rec is not None and (rec.evidence or {}).get("review_id") == rid:
         for g in asked[1:]:
-            ev = {**rec.evidence, **_rounds_for(log, item, g, rec.evidence)}
+            ev = {**rec.evidence, **_rounds_for(st.items[item], g, rec.evidence)}
             GD.record(
                 log, cfg, item, g, rec.outcome,
                 by=rec.by, reason=rec.reason, evidence=ev, gates=gates,
@@ -1342,14 +1334,14 @@ def _review_combined(asked, args, lines: int, under: int, log, cfg) -> O.Outcome
     return O.Outcome(kind=out.kind, data=data, exit=out.exit, reason=out.reason)
 
 
-def _rounds_for(log, item: str, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
+def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
     """The round counts of ``gate``'s own record: the combined review is one more full
     round of each gate it stands for, and leaves each gate's delta count as it was."""
     counted = ev.get("review_kind") == "full"
-    done = _full_rounds(log, item, gate)
+    done = _full_rounds(it, gate)
     out: dict[str, Any] = {
         "rounds": done + (1 if counted else 0),
-        "delta_rounds": _delta_rounds(log, item, gate),
+        "delta_rounds": _delta_rounds(it, gate),
     }
     if counted:
         out["round"] = done + 1
@@ -1584,7 +1576,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
                 done,
                 best.status,
                 forced,
-                _delta_rounds(log, item, gate),
+                _delta_rounds(it, gate),
             ),
             **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
             **(extra_evidence or {}),
