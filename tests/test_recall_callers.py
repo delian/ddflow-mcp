@@ -21,6 +21,7 @@ from ddflow.api.knowledge.lessons import _store
 from ddflow.infra.store import RECALL_SOURCES
 from ddflow.services import searchcore as SC
 
+TABLES = {t for t, _, _ in RECALL_SOURCES}
 ROOT = Path(__file__).resolve().parents[1] / "ddflow"
 
 
@@ -105,13 +106,17 @@ def test_the_matcher_refuses_a_missing_index_instead_of_answering_from_stale_wei
 
 def _searching_calls(path: Path) -> list[int]:
     """The lines of ``path`` that call ``.search(...)`` on a store (a name or a call that
-    says "store") or ``open_store(...)``, the duplicate check's matcher."""
+    says "store", or any receiver given a table name) or ``open_store(...)``, the duplicate check's matcher."""
     out = []
     for n in ast.walk(ast.parse(path.read_text())):
         if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)):
             continue
+        first = n.args[0] if n.args else None
+        names_a_table = isinstance(first, ast.Constant) and first.value in TABLES
         on_a_store = "store" in ast.unparse(n.func.value).lower()
-        if (n.func.attr == "search" and on_a_store) or n.func.attr == "open_store":
+        if (
+            n.func.attr == "search" and (on_a_store or names_a_table)
+        ) or n.func.attr == "open_store":
             out.append(n.lineno)
     return out
 
