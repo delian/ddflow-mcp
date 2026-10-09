@@ -186,11 +186,15 @@ def test_the_detector_can_fail():
 def test_every_layer_is_declared():
     """A new directory under ddflow/ must be given a place in the rule.
 
+    `templates` and `harnesses` hold data (markdown, TOML descriptors), not code.
+
     Otherwise the way to escape the layering is to invent a layer, which is exactly
     what someone under time pressure will do.
     """
     on_disk = {
-        p.name for p in PKG.iterdir() if p.is_dir() and p.name not in ("__pycache__", "templates")
+        p.name
+        for p in PKG.iterdir()
+        if p.is_dir() and p.name not in ("__pycache__", "templates", "harnesses")
     }
     undeclared = on_disk - set(ALLOWED) - set(LAYER_PACKAGES)
     assert not undeclared, (

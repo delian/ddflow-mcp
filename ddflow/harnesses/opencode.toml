@@ -1,0 +1,52 @@
+id = "opencode"
+rank = 8
+family = "opencode"
+delta = "opencode.md"
+
+[mcp]
+path = "opencode.json"
+shape = "opencode"
+note = "`command` is ONE array including the arguments, and `enabled` is explicit."
+
+[instructions]
+reads = ["AGENTS.md", "CLAUDE.md"]
+agents_md = "yes"
+claude_md = "fallback"
+
+[hooks]
+style = "plugin"
+file = ".opencode/plugins/"
+normalizer = "opencode"
+emitter = "opencode"
+block = "throw"
+session_id = "sessionID"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "session.created"
+prompt = "chat.message"
+pre_tool = "tool.execute.before"
+post_tool = "tool.execute.after"
+pre_compact = "experimental.session.compacting"
+stop = "session.idle"
+session_end = "session.deleted"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin: [] in opencode.json"
+
+[commands]
+dir = ".opencode/commands"
+format = "markdown"
+
+[skills]
+dir = ".opencode/skills"
+
+[subagents]
+dir = ".opencode/agents"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://github.com/anomalyco/opencode"]
+record = "R-hx-opencode"
+unverified = ["worktree dir", "session id env var"]

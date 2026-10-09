@@ -1,0 +1,51 @@
+id = "vscode"
+rank = 4
+family = "copilot"
+delta = "vscode.md"
+
+[mcp]
+path = ".vscode/mcp.json"
+shape = "servers"
+note = "VS Code's built-in MCP support, used by any VS Code agent. Top-level key is `servers`, NOT `mcpServers`, and entries name their transport."
+
+[instructions]
+reads = [".github/copilot-instructions.md", "AGENTS.md", "CLAUDE.md", ".github/instructions/**/*.instructions.md"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "claude"
+file = ".github/hooks/ddflow.json"
+normalizer = "vscode"
+emitter = "vscode"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+pre_compact = "PreCompact"
+stop = "Stop"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin.json"
+
+[commands]
+dir = ".github/prompts"
+format = "markdown"
+
+[skills]
+dir = ".github/skills"
+
+[subagents]
+dir = ".github/agents"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://code.visualstudio.com/docs/copilot/customization/mcp-servers"]
+record = "R-hx-copilot"
+unverified = ["headless", "worktree dir"]

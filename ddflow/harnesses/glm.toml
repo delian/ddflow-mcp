@@ -1,0 +1,14 @@
+id = "glm"
+rank = 9
+family = "zcode"
+delta = "zcode-glm.md"
+
+[mcp]
+path = ".zcode/config.json"
+shape = "mcp.servers"
+note = "ZCode, Zhipu's coding agent and how GLM is driven. Nests under `mcp` -> `servers`."
+
+[verified]
+date = "2026-10-09"
+sources = ["https://github.com/zai-org/ZCode"]
+unverified = ["everything beyond the MCP path (zcode.z.ai docs not fetched)"]

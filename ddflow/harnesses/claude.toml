@@ -1,0 +1,60 @@
+id = "claude"
+rank = 0
+family = "claude-code"
+delta = "claude-code.md"
+
+[mcp]
+path = ".mcp.json"
+shape = "mcpServers"
+
+[instructions]
+reads = ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md", ".claude/rules/*.md", "AGENTS.md"]
+agents_md = "conditional"
+claude_md = "yes"
+
+[hooks]
+style = "claude"
+file = ".claude/settings.json"
+normalizer = "claude"
+emitter = "claude"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+pre_compact = "PreCompact"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[plugin]
+mechanism = "plugin"
+manifest = ".claude-plugin/plugin.json"
+
+[commands]
+dir = ".claude/commands"
+format = "markdown"
+
+[skills]
+dir = ".claude/skills"
+
+[subagents]
+dir = ".claude/agents"
+
+[worktrees]
+dir = ".claude/worktrees"
+
+[commands.files]
+".claude/commands/implement.md" = "commands/claude/implement.md"
+
+[env]
+session_id = ["CLAUDE_CODE_SESSION_ID"]
+
+[verified]
+date = "2026-10-09"
+sources = ["https://code.claude.com/docs/en/hooks.md", "https://code.claude.com/docs/en/mcp.md", "https://code.claude.com/docs/en/env-vars.md"]
+record = "R-hx-claude"
+probe = "claude --version -> 2.1.285; claude mcp add --help"

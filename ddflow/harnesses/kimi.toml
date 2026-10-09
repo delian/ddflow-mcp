@@ -1,0 +1,37 @@
+id = "kimi"
+rank = 7
+family = "claude-code"
+delta = "kimi-code.md"
+
+[mcp]
+path = ".kimi-code/mcp.json"
+shape = "mcpServers"
+note = "Project-level .kimi-code/mcp.json takes precedence over the user copy. NOT a repo-root .mcp.json: secondary write-ups say it reuses Claude's file and the official docs do not."
+
+[instructions]
+reads = ["AGENTS.md", ".kimi/AGENTS.md"]
+agents_md = "yes"
+claude_md = "nv"
+
+[hooks]
+style = "claude"
+file = "~/.kimi/config.toml"
+normalizer = "claude"
+emitter = "claude"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+pre_compact = "PreCompact"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://moonshotai.github.io/kimi-cli/en/customization/hooks.html"]
+unverified = ["project-level hook file", "additionalContext field", "session id env var"]
