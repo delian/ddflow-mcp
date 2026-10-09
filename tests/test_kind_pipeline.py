@@ -268,7 +268,10 @@ def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
 
 def test_workflow_text_lists_only_the_kinds_that_differ(repo):
     run_cli(repo, "init")
-    assert "A doc passes through" not in run_cli(repo, "workflow")[1]
+    default = run_cli(repo, "workflow")[1]
+    assert "A doc passes through" not in default
+    # the built-in phase line is printed once, by the phase pipeline itself
+    assert default.count("A phase passes through") == 1, default
     assert (
         run_cli(
             repo, "config", "--set", "gates.kind_pipelines", '{ doc = ["implement", "merge"] }'
@@ -277,4 +280,4 @@ def test_workflow_text_lists_only_the_kinds_that_differ(repo):
     )
     out = run_cli(repo, "workflow")[1]
     assert "A doc passes through: implement, merge" in out, out
-    assert "A bug passes through" not in out
+    assert "A bug passes through" not in out and out.count("A phase passes through") == 1
