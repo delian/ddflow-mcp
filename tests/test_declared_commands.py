@@ -16,6 +16,7 @@ import pytest
 
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.declared import (
+    flow,
     hooks,
     knowledge,
     lifecycle,
@@ -29,7 +30,7 @@ from ddflow.surfaces.declared import (
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks)
+FAMILIES = (knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -45,6 +46,8 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.setup",
         "ddflow.surfaces.declared.reporting",
         "ddflow.surfaces.declared.hooks",
+        "ddflow.surfaces.declared.flow",
+        "ddflow.surfaces.tools.flow",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],

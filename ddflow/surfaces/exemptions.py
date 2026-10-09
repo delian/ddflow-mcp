@@ -18,6 +18,7 @@ from .commands import viewers_lists as _lists
 from .commands import viewers_search as _search
 from .commands import viewers_sessions as _sessions
 from .declared.answer import ANSWER_FLAG_EXEMPT
+from .declared.flow import COMMANDS as _FLOW
 from .declared.hooks import COMMANDS as _HOOKS
 from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
@@ -43,10 +44,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=("mcp",),
         reason="starts the MCP server itself; exposing it over MCP would be recursive",
-    ),
-    Command(
-        path=("version", "lint"),
-        reason="the release lint runs inside ddflow_version_cut (also with dry_run), and its waiver is the operator's decision, from the CLI; a tool of its own would cost every client's tools/list for a check only a release-maker runs",
     ),
     Command(
         path=(),
@@ -114,6 +111,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REVIEW,
     *_SETUP,
     *_REPORTING,
+    *_FLOW,
     *_HOOKS,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
