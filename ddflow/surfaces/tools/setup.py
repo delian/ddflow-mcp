@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import review as RV
 from ._common import _AGENT_KEYS, _api, _configure_reported
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -84,144 +85,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "text": True,
         "kind": "config",
     },
-    "ddflow_reviewers_detect": {
-        "description": (
-            "Probe well-known local ports for an OpenAI-compatible model server (ollama, vLLM, LM Studio, llama.cpp, sglang) and report what serves, with each model's pretraining family: how to find a reviewer from a DIFFERENT family than yourself, which the critic gate requires. write=true records it in the git-ignored .ddflow/local/reviewers.toml (this machine's, never committed)."
-        ),
-        "properties": {
-            "write": (
-                "boolean",
-                "Append the discovered reviewers to .ddflow/local/reviewers.toml.",
-                False,
-            ),
-            "shared": (
-                "boolean",
-                "With write: commit them to .ddflow/config.toml instead, for every "
-                "clone. Only for a reviewer the whole team reaches at the same address.",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent: _api().reviewers_detect(
-            repo, write=bool(a.get("write")), shared=bool(a.get("shared")), agent=agent
-        ),
-        "payload": "text",
-        "text": True,
-        "kind": "reviewers.detect",
-    },
-    "ddflow_reviewers_list": {
-        "description": "Show the configured reviewers, their families and which gates they serve.",
-        "properties": {},
-        "api": lambda repo, a, agent: _api().reviewers_list(repo, agent=agent),
-        "payload": "text",
-        "text": True,
-        "kind": "reviewers.list",
-    },
-    "ddflow_review": {
-        "description": (
-            "Run the configured cross-family reviewer over an item's diff and record the "
-            "result: the critic gate, performed by ddflow. "
-            "No reviewer, endpoint or verdict records UNAVAILABLE, never a pass. A gate gets [review].max_rounds (default 2) rounds, delta too, "
-            "then ddflow_review_triage."
-        ),
-        "properties": {
-            "id": ("string", "Item whose diff to review.", True),
-            "gate": (
-                "string",
-                "critic|rubber_duck|rubber_duck,critic",
-                False,
-            ),
-            "intent": (
-                "string",
-                "What the change is MEANT to do. The reviewer flags where the diff "
-                "and the intent disagree, so without it there is nothing to "
-                "disagree with. Defaults to the item's title and body.",
-                False,
-            ),
-            "base": ("string", "Ref to diff against (default: the base branch).", False),
-            "context": ("string", "Extra context for the reviewer.", False),
-            "commit": (
-                "string",
-                "Review this ONE landed commit (against its first parent) instead of the "
-                "item's branch: the after-merge review, when the branch is gone.",
-                False,
-            ),
-            "branch": (
-                "string",
-                "Review this branch against base, for an item claimed with no_worktree (default: the branch checked out where this connection runs). With neither, the review is recorded unavailable.",
-                False,
-            ),
-            "delta": (
-                "boolean",
-                "Recheck only what changed since the reviewed head.",
-                False,
-            ),
-            "full": (
-                "boolean",
-                "Force a full round (when delta_default is on).",
-                False,
-            ),
-            "chunk": (
-                "array",
-                "Re-review ONLY these chunk numbers (as the recorded review numbered them, "
-                "e.g. [5]) and merge into that record; needs the same diff, chunk size and reviewer.",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent, called_from=None, on_progress=None: _api().run_review(
-            repo,
-            on_progress=on_progress,
-            gate=a.get("gate") or "critic",
-            item=a.get("id", "") or "",
-            intent=a.get("intent", "") or "",
-            context=a.get("context", "") or "",
-            base=a.get("base", "") or "",
-            commit=a.get("commit", "") or "",
-            branch=a.get("branch", "") or "",
-            called_from=called_from,
-            agent=agent,
-            chunks=a.get("chunk") or None,
-            delta=bool(a.get("delta")),
-            full=bool(a.get("full")),
-        ),
-        "wants_called_from": True,
-        "wants_progress": True,
-        # The TRANSCRIPT the run produced — findings already formatted with their
-        # severities, which is what this tool has always returned.
-        "payload": "text",
-        "text": True,
-        "kind": "review",
-    },
-    "ddflow_review_triage": {
-        "description": (
-            "Record your triage of ONE finding of an item's recorded `ddflow review`: it is "
-            "refuted (probe = the run that shows it false) or confirmed (probe = the fix or "
-            "test that answers it). The finding number is the #N the review printed. The "
-            "gate stays failed (D-review-triage) until, after the round cap, the triage of "
-            "its last finding records it passed on refutation, flagged."
-        ),
-        "properties": {
-            "id": ("string", "The item whose review it is.", True),
-            "gate": ("string", "Omit if one gate has findings.", False),
-            "finding": (
-                "integer",
-                "The finding's number: #N in the review's output -- of the RECORDED "
-                "reviewer's findings, which the output's last lines name when several ran.",
-                True,
-            ),
-            "verdict": ("string", "refuted or confirmed.", True),
-            "probe": ("string", "The evidence for the verdict. Required.", True),
-        },
-        "api": lambda repo, a, agent: _api().review_triage(
-            repo,
-            a.get("id", "") or "",
-            gate=a.get("gate") or "",
-            finding=int(a.get("finding") or 0),
-            verdict=a.get("verdict", "") or "",
-            probe=a.get("probe", "") or "",
-            agent=agent,
-        ),
-        "payload": "text",
-        "text": True,
-        "kind": "review.triage",
-    },
+    "ddflow_reviewers_detect": RV.BY_TOOL["ddflow_reviewers_detect"].tool_entry(),
+    "ddflow_reviewers_list": RV.BY_TOOL["ddflow_reviewers_list"].tool_entry(),
+    "ddflow_review": RV.BY_TOOL["ddflow_review"].tool_entry(),
+    "ddflow_review_triage": RV.BY_TOOL["ddflow_review_triage"].tool_entry(),
 }

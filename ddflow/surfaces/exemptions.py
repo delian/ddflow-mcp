@@ -22,6 +22,7 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
+from .declared.review import COMMANDS as _REVIEW
 from .declared.rules import COMMANDS as _RULES
 from .registry import (
     Command,
@@ -98,24 +99,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         path=("hooks", "check-commit"),
         reason="invoked BY the installed git hook, inside the commit that is being checked; it is not something an agent calls",
     ),
-    Command(
-        path=("reviewers", "presets"),
-        reason="lists boilerplate for authoring reviewer config, which pairs with `reviewers add` — an operator edit, exempt for the same reason",
-    ),
-    Command(
-        path=("reviewers", "add"),
-        reason="writes an API-key env-var name into project config; a config edit an operator should make deliberately, not an agent mid-task",
-    ),
-    Command(
-        path=("reviewers", "approve"),
-        reason="a PERSON vouches for a tool-written reviewer (decision D-reviewer-trust); an agent that could approve the reviewer it wrote would make the record decorative. test_approve_is_not_an_mcp_tool asserts there is no such tool.",
-    ),
-    Command(path=("reviewers", "detect"), reason="covered by ddflow_reviewers_detect"),
-    Command(path=("reviewers", "list"), reason="covered by ddflow_reviewers_list"),
-    Command(
-        path=("reviewers", "test"),
-        reason="covered by ddflow_reviewers_detect, which probes the same way",
-    ),
     Command(path=("adopt",), reason="covered by ddflow_setup", via=("ddflow_setup",)),
     Command(
         path=(),
@@ -126,9 +109,6 @@ EXEMPTIONS: tuple[Command, ...] = (
             "--report": "`ci record`: see --stage",
             "--sha": "`ci record`: see --stage",
         },
-    ),
-    Command(
-        path=(), tool="ddflow_verify", flag_exempt={"--all": "a sweep is what omitting `id` means"}
     ),
     Command(
         path=(),
@@ -142,18 +122,6 @@ EXEMPTIONS: tuple[Command, ...] = (
             "--kind": "carried by `sources`: `kind` selects the viewer",
             "--exact": "carried by `mode`=exact",
             "--regex": "carried by `mode`=regex",
-        },
-    ),
-    Command(
-        path=(),
-        tool="ddflow_review",
-        flag_exempt={
-            "--finding": "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)",
-            "--refuted": "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)",
-            "--confirmed": "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)",
-            "--probe": "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)",
-            "--force": "lifting the review-round budget belongs to the operator",
-            "--reason": "lifting the review-round budget belongs to the operator",
         },
     ),
     Command(
@@ -226,30 +194,6 @@ EXEMPTIONS: tuple[Command, ...] = (
     ),
     Command(
         path=(),
-        tool="ddflow_review",
-        prose=True,
-        prose_reason="reviewer findings, already formatted with their severities",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_review_triage",
-        prose=True,
-        prose_reason="one confirmation line, which is the whole answer",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_reviewers_list",
-        prose=True,
-        prose_reason="a table, plus the warning about unclassified reviewers",
-    ),
-    Command(
-        path=(),
-        tool="ddflow_reviewers_detect",
-        prose=True,
-        prose_reason="a probe report naming each endpoint and what answered",
-    ),
-    Command(
-        path=(),
         tool="ddflow_render",
         prose=True,
         prose_reason="with --show it returns the rendered view itself, to read or commit",
@@ -271,6 +215,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_QUEUE,
     *_LIFECYCLE,
     *_RULES,
+    *_REVIEW,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,

@@ -16,36 +16,6 @@ from ..render import emit_json
 _MARK = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "unknown": "??  "}
 
 
-def add_verify_parser(sub) -> None:
-    vf = sub.add_parser(
-        "verify",
-        help="re-derive the claims behind a done task, or sweep them all (exit 1 = one fails)",
-    )
-    vf.add_argument("id", nargs="?", default="", help="one done task; omit with --all/--phase")
-    vf.add_argument("--all", action="store_true", help="every done task, worst first")
-    vf.add_argument("--phase", default="", help="every done task under this phase")
-    vf.add_argument("--limit", type=int, default=None, help="how many of the worst to list (20)")
-    vf.add_argument(
-        "--file-bugs", action="store_true", help="file a bug for each completion that does not hold"
-    )
-    vf.add_argument(
-        "--reopen", action="store_true", help="send a task whose completion fails back to the queue"
-    )
-    vf.add_argument("--reason", default="", help="with --reopen: why (default: the failed claims)")
-    vf.add_argument(
-        "--force", action="store_true", help="with --reopen: even when the completion holds"
-    )
-    vf.add_argument(
-        "--pack", action="store_true", help="print the evidence pack for an independent verifier"
-    )
-    vf.add_argument(
-        "--judge",
-        action="store_true",
-        help="have the configured cross-family reviewer judge it (gate: verify)",
-    )
-    vf.set_defaults(fn=cmd_verify)
-
-
 def _one(a, c: Ctx) -> int:
     out = verify(c.repo, a.id, reopen=a.reopen, reason=a.reason, force=a.force)
     if out.exit == FAIL and not out.data.get("claims"):
