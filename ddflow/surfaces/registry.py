@@ -467,7 +467,8 @@ class Command:
     tool: str = ""
     call: Callable[..., Any] | None = None
     payload: str | tuple[str, ...] = ""
-    prose: bool = False
+    #: True, or a predicate over the call's arguments (``render``: text only with ``show``).
+    prose: bool | Callable[..., bool] = False
     tier: str = "standard"
     render: Callable[..., Any] | None = None
     handler: Callable[..., Any] | None = None
@@ -595,7 +596,7 @@ class Command:
             "payload": self.payload,
         }
         if self.prose:
-            entry["text"] = True
+            entry["text"] = self.prose if callable(self.prose) else True
         if self.kind:
             entry["kind"] = self.kind
         if self.identify:

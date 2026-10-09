@@ -30,3 +30,6 @@ DEFAULT_NEXT_KIND = "task"
 #: for an afternoon. A caller that wants longer asks again, which also re-checks that
 #: waiting is still the right move.
 DEFAULT_WAIT_TIMEOUT_S = 600
+
+#: Where `ddflow render` writes the human-readable views when nobody says otherwise.
+DEFAULT_RENDER_DIR = "docs/ddflow"
