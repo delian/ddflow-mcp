@@ -33,7 +33,6 @@ from ..core.plain import plain
 from ..services import gates as G
 from ..services import testselect as TS
 from ..services.gates.reviewers import run_watching_git
-from ..services.gates.runner import output_evidence
 from ._base import _load
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
@@ -721,7 +720,7 @@ def record(
             txt = Path(evidence.output_file).read_text("utf-8", errors="replace")
         except OSError as exc:
             return O.failed("gate.record", f"--output-file unreadable: {exc}", id=item, gate=gate)
-        ev.update(output_evidence(txt))
+        ev.update(G.output_evidence(txt))
         # WHERE the digested output is, so the digest can be checked against it.
         ev["output_file"] = evidence.output_file
 
