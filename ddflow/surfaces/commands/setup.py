@@ -366,36 +366,58 @@ def _hook_stdin(timeout_s: float = 2.0) -> str:
         return b"".join(got).decode("utf-8", "replace")
 
 
+def _run_alias(a) -> tuple[str, str] | None:
+    """`(event, harness)` for the old per-event subcommands, which are aliases of
+    `hooks run`; None for any other `hooks` subcommand."""
+    if a.hooks_cmd == "run":
+        return a.hook_event, a.harness
+    if a.hooks_cmd == "session-start":
+        return "session_start", "claude"
+    if a.hooks_cmd == "pre-compact":
+        return "pre_compact", "claude"
+    if a.hooks_cmd == "prompt":
+        return "prompt", "gemini" if getattr(a, "gemini", False) else "claude"
+    return None
+
+
 def cmd_hooks(a, c: Ctx) -> int:
+    alias = _run_alias(a)
+    if alias is not None:
+        # One entry point for every agent. The reply goes to stdout shaped for the agent
+        # (Claude Code adds ANY stdout to the model's context; Gemini CLI insists on JSON),
+        # a diagnostic goes to stderr, which no agent treats as a decision, and the exit is
+        # ALWAYS 0: a hook that fails can block the very turn it observes.
+        event, harness = alias
+        out = A.hooks(
+            c.repo,
+            action="run",
+            agent=c.requested_agent,
+            event=event,
+            harness=harness,
+            stdin=_hook_stdin(),
+        )
+        if out.data["stdout"]:
+            print(out.data["stdout"])
+        if out.data["note"]:
+            print(out.data["note"], file=sys.stderr)
+        return OK
+    harness = getattr(a, "harness", "") or ""
+    if harness and harness not in ("claude", "gemini"):
+        print(
+            f"ddflow hooks {a.hooks_cmd}: no hook writer for harness {harness!r} yet; "
+            "--harness takes claude or gemini",
+            file=sys.stderr,
+        )
+        return FAIL
     out = A.hooks(
         c.repo,
         action=a.hooks_cmd or "status",
         force=bool(getattr(a, "force", False)),
-        claude=bool(getattr(a, "claude", False)),
+        claude=bool(getattr(a, "claude", False)) or harness == "claude",
         msg_file=getattr(a, "msg_file", "") or "",
         agent=c.requested_agent,
-        gemini=bool(getattr(a, "gemini", False)),
-        stdin=_hook_stdin() if a.hooks_cmd in ("prompt", "pre-compact", "session-start") else "",
+        gemini=bool(getattr(a, "gemini", False)) or harness == "gemini",
     )
-    if a.hooks_cmd == "prompt":
-        # Gemini CLI insists on JSON on stdout; Claude Code would add ANY stdout to the
-        # model's context. So: `{}` for one, nothing for the other. Always exit 0.
-        if getattr(a, "gemini", False):
-            print("{}")
-        return OK
-    if a.hooks_cmd == "pre-compact":
-        # stdout stays empty and the exit is always 0: PreCompact output can only block,
-        # never inform (B195). Why a run recorded nothing goes to stderr, which Claude
-        # Code shows in its verbose transcript and never treats as a decision.
-        if out.data.get("result") not in ("recorded", "off"):
-            print(f"ddflow pre-compact: {out.data.get('why') or out.data.get('result')}",
-                  file=sys.stderr)  # fmt: skip
-        return OK
-    if a.hooks_cmd == "session-start":
-        # Claude Code puts this STDOUT into the session's context. Always exit 0: a hook
-        # that fails at session start blocks nothing useful.
-        print(out.data["message"])
-        return OK
     if a.hooks_cmd in ("check-commit", "check-msg"):
         # The MESSAGE is the product here, and it goes to stderr because a commit hook's
         # output is diagnostics, not data.

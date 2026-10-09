@@ -335,6 +335,10 @@ COMMANDS: tuple[Command, ...] = (
         reason="invoked BY the harness's prompt hook with the prompt's JSON on stdin; an agent records its own words with ddflow_session_prompt",
     ),
     Command(
+        path=("hooks", "run"),
+        reason="the one entry point every agent's lifecycle hook calls, with that agent's JSON on stdin; an agent never calls it, and over MCP the same work is ddflow_brief, ddflow_session_prompt and ddflow_session_note",
+    ),
+    Command(
         path=("hooks", "check-msg"),
         reason="invoked BY the installed commit-msg hook with the message being committed; it is not something an agent calls",
     ),

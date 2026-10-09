@@ -15,6 +15,7 @@ load-bearing as anything in the pipeline:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,7 @@ from ..config import csv_list
 from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..services import backups as BK
+from ..services import hookio as HI
 from ..services import identity as ID
 from ..services import upgrade_apply as UA
 from ..services import upgrade_plan as UP
@@ -766,6 +768,29 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
     return msgs
 
 
+def _prompt_core(repo: Path, agent: str, session_id: str, text: str, model: str) -> O.Outcome:
+    """Record one operator prompt (redacted inside `sessions.capture_prompt`). Raises on a
+    problem; both callers turn that into a quiet `skipped`."""
+    from ..config import Config
+    from ..services import sessions as S
+
+    cfg = Config.load(repo)
+    # A short lock wait: the hook must not make the operator's turn wait on a busy log.
+    log, _who = ID.open_log(repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0))
+    result = S.capture_prompt(
+        log,
+        cfg,
+        session_id,
+        text,
+        model=model,
+        tool="hook",
+        # This runs in the process the harness started for the hook: its start is
+        # the firing, and the imports and log read since are its own delay.
+        fired_at=S.process_started_at(),
+    )
+    return O.ok("hooks", message="", result=result)
+
+
 def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
     """What the prompt hook does with the harness's JSON. NEVER fails the user's turn:
     every problem becomes a quiet `skipped` with the reason, and the exit is always 0.
@@ -774,9 +799,6 @@ def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
     """
     import json
 
-    from ..config import Config
-    from ..services import sessions as S
-
     try:
         payload = json.loads(stdin) if stdin.strip() else {}
         if not isinstance(payload, dict):
@@ -784,26 +806,114 @@ def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
         text = payload.get("prompt")
         if not isinstance(text, str):
             return O.ok("hooks", message="", result="skipped", why="no prompt in the hook JSON")
-        cfg = Config.load(repo)
-        # A short lock wait: the hook must not make the operator's turn wait on a busy log.
-        log, _who = ID.open_log(
-            repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
-        )
         sid = str(payload.get("session_id") or payload.get("conversation_id") or "")
-        result = S.capture_prompt(
-            log,
-            cfg,
-            sid,
-            text,
-            model=str(payload.get("model") or ""),
-            tool="hook",
-            # This runs in the process the harness started for the hook: its start is
-            # the firing, and the imports and log read since are its own delay.
-            fired_at=S.process_started_at(),
-        )
-        return O.ok("hooks", message="", result=result)
+        return _prompt_core(repo, agent, sid, text, str(payload.get("model") or ""))
     except Exception as exc:  # a hook must not break the prompt it observes
         return O.ok("hooks", message="", result="skipped", why=f"{type(exc).__name__}: {exc}")
+
+
+@dataclass(frozen=True)
+class _HookResult:
+    """What one canonical event's handler produced."""
+
+    context: str = ""  #: text the agent should see, shaped by its emitter ("" for none)
+    note: str = ""  #: a diagnostic for stderr; never a decision
+    result: str = ""  #: what the handler did, for tests and `--json`
+
+
+def _synth_stdin(p) -> str:
+    """The payload as the existing handlers read it: the dialect-independent facts
+    (`session_id`, `source`) laid over the agent's own JSON."""
+    raw = dict(p.raw)
+    if p.session_id:
+        raw["session_id"] = p.session_id
+    if p.source:
+        raw["source"] = p.source
+    return json.dumps(raw)
+
+
+def _on_session_start(repo: Path, agent: str, p, plan) -> _HookResult:
+    if "session_start" not in plan.inject:
+        # This agent's SessionStart hook cannot show the model anything, so building the
+        # brief (an external sync, a cadence check, the log fold) would be wasted work.
+        return _HookResult(result="not injectable")
+    out = _session_start(repo, agent, _synth_stdin(p))
+    return _HookResult(context=out.data["message"], result="injected")
+
+
+def _on_prompt(repo: Path, agent: str, p, plan) -> _HookResult:
+    if p.prompt is None:
+        return _HookResult(result="skipped")  # silent, as the prompt hook always was
+    try:
+        out = _prompt_core(repo, agent, p.session_id, p.prompt, p.model)
+    except Exception:  # a hook must not break the prompt it observes
+        return _HookResult(result="skipped")
+    return _HookResult(result=str(out.data.get("result", "")))
+
+
+def _on_pre_compact(repo: Path, agent: str, p, plan) -> _HookResult:
+    if p.malformed:
+        return _HookResult(
+            result="skipped",
+            note="ddflow pre-compact: ValueError: the hook's stdin is not a JSON object",
+        )
+    out = _record_compaction(repo, _synth_stdin(p), agent)
+    result = str(out.data.get("result", ""))
+    # stdout stays empty: PreCompact output can only block, never inform (B195). Why a run
+    # recorded nothing goes to stderr, which no agent treats as a decision.
+    note = "" if result in ("recorded", "off") else str(out.data.get("why") or result)
+    return _HookResult(result=result, note=note and f"ddflow pre-compact: {note}")
+
+
+def _on_nothing(repo: Path, agent: str, p, plan) -> _HookResult:
+    """pre_tool, post_tool, stop and session_end: the entry point accepts them so an agent's
+    hook can be wired to every event today; the handlers (heartbeat, stop protocol, session
+    end) arrive with the tasks that need them."""
+    return _HookResult(result="no handler")
+
+
+#: One handler per canonical event (`harnessreg.CANONICAL_EVENTS`).
+_HOOK_HANDLERS = {
+    "session_start": _on_session_start,
+    "prompt": _on_prompt,
+    "pre_compact": _on_pre_compact,
+    "pre_tool": _on_nothing,
+    "post_tool": _on_nothing,
+    "stop": _on_nothing,
+    "session_end": _on_nothing,
+}
+
+
+def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O.Outcome:
+    """`ddflow hooks run <event> --harness <id>`: normalize the agent's JSON, run the event's
+    handler, shape the reply. ALWAYS exit 0 and never raise: a failing hook blocks, in some
+    agents, the very turn it observes. Every problem becomes a `note` for stderr."""
+    handler = _HOOK_HANDLERS.get(event)
+    if handler is None:
+        return O.ok(
+            "hooks", message="", stdout="", result="skipped", note=f"unknown event {event!r}"
+        )
+    try:
+        plan = HI.plan_for(harness)
+        if plan is None:
+            return O.ok(
+                "hooks",
+                message="",
+                stdout="",
+                result="skipped",
+                note=f"no command-hook descriptor for harness {harness!r}",
+            )
+        res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan)
+        out = HI.emit(plan, event, res.context)
+    except Exception as exc:  # a hook must never stand between the operator and their agent
+        return O.ok(
+            "hooks",
+            message="",
+            stdout="",
+            result="skipped",
+            note=f"{type(exc).__name__}: {exc}",
+        )
+    return O.ok("hooks", message=out, stdout=out, result=res.result, note=res.note)
 
 
 def _hooks_status(repo: Path, cfg) -> O.Outcome:
@@ -902,6 +1012,8 @@ def hooks(
     agent: str = "",
     gemini: bool = False,
     stdin: str = "",
+    event: str = "",
+    harness: str = "",
 ) -> O.Outcome:
     """The commit hook: install, uninstall, status, or run the check itself.
 
@@ -913,6 +1025,8 @@ def hooks(
     from ..services import claudehooks as CH
     from ..services import enforce as E
 
+    if action == "run":
+        return _run_hook(repo, event, harness, agent, stdin)
     if action == "session-start":
         return _session_start(repo, agent, stdin)
     if action == "pre-compact":
