@@ -1,11 +1,13 @@
-"""Who is calling: the one place an agent identity is resolved, and the B190 lease re-homing.
+"""Who is calling: the identity resolver the CLI, the typed api layer, the hooks and
+onboarding share, and the B190 lease re-homing.
 
-`resolve(root, cfg, declared)` answers `AgentId(id, source)` for every surface -- the CLI's
-`Ctx`, the typed api layer, the hooks and onboarding -- instead of each building the log's
-agent from its own copy of the precedence (an explicit declaration, `DDFLOW_AGENT`,
-`[agent].id`, then the tree-derived default). `open_log` is the shared "resolve, then open
-the log as that agent" step, and `bind` writes the answer back into the config so
-`config --explain` names the layer that really won.
+`resolve(root, cfg, declared)` answers `AgentId(id, source)` instead of each caller building
+the log's agent from its own copy of the precedence: an explicit declaration, then
+`DDFLOW_AGENT` (only while the config value is just its default), then `[agent].id`, then the
+tree-derived default. `open_log` is the shared "resolve, then open the log as that agent"
+step, and `bind` writes an identity that differs from the config's back into it, with the
+layer that won, so `config --explain` names it. The MCP surface still resolves through
+`infra.log` until B-uni-identity.3-resolver.4-mcp moves it here.
 
 Carrying this clone's leases across the B190 identity upgrade.
 
