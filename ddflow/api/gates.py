@@ -703,6 +703,7 @@ def record(
             gates=gates,
             by=by,
             tree=wt,
+            owner_of=G.record_owner(st),
         )
     except ValueError as exc:
         if gdef is not None and gdef.is_human_gate:

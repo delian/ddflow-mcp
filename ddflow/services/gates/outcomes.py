@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import getpass
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,7 @@ from .evidence import (
     tree_fingerprint,
     worktree_entries,
 )
-from .kinds import not_applicable
+from .kinds import evidence_problems, not_applicable
 
 
 @dataclass
@@ -363,6 +363,7 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
     gates: dict[str, GateDef] | None = None,
     human: bool = False,
     measured: dict[str, Any] | None = None,
+    owner_of: Callable[[str], str | None] | None = None,
 ) -> None:
     """Write a gate outcome to the log, enforcing the evidence contract.
 
@@ -407,6 +408,11 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
             f"gate {gate!r} requires evidence to pass (it is in gates.evidence_required). "
             f"Attach the command, its exit code and its output — or record "
             f"`unavailable` with a reason, which is an honest result."
+        )
+    if outcome == "passed" and (why := evidence_problems(gdef, evidence or {}, item_id, owner_of)):
+        raise ValueError(
+            f"gate {gate!r} cannot pass without {'; '.join(why)}. Record "
+            f"`unavailable` with a reason if the check could not run, or skip it with one."
         )
     if outcome in ("unavailable", "partial", "failed") and not reason:
         raise ValueError(f"outcome {outcome!r} must carry a --reason")
