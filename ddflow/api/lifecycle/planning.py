@@ -66,8 +66,9 @@ def plan_for(
 
 
 def alternatives_offer(repo: Path, log, cfg: Config):
-    """What a refused claim names as "you could take instead": the offer `next` makes now,
-    for the items of the refused item's kind, minus the refused one. Handed to
+    """What a refused claim names as "you could take instead": the first five of the offer
+    `next` makes now, in its order, for the items of the refused item's kind, minus the
+    refused one. Handed to
     `services.leases.acquire(offer=...)`, which cannot compute it (it needs the repository
     for the waiters' reservations and the load). Computed only when a claim is refused."""
 
@@ -83,6 +84,6 @@ def alternatives_offer(repo: Path, log, cfg: Config):
             agent=holder,
             now=now,
         )
-        return sorted(it.id for it in p.ready if it.id != item_id)[:5]
+        return [it.id for it in p.ready if it.id != item_id][:5]  # in `next`'s own order
 
     return offer
