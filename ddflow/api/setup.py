@@ -81,7 +81,7 @@ def companions(repo: Path, *, no_probe: bool = False, agent: str = "") -> O.Outc
             for st in statuses
         ],
         "gate_coverage": cover,
-        "uncovered_gates": [g for g, ids in cover.items() if not ids],
+        "uncovered_gates": CO.gate_gaps(cover, statuses),
         "_render": {"statuses": statuses},
     }
     # "Registered" is not a state a `cli` companion can reach -- there is nothing to

@@ -47,6 +47,7 @@ from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import install_info as II
 from . import reviewer_trust as RT
+from . import workflow as WF
 from .review import Reviewer
 
 #: The git-ignored machine-local layer (decision D-no-own-services-local-dir). Read
@@ -165,8 +166,7 @@ def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str
     report -- `Config.check` is what catches that, and reporting it twice in different
     words is how an operator learns to read neither message.
     """
-    from . import workflow as WF
-    from .gates import GateDef, load_gates
+    from .gates import load_gates
 
     try:
         data, cfg = _effective(repo, text, local)
@@ -175,12 +175,7 @@ def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str
         # yet -- so a gate being defined in the very same call was invisible, and
         # defining `lint` and piping it in one command refused itself for naming an
         # undefined gate. Judge the candidate, not the predecessor.
-        for gid, spec in (data.get("gate") or {}).items():
-            g = gates.get(gid) or GateDef(id=gid)
-            for field, value in (spec or {}).items():
-                if hasattr(g, field):
-                    setattr(g, field, value)
-            gates[gid] = g
+        WF.apply_gate_table(gates, data.get("gate") or {})
         return {f"{f.subject}: {f.detail}" for f in WF.check(cfg, gates) if f.level == WF.PROBLEM}
     except Exception:
         return set()
@@ -422,9 +417,7 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
     try:
         data, cfg = _effective(repo, text, local)
         gates = load_gates(repo, cfg)
-        for gid, spec in (data.get("gate") or {}).items():
-            if gid in gates and isinstance(spec, dict) and "human" in spec:
-                gates[gid].human = bool(spec["human"])
+        WF.apply_gate_table(gates, data.get("gate") or {}, only=("human",))
         # Every `gates.*_pipeline` (gates.pipelined), derived rather than listed: naming
         # task and phase missed `promotion_pipeline` -- where a deploy sign-off belongs.
         return {g for g in pipelined(cfg) if g in gates and gates[g].is_human_gate}
@@ -725,7 +718,6 @@ def _workflow_refusal(repo: Path, before: set[str], text: str, layer: str) -> st
     `workflow gate X --required` (with no pipeline) exited 0 having created the exact inert
     requirement `ddflow workflow` then reports as a problem. Only NEW problems are
     refused, so a config already broken can still be repaired by the tool that reports it."""
-    from . import workflow as WF
 
     introduced = sorted(_workflow_problems(repo, text, local=layer == "local") - before)
     if not introduced:
