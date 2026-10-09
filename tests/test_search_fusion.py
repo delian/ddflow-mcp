@@ -222,3 +222,17 @@ def test_an_index_built_without_trigram_is_rebuilt_where_there_is_one(repo, log,
     new.rebuild(log)
     assert not new.stale(log)
     assert {r["id"] for r in new.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}
+
+
+@pytest.mark.parametrize("backend", ["fts5", "like"])
+def test_tags_and_verdicts_are_searched_where_the_index_holds_them(repo, log, backend):
+    """The porter FTS tables index a lesson's and an item's tags and a research verdict, so
+    the Python rankers search them too: a tag-only match is no longer an FTS5-only hit."""
+    if backend == "fts5" and not _has_fts5():
+        pytest.skip("this SQLite has no FTS5")
+    log.append("lesson.recorded", "L1", {"title": "t", "rule": "r", "tags": ["zzytag"]})
+    log.append("research.recorded", "R1", {"question": "q", "claim": "c", "verdict": "ZZZUNIQUE"})
+    st = _store(repo, backend)
+    st.rebuild(log)
+    assert [r["id"] for r in st.search("lessons", "zzytag", 5)] == ["L1"]
+    assert [r["id"] for r in st.search("research", "zzzunique", 5)] == ["R1"]
