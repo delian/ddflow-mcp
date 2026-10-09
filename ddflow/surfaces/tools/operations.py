@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..declared import setup as ST
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -142,32 +143,5 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("total", "shown", "events"),
     },
-    "ddflow_import": {
-        "description": (
-            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons corpus, ADR files and unmerged branches and proposes them as queue items. Reports by default; writes NOTHING until `apply` is true. Call it right after `ddflow_setup` on any repository that is not brand new. The proposal is a GUESS: the `import-existing-project` prompt walks through fixing it. Exit 2: nothing found."
-        ),
-        "properties": {
-            "apply": ("boolean", "Write the proposal. Default false: look first.", False),
-            "include_done": (
-                "boolean",
-                "Also import already-ticked items as completed. Off by default — a "
-                "finished history is not a queue, and one real project yielded 3,638 of "
-                "them.",
-                False,
-            ),
-            "max_tasks": (
-                "integer",
-                "Refuse to propose more tasks than this (default 200).",
-                False,
-            ),
-        },
-        "api": lambda repo, a, agent: _api().import_project(
-            repo,
-            apply=bool(a.get("apply")),
-            include_done=bool(a.get("include_done")),
-            max_tasks=int(a.get("max_tasks") or 0),
-            agent=agent,
-        ),
-        "payload": "",
-    },
+    "ddflow_import": ST.BY_TOOL["ddflow_import"].tool_entry(),
 }

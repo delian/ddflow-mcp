@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..declared import review as RV
+from ..declared import setup as ST
 from ._common import _all_tools, _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -145,17 +146,5 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("topic", "text", "topics"),
     },
-    "ddflow_import_verify": {
-        "description": (
-            "Was this project's history imported, is that still true, and did anyone FINISH it? Read-only. "
-            "STATUS: what carries import provenance. STILL TRUE: whether the sources moved on (what a "
-            "re-run would add) or an imported item names a missing file. FINISHED: imported tasks with "
-            "no globs (the conflict detector cannot protect them) and phases claiming shipped work "
-            "while a task under them is open. Call after any import. Exit 1 = findings; exit 2 = "
-            "nothing ever imported. `ddflow_doctor` covers the rest."
-        ),
-        "properties": {},
-        "api": lambda repo, a, agent: _api().import_verify(repo, agent=agent),
-        "payload": "",
-    },
+    "ddflow_import_verify": ST.BY_TOOL["ddflow_import_verify"].tool_entry(),
 }

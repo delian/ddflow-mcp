@@ -17,6 +17,8 @@ from ..commands.reporting import (
     cmd_replay,
     cmd_show,
 )
+from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
+from ..registry import add_commands
 
 
 def register(s: argparse._SubParsersAction) -> None:
@@ -47,13 +49,7 @@ def register(s: argparse._SubParsersAction) -> None:
     cu.add_argument("--apply", action="store_true")
     cu.set_defaults(fn=cmd_cleanup)
 
-    dr = s.add_parser("doctor", help="integrity + health check")
-    dr.add_argument(
-        "--upgrade",
-        action="store_true",
-        help="the upgrade plan instead (the same as `ddflow upgrade`)",
-    )
-    dr.set_defaults(fn=cmd_doctor)
+    add_commands(s, [SETUP_BY_TOOL["ddflow_doctor"]], handlers={("doctor",): cmd_doctor})
     s.add_parser("rebuild", help="re-derive the index from the log").set_defaults(fn=cmd_rebuild)
 
     rn = s.add_parser("render", help="regenerate the human-readable views")

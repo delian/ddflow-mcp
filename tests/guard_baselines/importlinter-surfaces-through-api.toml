@@ -41,6 +41,5 @@ ignore_imports = [
     "ddflow.surfaces.mcp -> ddflow.services.obligations",
     "ddflow.surfaces.mcp -> ddflow.services.prompts",
     "ddflow.surfaces.mcp -> ddflow.services.review",
-    "ddflow.surfaces.parsers.review -> ddflow.services.adopt",
     "ddflow.surfaces.tools._common -> ddflow.services.adopt",
 ]
