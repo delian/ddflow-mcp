@@ -140,3 +140,12 @@ def test_a_hook_entry_is_judged_as_pre_commit_runs_it(tmp_path):
     assert not OP._command_found("FOO=bar true", tmp_path)
     assert OP._command_found("true --x", tmp_path)
     assert not OP._command_found("ddflow-no-such-tool --x", tmp_path)
+
+
+def test_start_redacts_the_reason_of_a_missing_program():
+    from ddflow.core.redact import Redactor
+    from ddflow.services import cmdrunner as CR
+
+    red = Redactor("log", secret_patterns=[r"hunter2"])
+    s = CR.CommandRunner(redactor=red).start(_decl("hunter2-tool --x"))
+    assert s.unavailable.kind == CR.MISSING and "hunter2" not in s.unavailable.reason
