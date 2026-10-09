@@ -123,6 +123,8 @@ def test_a_run_can_fold_stderr_into_its_output(tmp_path):
         _decl("echo a; echo b >&2"), cwd=tmp_path, timeout_s=10, merge_stderr=True
     )
     assert r.ran and r.out == "a\nb\n" and r.err == ""
+    kept = CR.CommandRunner().run(_decl("echo a; echo b >&2"), cwd=tmp_path, timeout_s=10)
+    assert kept.out == "a\n" and kept.err == "b\n"  # off by default
 
 
 def test_the_onboarding_run_keeps_its_old_codes(tmp_path):
