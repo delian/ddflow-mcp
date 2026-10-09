@@ -11,12 +11,13 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...infra.store import Store
+from ...services import inventory as INV
 from ...services import searchcore as SC
 from .._base import _load
 
 
 def _store(repo, log, cfg):
-    from ...infra.store import Store
 
     s = Store(repo, cfg)
     s.ensure(log)
@@ -63,7 +64,6 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     and names which sites appeared, where a stored count could only say that things got
     worse. A count cannot be acted on and cannot be reviewed.
     """
-    from ...services import inventory as INV
 
     log, cfg, st = _load(repo, agent)
     minted = IDS.mint(
@@ -132,7 +132,6 @@ def lessons_verify(repo: Path, *, agent: str = "") -> O.Outcome:
       pass: reporting "all clear" for a corpus with zero ratchets is how a project convinces
       itself it has checks it does not have.
     """
-    from ...services import inventory as INV
 
     _log, _cfg, st = _load(repo, agent)
     live = {k: v for k, v in st.lessons.items() if not v.superseded_by}

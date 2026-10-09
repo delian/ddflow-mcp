@@ -8,17 +8,44 @@ from typing import Any
 
 from ...config import Config
 from ...core import outcome as O
+from ...core import progress as PR
 from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
-from ...core.schedule import stale_package_globs
+from ...core.schedule import is_external, stale_package_globs, unpickable
 from ...core.tier import unknown_tier_notes
+from ...infra import container as CT
+from ...infra import signals as SIG
 from ...infra import worktree as W
+from ...infra.store import Store
+from ...infra.worktree import absolutise
+from ...services import adopt as AD
+from ...services import cleanup as CL
 from ...services import configcompat as CC
 from ...services import embed as EMB
+from ...services import eventcommit as EC
+from ...services import external as EX
+from ...services import flowstate as FL
+from ...services import launchers as LA
+from ...services import leases as L
+from ...services import rates as RT
 from ...services import repairs as RP
+from ...services import sessions as SS
+from ...services import shared_files as SF
+from ...services import upgrade as UP
+from ...services import workflow as WF
+from ...services.adopt import MISSING, NOT_BINDING, rules_status
+from ...services.completion import verdict
+from ...services.export import ops as X
+from ...services.export import select as export_select
+from ...services.export.query import ExportError
+from ...services.gates import load_gates
 from ...services.guidance import ruleview as RULEVIEW
+from ...services.review import load_reviewers
+from ...views import human
 from ...views.markdown import may_hold_work
 from .._base import _load
+from ..knowledge import _sweep_records, pairs_from
+from ..lifecycle.planning import plan_for
 from ..refs import stale_references
 
 
@@ -28,8 +55,6 @@ def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "")
     A worktree with uncommitted changes is reported and never touched, whatever `apply`
     says — the whole value of the sweep is that it does not destroy the work it found.
     """
-    from ...infra.worktree import absolutise
-    from ...services import leases as L
 
     log, cfg, _ = _load(repo, agent)
     found = [r for r in L.sweep(log, cfg, repo, apply=apply) if not item or r.item == item]
@@ -52,8 +77,6 @@ def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "")
 
 def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[str]) -> None:
     """Dependencies that can never be met, and external ones not yet observed."""
-    from ...core.schedule import is_external
-    from ...services import external as EX
 
     configured = EX.repos(cfg, repo)
     # Live items only, as `external.referenced` observes: a removed item's dependency
@@ -108,7 +131,6 @@ def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) 
     applied to tasks only, never to a phase, so an unknown author model cannot put a
     spurious blocker into this remedy.
     """
-    from ...services.completion import verdict
 
     v = verdict(st, cfg, item, repo=repo)
     if v.may_complete:
@@ -126,7 +148,6 @@ def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) 
 def _primary_mid_merge(repo: Path, problems: list[str], notes: list[str]) -> None:
     """B6926ec1ad9: a merge left half-done in the primary fails every later `merge`, by
     every agent, and agents may not touch the primary to clear it."""
-    from ...infra import worktree as W
 
     mid = W.merging(repo)
     if mid is None:
@@ -188,7 +209,6 @@ def _driver_drift_notes(repo: Path) -> list[str]:
     """One note naming driver docs that differ from the templates this ddflow ships, each
     with WHAT the difference is (the Managed state): an unedited older release, a hand edit,
     a newer ddflow's format, or a copy with no stamp."""
-    from ...services import adopt as AD
 
     lagging = AD.driver_states(repo)
     if not lagging:
@@ -211,7 +231,6 @@ def _driver_drift_notes(repo: Path) -> list[str]:
 
 
 def _orphan_notes(events: list) -> list[str]:
-    from ...services import sessions as SS
 
     lost = len(SS.unadopted_orphans(events))
     if lost <= 0:
@@ -226,7 +245,6 @@ def _launcher_findings(repo: Path, problems: list[str], notes: list[str]) -> Non
     """A launcher recorded in a hook or MCP entry whose target is gone. The git hooks fail
     open now, so the check silently stops: a PROBLEM, unless `ddflow` on PATH still runs
     it (B-dangling-precommit-hook)."""
-    from ...services import launchers as LA
 
     for d in LA.findings(repo):
         (notes if d.fallback else problems).append(d.render())
@@ -239,7 +257,6 @@ _SHARDS_NAMED = 3
 def _loose_shards(repo: Path) -> list[str]:
     """Event shards git has not committed: a clone or a pull gets an incomplete log
     (Bcd3512c891)."""
-    from ...services import eventcommit as EC
 
     loose = EC.uncommitted_shards(repo)
     if loose is None:
@@ -265,14 +282,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     The body is PROSE on both surfaces, rendered by `views/human.py`, because a list of
     problems with advice attached is what an operator and an agent both want.
     """
-    from ...core import progress as PR
-    from ...infra import container as CT
-    from ...infra.store import Store
-    from ...services import leases as L
-    from ...services import workflow as WF
-    from ...services.gates import load_gates
-    from ...views import human
-    from ..lifecycle.planning import plan_for
 
     log, cfg, st = _load(repo, agent)
     # One read of the whole log serves the data repairs and every pass below (the warm
@@ -294,18 +303,15 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
         )
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
-    from ...services.export import select as export_select
 
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
-    from ...infra import signals as SIG
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
     notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
-    from ...services import flowstate as FL
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes.extend(FL.doctor_notes(repo))
@@ -325,10 +331,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # below is computed WITHOUT them. A note, as an unknown config knob is named but the
     # old code keeps working -- the remedy is the same: bring in the newer ddflow.
     if st.skipped_kinds:
-        from ...services import upgrade as UP
-
         notes.append(UP.skipped_kinds_advice(st))
-    from ...services import upgrade as UP
 
     notes.extend(UP.doctor_notes(st))
     notes.extend(fold_problem_notes(st))
@@ -348,7 +351,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # measures the items that are present; this one asks whether any of them can be picked
     # up, which is the question that went unasked while 37 filed follow-ups sat invisible
     # on the source project with every audit exiting 0.
-    from ...core.schedule import unpickable
 
     for u in unpickable(st, cfg):
         if u.kind == "finished_phase":
@@ -358,7 +360,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # B24/B25: does ddflow's own machinery fire? Both are NOTES, not problems — a flaky
     # gate and a stalled cadence are facts about the tooling, and failing `doctor` on them
     # would block work on a defect in the thing that checks the work.
-    from ...services import rates as RT
 
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
@@ -366,7 +367,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     notes += _stale_glob_notes(repo, st)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
-    from ...services import shared_files as SF
 
     shared_problems, shared_notes = SF.findings(repo, cfg)
     problems += shared_problems
@@ -384,8 +384,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # The reviewer endpoints are fetched HERE and handed down: `infra.container` must not
     # reach up into `services.review` to get them.
     try:
-        from ...services.review import load_reviewers
-
         urls = [(r.name, r.base_url) for r in load_reviewers(repo) if r.enabled]
     except Exception:
         urls = []
@@ -394,8 +392,6 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
     # drifted or stripped block is a note — the agent has rules, they are just not current.
-    from ...services import cleanup as CL
-    from ...services.adopt import MISSING, NOT_BINDING, rules_status
 
     for state in rules_status(repo):
         if not state.needs_attention:
@@ -472,8 +468,6 @@ def _export_target_notes(repo: Path, cfg: Config) -> list[str]:
     """
     if cfg.enforce.generated_views == "off" or not cfg.export.documents:
         return []
-    from ...services.export import ops as X
-    from ...services.export.query import ExportError
 
     try:
         rows = X.listing(repo, cfg)
@@ -531,8 +525,6 @@ def _dupe_note(st, cfg) -> list[str]:
     if cfg.dedupe.on_match == "off":
         return []
     try:
-        from ..knowledge import _sweep_records, pairs_from
-
         n_records = sum(1 for r in _sweep_records(st) if r["kind"] in cfg.dedupe.kinds)
         if n_records > _DOCTOR_SWEEP_MAX:
             return [

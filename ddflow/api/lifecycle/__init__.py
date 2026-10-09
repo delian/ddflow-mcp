@@ -35,33 +35,74 @@ from datetime import (
     datetime,  # noqa: F401
 )
 from pathlib import Path  # noqa: F401
-from typing import TYPE_CHECKING, Any  # noqa: F401
+from typing import (  # noqa: F401
+    TYPE_CHECKING,
+    Any,
+    NamedTuple,
+)
 
+from ...config import csv_list  # noqa: F401
 from ...core import clock  # noqa: F401
+from ...core import flow as F  # noqa: F401
 from ...core import globspec as GS  # noqa: F401
 from ...core import outcome as O  # noqa: F401
 from ...core import progress as PR  # noqa: F401
+from ...core import provenance as PV  # noqa: F401
+from ...core.admission import glob_conflict  # noqa: F401
 from ...core.budget import Budget, approx_tokens  # noqa: F401
 from ...core.events import parse_changelog  # noqa: F401
 from ...core.model import (
     ABANDONED,  # noqa: F401
+    BLOCKED,  # noqa: F401
     DONE,  # noqa: F401
     REVIEW,  # noqa: F401
     State,  # noqa: F401
 )
 from ...core.plain import plain  # noqa: F401
-from ...core.schedule import needs_tree, plan  # noqa: F401
+from ...core.schedule import (  # noqa: F401
+    Blocked,
+    capacities,
+    critical_path,
+    find_cycles,
+    is_external,
+    item_blocker,
+    needs_tree,
+    path_in_glob,
+    plan,
+    resource_shortfall,
+)
+from ...core.tier import tier_of  # noqa: F401
 from ...infra import worktree as W  # noqa: F401
+from ...infra.log import EventLog  # noqa: F401
+from ...infra.store import Store  # noqa: F401
 from ...services import changes as CH  # noqa: F401
+from ...services import choices as CHO  # noqa: F401
+from ...services import completion as CM  # noqa: F401
+from ...services import eventcommit as EC  # noqa: F401
+from ...services import flow as FS  # noqa: F401
 from ...services import flowstate as FL  # noqa: F401
 from ...services import gates as G  # noqa: F401
 from ...services import leases as L  # noqa: F401
+from ...services import ledger as LG  # noqa: F401
+from ...services import ports as PT  # noqa: F401
+from ...services import progress_line as PL  # noqa: F401
+from ...services import promotions as PM  # noqa: F401
 from ...services import searchcore as SC  # noqa: F401
+from ...services import skills as SK  # noqa: F401
 from ...services import upgrade_notice as UN  # noqa: F401
 from ...services import upgrade_start as US  # noqa: F401
+from ...services import waits as WT  # noqa: F401
+from ...services.enforce import SELF_MANAGED  # noqa: F401
+from ...services.export import refresh as RF  # noqa: F401
+from ...services.export import select as export_select  # noqa: F401
 from ...services.gates import measured as GM  # noqa: F401
 from ...services.guidance import inject as GI  # noqa: F401
+from ...views import markdown as render_md  # noqa: F401
 from .._base import _load  # noqa: F401
+from ..bug_reopen import refile_reported  # noqa: F401
+from ..ci import check_after_merge  # noqa: F401
+from ..knowledge import bug_fixed  # noqa: F401
+from ..reporting import new_reports  # noqa: F401
 from ._common import (  # noqa: F401
     _require,
 )
@@ -74,8 +115,15 @@ from .brief import (  # noqa: F401
     brief,
 )
 from .claim import (  # noqa: F401
+    _acquire,
+    _adopt,
+    _apply_port,
+    _bind_tree,
     _blocking_items,
+    _Bound,
     _bring_local_files,
+    _claimed,
+    _create_tree,
     _early_refusal,
     _in_leased_tree,
     _is_items_tree,
@@ -83,6 +131,7 @@ from .claim import (  # noqa: F401
     _leave_line,
     _new_report_count,
     _prior_lease,
+    _rebind,
     _recorded_tree,
     _refuse_if_reserved,
     _refuse_looping,
@@ -142,11 +191,13 @@ from .reservations import (  # noqa: F401
     _blocking_leases,
     _claim_blocker,
     _clears_on_release,
+    _expired_blocker,
     _fmt_since,
     _in_motion,
     _reservation_hold,
     _reserved_for,
     _reserved_msg,
+    _resource_blocker,
 )
 from .wait import (  # noqa: F401
     DEFAULT_WAIT_TIMEOUT_S,

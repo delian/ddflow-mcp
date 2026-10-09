@@ -7,13 +7,16 @@ from typing import Any
 
 from ...config import Config
 from ...core import outcome as O
+from ...core import progress as PR
 from ...core.events import version_key
 from ...core.model import fold
 from ...core.plain import plain
 from ...infra.log import EventLog
 from ...services import gates as G
+from ...services import leases as L
 from ...views.markdown import may_hold_work
 from .._base import _load
+from ..lifecycle.planning import plan_for
 
 
 def loops(repo: Path) -> O.Outcome:
@@ -28,7 +31,6 @@ def loops(repo: Path) -> O.Outcome:
     found" is a finding rather than a tool failure, but that contract is what callers
     already branch on and changing it silently would be worse than its imperfection.
     """
-    from ...core import progress as PR
 
     # cfg BEFORE the log, not after: the log needs `[log]` to honour `reuse_parsed`.
     cfg = Config.load(repo)
@@ -65,7 +67,6 @@ def progress(repo: Path, item: str = "") -> O.Outcome:
     callers that want the count without walking the list; the `payload` entry on the
     tool keeps the MCP body unchanged.
     """
-    from ...core import progress as PR
 
     log = EventLog(repo, log_cfg=Config.load(repo).log)
     events = log.read_all()
@@ -104,9 +105,6 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     prose summary from that ONE computation, separately, by hand. Two of the numbers
     appeared in only one of them.
     """
-    from ...core import progress as PR
-    from ...services import leases as L
-    from ..lifecycle.planning import plan_for
 
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()

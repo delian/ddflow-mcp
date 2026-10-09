@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +10,12 @@ import ddflow.api._dedupe as DD
 
 from ...config import csv_list
 from ...core import outcome as O
+from ...core import provenance as PV
 from ...core.budget import RECALL_MAX_CHARS, Budget
 from ...infra.store import RECALL_SOURCES
 from ...services import contextpack as CP
 from ...services import searchcore as SC
+from ...services import similar as sim
 from .._base import _load
 from .lessons import _store
 
@@ -24,7 +27,6 @@ def _wire_hit(table: str, label: str, r: dict) -> dict:
 
 def _origin(st, table: str, ident):
     """The `Origin` of a recalled decision, lesson or memory; None for the other kinds."""
-    from ...core import provenance as PV
 
     if table == "decisions" and ident in st.decisions:
         return PV.decision_origin(st.decisions[ident])
@@ -121,9 +123,6 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     ``[dedupe].on_match`` says: that setting governs what an ADD does, not whether one may
     look. ``kinds`` narrows to some of ``[dedupe].kinds``.
     """
-    import dataclasses
-
-    from ...services import similar as sim
 
     text = (text or "").strip()
     if not text:

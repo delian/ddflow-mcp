@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from ...core import outcome as O
+from ...core.model import fold
+from ...services import eventcommit as EC
 from ...services import leases as L
+from ...services import waits as WT
 from .._base import _load
 from .claim import _in_leased_tree, _new_report_count, _tree_of
 
@@ -72,7 +75,6 @@ def _catch_up_globs(log, cfg, item: str) -> str:
     on its own, so a refusal of one does not hold back the other. A claim records its
     globs and resources on the item, so this never undoes the claim itself.
     """
-    from ...core.model import fold
 
     why: list[str] = []
     for field in ("globs", "resources"):
@@ -100,7 +102,6 @@ def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
     globs, or release early; at a release or completion it is the list of agents this
     just woke. Advisory -- a registry that cannot be read is simply no waiters.
     """
-    from ...services import waits as WT
 
     try:
         return WT.waiting_on(repo, item)
@@ -115,7 +116,6 @@ def _commit_events(log, cfg, reason: str) -> dict[str, str]:
     Never fails the caller: a refusal is returned."""
     if not cfg.log.commit_events:
         return {}
-    from ...services import eventcommit as EC
 
     sha, why = EC.commit_shards(log.root, reason)
     if sha:
