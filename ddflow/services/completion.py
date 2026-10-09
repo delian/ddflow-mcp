@@ -137,7 +137,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     s = G.status(state, cfg, item_id)
     v = Verdict(item=item_id, coverage_gaps=list(s.unavailable), kind=it.kind)
-    required = set(cfg.gates.required)
+    required = G.required_gates(cfg)
 
     missing = [g for g in s.pipeline if g in required and not it.gate_satisfied(g, True)]
     if missing:
