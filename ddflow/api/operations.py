@@ -16,15 +16,32 @@ Two exit-code rules here are load-bearing and neither is obvious from the code:
 from __future__ import annotations
 
 import json
+import os
+import re
+import shlex
+import shutil
 from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
 from ..core.plain import plain
+from ..infra import fsio
+from ..infra import worktree as W
+from ..infra.store import Store
+from ..services import cleanup as CL
+from ..services import companions as C
+from ..services import enforce as E
+from ..services import external as EX
+from ..services import importer as IM
+from ..services import precommit as PC
+from ..services import prosepin as PP
+from ..services import testselect as TS
 from ..services.cadence import DueContext, due_all
+from ..services.gates import load_gates, parallel_test_advice
 from ..services.schedule import calendar as schedule_calendar
 from ..services.schedule import count_unit, done_counts
 from ._base import _load
+from .lifecycle import _tree_of
 
 
 def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
@@ -33,8 +50,6 @@ def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
     A tree holding UNCOMMITTED work is reported and never touched, whatever `apply` says.
     That is the whole value of the sweep: it does not destroy what it found.
     """
-    from ..infra.store import Store
-    from ..services import cleanup as CL
 
     log, cfg, _ = _load(repo, agent)
     st = Store(repo, cfg).ensure(log)
@@ -106,7 +121,6 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
 def import_verify(repo: Path, *, agent: str = "") -> O.Outcome:
     """Status, still-true, and did-anyone-finish-it. Three exit codes — see the module
     docstring for why none of them may be collapsed."""
-    from ..services import importer as IM
 
     _log, cfg, st = _load(repo, agent)
     r = IM.verify_import(
@@ -153,7 +167,6 @@ def import_project(
     four hundred days of work, and a queue that starts empty tells an agent "nothing is in
     flight" about a repository with three branches in flight.
     """
-    from ..services import importer as IM
 
     log, cfg, st = _load(repo, agent)
     # The flag overrides the knob; 0 means 'no flag given', so an operator who set
@@ -203,7 +216,6 @@ def external_sync(repo: Path, *, agent: str = "") -> O.Outcome:
     repository could not be read -- its dependents stay unmet, which is the safe side,
     but the operator has to hear why.
     """
-    from ..services import external as EX
 
     log, cfg, st = _load(repo, agent)
     obs = EX.sync(log, cfg, repo, st)
@@ -238,8 +250,6 @@ def pins(
     sentence is of unknown status, and reporting it all as free is the failure this
     exists to prevent.
     """
-    from ..infra import worktree as W
-    from ..services import prosepin as PP
 
     # `None` is "unset", never 0: using 0 for both made an explicit `--min-needle 0`
     # the default 12, and short pins were reported free (B22-minzero).
@@ -304,9 +314,6 @@ def relevant_tests(
     (the caller's own checkout), else the repo; the base is the item's, else the
     configured base ref, else the default branch.
     """
-    from ..infra import worktree as W
-    from ..services import testselect as TS
-    from ..services.gates import load_gates, parallel_test_advice
 
     _log, cfg, st = _load(repo, agent)
     tree = _caller_tree(repo, where)
@@ -361,7 +368,6 @@ def _caller_tree(repo: Path, where: Path | None) -> Path:
     """The checkout the caller is standing in. A linked worktree stays itself, where the
     repo root (and so `repo`) is the PRIMARY -- whose files and diff are not the ones the
     caller is working on."""
-    from .lifecycle import _tree_of
 
     return (_tree_of(where) if where else None) or repo
 
@@ -369,9 +375,6 @@ def _caller_tree(repo: Path, where: Path | None) -> Path:
 def _command_found(command: str, tree: Path) -> bool:
     """Whether the program ``command`` starts with can be run from ``tree`` -- where
     pre-commit runs a hook's entry, so a relative path is read against it."""
-    import os
-    import shlex
-    import shutil
 
     try:
         words = shlex.split(command)
@@ -389,7 +392,6 @@ def _command_found(command: str, tree: Path) -> bool:
 
 
 def _precommit_installed(repo: Path) -> bool | None:
-    from ..services import companions as C
 
     try:
         entry = next((c for c in C.load(repo) if c.id == "pre-commit"), None)
@@ -403,7 +405,6 @@ def _activation(path: Path, exists: bool, hook_types: list[str]) -> str:
     honours a file's default_install_hook_types -- the generated one declares them --
     and explicit --hook-type flags would OVERRIDE that list; they are needed only for a
     file that declares none, where a plain install sets up the pre-commit hook alone."""
-    import re
 
     try:
         text = path.read_text(encoding="utf-8") if exists else ""
@@ -428,12 +429,6 @@ def precommit(
     one that exists: which checks gate somebody's commits is theirs to decide, and a
     config they already have is exactly that decision.
     """
-    import shlex
-    import shutil
-
-    from ..infra import fsio
-    from ..services import enforce as E
-    from ..services import precommit as PC
 
     _load(repo, agent)
     ddflow_cmd = ddflow_cmd.strip()
