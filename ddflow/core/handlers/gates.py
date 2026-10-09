@@ -6,7 +6,7 @@ the small wrapper or factory call it shows. Everything in this module is pure.""
 from __future__ import annotations
 
 from ..events import Event
-from ..records import GateRecord, State
+from ..records import GateRecord, GateRun, State
 from ._common import _item
 from .approvals import REVIEWER, grant_row
 
@@ -36,6 +36,9 @@ def _h_gate(outcome: str):
                 by=d.get("by", ev.agent),
                 reason=d.get("reason", ""),
                 evidence=dict(d.get("evidence", {})),
+            )
+            it.gate_history.append(
+                GateRun(gate=gate, outcome=outcome, at=ev.ts, evidence=dict(d.get("evidence", {})))
             )
 
     return handler
