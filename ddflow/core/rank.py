@@ -5,7 +5,8 @@ Pure functions over token lists, so any source ranks the same way. FTS5's own BM
 
 ``substring_bm25`` is the trigram ranker where SQLite has no trigram tokenizer: a doc matches
 a term exactly when FTS5's trigram index would match it (the term occurs in the text, any
-case), so the candidate set is the same on every machine. ``rerank`` is the optional fuzzy
+case), so the candidate set is the same on every machine (the scores approximate its BM25,
+which weighs trigrams, not whole terms). ``rerank`` is the optional fuzzy
 step over a fused list: rapidfuzz when the ``[search]`` extra is installed, ``difflib``
 otherwise (`core/fuzzy`, the extra's one adapter).
 """
@@ -66,6 +67,16 @@ def rrf(rankings: Iterable[Sequence[str]], k: int = RRF_K) -> dict[str, float]:
     return fused
 
 
+def _occurrences(text: str, term: str) -> int:
+    """How often ``term`` occurs in ``text``, overlaps included (``aba`` twice in ``ababa``),
+    as a trigram index counts them."""
+    n, at = 0, text.find(term)
+    while at >= 0:
+        n += 1
+        at = text.find(term, at + 1)
+    return n
+
+
 def substring_bm25(texts: Sequence[str], terms: Iterable[str]) -> dict[int, float]:
     """BM25 of each distinct lower-cased ``terms`` entry's occurrences as a SUBSTRING of each
     text (the question FTS5's trigram tokenizer answers); index -> score, non-matches left
@@ -76,7 +87,7 @@ def substring_bm25(texts: Sequence[str], terms: Iterable[str]) -> dict[int, floa
     low = [t.lower() for t in texts]
     n = len(low)
     avg = (sum(len(t) for t in low) / n) or 1.0
-    counts = [{t: text.count(t) for t in q} for text in low]
+    counts = [{t: _occurrences(text, t) for t in q} for text in low]
     df = {t: sum(1 for c in counts if c[t]) for t in q}
     out: dict[int, float] = {}
     for i, text in enumerate(low):

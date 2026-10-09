@@ -567,6 +567,8 @@ class Store:
         cols = _SEARCH_COLS[table]
         pool = max(limit * _POOL, _POOL_MIN)
         terms = textsim.words(query, min_len=MIN_TERM_CHARS)
+        if not terms:  # nothing to rank on, on every machine
+            return []
         with closing(self.connect()) as con:
             self.init(con)
             scan: tuple[list[str], list[dict[str, Any]], list[str]] | None = None
@@ -592,10 +594,7 @@ class Store:
 
             lists: list[list[str]] = []
             if self.fts:
-                fq = _fts_query(query)
-                if not fq:
-                    return []
-                lists = [self._fts_ranking(con, f"{table}_fts", fq, pool)]
+                lists = [self._fts_ranking(con, f"{table}_fts", _fts_query(query), pool)]
                 lists.append(
                     self._fts_ranking(con, f"{table}_tri", _tri_query(terms), pool)
                     if self.trigram

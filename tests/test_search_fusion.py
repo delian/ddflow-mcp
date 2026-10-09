@@ -126,17 +126,42 @@ def test_fts_and_the_python_rankers_agree_on_the_candidates(repo, log, monkeypat
     assert ids["fts-trigram"] == ids["like"] == {"L1", "L2", "L4"}
 
 
-def test_prompts_fuse_on_their_session_ids_on_both_paths(repo, log, monkeypatch):
+@pytest.mark.parametrize("backend", ["fts5", "like"])
+def test_prompts_fuse_on_their_session_ids_on_both_paths(repo, log, backend):
+    if backend == "fts5" and not _has_fts5():
+        pytest.skip("this SQLite has no FTS5")
     log.append("session.started", "S1", {"model": "m", "tool": "t"})
     log.append("session.prompt", "S1", {"text": "please migrate the database", "seq": 1})
     log.append("session.prompt", "S1", {"text": "unrelated chatter", "seq": 2})
-    for backend in ("fts5", "like"):
-        if backend == "fts5" and not _has_fts5():
-            continue
-        st = _store(repo, backend)
-        st.rebuild(log)
-        got = st.search("prompts", "igrat", 5)  # a substring of "migrate", no word of it
-        assert [r["text"] for r in got] == ["please migrate the database"], backend
+    st = _store(repo, backend)
+    st.rebuild(log)
+    got = st.search("prompts", "igrat", 5)  # a substring of "migrate", no word of it
+    assert [r["text"] for r in got] == ["please migrate the database"]
+
+
+@pytest.mark.parametrize("backend", ["fts5", "like"])
+def test_a_query_with_no_usable_term_finds_nothing_on_every_machine(repo, log, backend):
+    """The like fallback, rewritten around fusion, returned the first rows of the table
+    for `""`/`"###"`/`"to be"` while FTS5 returned nothing."""
+    if backend == "fts5" and not _has_fts5():
+        pytest.skip("this SQLite has no FTS5")
+    _lessons(log)
+    st = _store(repo, backend)
+    st.rebuild(log)
+    for q in ("", "###", "x", "a b"):
+        assert st.search("lessons", q, 5) == [], q
+
+
+def test_overlapping_occurrences_count_as_a_trigram_index_counts_them():
+    assert rank._occurrences("ababa", "aba") == 2
+    assert rank._occurrences("abc", "zzz") == 0
+    s = rank.substring_bm25(["ababa", "abaxx"], ["aba"])
+    assert s[0] > s[1]
+
+
+def test_rerank_is_case_insensitive_with_or_without_the_extra(monkeypatch):
+    monkeypatch.setattr(fuzzy, "_fuzz", None)
+    assert fuzzy.ratio("DNS", "dns") == 1.0
 
 
 def test_the_optional_rerank_does_not_change_the_hit_set(repo, log):
