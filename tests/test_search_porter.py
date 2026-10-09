@@ -74,7 +74,7 @@ def test_the_query_terms_are_raw_words_the_fallback_then_stems_like_the_rows() -
     """`_terms` stems nothing: both rankers get the raw words, and the fallback runs the QUERY
     through `_fallback_words` as it runs every row, so the two sides stem alike."""
     terms = store._terms("Running ponies")
-    assert terms == ["running", "ponies"]
+    assert terms == ["Running", "ponies"]  # raw: case and all
     assert store._fallback_words(" ".join(terms)) == ["run", "poni"]
     assert (
         store._fallback_words("the daemon runs forever")[2] == store._fallback_words("running")[0]
