@@ -10,7 +10,8 @@ from pathlib import Path
 
 from ..config import Config
 from ..core.model import State, fold
-from ..infra.log import EventLog, resolve_agent_id
+from ..infra.log import EventLog
+from ..services import identity as ID
 
 
 def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
@@ -25,20 +26,12 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
     # Resolved AND written back, exactly as `surfaces/context.Ctx` does. Resolving without
     # writing back is a third copy of the same drift: `config --explain` reported
     # `agent.id = ""  [default]` from this path while the argv path reported the value the
-    # env var actually set. The identity is a fact about this invocation, and a config
-    # object that does not carry it is a config object two surfaces disagree about.
-    resolved, layer = resolve_agent_id(repo, cfg, agent)
-    if resolved != cfg.agent.id:
-        cfg.agent.id = resolved
-        # The layer that actually WON, not a guess from comparing values.
-        cfg.sources["agent.id"] = layer
-    log = EventLog(repo, resolved, lock_timeout_s=cfg.lease.acquire_timeout_s, log_cfg=cfg.log)
+    # env var actually set (`identity.bind`: the layer that actually WON).
+    log, who = ID.open_log(repo, cfg, agent, bind_cfg=True)
     st = fold(log.read_all(), strict=False)
     # Leases this clone claimed under its pre-B190 bare id become its suffixed id's, HERE,
     # once -- so no holder comparison anywhere needs to know the old name (B205).
-    from ..services.identity import rehome_pre_upgrade_leases
-
-    if rehome_pre_upgrade_leases(log, cfg, st, layer):
+    if ID.rehome_pre_upgrade_leases(log, cfg, st, who.source):
         st = fold(log.read_all(), strict=False)
     # Workflow choices recorded in the log fill in wherever the config file is silent --
     # HERE, once, so every operation reads `cfg.flow.*` and sees the same answer.

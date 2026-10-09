@@ -24,6 +24,7 @@ from ..config import csv_list
 from ..core import outcome as O
 from ..infra import tomlcfg as TC
 from ..services import backups as BK
+from ..services import identity as ID
 from ..services import upgrade_apply as UA
 from ..services import upgrade_plan as UP
 from ._base import _load
@@ -548,7 +549,6 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
 
     from ..config import Config
     from ..core.model import fold
-    from ..infra.log import EventLog, resolve_agent_id
     from ..services import compaction as CP
 
     try:
@@ -556,12 +556,11 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
         if not isinstance(payload, dict):
             raise ValueError("the hook's stdin is not a JSON object")
         cfg = Config.load(repo)
-        resolved, _layer = resolve_agent_id(repo, cfg, agent)
-        log = EventLog(
-            repo, resolved, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0), log_cfg=cfg.log
+        log, who = ID.open_log(
+            repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
         )
         st = fold(log.read_all(), strict=False)
-        held = sorted(i.id for i in st.items.values() if i.lease and i.lease.holder == resolved)
+        held = sorted(i.id for i in st.items.values() if i.lease and i.lease.holder == who.id)
         result = CP.record(log, cfg, payload, held, set(st.sessions))
         return O.ok("hooks", message="", result=result)
     except Exception as exc:  # a hook must never stand between the operator and /compact
@@ -776,7 +775,6 @@ def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
     import json
 
     from ..config import Config
-    from ..infra.log import EventLog, resolve_agent_id
     from ..services import sessions as S
 
     try:
@@ -787,10 +785,9 @@ def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
         if not isinstance(text, str):
             return O.ok("hooks", message="", result="skipped", why="no prompt in the hook JSON")
         cfg = Config.load(repo)
-        resolved, _layer = resolve_agent_id(repo, cfg, agent)
         # A short lock wait: the hook must not make the operator's turn wait on a busy log.
-        log = EventLog(
-            repo, resolved, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0), log_cfg=cfg.log
+        log, _who = ID.open_log(
+            repo, cfg, agent, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0)
         )
         sid = str(payload.get("session_id") or payload.get("conversation_id") or "")
         result = S.capture_prompt(

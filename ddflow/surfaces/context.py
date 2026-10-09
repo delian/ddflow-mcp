@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..api import identity as ID
 from ..config import Config
 from ..core.ids import auto_id
 from ..core.model import fold
@@ -31,7 +32,7 @@ from ..core.outcome import (  # noqa: F401  (the commands import these from here
 )
 from ..core.plain import plain
 from ..infra import worktree as W
-from ..infra.log import EventLog, resolve_agent_id
+from ..infra.log import EventLog
 from ..infra.store import Store
 from ..services import gates as G
 from .render import emit_json
@@ -93,16 +94,12 @@ class Ctx:
             from ..infra import harness_identity
 
             harness = self.requested_agent = harness_identity.declared(self.repo)
-        resolved, layer = resolve_agent_id(self.repo, self.cfg, self.requested_agent)
-        if harness:
-            layer = "ddflow_identify"
-        if resolved != self.cfg.agent.id:
-            self.cfg.agent.id = resolved
-            # The layer that actually won, not a guess from comparing values. With
-            # nothing set anywhere the derived name differs from `cfg.agent.id` (""),
-            # so the old code fired and recorded `env` -- and `config --explain` then
-            # blamed the environment for a variable nobody had exported.
-            self.cfg.sources["agent.id"] = layer
+        who = ID.resolve(self.repo, self.cfg, self.requested_agent)
+        # The layer that actually won, not a guess from comparing values. With nothing set
+        # anywhere the derived name differs from `cfg.agent.id` ("") so the old code fired
+        # and recorded `env` -- and `config --explain` then blamed the environment for a
+        # variable nobody had exported.
+        ID.bind(self.cfg, ID.AgentId(who.id, "ddflow_identify" if harness else who.source))
         self.log = EventLog(
             self.repo,
             self.cfg.agent.id,

@@ -32,6 +32,7 @@ from ..infra import tomlcfg as TC
 # The person-only checks are the approval primitive's (B-uni-approval); re-exported so
 # `reviewer_trust.agent_marker` and friends keep working.
 from . import approval as AP
+from . import identity as ID
 from .approval import HARNESS_MARKERS, agent_marker  # noqa: F401
 from .approval import os_user as _user
 
@@ -74,11 +75,8 @@ def _files(repo: Path) -> tuple[Path, ...]:
 
 def _log(repo: Path, agent: str):
     from ..config import Config
-    from ..infra.log import EventLog, resolve_agent_id
 
-    cfg = Config.load(repo)
-    who, _layer = resolve_agent_id(repo, cfg, agent)
-    return EventLog(repo, who, lock_timeout_s=cfg.lease.acquire_timeout_s, log_cfg=cfg.log)
+    return ID.open_log(repo, Config.load(repo), agent)[0]
 
 
 def write(repo: Path, path: Path, text: str, *, person: bool = False, agent: str = "") -> None:
