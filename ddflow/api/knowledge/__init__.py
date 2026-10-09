@@ -30,13 +30,13 @@ from typing import Any  # noqa: F401
 
 import ddflow.api._dedupe as DD  # noqa: F401
 
-from ...api.items import DEFAULT_PRIORITY  # noqa: F401
 from ...config import Config, csv_list  # noqa: F401
 from ...core import globspec as GS  # noqa: F401
 from ...core import ids as IDS  # noqa: F401
 from ...core import outcome as O  # noqa: F401
 from ...core import provenance as PV  # noqa: F401
 from ...core.budget import RECALL_MAX_CHARS, Budget  # noqa: F401
+from ...core.defaults import DEFAULT_PRIORITY  # noqa: F401
 from ...core.events import parse_changelog  # noqa: F401
 from ...core.flow import FEATURE, branch_kind  # noqa: F401
 from ...core.model import (  # noqa: F401  # noqa: F401

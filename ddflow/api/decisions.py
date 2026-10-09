@@ -221,6 +221,20 @@ def decision_search(repo: Path, query: str, *, limit: int = 20) -> O.Outcome:
     return O.ok("decision.search", **data)
 
 
+def _none_listed(data: dict[str, Any], *, filtered: bool) -> O.Outcome:
+    """The answer for an empty listing. `hidden`/`total` say WHICH emptiness this is:
+    nothing recorded at all, or nothing left after a filter. Reporting the first for the
+    second sends the reader to record a decision they already have."""
+    if filtered:
+        return O.nothing("decision.list", "No architectural decisions match the filters.", **data)
+    return O.nothing(
+        "decision.list",
+        "No architectural decisions recorded.\n"
+        "  ddflow decision add --title '...' --decision '...' --globs 'src/x/*'",
+        **data,
+    )
+
+
 def decision_list(
     repo: Path, *, all: bool = False, since: str = "", limit: int | None = None
 ) -> O.Outcome:
@@ -275,19 +289,5 @@ def decision_list(
     data["total"] = total
     data["shown"] = len(rows)
     if not rows:
-        # `hidden`/`total` say WHICH emptiness this is: nothing recorded at all, or
-        # nothing left after a filter. Reporting the first for the second sends the
-        # reader to record a decision they already have.
-        if since or limit:
-            return O.nothing(
-                "decision.list",
-                "No architectural decisions match the filters.",
-                **data,
-            )
-        return O.nothing(
-            "decision.list",
-            "No architectural decisions recorded.\n"
-            "  ddflow decision add --title '...' --decision '...' --globs 'src/x/*'",
-            **data,
-        )
+        return _none_listed(data, filtered=bool(since or limit))
     return O.ok("decision.list", **data)

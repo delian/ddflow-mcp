@@ -7,10 +7,10 @@ from typing import Any
 
 import ddflow.api._dedupe as DD
 
-from ...api.items import DEFAULT_PRIORITY
 from ...core import globspec as GS
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
 from ...services.completion import fixes_of

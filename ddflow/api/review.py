@@ -14,7 +14,10 @@ reviewer has actually answered.
 
 from __future__ import annotations
 
+import json
 import secrets
+import threading
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -22,16 +25,21 @@ from typing import Any
 from ..config import family_for
 from ..core import clock
 from ..core import outcome as O
+from ..core.digest import content_digest
 from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
+from ..services import prompts as P
 from ..services import review as RV
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
+from ..services.enforce import SELF_MANAGED
 from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
+from ..views import human
 from ._base import _load
-from .gates import item_tree
+from .gates import _lease_keeper, item_tree
+from .lifecycle import callers_tree
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -103,46 +111,11 @@ def diff_for(
     it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
-        # The branch's commits plus TRACKED edits. An untracked file is a draft nobody
-        # committed (B2bf4d38cc1): it is named, not reviewed.
-        try:
-            diff = W.capture_diff(wt_path, base, include_untracked=False)
-        except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
-            return "", f"{base}..HEAD in {wt_path} could not be read: {exc}"
-        how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
-        if untracked := W.untracked_files(wt_path):
-            shown = ", ".join(untracked[:SHOWN_UNTRACKED]) + (
-                f", ... ({len(untracked)} in all)" if len(untracked) > SHOWN_UNTRACKED else ""
-            )
-            how += f" (untracked, not reviewed: {shown})"
-        if diff.strip():
-            ok, missing = W.diff_covers_everything(wt_path, diff, ignore_untracked=True)
-            if not ok:
-                how += f" (WARNING: {len(missing)} changed path(s) absent from the diff)"
-        return diff, how
-    chosen = "named with --branch" if branch else ""
-    if not branch and it and it.branch:
-        branch, chosen = it.branch, f"{item}'s branch (its tree is gone)"
-    if not branch and it:
-        from .lifecycle import callers_tree
-
-        here, held = callers_tree(repo, cfg, st, it, called_from)
-        if held:
-            return "", (
-                f"the worktree you are in belongs to {held}, not {item}; pass {item}'s "
-                f"branch with --branch"
-            )
-        if here is not None and here.branch:
-            branch, chosen = here.branch, f"checked out in {here.path}"
-    if not branch and it and it.lease is not None and cfg.worktree.enabled:
-        return "", (
-            f"{item} was claimed without a worktree, and the primary's working tree is not "
-            f"its: pass --branch <branch>, run review from the worktree it is worked in, or "
-            f"set [worktree].enabled = false if the primary is where you work"
-        )
+        return _tree_diff(wt_path, base)
+    branch, chosen, early = _review_branch(repo, cfg, st, it, item, branch, called_from)
+    if early is not None:
+        return early
     if not branch:
-        from ..services.enforce import SELF_MANAGED
-
         return _captured(
             repo,
             f"working tree in {repo}, ddflow's bookkeeping excluded -- for {item}'s work "
@@ -154,6 +127,62 @@ def diff_for(
     if not d.ok:  # git could not say: an empty diff, recorded unavailable, with the reason
         return "", f"{how} could not be read: {d.err or d.out}"
     return (d.out + "\n") if d.out else "", how
+
+
+def _tree_diff(wt_path: Path, base: str) -> tuple[str, str]:
+    """(diff, how) of an item's worktree: the branch's commits plus TRACKED edits. An
+    untracked file is a draft nobody committed (B2bf4d38cc1): it is named, not reviewed."""
+    try:
+        diff = W.capture_diff(wt_path, base, include_untracked=False)
+    except RuntimeError as exc:  # git could not say: an empty diff, recorded unavailable
+        return "", f"{base}..HEAD in {wt_path} could not be read: {exc}"
+    how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
+    if untracked := W.untracked_files(wt_path):
+        shown = ", ".join(untracked[:SHOWN_UNTRACKED]) + (
+            f", ... ({len(untracked)} in all)" if len(untracked) > SHOWN_UNTRACKED else ""
+        )
+        how += f" (untracked, not reviewed: {shown})"
+    if diff.strip():
+        ok, missing = W.diff_covers_everything(wt_path, diff, ignore_untracked=True)
+        if not ok:
+            how += f" (WARNING: {len(missing)} changed path(s) absent from the diff)"
+    return diff, how
+
+
+def _review_branch(
+    repo: Path, cfg, st, it, item: str, branch: str, called_from: Path | None
+) -> tuple[str, str, tuple[str, str] | None]:
+    """(branch, why, early): the branch to review when no tree answers, and the
+    (diff, how) to return at once when none can be named."""
+    chosen = "named with --branch" if branch else ""
+    if not branch and it and it.branch:
+        branch, chosen = it.branch, f"{item}'s branch (its tree is gone)"
+    if not branch and it:
+        here, held = callers_tree(repo, cfg, st, it, called_from)
+        if held:
+            return (
+                branch,
+                chosen,
+                (
+                    "",
+                    f"the worktree you are in belongs to {held}, not {item}; pass {item}'s "
+                    f"branch with --branch",
+                ),
+            )
+        if here is not None and here.branch:
+            branch, chosen = here.branch, f"checked out in {here.path}"
+    if not branch and it and it.lease is not None and cfg.worktree.enabled:
+        return (
+            branch,
+            chosen,
+            (
+                "",
+                f"{item} was claimed without a worktree, and the primary's working tree is not "
+                f"its: pass --branch <branch>, run review from the worktree it is worked in, or "
+                f"set [worktree].enabled = false if the primary is where you work",
+            ),
+        )
+    return branch, chosen, None
 
 
 def _captured(tree: Path, how: str, **kw) -> tuple[str, str]:
@@ -182,9 +211,6 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
     last renewal, so two renewals are never further apart than `heartbeat_s` (critic:
     a 0.9 x heartbeat threshold let a 60 s tick land a renewal up to a tick late).
     """
-    import time
-
-    from .gates import _lease_keeper
 
     renew = _lease_keeper(log, cfg, it) if it else None
     if renew is None:
@@ -238,7 +264,6 @@ def triage(
     Bca71987363): it resolves only when exactly one gate has numbered findings, else it
     is refused naming the gates that do.
     """
-    from ..services import gates as G
 
     log, _cfg, st = _load(repo, agent)
 
@@ -294,10 +319,10 @@ def triage(
         },
     )
     log, cfg, st = _load(repo, agent)
-    counts = G.triage_counts(st.items[item], gate) or {}
+    counts = GD.triage_counts(st.items[item], gate) or {}
     text = (
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
-        f"{G.triage_line(counts)}"
+        f"{GD.triage_line(counts)}"
     )
     settled = _settle_after_cap(log, cfg, st.items[item], gate, counts)
     return O.ok(
@@ -401,9 +426,8 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     Returns how many findings of the merged record have no triage verdict yet: a clean
     delta does not clear a gate whose earlier findings nobody has settled (`_hold`).
     """
-    from ..services import review as R
 
-    if kind != "delta" or status not in (R.REVIEWED, R.PARTIAL):
+    if kind != "delta" or status not in (RV.REVIEWED, RV.PARTIAL):
         return 0
     ev["delta_from"] = _last_head(it, gate)
     rec = it.gates.get(gate) if it else None
@@ -468,7 +492,6 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
     same chunk size, the same reviewer. Checked BEFORE a reviewer is called, so a 30-
     minute request is never spent on a result that could not be merged.
     """
-    from ..services import review as R
 
     chunks = _chunk_numbers(value)
     if isinstance(chunks, str):
@@ -482,7 +505,7 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
             f"no `ddflow review` of {it.id}.{gate} with per-chunk evidence is on record; "
             f"run the full review first"
         )
-    if prior["diff_sha"] != R.diff_digest(diff):
+    if prior["diff_sha"] != RV.diff_digest(diff):
         return (
             f"the diff changed since the recorded review of {it.id}.{gate}, so its chunk "
             f"numbers no longer apply: run the full review"
@@ -508,10 +531,9 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
 
 def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     """Every configured reviewer, and which of them cannot satisfy the family rule."""
-    from ..services import review as R
 
     _log, _cfg, _st = _load(repo, agent)
-    revs = R.load_reviewers(repo)
+    revs = RV.load_reviewers(repo)
     rows = [
         {
             "name": r.name,
@@ -527,7 +549,6 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     # requirement, so `complete` refuses and the reason looks like it is about the review
     # rather than about a missing `family = "..."` line.
     unclassified = [r["name"] for r in rows if not r["family"] and r["enabled"]]
-    from ..views import human
 
     data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified}
     if not rows:
@@ -628,14 +649,13 @@ def reviewers_detect(
     an address that does not exist there (bug B-reviewers-write-committed). `shared`
     commits it to `.ddflow/config.toml` instead, deliberately.
     """
-    from ..services import review as R
 
     _log, cfg, _st = _load(repo, agent)
-    found = R.detect()
+    found = RV.detect()
     if not found:
         none = (
             "No local OpenAI-compatible endpoint answered on any well-known port.\n"
-            "Checked: " + ", ".join(u for u, _ in R.WELL_KNOWN_ENDPOINTS)
+            "Checked: " + ", ".join(u for u, _ in RV.WELL_KNOWN_ENDPOINTS)
         )
         return O.nothing("reviewers.detect", none, found=[], blocks="", written="", text=none)
     rows, blocks = [], []
@@ -680,7 +700,6 @@ def reviewers_detect(
                 text="",
             )
         written = str(res.path)
-    from ..views import human
 
     out = O.ok(
         "reviewers.detect",
@@ -703,7 +722,6 @@ class _ReplyFile:
     same time, must not truncate the file an earlier record's digest refers to."""
 
     def __init__(self, repo: Path, item: str, gate: str, reviewer: str) -> None:
-        import threading
 
         run = clock.run_stamp()
         who = safe_filename(reviewer, repl="_")
@@ -713,7 +731,6 @@ class _ReplyFile:
         self._started = False
 
     def add(self, chunk: int, reply: str) -> None:
-        import json
 
         with self._lock:
             try:
@@ -725,7 +742,6 @@ class _ReplyFile:
                 pass  # the evidence still carries the bodies; this is the belt
 
     def evidence(self) -> dict[str, Any]:
-        from ..core.digest import content_digest
 
         if not self._started:
             return {}
@@ -782,9 +798,8 @@ def _round_evidence(head, kind, done, status, forced, deltas=0) -> dict[str, Any
     `head` is the one captured BEFORE the diff was taken (B4f5be8179f): a review runs for
     minutes, and the branch's head when it ends may hold commits made meanwhile that no
     reviewer saw -- recording that one let the next delta skip them."""
-    from ..services import review as R
 
-    reviewed = status in (R.REVIEWED, R.PARTIAL)
+    reviewed = status in (RV.REVIEWED, RV.PARTIAL)
     counted = kind == "full" and reviewed
     ev: dict[str, Any] = {
         "review_kind": kind if counted or kind != "full" else "full_unavailable",
@@ -1156,7 +1171,6 @@ def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
 
 def _head_of(repo: Path, it, branch: str, commit: str) -> str:
     """The commit a review covered: what `--delta` later diffs from. "" when unknown."""
-    from ..infra import worktree as W
 
     wt = W.load_path(repo, it.worktree) if it and it.worktree else None
     where, ref = (
@@ -1176,8 +1190,6 @@ def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
     """What the item changed since `head`: its branch or tree against that commit --
     against `head` merged with ``base``'s incoming work when the branch merged ``base``
     since (`_delta_start`), so other items' commits are never sent (Bccf6d1aec7)."""
-    from ..infra import worktree as W
-    from ..services.enforce import SELF_MANAGED
 
     base = base or W.default_branch(repo)
     wt = W.load_path(repo, it.worktree) if it and it.worktree else None
@@ -1547,9 +1559,6 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     reviews that branch against base, for an item claimed without a worktree (see
     `diff_for` for how the branch is otherwise found).
     """
-    from ..services import gates as G
-    from ..services import prompts as P
-    from ..services import review as R
 
     # Collected AND forwarded. The CLI prints each line as it happens so a two-minute
     # review does not look like a hang; the MCP tool has no live channel, so the same
@@ -1564,7 +1573,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             on_progress(line)
 
     log, cfg, st = _load(repo, agent)
-    gates = G.load_gates(repo, cfg)
+    gates = GD.load_gates(repo, cfg)
 
     def unavailable(reason: str, **extra) -> O.Outcome:
         """Record it, then report it. An unrecorded UNAVAILABLE is indistinguishable
@@ -1588,8 +1597,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     if refused is not None:
         return refused
 
-    dispatch = R.ReviewerDispatch()
-    selected = dispatch.select(R.load_reviewers(repo), gate, gates.get(gate))
+    dispatch = RV.ReviewerDispatch()
+    selected = dispatch.select(RV.load_reviewers(repo), gate, gates.get(gate))
     revs = selected.reviewers
     _say_selection(selected, say)
     if not revs:
@@ -1662,7 +1671,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
-        res = R.review(
+        res = RV.review(
             r,
             diff,
             intent,
@@ -1680,8 +1689,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
             # record holds every other chunk's coverage, and a later --chunk needs it.
             why = (
                 (res.reason or "the re-run errored")
-                if res.status == R.ERROR
-                else R.merge_rerun(prior, res)
+                if res.status == RV.ERROR
+                else RV.merge_rerun(prior, res)
             )
             if why:
                 return O.Outcome(
@@ -1692,10 +1701,10 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
 
     best = min(results, key=lambda r: r.status)
     outcome = {
-        R.REVIEWED: ("failed" if best.findings else "passed"),
-        R.PARTIAL: "partial",
-        R.UNAVAILABLE: "unavailable",
-        R.ERROR: "unavailable",
+        RV.REVIEWED: ("failed" if best.findings else "passed"),
+        RV.PARTIAL: "partial",
+        RV.UNAVAILABLE: "unavailable",
+        RV.ERROR: "unavailable",
     }[best.status]
     if item:
         outcome = _record_review(
@@ -1714,9 +1723,12 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         "findings": _finding_rows(best),
         "text": "\n".join(transcript),
     }
-    exit_code = {R.REVIEWED: O.OK, R.PARTIAL: O.REFUSED, R.UNAVAILABLE: O.NOTHING, R.ERROR: O.FAIL}[
-        best.status
-    ]
+    exit_code = {
+        RV.REVIEWED: O.OK,
+        RV.PARTIAL: O.REFUSED,
+        RV.UNAVAILABLE: O.NOTHING,
+        RV.ERROR: O.FAIL,
+    }[best.status]
     if exit_code == O.OK:
         return O.ok("review", **data)
     return O.Outcome(

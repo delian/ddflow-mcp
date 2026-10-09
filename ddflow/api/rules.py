@@ -40,11 +40,7 @@ class RuleDedupAnswer:
     @classmethod
     def parse(cls, spec: str) -> RuleDedupAnswer:
         """Parse 'new', 'extends ID', 'duplicate_of ID', or 'duplicate ID'."""
-        words = (spec or "").replace(":", " ").replace("=", " ").split()
-        if not words:
-            return cls()
-        rel = {"duplicate": "duplicate_of", "dup": "duplicate_of"}.get(words[0], words[0])
-        return cls(rel, " ".join(words[1:]))
+        return cls(*DD.split_answer(spec))
 
     def __bool__(self) -> bool:
         return bool(self.relation)

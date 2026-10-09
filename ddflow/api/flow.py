@@ -12,8 +12,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ..core import flow as F
 from ..core import outcome as O
-from ..core.model import REVIEW
+from ..core.model import REVIEW, RUNNING
+from ..services import choices as CH
+from ..services import flow as FS
+from ..services import promotions as PM
 from ..services import upgrade_manifest as UM
 from ._base import _load
 
@@ -35,7 +39,6 @@ def pr_sync(repo: Path, *, item: str = "", agent: str = "") -> O.Outcome:
     never read as "nothing changed", which is the whole reason `unavailable` exists.
     Partial reachability is exit 0 with the gaps listed.
     """
-    from ..services import flow as FS
 
     log, cfg, _st = _load(repo, agent)
     rep = FS.sync(repo, cfg, log, only=item)
@@ -61,7 +64,6 @@ def pr_threads(
     """An item's review threads from the forge; with ``thread``, ``reply`` on it and/or
     ``resolve`` it. Exit 2 = the forge could not be asked; exit 3 = refused (no request,
     unknown thread, a write the forge declined)."""
-    from ..services import flow as FS
 
     _log, cfg, st = _load(repo, agent)
     rep = FS.review_threads(repo, cfg, st, item, thread=thread, reply=reply, resolve=resolve)
@@ -134,7 +136,6 @@ def _plan_data(vp) -> dict[str, Any]:
 
 def version_show(repo: Path, *, bump: str = "", line: str = "", agent: str = "") -> O.Outcome:
     """The current version, the next one, why, and the release notes. Reads only."""
-    from ..services import flow as FS
 
     _log, cfg, st = _load(repo, agent)
     vp = FS.plan_version(repo, cfg, st, bump=bump, line=line)
@@ -223,7 +224,6 @@ def version_cut(
 
     ``changelog`` also writes the version's section into CHANGELOG.md as part of the cut
     (refused, exit 3, over a hand-edited file unless ``force``; git failure is exit 2)."""
-    from ..services import flow as FS
 
     log, cfg, _st = _load(repo, agent)
     blocked = _lint_outcome("version.cut", repo, cfg)
@@ -267,8 +267,6 @@ def version_cut(
 def flow_show(repo: Path, *, agent: str = "") -> O.Outcome:
     """How this project works: the model, its release lines, and every workflow choice --
     its value, who made it (config, a recorded choice, or a default nobody chose) and when."""
-    from ..core import flow as F
-    from ..services import choices as CH
 
     _log, cfg, st = _load(repo, agent)
     rows = CH.report(cfg, st)
@@ -290,7 +288,6 @@ def flow_choose(
 ) -> O.Outcome:
     """Record a workflow choice, attributed. The config file still wins over it, and the
     result says so when it does -- a choice that is not in effect must not look like one."""
-    from ..services import choices as CH
 
     log, cfg, _st = _load(repo, agent)
     bad = CH.validate(knob, value)
@@ -299,7 +296,6 @@ def flow_choose(
     CH.choose(log, knob, value, reason=reason)
     source = cfg.sources.get(f"flow.{knob}", "default")
     overridden = CH.config_wins(source)
-    from ..core.model import REVIEW, RUNNING
 
     in_flight = [i.id for i in _st.items.values() if i.state in (RUNNING, REVIEW)]
     shift = (
@@ -325,7 +321,6 @@ def flow_choose(
 def promote_add(repo: Path, env: str, *, force: bool = False, agent: str = "") -> O.Outcome:
     """File a promotion to ``env`` from the branch immediately upstream of it.
     Exit 2 = nothing to promote; exit 3 = refused (unknown, busy, missing branch)."""
-    from ..services import promotions as PM
 
     log, cfg, st = _load(repo, agent)
     try:
@@ -343,7 +338,6 @@ def promote_add(repo: Path, env: str, *, force: bool = False, agent: str = "") -
 def promote_deployed(repo: Path, env: str, *, sha: str = "", agent: str = "") -> O.Outcome:
     """Record the sha a deploy put live in ``env`` (default: the environment branch's head),
     so `promote status` answers "what is live" exactly. Exit 3 = refused."""
-    from ..services import promotions as PM
 
     log, cfg, _st = _load(repo, agent)
     try:
@@ -355,7 +349,6 @@ def promote_deployed(repo: Path, env: str, *, sha: str = "", agent: str = "") ->
 
 def promote_status(repo: Path, *, agent: str = "") -> O.Outcome:
     """Each environment: where it stands, how far behind its upstream, what is open."""
-    from ..services import promotions as PM
 
     _log, cfg, st = _load(repo, agent)
     rows = PM.status(repo, cfg, st)

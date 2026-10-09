@@ -39,28 +39,12 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
-# ONE dependency, and the reason it is here is a bug, not a convenience.
-#
-# This list was empty on purpose: the standard library plus `git` is what makes ddflow
-# installable everywhere an agent runs -- sandboxes with no reachable package index, CI
-# images, the inside of another tool's ephemeral container. The MCP stdio transport is
-# newline-delimited JSON-RPC and is implemented here rather than taken as a dependency;
-# see docs/ARCHITECTURE.md. That property is still real and still worth having.
-#
-# What it cost: prompts are Jinja2 templates, and `services/prompts.py` carries a
-# fallback renderer for when Jinja2 is absent. Two engines, one of them untested,
-# because every developer's ambient interpreter had Jinja2 and the project venv did
-# not -- so `python -m pytest` was green and `uv run pytest` was red on the same
-# commit. 0.1.1 shipped a handshake that rendered correctly for the people who wrote it
-# and, for every unadopted repository, produced:
-#
-#     ddflow's instruction template could not be loaded: template variable
-#     'actionable_companions' is not defined
-#
-# Declaring it makes the language the templates are written in the language that is
-# actually installed. The fallback stays — it is what a stripped deployment falls back
-# to — but it is now a tested, LOUD degraded path rather than an invisible second
-# implementation. `tests/test_template_engines.py` runs the suite through both.
+# Two runtime dependencies. Jinja2 is here because of a bug, not a convenience: prompts
+# are Jinja2 templates and the project venv once lacked it, so `pytest` was green and
+# `uv run pytest` red on one commit. `services/prompts.py` keeps a LOUD fallback renderer
+# for stripped deployments; `tests/test_template_engines.py` runs both engines. tomlkit is
+# the second: it edits config files without losing comments. Everything else is stdlib
+# plus `git`; each optional extra below that is in use is reached through one adapter.
 dependencies = [
     "jinja2>=3.1.6",
     "tomlkit>=0.13",
@@ -81,13 +65,16 @@ Issues = "https://github.com/delian/ddflow-mcp/issues"
 search = [
     "rapidfuzz>=3.14.6",
 ]
+# declared, no module imports it yet (no task)
 watch = [
     "watchfiles>=1.3.0",
 ]
+# sqlite-vec: declared, no module imports it yet (tasks B-uni-context-pack, B-semantic-recall)
 rag = [
     "model2vec>=0.9.0",
     "sqlite-vec>=0.1.9",
 ]
+# declared, no module imports it yet (no task)
 mcp-sdk = [
     "mcp>=2.3.0",
 ]

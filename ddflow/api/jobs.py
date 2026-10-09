@@ -9,6 +9,8 @@ from typing import Any
 from ..core import clock
 from ..core import ids as IDS
 from ..core import outcome as O
+from ..infra import worktree as W
+from ..services import jobs as J
 from ._base import _load
 
 #: Where launched jobs write their output: under `.ddflow/local/`, which `init` ignores.
@@ -16,7 +18,6 @@ JOB_LOG_DIR = ".ddflow/local/jobs"
 
 
 def _row(job, st) -> dict[str, Any]:
-    from ..services import jobs as J
 
     s = J.status(job)
     return {
@@ -65,7 +66,6 @@ def _not_held(log, cfg, it) -> O.Outcome | None:
 
 
 def _record(log, cfg, st, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
-    from ..services import jobs as J
 
     parts = (item, command, str(pid))
     minted = IDS.mint(cfg, st, "job", events=log.read_all, hash_parts=parts)
@@ -98,8 +98,6 @@ def job_run(
     repository. Detached into its own session, so it outlives the agent, the MCP server
     and a restarted remote-control service -- which is the point of a multi-hour run.
     """
-    from ..infra import worktree as W
-    from ..services import jobs as J
 
     log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
@@ -130,7 +128,6 @@ def job_add(
     repo: Path, item: str, pid: int, *, command: str = "", log_file: str = "", agent: str = ""
 ) -> O.Outcome:
     """Register a process that was started some other way (a launcher script, torchrun)."""
-    from ..services import jobs as J
 
     log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
@@ -181,7 +178,6 @@ def job_end(
     Refused while the process is still running: "ended" is a fact about the process,
     and recording it early is how a queue says a run finished that is still writing.
     """
-    from ..services import jobs as J
 
     log, _cfg, st = _load(repo, agent)
     j = st.jobs.get(job)
