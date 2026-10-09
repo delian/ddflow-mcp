@@ -127,8 +127,9 @@ def _writes_of_output_bytes() -> list[str]:
                 and isinstance(node.slice, ast.Constant)
                 and node.slice.value == "output_bytes"
             )
-            if dict_key or sub_store:
-                found.append(f"{path.relative_to(root)}:{node.lineno}")
+            keyword = isinstance(node, ast.keyword) and node.arg == "output_bytes"  # dict(...)
+            if dict_key or sub_store or keyword:
+                found.append(f"{path.relative_to(root)}:{getattr(node, 'lineno', 0)}")
     return found
 
 
