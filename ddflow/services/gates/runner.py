@@ -14,7 +14,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from .. import cmdrunner
 from .defs import GateDef
-from .evidence import diff_stat, digest, source_tree, tree_fingerprint
+from .evidence import diff_stat, digest, tree_identity
 from .testcmd import suggested_test_command, summary_lines
 
 #: Where `gate run` keeps each run's full output, under the primary's `.ddflow/`.
@@ -183,10 +183,9 @@ def run_command_gate(
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe
         # source that no longer exists.
-        "tree_sha": tree_fingerprint(cwd),
-        # ...and its CONTENT, independent of which commit it sits on: what `complete`
-        # compares against the branch that landed once the worktree is gone.
-        "source_tree": source_tree(cwd),
+        # One identity: the commit plus the tree's exact content, so `complete` can compare
+        # it with the branch that landed once the worktree is gone (`tree_identity`).
+        "tree_sha": tree_identity(cwd),
         # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
         # opaque; this answers "how big was the change", which is what makes a recorded
         # pass auditable after the fact. A review gate that passed over 4,000 changed

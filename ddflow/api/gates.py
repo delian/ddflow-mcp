@@ -313,25 +313,21 @@ def _measure(repo: Path, it, wt: Path | None) -> dict:
     still reports it."""
     if not wt:
         return {}
-    measured = {
-        "tree_sha": G.tree_fingerprint(wt),
-        "source_tree": G.source_tree(wt),
-        "diff_stat": G.diff_stat(wt),
-    }
-    measured.update(_landed_if_only_untracked_differs(repo, it, wt, measured["source_tree"]))
+    measured = {"tree_sha": G.tree_identity(wt), "diff_stat": G.diff_stat(wt)}
+    measured.update(_landed_if_only_untracked_differs(repo, it, wt))
     return measured
 
 
-def _landed_if_only_untracked_differs(repo: Path, it, wt: Path, here: str) -> dict:
-    """`tree_sha`/`source_tree` of the landed commit when ``wt`` holds exactly that content
-    plus untracked files; {} otherwise (not landed, the same already, or a real change)."""
+def _landed_if_only_untracked_differs(repo: Path, it, wt: Path) -> dict:
+    """`tree_sha` of the landed commit when ``wt`` holds exactly that content plus untracked
+    files; {} otherwise (not landed, the same already, or a real change)."""
     from ..services.completion import _tree_being_completed
 
     if not (it.landed_after or it.merged_sha):
         return {}
     _cwd, landed = _tree_being_completed(repo, it)
     source = G.commit_source_tree(repo, landed) if landed else ""
-    if not source or source == here:
+    if not source or source == G.source_tree(wt):
         return {}
     entries = G.worktree_entries(wt)
     if entries is None:
@@ -340,7 +336,7 @@ def _landed_if_only_untracked_differs(repo: Path, it, wt: Path, here: str) -> di
     tracked_only = {p: e for p, e in entries.items() if p not in untracked}
     if G.content_id(tracked_only) != source:
         return {}  # the tree changed beyond scratch: let complete say so
-    return {"tree_sha": f"{landed[:12]}+clean", "source_tree": source}
+    return {"tree_sha": f"{landed[:12]}+clean"}
 
 
 def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
@@ -359,7 +355,7 @@ def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outco
     for f in PR.detect(log.read_all(), st, cfg):
         if f.kind != "repeated_failure" or f.item != item or f.gate != gate:
             continue
-        if not f.tree_sha or G.tree_fingerprint(cwd) != f.tree_sha:
+        if not G.is_tree(f.tree_sha, cwd):
             return None
         return O.refused(
             "gate.run",

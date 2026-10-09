@@ -15,11 +15,11 @@ import sys
 import pytest
 
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.declared import knowledge, lifecycle, queue, records
+from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, review, rules
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle)
+FAMILIES = (knowledge, records, queue, lifecycle, rules, review)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -30,6 +30,8 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.records",
         "ddflow.surfaces.declared.queue",
         "ddflow.surfaces.declared.lifecycle",
+        "ddflow.surfaces.declared.rules",
+        "ddflow.surfaces.declared.review",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -163,6 +165,7 @@ def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
         "ddflow_gate_run",
         "ddflow_gate_record",
         "ddflow_merge",
+        "ddflow_review",
     }
 
 
@@ -201,3 +204,74 @@ def test_a_priority_of_zero_over_mcp_is_filed_as_zero_like_the_command_line(repo
     default = TOOLS[tool]["api"](repo, {"id": "Z1", "title": "t"}, "agent")
     assert default.exit == 0, default.reason
     assert json.loads(run_cli(repo, "show", "Z1", "--json")[1])["priority"] == 100
+
+
+def test_rule_answers_exclude_each_other_and_a_bare_rule_lists():
+    parser = build_parser()
+    for argv in (
+        ["rule", "add", "--id", "r", "--title", "t", "--new", "--extends", "R1"],
+        ["rule", "add", "--id", "r", "--title", "t", "--check", "--related", "R1"],
+        ["rule", "edit", "r", "--new", "--related", "R1"],
+    ):
+        with pytest.raises(SystemExit) as stop:
+            parser.parse_args(argv)
+        assert stop.value.code == 2, argv
+    ns = parser.parse_args(["rule"])
+    assert (ns.rule_cmd, ns.tag, ns.scope) == ("list", "", "") and ns.fn.__name__ == "cmd_rule"
+    assert parser.parse_args(["rule", "add", "--id", "r", "--title", "t"]).priority is None
+
+
+def test_the_rule_tools_keep_their_deprecated_arguments_accepted_but_unadvertised():
+    for tool, old in (("ddflow_rule_list", {"json", "limit"}), ("ddflow_rule_remove", {"reason"})):
+        entry = TOOLS[tool]
+        assert set(entry["deprecated"]) == old and old <= set(entry["properties"])
+        command = next(c for c in DECLARED if c.tool == tool)
+        assert not old & set(command.input_schema()["properties"])
+
+
+def test_a_rule_priority_of_zero_over_mcp_is_stored_as_zero_like_the_command_line(repo):
+    """`int(a.get("priority", 50) or 50)` read a 0 as absent, on add and on edit, while
+    `ddflow rule add --priority 0` stored it: the same call ranked a rule differently."""
+    add, edit, show = (TOOLS[f"ddflow_rule_{v}"]["api"] for v in ("add", "edit", "show"))
+    out = add(repo, {"id": "r-zero", "title": "t", "content": "c", "priority": 0}, "agent")
+    assert out.exit == 0, out.reason
+    assert show(repo, {"id": "r-zero"}, "agent").data["priority"] == 0
+    add(repo, {"id": "r-edit", "title": "u", "content": "d", "priority": 80}, "agent")
+    assert edit(repo, {"id": "r-edit", "priority": 0}, "agent").exit == 0
+    assert show(repo, {"id": "r-edit"}, "agent").data["priority"] == 0
+    add(repo, {"id": "r-dflt", "title": "v", "content": "e"}, "agent")
+    assert show(repo, {"id": "r-dflt"}, "agent").data["priority"] == 50
+
+
+def test_a_rule_search_limit_of_zero_over_mcp_returns_nothing_like_the_command_line(repo):
+    """`int(a.get("limit", 10) or 10)` read a 0 as absent and returned ten rows; the command
+    line passed the 0 on."""
+    add, search = (TOOLS[f"ddflow_rule_{v}"]["api"] for v in ("add", "search"))
+    for name, word in (("r-a", "alpha"), ("r-b", "bravo"), ("r-c", "charlie")):
+        out = add(repo, {"id": name, "title": f"{word} rule", "content": f"{word} naming"}, "a")
+        assert out.exit == 0, out.reason
+    assert search(repo, {"query": "naming", "limit": 0}, "a").data["count"] == 0
+    assert search(repo, {"query": "naming"}, "a").data["count"] == 3
+
+
+def test_review_is_one_parser_for_the_run_and_for_triage():
+    parser = build_parser()
+    run = parser.parse_args(["review", "I", "--gate", "critic", "--chunk", "2", "--chunk", "3,4"])
+    assert (run.id, run.chunk, run.finding) == (["I"], ["2", "3,4"], None)
+    triage = parser.parse_args(["review", "triage", "I", "--finding", "2", "--refuted"])
+    assert (triage.id, triage.finding, triage.refuted) == (["triage", "I"], 2, True)
+    assert parser.parse_args(["review"]).id == []  # the handler says what is missing
+    entry = TOOLS["ddflow_review"]
+    assert entry["wants_called_from"] and entry["wants_progress"] and entry["text"] is True
+    assert entry["properties"]["id"][2] is True  # required on the tool, not on the command line
+    assert TOOLS["ddflow_review_triage"]["properties"]["probe"][2] is True
+
+
+def test_verify_takes_an_optional_id_and_the_sweep_flags():
+    ns = build_parser().parse_args(["verify", "--all", "--phase", "P", "--limit", "3", "--judge"])
+    assert (ns.id, ns.all, ns.phase, ns.limit, ns.judge) == ("", True, "P", 3, True)
+    assert "all" not in TOOLS["ddflow_verify"]["properties"]  # a sweep is what omitting id means
+    from ddflow.surfaces import exemptions as X
+
+    assert ("ddflow_verify", "--all") in X.FLAG_EXEMPT  # the command carries its own reason
+    assert TOOLS["ddflow_verify"]["properties"]["id"][2] is False

@@ -197,28 +197,97 @@ def tree_fingerprint(cwd: Path) -> str:
     are hashed bytewise). The fix for the remaining case -- `--binary`, base85-encoding
     whole blobs into the digest -- costs far more than it buys here. Filed as B95.
 
+    **This is no longer what a gate records** (B-uni-tree-identity): `tree_identity` is,
+    and it names the tree by its content manifest (every path's mode and blob id), not by
+    the rendered text of `git diff`. The fingerprint stays for evidence already in the log,
+    as the fallback when no manifest can be taken, and for the "is the tree dirty" test.
+
     Not `write-tree` or `stash create`: both WRITE, and a function whose job is to
     observe must not change what it observes. Outside a repository it returns ""
     rather than raising, because a gate can legitimately run somewhere git does not
     reach, and a missing fingerprint is honest where a fabricated one is not.
     """
+    head, parts = _dirt_parts(cwd)
+    if not head:
+        return ""
+    return f"{head}+{_dirt(parts)}"
+
+
+def _dirt_parts(cwd: Path) -> tuple[str, list[str]]:
+    """(HEAD's first 12 characters, the three parts whose digest is a tree's "dirt"), or
+    ("", []) outside a repository."""
     from ...infra import worktree as W
 
     head = W.git(cwd, "rev-parse", "HEAD")
     if not head.ok:
-        return ""
+        return "", []
     status = W.git(cwd, "status", "--porcelain", "--", ".", *FINGERPRINT_EXCLUDE)
     # `HEAD` and not `--cached`: staged and unstaged changes are equally "not what is
     # committed", and a gate cares about the files on disk it just ran against.
     diff = W.git(cwd, "diff", "HEAD", "--", ".", *FINGERPRINT_EXCLUDE)
     parts = [status.out if status.ok else "", diff.out if diff.ok else ""]
     parts.append(_untracked_digest(cwd))
-    body = "\x00".join(parts)
+    return head.out.strip()[:12], parts
+
+
+def _dirt(parts: list[str]) -> str:
+    """ "clean" when every part is empty, else the digest of the parts joined by NUL."""
     # Each PART, not the joined body: `str.strip` keeps NUL, so a clean tree's body
     # "\0\0" never tested empty and every fingerprint read as dirty
     # (bug B-fingerprint-never-clean). `LEGACY_CLEAN` is what that recorded.
-    dirt = digest(body) if any(p.strip() for p in parts) else "clean"
-    return f"{head.out.strip()[:12]}+{dirt}"
+    return digest("\x00".join(parts)) if any(p.strip() for p in parts) else "clean"
+
+
+def tree_identity(cwd: Path) -> str:
+    """THE identity a gate records for the tree it ran on: ``<head12>+clean`` for a tree
+    that holds exactly HEAD's files, else ``<head12>+<content id>`` (`source_tree`'s
+    ``st:...``) -- the commit plus the exact content manifest, with `.ddflow/` left out.
+
+    It replaces recording `tree_fingerprint` AND `source_tree` side by side: a clean tree is
+    spelled exactly as the fingerprint spelled it, and a dirty one carries the manifest, so
+    one id both distinguishes the tree and can be compared with the commit that later
+    records it. When no manifest can be taken (an unmerged index, untracked files past the
+    cap) the fingerprint's digest is the fallback. Before the first commit it is ``+<content id>``;
+    "" outside a repository.
+    """
+    head, parts = _dirt_parts(cwd)
+    if not head:
+        # No commit yet (`git init`, scaffold, run a gate): the content is still named, as
+        # `source_tree` named it beside an empty fingerprint -- "+st:..." has no commit part.
+        manifest = source_tree(cwd)
+        return f"+{manifest}" if manifest else ""
+    if _dirt(parts) == "clean":
+        return f"{head}+clean"
+    manifest = source_tree(cwd)
+    return f"{head}+{manifest or _dirt(parts)}"
+
+
+def is_tree(tree_sha: str, cwd: Path) -> bool:
+    """Does the recorded ``tree_sha`` name the tree ``cwd`` holds now? Either spelling: a
+    `tree_identity`, or the fingerprint (clean or the pre-fix clean) an earlier ddflow
+    recorded -- so a streak of failures begun before the upgrade is still one streak."""
+    if not tree_sha:
+        return False
+    was = normal_fingerprint(tree_sha)
+    return was == normal_fingerprint(tree_identity(cwd)) or was == normal_fingerprint(
+        tree_fingerprint(cwd)
+    )
+
+
+def recorded_content(tree_sha: str, source_tree_field: str = "") -> str:
+    """The content id a recorded identity names, or "" when it names none: the
+    ``source_tree`` field an older gate recorded beside its fingerprint, else the ``st:...``
+    a `tree_identity` carries.
+
+    "" is NOT "the commit's own tree" except for a clean spelling: the caller reads
+    ``<head>+clean`` as HEAD's tree, and a fingerprint-spelled dirty value (evidence from
+    before this identity, or the fallback `tree_identity` emits when no manifest can be
+    taken) as an opaque digest that only an equal fingerprint of the tree can vouch for.
+    """
+    if source_tree_field:
+        return source_tree_field
+    _base, _sep, dirt = tree_sha.partition("+")
+    return dirt if dirt.startswith("st:") else ""
 
 
 #: The "dirt" every CLEAN tree recorded before bug B-fingerprint-never-clean was fixed:

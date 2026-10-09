@@ -518,7 +518,7 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
             "the ci gate passed on a tree with uncommitted changes, and ci tests only the "
             "committed HEAD: this gate runs the whole suite (commit, then re-run ci)"
         )
-    if ran != G.normal_fingerprint(G.tree_fingerprint(tree)):
+    if ran != G.normal_fingerprint(G.tree_identity(tree)):
         return "the tree changed since the ci gate passed (another commit, or uncommitted edits): this gate runs the whole suite"
     return ""
 

@@ -75,6 +75,19 @@ def _answer(a: dict[str, Any]):
     return Answer(given.relation, given.target, bool(a.get("check_only")))
 
 
+def _rule_answer(a: dict[str, Any], relations: tuple[str, ...]) -> Any:
+    """The duplicate-check answer a rule tool call carries, or None. More than one is
+    refused (the CLI's flags are mutually exclusive; silently keeping one dropped the
+    other, rubber-duck)."""
+    given = [r for r in relations if (a.get(r) if r != "new" else bool(a.get("new")))]
+    if len(given) > 1:
+        raise ValueError(f"answer one of {', '.join(given)}, not several")
+    if not given:
+        return None
+    rel = given[0]
+    return _api().RuleDedupAnswer(rel, "" if rel == "new" else a[rel])
+
+
 def _configure_reported(repo, a, agent):
     """`ddflow_configure`, telling the operator when it changed the review budget."""
     from ...api.setup import report_budget_change

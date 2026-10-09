@@ -34,6 +34,9 @@ TYPES = ("string", "boolean", "integer", "number", "array")
 
 _UNSET: Any = object()
 
+#: The ``nargs`` of a positional that argparse does not require.
+OPTIONAL_NARGS = ("?", "*")
+
 #: The longest CLI path: `group command`.
 GROUP_DEPTH = 2
 #: `via` is a tool, optionally with the selector value.
@@ -297,12 +300,12 @@ class Param:
 
     def _check_positional(self) -> None:
         """What only a positional, an ``nargs`` or an exclusive group may be."""
-        if self.positional and self.default is not _UNSET and self.nargs != "?":
+        if self.positional and self.default is not _UNSET and self.nargs not in OPTIONAL_NARGS:
             raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
         if self.nargs is not None and not self.positional:
             raise ValueError(f"param {self.name!r}: nargs is for a positional")
-        if self.nargs not in (None, "?"):
-            raise ValueError(f"param {self.name!r}: only nargs='?' (optional) is supported")
+        if self.nargs not in (None, *OPTIONAL_NARGS):
+            raise ValueError(f"param {self.name!r}: only nargs='?' or '*' (optional) is supported")
         if self.exclusive is not None and (self.required or self.positional):
             raise ValueError(f"param {self.name!r}: a member of an exclusive group is optional")
 
@@ -499,6 +502,11 @@ class Command:
     #: The tool is told where the caller stands (``called_from``), for a tool that creates
     #: or lands a worktree (the engine reads ``wants_called_from`` from the table entry).
     wants_called_from: bool = False
+    #: The tool reports progress while it runs (``on_progress``), for a call that takes minutes.
+    wants_progress: bool = False
+    #: argparse's ``formatter_class`` and ``epilog`` for this command's help.
+    formatter_class: Any = None
+    epilog: str = ""
 
     def __post_init__(self) -> None:
         self._check_names()
@@ -594,6 +602,8 @@ class Command:
             entry["identify"] = True
         if self.wants_called_from:
             entry["wants_called_from"] = True
+        if self.wants_progress:
+            entry["wants_progress"] = True
         if self.deprecated:
             entry["deprecated"] = dict(self.deprecated)
         if aliases := self.tool_alias_list():
@@ -614,6 +624,10 @@ class Command:
         kwargs: dict[str, Any] = {}
         if self.summary:
             kwargs["help"] = self.summary
+        if self.formatter_class is not None:
+            kwargs["formatter_class"] = self.formatter_class
+        if self.epilog:
+            kwargs["epilog"] = self.epilog
         sub = subparsers.add_parser(self.path[-1], **kwargs)
         groups: dict[str, Any] = {}
         for p in self.cli_params:
