@@ -61,6 +61,7 @@ def _cvc(word: str) -> bool:
     n = len(word)
     return (
         n >= _CVC_LEN
+        and word[-1].isascii()  # FTS5 knows only a-z here: ``feß`` is not consonant-vowel-consonant
         and _is_consonant(word, n - 1)
         and not _is_consonant(word, n - 2)
         and _is_consonant(word, n - 3)
@@ -162,9 +163,10 @@ def _step5(w: str) -> str:
 
 @functools.lru_cache(maxsize=65536)
 def stem(word: str) -> str:
-    """The stem of a lower-cased ``word`` (Porter 1980). A word of one or two letters, or of more
-    than 64 bytes, is left as it is, as FTS5's tokenizer leaves it."""
-    if len(word) <= _MIN_STEMMED or len(word.encode("utf-8")) > _MAX_STEMMED_BYTES:
+    """The stem of a lower-cased ``word`` (Porter 1980). A word of one or two bytes, or of more
+    than 64, is left as it is, as FTS5's tokenizer leaves it."""
+    size = len(word.encode("utf-8"))  # FTS5 counts bytes, not letters
+    if size <= _MIN_STEMMED or size > _MAX_STEMMED_BYTES:
         return word
     w = _step1a(word)
     w = _step1b(w)

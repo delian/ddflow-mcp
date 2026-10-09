@@ -4261,10 +4261,11 @@ characters) and looks at the first 2000 characters of each record under a 5 seco
 `ddflow rule search --regex` makes the same check and refuses the same patterns (exit 3, with the
 reason; an uncompilable pattern is a refusal too, not "no rules found"). The `like` lesson-search
 backend (SQLite without FTS5) now ranks with the same BM25 over words split and stemmed exactly as
-FTS5's `porter` tokenizer does it (`core/porter.py` and `textsim.fts_words`: lower-cased, diacritics
-removed, split at an underscore or any non-alphanumeric, Porter stems; both checked against FTS5
-itself), so a query returns the same rows with and without FTS5, best first, instead of the first
-rows a substring match met.
+FTS5's `porter` tokenizer does it (`core/porter.py` and `textsim.fts_words`: lower-cased, the
+diacritics of Latin letters removed, split at an underscore or any non-alphanumeric, Porter stems;
+both checked against FTS5 itself), so a query returns the same rows with and without FTS5 for ASCII,
+Latin and the common scripts (a rare character FTS5 folds by its own table can still differ), best
+first, instead of the first rows a substring match met.
 Exit codes: 0 hits, 2 none ("No matches ..."), 3 a refused request. No MCP tool yet: it joins
 the consolidated read tool of the viewers phase; agents use `ddflow_recall` meanwhile.
 
