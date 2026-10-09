@@ -9,8 +9,7 @@ from typing import Any
 
 from ...config import Config
 from ...core.model import Item, State
-from ...infra import worktree as W
-from ...infra.fsio import replace_text
+from ...infra import fsio
 from .defs import GateDef, load_gates
 from .runner import run_command_gate
 
@@ -97,6 +96,8 @@ def verify(
 
     cwd = repo
     if item is not None and gdef.cwd == "worktree" and item.worktree:
+        from ...infra import worktree as W  # function-level: see verify_regression_test
+
         # No `or repo` fallback. An item that HAS a worktree whose path no longer
         # resolves is a broken state, and falling back writes the mutation into the
         # primary checkout and then reports a verdict about the wrong tree. Refused,
@@ -145,7 +146,7 @@ def verify(
             )
             continue
         try:
-            replace_text(target, src.replace(old, new, 1), fsync=False)
+            fsio.replace_text(target, src.replace(old, new, 1), fsync=False)
             outcome, ev = run_command_gate(gdef, cwd)
             detected = outcome == "failed"
             results.append(
@@ -161,7 +162,7 @@ def verify(
                 )
             )
         finally:
-            replace_text(target, src, fsync=False)
+            fsio.replace_text(target, src, fsync=False)
     return results, ""
 
 
@@ -202,8 +203,11 @@ def verify_regression_test(
     caller closes the bug with the gap on the record rather than locking it open on an
     environment that cannot test.
     """
-    from .. import ci as CI  # local: imported lazily, so gates has no module-level cycle
-    from .. import testselect as TS  # local too: ci and testselect import gates back
+    # Function-level, not top-level: ci and testselect import gates back, and the package
+    # re-exports every top-level name of its areas (tests/test_module_splits.py).
+    from ...infra import worktree as W
+    from .. import ci as CI
+    from .. import testselect as TS
 
     if after:
         with CI.merge_tree(repo, after, "") as (landed, why):
