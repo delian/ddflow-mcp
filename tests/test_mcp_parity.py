@@ -348,12 +348,11 @@ def test_no_test_keeps_its_own_exemption_table():
                 targets = node.targets
             else:
                 continue
-            kept += [  # a name anywhere in the target: `A, B = ...` and `x.A = ...` count
-                f"{path.name}: {n.id}"
-                for t in targets
-                for n in ast.walk(t)
-                if isinstance(n, ast.Name) and n.id in _RETIRED_TABLES
-            ]
+            for t in targets:  # `A, B = ...` and `x.A = ...` count, wherever they are
+                for n in ast.walk(t):
+                    name = n.id if isinstance(n, ast.Name) else getattr(n, "attr", "")
+                    if name in _RETIRED_TABLES:
+                        kept.append(f"{path.name}: {name}")
     assert not kept, f"exemption tables belong on the Command registry: {kept}"
 
 
