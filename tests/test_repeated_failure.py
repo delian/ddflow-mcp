@@ -154,6 +154,30 @@ def test_block_refuses_a_gate_rerun_on_an_unchanged_tree_with_the_evidence(repo)
     assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == FAIL
 
 
+def test_block_still_refuses_after_an_upgrade_when_the_streak_was_recorded_as_a_fingerprint(repo):
+    """Failures an earlier ddflow recorded carry the fingerprint spelling of the tree; the
+    same tree, now identified by `tree_identity`, is still the tree that last failed."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import gates as G
+
+    _setup(repo, "[loops]\non_detect = 'block'\n")
+    (repo / "a.py").write_text("print('dirty')\n")
+    for _ in range(3):
+        EventLog(repo, "old-ddflow").append(
+            "gate.failed",
+            "T1",
+            {
+                "gate": "unit_tests",
+                "reason": "red",
+                "evidence": {"output_digest": "d1", "tree_sha": G.tree_fingerprint(repo)},
+            },
+        )
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    assert code == REFUSED, out + err
+    (repo / "a.py").write_text("print('changed')\n")
+    assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == FAIL
+
+
 def test_loops_reports_repeated_failures_among_what_it_checked(repo):
     run_cli(repo, "init")
     code, out, _ = run_cli(repo, "loops")
