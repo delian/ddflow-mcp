@@ -45,6 +45,7 @@ def test_substring_bm25_matches_what_the_trigram_index_matches():
     assert set(got) == {0}  # "migrate" does not contain "gration"
     assert set(rank.substring_bm25(texts, ["MIGRAT"])) == {0, 2}  # case-insensitive
     assert rank.substring_bm25(texts, ["mi"]) == {}  # under three characters matches nothing
+    assert rank.substring_bm25(["is it up"], ["is", "it", "up"]) == {}
     assert rank.substring_bm25([], ["abc"]) == {} and rank.substring_bm25(texts, []) == {}
     two = rank.substring_bm25(texts, ["migrat"])
     assert two[2] > two[0]  # more occurrences rank higher at similar length
@@ -160,9 +161,28 @@ def test_overlapping_occurrences_count_as_a_trigram_index_counts_them():
     assert s[0] > s[1]
 
 
-def test_rerank_is_case_insensitive_with_or_without_the_extra(monkeypatch):
+def test_ratio_is_case_insensitive_with_and_without_the_extra(monkeypatch):
     monkeypatch.setattr(fuzzy, "_fuzz", None)
     assert fuzzy.ratio("DNS", "dns") == 1.0
+
+    class CaseSensitive:  # rapidfuzz's default: no processor, so case matters
+        @staticmethod
+        def token_set_ratio(a, b):
+            return 100.0 if a == b else 0.0
+
+    monkeypatch.setattr(fuzzy, "_fuzz", CaseSensitive)
+    assert fuzzy.ratio("DNS", "dns") == 1.0
+
+
+@pytest.mark.parametrize("backend", ["fts5", "like"])
+def test_a_differently_cased_row_is_found_on_every_machine(repo, log, backend):
+    if backend == "fts5" and not _has_fts5():
+        pytest.skip("this SQLite has no FTS5")
+    log.append("memory.recorded", "M1", {"text": "Quux release notes", "tags": []})
+    st = _store(repo, backend)
+    st.rebuild(log)
+    assert [r["id"] for r in st.search("memories", "quu", 5)] == ["M1"]
+    assert [r["id"] for r in st.search("memories", "QUUX", 5)] == ["M1"]
 
 
 def test_the_optional_rerank_reorders_the_pool_not_just_the_page(repo, log):
