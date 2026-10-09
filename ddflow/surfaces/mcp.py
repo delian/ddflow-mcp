@@ -691,7 +691,7 @@ class Server:
         sent in. The era is the message's own; only `_structured` falls back on the
         protocol a legacy connection negotiated at `initialize`."""
         method = msg.get("method", "")
-        handler = self._METHODS.get(method)
+        handler = self._METHODS.get(method) if isinstance(method, str) else None
         if handler is None:
             return _err(msg.get("id"), -32601, f"method not found: {method}")
         return handler(self, msg, modern)
