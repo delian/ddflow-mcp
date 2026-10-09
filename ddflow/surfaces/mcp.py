@@ -1301,7 +1301,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
 
 def _upgrade_line(repo: Path, agent: str) -> str:
     """The upgrade notice for the handshake, set off by a blank line, or "". Said once per
-    machine per version (`services.upgrade_notice`); a courtesy that can never fail a connect."""
+    version on this machine, per project (`services.upgrade_notice`); a courtesy that can never fail a connect."""
     try:
         notice = _api().upgrade_notice(repo, agent=agent)
     except Exception:
