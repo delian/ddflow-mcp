@@ -1218,9 +1218,9 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
             f"error) — until then, treat every gate as unserved rather than served."
         )
     try:
+        from ..api.lifecycle import plan_for
         from ..core import progress as PR
         from ..core.model import fold
-        from ..core.schedule import plan
         from ..infra.log import EventLog
         from ..services import importer as IM
         from ..services import leases as L
@@ -1234,7 +1234,10 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         log = EventLog(repo, _identity().resolve(repo, cfg, agent).id, log_cfg=cfg.log)
         events = log.read_all()
         st = fold(events, strict=False)
-        p = plan(st, cfg, agent=log.agent_id)
+        # The ready set as `next` offers it (the waiters' reservation hold and the
+        # parallelism limit), not the bare scheduler's: the handshake is where an agent is
+        # told what to do next, so it must not promise an item `next` withholds.
+        p = plan_for(repo, log, cfg, st, purpose="view", agent=log.agent_id, events=events)
         v["ready"], v["running"] = len(p.ready), len(p.running)
         v["queue_is_empty"] = not st.items
         # `rescan=False`: the queue-only half, which costs nothing because `st` is
