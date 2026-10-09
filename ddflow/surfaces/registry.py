@@ -671,6 +671,7 @@ def add_commands(
     groups: Mapping[str, str] | None = None,
     group_aliases: Mapping[str, tuple[Alias, ...]] | None = None,
     handlers: Mapping[tuple[str, ...], Callable[..., Any]] | None = None,
+    executor: Callable[[Command], Callable[..., Any]] | None = None,
 ) -> None:
     """Register ``commands`` on the root ``subparsers``, in order.
 
@@ -681,7 +682,8 @@ def add_commands(
     old names of the whole group (``{"docs": (Alias("command", "doc", "docs", "0.1.17"),)}``):
     hidden, always callable. ``handlers`` supplies the CLI function of a command that
     declares none (its path is the key), so a declaration can live where the parser's
-    imports are not wanted.
+    imports are not wanted. ``executor`` makes the CLI function of a command that has none
+    and declares ``render`` (`cliexec.handler`): such a command needs no ``cmd_*`` function.
     """
     made: dict[str, argparse._SubParsersAction] = {}
     parsers: dict[str, argparse.ArgumentParser] = {}
@@ -691,6 +693,8 @@ def add_commands(
         cmd = declared
         if handlers and cmd.handler is None and cmd.path in handlers:
             cmd = dataclasses.replace(cmd, handler=handlers[cmd.path])
+        if executor and cmd.handler is None and cmd.render is not None:
+            cmd = dataclasses.replace(cmd, handler=executor(cmd))
         if len(cmd.path) == 1:
             cmd.add_to(subparsers)
             continue
