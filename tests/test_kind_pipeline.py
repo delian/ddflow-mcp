@@ -325,7 +325,7 @@ def _owner(table):
         ),
         (
             {"requires_evidence": ["report"]},
-            {"output_digest": "ab", "output_bytes": 1, "output_blank": True},
+            {"output_digest": "ab", "output_bytes": 1, "tail": "\n"},
             None,
             False,
         ),
@@ -434,7 +434,10 @@ def test_a_record_linked_to_another_item_does_not_satisfy_a_link(repo):
     "text,blank",
     [("", True), ("\n", True), (" " * 10000, True), ("\u00a0" * 50, True), ("ok\n", False)],
 )
-def test_output_evidence_marks_a_blank_output_and_only_then(text, blank):
+def test_a_blank_attached_output_is_not_a_report(text, blank):
+    """End to end over the real evidence builder: whitespace of any length or kind."""
+    from ddflow.services.gates import evidence_problems
     from ddflow.services.gates.runner import output_evidence
 
-    assert (output_evidence(text).get("output_blank") is True) is blank
+    gate = _gate(requires_evidence=["report"])
+    assert (evidence_problems(gate, output_evidence(text), "X") != []) is blank

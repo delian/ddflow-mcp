@@ -94,8 +94,6 @@ def output_evidence(text: str) -> dict[str, Any]:
         "output_bytes": len(text),
         "tail": text[-OUTPUT_TAIL_CHARS:],
         "summary": summary_lines(text),
-        # Only when true, so the evidence of every non-blank output is what it always was.
-        **({"output_blank": True} if not text.strip() else {}),
     }
 
 
