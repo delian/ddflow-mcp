@@ -247,11 +247,15 @@ def tree_identity(cwd: Path) -> str:
     spelled exactly as the fingerprint spelled it, and a dirty one carries the manifest, so
     one id both distinguishes the tree and can be compared with the commit that later
     records it. When no manifest can be taken (an unmerged index, untracked files past the
-    cap) the fingerprint's digest is the fallback. "" outside a repository.
+    cap) the fingerprint's digest is the fallback. Before the first commit it is ``+<content id>``;
+    "" outside a repository.
     """
     head, parts = _dirt_parts(cwd)
     if not head:
-        return ""
+        # No commit yet (`git init`, scaffold, run a gate): the content is still named, as
+        # `source_tree` named it beside an empty fingerprint -- "+st:..." has no commit part.
+        manifest = source_tree(cwd)
+        return f"+{manifest}" if manifest else ""
     if _dirt(parts) == "clean":
         return f"{head}+clean"
     manifest = source_tree(cwd)
