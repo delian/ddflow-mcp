@@ -9,29 +9,6 @@ from ..context import FAIL, Ctx
 from ..render import emit_json
 
 
-def add_bisect_parser(s) -> None:
-    b = s.add_parser(
-        "bisect",
-        help="find which earlier test file makes a test fail only in full-suite order "
-        "(exit 0 = found, 2 = nothing to report)",
-    )
-    b.add_argument("victim", help="the test that fails only after others ran (a test id)")
-    b.add_argument(
-        "--cmd",
-        required=True,
-        help="a command that runs a list of tests and exits non-zero on failure, with "
-        "{tests} where the list goes, e.g. 'pytest -q {tests}'",
-    )
-    b.add_argument("--candidates", default="", help="comma-separated files, in run order")
-    b.add_argument(
-        "--glob", default="", help=f"where candidates come from (default {A.DEFAULT_GLOB})"
-    )
-    b.add_argument("--timeout", type=float, default=600, help="seconds per run (default 600)")
-    b.add_argument("--repeat", type=int, default=1, help="runs per probe; any failure counts")
-    b.add_argument("--max-runs", type=int, default=200, help="stop after this many runs")
-    b.set_defaults(fn=cmd_bisect)
-
-
 def cmd_bisect(a, c: Ctx) -> int:
     out = A.bisect(
         c.repo,

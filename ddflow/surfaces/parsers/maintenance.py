@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import argparse
 
-from ..commands.bisect import add_bisect_parser
-from ..commands.export import add_export_parser
+from ..commands.bisect import cmd_bisect
+from ..commands.export import cmd_export
 from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit, cmd_tests
 from ..commands.setup import cmd_config, cmd_upgrade
+from ..declared.export import BY_TOOL as EXPORT_BY_TOOL
 from ..declared.setup import COMMANDS as SETUP_COMMANDS
 from ..registry import add_commands
 
@@ -76,8 +77,11 @@ def register(s: argparse._SubParsersAction) -> None:
     )
     up.set_defaults(fn=cmd_upgrade)
 
-    add_export_parser(s)
-    add_bisect_parser(s)
+    add_commands(
+        s,
+        [EXPORT_BY_TOOL["ddflow_export"], EXPORT_BY_TOOL["ddflow_bisect"]],
+        handlers={("export",): cmd_export, ("bisect",): cmd_bisect},
+    )
 
     cd = s.add_parser("cadence", help="which periodic passes are due (exit 2 = none)")
     cd.add_argument("--ran", default="")
@@ -99,27 +103,8 @@ def register(s: argparse._SubParsersAction) -> None:
     pn.add_argument("--top", type=int, default=10, help="how many free stretches to show")
     pn.set_defaults(fn=cmd_pins)
 
-    ts = s.add_parser(
-        "tests",
-        help="the tests your change reaches, and a parallel command to run them (exit 2 = none)",
+    add_commands(
+        s,
+        [EXPORT_BY_TOOL["ddflow_tests"], EXPORT_BY_TOOL["ddflow_precommit"]],
+        handlers={("tests",): cmd_tests, ("precommit",): cmd_precommit},
     )
-    ts.add_argument("--item", default="", help="an item id: use its worktree and base")
-    ts.add_argument("--base", default="", help="compare against this ref (default: the base)")
-    ts.set_defaults(fn=cmd_tests)
-
-    pc = s.add_parser(
-        "precommit",
-        help="propose a .pre-commit-config.yaml for this repository's stacks "
-        "(writes nothing without --write)",
-    )
-    pc.add_argument(
-        "--ddflow-cmd",
-        default="ddflow",
-        help="how the proposed local hooks reach ddflow (default: `ddflow` on PATH)",
-    )
-    pc.add_argument(
-        "--write",
-        action="store_true",
-        help="create .pre-commit-config.yaml; an existing one is never replaced (exit 3)",
-    )
-    pc.set_defaults(fn=cmd_precommit)
