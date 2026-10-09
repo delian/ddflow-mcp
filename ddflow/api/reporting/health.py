@@ -298,6 +298,9 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
     notes.extend(RULEVIEW.notes(repo, cfg, st))
+    from ...services import embed as EMB
+
+    notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
     from ...infra import signals as SIG
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
