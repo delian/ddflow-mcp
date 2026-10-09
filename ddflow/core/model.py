@@ -170,6 +170,7 @@ from .records import (  # noqa: F401
     FoldProblem,
     GateOutcome,
     GateRecord,
+    GateRun,
     Item,
     Job,
     Lease,

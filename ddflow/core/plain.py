@@ -14,13 +14,18 @@ as `absolutise`.
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from typing import Any
 
 
 def plain(obj: Any) -> Any:
     if is_dataclass(obj) and not isinstance(obj, type):
-        return {k: plain(v) for k, v in asdict(obj).items()}
+        # Fields marked `metadata={"internal": True}` are folded state, not wire data.
+        return {
+            f.name: plain(getattr(obj, f.name))
+            for f in fields(obj)
+            if not f.metadata.get("internal")
+        }
     if isinstance(obj, dict):
         return {k: plain(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
