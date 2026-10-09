@@ -65,6 +65,7 @@ from ...infra import fsio  # noqa: F401
 from ...infra import git as GIT  # noqa: F401
 from ...infra import hostinfo as H  # noqa: F401
 from ...infra import proc as P  # noqa: F401
+from ...infra import worktree as W  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from .. import cmdrunner  # noqa: F401
 from .defs import (  # noqa: F401
@@ -107,9 +108,20 @@ from .evidence import (  # noqa: F401
     normal_fingerprint,
     recorded_content,
     source_tree,
+    tree_being_completed,
     tree_fingerprint,
     tree_identity,
     worktree_entries,
+)
+from .measured import (  # noqa: F401
+    Order,
+    _landed_if_only_untracked_differs,
+    check_order,
+    gates_ahead_of,
+    measure_tree,
+    order_note,
+    record_measured,
+    record_merge,
 )
 from .mutation import (  # noqa: F401
     REGRESSION_COULD_NOT_RUN,

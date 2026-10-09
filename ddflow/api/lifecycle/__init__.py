@@ -56,6 +56,7 @@ from ...services import changes as CH  # noqa: F401
 from ...services import flowstate as FL  # noqa: F401
 from ...services import gates as G  # noqa: F401
 from ...services import leases as L  # noqa: F401
+from ...services.gates import measured as GM  # noqa: F401
 from .._base import _load  # noqa: F401
 from ._common import (  # noqa: F401
     _require,
@@ -112,7 +113,6 @@ from .merge import (  # noqa: F401
     _lands_nothing,
     _open_request,
     _outside_globs,
-    _record_merge_gate,
     _refresh_documents,
     _scope_fields,
     _stands_in,
