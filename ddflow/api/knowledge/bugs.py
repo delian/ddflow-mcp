@@ -7,10 +7,13 @@ from typing import Any
 
 import ddflow.api._dedupe as DD
 
+from ...api.items import DEFAULT_PRIORITY
 from ...core import globspec as GS
 from ...core import ids as IDS
 from ...core import outcome as O
-from ...core.model import fold
+from ...core.flow import FEATURE, branch_kind
+from ...core.model import ABANDONED, DONE, Item, fold
+from ...services.completion import fixes_of
 from ...services.items import TaskDraft, add_task
 from .._base import _load
 
@@ -158,7 +161,6 @@ def _fix_task_of(st, cfg, item: str):
     is fixing it (`bug found --item <fix task>`, the dedupe's `filed_against`) names its
     fix; one filed against the item it was FOUND in -- a feature, a finished task, a
     phase -- names where to look, and gets a task of its own."""
-    from ...core.flow import FEATURE, branch_kind
 
     it = st.items.get(item) if item else None
     if it is None or it.removed or it.kind != "task" or it.terminal:
@@ -186,7 +188,6 @@ def _own_fix_id(st, cfg, bug_id: str) -> str:
     `[ids].fix_task_followup` (`fix-<bug>-2`, `-3`, ...) that is not abandoned too
     (B974e34fa83). Decided from the fold the caller holds inside its transaction, so the
     id is free when it is filed (L-free-id-before-add)."""
-    from ...core.model import ABANDONED
 
     used = IDS.taken(st)
     # seq=1: the bug's OWN fix task is one fixed name (a `{seq}` in its template is the
@@ -230,8 +231,6 @@ def _file_fix_task(
     ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
     names, or a `fix-<bug>` already in the queue.
     """
-    from ...api.items import DEFAULT_PRIORITY
-    from ...core.model import Item
 
     tid = _fix_task_id(st, cfg, bug_id, item)
     if _has_fix_task(st, cfg, bug_id, item):
@@ -311,9 +310,6 @@ def _needs_fix_task(st, b, cfg=None) -> bool:
     ABANDONED task, which nothing sends back -- its own `fix-<bug>` included, refiled as
     `fix-<bug>-2` (`_own_fix_id`, B974e34fa83). Left alone: a done task's OWN bug
     (`verify --reopen` sends that task back)."""
-    from ...core.model import ABANDONED, DONE
-    from ...services.completion import fixes_of
-
     if not _live(st, b.fix_task):
         return True
     state = st.items[b.fix_task].state

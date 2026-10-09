@@ -85,6 +85,26 @@ def _memory_row(m) -> dict[str, Any]:
     }
 
 
+def _matching(repo: Path, log, cfg, st, query: str, limit: int, include_forgotten: bool) -> list:
+    """The memories `query` ranks, best first (the forgotten ones matching it appended)."""
+    store = _store(repo, log, cfg)
+    # `limit` defaults to ALL here as on the other path; a silent cap of 20 returned
+    # a truncated answer presented as complete (roborev 825).
+    hits = SC.search_table(store, "memories", query, limit or max(1, len(st.memories)))
+    ids = [r["id"] for r in hits]
+    rows = [st.memories[i] for i in ids if i in st.memories]
+    if include_forgotten:
+        # The index holds LIVE memories only, so a forgotten one must be matched
+        # here -- or `--all` means nothing whenever `--query` is given (roborev 825).
+        terms = [t.lower() for t in query.split() if t]
+        rows += [
+            m
+            for m in st.memories.values()
+            if not m.live and any(t in m.text.lower() for t in terms)
+        ]
+    return rows
+
+
 def memory_list(
     repo: Path,
     *,
@@ -101,21 +121,7 @@ def memory_list(
     """
     log, cfg, st = _load(repo, agent)
     if query:
-        store = _store(repo, log, cfg)
-        # `limit` defaults to ALL here as on the other path; a silent cap of 20 returned
-        # a truncated answer presented as complete (roborev 825).
-        hits = SC.search_table(store, "memories", query, limit or max(1, len(st.memories)))
-        ids = [r["id"] for r in hits]
-        rows = [st.memories[i] for i in ids if i in st.memories]
-        if include_forgotten:
-            # The index holds LIVE memories only, so a forgotten one must be matched
-            # here -- or `--all` means nothing whenever `--query` is given (roborev 825).
-            terms = [t.lower() for t in query.split() if t]
-            rows += [
-                m
-                for m in st.memories.values()
-                if not m.live and any(t in m.text.lower() for t in terms)
-            ]
+        rows = _matching(repo, log, cfg, st, query, limit, include_forgotten)
     else:
         rows = sorted(
             (m for m in st.memories.values() if include_forgotten or m.live),

@@ -9,6 +9,9 @@ from typing import Any
 from ...core import clock
 from ...core import outcome as O
 from ...core.plain import plain
+from ...infra.worktree import absolutise
+from ...services import gates as G
+from ...services import ledger as LG
 from .._base import _load
 
 #: How much of one record's text a rendering carries. The record is whole in the log and
@@ -124,8 +127,6 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     handed ".ddflow-worktrees/T1" has to know what it is relative to and will resolve it
     against its own cwd.
     """
-    from ...infra.worktree import absolutise
-    from ...services import gates as G
 
     _log, cfg, st = _load(repo, agent)
     defs = G.load_gates(repo, cfg)
@@ -138,7 +139,6 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
                 "show", f"no such item {item!r} (it was removed from the queue)", id=item, item=None
             )
         return O.failed("show", f"no such item or bug {item!r}", id=item, item=None)
-    from ...services import ledger as LG
 
     led = LG.build(_log.read_all(), item) if it.state == "done" else None
     return O.ok(

@@ -6,6 +6,8 @@ import ast
 import re
 from pathlib import Path
 
+from ...infra import worktree as W
+
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
     """Split a `--regression-test` list into (missing, unchecked) pytest node ids.
@@ -16,7 +18,6 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
     B-bugfix-verified's job. Anything that is not a Python node id -- a spec, a shell
     command -- cannot be resolved here and is returned as unchecked, not refused.
     """
-    from ...infra import worktree as W
 
     trees = [Path(t["worktree"]) for t in W.list_worktrees(repo) if t.get("worktree")] or [repo]
     missing: list[str] = []
