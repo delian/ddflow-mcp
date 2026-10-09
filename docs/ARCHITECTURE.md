@@ -232,9 +232,11 @@ layer split by role, and saying so is more honest than an exemption list that gr
 **Dependencies.** Two runtime dependencies, both pure Python: **Jinja2** (the prompt and
 export templates) and **tomlkit** (config write-back that keeps comments and layout),
 declared in `pyproject.toml` and decided in `docs/ddflow/decisions/unify.md` (D-unify 1).
-Everything else is an optional extra, each imported in exactly one adapter module with a
-standard-library fallback, and a feature whose extra is absent is recorded `unavailable`,
-never silently downgraded and never passed:
+Everything else is an optional extra. Each is to be imported in exactly one adapter module
+(`importlinter-extras-one-adapter` enforces it) with a standard-library fallback; two adapters
+have landed and two extras are declared but not yet used. Where the extra is absent the fallback below runs and the
+missing extra is reported (a `ddflow doctor` line); a gate or check that needs the extra and
+cannot run is recorded `unavailable`, never passed:
 
 | Extra | Library | The one adapter | Fallback |
 |---|---|---|---|
@@ -336,7 +338,8 @@ renderer. The guards fail the suite if a change reintroduces the pattern by hand
   synonym-only one ([R4](RESEARCH.md)). Local embeddings are the optional `ddflow[rag]`
   extra, never downloaded at runtime, with BM25 as the fallback.
 - **No MCP SDK in core.** The stdio transport is stdlib JSON-RPC (`surfaces/mcp_protocol.py`).
-  The official SDK is the optional `ddflow[mcp-sdk]` extra, for a network transport only.
+  The official SDK is declared as the optional `ddflow[mcp-sdk]` extra for a future network
+  transport; no module imports it yet.
 - **No incremental projector.** An incremental updater is a second implementation of
   `fold` that can disagree with it, and a cache that silently disagrees with its source
   is worse than no cache. `rebuild` drops and re-derives; at 407k events/s it can afford to.
