@@ -238,3 +238,24 @@ def test_a_gate_with_a_recorded_outcome_always_applies(repo):
     cfg = Config.load(repo)
     s = G.status(fold(EventLog(repo).read_all()), cfg, "T1", G.load_gates(repo, cfg))
     assert "dedupe" not in s.not_applicable and s.blocked_by == ["dedupe"]
+
+
+def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
+    """Every applicable gate carries an outcome; the one outside the work has none and
+    owes none: the status is complete and `verify` finds no silent gate."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import gates as G
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    cfg = Config.load(repo)
+    for gate in cfg.gates.task_pipeline:
+        if gate != "dedupe":
+            run_cli(repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "test")
+    s = G.status(fold(EventLog(repo).read_all()), cfg, "T1", G.load_gates(repo, cfg))
+    assert s.complete and s.silent == [] and list(s.not_applicable) == ["dedupe"]
+    run_cli(repo, "complete", "T1", "--force", "--reason", "test")
+    out = run_cli(repo, "verify", "T1")[1]
+    assert "never run and never skipped" not in out, out
