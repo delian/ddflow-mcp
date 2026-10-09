@@ -27,7 +27,7 @@ class RagConfig:
 
     command: str = knob(
         "",
-        doc='The embedder companion: a command (split like a shell line, run WITHOUT a shell, in the repository root) that reads {"texts": ["...", ...]} as JSON on stdin and prints {"model": "<model id>", "vectors": [[...], ...]} on stdout, one vector per text, all the same length. The model id is how stored vectors are told apart from a different model\'s. Empty (default): none. A call that times out, exits non-zero, prints anything else or returns the wrong number of vectors is `unavailable` with the reason, never a partial answer. This runs a program, so set it in the git-ignored local file (`config --set rag.command ... --local`).',
+        doc='The embedder companion: a command (a shell line, run like every operator command, in the repository root) that reads {"texts": ["...", ...]} as JSON on stdin and prints {"model": "<model id>", "vectors": [[...], ...]} on stdout, one vector per text, all the same length. The model id is how stored vectors are told apart from a different model\'s. Empty (default): none. A call that times out, exits non-zero, prints anything else or returns the wrong number of vectors is `unavailable` with the reason, never a partial answer. This runs a program, so set it in the git-ignored local file (`config --set rag.command ... --local`).',
     )
     model_dir: str = knob(
         "",

@@ -78,9 +78,7 @@ def test_a_slow_companion_times_out_and_a_missing_one_does_not_start(tmp_path):
     got = E.embed(tmp_path, _cfg(slow, timeout_s=1), ["a"])
     assert got.unavailable and "timed out after 1s" in got.reason
     gone = E.embed(tmp_path, _cfg("/nonexistent/embedder"), ["a"])
-    assert gone.unavailable and "could not be started" in gone.reason
-    bad = E.embed(tmp_path, _cfg("echo 'unterminated"), ["a"])
-    assert bad.unavailable and "does not parse" in bad.reason
+    assert gone.unavailable and "unavailable" in gone.reason
 
 
 def test_nothing_configured_is_unavailable_and_says_how_to_configure_it(tmp_path):
@@ -127,11 +125,9 @@ def test_the_doctor_line_says_what_is_configured_and_whether_it_can_run(tmp_path
     (none,) = E.doctor_notes(_cfg())
     assert none.startswith("embedder: none configured") and "BM25 only" in none
     (ok,) = E.doctor_notes(_cfg(f"{sys.executable} -V"))
-    assert "companion" in ok and "not run by doctor" in ok
+    assert "companion command is configured" in ok and "does not run it" in ok
     (gone,) = E.doctor_notes(_cfg("no-such-embedder-xyz --x"))
-    assert "not an executable on PATH" in gone and "BM25 only" in gone
-    (bad,) = E.doctor_notes(_cfg("echo 'x"))
-    assert "does not parse" in bad
+    assert "'no-such-embedder-xyz'" in gone and "not installed" in gone and "BM25 only" in gone
     (dir_,) = E.doctor_notes(_cfg(model_dir=str(tmp_path / "missing")))
     assert "model_dir" in dir_ and ("not a directory" in dir_ or "not installed" in dir_)
 
@@ -154,3 +150,14 @@ def test_the_rag_knobs_are_checked():
     for bad in (0, -1, 601, "ten", True, 1.5):
         assert timeout_problem(bad)
     assert json.dumps(Config().rag.__dict__) == '{"command": "", "model_dir": "", "timeout_s": 60}'
+
+
+def test_the_shell_runner_feeds_stdin_only_when_asked():
+    from ddflow.infra import proc as P
+
+    assert P.run_shell("cat", timeout_s=10, stdin_text='{"a": 1}').out == '{"a": 1}'
+    assert P.run_shell("cat", timeout_s=10).out == ""  # /dev/null, as every other caller
+    slow = P.run_shell(
+        "cat; sleep 30", timeout_s=1, stdin_text="x", on_tick=lambda: None, tick_s=0.2
+    )
+    assert slow.timed_out and slow.out == "x"  # the text went in once; a resumed wait takes none
