@@ -29,6 +29,7 @@ from ..core.admission import is_shared
 from ..core.model import State
 from . import changes as CH
 from . import gates as G
+from .gates.evidence import tree_being_completed as _tree_being_completed
 
 
 @dataclass
@@ -350,48 +351,6 @@ def changed_paths(repo: Path, it) -> list[str] | None:
         # the base itself, diffs to nothing whatever the task did.
         return sorted(out) if out else None
     return None
-
-
-def _tree_being_completed(repo: Path, it) -> tuple[Path, str]:
-    """(where to look, the landed commit or "") for the stale-evidence check.
-
-    Once the item has landed, the commit that landed -- even when its worktree was kept,
-    since what is completed is what landed, not what the tree holds now -- and NOT the
-    primary checkout, whose HEAD is the target branch and whose files
-    are everyone's (bugs Bd86b05a8f8, Ba84119f707, B613cb67194). Of a merge commit, its
-    second parent: the branch head that was merged, which is what the gates ran on;
-    the merge commit itself also holds whatever the target gained meanwhile, and that
-    is not a reason to distrust the item's gates. A fast-forward or squash lands one
-    parent, and is itself the branch's content. Before it lands, the item's worktree.
-
-    `merged_sha` is only the fallback for an event without `landed_after`: `pr.merged`
-    with no merge sha, which records the branch's HEAD -- so it is taken as it is, with
-    no second-parent rule (that rule needs `landed_before` to tell OUR merge commit from
-    a branch head that is itself a merge). Every `worktree.merged` in this project's
-    log carries `landed_after`.
-    """
-    from ..infra import worktree as W
-
-    for ref in (it.landed_after, it.merged_sha):
-        sha = W.rev(repo, ref) if ref else ""
-        if not sha:
-            continue
-        parents = W.git(repo, "rev-list", "--parents", "-n", "1", sha).out.split()
-        # OUR merge commit only: its first parent is the target before it. A branch
-        # head that is itself a merge (main merged into it), fast-forwarded, is not.
-        # The forge path records `landed_before` as the landed commit's own first
-        # parent, so there a fast-forward is told apart by the PR's head instead.
-        head = W.rev(repo, it.pr.head_sha) if it.pr and it.pr.head_sha else ""
-        ours = (
-            ref == it.landed_after
-            and parents[1:2] == [W.rev(repo, it.landed_before)]
-            and sha != head
-        )
-        if ours and len(parents) > 2:  # noqa: PLR2004 -- self + 2 parents
-            return repo, parents[2]
-        return repo, sha
-    path = W.load_path(repo, it.worktree) if it.worktree else None
-    return path or repo, ""
 
 
 def _coverage_note(it, gaps: list[str]) -> str:

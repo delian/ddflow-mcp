@@ -24,7 +24,6 @@ from typing import Any
 from ...config import Config
 from ...core.model import Item, State
 from ...infra.log import EventLog
-from ..completion import _tree_being_completed
 from .defs import GateDef
 from .evidence import (
     _untracked_paths,
@@ -32,6 +31,7 @@ from .evidence import (
     content_id,
     diff_stat,
     source_tree,
+    tree_being_completed,
     tree_identity,
     worktree_entries,
 )
@@ -128,7 +128,7 @@ def _landed_if_only_untracked_differs(repo: Path, it: Item, wt: Path) -> dict[st
     files; {} otherwise (not landed, the same already, or a real change)."""
     if not (it.landed_after or it.merged_sha):
         return {}
-    _cwd, landed = _tree_being_completed(repo, it)
+    _cwd, landed = tree_being_completed(repo, it)
     source = commit_source_tree(repo, landed) if landed else ""
     if not source or source == source_tree(wt):
         return {}
