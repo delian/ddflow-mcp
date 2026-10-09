@@ -110,27 +110,45 @@ def test_the_values_themselves_are_pinned_not_only_their_agreement() -> None:
     assert R.OUTPUT_TAIL_CHARS == 2000
 
 
+def _writes_in(source: str) -> list[int]:
+    """The lines of ``source`` that SET ``"output_bytes"`` -- the size of a command's output,
+    which only the evidence of that output carries (a review transcript's digest is another
+    thing and has no size; reading the key back, as `verify` does, is not building it). Three
+    forms: a dict literal key, a subscript assignment and a keyword (``dict(output_bytes=...)``)."""
+    lines = []
+    for node in ast.walk(ast.parse(source)):
+        literal = isinstance(node, ast.Dict) and any(
+            isinstance(k, ast.Constant) and k.value == "output_bytes" for k in node.keys
+        )
+        stored = (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.ctx, ast.Store)
+            and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "output_bytes"
+        )
+        keyword = isinstance(node, ast.keyword) and node.arg == "output_bytes"
+        if literal or stored or keyword:
+            lines.append(getattr(node, "lineno", 0))
+    return lines
+
+
 def _writes_of_output_bytes() -> list[str]:
-    """Where under ddflow/ a dict literal or a subscript assignment SETS ``"output_bytes"``,
-    the size of a command's output, which only the evidence of that output carries (reading
-    it back, as `verify` does, is not building it; a review transcript's digest is another
-    thing and has no size)."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    found = []
-    for path in sorted(root.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text("utf-8"))):
-            dict_key = isinstance(node, ast.Dict) and any(
-                isinstance(k, ast.Constant) and k.value == "output_bytes" for k in node.keys
-            )
-            sub_store = isinstance(node, ast.Subscript) and (
-                isinstance(node.ctx, ast.Store)
-                and isinstance(node.slice, ast.Constant)
-                and node.slice.value == "output_bytes"
-            )
-            keyword = isinstance(node, ast.keyword) and node.arg == "output_bytes"  # dict(...)
-            if dict_key or sub_store or keyword:
-                found.append(f"{path.relative_to(root)}:{getattr(node, 'lineno', 0)}")
-    return found
+    return [
+        f"{path.relative_to(root)}:{line}"
+        for path in sorted(root.rglob("*.py"))
+        for line in _writes_in(path.read_text("utf-8"))
+    ]
+
+
+def test_the_scan_sees_each_way_of_building_the_evidence() -> None:
+    """The structural check below must not be blind to a copy written another way."""
+    assert _writes_in('ev = {"output_bytes": 1}') == [1]
+    assert _writes_in('ev = {}\nev["output_bytes"] = 1') == [2]
+    assert _writes_in("ev = dict(output_bytes=1)") == [1]
+    assert _writes_in('size = ev["output_bytes"]\nrun.output_bytes = 3') == [], (
+        "reading is not building"
+    )
 
 
 def test_there_is_one_builder_in_the_source() -> None:
