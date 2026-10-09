@@ -118,3 +118,13 @@ def test_drop_writes_kind_pipelines_only_when_one_is_configured(repo):
     assert (
         run_cli(repo, "config", "--set", "gates.kind_pipelines", '{ docs = ["merge"] }')[0] != 0
     ), "an unregistered kind is refused"
+
+
+def test_check_flags_a_phase_only_gate_in_a_kind_pipeline(tmp_path):
+    """`applies_to` is judged for kind pipelines too: a document is task-like."""
+    cfg = Config()
+    gates = load_gates(tmp_path, cfg)
+    gates["tasks"].applies_to = "phase"
+    cfg.gates.kind_pipelines = {"doc": ["implement", "tasks", "merge"]}
+    hit = [f for f in WF.check(cfg, gates) if f.subject == "tasks" and "applies_to" in f.detail]
+    assert hit and "doc pipeline" in hit[0].detail

@@ -5279,7 +5279,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=17b0958ca5fc -->
+<!-- ddflow:begin README/knobs sha=64b34d720ac2 -->
 <details><summary>All 202 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
@@ -5332,13 +5332,13 @@ long default is left to `ddflow config --explain`.
 | `flow.version_files` | `{}` |  |
 | `gates.task_pipeline` | (long: see `ddflow config --explain`) |  |
 | `gates.phase_pipeline` | (long: see `ddflow config --explain`) |  |
+| `gates.kind_pipelines` | `{}` |  |
 | `gates.required` | `["implement", "unit_tests", "merge"]` |  |
 | `gates.unavailable_is_failure` | `false` |  |
 | `gates.allow_skip_with_reason` | `true` |  |
 | `gates.require_outcome` | `true` |  |
 | `gates.enforce_order` | `"warn"` | `warn` \| `block` \| `off` |
 | `gates.promotion_pipeline` | `["unit_tests", "merge"]` |  |
-| `gates.kind_pipelines` | `{}` |  |
 | `gates.rate_min_runs` | `5` |  |
 | `gates.rate_max_fail` | `0.9` |  |
 | `gates.evidence_required` | (long: see `ddflow config --explain`) |  |
