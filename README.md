@@ -2741,7 +2741,8 @@ not a knob -- empty by default, so a project that never sets it sees no change.
 `[gate.<id>] requires_evidence = ["report", "link"]` and `evidence_fields = ["intent",
 "edge cases"]` refuse a bare pass: `gate record ... --outcome passed` fails, listing every
 unmet form at once, unless the evidence carries what the gate asks for. **report** -- an
-output digest (attach the output with `--output-file`) or a `report_digest`; **link** -- a
+output digest (attach the output with `--output-file`; an empty or whitespace-only file
+does not count) or a `report_digest`; **link** -- a
 record id (a research note) whose item is this one, so a note filed against another item
 does not count; **fields** -- every `evidence_fields` name filled in with real content (an
 empty value, `n/a`, `none` or `LGTM` counts as missing). Listing `evidence_fields` implies
