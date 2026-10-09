@@ -1679,6 +1679,10 @@
           "type": "string",
           "description": "search: comma-separated record kinds."
          },
+         "source": {
+          "type": "string",
+          "description": "search: comma-separated search sources (default all)."
+         },
          "as_agent": {
           "type": "string",
           "description": "A subagent's own name, this call only."

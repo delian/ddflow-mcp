@@ -181,7 +181,7 @@
   tuple(
     3,
     '''
-      unknown kind nope: one of task, phase, bug, research, decision, lesson, session, prompt, log
+      unknown kind nope: one of task, phase, bug, research, decision, lesson, session, prompt, log, rule, skill, command, agent, job, schedule
   
     ''',
   )
