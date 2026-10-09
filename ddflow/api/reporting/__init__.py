@@ -25,6 +25,7 @@ from ...core.tier import unknown_tier_notes  # noqa: F401
 from ...infra import worktree as W  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from ...services import configcompat as CC  # noqa: F401
+from ...services import embed as EMB  # noqa: F401
 from ...services import gates as G  # noqa: F401
 from ...services import repairs as RP  # noqa: F401
 from ...services.guidance import ruleview as RULEVIEW  # noqa: F401

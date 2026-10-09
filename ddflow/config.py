@@ -109,6 +109,9 @@ from .config_sections.memory import (
 from .config_sections.prompts import (
     PromptsConfig,
 )
+from .config_sections.rag import (
+    RagConfig,
+)
 from .config_sections.reinstruct import (
     ReinstructConfig,
 )
@@ -234,6 +237,7 @@ class Config:
     agent: AgentConfig = field(default_factory=AgentConfig)
     ids: IdsConfig = field(default_factory=IdsConfig)
     triggers: TriggersConfig = field(default_factory=TriggersConfig)
+    rag: RagConfig = field(default_factory=RagConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "local" | "env",
     #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong

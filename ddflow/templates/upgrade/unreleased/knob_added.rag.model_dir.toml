@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "rag.model_dir"
+new = "\"\""
+why = "A local model2vec model directory for the in-process embedder ([rag].model_dir); empty by default, never downloaded."
+impact = "additive"

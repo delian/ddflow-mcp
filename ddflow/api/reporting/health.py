@@ -14,6 +14,7 @@ from ...core.schedule import stale_package_globs
 from ...core.tier import unknown_tier_notes
 from ...infra import worktree as W
 from ...services import configcompat as CC
+from ...services import embed as EMB
 from ...services import repairs as RP
 from ...services.guidance import ruleview as RULEVIEW
 from ...views.markdown import may_hold_work
@@ -298,6 +299,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
     notes.extend(RULEVIEW.notes(repo, cfg, st))
+    notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
     from ...infra import signals as SIG
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
