@@ -271,7 +271,7 @@ def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
     silent = [g for g in pipeline if g not in gates] if cfg.gates.require_outcome else []
     required_bad = [
         g
-        for g in cfg.gates.required
+        for g in G.required_gates(cfg)
         if g in pipeline and not GateOutcome.settled(gates.get(g, {}).get("outcome", ""), True)
     ]
     unreasoned = [

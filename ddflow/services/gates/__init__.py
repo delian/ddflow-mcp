@@ -77,6 +77,7 @@ from .defs import (  # noqa: F401
     pipeline_for,
     pipelined,
     pipelines,
+    required_gates,
 )
 from .evidence import (  # noqa: F401
     _NUMSTAT_FIELDS,
