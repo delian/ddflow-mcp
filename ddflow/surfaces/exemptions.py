@@ -22,6 +22,7 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
+from .declared.rules import COMMANDS as _RULES
 from .registry import (
     Command,
     covering_tools,
@@ -269,6 +270,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_RECORDS,
     *_QUEUE,
     *_LIFECYCLE,
+    *_RULES,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,
