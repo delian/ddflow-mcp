@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import run_cli
 
 from ddflow.config import Config
 from ddflow.config_sections._kinds import KINDS, kind_pipelines_problem
@@ -128,3 +129,138 @@ def test_check_flags_a_phase_only_gate_in_a_kind_pipeline(tmp_path):
     cfg.gates.kind_pipelines = {"doc": ["implement", "tasks", "merge"]}
     hit = [f for f in WF.check(cfg, gates) if f.subject == "tasks" and "applies_to" in f.detail]
     assert hit and "doc pipeline" in hit[0].detail
+
+
+# ---- applies_when: a gate that runs only on work touching its paths -------------------
+
+
+def _gate(**kw):
+    from ddflow.services.gates import GateDef
+
+    return GateDef(id="g", **kw)
+
+
+@pytest.mark.parametrize(
+    "when,globs,applies",
+    [
+        ([], ["src/a.py"], True),  # no patterns: always
+        (["docs/**"], [], True),  # no declared globs: cannot judge, so it applies
+        (["docs/**"], ["docs/guide.md"], True),
+        (["docs/**"], ["src/a.py"], False),
+        (["docs/**", "api/**"], ["src/a.py", "api/x.py"], True),
+        (["docs/**"], ["src/**", "tests/"], False),
+    ],
+)
+def test_gate_applies_grid(when, globs, applies):
+    from ddflow.services.gates import gate_applies
+
+    item = _item("task", globs=globs)
+    assert (gate_applies(_gate(applies_when=when), item) == "") is applies
+    if not applies:
+        assert "docs/**" in gate_applies(_gate(applies_when=when), item)
+
+
+def test_an_undefined_gate_always_applies():
+    from ddflow.services.gates import gate_applies
+
+    assert gate_applies(None, _item("task", globs=["a.py"])) == ""
+
+
+def test_status_without_definitions_or_patterns_is_unchanged(repo):
+    """Passing the gate definitions changes nothing while no gate has `applies_when`."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import gates as G
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    cfg = Config.load(repo)
+    st = fold(EventLog(repo).read_all())
+    plain = G.status(st, cfg, "T1")
+    withdefs = G.status(st, cfg, "T1", G.load_gates(repo, cfg))
+    assert withdefs == plain
+    assert withdefs.not_applicable == {}
+
+
+def test_a_gate_outside_the_declared_work_is_reported_and_waited_on_by_nothing(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    assert run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')[0] == 0
+    _code, out, err = run_cli(repo, "gate", "status", "T1")
+    assert "[-] dedupe  -- not applicable: applies only to work touching docs/**" in out, out + err
+    # nothing waits on it: it is not silent, so completion does not ask for an outcome
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import completion as CM
+    from ddflow.services import gates as G
+
+    cfg = Config.load(repo)
+    st = fold(EventLog(repo).read_all())
+    s = G.status(st, cfg, "T1", G.load_gates(repo, cfg))
+    assert "dedupe" in s.not_applicable and "dedupe" not in s.silent
+    assert "dedupe" not in s.render().split("[-]")[0]
+    v = CM.verdict(st, cfg, "T1", repo=repo)
+    assert not any("dedupe" in b for b in v.blockers), v.blockers
+    # and it is not "ahead" of the gate after it
+    assert "dedupe" not in G.gates_ahead_of(st, cfg, "T1", "merge", G.load_gates(repo, cfg))
+    assert "dedupe" in G.gates_ahead_of(st, cfg, "T1", "merge")
+
+
+def test_a_gate_in_scope_is_waited_on_as_before(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "docs/guide.md")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    out = run_cli(repo, "gate", "status", "T1")[1]
+    assert "not applicable" not in out and "[ ] dedupe" in out, out
+
+
+def test_brief_and_verify_leave_out_a_gate_that_does_not_apply(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    run_cli(repo, "config", "--set", "gate.bug_hunt.applies_when", '["src/**"]')
+    out = run_cli(repo, "brief", "--item", "T1")[1]
+    remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
+    assert "dedupe" not in remaining and "bug_hunt" in remaining, remaining
+
+
+def test_a_gate_with_a_recorded_outcome_always_applies(repo):
+    """Work already done is never hidden: a failed outcome keeps its gate in play even
+    where `applies_when` no longer covers the item, and it is not reported as N/A."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import gates as G
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "gate", "record", "T1", "dedupe", "--outcome", "failed", "--reason", "x")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    cfg = Config.load(repo)
+    s = G.status(fold(EventLog(repo).read_all()), cfg, "T1", G.load_gates(repo, cfg))
+    assert "dedupe" not in s.not_applicable and s.blocked_by == ["dedupe"]
+
+
+def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
+    """Every applicable gate carries an outcome; the one outside the work has none and
+    owes none: the status is complete and `verify` finds no silent gate."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import gates as G
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/a.py")
+    run_cli(repo, "config", "--set", "gate.dedupe.applies_when", '["docs/**"]')
+    cfg = Config.load(repo)
+    for gate in cfg.gates.task_pipeline:
+        if gate != "dedupe":
+            run_cli(repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "test")
+    s = G.status(fold(EventLog(repo).read_all()), cfg, "T1", G.load_gates(repo, cfg))
+    assert s.complete and s.silent == [] and list(s.not_applicable) == ["dedupe"]
+    assert run_cli(repo, "complete", "T1", "--force", "--reason", "test")[0] == 0
+    code, out, err = run_cli(repo, "verify", "T1")
+    assert code in (0, 1), out + err  # a completed item: verified or flagged, not "not completed"
+    assert "never run and never skipped" not in out, out
+    from ddflow.services import completion as CM
+
+    st = fold(EventLog(repo).read_all())
+    assert not [b for b in CM.verdict(st, cfg, "T1", repo=repo).blockers if "dedupe" in b]

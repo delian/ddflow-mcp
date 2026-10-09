@@ -39,6 +39,12 @@ class GateDef:
     #: exit code. A cross-family critic that exits 2 when its endpoint is down and 3 when
     #: only some files were reviewed was recorded as FAILED either way -- and a failure
     #: that is really an outage sends the author off to fix code that nobody reviewed.
+    #: Path globs that put this gate in an item's pipeline only when the work touches them:
+    #: the gate applies when one of its patterns can match one of the item's declared
+    #: globs (`gate_applies`). Empty (the default) means always. An item that declares no
+    #: globs cannot be judged, so every gate applies to it -- a gate is never dropped on a
+    #: guess.
+    applies_when: list[str] = field(default_factory=list)
     unavailable_exits: list[int] = field(default_factory=list)
     partial_exits: list[int] = field(default_factory=list)
     #: For tools whose exit code does not carry the verdict. `require_output`: a regex

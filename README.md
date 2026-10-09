@@ -2723,6 +2723,18 @@ own bug, found by a cross-family review of it:
   catch the vacuous-pass class contained it. It now runs unmutated first and refuses
   without a pass.
 
+### A gate that runs only on the work it concerns
+
+`[gate.<id>] applies_when = ["api/**", "schema/*.sql"]` puts the gate in effect for an
+item only when one of those path patterns can cover one of the item's declared globs
+(`--globs`). For any other item `ddflow gate status` shows it as `[-] <gate>  -- not
+applicable: ...`, naming the patterns and the globs it was judged against; nothing waits
+on it, so it is neither `silent` (completion does not demand an outcome), a required gate
+that is missing, nor ahead of the gates after it under `gates.enforce_order`. A gate that
+already has a recorded outcome always applies, and so does every gate of an item that
+declares no globs: a gate is never left out for want of information. It is a gate field,
+not a knob -- empty by default, so a project that never sets it sees no change.
+
 ### When the exit code is not the verdict
 
 Some tools say "I could not run" or "I only did part of it" with an exit code, and some
