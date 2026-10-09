@@ -1,7 +1,7 @@
 """What the log says about ddflow versions: the stamp, skew, and the overrides to review.
 
 The pieces `ddflow doctor` and (later) `ddflow upgrade` share. Pure over a folded `State`:
-nothing here reads a disk except `last_seen_version`, which reads the machine-local marker.
+nothing here reads a disk.
 
 The mechanism lives lower down: `core.events` (the kinds, version order, `stamp_facts`) and
 `infra.log.EventLog` (the stamp on first write, the guard, the override). Decisions
@@ -10,24 +10,12 @@ D-upgrade-event-kinds and D-upgrade-skew-guard.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from ..core.events import is_older
 from ..core.model import State
-from ..infra.log import SEEN_MARKER, running_version
+from ..infra.log import running_version
 from .install_info import upgrade_advice
-
-
-def last_seen_version(root: Path | str) -> str:
-    """The version this MACHINE last acted under (`.ddflow/local/seen.json`), "" when it
-    has never written to this project."""
-    try:
-        data = json.loads((Path(root) / SEEN_MARKER).read_text("utf-8"))
-    except (OSError, ValueError):
-        return ""
-    return str(data.get("version", "")) if isinstance(data, dict) else ""
 
 
 def skew_report(st: State, running: str = "") -> dict[str, Any]:

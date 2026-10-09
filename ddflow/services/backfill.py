@@ -15,20 +15,19 @@ from pathlib import Path
 from typing import Any
 
 from ..core.model import State
+from ..infra.worktree import default_branch, git
 from . import ledger as LG
 
 RECORDED = "the sha the completion recorded"
 
 
 def _is_commit(repo: Path, sha: str) -> bool:
-    from ..infra.worktree import git
 
     return bool(sha) and git(repo, "cat-file", "-e", f"{sha}^{{commit}}", timeout=60).ok
 
 
 def find_commit(repo: Path, st: State, item_id: str) -> tuple[str, str] | None:
     """(sha, how it was found) for an item's landing, or None."""
-    from ..infra.worktree import default_branch, git
 
     it = st.items.get(item_id)
     if it is not None and _is_commit(repo, it.merged_sha):

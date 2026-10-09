@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.model import fold
 from ..core.slug import ascii_slug, claude_project_slug
 from ..infra.log import EventLog
 from .enforce import UnreadableYaml, read_precommit_yaml
@@ -290,7 +291,6 @@ def apply(
     clears the reason, and the operator approving a plain "remember" line does not know
     they are reviving it.
     """
-    from ..core.model import fold
 
     cfg = cfg or Config.load(log.root)
     # The read-decide-append runs INSIDE the lock: a second onboarding run must not pass
