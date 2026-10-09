@@ -10,6 +10,8 @@ import ddflow.api._dedupe as DD
 from ...config import Config, csv_list
 from ...core import outcome as O
 from ...core.model import LINK_RELATIONS
+from ...infra.store import similar_records
+from ...services import similar as sim
 from .._base import _load
 
 
@@ -22,7 +24,6 @@ def _sweep_records(st) -> list[dict[str, str]]:
     is the one definition of what a record's TEXT is, so this adds the dropped records to
     it rather than re-deriving titles and bodies.
     """
-    from ...infra.store import similar_records
 
     out = similar_records(st)
     seen = {r["id"] for r in out}
@@ -103,7 +104,6 @@ def pair_records(
     (> 0) stops as soon as that many pairs are found, for a caller that only needs a
     bounded count (the doctor note) and must not pay for a dense log's full sweep.
     """
-    from ...services import similar as sim
 
     if len(records) < _MIN_PAIR:
         return []
