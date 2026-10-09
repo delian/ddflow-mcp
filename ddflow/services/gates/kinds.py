@@ -136,9 +136,12 @@ def evidence_problems(
 
 
 def _report_problem(evidence: Mapping[str, Any]) -> str:
-    if any(_filled(evidence.get(k)) for k in REPORT_KEYS):
+    # An attached output that is empty (`--output-file /dev/null`) digests to a value like any
+    # other, but it reports nothing.
+    empty = evidence.get("output_bytes") == 0
+    if any(_filled(evidence.get(k)) and not (empty and k == "output_digest") for k in REPORT_KEYS):
         return ""
-    return "a report: attach the output (`--output-file`) or name its digest"
+    return "a report: attach the output (`--output-file`, not empty) or name its digest"
 
 
 def _link_problem(
