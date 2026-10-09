@@ -668,7 +668,8 @@
           e.g. { doc = ["implement", "merge"] }. A kind not named here runs
           `task_pipeline` (`phase_pipeline` for a phase); a promotion task keeps
           `promotion_pipeline`. Empty by default, so every kind runs as before.
-          `ddflow workflow --json` shows each kind's effective pipeline.
+          `ddflow workflow` lists each kind that differs, and `--json` every kind's
+          effective pipeline.
       gates.required = ['implement', 'unit_tests', 'merge']   [default]
           Gates whose failure BLOCKS completion. Everything else records its outcome
           and lets the pipeline continue — advisory vs blocking is an explicit field,
