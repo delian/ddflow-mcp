@@ -162,6 +162,7 @@ def test_parse_accepts_a_minimal_descriptor():
         (lambda t: t.replace("[mcp]", '[mcp]\ncolour = "red"'), "unknown key"),
         (lambda t: t + '\n[plugin]\nnone = true\nmanifest = "x"\n', "none = true and also"),
         (lambda t: t + "\n[skills]\n", "is empty: omit it"),
+        (lambda t: t + "\n[env]\n", "is empty: omit it"),
         (
             lambda t: t.replace('[mcp]\npath = ".demo/mcp.json"\nshape = "mcpServers"', ""),
             "expected a table",
