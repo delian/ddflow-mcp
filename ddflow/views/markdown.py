@@ -30,7 +30,11 @@ from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING
 from ..core.schedule import Plan, critical_path
 from ..core.textcut import clip
 from ..core.tier import tier_of
-from ..infra.fsio import FORMAT_LEVEL, NewerContent, parse_level
+from ..infra.fsio import FORMAT_LEVEL, NewerContent, parse_level, replace_text
+from ..infra.worktree import load_path
+from ..services import jobs as J
+from ..services.completion import readme_report
+from ..services.gates import load_gates, not_applicable, pipeline_for, required_gates
 from ..services.redact_report import redactor
 
 #: What every view's first line starts with, stamped or not.
@@ -141,8 +145,6 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
     run. Passing `cfg=None` falls back to the defaults for callers that genuinely have
     no config to hand.
     """
-    from ..services.gates import pipeline_for
-
     out = [GENERATED, "", "# Work queue", ""]
     default = list(Config().gates.task_pipeline)
     sections = PR.board_rows(
@@ -630,8 +632,6 @@ def _brief_current(
     with `--item` or held under its lease; the queue's top pick for an agent holding
     nothing is "Suggested next", because calling it Current told an agent it was working
     on something it never claimed (B226d8db6e8)."""
-    from ..services.gates import load_gates, not_applicable, pipeline_for, required_gates
-
     it = state.items.get(item)
     if not it:
         return
@@ -671,8 +671,6 @@ def _brief_current(
     if it.worktree:
         # Resolved for display: a relative path is portable in the LOG and ambiguous in
         # a brief, where the reader is about to `cd` to it.
-        from ..infra.worktree import load_path
-
         out.append(
             f"- worktree: `{load_path(repo, it.worktree) if repo else it.worktree}`"
             f" on `{it.branch}`"
@@ -683,8 +681,6 @@ def _brief_current(
     todo = [g for g in pipe if g not in off and not it.gate_satisfied(g, g in required)]
     out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
     if repo is not None and not suggested:
-        from ..services.completion import readme_report
-
         readme = readme_report(state, cfg, item, repo=repo)
         if readme:
             out.append(f"- docs: {readme}")
@@ -808,8 +804,6 @@ def _brief_jobs(out: list[str], state: State, item: str = "", agent: str = "") -
     one they filled the whole token budget ahead of the item's own section, and the
     brief was cut before it said anything about the item.
     """
-    from ..services import jobs as J
-
     pending = [j for j in state.jobs.values() if not j.ended_at]
     if not pending:
         return
@@ -1152,6 +1146,6 @@ def write_views(
     for name, new in views.items():
         p = d / name
         if not p.exists() or p.read_text("utf-8") != new:
-            p.write_text(new, "utf-8")
+            replace_text(p, new)
         written.append(p)
     return written
