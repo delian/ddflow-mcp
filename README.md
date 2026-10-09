@@ -3851,9 +3851,9 @@ A project is brought up to a newer ddflow in three steps, and ddflow does only t
 
 1. **Silent: it tells you, once.** After ddflow is upgraded, the brief and the MCP handshake
    print one line, `Upgraded ddflow A -> B: run ddflow upgrade --plan`, once per version on this
-   machine for this project. The only file that writes is the git-ignored
-   `.ddflow/local/upgrade-notice.json`. `[upgrade].auto = "safe"` also refreshes ddflow's own
-   files (hooks, driver docs, rules blocks) after a backup; `"off"` says nothing.
+   machine for this project. With the shipped `[upgrade].auto = "check"` the only file that
+   writes is the git-ignored `.ddflow/local/upgrade-notice.json`. `"safe"` also refreshes
+   ddflow's own files (hooks, driver docs, rules blocks) after a backup; `"off"` says nothing.
 2. **Read-only: you look.** `ddflow upgrade --plan` lists what would change, by category, and
    writes nothing.
 3. **Consented: you apply.** `ddflow upgrade --apply` does what the plan lists after saving what
