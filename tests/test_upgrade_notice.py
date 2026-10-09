@@ -151,3 +151,44 @@ def test_the_newest_version_wins_the_note() -> None:
 )
 def test_a_current_server_says_nothing(running: str, installed: str, highest: str) -> None:
     assert UN.stale_server_note(_state(highest), running=running, installed=installed) == ""
+
+
+# --- the brief and the MCP surfaces ---------------------------------------------------------
+
+
+def test_the_brief_leads_with_the_notice_once(old: Path) -> None:
+    code, out, _err = run_cli(old, "brief")
+    assert code == 0 and out.lstrip().startswith(LINE)
+    assert LINE not in run_cli(old, "brief")[1]
+    assert LINE not in _start(old), "the hook and the brief share one marker"
+
+
+def test_the_mcp_handshake_says_it_once(old: Path) -> None:
+    from ddflow.surfaces.mcp import Server
+
+    first = Server(old)._dispatch(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )["result"]["instructions"]
+    assert LINE in first and first.rstrip().endswith("`ddflow upgrade --plan`")
+    again = Server(old)._dispatch(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )["result"]["instructions"]
+    assert LINE not in again
+
+
+def test_a_stale_server_says_restart_once(old: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ddflow.services import upgrade_notice as un
+    from ddflow.surfaces import mcp
+
+    monkeypatch.setattr(un, "installed_version", lambda: "99.0.0")
+    server = mcp.Server(old)
+    call = {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {"name": "ddflow_status", "arguments": {}},
+    }
+    texts = [c["text"] for c in server._dispatch(call)["result"]["content"]]
+    assert any("restart the server" in t and "99.0.0" in t for t in texts)
+    again = [c["text"] for c in server._dispatch(call)["result"]["content"]]
+    assert not any("restart the server" in t for t in again), "said once per server"

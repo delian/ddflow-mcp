@@ -40,6 +40,16 @@ inside a token budget. Read it instead of the corpora, not in addition to them.
 agent's worktree frequently contains finished work that exists nowhere else. Inspect the
 named tree, salvage what is real, then `ddflow release <id>`. Never delete first.
 
+**If the brief opens with `ddflow upgraded A -> B: run ddflow upgrade --plan`**, ddflow was
+upgraded since this project was last brought up to date (it says so once per machine per
+version, and writes nothing). Run `ddflow upgrade --plan` [`ddflow_upgrade`]: it lists what
+would change by category and exits 1 while it has items. `ddflow upgrade --apply` applies
+them after a backup; a config value anyone set, and every item marked for the operator, waits
+for `--confirm KEY --reason WHY`: ask the operator, do not guess. `[upgrade].auto = safe`
+lets ddflow apply the hooks and instructions categories itself at that moment; `off` silences
+the notice. A line `restart the server` after a tool call means the MCP server predates the
+upgrade: reconnect it in your client.
+
 ---
 
 ## 1. Phase-level research (once per phase)

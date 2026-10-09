@@ -656,12 +656,6 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     except Exception as exc:
         parts += [f"_(cadence check failed: {exc})_", ""]
     try:
-        notice = _upgrade_notice(repo, agent)
-        if notice:
-            parts += [notice, ""]
-    except Exception as exc:
-        parts += [f"_(upgrade notice failed: {exc})_", ""]
-    try:
         out = brief(repo, check_recovery=True, agent=agent)
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:
@@ -675,9 +669,9 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
 
 
-def _upgrade_notice(repo: Path, agent: str) -> str:
-    """The one-line upgrade notice (`services.upgrade_notice`), or "" when none is due: said
-    once per machine per version, whichever surface asks first."""
+def upgrade_notice(repo: Path, *, agent: str = "") -> str:
+    """The one-line upgrade notice (`services.upgrade_notice.line`) or "": said once per machine
+    per version, whichever surface asks first. For the MCP handshake; the brief says it itself."""
     log, cfg, st = _load(repo, agent)
     return UN.line(repo, log, cfg, st, agent=agent)
 
