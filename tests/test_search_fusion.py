@@ -137,6 +137,7 @@ def test_prompts_fuse_on_their_session_ids_on_both_paths(repo, log, backend):
     st.rebuild(log)
     got = st.search("prompts", "igrat", 5)  # a substring of "migrate", no word of it
     assert [r["text"] for r in got] == ["please migrate the database"]
+    assert got[0]["id"] == "S1#p0"  # the same id on both paths
 
 
 @pytest.mark.parametrize("backend", ["fts5", "like"])
@@ -164,10 +165,40 @@ def test_rerank_is_case_insensitive_with_or_without_the_extra(monkeypatch):
     assert fuzzy.ratio("DNS", "dns") == 1.0
 
 
-def test_the_optional_rerank_does_not_change_the_hit_set(repo, log):
+def test_the_optional_rerank_reorders_the_pool_not_just_the_page(repo, log):
     _lessons(log)
     st = _store(repo, "like")
     st.rebuild(log)
     plain = st.search("lessons", "claim worktree", 5)
-    fuzzy = st.search("lessons", "claim worktree", 5, rerank_by_likeness=True)
-    assert {r["id"] for r in plain} == {r["id"] for r in fuzzy}
+    fuzzy_all = st.search("lessons", "claim worktree", 5, rerank_by_likeness=True)
+    assert {r["id"] for r in plain} == {r["id"] for r in fuzzy_all}
+    # a page of one is the closest of the whole pool, whatever the fused order says
+    one = st.search("lessons", "claim worktree", 1, rerank_by_likeness=True)
+    assert [r["id"] for r in one] == [fuzzy_all[0]["id"]]
+
+
+@pytest.mark.parametrize("backend", ["fts5", "like"])
+def test_a_late_short_term_is_ranked_on_every_machine(repo, log, backend):
+    """Both word rankers take the same number of terms, so a short word past the eighth
+    is found with or without FTS5."""
+    if backend == "fts5" and not _has_fts5():
+        pytest.skip("this SQLite has no FTS5")
+    log.append("lesson.recorded", "L1", {"title": "zz ab", "rule": "r"})
+    st = _store(repo, backend)
+    st.rebuild(log)
+    assert [r["id"] for r in st.search("lessons", "xx yy ww vv uu tt ss rr ab", 5)] == ["L1"]
+
+
+def test_an_index_built_without_trigram_is_rebuilt_where_there_is_one(repo, log, monkeypatch):
+    if not (_has_fts5() and S._has_trigram()):
+        pytest.skip("this SQLite has no FTS5 trigram")
+    _lessons(log)
+    old = _store(repo, "fts5", trigram=False, monkeypatch=monkeypatch)
+    old.rebuild(log)
+    assert not old.stale(log)
+    monkeypatch.undo()
+    new = _store(repo, "fts5")
+    assert new.trigram and new.stale(log)
+    new.rebuild(log)
+    assert not new.stale(log)
+    assert {r["id"] for r in new.search("lessons", "claim gration", 10)} == {"L1", "L2", "L4"}

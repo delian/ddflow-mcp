@@ -2,7 +2,7 @@
 
 Nothing else imports rapidfuzz (the `extras-one-adapter` contract). ``ratio`` is rapidfuzz's
 token-set ratio when the extra is installed and ``difflib``'s sequence ratio otherwise; both
-are 0..1. ``available`` says which one a caller is getting, for the doctor line.
+are 0..1. ``available`` says which one a caller is getting.
 """
 
 from __future__ import annotations
