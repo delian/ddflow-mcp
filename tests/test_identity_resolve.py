@@ -476,6 +476,18 @@ def test_agent_marker_answers_the_same_for_every_caller(monkeypatch, requested, 
     for var, value in env.items():
         monkeypatch.setenv(var, value)
     assert ID.agent_marker(requested) == want
-    assert AP.agent_marker is RT.agent_marker is ID.agent_marker
+    assert AP.agent_marker(requested) == RT.agent_marker(requested) == want
+    assert export_select._is_agent(requested, False) == want
     assert ID.is_agent(requested, False) == want
     assert ID.is_agent(requested, True) == "the MCP surface"
+
+
+def test_only_services_identity_defines_or_reads_the_agent_marker():
+    """A private copy of the rule (a second env-var check) is how the callers drifted."""
+    root = Path(__file__).resolve().parents[1] / "ddflow"
+    homes = {
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*.py")
+        if "CLAUDECODE" in p.read_text() or "def agent_marker" in p.read_text()
+    }
+    assert homes == {"services/identity.py"}, homes
