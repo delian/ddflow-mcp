@@ -1645,15 +1645,15 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     src = inspect.getsource(A._review_gate)
     table = src[src.index("outcome = {") : src.index("}[best.status]")]
     for status in ("PARTIAL", "UNAVAILABLE", "ERROR"):
-        arm = table[table.index(f"R.{status}:") : table.index("\n", table.index(f"R.{status}:"))]
-        assert '"passed"' not in arm, f"R.{status} maps to a pass: {arm.strip()}"
-    assert 'R.REVIEWED: ("failed" if best.findings else "passed")' in table, table
+        arm = table[table.index(f"RV.{status}:") : table.index("\n", table.index(f"RV.{status}:"))]
+        assert '"passed"' not in arm, f"RV.{status} maps to a pass: {arm.strip()}"
+    assert 'RV.REVIEWED: ("failed" if best.findings else "passed")' in table, table
 
     # And the exit codes: only a real review with no findings is success.
     exits = src[src.index("exit_code = {") : src.index("]\n", src.index("exit_code = {"))]
-    assert "R.UNAVAILABLE: O.NOTHING" in exits, exits
-    assert "R.ERROR: O.FAIL" in exits, exits
-    assert "R.PARTIAL: O.REFUSED" in exits, exits
+    assert "RV.UNAVAILABLE: O.NOTHING" in exits, exits
+    assert "RV.ERROR: O.FAIL" in exits, exits
+    assert "RV.PARTIAL: O.REFUSED" in exits, exits
     # A status nobody mapped would KeyError at runtime, on the failing path.
     assert {"REVIEWED", "PARTIAL", "UNAVAILABLE", "ERROR"} <= set(dir(R))
 
