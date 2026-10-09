@@ -342,13 +342,26 @@ def test_no_test_keeps_its_own_exemption_table():
     kept = []
     for path in sorted(Path(__file__).parent.rglob("test_*.py")):
         for node in ast.walk(ast.parse(path.read_text("utf-8"))):
-            targets = (
-                [node.target] if isinstance(node, ast.AnnAssign) else
-                node.targets if isinstance(node, ast.Assign) else []
-            )  # fmt: skip
-            kept += [
-                f"{path.name}: {t.id}"
+            if isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            elif isinstance(node, ast.Assign):
+                targets = node.targets
+            else:
+                continue
+            kept += [  # a name anywhere in the target: `A, B = ...` and `x.A = ...` count
+                f"{path.name}: {n.id}"
                 for t in targets
-                if isinstance(t, ast.Name) and t.id in _RETIRED_TABLES
+                for n in ast.walk(t)
+                if isinstance(n, ast.Name) and n.id in _RETIRED_TABLES
             ]
     assert not kept, f"exemption tables belong on the Command registry: {kept}"
+
+
+@pytest.mark.parametrize("method", [[], {"a": 1}, 5, None, "no/such"])
+def test_a_method_that_is_not_a_known_string_is_method_not_found(method, tmp_path):
+    """The handler table is keyed by string: a frame whose `method` is not even hashable is
+    answered -32601, as the comparison chain it replaced answered it, not raised."""
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(tmp_path, agent="t")._dispatch({"jsonrpc": "2.0", "id": 7, "method": method})
+    assert reply["id"] == 7 and reply["error"]["code"] == -32601
