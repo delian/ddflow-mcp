@@ -1027,8 +1027,11 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     Every lookup that can fail contributes its own default rather than taking the whole
     handshake down, because a server that refuses to start cannot tell anyone why.
 
-    It also must not WRITE anything — a handshake that adopts the repository is the bug
-    this file already fixed once, and `Store` learned the same lesson separately.
+    It also must not WRITE anything to the project — a handshake that adopts the repository
+    is the bug this file already fixed once, and `Store` learned the same lesson separately.
+    (The one exception is the ready count: `plan_for` reads the waiters' registry, which
+    prunes an expired entry under `.ddflow/local/`, git-ignored advisory state that the next
+    `next` or `wait` would prune the same way.)
     """
     adopted = (repo / ".ddflow" / "config.toml").is_file()
     v: dict[str, Any] = {
