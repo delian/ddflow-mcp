@@ -142,12 +142,12 @@ def _has_trigram() -> bool:
 
 #: The columns each searchable table is ranked on, by both rankers and the trigram index.
 _SEARCH_COLS: dict[str, tuple[str, ...]] = {
-    "lessons": ("title", "rule", "why", "how"),
+    "lessons": ("title", "rule", "why", "how", "tags"),
     "decisions": ("title", "context", "decision", "consequences", "alternatives"),
-    "research": ("question", "claim", "probe"),
+    "research": ("question", "claim", "probe", "verdict"),
     "bugs": ("summary", "lesson"),
     "prompts": ("text",),
-    "items": ("title", "body"),
+    "items": ("title", "body", "tags"),
     "memories": ("text", "tags"),
 }
 
@@ -560,7 +560,9 @@ class Store:
 
         Both lists exist on every machine. Where SQLite has FTS5 they come from its indexes;
         where it has none (or no trigram tokenizer) the same lists are computed in Python
-        from the same words, so the candidates do not depend on the machine.
+        over the same columns and the same query terms. The substring list is identical in
+        its candidates everywhere; the WORD list is not: FTS5's porter stemmer and
+        `textsim.stem` agree on plurals and -ed/-ing, not on every word.
         ``rerank_by_likeness`` additionally reorders the fused top by fuzzy likeness to the
         query (`rank.rerank`: rapidfuzz when installed, else difflib).
 
