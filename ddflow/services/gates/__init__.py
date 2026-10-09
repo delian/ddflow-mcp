@@ -103,6 +103,7 @@ from .evidence import (  # noqa: F401
     diff_stat,
     differing_paths,
     digest,
+    is_tree,
     normal_fingerprint,
     recorded_content,
     source_tree,
