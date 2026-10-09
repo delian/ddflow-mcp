@@ -233,7 +233,9 @@ def trigger_evaluate(
     OUTSIDE the append lock, as a claim's do (`EventLog.decide_then_append`); under the lock a
     few `stat` calls prove the log did not grow, and only if it did is everything read
     and decided again -- with NOW taken again -- before anything is written. A dry run
-    takes no lock: its answer is what a run would decide from the log as it was read."""
+    takes no lock: its answer is what a run would decide from the log as it was read, except
+    that a fire the item checks refuse (`item_refused`) is only found out when a run applies
+    it."""
     log, cfg, _st = _load(repo, agent)
     given = TR.ts(now) if now else None
     if now and given is None:
