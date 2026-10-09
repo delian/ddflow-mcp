@@ -15,11 +15,11 @@ import sys
 import pytest
 
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, review, rules
+from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, review, rules, setup
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle, rules, review)
+FAMILIES = (knowledge, records, queue, lifecycle, rules, review, setup)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -32,6 +32,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.lifecycle",
         "ddflow.surfaces.declared.rules",
         "ddflow.surfaces.declared.review",
+        "ddflow.surfaces.declared.setup",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -166,6 +167,7 @@ def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
         "ddflow_gate_record",
         "ddflow_merge",
         "ddflow_review",
+        "ddflow_setup",
     }
 
 
@@ -275,3 +277,40 @@ def test_verify_takes_an_optional_id_and_the_sweep_flags():
 
     assert ("ddflow_verify", "--all") in X.FLAG_EXEMPT  # the command carries its own reason
     assert TOOLS["ddflow_verify"]["properties"]["id"][2] is False
+
+
+def test_the_agent_lists_are_generated_from_the_registry_not_typed():
+    from ddflow.services.adopt import AGENT_TARGETS
+
+    listed = ",".join(AGENT_TARGETS)
+    assert listed in TOOLS["ddflow_setup"]["properties"]["agents"][1]
+    adopt = next(c for c in DECLARED if c.path == ("adopt",))
+    assert listed in next(p for p in adopt.params if p.name == "agents").help
+
+
+def test_config_and_adopt_are_served_by_tools_of_other_names():
+    from ddflow.surfaces import exemptions as X
+
+    config = next(c for c in DECLARED if c.path == ("config",))
+    assert config.via == ("ddflow_configure",) and not config.tool
+    assert X.COVERING_TOOLS["adopt"] == ("ddflow_setup",) and X.COVERING_TOOLS["init"] == (
+        "ddflow_setup",
+    )
+    ns = build_parser().parse_args(["config", "--set", "k", "v", "--local"])
+    assert (ns.set, ns.value, ns.local, ns.explain) == ("k", ["v"], True, False)
+    assert TOOLS["ddflow_configure"]["properties"]["toml"][0] == "string"  # `--append-toml` there
+
+
+def test_import_doctor_and_upgrade_keep_their_flags_and_their_tool_exemptions():
+    from ddflow.surfaces import exemptions as X
+
+    assert ("ddflow_import", "--verify") in X.FLAG_EXEMPT and (
+        "ddflow_doctor",
+        "--upgrade",
+    ) in X.FLAG_EXEMPT
+    assert "ddflow_doctor" in X.PROSE_REASONS and "ddflow_setup" in X.PROSE_REASONS
+    ns = build_parser().parse_args(["import", "--apply", "--max-tasks", "5"])
+    assert (ns.apply, ns.max_tasks, ns.include_done) == (True, 5, False)
+    assert build_parser().parse_args(["doctor", "--upgrade"]).upgrade is True
+    up = build_parser().parse_args(["upgrade", "--apply"])  # the hand-written half
+    assert up.apply == "all" and "ddflow_upgrade" in TOOLS
