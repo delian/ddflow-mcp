@@ -1,0 +1,55 @@
+id = "kilo"
+rank = 5
+family = "opencode"
+delta = "kilo-cline.md"
+
+[mcp]
+path = ".kilo/kilo.json"
+shape = "opencode"
+note = "Kilo's CLI is an opencode fork and reads opencode's shape: `mcp`, NOT `mcpServers`. It was mcpServers until a probe against Kilo 7.2.20 listed that file as 'No MCP servers configured': valid JSON, silently ignored."
+
+[instructions]
+reads = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "plugin"
+file = ".kilo/plugin/"
+normalizer = "opencode"
+emitter = "opencode"
+block = "throw"
+session_id = "sessionID"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "session.created"
+prompt = "chat.message"
+pre_tool = "tool.execute.before"
+post_tool = "tool.execute.after"
+pre_compact = "experimental.session.compacting"
+stop = "session.idle"
+session_end = "session.deleted"
+
+[plugin]
+mechanism = "plugin"
+manifest = "plugin: [] in kilo.json"
+
+[commands]
+dir = ".kilo/command"
+format = "markdown"
+
+[skills]
+dir = ".kilo/skills"
+
+[subagents]
+dir = ".kilo/agent"
+
+[worktrees]
+dir = ".kilo/worktrees"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://github.com/Kilo-Org/kilocode"]
+record = "R-hx-kilo"
+probe = "kilo --version -> 7.2.20; kilo mcp --help; kilo agent --help; kilo debug paths"

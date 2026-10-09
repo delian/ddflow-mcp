@@ -1,0 +1,41 @@
+id = "aider"
+rank = 15
+family = "aider"
+delta = "aider.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "Aider has no MCP client and no AGENTS.md convention: it loads a read-only context file named by `read:` in .aider.conf.yml."
+
+[instructions]
+reads = [".aider.conf.yml"]
+agents_md = "no"
+claude_md = "no"
+native_rank = 6
+native_path = ".aider.conf.yml"
+native_form = "aider-conf"
+native_why = "Aider loads only what `read:` names — it discovers no instruction file at all"
+
+[hooks]
+style = "none"
+
+[plugin]
+none = true
+
+[commands]
+none = true
+
+[skills]
+none = true
+
+[subagents]
+none = true
+
+[worktrees]
+none = true
+
+[verified]
+date = "2026-10-09"
+sources = ["https://aider.chat/docs"]
+record = "R-hx-aider"

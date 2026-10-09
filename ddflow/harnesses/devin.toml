@@ -1,0 +1,47 @@
+id = "devin"
+rank = 12
+family = "devin"
+delta = "devin.md"
+
+[mcp]
+path = ".devin/mcp_config.json"
+shape = "mcpServers"
+note = ".devin/mcp_config.json is the git-tracked project scope (a .local.json sibling exists for secrets). CLOUD Devin sessions are configured in the web UI, which no repo file can do."
+
+[instructions]
+reads = ["AGENTS.md", "AGENT.md", "CLAUDE.md", ".devin/rules/*.md", ".windsurfrules"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "claude"
+file = ".devin/hooks.v1.json"
+normalizer = "claude"
+emitter = "claude"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[plugin]
+mechanism = "plugin"
+manifest = ".devin-plugin/plugin.json"
+
+[skills]
+dir = ".devin/skills"
+
+[subagents]
+dir = ".devin/agents"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.devin.ai/cli/extensibility/hooks/overview"]
+record = "R-hx-windsurf"
+unverified = ["CLI worktree dir"]

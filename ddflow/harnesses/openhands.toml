@@ -1,0 +1,39 @@
+id = "openhands"
+rank = 19
+family = "openhands"
+delta = "openhands.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "The primary path is Settings -> MCP in the UI. A config.toml [mcp] stdio_servers array exists and its own docs call it development-only."
+
+[instructions]
+reads = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"]
+agents_md = "yes"
+claude_md = "yes"
+
+[hooks]
+style = "claude"
+file = ".openhands/hooks.json"
+normalizer = "claude"
+emitter = "claude"
+block = "exit2"
+session_id = "session_id"
+inject = ["session_start", "prompt"]
+
+[hooks.events]
+session_start = "SessionStart"
+prompt = "UserPromptSubmit"
+pre_tool = "PreToolUse"
+post_tool = "PostToolUse"
+stop = "Stop"
+session_end = "SessionEnd"
+
+[skills]
+dir = ".agents/skills"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.openhands.dev/openhands/usage/customization/hooks.md"]
+unverified = ["user-level hook file"]

@@ -1,0 +1,57 @@
+id = "cline"
+rank = 16
+family = "cline"
+delta = "cline.md"
+
+[mcp]
+path = ""
+shape = "none"
+note = "Cline's MCP settings are one GLOBAL file; its project surface is rules only."
+
+[instructions]
+reads = [".clinerules/", "AGENTS.md", ".cursorrules", ".windsurfrules"]
+agents_md = "yes"
+claude_md = "no"
+native_rank = 2
+native_path = ".clinerules/ddflow.md"
+native_form = "block"
+native_why = "Cline reads .clinerules/, not AGENTS.md"
+
+[hooks]
+style = "cline"
+file = ".cline/hooks/"
+normalizer = "cline"
+emitter = "cline"
+block = "cancel"
+session_id = "taskId"
+inject = ["prompt"]
+
+[hooks.events]
+session_start = "agent_start"
+prompt = "prompt_submit"
+pre_tool = "tool_call"
+post_tool = "tool_result"
+stop = "agent_end"
+
+[plugin]
+mechanism = "sdk-plugin"
+manifest = "package.json cline.plugins"
+
+[commands]
+dir = ".cline/workflows"
+format = "markdown"
+
+[skills]
+dir = ".cline/skills"
+
+[subagents]
+dir = ".cline/agents"
+
+[worktrees]
+dir = "~/.cline/worktrees"
+
+[verified]
+date = "2026-10-09"
+sources = ["https://docs.cline.bot", "https://github.com/cline/cline/tree/main/sdk/examples/hooks"]
+record = "R-hx-cline"
+unverified = ["project MCP file", "extension payload differs from CLI"]
