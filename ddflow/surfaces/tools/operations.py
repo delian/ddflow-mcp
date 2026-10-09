@@ -6,13 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..declared import reporting as R
-from ..declared import setup as ST
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
-    "ddflow_replay": R.BY_TOOL["ddflow_replay"].tool_entry(),
-    "ddflow_render": R.BY_TOOL["ddflow_render"].tool_entry(),
     "ddflow_list": {
         "description": (
             "Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. "
@@ -54,7 +50,4 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
-    "ddflow_rebuild": R.BY_TOOL["ddflow_rebuild"].tool_entry(),
-    "ddflow_history": R.BY_TOOL["ddflow_history"].tool_entry(),
-    "ddflow_import": ST.BY_TOOL["ddflow_import"].tool_entry(),
 }

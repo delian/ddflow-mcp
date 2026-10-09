@@ -454,7 +454,7 @@ def test_cli_snapshot_needs_apply_and_does_not_contradict_backup(old: Path) -> N
 
 
 def test_the_mcp_tool_carries_snapshot_and_restore(old: Path) -> None:
-    from ddflow.surfaces.tools import maintenance as M
+    from ddflow.surfaces import tools as M
 
     spec = M.TOOLS["ddflow_upgrade"]
     assert {"snapshot", "restore", "backup"} <= set(spec["properties"])
@@ -470,7 +470,7 @@ def test_the_mcp_tool_carries_snapshot_and_restore(old: Path) -> None:
 
 
 def test_the_mcp_tool_refuses_what_the_cli_refuses(old: Path) -> None:
-    from ddflow.surfaces.tools import maintenance as M
+    from ddflow.surfaces import tools as M
 
     api = M.TOOLS["ddflow_upgrade"]["api"]
     for args in (

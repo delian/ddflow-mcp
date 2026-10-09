@@ -682,6 +682,22 @@ def _group_subparsers(
     return next((a for a in parser._actions if isinstance(a, argparse._SubParsersAction)), None)
 
 
+def _with_handler(
+    cmd: Command,
+    handlers: Mapping[tuple[str, ...], Callable[..., Any]] | None,
+    executor: Callable[[Command], Callable[..., Any]] | None,
+) -> Command:
+    """``cmd`` with the CLI function it declares none of: its row in ``handlers``, else the
+    ``executor``'s for a command that has a ``render``."""
+    if cmd.handler is not None:
+        return cmd
+    if handlers and cmd.path in handlers:
+        return dataclasses.replace(cmd, handler=handlers[cmd.path])
+    if executor and cmd.render is not None:
+        return dataclasses.replace(cmd, handler=executor(cmd))
+    return cmd
+
+
 def add_commands(
     subparsers: argparse._SubParsersAction,
     commands: tuple[Command, ...] | list[Command],
@@ -708,11 +724,7 @@ def add_commands(
     for declared in commands:
         if not declared.path:
             continue
-        cmd = declared
-        if handlers and cmd.handler is None and cmd.path in handlers:
-            cmd = dataclasses.replace(cmd, handler=handlers[cmd.path])
-        if executor and cmd.handler is None and cmd.render is not None:
-            cmd = dataclasses.replace(cmd, handler=executor(cmd))
+        cmd = _with_handler(declared, handlers, executor)
         if len(cmd.path) == 1:
             cmd.add_to(subparsers)
             continue

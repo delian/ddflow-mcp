@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..declared import lifecycle as L
 from ._common import _api
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -39,15 +38,4 @@ TOOLS: dict[str, dict[str, Any]] = {
         "text": True,
         "kind": "brief",
     },
-    "ddflow_next": L.BY_TOOL["ddflow_next"].tool_entry(),
-    "ddflow_claim": L.BY_TOOL["ddflow_claim"].tool_entry(),
-    "ddflow_heartbeat": L.BY_TOOL["ddflow_heartbeat"].tool_entry(),
-    "ddflow_gate_status": L.BY_TOOL["ddflow_gate_status"].tool_entry(),
-    "ddflow_gate_list": L.BY_TOOL["ddflow_gate_list"].tool_entry(),
-    "ddflow_gate_run": L.BY_TOOL["ddflow_gate_run"].tool_entry(),
-    "ddflow_gate_record": L.BY_TOOL["ddflow_gate_record"].tool_entry(),
-    "ddflow_gate_verify": L.BY_TOOL["ddflow_gate_verify"].tool_entry(),
-    "ddflow_gate_skip": L.BY_TOOL["ddflow_gate_skip"].tool_entry(),
-    "ddflow_complete": L.BY_TOOL["ddflow_complete"].tool_entry(),
-    "ddflow_merge": L.BY_TOOL["ddflow_merge"].tool_entry(),
 }
