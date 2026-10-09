@@ -13,6 +13,7 @@ from ...core.budget import Budget, approx_tokens
 from ...services import gates as G
 from ...services import leases as L
 from ...services import searchcore as SC
+from ...services.guidance import inject as GI
 from .._base import _load
 from .heartbeat import _waiters
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
@@ -35,6 +36,39 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
         "Claim when you are ready to edit; do not hold file globs while only gates, "
         "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
     )
+
+
+def _rules_block(governing) -> str:
+    """The project's rules that govern the item's files, one fenced line each, "" for none."""
+    from ...core import provenance as PV
+
+    rules = governing.records("rule")
+    if not rules:
+        return ""
+    return "\n".join(
+        "- "
+        + PV.fence(
+            "rule", r.id, f"**{r.title}** — {r.body}" if r.title else r.body, GI.origin_of(r)
+        )
+        for r in rules
+    )
+
+
+def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
+    """The decisions that govern the item, ranked by the one injection path (pinned first,
+    then enforcement, scope specificity and priority), and the rules text with the project's
+    own rules that govern its files LEADING it (the pointer line follows, so a trim from
+    the bottom reaches the pointer first).
+
+    The brief stays inside ``session.brief_max_tokens`` (B1472311a63), so what the other
+    doors guarantee -- pinned guidance never trimmed -- holds here as order: pinned leads its
+    section, and a section is cut from the bottom."""
+    if not (item and item in st.items):
+        return [], rules
+    found = GI.for_item(cfg, st, item)
+    block = _rules_block(found)
+    decisions = [st.decisions[r.id] for r in found.records("decision")]
+    return decisions, (block + "\n\n" + rules).strip() if block else rules
 
 
 _REFUTED_SHOWN = 5
@@ -69,7 +103,6 @@ def brief(
     arrive without its having to suspect they exist.
     """
     from ...infra.store import Store
-    from ...services.guidance.kinds import governing
     from ...views import markdown as render_md
     from .planning import plan_for
 
@@ -118,11 +151,7 @@ def brief(
             break
 
     recovery = L.scan(log, cfg, repo) if check_recovery else []
-    decisions = []
-    if item and item in st.items:
-        target = st.items[item]
-        hits, wide = governing(st, target.globs)
-        decisions = hits + wide
+    decisions, rules = _governing(cfg, st, item, rules)
 
     live = sorted(
         (m for m in st.memories.values() if m.live),
