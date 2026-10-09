@@ -68,7 +68,7 @@ def report(
         )
     if phase:
         lines.append(f"Phase {phase}: {_pct_of(PR.phase_tally(st, phase))}")
-    plan = plan or S.plan(st, cfg)
+    plan = plan if plan is not None else S.plan(st, cfg)
     ready = [it.id for it in plan.ready[:NEXT_SHOWN]]
     if ready:
         lines.append("Next: " + ", ".join(ready))

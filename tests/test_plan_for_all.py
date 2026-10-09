@@ -110,7 +110,7 @@ def test_a_claim_refused_for_a_held_item_names_what_next_offers(proj):
     assert not out.ok
     named = set(out.data.get("alternatives") or [])
     assert "TC" not in named, "TC is reserved for the waiter in line: next withholds it"
-    assert named <= _offered(proj, C) | {"TB"}, (named, _offered(proj, C))
+    assert named <= _offered(proj, C), (named, _offered(proj, C))
 
 
 def test_no_surface_asks_the_bare_scheduler(proj):
@@ -123,5 +123,5 @@ def test_no_surface_asks_the_bare_scheduler(proj):
     ):
         text = (root / rel).read_text()
         # the only bare call left is progress_line's fallback when the caller passes no plan
-        text = text.replace("plan = plan or S.plan(st, cfg)", "")
+        text = text.replace("plan = plan if plan is not None else S.plan(st, cfg)", "")
         assert "plan(st, cfg" not in text and "S.plan(" not in text, rel
