@@ -48,6 +48,8 @@ from .bug_close import (  # noqa: F401
     _drop_fix_task,
     _drop_fix_task_unchecked,
     _fixing_item,
+    _missing_tests,
+    _named_tests,
     _regression_status,
     _verify_regression,
     bug_fixed,
@@ -81,6 +83,7 @@ from .lessons import (  # noqa: F401
     lessons_verify,
 )
 from .memory import (  # noqa: F401
+    _matching,
     _memory_row,
     memory_add,
     memory_forget,

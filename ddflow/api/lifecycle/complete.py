@@ -9,10 +9,16 @@ from typing import Any
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import ABANDONED, DONE, REVIEW, State, fold
+from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
+from ...services import completion as CM
 from ...services import gates as G
 from ...services import leases as L
+from ...services import ledger as LG
+from ...services import progress_line as PL
+from ...services.export import refresh as RF
 from .._base import _load
+from ..bug_reopen import refile_reported
+from ..knowledge import bug_fixed
 from ._common import _require
 from .heartbeat import _commit_events, _waiters
 from .planning import plan_for
@@ -52,7 +58,6 @@ def complete(
     when the command is typed), and the flag on an item that fixes no open bug is refused
     rather than dropped on the floor.
     """
-    from ...services import completion as CM
 
     entry: dict[str, Any] = {}
     if changelog:
@@ -122,7 +127,6 @@ def complete(
     forced = bool(v.blockers and force)
     if closing:
         # Only now, with the completion going through: a refusal above closed nothing.
-        from ..knowledge import bug_fixed
 
         for bid in pending:
             out = bug_fixed(repo, bid, regression_test=tests, agent=agent)
@@ -137,11 +141,9 @@ def complete(
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks
     # of their own and the item still completable, never stranded on a done task.
-    from ..bug_reopen import refile_reported
 
     refiled = refile_reported(log, cfg, item, CM.reported_against(st, item, cfg))
     waiting = _waiters(repo, item)  # before the release: see `release`
-    from ...services import ledger as LG
 
     log.append(
         "item.completed",
@@ -162,7 +164,6 @@ def complete(
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
     extra.update(_refuted_extra(st, item))
-    from ...services import progress_line as PL
 
     # The item is complete and released by now: a report that cannot be built must
     # never make that look like a failed completion.
@@ -180,8 +181,6 @@ def complete(
     if progress:
         extra["progress"] = progress
     if it.kind == "phase":  # [export].refresh = phase_close
-        from ...services.export import refresh as RF
-
         rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
         if rr.outcomes:
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
@@ -371,7 +370,6 @@ def unblock(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outc
     Exit 2 when nothing under `item` is blocked: "nothing to release" is a fact the
     caller should see, not a success that wrote no event.
     """
-    from ...core.model import BLOCKED
 
     log, _cfg, st = _load(repo, agent)
     it = _require(st, item, "item.unblocked")

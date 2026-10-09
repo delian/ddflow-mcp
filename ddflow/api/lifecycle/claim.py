@@ -6,16 +6,23 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+from ...config import csv_list
 from ...core import globspec as GS
 from ...core import outcome as O
-from ...core.model import ABANDONED, DONE, REVIEW
+from ...core import progress as PR
+from ...core.model import ABANDONED, DONE, REVIEW, fold
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
+from ...services import choices as CHO
+from ...services import flow as FS
 from ...services import leases as L
+from ...services import ports as PT
+from ...services import waits as WT
 from ...services.guidance import inject as GI
 from .._base import _load
+from ..reporting import new_reports
 from .planning import alternatives_offer
 from .reservations import _reserved_for, _reserved_msg
 
@@ -81,7 +88,6 @@ def _tree_let_go(repo: Path, cfg, st, item) -> bool:
     (B0ff09a29a5) -- whose way out, `--no-worktree`, then broke `merge` and `review`. An
     expired but unreleased lease still holds: that is `recover`'s, not a claim's.
     """
-    from ...services import flow as FS
 
     if item.lease is not None or not item.merged_sha:
         return False
@@ -173,6 +179,15 @@ def _bring_local_files(repo: Path, cfg, wt: W.Worktree | None) -> None:
         wt.local_files = W.copy_local_files(repo, wt.path, cfg.worktree.local_files)
 
 
+class _Bound(NamedTuple):
+    """What a claim bound for the item: the tree (None for none) and how it came to it."""
+
+    wt: W.Worktree | None = None
+    ours: bool = False  # a tree ddflow made (now or on an earlier claim), not one it adopted
+    rebound: bool = False  # bound to the item's OWN recorded tree from an earlier claim
+    was_adopted: bool = False
+
+
 def claim(
     repo: Path,
     item: str,
@@ -191,8 +206,6 @@ def claim(
     refusal is the only thing that actually stops an agent spinning: a warning in a report
     is read by a human later, while a refused claim is read by the agent now.
     """
-    from ...config import csv_list
-    from ...core.model import fold
 
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
@@ -223,8 +236,67 @@ def claim(
     )
     if early is not None:
         return early
+    lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources)
+    if isinstance(lz, O.Outcome):
+        return lz
+
+    _leave_line(repo, log.agent_id, item)
+    bound = _bind_tree(repo, log, cfg, st, item, want, held_before, called_from, no_worktree)
+    if isinstance(bound, O.Outcome):
+        return bound
+    wt = bound.wt
+    _bring_local_files(repo, cfg, wt)
+    log.append("item.started", item, {})
+    # The first branch made is where the branching model starts to matter. An unmade
+    # choice is defaulted here, on the record, and followed from now on.
+
+    CHO.adopt_defaults(log, cfg, ["model", "integration"])
+    target_item = st.items.get(item)
+    port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
+    return _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo)
+
+
+def _claimed(cfg, st, item: str, lz, bound: _Bound, port, target_item, stands: Path) -> O.Outcome:
+    """The success answer of a claim: the lease, the tree and what governs the item."""
+    wt = bound.wt
+    guidance = GI.for_work(
+        cfg,
+        st,
+        lz.globs,
+        target_item.tags if target_item is not None else (),
+        budget=GI.door_budget(cfg),
+        heading="## Guidance that governs this item",
+    ).text
+    return O.ok(
+        "item.claimed",
+        # Only when something governs the item: the key is absent otherwise, as it always was.
+        **({"guidance": guidance} if guidance else {}),
+        port=port,
+        port_advice=PT.advice(port, item) if port else "",
+        item=item,
+        holder=lz.holder,
+        worktree=str(wt.path) if wt else "",
+        branch=wt.branch if wt else "",
+        adopted=bound.was_adopted
+        if bound.rebound
+        else bool(wt and not wt.created and not bound.ours),
+        rebound=bound.rebound,
+        # Whether the caller already stands in the tree it was given: a rebound tree
+        # is usually somewhere else, and the caller has to be told to go there.
+        here=bool(wt and _tree_of(stands) == Path(wt.path).resolve()),
+        ttl_s=cfg.lease.ttl_s,
+        heartbeat_s=cfg.lease.heartbeat_s,
+        base=wt.base if wt else "",
+        # What the lease now covers, so the caller need not read the log to learn it
+        # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
+        globs=list(lz.globs),
+    )
+
+
+def _acquire(repo: Path, log, cfg, st, item: str, want, prior, note, force, resources):
+    """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
-        lz = L.acquire(
+        return L.acquire(
             log,
             cfg,
             item,
@@ -259,143 +331,113 @@ def claim(
             )
         return O.refused("item.claimed", reason, id=item, alternatives=list(exc.alternatives or []))
 
-    _leave_line(repo, log.agent_id, item)
-    wt = None
-    ours = False  # a tree ddflow made (now or on an earlier claim), not one it adopted
-    rebound = False  # bound to the item's OWN recorded tree from an earlier claim
-    was_adopted = False
+
+def _bind_tree(
+    repo: Path, log, cfg, st, item: str, want, held_before: bool, called_from, no_worktree: bool
+) -> _Bound | O.Outcome:
+    """The tree this claim binds the item to, or the refusal that undid the claim."""
+    if not cfg.worktree.enabled or no_worktree:
+        return _Bound()
     recorded = _recorded_tree(repo, st.items.get(item))
-    if cfg.worktree.enabled and not no_worktree and recorded is not None:
-        # The item already has a tree, and it still exists: that tree -- and its branch,
-        # with whatever unmerged work is on it -- is the item's, wherever the caller is
-        # standing. Adopting the caller's tree instead made `merge` merge nothing.
-        it = st.items[item]
-        branch = it.branch
-        stored = W.store_path(repo, recorded)
-        wt = W.Worktree(item=item, path=recorded, branch=branch, base=it.base, created=False)
-        L.acquire(log, cfg, item, worktree=stored, branch=branch, globs=want, force=True)
-        rebound = True
-        was_adopted = bool(it.adopted)
-        ours = not it.adopted
-    elif cfg.worktree.enabled and not no_worktree:
-        adopted = W.current(called_from or repo) if cfg.worktree.adopt_existing else None
-        if adopted is not None:
-            stored = W.store_path(repo, adopted.path)
-            held = _worktree_held_by(st, stored, item, repo, cfg)
-            if held:
-                # RELEASE before refusing -- see the module docstring.
-                _undo_claim(log, item, held_before, "claim refused: worktree conflict")
+    if recorded is not None:
+        return _rebind(repo, log, cfg, st, item, want, recorded)
+    adopted = W.current(called_from or repo) if cfg.worktree.adopt_existing else None
+    if adopted is not None:
+        return _adopt(repo, log, cfg, st, item, want, held_before, adopted)
+    return _create_tree(repo, log, cfg, st, item, want, held_before)
+
+
+def _rebind(repo: Path, log, cfg, st, item: str, want, recorded: Path) -> _Bound:
+    # The item already has a tree, and it still exists: that tree -- and its branch,
+    # with whatever unmerged work is on it -- is the item's, wherever the caller is
+    # standing. Adopting the caller's tree instead made `merge` merge nothing.
+    it = st.items[item]
+    branch = it.branch
+    stored = W.store_path(repo, recorded)
+    wt = W.Worktree(item=item, path=recorded, branch=branch, base=it.base, created=False)
+    L.acquire(log, cfg, item, worktree=stored, branch=branch, globs=want, force=True)
+    return _Bound(wt, ours=not it.adopted, rebound=True, was_adopted=bool(it.adopted))
+
+
+def _adopt(
+    repo: Path, log, cfg, st, item: str, want, held_before: bool, adopted
+) -> _Bound | O.Outcome:
+    stored = W.store_path(repo, adopted.path)
+    held = _worktree_held_by(st, stored, item, repo, cfg)
+    if held:
+        # RELEASE before refusing -- see the module docstring.
+        _undo_claim(log, item, held_before, "claim refused: worktree conflict")
+        return O.refused(
+            "item.claimed",
+            f"this worktree is already bound to {held}, which is still open. "
+            f"Two items sharing one tree cannot be merged or recovered "
+            f"separately. Finish {held}, work somewhere else, or "
+            f"`--no-worktree` to claim without binding a tree.",
+            id=item,
+            conflicts_with=held,
+        )
+    wt = W.Worktree(item=item, path=adopted.path, branch=adopted.branch, base="", created=False)
+    log.append("worktree.adopted", item, {"path": stored, "branch": wt.branch, "base": ""})
+    L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
+    return _Bound(wt)
+
+
+def _create_tree(
+    repo: Path, log, cfg, st, item: str, want, held_before: bool
+) -> _Bound | O.Outcome:
+    try:
+        base, branch = ("", "")
+        if item in st.items:
+            # The branching model decides the fork point: gitflow's develop or
+            # production, or a dependency's unmerged branch when stacking.
+            base, branch = FS.fork_point(repo, cfg, st, st.items[item])
+        wt = W.create(repo, cfg, item, base=base, branch=branch)
+        if not wt.created:
+            # `W.create` reuses whatever tree sits at the default path. One on
+            # ANOTHER branch is not this item's: binding it recorded a branch
+            # that is not checked out there, and `merge` merged the wrong work.
+            if not _is_items_tree(repo, wt.path, wt.branch):
+                head = W.git(wt.path, "rev-parse", "--abbrev-ref", "HEAD")
+                there = head.out if head.ok else "something else"
+                there = "a detached HEAD" if there == "HEAD" else there
+                _undo_claim(log, item, held_before, "claim refused: worktree path occupied")
                 return O.refused(
                     "item.claimed",
-                    f"this worktree is already bound to {held}, which is still open. "
-                    f"Two items sharing one tree cannot be merged or recovered "
-                    f"separately. Finish {held}, work somewhere else, or "
-                    f"`--no-worktree` to claim without binding a tree.",
+                    f"{wt.path} already exists with {there} checked out, which "
+                    f"does not carry {wt.branch}. It is not {item}'s tree; move or "
+                    f"remove it, or claim from a tree of your own.",
                     id=item,
-                    conflicts_with=held,
+                    path=str(wt.path),
                 )
-            wt = W.Worktree(
-                item=item, path=adopted.path, branch=adopted.branch, base="", created=False
-            )
-            log.append("worktree.adopted", item, {"path": stored, "branch": wt.branch, "base": ""})
-            L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
-        else:
-            try:
-                from ...services import flow as FS
+        stored = W.store_path(repo, wt.path)
+        log.append(
+            "worktree.created",
+            item,
+            {"path": stored, "branch": wt.branch, "base": wt.base},
+        )
+        L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
+        return _Bound(wt, ours=True)
+    except W.GitError as exc:
+        return O.failed("item.claimed", f"lease held, but worktree creation failed: {exc}", id=item)
 
-                base, branch = ("", "")
-                if item in st.items:
-                    # The branching model decides the fork point: gitflow's develop or
-                    # production, or a dependency's unmerged branch when stacking.
-                    base, branch = FS.fork_point(repo, cfg, st, st.items[item])
-                wt = W.create(repo, cfg, item, base=base, branch=branch)
-                if not wt.created:
-                    # `W.create` reuses whatever tree sits at the default path. One on
-                    # ANOTHER branch is not this item's: binding it recorded a branch
-                    # that is not checked out there, and `merge` merged the wrong work.
-                    if not _is_items_tree(repo, wt.path, wt.branch):
-                        head = W.git(wt.path, "rev-parse", "--abbrev-ref", "HEAD")
-                        there = head.out if head.ok else "something else"
-                        there = "a detached HEAD" if there == "HEAD" else there
-                        _undo_claim(log, item, held_before, "claim refused: worktree path occupied")
-                        return O.refused(
-                            "item.claimed",
-                            f"{wt.path} already exists with {there} checked out, which "
-                            f"does not carry {wt.branch}. It is not {item}'s tree; move or "
-                            f"remove it, or claim from a tree of your own.",
-                            id=item,
-                            path=str(wt.path),
-                        )
-                ours = True
-                stored = W.store_path(repo, wt.path)
-                log.append(
-                    "worktree.created",
-                    item,
-                    {"path": stored, "branch": wt.branch, "base": wt.base},
-                )
-                L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
-            except W.GitError as exc:
-                return O.failed(
-                    "item.claimed", f"lease held, but worktree creation failed: {exc}", id=item
-                )
-    _bring_local_files(repo, cfg, wt)
-    log.append("item.started", item, {})
-    # The first branch made is where the branching model starts to matter. An unmade
-    # choice is defaulted here, on the record, and followed from now on.
-    from ...services import choices as CH
 
-    CH.adopt_defaults(log, cfg, ["model", "integration"])
-    port: dict[str, Any] = {}
-    target_item = st.items.get(item)
-    if (
+def _apply_port(repo: Path, cfg, log, st, item: str, target_item, wt, ours: bool) -> dict[str, Any]:
+    """The port this claim applies (or tells the agent to), `{}` for an item that is none."""
+    if not (
         target_item is not None
         and (target_item.port_from or target_item.promote_to)
         and not target_item.port
     ):
-        from ...services import ports as PT
-
-        # Applied in a tree ddflow made -- also on a RE-claim, which is how a port claimed
-        # with --force before its source landed gets applied once it has. In an adopted
-        # tree, or with no tree, ddflow does not rewrite the agent's files: it says what
-        # to do instead of staying silent about it being a port at all.
-        port = (
-            PT.apply(repo, cfg, log, st, item, wt.path) if ours else PT.manual(repo, cfg, st, item)
-        )
-    guidance = GI.for_work(
-        cfg,
-        st,
-        lz.globs,
-        target_item.tags if target_item is not None else (),
-        budget=GI.door_budget(cfg),
-        heading="## Guidance that governs this item",
-    ).text
-    return O.ok(
-        "item.claimed",
-        # Only when something governs the item: the key is absent otherwise, as it always was.
-        **({"guidance": guidance} if guidance else {}),
-        port=port,
-        port_advice=PT.advice(port, item) if port else "",
-        item=item,
-        holder=lz.holder,
-        worktree=str(wt.path) if wt else "",
-        branch=wt.branch if wt else "",
-        adopted=was_adopted if rebound else bool(wt and not wt.created and not ours),
-        rebound=rebound,
-        # Whether the caller already stands in the tree it was given: a rebound tree
-        # is usually somewhere else, and the caller has to be told to go there.
-        here=bool(wt and _tree_of(called_from or repo) == Path(wt.path).resolve()),
-        ttl_s=cfg.lease.ttl_s,
-        heartbeat_s=cfg.lease.heartbeat_s,
-        base=wt.base if wt else "",
-        # What the lease now covers, so the caller need not read the log to learn it
-        # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
-        globs=list(lz.globs),
-    )
+        return {}
+    # Applied in a tree ddflow made -- also on a RE-claim, which is how a port claimed
+    # with --force before its source landed gets applied once it has. In an adopted
+    # tree, or with no tree, ddflow does not rewrite the agent's files: it says what
+    # to do instead of staying silent about it being a port at all.
+    return PT.apply(repo, cfg, log, st, item, wt.path) if ours else PT.manual(repo, cfg, st, item)
 
 
 def _new_report_count(st, item: str) -> int:
     """Reports on `item` since its lease was taken (additions and records linked to it)."""
-    from ..reporting import new_reports
 
     it = st.items.get(item)
     if it is None or it.lease is None:
@@ -417,7 +459,6 @@ def _early_refusal(
 
 def _refuse_looping(events, st, cfg, item: str, force: bool) -> O.Outcome | None:
     """The refusal for an item that is already looping (`[loops].on_detect = "block"`)."""
-    from ...core import progress as PR
 
     looping = [f for f in PR.detect(events, st, cfg) if f.item == item and f.severity == "block"]
     if not looping or force:
@@ -480,7 +521,6 @@ def _blocking_items(st, cfg, item: str, want, me: str) -> list[str]:
 
 def _join_line(repo: Path, cfg, agent: str, item: str, waiting_on: list[str], why: str) -> None:
     """A refused claim is a place in line (`waits.queue`). Never fails the refusal."""
-    from ...services import waits as WT
 
     if cfg.lease.waiter_reservation_s <= 0:
         return
@@ -499,7 +539,6 @@ def _join_line(repo: Path, cfg, agent: str, item: str, waiting_on: list[str], wh
 
 def _leave_line(repo: Path, agent: str, item: str) -> None:
     """The claim landed: the place in line it held is spent."""
-    from ...services import waits as WT
 
     try:
         WT.clear(repo, agent, item)

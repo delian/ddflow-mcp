@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+import inspect
+import time
 from pathlib import Path
 
+from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.defaults import DEFAULT_RENDER_DIR
+from ...core.schedule import critical_path
+from ...infra.store import Store
+from ...services import sessions as session
+from ...services.gates import pipeline_for
+from ...views import markdown as render_md
 from .._base import _load
+from ..lifecycle.ready import _unknown_phase
 
 
 def rebuild(repo: Path, *, agent: str = "") -> O.Outcome:
     """Rebuild the sqlite projection from the log. The log is the source of truth; this
     is a cache, and saying how long it took is how you notice it has stopped being one."""
-    import time
-
-    from ...infra.store import Store
 
     log, cfg, _ = _load(repo, agent)
     t0 = time.time()
@@ -33,10 +39,6 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
     """The queue as a board: the markdown document (`text`, what MCP and a terminal
     show) and the same rows as data (`phases`, `critical_path`) for `--json` -- which
     used to print the markdown (B1f1d4f9f54)."""
-    from ...core.schedule import critical_path
-    from ...services.gates import pipeline_for
-    from ...views import markdown as render_md
-    from ..lifecycle import _unknown_phase
 
     _log, cfg, st = _load(repo, agent)
     unknown = _unknown_phase(st, phase, phases_only=True)
@@ -98,7 +100,6 @@ def render(
     Two shapes by design, and both are pre-existing contracts: `--show` returns the
     document, and without it the answer is the list of files written.
     """
-    from ...views import markdown as render_md
 
     log, cfg, st = _load(repo, agent)
     if show:
@@ -123,13 +124,9 @@ def render(
         # so this stays future-proof for one that does not. INSPECTED rather than
         # try/except'd, because a TypeError raised inside a renderer would otherwise be
         # caught and retried with the wrong arity.
-        import inspect
 
         text = fn(st, cfg) if len(inspect.signature(fn).parameters) > 1 else fn(st)
         return O.ok("render", show=show, text=text, files=[])
-
-    from ...config import Config
-    from ...infra.store import Store
 
     # Written views are rendered from the config FILES only, never `DDFLOW_*` env
     # overrides. A file that gets committed must be reproducible from what is committed,
@@ -152,7 +149,6 @@ def replay(repo: Path, *, out_dir: str = "", verify: bool = False, agent: str = 
     reconstruction describes work that is not in the tree, which is the one way this
     document can be confidently wrong.
     """
-    from ...services import sessions as session
 
     log, cfg, st = _load(repo, agent)
     steps = session.replay(log.read_all())

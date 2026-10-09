@@ -7,13 +7,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...core import flow as F
 from ...core import outcome as O
+from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import flow as FS
 from ...services import gates as G
 from ...services.cleanup import dispose_tree, record_item_removed  # noqa: F401  (re-exported)
+from ...services.enforce import SELF_MANAGED
+from ...services.export import refresh as RF
 from ...services.gates import measured as GM
 from .._base import _load
+from ..ci import check_after_merge
 from ._common import _require
 from .claim import callers_tree
 
@@ -57,8 +63,6 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     removed. It used to refuse ("has no worktree to merge"), and the work was then
     landed by hand, outside the log -- no `worktree.merged`, no merge gate.
     """
-    from ...core import flow as F
-    from ...services import flow as FS
 
     log, cfg, st = _load(repo, agent)
     it = _require(st, item, "worktree.merged")
@@ -200,7 +204,6 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         kept_reason = "; ".join(
             filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
         )
-    from ..ci import check_after_merge
 
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
     return O.ok(
@@ -231,7 +234,6 @@ def _refresh_documents(repo: Path, cfg, wt: W.Worktree) -> dict[str, Any]:
 
     Empty when nothing is selected for ``merge`` (the default: refresh is off).
     """
-    from ...services.export import refresh as RF
 
     r = RF.refresh_selected(repo, "merge", root=wt.path, cfg=cfg)
     if not r.outcomes:
@@ -456,8 +458,6 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str] | None
     refused: an item's globs are often narrower than its honest diff, and the caller named
     or stood on this branch. ddflow's own bookkeeping paths are not the item's to declare.
     """
-    from ...core.schedule import path_in_glob
-    from ...services.enforce import SELF_MANAGED
 
     # -z (via git_paths): a non-ASCII name is not C-quoted into one no glob matches;
     # --no-renames: a rename lists its old path too, which the landing removes (B20dc45f4c5).
@@ -474,7 +474,6 @@ def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str] | None
 def _open_request(
     repo: Path, cfg, log, it, *, message: str, model: str, dirty: list[str]
 ) -> O.Outcome:
-    from ...services import flow as FS
 
     op = FS.open_request(repo, cfg, log, it.id, title=message, model=model)
     data: dict[str, Any] = {
