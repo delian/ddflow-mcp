@@ -5618,6 +5618,22 @@ part that matters.
   in `.cursor/hooks.json`), Codex, Kilo and opencode have no wiring yet: known gaps.
   `ddflow hooks status` reports whether the prompt hook is installed, and
   `ddflow hooks uninstall --claude` (or `--gemini`) removes only ddflow's own hooks.
+* **One hook entry point for every agent**: `ddflow hooks run <event> --harness <id>`,
+  where `<event>` is one of the canonical lifecycle events (`session_start`, `prompt`,
+  `pre_tool`, `post_tool`, `pre_compact`, `stop`, `session_end`) and `<id>` is an agent's
+  descriptor in `ddflow/harnesses/`. The agent's JSON goes in on stdin and is read in that
+  agent's own dialect (Claude's `session_id`, Copilot's `sessionId`, Cursor's
+  `conversation_id`, Cline's `taskId`...); the reply is shaped the way that agent's hook
+  contract accepts it (plain stdout for Claude Code and Codex, `additionalContext` JSON for
+  Gemini CLI and VS Code, `{"additionalContext"}` for Copilot, `additional_context` for
+  Cursor, `contextModification` for Cline) and context is printed only at the events the
+  descriptor says the agent honours. It always exits 0 and never raises: a failing hook can
+  block the very turn it observes, so a problem is a one-line note on stderr. The older
+  `ddflow hooks session-start`, `prompt` and `pre-compact` are aliases of
+  `hooks run ... --harness claude` (`prompt --gemini` of `--harness gemini`), and
+  `ddflow hooks install|uninstall --harness claude|gemini` is `--claude` / `--gemini`; the
+  other agents' hook files arrive with their writers, so `--harness cursor` fails with
+  that said. `pre_tool`, `post_tool`, `stop` and `session_end` are accepted and do nothing yet.
 * **Every prompt and note carries a session id, even an implicit one.** The id on
   `ddflow session prompt|note` (and the MCP `ddflow_session_prompt|note`) is optional.
   Without one, the words go to the session named by `DDFLOW_SESSION_ID`/`CLAUDE_SESSION_ID`

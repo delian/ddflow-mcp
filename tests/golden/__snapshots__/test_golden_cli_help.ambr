@@ -775,14 +775,17 @@
 # ---
 # name: test_help[ddflow hooks install]
   '''
-  usage: ddflow hooks install [-h] [--force] [--claude] [--gemini]
+  usage: ddflow hooks install [-h] [--force] [--claude] [--gemini] [--harness HARNESS]
   
   options:
-    -h, --help  show this help message and exit
-    --force     replace an existing pre-commit hook ddflow does not manage
-    --claude    the Claude Code SessionStart hook in .claude/settings.json instead of the git hook;
-                other hooks there are left exactly as they are
-    --gemini    the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json
+    -h, --help         show this help message and exit
+    --force            replace an existing pre-commit hook ddflow does not manage
+    --claude           the Claude Code SessionStart hook in .claude/settings.json instead of the git
+                       hook; other hooks there are left exactly as they are
+    --gemini           the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json
+    --harness HARNESS  the agent's own hooks, by descriptor id; --harness claude and --harness
+                       gemini are --claude and --gemini (the other agents' hook files arrive with
+                       their writers)
   
   '''
 # ---
@@ -802,6 +805,21 @@
   options:
     -h, --help  show this help message and exit
     --gemini    answer with the JSON Gemini CLI wants
+  
+  '''
+# ---
+# name: test_help[ddflow hooks run]
+  '''
+  usage: ddflow hooks run [-h] [--harness HARNESS] [event]
+  
+  positional arguments:
+    event              the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact,
+                       stop, session_end
+  
+  options:
+    -h, --help         show this help message and exit
+    --harness HARNESS  the agent whose hook dialect the call speaks (a descriptor id; default
+                       claude)
   
   '''
 # ---
@@ -825,22 +843,25 @@
 # ---
 # name: test_help[ddflow hooks uninstall]
   '''
-  usage: ddflow hooks uninstall [-h] [--claude] [--gemini]
+  usage: ddflow hooks uninstall [-h] [--claude] [--gemini] [--harness HARNESS]
   
   options:
-    -h, --help  show this help message and exit
-    --claude    the Claude Code SessionStart hook in .claude/settings.json instead of the git hook;
-                other hooks there are left exactly as they are
-    --gemini    the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json
+    -h, --help         show this help message and exit
+    --claude           the Claude Code SessionStart hook in .claude/settings.json instead of the git
+                       hook; other hooks there are left exactly as they are
+    --gemini           the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json
+    --harness HARNESS  the agent's own hooks, by descriptor id; --harness claude and --harness
+                       gemini are --claude and --gemini (the other agents' hook files arrive with
+                       their writers)
   
   '''
 # ---
 # name: test_help[ddflow hooks]
   '''
-  usage: ddflow hooks [-h] {install,uninstall,status,check-commit,check-msg,session-start,pre-compact,prompt} ...
+  usage: ddflow hooks [-h] {install,uninstall,status,check-commit,check-msg,session-start,pre-compact,prompt,run} ...
   
   positional arguments:
-    {install,uninstall,status,check-commit,check-msg,session-start,pre-compact,prompt}
+    {install,uninstall,status,check-commit,check-msg,session-start,pre-compact,prompt,run}
       check-commit        (invoked by the hook)
       check-msg           (invoked by the commit-msg hook)
       session-start       (invoked by the Claude Code SessionStart hook) print the brief; always
@@ -849,6 +870,8 @@
                           doing before compaction; always exit 0
       prompt              (invoked by the UserPromptSubmit / BeforeAgent hook) record the prompt on
                           stdin; always exit 0
+      run                 (invoked by any agent's hook) handle one lifecycle event for a harness;
+                          always exit 0
   
   options:
     -h, --help            show this help message and exit
@@ -2475,6 +2498,7 @@
     'ddflow hooks install',
     'ddflow hooks pre-compact',
     'ddflow hooks prompt',
+    'ddflow hooks run',
     'ddflow hooks session-start',
     'ddflow hooks status',
     'ddflow hooks uninstall',
