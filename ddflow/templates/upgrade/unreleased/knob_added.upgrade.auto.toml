@@ -4,5 +4,5 @@
 kind = "knob_added"
 key = "upgrade.auto"
 new = '"check"'
-why = "What ddflow does after it is upgraded (D-upgrade-auto-check): check (default) prints one line per machine per version in the brief and MCP instructions; safe also applies the hooks and instructions categories with a backup; off says nothing."
+why = "What ddflow does after it is upgraded (D-upgrade-auto-check): check (default) prints one line per version on this machine in the brief and MCP instructions; safe also applies the hooks and instructions categories with a backup; off says nothing."
 impact = "additive"
