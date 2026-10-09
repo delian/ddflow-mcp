@@ -271,4 +271,7 @@ def test_verify_takes_an_optional_id_and_the_sweep_flags():
     ns = build_parser().parse_args(["verify", "--all", "--phase", "P", "--limit", "3", "--judge"])
     assert (ns.id, ns.all, ns.phase, ns.limit, ns.judge) == ("", True, "P", 3, True)
     assert "all" not in TOOLS["ddflow_verify"]["properties"]  # a sweep is what omitting id means
+    from ddflow.surfaces import exemptions as X
+
+    assert ("ddflow_verify", "--all") in X.FLAG_EXEMPT  # the command carries its own reason
     assert TOOLS["ddflow_verify"]["properties"]["id"][2] is False

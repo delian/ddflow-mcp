@@ -111,9 +111,6 @@ EXEMPTIONS: tuple[Command, ...] = (
         },
     ),
     Command(
-        path=(), tool="ddflow_verify", flag_exempt={"--all": "a sweep is what omitting `id` means"}
-    ),
-    Command(
         path=(),
         tool="ddflow_doctor",
         flag_exempt={"--upgrade": "the same as `ddflow upgrade`, which is `ddflow_upgrade`"},
