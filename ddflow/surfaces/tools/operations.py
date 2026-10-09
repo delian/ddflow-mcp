@@ -33,6 +33,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "all": ("boolean", "kind=bug|lesson: include fixed/invalid/superseded.", False),
             "mode": ("string", "search: ranked|exact|regex.", False),
             "sources": ("string", "search: comma-separated record kinds.", False),
+            "source": ("string", "search: comma-separated search sources (default all).", False),
         },
         "api": lambda repo, a, agent: _api().view_read(
             repo,
@@ -49,6 +50,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             all=bool(a.get("all")),
             mode=a.get("mode", "") or "ranked",
             sources=a.get("sources", "") or "",
+            source=a.get("source", "") or "",
         ),
         "payload": "",
     },
