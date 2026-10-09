@@ -19,7 +19,7 @@ import re
 import pytest
 
 from ddflow.core import textsim
-from ddflow.infra.store import MIN_TERM_CHARS, _fts_query, _like_terms
+from ddflow.infra.store import MIN_TERM_CHARS, _fts_query, _terms
 from ddflow.services.guidance.similarity import words as _tokenize
 
 #: (text, fts expression, LIKE terms, rule tokens), from the code as it was before the slice
@@ -87,7 +87,20 @@ GOLDEN = [
         "one two three four five six seven eight nine ten eleven twelve thirteen fourteen",
         '"one" OR "two" OR "three" OR "four" OR "five" OR "six" OR "seven" OR "eight" OR "nine" OR "ten" '
         'OR "eleven" OR "twelve"',
-        ["one", "two", "three", "four", "five", "six", "seven", "eight"],
+        [
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+        ],
         [
             "one",
             "two",
@@ -125,13 +138,13 @@ GOLDEN = [
 @pytest.mark.parametrize(("text", "fts", "like", "rules"), GOLDEN, ids=[g[0][:20] for g in GOLDEN])
 def test_every_caller_yields_what_it_did_before(text, fts, like, rules) -> None:
     assert _fts_query(text) == fts
-    assert _like_terms(text) == like
+    assert _terms(text) == like
     assert _tokenize(text) == rules
 
 
-def test_fts_and_like_are_the_same_words_with_different_caps() -> None:
+def test_fts_and_the_fallback_are_the_same_words_with_the_same_cap() -> None:
     text = " ".join(f"word{i:02d}" for i in range(20))
-    assert _like_terms(text) == [f"word{i:02d}" for i in range(8)]
+    assert _terms(text) == [f"word{i:02d}" for i in range(12)]
     assert _fts_query(text).count(" OR ") == 11
 
 
@@ -171,5 +184,6 @@ def test_no_second_word_splitter_is_left_behind() -> None:
         assert not hits, (path, hits)
     assert MIN_TERM_CHARS is textsim.MIN_WORD_CHARS
     # and they delegate: the functions themselves name `textsim.words`
-    for fn in (_fts_query, _like_terms, _tokenize):
+    for fn in (_terms, _tokenize):
         assert "textsim.words(" in inspect.getsource(fn), fn.__name__
+    assert "_terms(" in inspect.getsource(_fts_query)

@@ -9,4 +9,6 @@
 # change; never add one to make a new import pass. An entry marked "home" is permanent:
 # the one module allowed to own that import. The task that writes an extra's adapter
 # adds its one home entry here, e.g. `ddflow.services.searchcore.fuzzy -> rapidfuzz`.
-ignore_imports = []
+ignore_imports = [
+    "ddflow.core.fuzzy -> rapidfuzz",  # home: the [search] extra's one adapter
+]
