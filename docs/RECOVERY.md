@@ -120,8 +120,11 @@ rm -f .ddflow/index.db*
 ddflow rebuild
 ```
 
-There is no migration path and none is needed: the schema version is part of the
-staleness check, so an upgraded ddflow rebuilds automatically on first read.
+The index needs no migration: the schema version is part of the staleness check, so an
+upgraded ddflow rebuilds it automatically on first read. The *project* (the log, config and
+ddflow's own files) does have an upgrade path: `ddflow upgrade --plan` shows what a newer ddflow
+would change and `ddflow upgrade --apply` does it after a backup (undo: `ddflow upgrade
+--restore`).
 
 ---
 
