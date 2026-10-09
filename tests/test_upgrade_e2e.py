@@ -126,9 +126,9 @@ def test_upgrade_docs_and_templates_name_no_repository_of_this_project() -> None
         _section(readme, "Applying an upgrade"),
         (ROOT / "docs" / "RECOVERY.md").read_text(encoding="utf-8"),
     ]
-    texts += [
-        p.read_text(encoding="utf-8") for p in (ROOT / "ddflow/templates/upgrade").rglob("*.toml")
-    ]
+    templates = sorted((ROOT / "ddflow/templates/upgrade").rglob("*.toml"))
+    assert templates, "no upgrade templates found: this check would read nothing"
+    texts += [p.read_text(encoding="utf-8") for p in templates]
     texts += [(ROOT / "ddflow/templates/drivers/implement-phase.md").read_text(encoding="utf-8")]
     pattern = re.compile(r"run_nemo_run|home-simulator|home_simulator|/home/\w+/src", re.I)
     for t in texts:
