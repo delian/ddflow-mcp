@@ -311,6 +311,18 @@ def _owner(table):
         ({"requires_evidence": ["report"]}, {"output_digest": "abc"}, None, True),
         ({"requires_evidence": ["report"]}, {"report_digest": "abc"}, None, True),
         ({"requires_evidence": ["report"]}, {"output_digest": "  "}, None, False),
+        (
+            {"requires_evidence": ["report"]},
+            {"output_digest": "e3b0", "output_bytes": 0},
+            None,
+            False,
+        ),
+        (
+            {"requires_evidence": ["report"]},
+            {"output_digest": "ab", "output_bytes": 12},
+            None,
+            True,
+        ),
         ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "X"}, True),
         ({"requires_evidence": ["link"]}, {"link": ["R2", "R1"]}, {"R1": "X"}, True),
         ({"requires_evidence": ["link"]}, {"link": "R1"}, {"R1": "OTHER"}, False),
