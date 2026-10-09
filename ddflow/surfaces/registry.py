@@ -671,6 +671,10 @@ def add_commands(
         if group not in made:
             existing = _group_subparsers(subparsers, group)
             if existing is not None:
+                if groups and group in groups:
+                    raise ValueError(
+                        f"group {group!r} was made before; its help is given where it is made"
+                    )
                 made[group] = existing
                 parsers[group] = subparsers.choices[group]
             else:

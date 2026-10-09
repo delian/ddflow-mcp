@@ -5,8 +5,9 @@
 excuse. They are fields of the command registry now (D-unify, B-uni-cmd-core): a `Command`
 carries ``reason`` (why it has no MCP tool of its own), ``via`` (the tool, and the argument
 value, that serves it), ``flag_exempt`` (CLI flags its tool omits) and ``prose_reason`` (why
-its body is text). The parity test DERIVES its tables from `EXEMPTIONS`, so an exemption is
-declared once, beside a Command, and a migrated command moves its declaration onto itself.
+its body is text). The parity test DERIVES its tables from `DECLARATIONS` -- these, and the
+commands that moved onto the registry (`surfaces/declared/`, `commands/viewers_*`) with their
+own -- so an exemption is declared once, beside a Command.
 
 Each entry carries its reason; the ratchet is that the list may only shrink.
 """

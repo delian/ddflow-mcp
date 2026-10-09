@@ -15,7 +15,7 @@ import pytest
 from ddflow.api import lifecycle as A_LIFECYCLE
 from ddflow.surfaces import registry as R
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.exemptions import EXEMPTIONS
+from ddflow.surfaces.exemptions import DECLARATIONS
 from ddflow.surfaces.mcp import TOOLS, Server
 from ddflow.surfaces.parsers._common import GLOBS_HELP, _Globs
 from ddflow.surfaces.registry import (
@@ -352,6 +352,8 @@ def test_a_group_is_listed_only_when_it_has_help_and_an_existing_group_is_joined
         group_aliases={"quiet": (old,)},
     )
     assert root.parse_args(["quiet-old", "two"]).quiet_cmd == "two"
+    with pytest.raises(ValueError, match="its help is given where it is made"):
+        add_commands(subs, [Command(path=("quiet", "three"))], groups={"quiet": "too late"})
     assert root.parse_args(["quiet", "two"]).quiet_cmd == "two"
     assert root.parse_args(["quiet", "one"]).quiet_cmd == "one"
 
@@ -382,12 +384,12 @@ def test_exemption_derivations():
 
 
 def test_every_declared_exemption_is_well_formed():
-    paths = [c.path for c in EXEMPTIONS if c.path]
+    paths = [c.path for c in DECLARATIONS if c.path]
     assert len(paths) == len(set(paths)), "a command is declared twice"
-    for c in EXEMPTIONS:
+    for c in DECLARATIONS:
         if c.prose:
             assert len(c.prose_reason) > 20, f"{c.tool}: a prose tool needs its reason"
         for flag, reason in c.flag_exempt.items():
             assert flag.startswith("--") and reason, (c.tool, flag)
-        if c.path and not (c.reason or c.via):
-            raise AssertionError(f"{c.path}: neither a reason nor a route")
+        if c.path and not c.tool and not (c.reason or c.via):
+            raise AssertionError(f"{c.path}: neither a tool, a reason nor a route")
