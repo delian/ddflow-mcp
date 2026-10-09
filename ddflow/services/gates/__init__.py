@@ -156,6 +156,7 @@ from .runner import (  # noqa: F401
     _SHELL_BUILTINS,
     _SHELL_META,
     KEEP_RUN_LOGS,
+    OUTPUT_TAIL_CHARS,
     RUNS_DIR,
     Classified,
     _account_for_drift,
@@ -166,6 +167,7 @@ from .runner import (  # noqa: F401
     _unavailable_evidence,
     classify_exit,
     gate_config_drift,
+    output_evidence,
     run_command_gate,
     run_log_writer,
 )
