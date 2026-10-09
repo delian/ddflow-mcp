@@ -192,3 +192,15 @@ def test_a_stale_server_says_restart_once(old: Path, monkeypatch: pytest.MonkeyP
     assert any("restart the server" in t and "99.0.0" in t for t in texts)
     again = [c["text"] for c in server._dispatch(call)["result"]["content"]]
     assert not any("restart the server" in t for t in again), "said once per server"
+
+
+def test_a_broken_instruction_template_still_carries_the_notice(old: Path) -> None:
+    """The handshake falls back to a plain message when the template cannot load, and the
+    upgrade may be exactly why: the notice rides on both paths."""
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(old, "config", "prompts.mcp_instructions", "no/such/template.md")
+    text = Server(old)._dispatch({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})[
+        "result"
+    ]["instructions"]
+    assert LINE in text

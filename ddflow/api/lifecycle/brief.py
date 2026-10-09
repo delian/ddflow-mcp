@@ -214,7 +214,7 @@ def brief(
         text += "\n" + line
     text += _refuted_line(st)
     if notice := UN.line(repo, log, cfg, st, agent=agent):
-        # One line, once per machine per version (D-upgrade-auto-check): FIRST, so the hook,
+        # One line, once per version on this machine (D-upgrade-auto-check): FIRST, so the hook,
         # `ddflow brief` and `ddflow_brief` all lead with it whichever is asked first.
         text = notice + "\n\n" + text
     if item and item in st.items:

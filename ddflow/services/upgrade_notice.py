@@ -2,8 +2,8 @@
 
 Decision D-upgrade-auto-check (operator, 2026-10-03). After ddflow is upgraded, the first
 brief (and with it the SessionStart hook) or MCP handshake on a machine says, in ONE line,
-``ddflow upgraded 0.1.9 -> 0.1.10: run ddflow upgrade --plan`` -- once per machine per
-version -- and writes nothing. ``[upgrade].auto`` governs it:
+``ddflow upgraded 0.1.9 -> 0.1.10: run ddflow upgrade --plan`` -- once per version
+on this machine, per project -- and changes nothing else. ``[upgrade].auto`` governs it:
 
 * ``check`` (the default): the line only;
 * ``safe``: the line, after applying the plan's non-destructive categories (``hooks`` and
