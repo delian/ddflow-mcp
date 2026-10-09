@@ -1464,7 +1464,7 @@ def _say_selection(selected, say) -> None:
     for line in selected.notes:
         say(f"→ {line}")
     if selected.agent:
-        say(f"→ routed to {selected.agent}")
+        say(f"→ route: {selected.agent}")
 
 
 def _early_refusal(full, force, delta, log, cfg, st, item: str, gate: str, say, defs=None):
@@ -1595,8 +1595,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     if not revs:
         return unavailable(
             f"No reviewer is configured for gate {gate!r}. "
-            f"`ddflow reviewers detect --write` finds local models.\n"
-            f"Recording UNAVAILABLE — which is NOT a pass.",
+            + "".join(f"{n}. " for n in selected.notes)
+            + "`ddflow reviewers detect --write` finds local models.\n"
+            "Recording UNAVAILABLE — which is NOT a pass.",
             how="",
         )
 

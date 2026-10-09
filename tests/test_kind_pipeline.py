@@ -531,5 +531,7 @@ def test_review_says_what_the_pool_and_route_stages_decided(repo, monkeypatch):
         ),
     )
     said: list[str] = []
-    AR.review(repo, item="T1", gate="critic", on_progress=said.append)
-    assert "→ a: not independent of the author" in said and "→ routed to reviewer-agent" in said
+    out = AR.review(repo, item="T1", gate="critic", on_progress=said.append)
+    # the skip reaches a caller that subscribed to no progress too
+    assert "a: not independent of the author" in out.data["text"], out.data
+    assert "→ a: not independent of the author" in said and "→ route: reviewer-agent" in said
