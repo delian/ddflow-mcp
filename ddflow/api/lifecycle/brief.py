@@ -12,6 +12,7 @@ from ...core import outcome as O
 from ...core.budget import Budget, approx_tokens
 from ...services import gates as G
 from ...services import leases as L
+from ...services import searchcore as SC
 from .._base import _load
 from .heartbeat import _waiters
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
@@ -102,7 +103,9 @@ def brief(
     if item and item in st.items:
         target = st.items[item]
         query = f"{target.title} {target.body} {' '.join(target.tags)}"
-    lessons = store.search("lessons", query, cfg.session.brief_lesson_count) if query else []
+    lessons = (
+        SC.search_table(store, "lessons", query, cfg.session.brief_lesson_count) if query else []
+    )
 
     from ...services import skills as SK
 
