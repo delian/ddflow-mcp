@@ -38,6 +38,8 @@ def _checkout(tmp_path: Path) -> Path:
     shutil.copytree(ROOT / "ddflow", repo / "ddflow", ignore=shutil.ignore_patterns("__pycache__"))
     (repo / "scripts").mkdir()
     shutil.copy(ROOT / "scripts" / "bump.sh", repo / "scripts" / "bump.sh")
+    # bump.sh numbers through the helper CI uses for the same step
+    shutil.copy(ROOT / "scripts" / "release_impact.py", repo / "scripts" / "release_impact.py")
     shutil.copy(
         ROOT / "scripts" / "render_server_json.py", repo / "scripts" / "render_server_json.py"
     )

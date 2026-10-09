@@ -47,7 +47,7 @@ from .registry import (
     parsed_path,
     used_aliases,
 )
-from .render import emit_json, set_command
+from .render import emit_json, reset_command, set_command
 from .tools import TOOLS
 from .vocabulary import provide
 
@@ -342,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     for alias in _NOTICES.fresh(used_aliases(parser, args, args._argv)):
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
     # The schema every object body of this run is tagged with (D-compat-json-views).
-    set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
+    tagged = set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
     try:
         ctx = Ctx(args)
         if getattr(args, "allow_older", False):
@@ -362,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
         if code != INTERRUPTED:
             print(str(exc) if code == REFUSED else f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return code
+    finally:
+        reset_command(tagged)
 
 
 if __name__ == "__main__":
