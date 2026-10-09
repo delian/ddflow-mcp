@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..core.kinds import kind_pipelines_problem
+from .kinds import kind_pipelines_problem
 from ._docs import declare, knob
 
 
