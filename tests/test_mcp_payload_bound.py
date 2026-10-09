@@ -182,6 +182,19 @@ def test_recall_drops_raw_records_and_keeps_within_budget_saying_so(repo):
     assert "raw" in next(v for k, v in cli.items() if k != "schema")[0]
 
 
+def test_recall_over_mcp_keeps_one_hit_under_any_budget_and_says_it_cut(repo):
+    """The budget is the API's now (tests/test_context_pack.py); over MCP a budget smaller
+    than any hit still answers with the first one, and the cut is the second block."""
+    run_cli(repo, "init")
+    for i in range(4):
+        run_cli(repo, "decision", "add", "--id", f"D{i}", "--title", f"tiny budget {i}",
+                "--decision", "tiny budget " + "w" * 200)  # fmt: skip
+    r = _call(repo, "ddflow_recall", query="tiny budget", limit=4, max_chars=1)
+    hits = [h for k, v in _body(r).items() if k != "schema" for h in v]
+    assert len(hits) == 1 and "raw" not in hits[0]
+    assert "truncated: showing 1 of 4 hits within max_chars=1" in r["content"][1]["text"]
+
+
 def test_mcp_json_is_compact(repo):
     _gated(repo)
     text = _call(repo, "ddflow_show", id="T1")["content"][0]["text"]
@@ -220,14 +233,13 @@ def test_a_gate_timestamp_loses_only_a_utc_fraction():
     assert at("2026-10-01T21:29:42.5+05:00") == "2026-10-01T21:29:42.5+05:00"
 
 
-def test_recall_budget_counts_the_returned_json_and_keeps_the_first_hit():
+def test_recall_bound_only_drops_the_raw_records():
+    """The budget moved into the API's context pack (tests/test_context_pack.py); the bound
+    keeps every hit it is given and says it left the raw records out."""
     hit = {"id": 1, "kind": "K", "headline": "h", "body": "b" * 300, "raw": {"x": "y" * 900}}
     body = {"a": [dict(hit), dict(hit)], "b": [dict(hit)]}
     out, note = B.bound_recall(body, {"max_chars": 1})
-    assert [len(v) for v in out.values()] == [1, 0], "the first hit survives any budget"
-    assert "truncated: showing 1 of 3" in note
-    out, note = B.bound_recall(body, {"max_chars": 100_000})
-    assert sum(len(v) for v in out.values()) == 3 and "truncated" not in note
+    assert [len(v) for v in out.values()] == [2, 1] and "raw record" in note
     assert all("raw" not in h for v in out.values() for h in v)
 
 

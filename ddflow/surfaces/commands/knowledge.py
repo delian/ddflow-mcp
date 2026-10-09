@@ -195,32 +195,38 @@ def cmd_recall(a, c: Ctx) -> int:
         agent=c.requested_agent,
     )
     if c.json:
-        emit_json(out.body("results"))
+        body = out.body("results")
+        # A cut or folded answer says so in the body too: a reader of the JSON must not
+        # take the packed hits for all of them. Strings, not lists: they are no source.
+        pack = out.data.get("pack", {})
+        for key, note in (("truncated", "cut_note"), ("folded", "fold_note")):
+            if pack.get(note):
+                body = {**body, key: pack[note]}
+        emit_json(body)
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
         return NOTHING
 
+    # The API already cut the answer to its budget (`services/contextpack.py`); this only
+    # prints what it kept, in source order.
     results = out.data["_render"]["results"]
-    budget, used = out.data["max_chars"], 0
+    pack = out.data["pack"]
     # BEFORE the records, so a recall cut short by the budget still carried it.
     print(PV.DATA_RULE)
-    used += len(PV.DATA_RULE)
     for table, label, why in out.data["_render"]["sources"]:
         rows = results.get(table)
         if not rows:
             continue
-        header = f"\n## {label}  — {why}\n"
-        print(header, end="")
-        used += len(header)
+        print(f"\n## {label}  — {why}\n", end="")
         for r in rows:
             head, body = summarise_row(table, r)
-            block = _recall_block(table, r, head, body)
-            if used + len(block) > budget:
-                print(f"      … truncated at {budget} chars (--max-chars to raise)")
-                return OK
-            print(block, end="")
-            used += len(block)
+            print(_recall_block(table, r, head, body), end="")
+    if pack["fold_note"]:
+        print(f"      … {pack['fold_note']}")
+    if pack["truncated"]:
+        print(f"      … truncated at {out.data['max_chars']} chars (--max-chars to raise)")
+        return OK
     print(
         "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
         "unless the operator says otherwise; a lesson is advice; a past prompt is "
