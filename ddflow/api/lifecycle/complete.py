@@ -15,6 +15,7 @@ from ...services import leases as L
 from .._base import _load
 from ._common import _require
 from .heartbeat import _commit_events, _waiters
+from .planning import plan_for
 
 
 def _session_model(st: State, agent: str) -> str:
@@ -166,7 +167,14 @@ def complete(
     # The item is complete and released by now: a report that cannot be built must
     # never make that look like a failed completion.
     try:
-        progress = PL.report(fold(log.read_all(), strict=False), cfg, item)
+        after = fold(log.read_all(), strict=False)
+        # What `next` would offer now, not the bare queue: the block names it as "Next".
+        progress = PL.report(
+            after,
+            cfg,
+            item,
+            plan=plan_for(repo, log, cfg, after, purpose="view", agent=log.agent_id),
+        )
     except Exception as e:  # informational only, see above
         progress = f"(progress report unavailable: {type(e).__name__}: {e})"
     if progress:
