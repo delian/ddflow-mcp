@@ -22,7 +22,6 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
-import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -30,9 +29,11 @@ from typing import Any
 
 from ..config import Config
 from ..core import unidiff
+from ..core.flow import parse_version
 from ..core.flow import safe_name as _core_safe_name
 from ..infra import fsio
 from ..infra import git as G
+from ..infra.container import default_worktree_root
 
 #: The one git runner lives in `infra.git`; these names stay importable from here.
 git = G.run
@@ -77,8 +78,7 @@ def scratch_tree(
     body did.
     """
     root = Path(root)
-    tmp = Path(tempfile.mkdtemp(prefix=prefix, dir=under))
-    tmp.rmdir()  # `worktree add` wants to create it
+    tmp = fsio.unused_dir(prefix, under)  # `worktree add` wants to create it
     args = ["worktree", "add", *(["--quiet"] if quiet else []), *(["--detach"] if detach else [])]
     add = git(root, *args, str(tmp), ref)
     try:
@@ -219,7 +219,6 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     base = base or cfg.worktree.base_ref or default_branch(root)
     name = safe_name(item_id)
     branch = branch or f"{cfg.worktree.branch_prefix}{name}"
-    from ..infra.container import default_worktree_root
 
     # Inside a container the default sibling root lands on the ephemeral layer and is
     # destroyed on exit, taking uncommitted work with it. See container.py.
@@ -981,8 +980,6 @@ def rev(repo: Path, ref: str) -> str:
 
 def version_tags(repo: Path, prefix: str) -> list[tuple[str, str]]:
     """``(tag, version)`` for every tag ``<prefix>MAJOR.MINOR.PATCH``, newest version first."""
-    from ..core.flow import parse_version
-
     r = git(repo, "tag", "--list", f"{prefix}*")
     found = []
     for line in r.out.splitlines() if r.ok else []:

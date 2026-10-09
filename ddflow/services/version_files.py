@@ -23,6 +23,9 @@ from ..config import Config
 from ..core import flow as F
 from ..infra import git as GIT
 from ..infra import worktree as W
+from ..infra.fsio import replace_text
+from . import changelog_cut as CC
+from .export.query import EXIT_UNAVAILABLE, ExportError
 
 
 class VersionFileError(ValueError):
@@ -103,14 +106,10 @@ def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: 
     """
     if not prep.edits:
         return []
-    from . import changelog_cut as CC
-    from .export.query import ExportError
 
     try:
         root, throwaway = CC._tree_for(repo, cfg, branch)
     except ExportError as exc:
-        from .export.query import EXIT_UNAVAILABLE
-
         raise VersionFileError(str(exc), unavailable=exc.code == EXIT_UNAVAILABLE) from exc
     if not throwaway:
         return _commit_edits(root, prep, message)
@@ -137,7 +136,7 @@ def _commit_edits(tree: Path, prep: Prepared, message: str) -> list[str]:
             f"the release (commit or discard them)"
         )
     for path, text in prep.edits.items():
-        (tree / path).write_text(text, encoding="utf-8")
+        replace_text(tree / path, text)
     try:
         for step in (("add", "--", *paths), ("commit", "-m", message, "--", *paths)):
             r = W.git(tree, *step)

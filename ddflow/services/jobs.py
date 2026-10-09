@@ -79,13 +79,8 @@ def proc_start(pid: int) -> str:
 def launch(command: str, cwd: Path, log: Path) -> int:
     """Start `command` detached, output to `log`. Returns the job's pid."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    r = P.run(
-        ["/bin/sh", "-c", _LAUNCH, _wrapped(command), str(log)],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    r = P.capture(["/bin/sh", "-c", _LAUNCH, _wrapped(command), str(log)], cwd=str(cwd), timeout=30)
+    r.unwrap()
     pid = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
     if r.returncode != 0 or not pid.isdigit():
         raise RuntimeError(f"could not launch the job: {(r.stderr or r.stdout).strip()[:300]}")

@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import json
 import shutil
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
 from ..core.textcut import clip
+from . import fsio
 from . import proc as P
 from .worktree import git
 
@@ -137,10 +137,10 @@ def _run(repo: Path, argv: list[str], *, timeout: int = 120) -> Any:
             f"`{argv[0]}` is not installed, so the forge cannot be reached. Install and "
             f"log in (`{argv[0]} auth login`), or set [flow].integration = 'merge'."
         )
-    try:
-        return P.run(argv, cwd=str(repo), capture_output=True, text=True, timeout=timeout)
-    except P.TimeoutExpired as exc:
-        raise ForgeUnavailable(f"`{' '.join(argv[:3])}` timed out after {timeout}s") from exc
+    done = P.capture(argv, cwd=str(repo), timeout=timeout)
+    if done.timed_out:
+        raise ForgeUnavailable(f"`{' '.join(argv[:3])}` timed out after {timeout}s") from done.error
+    return done.unwrap()
 
 
 #: stderr fragments meaning "could not ASK" rather than "asked, and the answer is no".
@@ -460,12 +460,9 @@ class GitHub(Forge):
         )
 
     def create(self, *, head, base, title, body, draft, labels, reviewers) -> PRInfo:
-        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
-            fh.write(body)
-            body_file = fh.name
-        try:
+        with fsio.temp_text(body, ".md") as body_file:
             argv = ["gh", "pr", "create", "--head", head, "--base", base, "--title", title]
-            argv += ["--body-file", body_file]
+            argv += ["--body-file", str(body_file)]
             if draft:
                 argv.append("--draft")
             for label in labels:
@@ -473,8 +470,6 @@ class GitHub(Forge):
             for r in reviewers:
                 argv += ["--reviewer", r]
             _check(_run(self.repo, argv), f"gh pr create --head {head}")
-        finally:
-            Path(body_file).unlink(missing_ok=True)
         found = self.find(head)
         if found is None:
             raise ForgeUnavailable(

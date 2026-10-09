@@ -24,6 +24,7 @@ import os
 import re
 import secrets
 import stat
+import tempfile
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -251,6 +252,50 @@ def file_lock(
                 fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
+
+
+# -- scratch space ----------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def scratch_dir(
+    prefix: str | None = None, *, ignore_cleanup_errors: bool = False
+) -> Iterator[Path]:
+    """A temporary directory, removed (with what is in it) when the block ends."""
+    with tempfile.TemporaryDirectory(
+        prefix=prefix, ignore_cleanup_errors=ignore_cleanup_errors
+    ) as d:
+        yield Path(d)
+
+
+@contextlib.contextmanager
+def scratch_file() -> Iterator[Any]:
+    """An anonymous temporary file open for binary reading and writing, gone when the
+    block ends."""
+    with tempfile.TemporaryFile() as fh:
+        yield fh
+
+
+@contextlib.contextmanager
+def temp_text(text: str, suffix: str = "") -> Iterator[Path]:
+    """A temporary file holding ``text``, for a program that wants a path; unlinked when
+    the block ends, by an exception too."""
+    with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False) as fh:
+        fh.write(text)
+        path = Path(fh.name)
+    try:
+        yield path
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def unused_dir(prefix: str, under: Path | None = None) -> Path:
+    """A path in ``under`` (the system temp directory by default) that is free now: its
+    name was reserved and the directory removed again, for a tool that wants to create
+    it itself (`git worktree add`)."""
+    path = Path(tempfile.mkdtemp(prefix=prefix, dir=under))
+    path.rmdir()
+    return path
 
 
 # -- paths ------------------------------------------------------------------------------
