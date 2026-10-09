@@ -264,3 +264,33 @@ def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
 
     st = fold(EventLog(repo).read_all())
     assert not [b for b in CM.verdict(st, cfg, "T1", repo=repo).blockers if "dedupe" in b]
+
+
+def test_workflow_text_lists_only_the_kinds_that_differ(repo):
+    run_cli(repo, "init")
+    default = run_cli(repo, "workflow")[1]
+    assert "A doc passes through" not in default
+    # the built-in phase line is printed once, by the phase pipeline itself
+    assert default.count("A phase passes through") == 1, default
+    assert (
+        run_cli(
+            repo, "config", "--set", "gates.kind_pipelines", '{ doc = ["implement", "merge"] }'
+        )[0]
+        == 0
+    )
+    out = run_cli(repo, "workflow")[1]
+    assert "A doc passes through: implement, merge" in out, out
+    assert "A bug passes through" not in out and out.count("A phase passes through") == 1
+
+
+def test_a_phase_override_replaces_the_phase_line_instead_of_adding_one(repo):
+    run_cli(repo, "init")
+    assert (
+        run_cli(
+            repo, "config", "--set", "gates.kind_pipelines", '{ phase = ["research", "merge"] }'
+        )[0]
+        == 0
+    )
+    out = run_cli(repo, "workflow")[1]
+    assert out.count("A phase passes through") == 1, out
+    assert "A phase passes through: research, merge" in out, out

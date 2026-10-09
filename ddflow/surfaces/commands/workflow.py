@@ -130,11 +130,16 @@ def _render_workflow(v) -> str:
         "",
         *_gate_lines(v),
         "",
-        f"A phase passes through: {', '.join(v.phase_pipeline)}",
+        f"A phase passes through: {', '.join(v.kind_pipelines.get('phase', v.phase_pipeline))}",
         *(
             [f"A promotion passes through: {', '.join(v.promotion_pipeline)}"]
             if v.promotion_pipeline
             else []
+        ),
+        *(
+            f"A {k} passes through: {', '.join(ids)}"
+            for k, ids in v.kind_pipelines.items()
+            if k != "phase" and ids != v.task_pipeline
         ),
         "",
         "## The rules, and where each came from",
