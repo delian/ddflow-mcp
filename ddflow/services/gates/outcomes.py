@@ -12,7 +12,7 @@ from ...config import Config
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra import hostinfo as H
 from ...infra.log import EventLog
-from .defs import GateDef, pipeline_for
+from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
     commit_tree_entries,
@@ -165,7 +165,7 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         raise KeyError(item_id)
     gates = pipeline_for(it, cfg)
     rows = [(g, it.gate_outcome(g)) for g in gates]
-    required = set(cfg.gates.required)
+    required = required_gates(cfg)
     settled = {g: it.gate_satisfied(g, g in required) for g in gates}
     done = [g for g in gates if settled[g]]
     blocked = [g for g, o in rows if o == "failed"]
