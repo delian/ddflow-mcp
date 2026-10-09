@@ -21,6 +21,7 @@ here.
 
 from __future__ import annotations
 
+import textwrap
 from typing import Any
 
 #: `kind` -> renderer. Populated by `@renders`, and asserted non-empty and complete by
@@ -127,8 +128,6 @@ def config(out) -> str:
     for row in d.get("rows", []):
         lines.append(f"{row['key']} = {row['value']!r}   [{row['source']}]")
         if d.get("explain") and row.get("doc"):
-            import textwrap
-
             lines += [f"    {ln}" for ln in textwrap.wrap(" ".join(row["doc"].split()), 76)]
     if d.get("path") and not d.get("rows"):
         # A WRITE: the answer is what changed and where.
