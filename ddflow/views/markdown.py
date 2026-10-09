@@ -1088,7 +1088,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
             f"`ddflow recall <topic>`._"
         )
     if rules:
-        part["rules"] += ["", "## Project rules", "", rules.strip()]
+        part["rules"] += ["", "## Project rules", "", *rules.strip().split("\n")]
     _brief_lessons(part["lessons"], cfg, lessons or [], state)
     _brief_skills(part["skills"], skills or [])
 

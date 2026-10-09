@@ -455,8 +455,9 @@ def test_a_rule_refused_by_a_limit_says_why_and_does_not_say_added(repo) -> None
 
 
 def test_brief_hands_over_the_decisions_decision_applicable_names(repo) -> None:
-    """`brief` and `decision applicable` ask the one resolver: the same decisions, the same
-    order, project-wide ones after those the item's files select."""
+    """`brief` and `decision applicable` ask the one resolver: the same decisions. The brief
+    leads with the project-wide (pinned) ones -- the injection path's order, so a section trim
+    never reaches them (B-uni-guidance-inject) -- then those the item's files select."""
     import json
 
     from conftest import run_cli
@@ -476,4 +477,7 @@ def test_brief_hands_over_the_decisions_decision_applicable_names(repo) -> None:
     mentioned = sorted(
         (brief.index(f'id="{d}"'), d) for d in ("D-a", "D-b", "D-c") if f'id="{d}"' in brief
     )
-    assert [d for _, d in mentioned] == named
+    assert [d for _, d in mentioned] == [d["id"] for d in body["project_wide"]] + [
+        d["id"] for d in body["applicable"]
+    ]
+    assert sorted(named) == sorted(d for _, d in mentioned)
