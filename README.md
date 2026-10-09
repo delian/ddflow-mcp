@@ -2513,9 +2513,12 @@ they want the command, its exit code and its output digest.
 
 **And evidence says WHICH tree and HOW MUCH.** Every gate that produces an OUTCOME —
 command gates, and agent gates recorded with `gate record` — carries a
-`tree_sha`: a fingerprint of the working tree it ran against, covering committed
-state, uncommitted changes to tracked files, *and* the content of untracked ones (a new
-module is untracked until its first commit, which is the ordinary state of agent work).
+`tree_sha`, ONE identity of the tree it ran against: `<head>+clean` for a tree that holds
+exactly HEAD's files, else `<head>+st:<content id>` -- the commit plus the exact content
+of every file, tracked changes *and* untracked ones (a new module is untracked until its
+first commit, which is the ordinary state of agent work). Older evidence recorded a
+digest of the status and diff text beside a separate `source_tree` field; both spellings
+are still read, so a pass recorded by an earlier ddflow keeps its meaning.
 ddflow's own `.ddflow/` is excluded, or recording a gate's outcome would invalidate the
 gate that just recorded it. If the tree moves afterwards, `complete` warns that the pass
 describes source nobody is shipping — a warning, not a block, because refusing on a
@@ -2529,7 +2532,7 @@ silently.
 Beside it, `diff_stat` records files, insertions, deletions and untracked count —
 including the *lines* in untracked files, because a new module is untracked until its
 first commit and a task that is entirely new files would otherwise report zero
-insertions. The fingerprint answers *which* tree and is opaque; this answers *how big*,
+insertions. `tree_sha` answers *which* tree and is opaque; this answers *how big*,
 and that is what makes a pass auditable later — a review gate that passed over 4,000
 changed lines in two minutes is a different claim from one that passed over 12.
 
@@ -2537,7 +2540,7 @@ Neither is recorded for a **skip** (nothing was reviewed, so a magnitude would i
 inspection that did not happen) nor for an `unavailable` gate that never ran.
 
 Hashing untracked content is capped by `MAX_UNTRACKED_HASHED` (512). Above it the
-fingerprint falls back to file *names* and says so inside the digest, because a check
+identity falls back to the older digest, which covers file *names* and says so inside it, because a check
 that quietly stopped covering content would go silent for exactly the repositories that
 need it most.
 
@@ -5485,7 +5488,7 @@ part that matters.
   same files waits behind it, and the bug closes when that task completes with a
   regression test (`complete fix-<bug> --regression-test ...`). See [Bugs are queue
   items](#bugs-are-queue-items).
-* **Gate evidence records which tree and how much** — a working-tree fingerprint plus
+* **Gate evidence records which tree and how much** — one tree identity (commit plus content) plus
   files/lines changed — so a pass names what it passed on. If the tree moves afterwards,
   `complete` warns that the evidence describes source nobody is shipping.
 * **Crash recovery**: `ddflow recover` finds worktrees whose lease expired, so an

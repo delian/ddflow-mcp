@@ -19,6 +19,7 @@ from .evidence import (
     content_id,
     differing_paths,
     normal_fingerprint,
+    recorded_content,
     tree_fingerprint,
     worktree_entries,
 )
@@ -273,7 +274,7 @@ def stale_evidence_detail(
         ev = rec.evidence or {}
         was_sha = normal_fingerprint(ev.get("tree_sha", "") or "")
         base, _, dirt = was_sha.partition("+")
-        was_id = ev.get("source_tree", "") or ""
+        was_id = recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
         if was_id:
             if not now_id:
                 stale.append(StaleNote(gid, f"{label} could not be read", unverified=True))

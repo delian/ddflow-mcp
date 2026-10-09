@@ -87,6 +87,8 @@ from .evidence import (  # noqa: F401
     UNLISTED,
     TreeEntries,
     _blob_id,
+    _dirt,
+    _dirt_parts,
     _git_z,
     _hash_into,
     _index_entries,
@@ -102,8 +104,10 @@ from .evidence import (  # noqa: F401
     differing_paths,
     digest,
     normal_fingerprint,
+    recorded_content,
     source_tree,
     tree_fingerprint,
+    tree_identity,
     worktree_entries,
 )
 from .mutation import (  # noqa: F401
