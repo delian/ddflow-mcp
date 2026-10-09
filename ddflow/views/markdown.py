@@ -630,7 +630,7 @@ def _brief_current(
     with `--item` or held under its lease; the queue's top pick for an agent holding
     nothing is "Suggested next", because calling it Current told an agent it was working
     on something it never claimed (B226d8db6e8)."""
-    from ..services.gates import pipeline_for
+    from ..services.gates import pipeline_for, required_gates
 
     it = state.items.get(item)
     if not it:
@@ -677,7 +677,7 @@ def _brief_current(
             f"- worktree: `{load_path(repo, it.worktree) if repo else it.worktree}`"
             f" on `{it.branch}`"
         )
-    required = set(cfg.gates.required)
+    required = required_gates(cfg)
     todo = [g for g in pipeline_for(it, cfg) if not it.gate_satisfied(g, g in required)]
     out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
     if repo is not None and not suggested:
