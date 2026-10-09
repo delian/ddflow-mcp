@@ -916,7 +916,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 197 knobs.
+cadences, and the rest of the 200 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2129,6 +2129,26 @@ on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
 duplicate from a different bug in the same function, which is why the default asks rather than decides. (It was `warn` for a short while, because no surface could answer an ask; the CLI flags, terminal prompt and MCP `relation` now can.)
+
+### The Embedder: semantic ranking, optional
+
+Every semantic feature asks ONE interface for vectors (`ddflow/services/embed.py`); it has
+no second backend, and nothing is semantic until you configure it. `[rag].command` is a
+companion: a command (a shell line, run like every operator command, in the repository
+root) that reads `{"texts": ["...", ...]}` as JSON on stdin and prints
+`{"model": "<model id>", "vectors": [[...], ...]}` on stdout, one vector per text, in order,
+all the same length, every number finite. The model id is how stored vectors are told apart
+from another model's. `[rag].model_dir` instead names a **local** model2vec directory used
+in-process when the `ddflow[rag]` extra is installed; ddflow never downloads a model, and the
+command wins when both are set. `[rag].timeout_s` (default 60, 1 to 600) bounds one call.
+It runs a program, so set the command with `ddflow config --set rag.command '...' --local`.
+
+An embedder that is not configured, a missing extra, a path that is not a directory, a
+timeout, a non-zero exit or output that breaks the contract is `unavailable` with the
+reason, never a partial answer. Where a feature falls back, it keeps the BM25 order and its
+answer says "semantic ranking unavailable (...); BM25 order kept". `ddflow doctor` always
+carries one `embedder:` note saying what is configured, or that nothing is (it does not run
+the companion).
 
 ### Who wrote it: provenance and the data fence
 
@@ -4649,7 +4669,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 197): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 200): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5148,7 +5168,7 @@ declared once and persists — see
 
 ## Configuration
 
-197 knobs across 28 sections, every one documented in place and listed, with its default
+200 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5215,8 +5235,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=4feadc7c9703 -->
-<details><summary>All 197 knobs across 28 sections</summary>
+<!-- ddflow:begin README/knobs sha=823cf6ec0358 -->
+<details><summary>All 200 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5417,6 +5437,9 @@ long default is left to `ddflow config --explain`.
 | `ids.imported_phase` | `"{user-text}"` |  |
 | `ids.imported_task` | `"{phase}.{slug}"` |  |
 | `triggers.max_fires_per_hour` | `10` |  |
+| `rag.command` | `""` |  |
+| `rag.model_dir` | `""` |  |
+| `rag.timeout_s` | `60` |  |
 
 </details>
 <!-- ddflow:end README/knobs -->
@@ -5683,6 +5706,7 @@ knob with its value, source and documentation.
 | `importer` | Which files an import treats as plans, lessons, decisions, research, journals |
 | `export` | Which documents are generated, redaction, size limits, refresh |
 | `companions`, `mcp`, `loops`, `upgrade` | Companion tools, which MCP tools are exposed, loop detection, upgrade behaviour |
+| `rag` | The Embedder: the companion command, a local model directory, its timeout |
 | `[[macro]]` | Your own named prompt modes, exposed as slash commands and `ddflow prompts` |
 
 ### Prompts and workflow commands

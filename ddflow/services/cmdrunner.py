@@ -236,8 +236,10 @@ class CommandRunner:
         tick_s: float = 0,
         check_installed: bool = True,
         merge_stderr: bool = False,
+        stdin_text: str | None = None,
     ) -> CommandRun:
-        """Run ``declared``; with ``merge_stderr`` its stderr is folded into ``out``. Never raises for the command's own trouble.
+        """Run ``declared``; with ``merge_stderr`` its stderr is folded into ``out``, with
+        ``stdin_text`` it is fed that text on stdin (the embedder's JSON request). Never raises for the command's own trouble.
 
         An ``on_tick`` that fails is the caller's trouble: the process group is killed and
         the run is unavailable with the error, as a command that could not run.
@@ -245,7 +247,15 @@ class CommandRunner:
         if not isinstance(declared, Declared):
             raise TypeError("CommandRunner.run takes a Declared operator command, not a string")
         run = self._admitted(
-            declared.line, cwd, env, timeout_s, on_tick, tick_s, check_installed, merge_stderr
+            declared.line,
+            cwd,
+            env,
+            timeout_s,
+            on_tick,
+            tick_s,
+            check_installed,
+            merge_stderr,
+            stdin_text,
         )
         return self._clean(run)
 
@@ -306,6 +316,7 @@ class CommandRunner:
         tick_s: float,
         check_installed: bool,
         merge_stderr: bool = False,
+        stdin_text: str | None = None,
     ) -> CommandRun:
         if check_installed and (
             missing := executable_missing(
@@ -314,11 +325,21 @@ class CommandRunner:
         ):
             return _unavailable(line, MISSING, f"{missing!r} is not installed", missing=missing)
         if self.slots is None:
-            return self._run(line, cwd, env, timeout_s, on_tick, tick_s, 0.0, merge_stderr)
+            return self._run(
+                line, cwd, env, timeout_s, on_tick, tick_s, 0.0, merge_stderr, stdin_text
+            )
         try:
             with self.slots.hold(self.slot_limit, self.slot_wait_s) as slot:
                 return self._run(
-                    line, cwd, env, timeout_s, on_tick, tick_s, slot.waited_s, merge_stderr
+                    line,
+                    cwd,
+                    env,
+                    timeout_s,
+                    on_tick,
+                    tick_s,
+                    slot.waited_s,
+                    merge_stderr,
+                    stdin_text,
                 )
         except SlotsTimeout as exc:
             return _unavailable(line, BUSY, str(exc))
@@ -333,6 +354,7 @@ class CommandRunner:
         tick_s: float,
         waited_s: float,
         merge_stderr: bool = False,
+        stdin_text: str | None = None,
     ) -> CommandRun:
         ticking = on_tick is not None and tick_s > 0
         try:
@@ -344,6 +366,7 @@ class CommandRunner:
                 on_tick=on_tick if ticking else None,
                 tick_s=tick_s if ticking else 0,
                 merge_stderr=merge_stderr,
+                stdin_text=stdin_text,
             )
         except (OSError, ValueError) as exc:  # the keep-alive tick failed; the command is killed
             return _unavailable(line, COULD_NOT_RUN, f"could not execute: {exc}")
