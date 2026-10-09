@@ -18,12 +18,17 @@ protection of D-export. Nothing here prints; ``api.export`` wraps these into Out
 
 from __future__ import annotations
 
+import getpass
 from pathlib import Path
 from typing import Any
 
 from ...config import Config
 from ...core.model import State
+from ..configwrite import SetPairs, apply_edit
+from ..identity import is_agent
+from . import ops
 from . import registry as R
+from . import templates as T
 from . import write as W
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
@@ -39,7 +44,6 @@ def _is_agent(requested_agent: str, via_mcp: bool) -> str:
     """Why this call is an agent's, or "" for a person at a terminal. The MCP surface is
     always an agent; a CLI call is one under --agent, DDFLOW_AGENT or a harness's marker
     (the rule ``reviewers approve`` uses)."""
-    from ..identity import is_agent
 
     return is_agent(requested_agent, via_mcp)
 
@@ -52,7 +56,6 @@ def _locked(st: State, doc: str) -> dict[str, Any] | None:
 def _write_selection(
     repo: Path, pairs: list[tuple[str, object]], *, local: bool, agent: str
 ) -> list[tuple[str, object]]:
-    from ..configwrite import SetPairs, apply_edit
 
     res = apply_edit(repo, SetPairs(pairs), layer="local" if local else "file", agent=agent)
     if res.error:
@@ -78,7 +81,6 @@ def enable(
     Idempotent: enabling a selected document with the settings it already has changes
     nothing and records nothing. An agent's enable of a locked document is refused.
     """
-    from . import ops
 
     R.get(doc)  # unknown kind: refused, listing the kinds
     why_agent = _is_agent(requested_agent, via_mcp)
@@ -167,7 +169,6 @@ def disable(
     via_mcp: bool = False,
 ) -> dict[str, Any]:
     """Stop selecting ``doc`` (the file, if any, stays). ``lock`` is the operator's veto."""
-    from . import ops
 
     R.get(doc)
     why_agent = _is_agent(requested_agent, via_mcp)
@@ -247,8 +248,6 @@ def acknowledge(
         )
     docs = [r["doc"] for r in unacknowledged(st, cfg)]
     if docs:
-        import getpass
-
         try:
             user = getpass.getuser()
         except Exception:
@@ -290,7 +289,6 @@ def brief_line(st: State, cfg: Config) -> str:
 def doctor_notes(repo: Path, cfg: Config, st: State) -> list[str]:
     """Notes for ``doctor``: agent-enabled documents not yet acknowledged, and ejected
     templates older than the shipped default."""
-    from . import templates as T
 
     notes = [
         f"export: {r['doc']} was enabled by {r['by'] or '?'} at {str(r['at'])[:19]} and is not "

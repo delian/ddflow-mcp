@@ -36,6 +36,7 @@ import re
 import tomllib
 from collections import Counter
 from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import unquote
 
 from ..config import EnforceConfig
@@ -176,7 +177,6 @@ def check_docs(
     OSError when git cannot list the tree or a named document cannot be read: "could not tell" is
     never a clean report.
     """
-    from pathlib import Path
 
     root = Path(repo)
     files = _tree(root)
