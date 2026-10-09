@@ -5,8 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core import outcome as O
+from ..services import backfill as BF
+from ..services import ledger as LG
 from ..services import verify as V
+from ..services import verifypack as VP
 from ._base import _load
+from .knowledge import bug_found
+from .review import review
 
 _BUG_PREFIX = "verify: the completion of "
 
@@ -30,8 +35,6 @@ def verify(
     rep = V.check(repo, cfg, st, log.read_all(), item)
     data = rep.as_data()
     if not rep.completed:
-        from ..services import backfill as BF
-
         found = BF.find_commit(repo, st, item) if it.state != "done" else None
         if found:
             data["appears_landed"] = {"sha": found[0], "how": found[1]}
@@ -82,8 +85,6 @@ def verify_sweep(
     failing = [r for _, r in sw.worst if r.failed]
     filed: list[str] = []
     if file_bugs:
-        from .knowledge import bug_found
-
         already = {
             b.summary.split(" does not hold", 1)[0]
             for b in st.bugs.values()
@@ -152,7 +153,6 @@ def _reopen(log, rep, data: dict, *, reason: str, force: bool) -> O.Outcome:
 
 def pack(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     """The evidence pack for an independent verifier (`ddflow verify <id> --pack`)."""
-    from ..services import verifypack as VP
 
     log, cfg, st = _load(repo, agent)
     if item not in st.items or st.items[item].removed:
@@ -167,9 +167,6 @@ def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outc
     """Hand the pack to the configured different-family reviewer (gate `verify`) as the
     review's context, against the commit that landed. A finding is a requirement clause the
     evidence does not show as met; the outcome is recorded on the item like any review."""
-    from ..services import ledger as LG
-    from ..services import verifypack as VP
-    from .review import review
 
     log, cfg, st = _load(repo, agent)
     if item not in st.items or st.items[item].removed:

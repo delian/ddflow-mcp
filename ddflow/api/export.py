@@ -24,6 +24,7 @@ from ..services.export import registry as R
 from ..services.export import select as S
 from ..services.export import templates as T
 from ..services.export.query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
+from ._base import _load
 
 #: ``confirm(rel_path, unified_diff) -> bool``: the CLI asks on a terminal before --update.
 Confirm = Callable[[str, str], bool]
@@ -31,7 +32,6 @@ Confirm = Callable[[str, str], bool]
 
 def export_list(repo: Path, agent: str = "") -> O.Outcome:
     """Every document kind with its target, mode, state and who enabled it."""
-    from ._base import _load
 
     try:
         _log, cfg, st = _load(repo, agent)
@@ -78,7 +78,6 @@ def export_enable(
     via_mcp: bool = False,
 ) -> O.Outcome:
     """Select ``doc`` (no file is written). An agent may; the result says who and how to stop."""
-    from ._base import _load
 
     def run() -> O.Outcome:
         log, cfg, st = _load(repo, agent)
@@ -101,7 +100,6 @@ def export_disable(
     via_mcp: bool = False,
 ) -> O.Outcome:
     """Stop selecting ``doc``; ``lock`` (the operator's veto) keeps agents from enabling it."""
-    from ._base import _load
 
     def run() -> O.Outcome:
         log, cfg, st = _load(repo, agent)
@@ -116,7 +114,6 @@ def export_disable(
 
 def export_ack(repo: Path, *, agent: str = "") -> O.Outcome:
     """The operator has seen every document an agent enabled (refused under an agent)."""
-    from ._base import _load
 
     def run() -> O.Outcome:
         log, cfg, st = _load(repo, agent)

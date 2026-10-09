@@ -23,12 +23,12 @@ from ..core.plain import plain as _plain
 from ..services import gates as G
 from ..services import workflow as WF
 from ..services.configwrite import KeyRefused, SetPairs, apply_edit, gate_id_problem
+from ..services.gates import load_gates
+from ..services.review import load_reviewers
 from ._base import _load
 
 
 def _view(repo: Path):
-    from ..services.gates import load_gates
-    from ..services.review import load_reviewers
 
     _log, cfg, st = _load(repo)
     try:
@@ -90,7 +90,6 @@ def pipeline(
     repo: Path, which: str, gates: str, *, dry_run: bool = False, agent: str = ""
 ) -> O.Outcome:
     """Set the task or phase pipeline. Refuses an empty one, and an undefined gate."""
-    from ..services.gates import load_gates
 
     _log, cfg, _st = _load(repo)
     known = load_gates(repo, cfg)
@@ -158,7 +157,6 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") 
     never pass, so every item reaching it blocks forever. The check consults the
     EXISTING definition too, so `--into` on an already-defined gate is allowed.
     """
-    from ..services.gates import load_gates
 
     # Checked first for a plain answer; `apply_edit` refuses it again at the choke
     # point, for every other writer (B72b8adba30).
