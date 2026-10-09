@@ -307,9 +307,7 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
 
     from ddflow.surfaces import mcp as M
 
-    src = inspect.getsource(M.Server._dispatch)  # `handle` picks the era, then dispatches
-    read = src[src.index('if method == "resources/read"') :]
-    read = read[: read.index('if method == "prompts/list"')]
+    read = inspect.getsource(M.Server._m_resources_read)  # the `resources/read` handler
     assert "fold(" not in read, f"resources/read still folds the log itself:\n{read}"
     # One table (`RESOURCES`), read through one call; the table's entries go through the api.
     assert "RESOURCE_BY_URI" in read and read.count("resource.read(") == 1, (
