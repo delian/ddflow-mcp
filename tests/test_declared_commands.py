@@ -15,11 +15,11 @@ import sys
 import pytest
 
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.declared import knowledge, lifecycle, queue, records
+from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, rules
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle)
+FAMILIES = (knowledge, records, queue, lifecycle, rules)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -30,6 +30,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.records",
         "ddflow.surfaces.declared.queue",
         "ddflow.surfaces.declared.lifecycle",
+        "ddflow.surfaces.declared.rules",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -201,3 +202,26 @@ def test_a_priority_of_zero_over_mcp_is_filed_as_zero_like_the_command_line(repo
     default = TOOLS[tool]["api"](repo, {"id": "Z1", "title": "t"}, "agent")
     assert default.exit == 0, default.reason
     assert json.loads(run_cli(repo, "show", "Z1", "--json")[1])["priority"] == 100
+
+
+def test_rule_answers_exclude_each_other_and_a_bare_rule_lists():
+    parser = build_parser()
+    for argv in (
+        ["rule", "add", "--id", "r", "--title", "t", "--new", "--extends", "R1"],
+        ["rule", "add", "--id", "r", "--title", "t", "--check", "--related", "R1"],
+        ["rule", "edit", "r", "--new", "--related", "R1"],
+    ):
+        with pytest.raises(SystemExit) as stop:
+            parser.parse_args(argv)
+        assert stop.value.code == 2, argv
+    ns = parser.parse_args(["rule"])
+    assert (ns.rule_cmd, ns.tag, ns.scope) == ("list", "", "") and ns.fn.__name__ == "cmd_rule"
+    assert parser.parse_args(["rule", "add", "--id", "r", "--title", "t"]).priority is None
+
+
+def test_the_rule_tools_keep_their_deprecated_arguments_accepted_but_unadvertised():
+    for tool, old in (("ddflow_rule_list", {"json", "limit"}), ("ddflow_rule_remove", {"reason"})):
+        entry = TOOLS[tool]
+        assert set(entry["deprecated"]) == old and old <= set(entry["properties"])
+        command = next(c for c in DECLARED if c.tool == tool)
+        assert not old & set(command.input_schema()["properties"])
