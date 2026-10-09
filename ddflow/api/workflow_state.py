@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import workflow as WF
+from ..services.rules import RulesStorage
 from ._base import _load
 from .lifecycle.planning import plan_for
 
@@ -98,7 +99,6 @@ def _decisions(st) -> dict:
 
 
 def _rules(repo: Path) -> dict:
-    from ..services.rules import RulesStorage
 
     rules = RulesStorage(repo).list()
     by_scope: dict[str, int] = {}

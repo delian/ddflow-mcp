@@ -17,22 +17,45 @@ from __future__ import annotations
 
 import json
 import threading
+import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..config import csv_list
+from ..config import Config, ReviewConfig, csv_list
 from ..core import outcome as O
+from ..core.model import fold
+from ..infra import git as G
 from ..infra import tomlcfg as TC
+from ..infra import worktree as W
+from ..infra.log import EventLog
 from ..services import backups as BK
+from ..services import claudehooks as CH
+from ..services import compaction as CP
+from ..services import companions as CO
+from ..services import configwrite as CW
+from ..services import enforce as E
+from ..services import help as H
 from ..services import hookio as HI
 from ..services import identity as ID
+from ..services import launchers as LA
+from ..services import prompts as P
+from ..services import sessions as S
 from ..services import upgrade_apply as UA
 from ..services import upgrade_notice as UN
 from ..services import upgrade_plan as UP
 from ..services import upgrade_start as US
+from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, init_files, refresh_docs
+from ..services.configwrite import bare_id_problem
+from ..services.macros import macro_problems
+from ..services.prompts import TemplateError
+from ..views import human
+from ..views import human as _human
 from ._base import _load
+from .knowledge import session_note
+from .lifecycle import brief
+from .operations import cadence, external_sync
 
 
 def _scan(repo: Path, *, probe: bool = True):
@@ -42,7 +65,6 @@ def _scan(repo: Path, *, probe: bool = True):
     value; letting its `ValueError` escape renders that sentence as an uncaught exception
     and makes the exit code an accident rather than a contract.
     """
-    from ..services import companions as CO
 
     try:
         return CO.scan(repo, probe=probe)
@@ -61,7 +83,6 @@ def companions(repo: Path, *, no_probe: bool = False, agent: str = "") -> O.Outc
     reported as itself. NEVER exit 1: a missing optional server is a gap to close, not a
     failure of this command.
     """
-    from ..services import companions as CO
 
     statuses = _scan(repo, probe=not no_probe)
     if isinstance(statuses, O.Outcome):
@@ -112,7 +133,6 @@ def companions_verify(repo: Path, ids: str = "", *, agent: str = "") -> O.Outcom
     FACT: absent, exited, or answered something that is not a JSON-RPC response); 2 when
     nothing could be launched or one could not be told (no answer in time).
     """
-    from ..services import companions as CO
 
     statuses = _scan(repo, probe=True)
     if isinstance(statuses, O.Outcome):
@@ -191,7 +211,6 @@ def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = 
     Four refusals, and the distinction between the last two is the one that matters — see
     the module docstring.
     """
-    from ..services import companions as CO
 
     reg = reg or Registration()
     statuses = _scan(repo, probe=True)
@@ -216,7 +235,6 @@ def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = 
         )
     # The id is the server's key in an agent's config: `a.b` wrote [mcp_servers.a.b], a
     # nested table, not a server (D-plain-keys, B7a1ed66cb9).
-    from ..services.configwrite import bare_id_problem
 
     if bad := [
         p
@@ -344,7 +362,6 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     An append is validated against the MERGED text — see the module docstring for why
     validating what is already on disk checks nothing.
     """
-    from ..services import configwrite as CW
 
     edit = edit or ConfigEdit()
     _log, cfg, _st = _load(repo, agent)
@@ -391,8 +408,6 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             text=f"appended to {res.path}" + _said(res.attributes_added),
         )
 
-    from ..views import human
-
     rows = [
         {"key": k, "value": v, "source": s, "doc": d}
         for k, v, s, d in cfg.explain()
@@ -409,7 +424,6 @@ _BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed", "review.delta_default"
 def _budget_keys(edit: ConfigEdit) -> list[str]:
     """The `review.*` knobs this edit sets, parsed (not substring-matched): quoting,
     spacing and a commented-out header do not change what TOML says."""
-    import tomllib
 
     def norm(k: str) -> str:
         return ".".join(seg.strip().strip("\"'") for seg in k.split("."))
@@ -444,7 +458,6 @@ def report_budget_change(
     touched = _budget_keys(edit)
     if not touched:
         return out
-    from ..config import ReviewConfig
 
     default = ReviewConfig()
     layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
@@ -460,7 +473,6 @@ def report_budget_change(
         f"{str(default.delta_default).lower()}. If you did not ask for this, "
         f"revert it with {revert}. Recorded as a session note."
     )
-    from .knowledge import session_note
 
     session_note(repo, "", note, agent=agent)
     out.data["text"] = (out.data.get("text") or "") + "\n" + note
@@ -477,8 +489,6 @@ def _worktree_drift(repo: Path, here: Path) -> str:
     gate (`enforce.check_drift`, which BLOCKS) reads too -- two copies of "behind" and
     "which rules" would disagree about the same tree.
     """
-    from ..infra import worktree as W
-    from ..services import enforce as E
 
     # Outside any git tree there is no branch to be behind, and nothing to say.
     if not W.git(here, "rev-parse", "--show-toplevel").ok:
@@ -501,8 +511,6 @@ def _check_msg(repo: Path, cfg, msg_file: str) -> O.Outcome:
     for `check-commit`, so a commit in a linked worktree is checked against the one
     queue every worktree shares.
     """
-    from ..infra import git as G
-    from ..services import enforce as E
 
     data: dict[str, Any] = {"message": "", "installed": True, "policy": ""}
     forbidden = list(cfg.enforce.forbidden_trailers)
@@ -550,11 +558,6 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
     """What the PreCompact hook does (B195): record the transcript's last turns as a
     session note. NEVER blocks or fails a compaction -- the exit is always 0 and nothing
     is printed (a `decision` on stdout would block it)."""
-    import json
-
-    from ..config import Config
-    from ..core.model import fold
-    from ..services import compaction as CP
 
     try:
         payload = json.loads(stdin) if stdin.strip() else {}
@@ -575,10 +578,6 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
 def _after_compaction(repo: Path, stdin: str) -> list[str]:
     """The SessionStart lines for `source: compact`: the digest PreCompact recorded, or
     a request to write one when none landed. [] for any other start or any problem."""
-    import json
-
-    from ..infra.log import EventLog
-    from ..services import compaction as CP
 
     try:
         payload = json.loads(stdin) if stdin.strip() else {}
@@ -586,7 +585,6 @@ def _after_compaction(repo: Path, stdin: str) -> list[str]:
         return []
     if not isinstance(payload, dict) or payload.get("source") != "compact":
         return []
-    from ..config import Config
 
     cfg = Config.load(repo)
     if cfg.session.compaction_digest_chars <= 0:
@@ -612,7 +610,6 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     A hook that fails at session start blocks nothing useful and teaches the operator to
     remove it. Every failure becomes one line of text saying what to run instead.
     """
-    from .lifecycle import brief
 
     parts = ["# ddflow session start", ""]
     try:
@@ -628,7 +625,6 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     try:
         # Work waiting on a sibling repository becomes ready the moment its dependency
         # is observed done, and session start is when an agent decides what to take.
-        from .operations import external_sync
 
         ext = external_sync(repo, agent=agent)
         changed = [o for o in ext.data.get("observed", []) if o["changed"]]
@@ -643,8 +639,6 @@ def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     except Exception as exc:
         parts += [f"_(external sync failed: {exc})_", ""]
     try:
-        from .operations import cadence
-
         due = cadence(repo, agent=agent)
         if due.exit == O.FAIL:
             parts += [f"_(cadence check failed: {due.reason})_", ""]
@@ -722,8 +716,6 @@ def _companion_lines(repo: Path) -> list[str]:
     NEVER probes: a session start must not wait on `npx`, so an unprobed companion says
     "not checked", which is not "missing"."""
     try:
-        from ..services import companions as CO
-
         gaps = CO.actionable(CO.scan(repo, probe=False))
     except Exception as exc:
         return ["", f"_(companions not read: {exc}; run `ddflow companions`)_"]
@@ -777,7 +769,6 @@ def _state_line(known: tuple[bool | None, str], missing: str) -> str:
 
 
 def _prompt_hook_line(repo: Path) -> str:
-    from ..services import claudehooks as CH
 
     names = {"claude": "Claude Code", "gemini": "Gemini CLI"}
     return "; ".join(
@@ -788,7 +779,6 @@ def _prompt_hook_line(repo: Path) -> str:
 
 
 def _precompact_line(repo: Path) -> str:
-    from ..services import claudehooks as CH
 
     return _state_line(
         CH.state_spec(repo, CH.spec("claude", "pre-compact")),
@@ -798,8 +788,6 @@ def _precompact_line(repo: Path) -> str:
 
 def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list[str]:
     """Install or remove every table hook of the named harnesses (`claudehooks.HOOKS`)."""
-    from ..services import claudehooks as CH
-    from ..services import enforce as E
 
     want = {"claude": claude, "gemini": gemini}
     msgs: list[str] = []
@@ -819,8 +807,6 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
 def _prompt_core(repo: Path, agent: str, session_id: str, text: str, model: str) -> O.Outcome:
     """Record one operator prompt (redacted inside `sessions.capture_prompt`). Raises on a
     problem; both callers turn that into a quiet `skipped`."""
-    from ..config import Config
-    from ..services import sessions as S
 
     cfg = Config.load(repo)
     # A short lock wait: the hook must not make the operator's turn wait on a busy log.
@@ -845,7 +831,6 @@ def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
 
     Redaction happens inside `sessions.capture_prompt`, before the event is built.
     """
-    import json
 
     try:
         payload = json.loads(stdin) if stdin.strip() else {}
@@ -966,8 +951,6 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
 
 def _hooks_status(repo: Path, cfg) -> O.Outcome:
     """What is installed, and whether the installed hook and the policy agree."""
-    from ..services import claudehooks as CH
-    from ..services import enforce as E
 
     commit_hook = E.armed(repo, "pre-commit")
     on = bool(commit_hook.via)
@@ -1016,7 +999,6 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         f"Claude Code PreCompact hook: {_precompact_line(repo)}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
-    from ..services import launchers as LA
 
     dangling = LA.findings(repo)
     if dangling:
@@ -1070,8 +1052,6 @@ def hooks(
     one. `session-start` is what the first runs; `prompt` records the operator's prompt
     from the hook's JSON on `stdin`.
     """
-    from ..services import claudehooks as CH
-    from ..services import enforce as E
 
     if action == "run":
         return _run_hook(repo, event, harness, agent, stdin)
@@ -1086,7 +1066,6 @@ def hooks(
         # log up front cost ~120 ms on a 5k-event log whether or not a trailer needed the
         # queue. `queue_ids` reads it only when a trailer names an item, from the index
         # when that is current. Nothing here needs the resolved identity.
-        from ..config import Config
 
         return _check_msg(repo, Config.load(repo), msg_file)
     _log, cfg, _st = _load(repo, agent)
@@ -1318,12 +1297,9 @@ def prompts(
     `prompts/get` serves it -- arguments bound, a macro's parameters required, its tool
     preamble on top -- through the same `prompts.render_command` (B5a2a2933c9).
     """
-    from ..services import prompts as P
 
     _log, cfg, _st = _load(repo, agent)
     overrides = P.overrides_from(cfg)
-
-    from ..services.macros import macro_problems
 
     # Every configured macro that is NOT loaded, and why -- on the surface an operator
     # reads, not only in doctor (B-macro-clash-silent).
@@ -1423,8 +1399,6 @@ def help_topic(
     renderer may not reach up for the tool registry, and the generated capability inventory
     must come from the LIVE table rather than a hand-kept second copy.
     """
-    from ..services import help as H
-    from ..services.prompts import TemplateError
 
     try:
         text = H.render_topic(topic, repo) if topic else H.render_index(repo, tools=tools or {})
@@ -1439,7 +1413,6 @@ def init_project(repo: Path, *, agent: str = "", called_from: Path | None = None
     The same `services.adopt.init_files` that `setup` runs as its first step, so `init`,
     `adopt` and `ddflow_setup` cannot disagree about what an initialised project is.
     """
-    from ..services.adopt import init_files
 
     del agent  # identity is not needed to create files; accepted for surface symmetry
     tree = files_tree(repo, called_from)  # committed files: the caller's tree, as `setup`
@@ -1471,7 +1444,6 @@ def files_tree(repo: Path, called_from: Path | None) -> Path:
     for a claim), which is still the caller's checkout here, and it does not ask whether
     the tree belongs to `repo` at all.
     """
-    from ..infra import worktree as W
 
     if called_from is None:
         return Path(repo)
@@ -1504,7 +1476,6 @@ def setup(
     this design exists to prevent. Detection only; nothing is installed, because fetching
     and running code on someone's machine is not a thing a work-queue tool gets to do.
     """
-    from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, refresh_docs
 
     plan = plan or Adoption()
     _log, cfg, _st = _load(repo, agent)
@@ -1517,7 +1488,6 @@ def setup(
             actions = refresh_docs(tree, docs_dir=plan.docs)
         except ValueError as exc:
             return O.failed("setup", str(exc), actions=[], agents=[], text="")
-        from ..views import human as _human
 
         data = {
             "actions": actions,
@@ -1555,7 +1525,6 @@ def setup(
         if not st.is_gap:
             continue
         (ready if st.state == "installed" else absent).append(st.companion.id)
-    from ..views import human
 
     data = {
         "actions": actions,
