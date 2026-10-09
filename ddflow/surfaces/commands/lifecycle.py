@@ -148,22 +148,19 @@ def cmd_claim(a, c: Ctx) -> int:
         msg += f"\n  {d['port_advice']}"
     if d.get("guidance"):
         msg += "\n\n" + d["guidance"].rstrip()
-    c.out(
-        msg,
-        out.body(
-            (
-                "item",
-                "holder",
-                "worktree",
-                "branch",
-                "base",
-                "rebound",
-                "port",
-                "port_advice",
-                "globs",
-            )
-        ),
+    fields = (
+        "item",
+        "holder",
+        "worktree",
+        "branch",
+        "base",
+        "rebound",
+        "port",
+        "port_advice",
+        "globs",
     )
+    # `guidance` only when something governs the item: the body is what it was otherwise.
+    c.out(msg, out.body(fields + (("guidance",) if d.get("guidance") else ())))
     return OK
 
 
