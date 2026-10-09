@@ -4800,7 +4800,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 202): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 204): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5299,7 +5299,7 @@ declared once and persists — see
 
 ## Configuration
 
-202 knobs across 29 sections, every one documented in place and listed, with its default
+204 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console

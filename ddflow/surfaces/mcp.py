@@ -1360,10 +1360,14 @@ def _upgrade_line(repo: Path, agent: str) -> str:
     the project -> what the start did and the proposal the operator is asked about. Else the
     one-line notice, said once per version on this machine, per project
     (`services.upgrade_notice`). A courtesy that can never fail a connect."""
-    try:
-        notice = _api().upgrade_start(repo, agent=agent) or _api().upgrade_notice(repo, agent=agent)
-    except Exception:
-        return ""
+    notice = ""
+    for name in ("upgrade_start", "upgrade_notice"):
+        try:  # each on its own: a start report that fails must not silence the notice
+            notice = getattr(_api(), name)(repo, agent=agent)
+        except Exception:
+            continue
+        if notice:
+            break
     return f"\n\n{notice}" if notice else ""
 
 

@@ -1474,11 +1474,12 @@
           project is reported, never written. The environment variable
           `DDFLOW_UPGRADE_ON_START` (`off`, `check` or `safe`) overrides this knob for
           one run, e.g. `docker run -e DDFLOW_UPGRADE_ON_START=check`; an unknown
-          value counts as `check`. An unrecognised value in a config file is warned
-          about, reported by `doctor` and falls back to 'check', the strictest (a bad
-          value proposes the upgrade and writes nothing); `config --set`,
-          `ddflow_configure` and the environment refuse it, and so does loading
-          ddflow's own source tree, where the file and the code are one commit.
+          value there counts as `check` (it is not refused, so a container still
+          starts). An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'check', the strictest (a bad value proposes the
+          upgrade and writes nothing); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
       upgrade.start_timeout_s = 10.0   [default]
           Seconds a starting MCP server or container spends on the `on_start` work
           before it serves anyway and reports the rest as pending (decision D-self-
