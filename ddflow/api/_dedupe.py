@@ -30,6 +30,7 @@ from typing import Any
 from ..config import Config
 from ..core import outcome as O
 from ..core import textsim
+from ..services import searchcore as SC
 
 #: What an add can be answered with. ``new``: not a duplicate, record it. The others point
 #: at an existing record (``Answer.target``).
@@ -281,7 +282,7 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
     try:
         store = Store(repo, cfg)
         store.ensure(log)
-        with sim.open_store(store) as matcher:
+        with SC.matcher(store) as matcher:
             record = {
                 "id": rec.rid,
                 "kind": rec.kind,
