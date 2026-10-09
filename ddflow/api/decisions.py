@@ -23,6 +23,7 @@ from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.plain import plain as _plain
 from ..infra.store import Store
+from ..services import searchcore as SC
 from ..services.export.query import ExportError, _cutoff
 from ..services.guidance.kinds import governing
 from ._base import _load
@@ -213,7 +214,7 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
 def decision_search(repo: Path, query: str, *, limit: int = 20) -> O.Outcome:
     """Free-text search across decisions."""
     log, cfg, _st = _load(repo)
-    hits = _store(repo, log, cfg).search("decisions", query, limit)
+    hits = SC.search_table(_store(repo, log, cfg), "decisions", query, limit)
     data: dict[str, Any] = {"query": query, "hits": hits, "count": len(hits)}
     if not hits:
         return O.nothing("decision.search", "no matching decisions", **data)
