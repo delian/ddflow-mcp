@@ -267,7 +267,7 @@ def test_an_optional_positional_is_optional_on_both_surfaces():
     assert root.parse_args(["x", "add", "S"]).session == "S"
     with pytest.raises(ValueError, match="nargs is for a positional"):
         Param("p", nargs="?")
-    with pytest.raises(ValueError, match="only nargs='\\?'"):
+    with pytest.raises(ValueError, match="only nargs='\\?' or"):
         Param("p", positional=True, nargs="+")  # argparse requires it; the schema would not
 
 
