@@ -12,7 +12,7 @@ from ...infra import worktree as W
 from ...services import changes as CH
 from ...services import gates as G
 from ...services.cleanup import dispose_tree, record_item_removed  # noqa: F401  (re-exported)
-from ...services.gates import measured as R
+from ...services.gates import measured as GM
 from .._base import _load
 from ._common import _require
 from .claim import callers_tree
@@ -139,7 +139,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
         if r.attempted:  # a refused precondition says nothing about this branch
-            R.record_merge(
+            GM.record_merge(
                 log,
                 cfg,
                 repo,
@@ -183,7 +183,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         (back_merged if br.ok else back_failed).append(
             extra if br.ok else f"{extra}: {br.err or br.out}"
         )
-    human_gate = R.record_merge(
+    human_gate = GM.record_merge(
         log,
         cfg,
         repo,
