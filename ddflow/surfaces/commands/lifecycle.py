@@ -146,6 +146,8 @@ def cmd_claim(a, c: Ctx) -> int:
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
+    if d.get("guidance"):
+        msg += "\n\n" + d["guidance"].rstrip()
     c.out(
         msg,
         out.body(

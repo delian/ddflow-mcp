@@ -34,6 +34,7 @@ from ..services import gates as G
 from ..services import testselect as TS
 from ..services.gates import measured as R
 from ..services.gates.reviewers import run_watching_git
+from ..services.guidance import inject as GI
 from ._base import _load
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
@@ -90,6 +91,17 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             # The gate is still named and still has a prompt; losing the FORMATTING of
             # the instruction must not lose the instruction.
             lines.append(f"\n{gd.title}: {gd.prompt}   [template error: {exc}]")
+    if gd and not s.complete:
+        governing = GI.for_item(
+            cfg,
+            st,
+            item,
+            gate=s.current,
+            budget=GI.door_budget(cfg),
+            heading=f"## Guidance that governs the {s.current} gate",
+        )
+        if governing.text:
+            lines.append("\n" + governing.text.rstrip())
     if s.unavailable:
         lines.append(
             f"\n  NOTE: {', '.join(s.unavailable)} did not run. "

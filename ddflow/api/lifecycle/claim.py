@@ -14,6 +14,7 @@ from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
 from ...services import leases as L
+from ...services.guidance import inject as GI
 from .._base import _load
 from .planning import alternatives_offer
 from .reservations import _reserved_for, _reserved_msg
@@ -360,8 +361,18 @@ def claim(
         port = (
             PT.apply(repo, cfg, log, st, item, wt.path) if ours else PT.manual(repo, cfg, st, item)
         )
+    guidance = GI.for_work(
+        cfg,
+        st,
+        lz.globs,
+        target_item.tags if target_item is not None else (),
+        budget=GI.door_budget(cfg),
+        heading="## Guidance that governs this item",
+    ).text
     return O.ok(
         "item.claimed",
+        # Only when something governs the item: the key is absent otherwise, as it always was.
+        **({"guidance": guidance} if guidance else {}),
         port=port,
         port_advice=PT.advice(port, item) if port else "",
         item=item,
