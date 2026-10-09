@@ -688,7 +688,8 @@ class Server:
         """Answer one JSON-RPC message: the method's own handler, else `method not found`.
 
         One handler per method (`_METHODS`), each taking the message and the era it was
-        sent in; none reads the connection's era, only what the message declares."""
+        sent in. The era is the message's own; only `_structured` falls back on the
+        protocol a legacy connection negotiated at `initialize`."""
         method = msg.get("method", "")
         handler = self._METHODS.get(method)
         if handler is None:
