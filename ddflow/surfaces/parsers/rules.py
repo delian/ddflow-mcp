@@ -10,7 +10,8 @@ from ..commands.ci import add_ci_parser
 from ..commands.onboard import add_onboard_parser
 from ..commands.rule_sync import cmd_rule_sync
 from ..commands.rules import cmd_rule
-from ..commands.verify import add_verify_parser
+from ..commands.verify import cmd_verify
+from ..declared.review import BY_TOOL as _REVIEW_BY_TOOL
 from ..declared.rules import COMMANDS
 from ..registry import add_commands
 
@@ -39,6 +40,6 @@ def register(s: argparse._SubParsersAction) -> None:
     next(a for a in ru._actions if isinstance(a, argparse._SubParsersAction)).required = False
     ru.set_defaults(fn=cmd_rule, rule_cmd="list", tag="", scope="")
 
-    add_verify_parser(s)
+    add_commands(s, [_REVIEW_BY_TOOL["ddflow_verify"]], handlers={("verify",): cmd_verify})
     add_ci_parser(s)
     add_onboard_parser(s)

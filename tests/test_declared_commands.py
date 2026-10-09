@@ -15,11 +15,11 @@ import sys
 import pytest
 
 from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, rules
+from ddflow.surfaces.declared import knowledge, lifecycle, queue, records, review, rules
 from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
-FAMILIES = (knowledge, records, queue, lifecycle, rules)
+FAMILIES = (knowledge, records, queue, lifecycle, rules, review)
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
 
@@ -31,6 +31,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.queue",
         "ddflow.surfaces.declared.lifecycle",
         "ddflow.surfaces.declared.rules",
+        "ddflow.surfaces.declared.review",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
     ],
@@ -164,6 +165,7 @@ def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
         "ddflow_gate_run",
         "ddflow_gate_record",
         "ddflow_merge",
+        "ddflow_review",
     }
 
 
@@ -250,3 +252,23 @@ def test_a_rule_search_limit_of_zero_over_mcp_returns_nothing_like_the_command_l
         assert out.exit == 0, out.reason
     assert search(repo, {"query": "naming", "limit": 0}, "a").data["count"] == 0
     assert search(repo, {"query": "naming"}, "a").data["count"] == 3
+
+
+def test_review_is_one_parser_for_the_run_and_for_triage():
+    parser = build_parser()
+    run = parser.parse_args(["review", "I", "--gate", "critic", "--chunk", "2", "--chunk", "3,4"])
+    assert (run.id, run.chunk, run.finding) == (["I"], ["2", "3,4"], None)
+    triage = parser.parse_args(["review", "triage", "I", "--finding", "2", "--refuted"])
+    assert (triage.id, triage.finding, triage.refuted) == (["triage", "I"], 2, True)
+    assert parser.parse_args(["review"]).id == []  # the handler says what is missing
+    entry = TOOLS["ddflow_review"]
+    assert entry["wants_called_from"] and entry["wants_progress"] and entry["text"] is True
+    assert entry["properties"]["id"][2] is True  # required on the tool, not on the command line
+    assert TOOLS["ddflow_review_triage"]["properties"]["probe"][2] is True
+
+
+def test_verify_takes_an_optional_id_and_the_sweep_flags():
+    ns = build_parser().parse_args(["verify", "--all", "--phase", "P", "--limit", "3", "--judge"])
+    assert (ns.id, ns.all, ns.phase, ns.limit, ns.judge) == ("", True, "P", 3, True)
+    assert "all" not in TOOLS["ddflow_verify"]["properties"]  # a sweep is what omitting id means
+    assert TOOLS["ddflow_verify"]["properties"]["id"][2] is False
