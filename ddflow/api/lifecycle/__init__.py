@@ -112,7 +112,6 @@ from .merge import (  # noqa: F401
     _lands_nothing,
     _open_request,
     _outside_globs,
-    _record_merge_gate,
     _refresh_documents,
     _scope_fields,
     _stands_in,

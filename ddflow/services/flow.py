@@ -36,6 +36,7 @@ from . import completion as CM
 from . import gates as G
 from . import leases as L
 from .cleanup import dispose_tree
+from .gates import measured as GR
 
 
 def _state(log: EventLog) -> State:
@@ -386,12 +387,15 @@ def _settle_merged(
     W.fetch(repo, cfg.flow.remote, info.base)
     landed = _landing(repo, cfg, info, base_before)
     log.append("worktree.merged", it.id, {"sha": sha, "branch": it.branch, **landed})
-    G.record(
+    # A human `merge` gate is the person's to clear: nothing is recorded, and the merge,
+    # which is a fact, still settles below.
+    GR.record_merge(
         log,
         cfg,
-        it.id,
-        "merge",
+        repo,
+        it,
         "passed",
+        gates=G.load_gates(repo, cfg),
         evidence={
             "pr": info.url,
             "merge_sha": info.merge_sha,
@@ -399,7 +403,6 @@ def _settle_merged(
             "review": info.review,
             "checks": info.checks,
         },
-        gates=G.load_gates(repo, cfg),
     )
     rep.changes.append(Change(it.id, "merged", f"into {info.base}", info.url))
     line = F.effective_line(_state(log), it)
