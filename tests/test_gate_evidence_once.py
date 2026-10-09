@@ -9,6 +9,7 @@ every value are checked against what the two sites used to write.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -92,10 +93,45 @@ def test_record_with_an_output_file_keeps_the_same_evidence_and_its_own_extras(r
     assert ev["output_file"] == str(out), "the file's own path is still recorded beside it"
 
 
-def test_there_is_one_builder_in_the_source() -> None:
+def test_the_values_themselves_are_pinned_not_only_their_agreement() -> None:
+    """Literal expectations, so a change to `digest` or `summary_lines` shows here too."""
+    assert R.output_evidence("ok\n") == {
+        "output_digest": "ff0f972446b0b858",
+        "output_bytes": 3,
+        "tail": "ok\n",
+        "summary": [],
+    }
+    assert R.output_evidence("115 failed, 3 passed\nnoise\n112 passed in 4s\n") == {
+        "output_digest": "6bab880599228cce",
+        "output_bytes": 44,
+        "tail": "115 failed, 3 passed\nnoise\n112 passed in 4s\n",
+        "summary": ["112 passed in 4s"],
+    }
+    assert R.OUTPUT_TAIL_CHARS == 2000
+
+
+def _writes_of_output_bytes() -> list[str]:
+    """Where under ddflow/ a dict literal or a subscript assignment SETS ``"output_bytes"``,
+    the size of a command's output, which only the evidence of that output carries (reading
+    it back, as `verify` does, is not building it; a review transcript's digest is another
+    thing and has no size)."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    sites = []
-    for path in (root / "api" / "gates.py", root / "services" / "gates" / "runner.py"):
-        text = path.read_text()
-        sites += [(path.name, ln) for ln in text.splitlines() if '"output_digest"' in ln]
-    assert len(sites) == 1 and sites[0][0] == "runner.py", sites
+    found = []
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text("utf-8"))):
+            dict_key = isinstance(node, ast.Dict) and any(
+                isinstance(k, ast.Constant) and k.value == "output_bytes" for k in node.keys
+            )
+            sub_store = isinstance(node, ast.Subscript) and (
+                isinstance(node.ctx, ast.Store)
+                and isinstance(node.slice, ast.Constant)
+                and node.slice.value == "output_bytes"
+            )
+            if dict_key or sub_store:
+                found.append(f"{path.relative_to(root)}:{node.lineno}")
+    return found
+
+
+def test_there_is_one_builder_in_the_source() -> None:
+    sites = _writes_of_output_bytes()
+    assert len(sites) == 1 and sites[0].startswith("services/gates/runner.py"), sites
