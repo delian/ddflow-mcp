@@ -137,8 +137,11 @@ def evidence_problems(
 
 def _report_problem(evidence: Mapping[str, Any]) -> str:
     # An attached output that is empty or only whitespace (`--output-file /dev/null`) digests
-    # to a value like any other, but it reports nothing: `output_evidence` marks it.
-    empty = evidence.get("output_blank") is True or evidence.get("output_bytes") == 0
+    # to a value like any other, but it reports nothing. `output_evidence` keeps the last
+    # characters of the output as `tail`: blank, the output ends in nothing worth reading,
+    # and when it is no longer than that tail the whole of it is blank.
+    tail = evidence.get("tail")
+    empty = evidence.get("output_bytes") == 0 or (isinstance(tail, str) and not tail.strip())
     if any(_filled(evidence.get(k)) and not (empty and k == "output_digest") for k in REPORT_KEYS):
         return ""
     return "a report: attach the output (`--output-file`, not blank) or name its digest"
