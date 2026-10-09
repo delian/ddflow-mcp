@@ -75,7 +75,7 @@ def surface(environ: Mapping[str, str] | None = None) -> str:
     env = os.environ if environ is None else environ
     # Exactly what our image sets and `infra.container.in_container` trusts first: `1`. A
     # stray `true` or `0` is no container, and only a container may apply without asking.
-    return "container" if str(env.get(CONTAINER_ENV, "")).strip() == "1" else "mcp"
+    return "container" if env.get(CONTAINER_ENV) == "1" else "mcp"
 
 
 def mode(cfg: Config, environ: Mapping[str, str] | None = None) -> str:
