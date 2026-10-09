@@ -261,8 +261,13 @@ def tree_identity(cwd: Path) -> str:
 def recorded_content(tree_sha: str, source_tree_field: str = "") -> str:
     """The content id a recorded identity names, or "" when it names none: the
     ``source_tree`` field an older gate recorded beside its fingerprint, else the ``st:...``
-    a `tree_identity` carries. A clean or fingerprint-spelled ``tree_sha`` names a commit,
-    which the caller reads as a tree."""
+    a `tree_identity` carries.
+
+    "" is NOT "the commit's own tree" except for a clean spelling: the caller reads
+    ``<head>+clean`` as HEAD's tree, and a fingerprint-spelled dirty value (evidence from
+    before this identity, or the fallback `tree_identity` emits when no manifest can be
+    taken) as an opaque digest that only an equal fingerprint of the tree can vouch for.
+    """
     if source_tree_field:
         return source_tree_field
     _base, _sep, dirt = tree_sha.partition("+")
