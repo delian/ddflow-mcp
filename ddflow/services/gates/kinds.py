@@ -136,12 +136,14 @@ def evidence_problems(
 
 
 def _report_problem(evidence: Mapping[str, Any]) -> str:
-    # An attached output that is empty (`--output-file /dev/null`) digests to a value like any
-    # other, but it reports nothing.
-    empty = evidence.get("output_bytes") == 0
+    # An attached output that is empty or only whitespace (`--output-file /dev/null`) digests
+    # to a value like any other, but it reports nothing. The tail is the whole output
+    # whenever it is no longer than the tail ddflow keeps.
+    size, tail = evidence.get("output_bytes"), str(evidence.get("tail") or "")
+    empty = size == 0 or (isinstance(size, int) and size <= len(tail) and not tail.strip())
     if any(_filled(evidence.get(k)) and not (empty and k == "output_digest") for k in REPORT_KEYS):
         return ""
-    return "a report: attach the output (`--output-file`, not empty) or name its digest"
+    return "a report: attach the output (`--output-file`, not blank) or name its digest"
 
 
 def _link_problem(
