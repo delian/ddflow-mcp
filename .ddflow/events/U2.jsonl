@@ -4842,3 +4842,9 @@
 {"agent":"U2","data":{"at":1791529145.8263116,"holder":"U2"},"id":"ebae0df94635af785c7552e1e","kind":"lease.renewed","lamport":47780,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T06:59:05.941524Z"}
 {"agent":"U2","data":{"at":1791529167.4819968,"holder":"U2"},"id":"e7e3c3a54d370a52c023b9c40","kind":"lease.renewed","lamport":47786,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T06:59:27.596891Z"}
 {"agent":"U2","data":{"at":1791529188.76564,"holder":"U2"},"id":"eade5b9d2c638f3f4e959d216","kind":"lease.renewed","lamport":47789,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T06:59:48.884260Z"}
+{"agent":"U2","data":{"at":1791529209.8448646,"holder":"U2"},"id":"e5268039a2d0760cda1e66cd8","kind":"lease.renewed","lamport":47793,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T07:00:09.962574Z"}
+{"agent":"U2","data":{"at":1791529230.9752626,"holder":"U2"},"id":"e45dd1d511c6d2b22594036d2","kind":"lease.renewed","lamport":47795,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T07:00:31.093448Z"}
+{"agent":"U2","data":{"at":1791529252.1281447,"holder":"U2"},"id":"e8b9c4803571b50ad0c668161","kind":"lease.renewed","lamport":47796,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T07:00:52.252563Z"}
+{"agent":"U2","data":{"at":1791529273.201374,"holder":"U2"},"id":"edbf9deb93f9eb13369f66fe0","kind":"lease.renewed","lamport":47798,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T07:01:13.312495Z"}
+{"agent":"U2","data":{"at":1791529293.8958638,"holder":"U2"},"id":"eacbe1fea3257a023ac7fd29e","kind":"lease.renewed","lamport":47800,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T07:01:34.007160Z"}
+{"agent":"U2","data":{"at":1791529316.49934,"holder":"U2"},"id":"e5a06f4fdc1324acc771c09ad","kind":"lease.renewed","lamport":47802,"schema":1,"subject":"6i-export.1-parsers","ts":"2026-10-09T07:01:56.609585Z"}
