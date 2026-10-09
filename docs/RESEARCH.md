@@ -1518,7 +1518,8 @@ This is the data the harness descriptors (B-hx-descriptor) and the hook core
 **Claim.** The hook systems of the agents that have one are expressible as a small number
 of styles: (A) the Claude shape `{hooks:{Event:[{matcher,hooks:[{type:command}]}]}}` with
 snake_case stdin carrying `session_id` (Claude, Codex, Qwen, Kimi, Devin, OpenHands,
-Copilot PascalCase form, Grok Build); (B) Gemini nesting with different event names
+Copilot PascalCase form; Grok Build is the same nesting and event names but camelCase
+stdin `sessionId`, so it needs its own normalizer inside style A); (B) Gemini nesting with different event names
 (Gemini, Tabnine); (C) own shape: Copilot camelCase, Cursor, Cline, Windsurf Cascade,
 Antigravity, Goose, Crush; (D) in-process plugins with no command hooks (opencode, Kilo,
 Amp). Session start context injection works natively on a subset only, so the fallback
@@ -1640,23 +1641,24 @@ raw markdown or source, not from a summary.
 ### What this changes for the design
 
 1. **Session start context.** Native hook injection exists for Claude, Codex, Gemini,
-   Qwen, Devin, Kimi, OpenHands, Tabnine, Cursor (`additional_context`) and Copilot CLI
-   (sessionStart JSON). It does not exist for Grok Build (SessionStart stdout is
+   Qwen, Devin, Kimi, OpenHands, Tabnine, Cursor (`additional_context`), Copilot CLI
+   (sessionStart JSON), Copilot VS Code (`additionalContext` on SessionStart) and the
+   Copilot cloud agent (sessionStart). It does not exist for Grok Build (SessionStart stdout is
    discarded), Windsurf Cascade, Crush, Goose, Roo, Aider; opencode, Kilo and Amp need a
    plugin. The ladder must therefore reach MCP `instructions` (Claude, Codex, Gemini,
    Qwen, Crush, opencode, Kilo) and then instruction text.
-2. **Prompt-time injection.** Works only on Claude, Codex, Gemini (BeforeAgent), Qwen,
-   Devin, OpenHands, Cline and Amp's plugin. Copilot CLI drops the output; Cursor's
+2. **Prompt-time injection.** Works on Claude, Codex, Gemini and Tabnine (BeforeAgent),
+   Qwen, Devin, Kimi, OpenHands, Cline and Amp's plugin. Copilot CLI drops the output; Cursor's
    beforeSubmitPrompt and Grok's UserPromptSubmit cannot inject. Prompt CAPTURE (the
    hook only reads stdin) is still possible wherever a prompt event exists.
 3. **Identity.** Most agents give a session id on hook stdin; env vars exist only for
    Claude (`CLAUDE_CODE_SESSION_ID`), Gemini (hooks), Qwen (`QWEN_CODE_SESSION_ID`),
    Goose (`AGENT_SESSION_ID`), Crush and Grok (hooks only). Copilot CLI, Codex, Cursor,
    opencode and Kilo expose no env var, so identity there rests on `ddflow_identify`.
-4. **MCP shape.** Four shapes cover the file-based agents: `mcpServers` (the majority),
+4. **MCP shape.** Four shapes cover most file-based agents: `mcpServers` (the majority),
    `servers` (VS Code), `mcp` with array `command` and `environment` (opencode, Kilo),
    TOML `[mcp_servers.N]` (Codex, Grok Build); plus Goose YAML `extensions`, Amp
-   `amp.mcpServers`, Crush `mcp`. Matches the shapes `adopt.AGENT_TARGETS` already has,
+   `amp.mcpServers`, Crush `mcp`, and grok-cli's `mcp.servers[]` array of `{id,label,transport,...}`. Matches the shapes `adopt.AGENT_TARGETS` already has,
    except `amp`, `goose`, `crush`, `grok` which it lacks.
 5. **Trust gates.** Project config is inert until trusted: Claude `.mcp.json` approval,
    Codex hooks hash review and trusted projects, Grok folder trust, Amp `mcp approve`,
