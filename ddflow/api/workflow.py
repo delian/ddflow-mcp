@@ -150,6 +150,50 @@ class GateEdit:
     required: bool = False
 
 
+def _gate_pairs(edit: GateEdit) -> list[tuple[str, object]]:
+    """The `gate.<id>.<field>` settings a gate edit asks for."""
+    pairs: list[tuple[str, object]] = []
+    for value, field in (
+        (edit.command, "command"),
+        (edit.prompt, "prompt"),
+        (edit.cwd, "cwd"),
+        (edit.reviewer, "reviewer"),
+        (edit.title, "title"),
+    ):
+        if value:
+            pairs.append((f"gate.{edit.id}.{field}", value))
+    if edit.timeout:
+        pairs.append((f"gate.{edit.id}.timeout_s", edit.timeout))
+    if edit.applies_to:
+        pairs.append((f"gate.{edit.id}.applies_to", edit.applies_to))
+    return pairs
+
+
+def _place_in_pipelines(
+    edit: GateEdit, cfg: Any, pairs: list[tuple[str, object]]
+) -> O.Outcome | None:
+    """Append the pipeline settings that put the gate where `--into`/`--after` say; a
+    refusal when `--after` names a gate that is not there."""
+    for which in ("task", "phase") if edit.into == "both" else (edit.into,):
+        current = list(getattr(cfg.gates, f"{which}_pipeline"))
+        if edit.id in current:
+            continue
+        at = len(current)
+        if edit.after:
+            if edit.after not in current:
+                return O.failed(
+                    "workflow.gate",
+                    f"--after {edit.after!r} is not in the {which} pipeline: {', '.join(current)}",
+                    gate=edit.id,
+                    changed=[],
+                    applied=False,
+                )
+            at = current.index(edit.after) + 1
+        current.insert(at, edit.id)
+        pairs.append((f"gates.{which}_pipeline", current))
+    return None
+
+
 def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
     """Define a gate, and optionally place it in a pipeline.
 
@@ -165,20 +209,7 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") 
         return O.refused("workflow.gate", problem, gate=edit.id, changed=[], applied=False)
     _log, cfg, _st = _load(repo)
     known = load_gates(repo, cfg)
-    pairs: list[tuple[str, object]] = []
-    for value, field in (
-        (edit.command, "command"),
-        (edit.prompt, "prompt"),
-        (edit.cwd, "cwd"),
-        (edit.reviewer, "reviewer"),
-        (edit.title, "title"),
-    ):
-        if value:
-            pairs.append((f"gate.{edit.id}.{field}", value))
-    if edit.timeout:
-        pairs.append((f"gate.{edit.id}.timeout_s", edit.timeout))
-    if edit.applies_to:
-        pairs.append((f"gate.{edit.id}.applies_to", edit.applies_to))
+    pairs = _gate_pairs(edit)
     if not pairs and not edit.into:
         return O.failed(
             "workflow.gate",
@@ -202,24 +233,9 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") 
         )
 
     if edit.into:
-        for which in ("task", "phase") if edit.into == "both" else (edit.into,):
-            current = list(getattr(cfg.gates, f"{which}_pipeline"))
-            if edit.id in current:
-                continue
-            at = len(current)
-            if edit.after:
-                if edit.after not in current:
-                    return O.failed(
-                        "workflow.gate",
-                        f"--after {edit.after!r} is not in the {which} pipeline: "
-                        f"{', '.join(current)}",
-                        gate=edit.id,
-                        changed=[],
-                        applied=False,
-                    )
-                at = current.index(edit.after) + 1
-            current.insert(at, edit.id)
-            pairs.append((f"gates.{which}_pipeline", current))
+        placed = _place_in_pipelines(edit, cfg, pairs)
+        if placed is not None:
+            return placed
     if edit.required:
         pairs.append(("gates.required", sorted({*cfg.gates.required, edit.id})))
 
