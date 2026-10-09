@@ -37,6 +37,7 @@ def cmd_search(a, c: Ctx) -> int:
         query=a.query,
         mode=mode,
         sources=a.kind,
+        source=a.source,
         state=a.state,
         phase=a.phase,
         owner=a.owner,
@@ -68,8 +69,8 @@ def cmd_search(a, c: Ctx) -> int:
 #: `ddflow search`: the CLI half of `ddflow_list` for `search`.
 COMMAND = Command(
     path=("search",),
-    summary="search tasks, phases, bugs, research, decisions, lessons, sessions, prompts "
-    "and the log (exit 2 = no match)",
+    summary="search tasks, phases, bugs, research, decisions, lessons, sessions, prompts, "
+    "rules, skills, agents, jobs, schedules and the log (exit 2 = no match)",
     params=(
         Param("query", positional=True, help="the text to look for"),
         Param(
@@ -87,7 +88,12 @@ COMMAND = Command(
         Param(
             "kind",
             default="",
-            help=f"comma-separated sources to search (default all): {', '.join(S.SOURCES)}",
+            help=f"comma-separated kinds of row to search (default all): {', '.join(S.SOURCES)}",
+        ),
+        Param(
+            "source",
+            default="",
+            help=f"comma-separated sources to search (default all): {', '.join(S.source_names())}",
         ),
         Param("state", default="", help="only hits in this state"),
         Param("phase", default="", help="only hits under this phase id"),

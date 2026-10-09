@@ -1,7 +1,9 @@
 """`ddflow search`: one search across everything the project records (read-only).
 
-Sources: task, phase, bug, research, decision, lesson, session (notes and summaries),
-prompt (what the operator said) and log (the payload text of every other event). Three
+Sources (`--source`, registered with the search core): records (task, phase, bug, research,
+decision, lesson), sessions (notes and summaries), prompts (what the operator said), log (the
+payload text of every other event), rules, skills (skills and commands), agents, jobs and
+schedules. `--kind` narrows by the kind of row. Three
 modes: ranked (default; the TF-IDF engine `core/textsim.py` that duplicate detection
 uses), `exact` (case-insensitive substring) and `regex`.
 
@@ -25,6 +27,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from ..config import Config
@@ -32,11 +35,14 @@ from ..core import textsim
 from ..core.model import State
 from ..core.rank import tfidf
 from ..core.textcut import window
+from . import schedule as SCH
 from . import session_view as SV
+from . import skills as SK
 from . import viewers as V
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
-from .searchcore.hit import FuncSource, gather, register
+from .rules import RulesStorage
+from .searchcore.hit import FuncSource, register, registered
 from .searchcore.hit import Hit as Doc
 from .searchcore.regexsafe import (  # noqa: F401 -- re-exported: the old import path
     MAX_BRANCH_REPS,
@@ -46,7 +52,23 @@ from .searchcore.regexsafe import (  # noqa: F401 -- re-exported: the old import
     check_regex,
 )
 
-SOURCES = ("task", "phase", "bug", "research", "decision", "lesson", "session", "prompt", "log")
+SOURCES = (
+    "task",
+    "phase",
+    "bug",
+    "research",
+    "decision",
+    "lesson",
+    "session",
+    "prompt",
+    "log",
+    "rule",
+    "skill",
+    "command",
+    "agent",
+    "job",
+    "schedule",
+)
 _RECORD_SOURCES = frozenset({"task", "phase", "bug", "research", "decision", "lesson"})
 MODES = ("ranked", "exact", "regex")
 DEFAULT_LIMIT = 20
@@ -136,13 +158,98 @@ def _log_docs(events: list, kinds: set[str]) -> list[Doc]:
     return out
 
 
+def _def_docs(st: State, def_kind: str, kind: str) -> list[Doc]:
+    """The recorded definitions (`State.defs`) of one family as rows of `kind`."""
+    out = []
+    for rec in st.defs.values():
+        if rec.kind != def_kind:
+            continue
+        text = _join(rec.id, *(v for v in rec.fields.values() if isinstance(v, str | int | float)))
+        out.append(Doc(kind, rec.id, rec.status, rec.updated_at or rec.at, rec.by, "", text))
+    return out
+
+
+def _rule_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
+    out = _def_docs(c.st, "rule", "rule")
+    if c.repo is not None:  # a file not (yet) recorded as a definition
+        have = {d.id for d in out}
+        for r in RulesStorage(c.repo).list():
+            if r.id in have:
+                continue
+            text = _join(r.id, r.title, r.content, " ".join(r.tags))
+            out.append(Doc("rule", r.id, "active", r.updated.isoformat(), "", "", text))
+    return out
+
+
+def _skill_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
+    out = [d for d in _def_docs(c.st, "skill", "skill") if "skill" in kinds]
+    if c.repo is not None:
+        for e in SK.inventory(c.repo):
+            if e.kind in kinds and e.kind in ("skill", "command"):
+                out.append(Doc(e.kind, e.name, "active", "", "", "", _join(e.name, e.text)))
+    return out
+
+
+def _agent_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
+    out = _def_docs(c.st, "agent", "agent")
+    if c.repo is not None:
+        for p in sorted((c.repo / ".claude" / "agents").glob("*.md")):
+            try:
+                body = p.read_text("utf-8", errors="replace")
+            except OSError:
+                continue
+            if body.strip():
+                out.append(Doc("agent", p.stem, "active", "", "", "", _join(p.stem, body[:4000])))
+    return out
+
+
+def _job_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
+    return [
+        Doc(
+            "job",
+            j.id,
+            "ended" if j.ended_at else "started",
+            j.ended_at or j.started_at,
+            j.by,
+            "",
+            _join(j.id, j.item, j.command, j.note),
+        )
+        for j in c.st.jobs.values()
+    ]
+
+
+def _schedule_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
+    out = _def_docs(c.st, "schedule", "schedule")
+    if c.repo is not None:
+        for jid, d in sorted(SCH.definitions(c.repo, c.cfg, c.st).jobs.items()):
+            if d.source == SCH.SOURCE_CADENCE:
+                continue  # the built-in [cadence] passes are config defaults, not definitions
+            j = d.job
+            text = _join(
+                jid,
+                j.title,
+                j.prompt,
+                j.concurrency_group,
+                j.mode,
+                *j.tags,
+                *j.needs,
+                *j.scope_globs,
+            )
+            out.append(
+                Doc("schedule", jid, "enabled" if j.enabled else "disabled", j.at, j.by, "", text)
+            )
+    return out
+
+
 @dataclass(frozen=True)
 class Ctx:
-    """What the sources of one request read: the folded state, the events and the config."""
+    """What the sources of one request read: the folded state, the events, the config and,
+    for the sources that read files, the repository (None: those sources yield nothing)."""
 
     st: State
     events: list
     cfg: Config
+    repo: Path | None = None
 
 
 # The sources, in the order their rows are listed before ranking.
@@ -154,13 +261,35 @@ register(
     )
 )
 register(
-    FuncSource("sessions", ("session", "prompt"), lambda c, kinds: _session_docs(c.events, kinds))
+    FuncSource(
+        "sessions", ("session",), lambda c, kinds: _session_docs(c.events, kinds & {"session"})
+    )
+)
+register(
+    FuncSource("prompts", ("prompt",), lambda c, kinds: _session_docs(c.events, kinds & {"prompt"}))
 )
 register(FuncSource("log", ("log",), lambda c, kinds: _log_docs(c.events, kinds)))
+register(FuncSource("rules", ("rule",), _rule_docs))
+register(FuncSource("skills", ("skill", "command"), _skill_docs))
+register(FuncSource("agents", ("agent",), _agent_docs))
+register(FuncSource("jobs", ("job",), _job_docs))
+register(FuncSource("schedules", ("schedule",), _schedule_docs))
 
 
-def _docs(st: State, events: list, cfg: Config, kinds: set[str]) -> list[Doc]:
-    return gather(Ctx(st, events, cfg), kinds)
+def source_names() -> list[str]:
+    """The names `--source` takes: every registered source."""
+    return [s.name for s in registered()]
+
+
+def _docs(
+    st: State, events: list, cfg: Config, kinds: set[str], repo: Path | None, names: set[str]
+) -> list[Doc]:
+    ctx = Ctx(st, events, cfg, repo)
+    out: list[Doc] = []
+    for src in registered():
+        if (not names or src.name in names) and kinds & set(src.kinds):
+            out += src.hits(ctx, kinds)
+    return out
 
 
 # ---------------------------------------------------------------- snippets
@@ -194,6 +323,7 @@ class Filters:
     phase: str = ""
     agent: str = ""
     since: str = ""
+    sources: str = ""
 
     def given(self) -> dict[str, str]:
         mine = {
@@ -202,8 +332,19 @@ class Filters:
             "phase": self.phase,
             "agent": self.agent,
             "since": self.since,
+            "source": self.sources,
         }
         return {k: v for k, v in mine.items() if v}
+
+
+def _source_names(f: Filters) -> set[str]:
+    """The sources asked for (empty: every one); an unknown name is refused."""
+    wanted = {k.strip().lower() for k in f.sources.split(",") if k.strip()}
+    known = source_names()
+    bad = sorted(wanted - set(known))
+    if bad:
+        raise SearchError(f"unknown source {', '.join(bad)}: one of {', '.join(known)}")
+    return wanted
 
 
 def _sources(f: Filters) -> set[str]:
@@ -284,6 +425,7 @@ def search(
     *,
     mode: str = "ranked",
     limit: int = DEFAULT_LIMIT,
+    repo: Path | None = None,
 ) -> Result:
     f = filters or Filters()
     if mode not in MODES:
@@ -294,8 +436,9 @@ def search(
         raise SearchError(f"limit must be at least 1, got {limit}")
     limit = min(limit, MAX_LIMIT)
     kinds = _sources(f)
+    names = _source_names(f)
     rx = check_regex(query) if mode == "regex" else None
-    docs = _narrow(_docs(st, events, cfg, kinds), st, f)
+    docs = _narrow(_docs(st, events, cfg, kinds, repo, names), st, f)
     res = Result(
         query=redact_text(query, cfg).text,
         mode=mode,
