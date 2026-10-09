@@ -23,6 +23,7 @@ from ddflow.infra import harness_identity
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog
 from ddflow.services import approval
+from ddflow.services import identity as ID
 from ddflow.services.export import select as export_select
 from ddflow.surfaces import mcp
 from ddflow.surfaces.context import Ctx
@@ -100,7 +101,7 @@ def test_the_hostname_is_the_short_form_in_the_derived_id(repo, monkeypatch):
     assert L.bare_agent_id(repo) == "plain-proj"
 
 
-# -- resolve_agent_id: the layers, and WHICH layer won ----------------------------------
+# -- ID.resolve: the layers, and WHICH layer won ----------------------------------
 
 CFG_ID = "cfg-agent"
 
@@ -124,24 +125,21 @@ def _cfg(repo: Path, *, config_id: str = "", env_sourced: bool = False) -> Confi
         ("", "", "", None, "derived"),
     ],
 )
-def test_resolve_agent_id_precedence_and_layer(
-    adopted, monkeypatch, declared, env, config_id, want, layer
-):
+def test_resolve_precedence_and_layer(adopted, monkeypatch, declared, env, config_id, want, layer):
     monkeypatch.chdir(adopted)
     if env:
         monkeypatch.setenv("DDFLOW_AGENT", env)
     cfg = _cfg(adopted, config_id=config_id)
-    who, got_layer = L.resolve_agent_id(adopted, cfg, declared)
+    who, got_layer = ID.resolve(adopted, cfg, declared)
     assert got_layer == layer
     assert who == (want if want is not None else L.default_agent_id(adopted))
-    assert L.effective_agent_id(adopted, cfg, declared) == who
 
 
 def test_without_a_config_the_env_wins_over_derived_and_nothing_is_validated(adopted, monkeypatch):
     monkeypatch.chdir(adopted)
     monkeypatch.setenv("DDFLOW_AGENT", "has space/and slash")
-    assert L.resolve_agent_id(adopted, None) == ("has space/and slash", "env")
-    assert L.resolve_agent_id(adopted, None, "not valid either!") == (
+    assert tuple(ID.resolve(adopted, None)) == ("has space/and slash", "env")
+    assert tuple(ID.resolve(adopted, None, "not valid either!")) == (
         "not valid either!",
         "explicit",
     )
@@ -402,32 +400,6 @@ def test_a_dangling_or_empty_git_pointer_is_no_repository(tmp_path):
 
 
 # -- services.identity.resolve / bind / open_log (B-uni-identity.3-resolver.2-resolve) -----
-
-
-@pytest.mark.parametrize(
-    ("declared", "env", "config_id", "layer"),
-    [
-        ("exp", "", "", "explicit"),
-        ("exp", "envy", CFG_ID, "explicit"),
-        ("", "envy", "", "env"),
-        ("", "envy", CFG_ID, "config"),
-        ("", "", CFG_ID, "config"),
-        ("", "", "", "derived"),
-    ],
-)
-def test_identity_resolve_answers_what_the_log_resolver_answers(
-    adopted, monkeypatch, declared, env, config_id, layer
-):
-    from ddflow.services import identity as ID
-
-    monkeypatch.chdir(adopted)
-    if env:
-        monkeypatch.setenv("DDFLOW_AGENT", env)
-    cfg = _cfg(adopted, config_id=config_id)
-    got = ID.resolve(adopted, cfg, declared)
-    assert got.source == layer
-    assert tuple(got) == L.resolve_agent_id(adopted, cfg, declared)
-    assert ID.resolve(adopted, None, declared).id == L.resolve_agent_id(adopted, None, declared)[0]
 
 
 def test_bind_writes_the_identity_and_its_layer_back_only_when_it_differs(adopted, monkeypatch):
