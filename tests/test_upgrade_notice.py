@@ -21,7 +21,7 @@ from ddflow.core.model import State
 from ddflow.services import upgrade_notice as UN
 
 OLD = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
-LINE = "ddflow upgraded"
+LINE = "Upgraded ddflow"
 
 
 @pytest.fixture

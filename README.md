@@ -4057,7 +4057,7 @@ there, and prints the backup and `git diff` to review the change.
 **The upgrade notice** (decision D-upgrade-auto-check; `[upgrade].auto`, shipped `check`).
 When ddflow has been upgraded past the release the project was last brought up to and
 `ddflow upgrade --plan` has items, the brief (so the SessionStart hook) and the MCP handshake say so in ONE line --
-`ddflow upgraded 0.1.9 -> 0.1.10: run ddflow upgrade --plan` -- once per version on this machine
+`Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan` -- once per version on this machine
 for this project (`.ddflow/local/upgrade-notice.json`, git-ignored: the only thing it writes),
 whichever surface speaks first. `check` changes nothing else. `safe` first applies the plan's non-destructive categories, `hooks` and `instructions`
 (ddflow's own files), after the backup `[upgrade].backup` names, and says what it did; config

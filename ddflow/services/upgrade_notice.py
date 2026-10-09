@@ -2,7 +2,7 @@
 
 Decision D-upgrade-auto-check (operator, 2026-10-03). After ddflow is upgraded, the first
 brief (and with it the SessionStart hook) or MCP handshake on a machine says, in ONE line,
-``ddflow upgraded 0.1.9 -> 0.1.10: run ddflow upgrade --plan`` -- once per version
+``Upgraded ddflow 0.1.9 -> 0.1.10: run `ddflow upgrade --plan``` -- once per version
 on this machine, per project -- and changes nothing else. ``[upgrade].auto`` governs it:
 
 * ``check`` (the default): the line only;
@@ -111,8 +111,8 @@ def line(repo: Path, log: Any, cfg: Config, st: State, *, agent: str = "") -> st
     ``log``, ``cfg`` and ``st`` are the caller's own (the brief already holds all three)."""
     try:
         policy = cfg.upgrade.auto
-        if policy == "off":
-            return ""
+        if policy == "off" or not (Path(repo) / ".ddflow").is_dir():
+            return ""  # off, or a directory ddflow never adopted: writing a marker would adopt it
         running = running_version()
         if not version_key(running) or noticed_version(repo) == running:
             return ""
@@ -125,9 +125,9 @@ def line(repo: Path, log: Any, cfg: Config, st: State, *, agent: str = "") -> st
         if policy == "safe":
             said = _apply_safe(repo, log, cfg, st, plan, agent)
         text = (
-            f"ddflow upgraded {project} -> {running}"
+            f"Upgraded ddflow {project} -> {running}"
             if project
-            else f"ddflow upgraded to {running} (this project predates version stamps)"
+            else f"Upgraded ddflow to {running} (this project predates version stamps)"
         )
         if said:
             text += f"; {said}"

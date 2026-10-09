@@ -220,7 +220,7 @@
   tuple(
     0,
     '''
-      ddflow upgraded to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
       
       ## Open workflow choices
       
@@ -276,7 +276,7 @@
   tuple(
     0,
     '''
-      ddflow upgraded to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
       
       ## Open workflow choices
       
@@ -333,7 +333,7 @@
   tuple(
     0,
     '''
-      ddflow upgraded to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
+      Upgraded ddflow to <VERSION> (this project predates version stamps): run `ddflow upgrade --plan`
       
       ## Open workflow choices
       
@@ -1437,7 +1437,7 @@
           check): the running version is newer than the one the project was last
           brought up to and `ddflow upgrade --plan` has items. `check` (default): the
           brief (so the SessionStart hook too) and the MCP instructions say so in ONE
-          line, `ddflow upgraded 0.1.9 -> 0.1.10: run ddflow upgrade --plan`, once per
+          line, `Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan`, once per
           version on this machine for this project (a git-ignored marker,
           `.ddflow/local/upgrade-notice.json`, is the only thing written). `safe`: the
           same line, after applying the plan's non-destructive categories (`hooks` and
