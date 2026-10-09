@@ -60,9 +60,11 @@ class AgentId(NamedTuple):
 def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> AgentId:
     """The identity a write will carry, and WHICH LAYER produced it.
 
-    Four layers, in order: an explicit declaration (`declared`: `--agent`, `as_agent`, a
-    harness's `ddflow_identify`), `DDFLOW_AGENT` (only while `[agent].id` is just its
-    default), `[agent].id` in config, and the tree-derived default. ``declared`` is what the
+    Four layers: an explicit declaration (`declared`: `--agent`, `as_agent`, a harness's
+    `ddflow_identify`) first; then `[agent].id` when a config layer sets it, which `DDFLOW_AGENT`
+    does not override (the environment applies only while no config layer sets the key, by
+    PROVENANCE: a file that sets it to "" still counts as setting it); then `DDFLOW_AGENT`; then
+    the tree-derived default. ``declared`` is what the
     caller EXPLICITLY asked for and "" for nothing: passing a resolved value back in makes it
     look explicit, which is how `config --explain` once blamed the environment for a variable
     nobody had set.
