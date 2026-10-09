@@ -271,6 +271,11 @@ class Store:
             return True
         if row.get("similar_version") != str(textsim.VERSION):
             return True
+        # An index built where SQLite had no trigram tokenizer has no `_tri` tables filled;
+        # read where it has one, it would rank on empty tables. A change of capability is
+        # a rebuild.
+        if row.get("trigram", "0") != ("1" if self.trigram else "0"):
+            return True
         # `EventLog.mark()` is O(shards); the old comparison called `read_all()` to
         # decide whether `read_all()` was needed, which is the shape of the problem
         # rather than a solution to it.
@@ -475,8 +480,8 @@ class Store:
                 (str(high),),
             )
             con.execute(
-                "insert or replace into meta values('built_at', ?), ('fts', ?)",
-                (str(time.time()), "1" if self.fts else "0"),
+                "insert or replace into meta values('built_at', ?), ('fts', ?), ('trigram', ?)",
+                (str(time.time()), "1" if self.fts else "0", "1" if self.trigram else "0"),
             )
             con.execute("COMMIT")
         finally:
@@ -566,7 +571,7 @@ class Store:
         """
         cols = _SEARCH_COLS[table]
         pool = max(limit * _POOL, _POOL_MIN)
-        terms = textsim.words(query, min_len=MIN_TERM_CHARS)
+        terms = _terms(query)
         if not terms:  # nothing to rank on, on every machine
             return []
         with closing(self.connect()) as con:
@@ -578,6 +583,8 @@ class Store:
                 if scan is None:
                     rows = [dict(r) for r in con.execute(f"select * from {table}")]  # nosec B608
                     keys = [_row_key(table, r, n) for n, r in enumerate(rows)]
+                    if table == "prompts":  # the id the FTS path gives a prompt, too
+                        rows = [{**r, "id": k} for r, k in zip(rows, keys, strict=True)]
                     scan = (keys, rows, [" ".join(str(r.get(c) or "") for c in cols) for r in rows])
                 return scan
 
@@ -586,10 +593,10 @@ class Store:
                 if which == "bm25":
                     score = bm25(
                         [_fallback_words(t) for t in texts],
-                        _fallback_words(" ".join(_like_terms(query))),
+                        _fallback_words(" ".join(terms)),
                     )
                 else:
-                    score = substring_bm25(texts, terms[:_FTS_TERMS])
+                    score = substring_bm25(texts, terms)
                 return [keys[i] for i in sorted(score, key=lambda i: (-score[i], keys[i]))][:pool]
 
             lists: list[list[str]] = []
@@ -674,14 +681,13 @@ def _fts_query(text: str) -> str:
     character inert; ORing is what makes a multi-word question behave like a
     relevance query instead of a conjunction that matches nothing.
     """
-    terms = textsim.words(text, min_len=MIN_TERM_CHARS)
-    return " OR ".join(f'"{t}"' for t in terms[:_FTS_TERMS])
+    return " OR ".join(f'"{t}"' for t in _terms(text))
 
 
 def _tri_query(terms: list[str]) -> str:
     """The FTS5 expression for the trigram index: each term as a quoted substring, ORed.
     Terms under three characters match nothing there, so they are left out."""
-    return " OR ".join(f'"{t}"' for t in terms[:_FTS_TERMS] if len(t) >= TRIGRAM_MIN)
+    return " OR ".join(f'"{t}"' for t in terms if len(t) >= TRIGRAM_MIN)
 
 
 def _row_key(table: str, row: dict[str, Any], n: int) -> str:
@@ -703,8 +709,8 @@ def _fill_trigram(con) -> None:
         )
 
 
-#: How many terms of a query reach FTS5, and how many reach the LIKE fallback.
-_FTS_TERMS, _LIKE_TERMS = 12, 8
+#: How many terms of a query reach any ranker.
+_FTS_TERMS = 12
 #: Each ranker is asked for this many times the wanted hits (at least `_POOL_MIN`) before fusion.
 _POOL, _POOL_MIN = 4, 20
 
@@ -714,9 +720,10 @@ def _fallback_words(text: str) -> list[str]:
     return [textsim.stem(w) for w in textsim.words(text, min_len=1, fold=True)]
 
 
-def _like_terms(query: str) -> list[str]:
-    """The terms of the LIKE fallback: the same words FTS5 would be asked for, fewer."""
-    return textsim.words(query, min_len=MIN_TERM_CHARS)[:_LIKE_TERMS]
+def _terms(query: str) -> list[str]:
+    """The terms every ranker is asked for, on every machine: the query's words of at least
+    ``MIN_TERM_CHARS``, the first ``_FTS_TERMS`` of them."""
+    return textsim.words(query, min_len=MIN_TERM_CHARS)[:_FTS_TERMS]
 
 
 #: What `recall` searches, in the order a reader should weigh them. Decisions first
