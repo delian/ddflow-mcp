@@ -137,7 +137,7 @@ def cmd_version(a, c: Ctx) -> int:
     out = A.version_cut(
         c.repo,
         bump=a.bump or "",
-        version=a.set_version or "",
+        version=a.version or "",
         push=a.push,
         dry_run=a.dry_run,
         line=a.line or "",

@@ -23,6 +23,7 @@ from ddflow.infra import harness_identity
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog
 from ddflow.services import approval
+from ddflow.services import identity as ID
 from ddflow.services.export import select as export_select
 from ddflow.surfaces import mcp
 from ddflow.surfaces.context import Ctx
@@ -100,7 +101,7 @@ def test_the_hostname_is_the_short_form_in_the_derived_id(repo, monkeypatch):
     assert L.bare_agent_id(repo) == "plain-proj"
 
 
-# -- resolve_agent_id: the layers, and WHICH layer won ----------------------------------
+# -- ID.resolve: the layers, and WHICH layer won ----------------------------------
 
 CFG_ID = "cfg-agent"
 
@@ -124,24 +125,21 @@ def _cfg(repo: Path, *, config_id: str = "", env_sourced: bool = False) -> Confi
         ("", "", "", None, "derived"),
     ],
 )
-def test_resolve_agent_id_precedence_and_layer(
-    adopted, monkeypatch, declared, env, config_id, want, layer
-):
+def test_resolve_precedence_and_layer(adopted, monkeypatch, declared, env, config_id, want, layer):
     monkeypatch.chdir(adopted)
     if env:
         monkeypatch.setenv("DDFLOW_AGENT", env)
     cfg = _cfg(adopted, config_id=config_id)
-    who, got_layer = L.resolve_agent_id(adopted, cfg, declared)
+    who, got_layer = ID.resolve(adopted, cfg, declared)
     assert got_layer == layer
     assert who == (want if want is not None else L.default_agent_id(adopted))
-    assert L.effective_agent_id(adopted, cfg, declared) == who
 
 
 def test_without_a_config_the_env_wins_over_derived_and_nothing_is_validated(adopted, monkeypatch):
     monkeypatch.chdir(adopted)
     monkeypatch.setenv("DDFLOW_AGENT", "has space/and slash")
-    assert L.resolve_agent_id(adopted, None) == ("has space/and slash", "env")
-    assert L.resolve_agent_id(adopted, None, "not valid either!") == (
+    assert tuple(ID.resolve(adopted, None)) == ("has space/and slash", "env")
+    assert tuple(ID.resolve(adopted, None, "not valid either!")) == (
         "not valid either!",
         "explicit",
     )
@@ -404,32 +402,6 @@ def test_a_dangling_or_empty_git_pointer_is_no_repository(tmp_path):
 # -- services.identity.resolve / bind / open_log (B-uni-identity.3-resolver.2-resolve) -----
 
 
-@pytest.mark.parametrize(
-    ("declared", "env", "config_id", "layer"),
-    [
-        ("exp", "", "", "explicit"),
-        ("exp", "envy", CFG_ID, "explicit"),
-        ("", "envy", "", "env"),
-        ("", "envy", CFG_ID, "config"),
-        ("", "", CFG_ID, "config"),
-        ("", "", "", "derived"),
-    ],
-)
-def test_identity_resolve_answers_what_the_log_resolver_answers(
-    adopted, monkeypatch, declared, env, config_id, layer
-):
-    from ddflow.services import identity as ID
-
-    monkeypatch.chdir(adopted)
-    if env:
-        monkeypatch.setenv("DDFLOW_AGENT", env)
-    cfg = _cfg(adopted, config_id=config_id)
-    got = ID.resolve(adopted, cfg, declared)
-    assert got.source == layer
-    assert tuple(got) == L.resolve_agent_id(adopted, cfg, declared)
-    assert ID.resolve(adopted, None, declared).id == L.resolve_agent_id(adopted, None, declared)[0]
-
-
 def test_bind_writes_the_identity_and_its_layer_back_only_when_it_differs(adopted, monkeypatch):
     from ddflow.services import identity as ID
 
@@ -454,3 +426,45 @@ def test_open_log_opens_as_the_resolved_agent_and_can_bind_the_config(adopted, m
     assert (cfg.agent.id, cfg.sources["agent.id"]) == ("envy", "env")
     log2, who2 = ID.open_log(adopted, _cfg(adopted), "flagged")
     assert (log2.agent_id, who2.source) == ("flagged", "explicit")
+
+
+@pytest.mark.parametrize(
+    ("requested", "env", "want"),
+    [
+        ("alpha", {"DDFLOW_AGENT": "beta", "CLAUDECODE": "1"}, "--agent alpha"),
+        ("", {"DDFLOW_AGENT": "beta", "CLAUDECODE": "1"}, "DDFLOW_AGENT=beta"),
+        ("", {"CLAUDECODE": "1"}, "CLAUDECODE is set (an agent harness's shell)"),
+        ("", {}, ""),
+    ],
+)
+def test_agent_marker_answers_the_same_for_every_caller(monkeypatch, requested, env, want):
+    """One marker rule behind approval, reviewer_trust and the export enable."""
+    from ddflow.services import approval as AP
+    from ddflow.services import identity as ID
+    from ddflow.services import reviewer_trust as RT
+
+    for var in ("DDFLOW_AGENT", *ID.HARNESS_MARKERS):
+        monkeypatch.delenv(var, raising=False)
+    for var, value in env.items():
+        monkeypatch.setenv(var, value)
+    assert ID.agent_marker(requested) == want
+    assert AP.agent_marker(requested) == RT.agent_marker(requested) == want
+    assert export_select._is_agent(requested, False) == want
+    assert ID.is_agent(requested, False) == want
+    assert ID.is_agent(requested, True) == "the MCP surface"
+
+
+def test_only_services_identity_defines_or_reads_the_agent_marker():
+    """A private copy of the rule drifts: the harness variable, the function name and the
+    marker table each appear only in services/identity (and its two re-exports)."""
+    root = Path(__file__).resolve().parents[1] / "ddflow"
+    reexports = {"services/approval.py", "services/reviewer_trust.py"}
+    for token, allowed in (
+        ("CLAUDECODE", {"services/identity.py"}),
+        ("def agent_marker", {"services/identity.py"}),
+        ("HARNESS_MARKERS", {"services/identity.py"} | reexports),
+    ):
+        homes = {
+            p.relative_to(root).as_posix() for p in root.rglob("*.py") if token in p.read_text()
+        }
+        assert homes <= allowed, (token, homes - allowed)

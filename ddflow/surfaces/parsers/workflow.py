@@ -5,12 +5,14 @@ Registered by `cli.build_parser`, in the order `ddflow --help` lists them."""
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 
 from ..commands.knowledge import cmd_history
 from ..commands.operations import cmd_import
 from ..commands.setup import cmd_companions, cmd_help, cmd_hooks, cmd_prompts, help_topics
 from ..commands.viewers_lists import register as register_list_viewers
 from ..commands.workflow import cmd_workflow
+from ..declared.hooks import BY_TOOL as HOOKS_BY_TOOL
 from ..declared.reporting import BY_TOOL as REPORTING_BY_TOOL
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
 from ..registry import add_commands
@@ -27,55 +29,27 @@ def register(s: argparse._SubParsersAction) -> None:
         "workflow",
         help="the rules this project runs by, and how to change them (exit 1 = incoherent)",
     )
-    wfs = wf.add_subparsers(dest="workflow_cmd")
+    wf.add_subparsers(dest="workflow_cmd")
     wf.set_defaults(fn=cmd_workflow, dry_run=False)
 
-    wfs.add_parser("state", help="one-page overview: workflow, rules, queue, bugs, diagram")
-
-    wfp = wfs.add_parser("pipeline", help="set the gates a task or phase passes through")
-    wfp.add_argument("which", choices=["task", "phase"])
-    wfp.add_argument("gates", help="comma-separated gate ids, in order")
-    wfp.add_argument("--dry-run", action="store_true", help="show it; write nothing")
-    wfp.set_defaults(fn=cmd_workflow)
-
-    wfg = wfs.add_parser("gate", help="define or change one gate")
-    wfg.add_argument("id")
-    wfg.add_argument("--command", default="", help="what to run; makes it a command gate")
-    wfg.add_argument("--prompt", default="", help="what to ask an agent; makes it an agent gate")
-    wfg.add_argument("--title", default="")
-    wfg.add_argument("--cwd", default="", choices=["", "worktree", "repo"])
-    wfg.add_argument(
-        "--reviewer",
-        default="",
-        choices=["", "different_family", "same_family_ok"],
-        help="require a reviewer, and whether it must be a different model family",
+    add_commands(
+        s,
+        [
+            HOOKS_BY_TOOL[f"ddflow_workflow_{leaf}"]
+            for leaf in ("state", "pipeline", "gate", "drop")
+        ],
+        handlers={
+            ("workflow", leaf): cmd_workflow for leaf in ("state", "pipeline", "gate", "drop")
+        },
     )
-    wfg.add_argument("--timeout", type=int, default=0, help="seconds before it is unavailable")
-    wfg.add_argument("--applies-to", default="", choices=["", "task", "phase", "both"])
-    wfg.add_argument(
-        "--into", default="", choices=["", "task", "phase", "both"], help="add to a pipeline"
-    )
-    wfg.add_argument("--after", default="", help="place it after this gate (default: last)")
-    wfg.add_argument("--required", action="store_true", help="an item cannot complete without it")
-    wfg.add_argument("--dry-run", action="store_true", help="show it; write nothing")
-    wfg.set_defaults(fn=cmd_workflow)
 
-    wfd = wfs.add_parser("drop", help="take a gate out of the pipelines (its definition stays)")
-    wfd.add_argument("id")
-    wfd.add_argument("--dry-run", action="store_true", help="show it; write nothing")
-    wfd.set_defaults(fn=cmd_workflow)
-
-    hp = s.add_parser(
-        "help",
-        help="what ddflow is, what it can do, and the workflow (try: ddflow help workflow)",
+    # The topic names are read here, at parse time, and not at import: see `help_topics`.
+    helped = HOOKS_BY_TOOL["ddflow_help"]
+    topic = replace(
+        helped.params[0],
+        cli_help="one of: " + ", ".join(sorted(help_topics())) + ". Omit for the overview.",
     )
-    hp.add_argument(
-        "topic",
-        nargs="?",
-        default="",
-        help="one of: " + ", ".join(sorted(help_topics())) + ". Omit for the overview.",
-    )
-    hp.set_defaults(fn=cmd_help)
+    add_commands(s, [replace(helped, params=(topic,))], handlers={("help",): cmd_help})
 
     add_commands(s, [SETUP_BY_TOOL["ddflow_import"]], handlers={("import",): cmd_import})
 
