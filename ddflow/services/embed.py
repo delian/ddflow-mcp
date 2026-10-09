@@ -3,8 +3,9 @@
 Every semantic feature (recall, rule and skill injection, the docs RAG) consumes THIS
 interface; there is no second backend. There are two ways to be one, tried in order:
 
-1. **A companion command**, `[rag].command`. It is split like a shell line and run without a
-   shell in the repository root. It reads one JSON object on stdin,
+1. **A companion command**, `[rag].command`, run like every operator command
+   (`services/cmdrunner.py`: a shell line, in the repository root, bounded by `[rag].timeout_s`).
+   It reads one JSON object on stdin,
    ``{"texts": ["...", ...]}``, and prints one on stdout,
    ``{"model": "<model id>", "vectors": [[0.1, ...], ...]}``: one vector per text, in order,
    all the same length, every number finite. `model` names the model that made the
@@ -24,16 +25,13 @@ from __future__ import annotations
 
 import json
 import math
-import shlex
-import shutil
-import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from ..infra import proc as P
+from .cmdrunner import CommandRunner, Declared, executable_missing
 
 try:  # the [rag] extra; every caller works without it
     from model2vec import StaticModel as _StaticModel
@@ -96,32 +94,18 @@ def embed(repo: Path, cfg: Config, texts: Sequence[str]) -> Embedding:
 
 
 def _companion(repo: Path, cfg: Config, texts: list[str]) -> Embedding:
-    try:
-        argv = shlex.split(cfg.rag.command)
-    except ValueError as exc:
-        return _unavailable(f"[rag].command does not parse: {exc}", COMPANION)
-    if not argv:
-        return _unavailable("[rag].command is empty", COMPANION)
-    try:
-        done = P.run(
-            argv,
-            input=json.dumps({"texts": texts}),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=cfg.rag.timeout_s,
-            cwd=repo,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return _unavailable(f"the embedder timed out after {cfg.rag.timeout_s}s", COMPANION)
-    except OSError as exc:
-        return _unavailable(f"the embedder could not be started: {exc}", COMPANION)
-    if done.returncode != 0:
-        tail = (done.stderr or "").strip().splitlines()[-1:] or [""]
-        return _unavailable(f"the embedder exited {done.returncode}: {tail[0][:200]}", COMPANION)
-    return _parse(done.stdout, len(texts))
+    run = CommandRunner().run(
+        Declared(cfg.rag.command, "rag.command"),
+        cwd=repo,
+        timeout_s=cfg.rag.timeout_s,
+        stdin_text=json.dumps({"texts": texts}),
+    )
+    if not run.ran:
+        return _unavailable(f"the embedder is unavailable: {run.reason}", COMPANION)
+    if run.code != 0:
+        tail = run.err.strip().splitlines()[-1:] or [""]
+        return _unavailable(f"the embedder exited {run.code}: {tail[0][:200]}", COMPANION)
+    return _parse(run.out, len(texts))
 
 
 def _parse(stdout: str, want: int) -> Embedding:
@@ -221,16 +205,12 @@ def doctor_notes(cfg: Config) -> list[str]:
     """
     which = backend(cfg)
     if which == COMPANION:
-        try:
-            argv = shlex.split(cfg.rag.command)
-        except ValueError as exc:
-            return [f"embedder: [rag].command does not parse ({exc}); recall is BM25 only"]
-        if not argv or shutil.which(argv[0]) is None:
+        if missing := executable_missing(cfg.rag.command):
             return [
-                f"embedder: [rag].command {argv[0] if argv else ''!r} is not an executable "
-                "on PATH; recall is BM25 only"
+                f"embedder: [rag].command runs {missing!r}, which is not installed; "
+                "recall is BM25 only"
             ]
-        return [f"embedder: companion {argv[0]!r} configured (not run by doctor)"]
+        return ["embedder: a companion command is configured (doctor does not run it)"]
     if which == MODEL2VEC:
         if not extra_installed():
             return [

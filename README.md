@@ -2134,7 +2134,7 @@ duplicate from a different bug in the same function, which is why the default as
 
 Every semantic feature asks ONE interface for vectors (`ddflow/services/embed.py`); it has
 no second backend, and nothing is semantic until you configure it. `[rag].command` is a
-companion: a command (split like a shell line, run without a shell in the repository
+companion: a command (a shell line, run like every operator command, in the repository
 root) that reads `{"texts": ["...", ...]}` as JSON on stdin and prints
 `{"model": "<model id>", "vectors": [[...], ...]}` on stdout, one vector per text, in order,
 all the same length, every number finite. The model id is how stored vectors are told apart
