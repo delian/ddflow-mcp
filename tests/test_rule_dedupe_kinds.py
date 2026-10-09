@@ -163,7 +163,7 @@ def test_a_check_that_could_not_run_says_the_rule_was_filed_unchecked(proj, monk
     """roborev: an index that would not open filed the rule and reported plain success."""
     from types import SimpleNamespace
 
-    from ddflow.surfaces.commands import rules as C
+    from ddflow.surfaces.declared import rules as C
 
     def broken(*a, **k):
         raise OSError("index locked")
@@ -200,7 +200,7 @@ def test_the_rules_limits_still_refuse(proj):
 def test_an_edit_cannot_relate_a_rule_to_itself(proj):
     from types import SimpleNamespace
 
-    from ddflow.surfaces.commands import rules as C
+    from ddflow.surfaces.declared import rules as C
 
     assert R.rule_add(proj, R.Rule(id="r-a", title="Test names", content=UNRELATED)).exit == 0
     out = R.rule_update(proj, "r-a", content="zz", dedup_answer=R.RuleDedupAnswer("related", "r-a"))

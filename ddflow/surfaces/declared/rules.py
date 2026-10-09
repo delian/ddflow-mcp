@@ -1,7 +1,7 @@
 """The project-rule commands, declared once: rule add, edit, list, search, show, remove, sync.
 
-`surfaces/parsers/rules.py` registers their command-line half and `surfaces/tools/rules.py`
-takes their MCP entries (D-unify 4, B-uni-cmd-migrate.6-rest). `ddflow rule` alone lists them.
+`ddflow rule` alone lists them. The CLI half runs on the executor (`surfaces/cliexec.py`):
+`call` is the operation, `payload` the --json body and `render` the human line.
 """
 
 from __future__ import annotations
@@ -9,10 +9,77 @@ from __future__ import annotations
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api, _list_or_none, _rule_answer
 
+
+def _rule_line(r: dict) -> str:
+    return f"{r['id']}  [{r.get('scope', '')}] {r.get('title', '')}"
+
+
+def _rows(out, a) -> str:
+    return "\n".join(_rule_line(r) for r in out.data.get("rows", []))
+
+
+def _check_note(out, done: str = "filed") -> str:
+    """What a filed or edited rule's result says about the duplicate check: that it could
+    not run (``done`` UNCHECKED), or the records it reads like (a warning)."""
+    if why := out.data.get("dedupe_unavailable"):
+        return f"\n  {done} UNCHECKED: the duplicate check could not run ({why})"
+    shown = [c for c in out.data.get("candidates", []) if c.get("kind") != "rule"]
+    if not shown:
+        return ""
+    return "\n  It reads like: " + "; ".join(
+        f"{c['id']} ({c.get('kind', '')}, score {c['score']:.2f})" for c in shown
+    )
+
+
+def _show(out, a) -> str:
+    d = out.data
+    return (
+        f"{d.get('id')}  {d.get('title')}\n  scope {d.get('scope')}  priority "
+        f"{d.get('priority')}  tags {d.get('tags')}  globs {d.get('globs')}\n\n"
+        f"{d.get('content', '')}"
+    )
+
+
+def _added(out, a) -> str:
+    if a.get("check"):
+        return "\n".join(str(x) for x in out.data.get("candidates", []))
+    if out.data.get("extended"):
+        return (
+            f"rule text added to {out.data['extended']} ({out.data.get('extended_kind', '')}); "
+            f"no rule {a['id']} filed"
+        )
+    said = {"related": "related to", "duplicate_of": "duplicate of", "extends": "extends"}
+    linked = next((f" ({said[r]} {out.data[r]})" for r in said if out.data.get(r)), "")
+    return f"added rule {a['id']}{linked}{_check_note(out)}"
+
+
+def _edited(out, a) -> str:
+    fields = sorted(k for k in ("title", "content", "scope", "tags", "globs", "priority") if k in a)
+    related = out.data.get("related")
+    return (
+        f"updated {a['id']}: {', '.join(fields) or 'nothing'}"
+        + (f" (related to {related})" if related else "")
+        + _check_note(out, "edited")
+    )
+
+
+def _synced(out, a) -> str:
+    said = (
+        ("recorded", "recorded"),
+        ("updated", "hand edit(s) recorded"),
+        ("restored", "file(s) written from the log"),
+    )
+    parts = [
+        f"{len(out.data[k])} {w}: {', '.join(out.data[k])}" for k, w in said if out.data.get(k)
+    ]
+    return "; ".join(parts) or "rule files and the log agree"
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "add"),
         tool="ddflow_rule_add",
+        render=_added,
         description="Add a project rule; duplicate-checked like every add (answer new | extends:ID | duplicate_of:ID | related:ID).",
         call=lambda repo, a, agent: (
             _api().rule_dedup_check_dry_run(
@@ -107,6 +174,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "edit"),
         tool="ddflow_rule_edit",
+        render=_edited,
         description="Change fields of an existing rule; omitted fields stay. Recorded in the manifest "
         "and, as a def.updated, in the log; new text is duplicate-checked.",
         call=lambda repo, a, agent: _api().rule_update(
@@ -197,6 +265,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "list"),
         tool="ddflow_rule_list",
+        render=_rows,
         deprecated={"json": "the result is always JSON", "limit": "the list is not truncated"},
         description="List the project's rules, filtered by tag or scope: what governs the current work.",
         call=lambda repo, a, agent: _api().rule_list(
@@ -215,6 +284,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "search"),
         tool="ddflow_rule_search",
+        render=_rows,
         description="Search rules by title or content, ranked by relevance, for an area or topic.",
         call=lambda repo, a, agent: _api().rule_search(
             repo,
@@ -245,6 +315,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "show"),
         tool="ddflow_rule_show",
+        render=_show,
         description="One rule with all its metadata: title, content, tags, scope, priority, globs, timestamps.",
         call=lambda repo, a, agent: _api().rule_get(
             repo,
@@ -266,6 +337,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("rule", "remove"),
         tool="ddflow_rule_remove",
+        render=lambda out, a: f"removed {a['id']}",
         deprecated={"reason": "a removal takes no reason"},
         description="Delete a rule file and regenerate the DDFLOW.md manifest. The rule's definition "
         "in the log is retired (def.retired; its history stays); a retirement the log "
@@ -281,6 +353,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("rule", "sync"),
         summary="record hand-edited rule files in the log; write the files the log has and the disk lacks",
         tool="ddflow_rule_sync",
+        render=_synced,
         description="Sync rule files with the log: record hand edits and new files, restore missing ones.",
         call=lambda repo, a, agent: _api().rule_sync(repo, agent=agent),
         payload=("recorded", "updated", "restored", "failed"),
