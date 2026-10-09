@@ -169,7 +169,12 @@ def complete(
     try:
         after = fold(log.read_all(), strict=False)
         # What `next` would offer now, not the bare queue: the block names it as "Next".
-        progress = PL.report(after, cfg, item, plan=plan_for(repo, log, cfg, after, purpose="view"))
+        progress = PL.report(
+            after,
+            cfg,
+            item,
+            plan=plan_for(repo, log, cfg, after, purpose="view", agent=log.agent_id),
+        )
     except Exception as e:  # informational only, see above
         progress = f"(progress report unavailable: {type(e).__name__}: {e})"
     if progress:
