@@ -340,8 +340,8 @@ def test_no_test_keeps_its_own_exemption_table():
     import ast
 
     kept = []
-    for path in sorted(Path(__file__).parent.glob("test_*.py")):
-        for node in ast.parse(path.read_text("utf-8")).body:
+    for path in sorted(Path(__file__).parent.rglob("test_*.py")):
+        for node in ast.walk(ast.parse(path.read_text("utf-8"))):
             targets = (
                 [node.target] if isinstance(node, ast.AnnAssign) else
                 node.targets if isinstance(node, ast.Assign) else []
