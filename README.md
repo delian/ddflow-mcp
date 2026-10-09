@@ -205,7 +205,7 @@ the same implementation, so neither drifts from the other.
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
-| **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`) |
+| **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs, schedules, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--source S] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`, `source`) |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **find records filed twice** | `ddflow dupes [--kind bug,task,...] [--open-only] [--floor F] [--limit N] [--json]` -- exit 0 with pairs, 2 with none | `ddflow_dupes` |
 | **settle a near-duplicate pair** | `ddflow link <a> --duplicate-of\|--extends\|--related\|--distinct <b> [--reason ...]` | `ddflow_link` |
@@ -3853,6 +3853,37 @@ old `config --set` key writes the new one. An unknown command, MCP tool or argum
 closest known one (`Did you mean 'ddflow_probe'?`). A command's alias is the same command to
 the parity test.
 
+### Upgrading a project: the whole picture
+
+A project is brought up to a newer ddflow in three steps, and ddflow does only the first on its own.
+
+1. **Silent: it tells you, once.** After ddflow is upgraded, the brief and the MCP handshake
+   print one line, `Upgraded ddflow A -> B: run ddflow upgrade --plan`, once per version on this
+   machine for this project. With the shipped `[upgrade].auto = "check"` the only file that
+   writes is the git-ignored `.ddflow/local/upgrade-notice.json`. `"safe"` also refreshes
+   ddflow's own files (hooks, driver docs, rules blocks) after a backup; `"off"` says nothing.
+2. **Read-only: you look.** `ddflow upgrade --plan` lists what would change, by category, and
+   writes nothing.
+3. **Consented: you apply.** `ddflow upgrade --apply` does what the plan lists after saving what
+   it rewrites. Anything an operator set by hand (a config value, a hand-edited driver doc) is
+   never changed without `--confirm KEY --reason WHY`, which is recorded in the log.
+
+**Undo and downgrade.** The log is append-only, so an upgrade is never undone by deleting events.
+`ddflow upgrade --restore [NAME]` puts back the files a backup holds (the default `local` backup,
+or the opt-in git `snapshot` tag: see "Backups: local or snapshot" above), and `git revert` of
+the commit that holds the upgrade's changes does the same for committed files. Going back to an
+older ddflow *binary* is a different matter: once a newer ddflow has stamped the log, the older
+one reads it but its writes are refused with the version to upgrade to (the skew guard,
+below), unless the operator passes `--allow-older-version` for that session.
+
+**Two versions at once.** Teammates on different ddflow versions share one log. Each agent
+appends to its own shard under `.ddflow/events/`, the shards are merged by union
+(`merge=union` in `.gitattributes`), and the version stamp is an event like any other, so the
+highest stamp wins on every clone: after the first upgraded clone's shard arrives, an older
+ddflow can still read and `ddflow upgrade --plan`, but its writes are refused until it is
+upgraded. Two clones that each ran `--apply` before merging both appended an `upgrade.applied`
+event; the union keeps both, every step was idempotent, and the plan on the merged log is empty.
+
 ### The version stamp and the skew guard
 
 A project's log records which ddflow versions have worked on it, so an upgrade, or a
@@ -4301,7 +4332,7 @@ as an unknown `--phase`. `research list` is the optional-verb form of `research`
 `standard` tier). `kind` is `task | phase | bug | research | session | search`; the filters
 are the CLI's (`state`, `phase`, `tag`, `owner`, `since`, `all` for bugs); `id` with
 `kind=session` is `session show`, and `kind=search` takes `query`, `mode`
-(`ranked | exact | regex`) and `sources` (the CLI's `--kind`). The body is the CLI's `--json`.
+(`ranked | exact | regex`), `sources` (the CLI's `--kind`) and `source` (its `--source`). The body is the CLI's `--json`.
 It is bounded: 25 rows unless `limit` says otherwise (`0` = the most: 1000 for a list, 200 for a search), a cut list
 says how many matched and how to get the rest, and one session shown in full is cut to its
 newest 25 entries with long texts clipped (`limit=0` for all; `ddflow session show` has
@@ -4310,8 +4341,18 @@ them whole). The event log's own timeline is `ddflow_history`.
 ### Searching everything
 
 `ddflow search "<text>"` looks across tasks, phases, bugs, research, decisions, lessons,
-sessions (notes and end summaries), prompts (what the operator said) and the log (the
-payload text of the events no record source already holds). Read-only; it writes nothing.
+sessions (notes and end summaries), prompts (what the operator said), rules, skills and
+commands, agents, jobs, schedules and the log (the payload text of the events no record source
+already holds). Read-only; it writes nothing.
+
+`--source` picks the search sources (comma list, default all): `records` (tasks, phases, bugs,
+research, decisions, lessons), `sessions`, `prompts`, `log`, `rules`, `skills` (`.claude/skills`
+and `.claude/commands`, and recorded skill definitions), `agents` (`.claude/agents` and recorded
+agent definitions), `jobs` (process jobs: command, item, note) and `schedules` (the log's and
+`.ddflow/schedules/*.toml`, not the built-in `[cadence]` passes). `--kind` then narrows by the kind
+of row (`rule`, `skill`, `command`, `agent`, `job`, `schedule` beside the older ones); an unknown
+name of either is refused with the choices. Documentation search joins as the `docs` source
+(B-ds-search).
 
 ```sh
 ddflow search "worktree cleanup"                 # ranked: the same TF-IDF engine `similar` uses
@@ -4321,7 +4362,7 @@ ddflow search retry --kind bug,research --state open --phase P2 --owner alice --
 ```
 
 One line per hit: source, id, state, date, and a snippet around the match. A prompt, note
-or summary hit carries its session id. Filters are `--kind` (comma list of the sources
+or summary hit carries its session id. Filters are `--source`, `--kind` (comma list of the kinds
 above), `--state`, `--phase` (tasks, bugs and research under it), `--owner` (the
 leaseholder, session agent or event agent; not `--agent`, which is who you are), `--since`
 and `--limit` (default 20, at most 200). Snippets are cut from text already redacted like

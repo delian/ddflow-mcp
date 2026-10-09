@@ -130,12 +130,16 @@ def test_gathered_rows_are_the_three_enumerators_in_order(project, ddflow):
     # not vacuous: the sessions source has rows to compare
     assert S._session_docs(events, {"session", "prompt"})
     assert S._log_docs(events, {"log"}) and S._item_docs(st, cfg, {"task"})
-    for n in (0, 1, 2, len(S.SOURCES)):
-        for combo in itertools.combinations(S.SOURCES, n):
+    original = S.SOURCES[:9]  # the nine kinds the three enumerators owned
+    for n in (0, 1, 2, len(original)):
+        for combo in itertools.combinations(original, n):
             kinds = set(combo)
             old = S._item_docs(st, cfg, kinds) + S._record_docs(st, cfg, kinds)
-            if kinds & {"session", "prompt"}:
-                old += S._session_docs(events, kinds)
+            # sessions and prompts are two sources now: summaries and notes, then the prompts
+            if "session" in kinds:
+                old += S._session_docs(events, {"session"})
+            if "prompt" in kinds:
+                old += S._session_docs(events, {"prompt"})
             if "log" in kinds:
                 old += S._log_docs(events, kinds)
-            assert S._docs(st, events, cfg, kinds) == old, combo
+            assert S._docs(st, events, cfg, kinds, None, set()) == old, combo
