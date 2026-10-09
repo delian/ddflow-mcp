@@ -73,7 +73,7 @@ def told(root: Path | str, version: str, said: str) -> None:
     """Record that ``version`` was already said (by the start report), so the one-line notice
     stays quiet. Never moves the marker backwards."""
     seen = noticed_version(root)
-    if version_key(version) and (not seen or is_older(seen, version)):
+    if said and version_key(version) and (not seen or is_older(seen, version)):
         _mark(root, version, said)
 
 
