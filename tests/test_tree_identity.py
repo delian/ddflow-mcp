@@ -166,3 +166,45 @@ def test_a_gate_run_records_the_one_identity(adopted):
     ev = G.run_command_gate(gdef, adopted)[1]
     assert ev["tree_sha"] == G.tree_identity(adopted)
     assert "source_tree" not in ev
+
+
+def _unborn(path: Path) -> Path:
+    path.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(path)], check=True)
+    return path
+
+
+def test_before_the_first_commit_the_content_is_still_named(tmp_path):
+    """`git init`, scaffold, run a gate: there is no HEAD, but the manifest exists. It used
+    to be recorded as `source_tree` beside an empty fingerprint; the one identity keeps it
+    (`+st:...`, no commit part) rather than recording nothing."""
+    work = _unborn(tmp_path / "fresh")
+    (work / "a.py").write_text("a = 1\n")
+    ident = G.tree_identity(work)
+    assert ident.startswith("+st:")
+    assert G.recorded_content(ident) == G.source_tree(work)
+    (work / "a.py").write_text("a = 2\n")
+    assert G.tree_identity(work) != ident
+
+
+def test_evidence_taken_before_the_first_commit_goes_stale_on_an_edit(adopted, tmp_path):
+    work = _unborn(tmp_path / "fresh")
+    (work / "a.py").write_text("a = 1\n")
+    _passed(adopted, {"command": "true", "exit": 0, "tree_sha": G.tree_identity(work)})
+    st = fold(EventLog(adopted).read_all(), strict=False)
+    cfg = Config.load(adopted)
+    assert outcomes.stale_evidence_detail(st, cfg, "T1", work) == []
+    (work / "a.py").write_text("a = 2\n")
+    notes = outcomes.stale_evidence_detail(st, cfg, "T1", work)
+    assert [n.gate for n in notes] == ["unit_tests"] and not notes[0].unverified
+
+
+def test_a_fingerprint_spelled_dirty_value_is_compared_as_a_fingerprint(adopted):
+    """The fallback `tree_identity` emits when no manifest can be taken, and what an older
+    gate recorded: not an `st:` id, and not HEAD's own tree -- an edit makes it stale."""
+    (adopted / "a.py").write_text("a = 1\n")
+    legacy = G.tree_fingerprint(adopted)
+    assert not legacy.endswith("+clean") and G.recorded_content(legacy) == ""
+    _passed(adopted, {"command": "true", "exit": 0, "tree_sha": legacy})
+    (adopted / "a.py").write_text("a = 2\n")
+    assert [n.gate for n in _stale(adopted)] == ["unit_tests"]
