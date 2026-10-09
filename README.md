@@ -916,7 +916,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 200 knobs.
+cadences, and the rest of the 201 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2158,14 +2158,16 @@ four ask `services/guidance/inject.py`. It selects the live guidance that govern
 (its files, its tags, the gate), ranks it, packs it, and fences every body as data with who
 recorded it:
 
-- **Rank:** pinned first -- guidance that applies to all work (no globs, categories or gates)
-  -- then by how hard it binds (`block`, `warn`, `advisory`), how specific its scope is (the
-  gate, then the files, then a category, then everything) and its priority; ties by id.
-- **Pinned is never trimmed.** `claim`, `gate status` and the reviewers' block spend a budget
-  (a quarter of `[session].brief_max_tokens`) on the *unpinned* guidance only, in rank order,
-  folding repeated text, quoting a long body to 600 characters and ending with one line that
-  names what was cut. The brief keeps its own hard cap: pinned guidance leads its section, so
-  a section's cut from the bottom reaches it last.
+- **Rank:** pinned first, then guidance that applies to all work (no globs, categories or
+  gates), then by how hard it binds (`block`, `warn`, `advisory`), how specific its scope is
+  (the gate, then the files, then a category) and its priority; ties by id.
+- **Pinned is never trimmed.** Pinned means an always-scope rule that `block`s (a way to pin a
+  decision explicitly is a later task's) -- not merely a decision that names no files, or a project with a dozen of them
+  would get a page at every claim. `claim`, `gate status` and the reviewers' block spend a
+  budget (a quarter of `[session].brief_max_tokens`) on the *unpinned* guidance only, in rank
+  order, folding repeated text, quoting a long body to 600 characters and ending with one line
+  that names what was cut. The brief keeps its own hard cap: what ranks first leads its
+  section, so a section's cut from the bottom reaches it last.
 - **`ddflow claim`** prints the block under the worktree lines (and `ddflow_claim` carries it
   as `guidance`) only when something governs the item; **`ddflow gate status`** adds the
   guidance for the current gate; **the brief** lists decisions in this order and adds a
@@ -4054,6 +4056,16 @@ originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, neve
 kept) with a `manifest.json` of what was
 there, and prints the backup and `git diff` to review the change.
 
+**The upgrade notice** (decision D-upgrade-auto-check; `[upgrade].auto`, shipped `check`).
+When ddflow has been upgraded past the release the project was last brought up to and
+`ddflow upgrade --plan` has items, the brief (so the SessionStart hook) and the MCP handshake say so in ONE line --
+`Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan` -- once per version on this machine
+for this project (`.ddflow/local/upgrade-notice.json`, git-ignored: the only thing it writes),
+whichever surface speaks first. `check` changes nothing else. `safe` first applies the plan's non-destructive categories, `hooks` and `instructions`
+(ddflow's own files), after the backup `[upgrade].backup` names, and says what it did; config
+defaults, migrations, repairs and features stay the operator's. `off` says nothing. Set it with
+`ddflow config upgrade.auto safe` (or the `ddflow_configure` tool).
+
 **Backups: local or snapshot** (decision D-upgrade-backups; `[upgrade].backup`, or `--backup`
 for one run). Both are explained here so you can choose:
 
@@ -4703,7 +4715,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 200): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 201): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5202,7 +5214,7 @@ declared once and persists — see
 
 ## Configuration
 
-200 knobs across 29 sections, every one documented in place and listed, with its default
+201 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5269,8 +5281,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=823cf6ec0358 -->
-<details><summary>All 200 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=17b0958ca5fc -->
+<details><summary>All 201 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5431,6 +5443,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |
 | `upgrade.config_changes` | `"agent"` | `agent` \| `ask` \| `operator` |
+| `upgrade.auto` | `"check"` | `off` \| `check` \| `safe` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |

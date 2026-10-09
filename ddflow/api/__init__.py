@@ -177,7 +177,9 @@ from .setup import (
     help_topic,
     hooks,
     prompts,
+    stale_server_note,
     upgrade,
+    upgrade_notice,
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
@@ -318,11 +320,13 @@ __all__ = [
     "show",
     "similar",
     "split",
+    "stale_server_note",
     "status",
     "task_add",
     "unblock",
     "update",
     "upgrade",
+    "upgrade_notice",
     "verify_item",
     "verify_sweep",
     "verify_tool",
