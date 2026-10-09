@@ -282,6 +282,11 @@ def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
     )
 
 
+def checked(cfg: Config, kind: str) -> bool:
+    """Whether `[dedupe]` checks records of ``kind`` at all (``assess`` says ``off`` if not)."""
+    return cfg.dedupe.on_match != "off" and kind in cfg.dedupe.kinds
+
+
 def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessment:
     """Apply ``[dedupe]`` to one record about to be added.
 
@@ -295,7 +300,7 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
     """
     dd = cfg.dedupe
     kind = str(record.get("kind") or "")
-    if dd.on_match == "off" or kind not in dd.kinds:
+    if not checked(cfg, kind):
         return Assessment("off")
     own = str(record.get("id") or "")
     item = str(record.get("item") or "")
@@ -409,7 +414,7 @@ def screen(
     seen: dict[str, str] = {}
     for i, probe in enumerate(probes):
         hit = _repeat_of(i, probe, index, cfg, batch, peers, compare)
-        if hit is None and fold_copies and _screened(cfg, batch[i]):
+        if hit is None and fold_copies and checked(cfg, str(batch[i].get("kind") or "")):
             hit = _copy_of(i, batch[i], seen)
         if hit is not None:
             repeats.append(hit)
@@ -427,11 +432,6 @@ def _copy_of(i: int, rec: Mapping[str, Any], seen: dict[str, str]) -> Screened |
         return Screened(i, seen[key], 1.0, True, "import")
     seen[key] = str(rec["id"])
     return None
-
-
-def _screened(cfg: Config, rec: Mapping[str, Any]) -> bool:
-    """Whether `[dedupe]` checks this record at all (``assess`` says ``off`` otherwise)."""
-    return cfg.dedupe.on_match != "off" and str(rec.get("kind") or "") in cfg.dedupe.kinds
 
 
 def _repeat_of(
