@@ -75,7 +75,7 @@ class GateDef:
         tool. An earlier version of this paragraph claimed satisfying the gate was
         "impossible through the MCP surface at all", and that was FALSE: two calls —
         `ddflow_configure` setting `gate.<id>.human = false`, then `ddflow_gate_record`
-        — cleared it with no shell involved. That path is now refused by `_write_config`
+        — cleared it with no shell involved. That path is now refused by `configwrite.apply_edit`, whose human-gate guard covers every kind of edit
         (the flag is not an editable preference), but the honest claim is the narrow one,
         because the broad one was the kind of overclaim this project keeps catching in
         its own docstrings and this docstring was no exception.
