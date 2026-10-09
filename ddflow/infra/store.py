@@ -563,7 +563,8 @@ class Store:
         over the same columns and the same query terms. Both lists are identical in their
         candidates everywhere: the substring list by construction, the WORD list because the
         fallback splits words as FTS5's unicode61 tokenizer does (`textsim.fts_words`) and
-        stems them as its porter tokenizer does (`core.porter`), each checked against FTS5.
+        stems them as its porter tokenizer does (`core.porter`), each checked against FTS5 (for ASCII,
+        Latin and the common scripts; see `textsim.fts_words` for what can still differ).
         ``rerank_by_likeness`` additionally reorders the fused top by fuzzy likeness to the
         query (`rank.rerank`: rapidfuzz when installed, else difflib).
 

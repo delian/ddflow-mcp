@@ -134,7 +134,8 @@ def _lines() -> list[str]:
             ln for ln in path.read_text("utf-8", errors="replace").splitlines() if ln.strip()
         )
     shapes = ["café résumé naïve", "foo_bar adopt_existing __init__", "x1y2 3d 2nd", "日本語 テスト",
-              "ﬁne ﬂow", "a-b c.d e/f", "Ünïcödé ÅNGSTRÖM", "αβγ δ", "тест слово", "n°1 ½ ²"]  # fmt: skip
+              "ﬁne ﬂow", "a-b c.d e/f", "Ünïcödé ÅNGSTRÖM", "αβγ δ", "тест слово", "n°1 ½ ²",
+              "ёлка Ёж", "αγορά Ελλάδα άλφα", "\u00b5s \u017ftill \u03c2\u03b1 \u0130stanbul", "한국어 문장", "ǟ ǖ ǻ", "ǆ Ǆ ǈ", "straße ŉ"]  # fmt: skip
     return sorted(lines)[:8000] + shapes
 
 
