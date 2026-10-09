@@ -12,6 +12,10 @@ from ...core import progress as PR
 from ...core.defaults import DEFAULT_NEXT_KIND
 from ...core.model import REVIEW
 from ...core.plain import plain
+from ...core.schedule import critical_path
+from ...core.tier import tier_of
+from ...services import flow as FS
+from ...services import promotions as PM
 from .._base import _load
 from .planning import plan_for
 from .reservations import WAITABLE
@@ -27,7 +31,6 @@ def next_(
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     ``phase`` names no item (`_unknown_phase`)."""
-    from ...core.schedule import critical_path
 
     log, cfg, st = _load(repo, agent)
     unknown = _unknown_phase(st, phase)
@@ -38,7 +41,6 @@ def next_(
         # Continuous delivery where the operator asked for it: an environment in
         # auto_promote whose upstream moved gets its promotion filed here, and offered
         # below like any other task.
-        from ...services import promotions as PM
 
         promoted = PM.auto(repo, cfg, log, st)
         if promoted:
@@ -57,7 +59,6 @@ def next_(
         # Reviewers act between an agent's turns. Asking here is what lets a merged
         # request complete, and a requested change come back as work, without anyone
         # remembering to run `pr sync` -- the loop stays `next`, `claim`, work, `merge`.
-        from ...services import flow as FS
 
         rep = FS.sync(repo, cfg, log)
         synced = {
@@ -95,7 +96,6 @@ def next_(
 def _ready_rows(items) -> list[dict[str, Any]]:
     """The ready items as rows; a `tier:` tag also as a `tier` field (advisory, so an
     untagged item carries nothing extra)."""
-    from ...core.tier import tier_of
 
     rows = []
     for i in items:

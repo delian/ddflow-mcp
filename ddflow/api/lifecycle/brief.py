@@ -9,15 +9,24 @@ from pathlib import Path
 
 from ...core import clock
 from ...core import outcome as O
+from ...core import progress as PR
+from ...core import provenance as PV
 from ...core.budget import Budget, approx_tokens
+from ...infra.store import Store
+from ...services import choices as CHO
 from ...services import gates as G
 from ...services import leases as L
 from ...services import searchcore as SC
+from ...services import skills as SK
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
+from ...services.export import select as export_select
 from ...services.guidance import inject as GI
+from ...views import markdown as render_md
 from .._base import _load
+from ..reporting import new_reports
 from .heartbeat import _waiters
+from .planning import plan_for
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
 
 
@@ -42,7 +51,6 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
 
 def _rules_block(governing) -> str:
     """The project's rules that govern the item's files, one fenced line each, "" for none."""
-    from ...core import provenance as PV
 
     rules = governing.records("rule")
     if not rules:
@@ -104,9 +112,6 @@ def brief(
     Decisions reach the agent by GLOB rather than by search — the whole point is that they
     arrive without its having to suspect they exist.
     """
-    from ...infra.store import Store
-    from ...views import markdown as render_md
-    from .planning import plan_for
 
     log, cfg, _ = _load(repo, agent)
     store = Store(repo, cfg)
@@ -142,8 +147,6 @@ def brief(
         SC.search_table(store, "lessons", query, cfg.session.brief_lesson_count) if query else []
     )
 
-    from ...services import skills as SK
-
     project_skills = SK.relevant(repo, query) if query else []
 
     rules = ""
@@ -160,7 +163,6 @@ def brief(
         key=lambda m: (m.origin_at or m.at, m.at),
         reverse=True,
     )
-    from ..reporting import new_reports
 
     reports_block = ""
     if item and item in st.items and st.items[item].lease:
@@ -172,12 +174,10 @@ def brief(
         cap = Budget(cfg.session.brief_max_tokens, "tokens").chars // 2
         if len(reports_block) > cap:
             reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
-    from ...core import progress as PR
-    from ...services import choices as CH
 
     # Prepended like the reports block, so budgeted like it (B1472311a63): uncounted, it
     # took the room the lessons were meant to have.
-    undecided = CH.brief_block(cfg)
+    undecided = CHO.brief_block(cfg)
     prepended = reports_block + (undecided + "\n" if undecided else "")
 
     text = render_md.brief(
@@ -209,7 +209,6 @@ def brief(
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
-    from ...services.export import select as export_select
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line

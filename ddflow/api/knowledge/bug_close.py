@@ -9,10 +9,38 @@ import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import fold
+from ...core.model import OPEN, fold
+from ...infra import worktree as W
+from ...services import gates as G
 from .._base import _load
 from .bugs import _unknown_bug
 from .regression import _looks_like_several, _split_outside_brackets, _unresolved_tests
+
+
+def _named_tests(regression_test: str | list[str]) -> tuple[list[str], str]:
+    """(the split test list, the string the event keeps) of what `--regression-test` was given."""
+    parts = [regression_test] if isinstance(regression_test, str) else list(regression_test)
+    tests = [t for part in parts for t in _split_outside_brackets(str(part or ""))]
+    shown = regression_test.strip() if isinstance(regression_test, str) else ", ".join(tests)
+    return tests, shown
+
+
+def _missing_tests(item: str, missing: list[str], tests: list[str]) -> O.Outcome:
+    """The refusal for named tests that exist in no worktree of this repository."""
+    joined = [m for m in missing if _looks_like_several(m)]
+    hint = (
+        f" {'; '.join(repr(m) for m in joined)} looks like several tests in one entry: "
+        f"separate them with ',' or ';', or repeat --regression-test."
+        if joined
+        else ""
+    )
+    return O.failed(
+        "bug.fixed",
+        f"--regression-test: {len(missing)} of {len(tests)} test(s) exist in no "
+        f"worktree of this repository: {'; '.join(missing)}.{hint} Name the tests "
+        f"that now guard this bug.",
+        id=item,
+    )
 
 
 def bug_fixed(
@@ -53,11 +81,7 @@ def bug_fixed(
         except ValueError as e:
             return O.failed("bug.fixed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
-    parts = [regression_test] if isinstance(regression_test, str) else list(regression_test)
-    tests = [t for part in parts for t in _split_outside_brackets(str(part or ""))]
-    regression_test = (
-        regression_test.strip() if isinstance(regression_test, str) else ", ".join(tests)
-    )
+    tests, regression_test = _named_tests(regression_test)
     if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
@@ -70,20 +94,7 @@ def bug_fixed(
         return _unknown_bug("bug.fixed", item, st)
     missing, unchecked = _unresolved_tests(repo, regression_test)
     if missing:
-        joined = [m for m in missing if _looks_like_several(m)]
-        hint = (
-            f" {'; '.join(repr(m) for m in joined)} looks like several tests in one entry: "
-            f"separate them with ',' or ';', or repeat --regression-test."
-            if joined
-            else ""
-        )
-        return O.failed(
-            "bug.fixed",
-            f"--regression-test: {len(missing)} of {len(tests)} test(s) exist in no "
-            f"worktree of this repository: {'; '.join(missing)}.{hint} Name the tests "
-            f"that now guard this bug.",
-            id=item,
-        )
+        return _missing_tests(item, missing, tests)
     if not verify_regression and not verify_reason.strip():
         return O.refused(
             "bug.fixed",
@@ -263,7 +274,6 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
     surfaces without its sentence),
     so the reply can say what is true: a task somebody has claimed, or that fixes a real
     bug too, stays and the agent decides; a finished or removed one is not "still queued"."""
-    from ...core.model import OPEN
 
     if not rec.fix_task:
         return "", ""
@@ -328,8 +338,6 @@ def _verify_regression(
     module_tests = [t for t in tests if "::" in t and t.split("::", 1)[0].endswith(".py")]
     if not module_tests:
         return "not-applicable", {}
-    from ...infra import worktree as W
-    from ...services import gates as G
 
     fx = _fixing_item(st, bug_id)
     if fx is not None and fx.landed_before and fx.landed_after:

@@ -8,8 +8,18 @@ import time
 from pathlib import Path
 
 from ...core import clock
+from ...core.admission import glob_conflict
 from ...core.model import ABANDONED, DONE, REVIEW
+from ...core.schedule import (
+    Blocked,
+    capacities,
+    find_cycles,
+    is_external,
+    item_blocker,
+    resource_shortfall,
+)
 from ...services import leases as L
+from ...services import waits as WT
 
 
 def _reservation_hold(repo: Path, st, cfg, me: str, now: float | None = None):
@@ -20,7 +30,6 @@ def _reservation_hold(repo: Path, st, cfg, me: str, now: float | None = None):
     the slot it frees goes to the next item and nothing is blocked on an item that is not
     in fact offered. None when reservations are off.
     """
-    from ...core.schedule import Blocked
 
     if cfg.lease.waiter_reservation_s <= 0:
         return None
@@ -94,6 +103,43 @@ def _blocking_leases(st, blocked, others) -> list[str]:
     return sorted(named) or sorted(others)
 
 
+def _expired_blocker(cfg, it, me: str, live):
+    """The `expired` verdict for an item whose holder's lease ran out, under
+    `reclaim_policy = "report"`; None otherwise."""
+    lz = it.lease
+    if not (
+        lz is not None
+        and it.id not in live
+        and lz.holder != me
+        and cfg.lease.reclaim_policy == "report"
+    ):
+        return None
+    # Expiry frees the holder's GLOBS for everyone else, but not its item: `claim`
+    # refuses an expired lease, because a crashed agent's tree often holds finished
+    # work. Calling it claimable made wait -> refused -> wait a spin -- for the item
+    # path, and (critic) for an any-wait under deps_only, whose ready set is
+    # filtered through here.
+    return Blocked(
+        it.id,
+        "expired",
+        f"{it.id}'s lease from {lz.holder} has expired and is not handed on "
+        f"automatically. `ddflow recover --item {it.id}` says what its tree holds; "
+        f"salvage, release it, then claim.",
+        [],
+    )
+
+
+def _resource_blocker(cfg, it, live):
+    """The `resources` verdict for an item whose declared resources are all in use."""
+    if not it.resources or it.id in live:
+        return None
+    try:
+        short = resource_shortfall(it.resources, live, capacities(cfg), exclude=it.id)
+    except ValueError:
+        short = ""  # a declaration error: claim reports it, and waiting cannot fix it
+    return Blocked(it.id, "resources", short, []) if short else None
+
+
 def _claim_blocker(
     st,
     cfg,
@@ -114,39 +160,14 @@ def _claim_blocker(
     `item_blocker` skips these under `ready_policy = deps_only`, and waking on a
     verdict `claim` then refuses would spin (roborev: it did, for a held item).
     """
-    from ...core.schedule import (
-        Blocked,
-        capacities,
-        find_cycles,
-        item_blocker,
-        resource_shortfall,
-    )
-
     cycles = find_cycles({i.id: i for i in st.items.values() if not i.removed})
     in_cycle = {n for c in cycles for n in c}
     b = item_blocker(st, cfg, it, live, agent=me, now=now, in_cycle=in_cycle, cycles=cycles)
     if b is not None:
         return b
-    lz = it.lease
-    if (
-        lz is not None
-        and it.id not in live
-        and lz.holder != me
-        and cfg.lease.reclaim_policy == "report"
-    ):
-        # Expiry frees the holder's GLOBS for everyone else, but not its item: `claim`
-        # refuses an expired lease, because a crashed agent's tree often holds finished
-        # work. Calling it claimable made wait -> refused -> wait a spin -- for the item
-        # path, and (critic) for an any-wait under deps_only, whose ready set is
-        # filtered through here.
-        return Blocked(
-            it.id,
-            "expired",
-            f"{it.id}'s lease from {lz.holder} has expired and is not handed on "
-            f"automatically. `ddflow recover --item {it.id}` says what its tree holds; "
-            f"salvage, release it, then claim.",
-            [],
-        )
+    expired = _expired_blocker(cfg, it, me, live)
+    if expired is not None:
+        return expired
     held = live.get(it.id)
     if held is not None and held.holder != me:
         return Blocked(it.id, "conflict", f"leased by {held.holder}", [it.id])
@@ -161,13 +182,9 @@ def _claim_blocker(
             f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})",
             [other_id],
         )
-    if it.resources and it.id not in live:
-        try:
-            short = resource_shortfall(it.resources, live, capacities(cfg), exclude=it.id)
-        except ValueError:
-            short = ""  # a declaration error: claim reports it, and waiting cannot fix it
-        if short:
-            return Blocked(it.id, "resources", short, [])
+    short = _resource_blocker(cfg, it, live)
+    if short is not None:
+        return short
     if fair and repo is not None:
         # Last: the files are free, and the question is only whether someone is in line.
         want = list(it.globs if globs is None else globs)
@@ -201,8 +218,6 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
     files, and only when it is older than the claimant -- a strict order, so it cannot
     deadlock, and two waiters on disjoint files never see each other.
     """
-    from ...core.admission import glob_conflict
-    from ...services import waits as WT
 
     if cfg.lease.waiter_reservation_s <= 0:
         return None
@@ -239,7 +254,6 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
 def _in_motion(st, dep: str, others: dict) -> bool:
     """Will `dep` finish without the caller? Held by another agent, under review, in
     another repository, or with a sub-task someone holds."""
-    from ...core.schedule import is_external
 
     if is_external(dep) or dep in others:
         return True
