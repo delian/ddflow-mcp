@@ -44,7 +44,7 @@ classifiers = [
 # `uv run pytest` red on one commit. `services/prompts.py` keeps a LOUD fallback renderer
 # for stripped deployments; `tests/test_template_engines.py` runs both engines. tomlkit is
 # the second: it edits config files without losing comments. Everything else is stdlib
-# plus `git`, and the optional extras below are each reached through one adapter.
+# plus `git`; each optional extra below that is in use is reached through one adapter.
 dependencies = [
     "jinja2>=3.1.6",
     "tomlkit>=0.13",
