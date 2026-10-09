@@ -380,3 +380,24 @@ def test_the_progress_limit_is_applied_to_the_rows_by_the_mcp_bound():
     assert len(default) == 25
     everything, _ = BOUNDS["ddflow_progress"](rows, {"limit": 0})
     assert len(everything) == 40
+
+
+def test_the_export_family_carries_its_own_parity_exemptions():
+    """The five tools of export, bisect, tests, precommit and ci take their entries from the
+    declarations and their omitted flags are declared on them, not in the shared exemptions."""
+    from ddflow.surfaces import exemptions as X
+
+    tools = {c.tool: c for c in export.COMMANDS}
+    assert set(tools) == {
+        "ddflow_export",
+        "ddflow_bisect",
+        "ddflow_tests",
+        "ddflow_precommit",
+        "ddflow_ci",
+    }
+    for name, command in tools.items():
+        assert TOOLS[name]["api"] is command.call
+        assert not any(c.tool == name for c in X.EXEMPTIONS)
+    omitted = {(t, f) for (t, f) in X.FLAG_EXEMPT if t in tools}
+    assert omitted == {(t, f) for t, c in tools.items() for f in c.flag_exempt}
+    assert ("ddflow_bisect", "--glob") in omitted and ("ddflow_ci", "--sha") in omitted
