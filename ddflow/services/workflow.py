@@ -28,7 +28,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from .gates import GateDef, inert_requirements, parallel_test_advice, pipelined, pipelines
+from .gates import (
+    GateDef,
+    inert_requirements,
+    parallel_test_advice,
+    pipelined,
+    pipelines,
+    required_gates,
+)
 
 #: A command gate with no registered mutation has never been shown able to go red.
 #: Advisory, not a defect: `ddflow gate verify` is how you find out, and a project may
@@ -406,7 +413,7 @@ def describe(
             in_phase=gid in cfg.gates.phase_pipeline,
             in_promotion=gid in v.promotion_pipeline,
             position=(cfg.gates.task_pipeline.index(gid) + 1) if in_task else 0,
-            required=gid in cfg.gates.required,
+            required=gid in required_gates(cfg),
             evidence=gid in cfg.gates.evidence_required,
         )
         if g is not None:
