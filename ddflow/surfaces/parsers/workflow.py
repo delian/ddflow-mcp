@@ -132,11 +132,17 @@ def register(s: argparse._SubParsersAction) -> None:
     )
     hki.add_argument("--claude", action="store_true", help=_claude_help)
     _gemini_help = "the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json"
+    _harness_help = (
+        "the agent's own hooks, by descriptor id; --harness claude and --harness gemini are "
+        "--claude and --gemini (the other agents' hook files arrive with their writers)"
+    )
     hki.add_argument("--gemini", action="store_true", help=_gemini_help)
+    hki.add_argument("--harness", default="", help=_harness_help)
     hki.set_defaults(fn=cmd_hooks)
     hku = hk_s.add_parser("uninstall")
     hku.add_argument("--claude", action="store_true", help=_claude_help)
     hku.add_argument("--gemini", action="store_true", help=_gemini_help)
+    hku.add_argument("--harness", default="", help=_harness_help)
     hku.set_defaults(fn=cmd_hooks)
     hk_s.add_parser("status").set_defaults(fn=cmd_hooks)
     hk_s.add_parser("check-commit", help="(invoked by the hook)").set_defaults(fn=cmd_hooks)
@@ -161,6 +167,27 @@ def register(s: argparse._SubParsersAction) -> None:
     )
     hkp.add_argument("--gemini", action="store_true", help="answer with the JSON Gemini CLI wants")
     hkp.set_defaults(fn=cmd_hooks)
+
+    hkr = hk_s.add_parser(
+        "run",
+        help="(invoked by any agent's hook) handle one lifecycle event for a harness; "
+        "always exit 0",
+    )
+    hkr.add_argument(
+        "hook_event",
+        metavar="event",
+        nargs="?",
+        default="",
+        # No `choices`: argparse would exit 2 on an event a newer or older agent config names,
+        # and exit 2 BLOCKS in Claude Code and Codex. The handler says it is unknown on stderr.
+        help="the lifecycle event: session_start, prompt, pre_tool, post_tool, pre_compact, stop, session_end",
+    )
+    hkr.add_argument(
+        "--harness",
+        default="claude",
+        help="the agent whose hook dialect the call speaks (a descriptor id; default claude)",
+    )
+    hkr.set_defaults(fn=cmd_hooks)
 
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(
         fn=cmd_mcp
