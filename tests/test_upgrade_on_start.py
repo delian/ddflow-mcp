@@ -122,7 +122,7 @@ def test_an_unknown_switch_counts_as_the_strictest(old: Path) -> None:
 def test_the_surface_follows_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
     assert US.surface({}) == "mcp"
     assert US.surface({US.CONTAINER_ENV: "1"}) == "container"
-    for no in ("0", "false", "No", " ", ""):
+    for no in ("0", "false", "No", "true", "yes", " ", ""):
         assert US.surface({US.CONTAINER_ENV: no}) == "mcp", no
 
 
@@ -314,6 +314,9 @@ def test_applying_the_upgrade_drops_the_cached_proposal(old: Path) -> None:
     out = S.upgrade(old, apply="hooks", agent="starter")
     assert out.exit in (0, 1, 3), out
     assert str(old.resolve()) not in S._START_REPORTS
+    assert "still pending" in S.upgrade_start(old, agent="starter")
+    S.upgrade(old, restore="latest", agent="starter")
+    assert str(old.resolve()) not in S._START_REPORTS, "a restore changes the plan too"
 
 
 def test_an_empty_report_never_marks_the_notice_as_said(old: Path) -> None:

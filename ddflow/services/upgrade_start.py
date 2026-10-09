@@ -73,9 +73,9 @@ OFF, CURRENT, OLDER, PROPOSED, APPLIED, READONLY, TIMEOUT, FAILED = (
 def surface(environ: Mapping[str, str] | None = None) -> str:
     """``container`` when the image says so, else ``mcp``."""
     env = os.environ if environ is None else environ
-    flag = str(env.get(CONTAINER_ENV, "")).strip().lower()
-    # `DDFLOW_IN_CONTAINER=0` is no container: only here may the start apply without asking.
-    return "container" if flag not in ("", "0", "false", "no", "off") else "mcp"
+    # Exactly what our image sets and `infra.container.in_container` trusts first: `1`. A
+    # stray `true` or `0` is no container, and only a container may apply without asking.
+    return "container" if str(env.get(CONTAINER_ENV, "")).strip() == "1" else "mcp"
 
 
 def mode(cfg: Config, environ: Mapping[str, str] | None = None) -> str:
