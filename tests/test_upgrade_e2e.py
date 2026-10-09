@@ -22,6 +22,8 @@ RELEASES = ROOT / "tests" / "fixtures" / "releases"
 VERSIONS = sorted(p.name for p in RELEASES.iterdir() if (p / "meta.json").is_file())
 AGENT = "e2e-upgrader"
 
+assert VERSIONS, "no release fixtures under tests/fixtures/releases: the e2e would vanish"
+
 
 def _git(root: Path, *args: str) -> None:
     subprocess.run(
@@ -85,9 +87,19 @@ def test_fresh_init_has_an_empty_plan(tmp_path: Path) -> None:
 
 
 def _section(text: str, heading: str) -> str:
-    m = re.search(rf"^### {re.escape(heading)}\n(.*?)(?=^#{{1,3}} )", text, re.S | re.M)
-    assert m, f"README has no section {heading!r}"
-    return m.group(1)
+    """The body of a `### heading` section: to the next heading of level 1-3 outside a fence."""
+    lines, body, found, fenced = text.splitlines(), [], False, False
+    for line in lines:
+        if line.startswith("```"):
+            fenced = not fenced
+        if found:
+            if not fenced and re.match(r"#{1,3} ", line):
+                break
+            body.append(line)
+        elif line == f"### {heading}":
+            found = True
+    assert found, f"README has no section {heading!r}"
+    return "\n".join(body)
 
 
 def test_readme_explains_the_upgrade_and_both_backup_options() -> None:
