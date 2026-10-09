@@ -10,6 +10,7 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...services import searchcore as SC
 from .._base import _load
 from .lessons import _store
 
@@ -103,7 +104,8 @@ def memory_list(
         store = _store(repo, log, cfg)
         # `limit` defaults to ALL here as on the other path; a silent cap of 20 returned
         # a truncated answer presented as complete (roborev 825).
-        ids = [r["id"] for r in store.search("memories", query, limit or max(1, len(st.memories)))]
+        hits = SC.search_table(store, "memories", query, limit or max(1, len(st.memories)))
+        ids = [r["id"] for r in hits]
         rows = [st.memories[i] for i in ids if i in st.memories]
         if include_forgotten:
             # The index holds LIVE memories only, so a forgotten one must be matched

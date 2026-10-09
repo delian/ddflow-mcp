@@ -11,6 +11,7 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...services import searchcore as SC
 from .._base import _load
 
 
@@ -178,8 +179,11 @@ def lesson_search(
     repo: Path, query: str, *, limit: int | None = None, agent: str = ""
 ) -> O.Outcome:
     log, cfg, _st = _load(repo, agent)
-    hits = _store(repo, log, cfg).search(
-        "lessons", query, limit if limit is not None else cfg.lessons.max_results
+    hits = SC.search_table(
+        _store(repo, log, cfg),
+        "lessons",
+        query,
+        limit if limit is not None else cfg.lessons.max_results,
     )
     data: dict[str, Any] = {
         "hits": hits,
