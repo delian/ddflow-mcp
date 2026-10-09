@@ -105,17 +105,17 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     appeared in only one of them.
     """
     from ...core import progress as PR
-    from ...core.schedule import plan
     from ...services import leases as L
+    from ..lifecycle.planning import plan_for
 
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
     st = fold(events, strict=False)
     tracked = PR.work(events, st)
     findings = PR.detect(events, st, cfg)
-    from ...services.flowstate import limit_for
-
-    p = plan(st, cfg, agent=log.agent_id, parallel=limit_for(repo, cfg, st, events))
+    # The offer `next` makes (reservation hold and parallelism limit alike), so "ready" here is
+    # never an item `next` withholds for a waiter in line.
+    p = plan_for(repo, log, cfg, st, purpose="view", agent=log.agent_id, events=events)
     rec = L.scan(log, cfg, repo)
 
     phases, tasks = st.phases(), st.tasks()

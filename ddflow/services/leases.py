@@ -209,7 +209,7 @@ def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
     return bool(lease and lease.holder == holder and lease.live(time.time(), cfg.lease.grace_s))
 
 
-def _acquire_locked(
+def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller's offer
     log: EventLog,
     cfg: Config,
     item_id: str,
@@ -221,8 +221,11 @@ def _acquire_locked(
     note: str = "",
     force: bool = False,
     resources: list[str] | None = None,
+    offer: Offer | None = None,
 ) -> Lease:
-    """Claim an item. Raises ``LeaseError`` (never steals) if someone live holds it.
+    """Claim an item. Raises ``LeaseError`` (never steals) if someone live holds it. A refusal
+    names what the caller could take instead: ``offer`` says (the API hands in the offer
+    `next` makes, reservations and limit included); without one it is the bare scheduler's.
 
     The read that decides and the write that claims cannot be separated by another
     agent's claim. That used to be achieved by folding the whole log INSIDE the lock;
@@ -252,7 +255,7 @@ def _acquire_locked(
                 + (f" (merged as {it.merged_sha})" if it.merged_sha else "")
                 + ". Re-open it deliberately with --force if you mean to redo it.",
                 item=item_id,
-                alternatives=_alternatives(state, cfg, item_id, holder, now),
+                alternatives=_alts(offer, state, cfg, item_id, holder, now),
             )
 
         existing = it.lease
@@ -267,7 +270,7 @@ def _acquire_locked(
                 f"{existing.remaining_s(now):.0f}s",
                 holder=existing.holder,
                 item=item_id,
-                alternatives=_alternatives(state, cfg, item_id, holder, now),
+                alternatives=_alts(offer, state, cfg, item_id, holder, now),
             )
         if existing and not force and cfg.lease.reclaim_policy == "report":
             if existing.expired_at:
@@ -311,7 +314,7 @@ def _acquire_locked(
                 alternatives=(
                     blocked.waiting_on
                     if blocked.reason == "umbrella"
-                    else _alternatives(state, cfg, item_id, holder, now)
+                    else _alts(offer, state, cfg, item_id, holder, now)
                 ),
             )
 
@@ -334,7 +337,7 @@ def _acquire_locked(
                 ),
                 holder=lease.holder,
                 item=item_id,
-                alternatives=_alternatives(state, cfg, item_id, holder, now),
+                alternatives=_alts(offer, state, cfg, item_id, holder, now),
             )
 
         # Resources: checked against EVERY live lease, the claimant's own included --
@@ -359,7 +362,7 @@ def _acquire_locked(
                     f"{item_id} {short}. Wait for one to be released, or take something "
                     f"that does not need it.",
                     item=item_id,
-                    alternatives=_alternatives(state, cfg, item_id, holder, now),
+                    alternatives=_alts(offer, state, cfg, item_id, holder, now),
                 )
 
         _record_claimed_globs(log, it, globs, resources)
@@ -389,6 +392,22 @@ def _acquire_locked(
             note=note,
             resources=wants,
         )
+
+
+#: Who says what a refused claimant could take instead: `(state, item_id, holder, now)` ->
+#: item ids. The scheduler's offer needs the repository (waiters' reservations, the load), which
+#: this layer does not hold; the API that does passes it in.
+Offer = Callable[[State, str, str, float], list[str]]
+
+
+def _alts(
+    offer: Offer | None, state: State, cfg: Config, item_id: str, holder: str, now: float
+) -> list[str]:
+    return (
+        offer(state, item_id, holder, now)
+        if offer is not None
+        else _alternatives(state, cfg, item_id, holder, now)
+    )
 
 
 def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: float) -> list[str]:
