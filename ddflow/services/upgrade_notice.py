@@ -69,13 +69,21 @@ def _mark(root: Path | str, version: str, said: str) -> None:
         pass
 
 
+def told(root: Path | str, version: str, said: str) -> None:
+    """Record that ``version`` was already said (by the start report), so the one-line notice
+    stays quiet. Never moves the marker backwards."""
+    seen = noticed_version(root)
+    if said and version_key(version) and (not seen or is_older(seen, version)):
+        _mark(root, version, said)
+
+
 def _behind(project: str, running: str) -> bool:
     """Is the project older than the running ddflow? A project last worked on before versions
     were stamped (``""``) is."""
     return not project or is_older(project, running)
 
 
-def _apply_safe(
+def apply_safe(
     repo: Path, log: Any, cfg: Config, st: State, plan: dict[str, Any], agent: str
 ) -> str:
     """Apply `SAFE_CATEGORIES` with a backup first. Returns what to say about it, "" when the
@@ -129,7 +137,7 @@ def line(repo: Path, log: Any, cfg: Config, st: State, *, agent: str = "") -> st
             return ""
         said = ""
         if policy == "safe":
-            said = _apply_safe(repo, log, cfg, st, plan, agent)
+            said = apply_safe(repo, log, cfg, st, plan, agent)
         text = (
             f"Upgraded ddflow {project} -> {running}"
             if project

@@ -166,6 +166,7 @@ def test_the_brief_leads_with_the_notice_once(old: Path) -> None:
 def test_the_mcp_handshake_says_it_once(old: Path) -> None:
     from ddflow.surfaces.mcp import Server
 
+    run_cli(old, "config", "upgrade.on_start", "off")  # the start report would speak first
     first = Server(old)._dispatch(
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
     )["result"]["instructions"]
@@ -199,6 +200,7 @@ def test_a_broken_instruction_template_still_carries_the_notice(old: Path) -> No
     upgrade may be exactly why: the notice rides on both paths."""
     from ddflow.surfaces.mcp import Server
 
+    run_cli(old, "config", "upgrade.on_start", "off")  # the start report would speak first
     run_cli(old, "config", "prompts.mcp_instructions", "no/such/template.md")
     text = Server(old)._dispatch({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})[
         "result"
