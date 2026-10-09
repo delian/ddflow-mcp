@@ -39,7 +39,7 @@ def search_sources(
     lowered = [w.lower() for w in want]
     results: dict[str, list[dict[str, Any]]] = {}
     for table, label, _why in RECALL_SOURCES:
-        if table not in want and label.lower() not in lowered:
+        if table not in lowered and label.lower() not in lowered:
             continue
         try:
             hits = search_table(store, table, query, limit)
