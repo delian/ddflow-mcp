@@ -285,6 +285,15 @@ class Param:
             raise ValueError(f"param {self.name!r}: type {self.type!r} not in {TYPES}")
         if self.repeat and self.type != "array":
             object.__setattr__(self, "type", "array")
+        self._check_positional()
+        if self.positional and not self.required and self.nargs is None:
+            # argparse refuses a missing positional, so the schema must say it is required.
+            object.__setattr__(self, "required", True)
+        if self.cli_only and self.mcp_only:
+            raise ValueError(f"param {self.name!r} is neither on the CLI nor on MCP")
+
+    def _check_positional(self) -> None:
+        """What only a positional, an ``nargs`` or an exclusive group may be."""
         if self.positional and self.default is not _UNSET and self.nargs != "?":
             raise ValueError(f"param {self.name!r}: a positional has no default (no nargs)")
         if self.nargs is not None and not self.positional:
@@ -293,11 +302,6 @@ class Param:
             raise ValueError(f"param {self.name!r}: only nargs='?' (optional) is supported")
         if self.exclusive is not None and (self.required or self.positional):
             raise ValueError(f"param {self.name!r}: a member of an exclusive group is optional")
-        if self.positional and not self.required and self.nargs is None:
-            # argparse refuses a missing positional, so the schema must say it is required.
-            object.__setattr__(self, "required", True)
-        if self.cli_only and self.mcp_only:
-            raise ValueError(f"param {self.name!r} is neither on the CLI nor on MCP")
 
     @property
     def mcp_required(self) -> bool:
