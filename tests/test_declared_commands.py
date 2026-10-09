@@ -16,6 +16,7 @@ import pytest
 
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.declared import (
+    export,
     flow,
     hooks,
     knowledge,
@@ -32,7 +33,7 @@ from ddflow.surfaces.declared.answer import ANSWER_PARAMS
 from ddflow.surfaces.tools import ADD_TOOLS, TOOLS
 
 FAMILIES = (
-    knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow, memory,
+    knowledge, records, queue, lifecycle, rules, review, setup, reporting, hooks, flow, memory, export,
 )  # fmt: skip
 DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
 
@@ -51,6 +52,7 @@ DECLARED = [c for f in FAMILIES for c in f.COMMANDS]
         "ddflow.surfaces.declared.hooks",
         "ddflow.surfaces.declared.flow",
         "ddflow.surfaces.declared.memory",
+        "ddflow.surfaces.declared.export",
         "ddflow.surfaces.tools.flow",
         "ddflow.surfaces.tools",
         "ddflow.surfaces.cli",
@@ -187,8 +189,10 @@ def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
         "ddflow_gate_run",
         "ddflow_gate_record",
         "ddflow_merge",
+        "ddflow_precommit",
         "ddflow_review",
         "ddflow_setup",
+        "ddflow_tests",
     }
 
 
