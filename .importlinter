@@ -10,7 +10,8 @@
 # edit the entry in the same change; never add one to make a new import pass.
 #
 # Those lists are not in this file. Each contract's `ignore_imports` lives in its own
-# tests/guard_baselines/importlinter-<contract>.toml, so tasks shrinking different
+# tests/guard_baselines/importlinter-<contract>.toml (surfaces-through-api, subprocess-home
+# and fsio-home: one file per source module in importlinter-<contract>/), so tasks shrinking different
 # contracts' lists never edit the same file; the guard test joins them back into the
 # contracts before it runs import-linter. (`lint-imports` run on this file alone reports
 # every allowlisted import as broken: run the guard test instead.)

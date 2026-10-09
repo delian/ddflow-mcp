@@ -29,8 +29,7 @@ import ddflow.api._dedupe as DD
 from ..config import id_problem
 from ..core import defs as D
 from ..core import outcome as O
-from ..core import redact as R
-from ..services.redact_report import redactor
+from ..services.guidance import deffields as DF
 from ._base import _load
 
 
@@ -132,7 +131,7 @@ def def_record_unchecked(
 def _write_record(
     log, cfg, kind, rid, fields, source, provenance, chk: DD.Checked, *, replaced: bool
 ) -> O.Outcome:
-    fields = _logged(cfg, fields)
+    fields = DF.logged(fields, cfg)
     digest = D.digest(fields)
     data = _envelope(cfg, kind, rid, source, provenance)
     data.update(fields=dict(fields), digest=digest, **chk.fields)
@@ -147,12 +146,6 @@ def _write_record(
         replaced=replaced,
         **chk.data(),
     )
-
-
-def _logged(cfg, fields: dict[str, Any]) -> dict[str, Any]:
-    """``fields`` as the committed log will hold them (the `log` redaction profile), so the
-    digest is of what is stored: equal fields, equal digest (D-unify 6, 7)."""
-    return R.redact_leaves(dict(fields), redactor("log", cfg))  # type: ignore[return-value]
 
 
 def _live(st, kind: str, rid: str, event_kind: str) -> tuple[Any, O.Outcome | None]:
@@ -190,7 +183,7 @@ def def_update(
     rec, refusal = _live(st, kind, rid, "def.updated")
     if refusal is not None:
         return refusal
-    merged = _logged(cfg, {**rec.fields, **fields})
+    merged = DF.logged({**rec.fields, **fields}, cfg)
     merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
     digest = D.digest(merged)
     # None keeps the recorded provenance (under this author); a mapping replaces it.

@@ -23,12 +23,12 @@ from ..core.plain import plain as _plain
 from ..services import gates as G
 from ..services import workflow as WF
 from ..services.configwrite import KeyRefused, SetPairs, apply_edit, gate_id_problem
+from ..services.gates import load_gates
+from ..services.review import load_reviewers
 from ._base import _load
 
 
 def _view(repo: Path):
-    from ..services.gates import load_gates
-    from ..services.review import load_reviewers
 
     _log, cfg, st = _load(repo)
     try:
@@ -90,7 +90,6 @@ def pipeline(
     repo: Path, which: str, gates: str, *, dry_run: bool = False, agent: str = ""
 ) -> O.Outcome:
     """Set the task or phase pipeline. Refuses an empty one, and an undefined gate."""
-    from ..services.gates import load_gates
 
     _log, cfg, _st = _load(repo)
     known = load_gates(repo, cfg)
@@ -151,22 +150,8 @@ class GateEdit:
     required: bool = False
 
 
-def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
-    """Define a gate, and optionally place it in a pipeline.
-
-    Refuses to put a gate with no command and no prompt into a pipeline: that gate can
-    never pass, so every item reaching it blocks forever. The check consults the
-    EXISTING definition too, so `--into` on an already-defined gate is allowed.
-    """
-    from ..services.gates import load_gates
-
-    # Checked first for a plain answer; `apply_edit` refuses it again at the choke
-    # point, for every other writer (B72b8adba30).
-    problem = gate_id_problem(edit.id)
-    if problem:
-        return O.refused("workflow.gate", problem, gate=edit.id, changed=[], applied=False)
-    _log, cfg, _st = _load(repo)
-    known = load_gates(repo, cfg)
+def _gate_pairs(edit: GateEdit) -> list[tuple[str, object]]:
+    """The `gate.<id>.<field>` settings a gate edit asks for."""
     pairs: list[tuple[str, object]] = []
     for value, field in (
         (edit.command, "command"),
@@ -181,6 +166,50 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") 
         pairs.append((f"gate.{edit.id}.timeout_s", edit.timeout))
     if edit.applies_to:
         pairs.append((f"gate.{edit.id}.applies_to", edit.applies_to))
+    return pairs
+
+
+def _place_in_pipelines(
+    edit: GateEdit, cfg: Any, pairs: list[tuple[str, object]]
+) -> O.Outcome | None:
+    """Append the pipeline settings that put the gate where `--into`/`--after` say; a
+    refusal when `--after` names a gate that is not there."""
+    for which in ("task", "phase") if edit.into == "both" else (edit.into,):
+        current = list(getattr(cfg.gates, f"{which}_pipeline"))
+        if edit.id in current:
+            continue
+        at = len(current)
+        if edit.after:
+            if edit.after not in current:
+                return O.failed(
+                    "workflow.gate",
+                    f"--after {edit.after!r} is not in the {which} pipeline: {', '.join(current)}",
+                    gate=edit.id,
+                    changed=[],
+                    applied=False,
+                )
+            at = current.index(edit.after) + 1
+        current.insert(at, edit.id)
+        pairs.append((f"gates.{which}_pipeline", current))
+    return None
+
+
+def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
+    """Define a gate, and optionally place it in a pipeline.
+
+    Refuses to put a gate with no command and no prompt into a pipeline: that gate can
+    never pass, so every item reaching it blocks forever. The check consults the
+    EXISTING definition too, so `--into` on an already-defined gate is allowed.
+    """
+
+    # Checked first for a plain answer; `apply_edit` refuses it again at the choke
+    # point, for every other writer (B72b8adba30).
+    problem = gate_id_problem(edit.id)
+    if problem:
+        return O.refused("workflow.gate", problem, gate=edit.id, changed=[], applied=False)
+    _log, cfg, _st = _load(repo)
+    known = load_gates(repo, cfg)
+    pairs = _gate_pairs(edit)
     if not pairs and not edit.into:
         return O.failed(
             "workflow.gate",
@@ -204,24 +233,9 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False, agent: str = "") 
         )
 
     if edit.into:
-        for which in ("task", "phase") if edit.into == "both" else (edit.into,):
-            current = list(getattr(cfg.gates, f"{which}_pipeline"))
-            if edit.id in current:
-                continue
-            at = len(current)
-            if edit.after:
-                if edit.after not in current:
-                    return O.failed(
-                        "workflow.gate",
-                        f"--after {edit.after!r} is not in the {which} pipeline: "
-                        f"{', '.join(current)}",
-                        gate=edit.id,
-                        changed=[],
-                        applied=False,
-                    )
-                at = current.index(edit.after) + 1
-            current.insert(at, edit.id)
-            pairs.append((f"gates.{which}_pipeline", current))
+        placed = _place_in_pipelines(edit, cfg, pairs)
+        if placed is not None:
+            return placed
     if edit.required:
         pairs.append(("gates.required", sorted({*cfg.gates.required, edit.id})))
 

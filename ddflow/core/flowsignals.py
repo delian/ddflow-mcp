@@ -42,6 +42,7 @@ from ..config import Config
 from . import progress as PR
 from .events import Event
 from .model import State
+from .schedule import plan
 
 RECENT_REVIEW_S = 30 * 60.0
 BASELINE_S = 7 * 86400.0
@@ -210,8 +211,6 @@ def independent_ready(state: State, cfg: Config, now: float) -> int:
     """Ready items that overlap neither anything in flight nor each other. Asks
     ``schedule.plan`` with the parallelism caps lifted, so the count is what the offer
     would make of the same state given unlimited slots; the caller's config is untouched."""
-    from .schedule import plan
-
     wide = copy.deepcopy(cfg)
     wide.schedule.max_parallel_tasks = 10**6
     wide.worktree.max_parallel = 10**6

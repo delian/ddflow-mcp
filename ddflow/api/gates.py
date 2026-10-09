@@ -28,14 +28,23 @@ from typing import Any
 
 from ..core import clock
 from ..core import outcome as O
+from ..core import progress as PR
 from ..core.model import GateOutcome
 from ..core.plain import plain
+from ..infra import worktree as W
 from ..services import gates as G
+from ..services import leases as L
+from ..services import prompts as P
+from ..services import roborev as RR
 from ..services import testselect as TS
+from ..services.completion import readme_report
+from ..services.export import refresh as RF
 from ..services.gates import measured as R
 from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
+from ..views.markdown import new_reports_line
 from ._base import _load
+from .lifecycle import _new_report_count, _session_model, callers_tree
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
@@ -68,7 +77,6 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     The instruction is the useful half — it is what tells an agent what the gate expects
     and how to record it — which is why this tool's body is prose on both surfaces.
     """
-    from ..services import prompts as P
 
     _log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
@@ -107,13 +115,10 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             f"\n  NOTE: {', '.join(s.unavailable)} did not run. "
             f"That is a gap in coverage, not a pass."
         )
-    from ..services.completion import readme_report
 
     readme = readme_report(st, cfg, item, repo=repo)
     if readme:
         lines.append(f"\n  NOTE: {readme}")
-    from ..views.markdown import new_reports_line
-    from .lifecycle import _new_report_count
 
     reports = new_reports_line(item, _new_report_count(st, item))
     if reports:
@@ -232,7 +237,6 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     `runner.run_command_gate` for why not a background thread. A failed renewal must not kill
     the gate, so it is swallowed; the lease then expires as it would have anyway.
     """
-    from ..services import leases as L
 
     if not (it.lease and it.lease.holder == log.agent_id):
         return None
@@ -259,8 +263,6 @@ def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path |
     result), for an item never claimed, and with worktrees off -- the switch for a lone
     agent that works in the primary.
     """
-    from ..infra import worktree as W
-    from .lifecycle import callers_tree
 
     if it.worktree:
         return W.load_path(repo, it.worktree), ""
@@ -286,7 +288,6 @@ def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outco
     the fingerprint is the tree's, so there is no deadlock. Warn mode never gets here."""
     if cfg.loops.on_detect != "block":
         return None
-    from ..core import progress as PR
 
     for f in PR.detect(log.read_all(), st, cfg):
         if f.kind != "repeated_failure" or f.item != item or f.gate != gate:
@@ -460,7 +461,6 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
     """
     if not G.is_reviewer_gate(gate, gdef):
         return ""
-    from .lifecycle import _session_model
 
     author = _session_model(st, log.agent_id)
     if not author:
@@ -486,7 +486,6 @@ def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple
     reviewed, but not what will merge); anything else -- main, another branch, an
     unknown sha -- is refused.
     """
-    from ..infra import worktree as W
 
     if not re.fullmatch(r"[0-9a-fA-F]{7,64}", sha):
         # `HEAD` resolves to a different commit in every checkout: it is the very input
@@ -555,7 +554,6 @@ def _roborev_reviewer(
     or without a finished review of the sha, the typed model stands, with a note and
     ``evidence.roborev.verified = false``.
     """
-    from ..services import roborev as RR
 
     if skip or not G.is_reviewer_gate(gate, gdef) or not ev.get("reviewed_sha"):
         return typed, ""
@@ -586,7 +584,6 @@ def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
     """`[export].refresh = docs_gate`: the docs gate's export step. Regenerates and verifies
     the selected documents and records them with their body digests in ``ev``; returns the
     warning, extended when a document was skipped, failed or is not fresh. Never fails."""
-    from ..services.export import refresh as RF
 
     rr = RF.refresh_selected(repo, "docs_gate", cfg=cfg)
     if not rr.outcomes:
@@ -595,6 +592,33 @@ def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
     if rr.problems or any(o.verified is False for o in rr.outcomes):
         return " ".join(filter(None, [warning, f"NOTE: {rr.summary()}"]))
     return warning
+
+
+def _evidence_fields(
+    evidence: Evidence, item: str, gate: str
+) -> tuple[dict[str, Any], O.Outcome | None]:
+    """The event's evidence from what the caller supplied, or the failure (an unreadable
+    ``--output-file``)."""
+    ev: dict[str, Any] = {}
+    if evidence.note:
+        ev["note"] = evidence.note
+    if evidence.command:
+        ev["command"] = evidence.command
+    if evidence.exit_code is not None:
+        ev["exit"] = evidence.exit_code
+    if evidence.model:
+        ev["model"] = evidence.model
+    if evidence.output_file:
+        try:
+            txt = Path(evidence.output_file).read_text("utf-8", errors="replace")
+        except OSError as exc:
+            return ev, O.failed(
+                "gate.record", f"--output-file unreadable: {exc}", id=item, gate=gate
+            )
+        ev.update(G.output_evidence(txt))
+        # WHERE the digested output is, so the digest can be checked against it.
+        ev["output_file"] = evidence.output_file
+    return ev, None
 
 
 def record(
@@ -634,23 +658,9 @@ def record(
     warning = R.Order(ordered).note(gate, cfg.gates.enforce_order)
 
     result = "skipped" if skip else outcome
-    ev: dict[str, Any] = {}
-    if evidence.note:
-        ev["note"] = evidence.note
-    if evidence.command:
-        ev["command"] = evidence.command
-    if evidence.exit_code is not None:
-        ev["exit"] = evidence.exit_code
-    if evidence.model:
-        ev["model"] = evidence.model
-    if evidence.output_file:
-        try:
-            txt = Path(evidence.output_file).read_text("utf-8", errors="replace")
-        except OSError as exc:
-            return O.failed("gate.record", f"--output-file unreadable: {exc}", id=item, gate=gate)
-        ev.update(G.output_evidence(txt))
-        # WHERE the digested output is, so the digest can be checked against it.
-        ev["output_file"] = evidence.output_file
+    ev, bad = _evidence_fields(evidence, item, gate)
+    if bad is not None:
+        return bad
 
     if not skip and gate == "docs" and it.kind == "phase" and result == "passed":
         warning = _docs_gate_export(repo, cfg, ev, warning)

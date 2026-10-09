@@ -50,7 +50,8 @@ from ..core.model import (
 )
 from . import clock
 from .events import Event
-from .graph import closure
+from .graph import closure, find_cycles
+from .schedule import inherited_deps
 
 #: Gates whose failure is a reviewer's verdict on the work, not a failure of the work
 #: (decision D-failed-critic-not-blocking). The repeated-failure detector skips them.
@@ -336,8 +337,6 @@ def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
 
 
 def _static_cycles(state: State, sev: str) -> list[LoopFinding]:
-    from ..core.schedule import find_cycles
-
     items = state.live_by_id()
     out = []
     for cyc in find_cycles(items):
@@ -566,7 +565,6 @@ def _waits_on(state: State, item_id: str) -> set[str]:
     finished and the dependent forks from it. Iterative with a visited set: a `needs`
     cycle (reported by ``_static_cycles``) must not hang it.
     """
-    from ..core.schedule import inherited_deps
 
     def live(i: str) -> bool:
         it = state.items.get(i)

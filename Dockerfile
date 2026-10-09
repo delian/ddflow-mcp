@@ -6,7 +6,8 @@
 # Alpine because the result is an order of magnitude smaller than a Debian base, which
 # matters when an MCP client pulls it on first use.
 #
-# ddflow has one dependency, Jinja2, which pulls MarkupSafe — and MarkupSafe carries a C
+# ddflow has two runtime dependencies, Jinja2 and tomlkit (pure Python). Jinja2 pulls
+# MarkupSafe, and MarkupSafe carries a C
 # extension, so musl is no longer irrelevant here the way it was when this was pure
 # standard library. It still needs no compiler: MarkupSafe publishes `musllinux_1_2`
 # wheels for x86_64 and aarch64, which are exactly the two platforms the `docker` job
