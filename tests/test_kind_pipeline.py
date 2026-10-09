@@ -264,3 +264,17 @@ def test_complete_and_verify_do_not_wait_on_a_gate_that_does_not_apply(repo):
 
     st = fold(EventLog(repo).read_all())
     assert not [b for b in CM.verdict(st, cfg, "T1", repo=repo).blockers if "dedupe" in b]
+
+
+def test_workflow_text_lists_only_the_kinds_that_differ(repo):
+    run_cli(repo, "init")
+    assert "A doc passes through" not in run_cli(repo, "workflow")[1]
+    assert (
+        run_cli(
+            repo, "config", "--set", "gates.kind_pipelines", '{ doc = ["implement", "merge"] }'
+        )[0]
+        == 0
+    )
+    out = run_cli(repo, "workflow")[1]
+    assert "A doc passes through: implement, merge" in out, out
+    assert "A bug passes through" not in out

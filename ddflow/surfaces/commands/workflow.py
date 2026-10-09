@@ -136,6 +136,11 @@ def _render_workflow(v) -> str:
             if v.promotion_pipeline
             else []
         ),
+        *(
+            f"A {k} passes through: {', '.join(ids)}"
+            for k, ids in v.kind_pipelines.items()
+            if ids != (v.phase_pipeline if k == "phase" else v.task_pipeline)
+        ),
         "",
         "## The rules, and where each came from",
         "",
