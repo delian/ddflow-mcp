@@ -916,7 +916,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 200 knobs.
+cadences, and the rest of the 201 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -4030,6 +4030,16 @@ originals to `.ddflow/backups/<stamp>-<from>-to-<to>/` (local, git-ignored, neve
 kept) with a `manifest.json` of what was
 there, and prints the backup and `git diff` to review the change.
 
+**The upgrade notice** (decision D-upgrade-auto-check; `[upgrade].auto`, shipped `check`).
+When ddflow has been upgraded past the release the project was last brought up to and
+`ddflow upgrade --plan` has items, the SessionStart hook says so in ONE line --
+`ddflow upgraded 0.1.9 -> 0.1.10: run ddflow upgrade --plan` -- once per machine per version
+(`.ddflow/local/upgrade-notice.json`, git-ignored), whichever surface speaks first. `check` writes
+nothing. `safe` first applies the plan's non-destructive categories, `hooks` and `instructions`
+(ddflow's own files), after the backup `[upgrade].backup` names, and says what it did; config
+defaults, migrations, repairs and features stay the operator's. `off` says nothing. Set it with
+`ddflow config upgrade.auto safe` (or the `ddflow_configure` tool).
+
 **Backups: local or snapshot** (decision D-upgrade-backups; `[upgrade].backup`, or `--backup`
 for one run). Both are explained here so you can choose:
 
@@ -4669,7 +4679,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 200): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 201): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5168,7 +5178,7 @@ declared once and persists — see
 
 ## Configuration
 
-200 knobs across 29 sections, every one documented in place and listed, with its default
+201 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5235,8 +5245,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=823cf6ec0358 -->
-<details><summary>All 200 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=17b0958ca5fc -->
+<details><summary>All 201 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5397,6 +5407,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |
 | `upgrade.config_changes` | `"agent"` | `agent` \| `ask` \| `operator` |
+| `upgrade.auto` | `"check"` | `off` \| `check` \| `safe` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
