@@ -73,7 +73,9 @@ OFF, CURRENT, OLDER, PROPOSED, APPLIED, READONLY, TIMEOUT, FAILED = (
 def surface(environ: Mapping[str, str] | None = None) -> str:
     """``container`` when the image says so, else ``mcp``."""
     env = os.environ if environ is None else environ
-    return "container" if env.get(CONTAINER_ENV) else "mcp"
+    flag = str(env.get(CONTAINER_ENV, "")).strip().lower()
+    # `DDFLOW_IN_CONTAINER=0` is no container: only here may the start apply without asking.
+    return "container" if flag not in ("", "0", "false", "no", "off") else "mcp"
 
 
 def mode(cfg: Config, environ: Mapping[str, str] | None = None) -> str:
@@ -232,6 +234,78 @@ def _refold(log: Any, st: State) -> State:
         return st
 
 
+def _behind_report(
+    repo: Path,
+    log: Any,
+    cfg: Config,
+    st: State,
+    *,
+    agent: str,
+    surf: str,
+    policy: str,
+    running: str,
+) -> dict[str, Any]:
+    """The report for a project that is not known to be current, within the time bound."""
+    seconds = float(cfg.upgrade.start_timeout_s)
+
+    def work() -> dict[str, Any]:
+        return _work(repo, log, cfg, st, agent=agent, surf=surf, policy=policy, running=running)
+
+    done, out = (False, None) if seconds <= 0 else _bounded(work, seconds)
+    if done:
+        return out
+    return {
+        "status": TIMEOUT,
+        "text": (
+            f"ddflow {running} is newer than this project; the upgrade check did not finish "
+            f"within {seconds:g}s, so the server started anyway and the upgrade stays "
+            "pending: run `ddflow upgrade --plan`."
+        ),
+    }
+
+
+def _decide(
+    repo: Path, log: Any, cfg: Config, st: State, *, agent: str, surf: str, environ: Any
+) -> dict[str, Any]:
+    """What the start has to say (raises on a surprise; `start` tells it)."""
+    running = running_version()
+    if not (repo / ".ddflow").is_dir() or not version_key(running):
+        return {"status": OFF, "text": ""}  # never adopted: a marker would adopt it
+    policy = mode(cfg, environ)
+    if policy == "off":
+        return {"status": OFF, "text": ""}
+    highest = str(getattr(st, "highest_version", "") or "")
+    if highest and is_older(running, highest):
+        return {"status": OLDER, "text": _older(running, highest)}
+    has_history = bool(st.ddflow_versions or st.upgrades or st.items or st.sessions)
+    project = UP.project_version(st, has_history, running)
+    if project and not is_older(project, running):
+        return {"status": CURRENT, "text": ""}
+    return _behind_report(
+        repo,
+        log,
+        cfg,
+        st,
+        agent=agent,
+        surf=surf or surface(environ),
+        policy=policy,
+        running=running,
+    )
+
+
+def _remember(repo: Path, report: dict[str, Any]) -> None:
+    """Keep the report for the first brief and tell the one-line notice it was said. An empty
+    report is saved too when a marker exists: the project caught up (the operator applied the
+    upgrade by hand), so the old proposal must not be replayed. Bookkeeping only."""
+    try:
+        if _writable(repo) and (report["text"] or (repo / MARKER).exists()):
+            _save(repo, report)
+            if report["text"]:
+                UN.told(repo, report["version"], report["text"])
+    except Exception:
+        pass
+
+
 def start(
     repo: Path,
     log: Any,
@@ -248,55 +322,16 @@ def start(
     constant: ``text`` is "" when there is nothing to say. Also records the report for
     `take_for_brief`."""
     repo = Path(repo)
-    running = running_version()
-    report: dict[str, Any] = {"status": OFF, "version": running, "text": ""}
+    report: dict[str, Any] = {"version": running_version()}
     try:
-        if not (repo / ".ddflow").is_dir() or not version_key(running):
-            return report  # a directory ddflow never adopted: a marker would adopt it
-        policy = mode(cfg, environ)
-        if policy == "off":
-            return report
-        highest = str(getattr(st, "highest_version", "") or "")
-        if highest and is_older(running, highest):
-            report.update(status=OLDER, text=_older(running, highest))
-        else:
-            has_history = bool(st.ddflow_versions or st.upgrades or st.items or st.sessions)
-            project = UP.project_version(st, has_history, running)
-            if project and not is_older(project, running):
-                report["status"] = CURRENT
-            else:
-                seconds = float(cfg.upgrade.start_timeout_s)
-                surf = surf or surface(environ)
-
-                def work() -> dict[str, Any]:
-                    return _work(
-                        repo, log, cfg, st, agent=agent, surf=surf, policy=policy, running=running
-                    )
-
-                done, out = (False, None) if seconds <= 0 else _bounded(work, seconds)
-                if done:
-                    report.update(out)
-                else:
-                    report.update(
-                        status=TIMEOUT,
-                        text=(
-                            f"ddflow {running} is newer than this project; the upgrade check "
-                            f"did not finish within {seconds:g}s, so the server started "
-                            "anyway and the upgrade stays pending: run `ddflow upgrade --plan`."
-                        ),
-                    )
+        report.update(_decide(repo, log, cfg, st, agent=agent, surf=surf, environ=environ))
     except Exception as exc:  # the one promise: never fail the start
         report.update(
             status=FAILED,
             text=f"the upgrade check at start failed ({exc}); serving anyway. "
             "Run `ddflow upgrade --plan`.",
         )
-    if _writable(repo) and (report["text"] or (repo / MARKER).exists()):
-        # An empty report is saved too when a marker exists: the project caught up (the
-        # operator applied the upgrade by hand), so the old proposal must not be replayed.
-        _save(repo, report)
-        if report["text"]:
-            UN.told(repo, running, report["text"])  # the one-line notice would only repeat it
+    _remember(repo, report)
     return report
 
 

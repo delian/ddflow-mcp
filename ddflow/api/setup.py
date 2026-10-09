@@ -695,15 +695,15 @@ def upgrade_start(repo: Path, *, agent: str = "", surface: str = "") -> str:
         return ""
     key = str(Path(repo).resolve())
     with _START_LOCK:
-        if key not in _START_REPORTS:
-            try:
-                log, cfg, st = _load(repo, agent)
-                _START_REPORTS[key] = US.start(repo, log, cfg, st, agent=agent, surf=surface)[
-                    "text"
-                ]
-            except Exception as exc:  # an unreadable log must not fail a start
-                _START_REPORTS[key] = f"the upgrade check at start failed ({exc}); serving anyway."
-        return _START_REPORTS[key]
+        if key in _START_REPORTS:
+            return _START_REPORTS[key]
+        try:
+            log, cfg, st = _load(repo, agent)
+            text = US.start(repo, log, cfg, st, agent=agent, surf=surface)["text"]
+        except Exception as exc:  # an unreadable log must not fail a start -- nor stick
+            return f"the upgrade check at start failed ({exc}); serving anyway."
+        _START_REPORTS[key] = text
+        return text
 
 
 def stale_server_note(repo: Path, *, agent: str = "") -> str:
@@ -1224,6 +1224,7 @@ def _upgrade_apply(
         )
     except ValueError as exc:
         return O.failed("upgrade", str(exc))
+    _START_REPORTS.pop(str(Path(repo).resolve()), None)  # the proposal it made is stale now
     log, cfg, st = _load(repo, agent)  # the plan that is left, judged on what is on disk now
     data = UP.build(repo, log, cfg, st)
     data["applied"] = {k: done[k] for k in _APPLIED_FIELDS}

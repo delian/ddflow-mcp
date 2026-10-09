@@ -122,6 +122,8 @@ def test_an_unknown_switch_counts_as_the_strictest(old: Path) -> None:
 def test_the_surface_follows_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
     assert US.surface({}) == "mcp"
     assert US.surface({US.CONTAINER_ENV: "1"}) == "container"
+    for no in ("0", "false", "No", " ", ""):
+        assert US.surface({US.CONTAINER_ENV: no}) == "mcp", no
 
 
 def test_a_project_that_is_up_to_date_hears_nothing(repo: Path) -> None:
@@ -301,6 +303,47 @@ def test_two_handshakes_at_once_make_one_start_check(
     for t in threads:
         t.join()
     assert out == ["once"] * 4 and len(calls) == 1
+
+
+def test_applying_the_upgrade_drops_the_cached_proposal(old: Path) -> None:
+    """Review finding: a reconnect in the same process repeated the pre-apply proposal."""
+    from ddflow.api import setup as S
+
+    S._START_REPORTS.clear()
+    assert "still pending" in S.upgrade_start(old, agent="starter")
+    out = S.upgrade(old, apply="hooks", agent="starter")
+    assert out.exit in (0, 1, 3), out
+    assert str(old.resolve()) not in S._START_REPORTS
+
+
+def test_an_empty_report_never_marks_the_notice_as_said(old: Path) -> None:
+    from ddflow.services import upgrade_notice as UN
+
+    UN.told(old, "99.0.0", "")
+    assert UN.noticed_version(old) == ""
+
+
+def test_a_failed_start_check_is_retried_not_cached(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding: one transient failure muted the start check for the whole process."""
+    from ddflow.api import setup as S
+
+    S._START_REPORTS.clear()
+    real = S._load
+    monkeypatch.setattr(S, "_load", lambda *a, **k: (_ for _ in ()).throw(OSError("locked")))
+    assert "failed (locked)" in S.upgrade_start(old, agent="starter")
+    monkeypatch.setattr(S, "_load", real)
+    assert "newer than this project" in S.upgrade_start(old, agent="starter")
+
+
+def test_a_failing_marker_write_does_not_lose_the_report(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.services import upgrade_notice as UN
+
+    monkeypatch.setattr(UN, "told", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk")))
+    assert "newer than this project" in _start(old, "mcp")["text"]
 
 
 def test_the_image_documents_the_switch() -> None:
