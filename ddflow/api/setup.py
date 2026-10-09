@@ -1241,6 +1241,9 @@ def _upgrade_restore(repo: Path, name: str, agent: str) -> O.Outcome:
         return O.refused("upgrade", str(exc))
     except (LookupError, OSError, ValueError) as exc:
         return O.failed("upgrade", str(exc))
+    _START_REPORTS.pop(
+        str(Path(repo).resolve()), None
+    )  # what it proposed was judged on the old files
     log, cfg, st = _load(repo, agent)
     BK.prune(repo, cfg.upgrade.backup_keep)  # the safety copy it just made counts too
     data = UP.build(repo, log, cfg, st)
