@@ -10,10 +10,10 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ..config import csv_list
-from ..core import defaults as _DEFAULTS
 from ..core import globspec as GS
 from ..core import ids as IDS
 from ..core import outcome as O
+from ..core.defaults import DEFAULT_PRIORITY
 from ..core.model import fold
 from ..services import items as IT
 from ..services import leases as L
@@ -256,14 +256,6 @@ def _fresh(log):
 
 #: Splitting into one piece is a rename, not a split.
 MIN_SPLIT_PARTS = 2
-
-#: Where an item sits when nobody says otherwise. The MIDDLE of the range, so a later
-#: item can be pushed either way without renumbering anything.
-#:
-#: Declared here and imported by the parser, not written twice. Duplicated, it became
-#: 100 in argparse and 0 in this layer — so every phase and task created over MCP was
-#: filed at the TOP priority while the CLI filed them in the middle, and nothing said so.
-DEFAULT_PRIORITY = _DEFAULTS.DEFAULT_PRIORITY
 
 
 def _line_frozen(st, it) -> str:
