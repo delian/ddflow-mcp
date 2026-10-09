@@ -43,10 +43,9 @@ def test_the_tool_schemas_carry_no_enum_the_command_line_has():
         "applies_to", "into", "after", "required", "dry_run",
     ]  # fmt: skip
     assert gate["timeout"][0] == "integer" and gate["id"][2] is True
-    from ddflow.surfaces.mcp import _schema
-
-    props = _schema(TOOLS["ddflow_workflow_gate"])["properties"]
-    assert all("enum" not in p for p in props.values())  # `into`, `cwd`, `reviewer` have choices
+    declared = hooks.BY_TOOL["ddflow_workflow_gate"]
+    assert any(p.choices for p in declared.mcp_params)  # the command line has choices...
+    assert all("enum" not in p for p in declared.input_schema()["properties"].values())
 
 
 def test_help_names_its_topics_on_the_command_line_only():
