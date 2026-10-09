@@ -301,6 +301,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             agent=agent,
         ),
+        # `{"id": "..."}` — what `ddflow decision add --json` has always printed.
         payload=("id",),
         params=(
             Param(

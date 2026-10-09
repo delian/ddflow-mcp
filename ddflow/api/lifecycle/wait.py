@@ -11,6 +11,7 @@ from typing import Any
 from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.clock import WAIT_MAX_S
+from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
 from .._base import _load
@@ -23,12 +24,6 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-
-#: How long `wait` blocks when the caller does not say. Long enough to outlast most
-#: holders' remaining work, short enough that a forgotten wait does not hold a process
-#: for an afternoon. A caller that wants longer asks again, which also re-checks that
-#: waiting is still the right move.
-DEFAULT_WAIT_TIMEOUT_S = 600
 
 
 def _note_cap(say, capped: bool) -> None:
