@@ -891,25 +891,30 @@ def _run_hook(repo: Path, event: str, harness: str, agent: str, stdin: str) -> O
     from ..services import hookio as HI
 
     handler = _HOOK_HANDLERS.get(event)
-    plan = HI.plan_for(harness)
     if handler is None:
         return O.ok(
             "hooks", message="", stdout="", result="skipped", note=f"unknown event {event!r}"
         )
-    if plan is None:
+    try:
+        plan = HI.plan_for(harness)
+        if plan is None:
+            return O.ok(
+                "hooks",
+                message="",
+                stdout="",
+                result="skipped",
+                note=f"no command-hook descriptor for harness {harness!r}",
+            )
+        res = handler(repo, agent, HI.normalize(plan.normalizer, event, harness, stdin), plan)
+        out = HI.emit(plan, event, res.context)
+    except Exception as exc:  # a hook must never stand between the operator and their agent
         return O.ok(
             "hooks",
             message="",
             stdout="",
             result="skipped",
-            note=f"no command-hook descriptor for harness {harness!r}",
+            note=f"{type(exc).__name__}: {exc}",
         )
-    try:
-        payload = HI.normalize(plan.normalizer, event, harness, stdin)
-        res = handler(repo, agent, payload, plan)
-    except Exception as exc:  # a hook must never stand between the operator and their agent
-        res = _HookResult(result="skipped", note=f"{type(exc).__name__}: {exc}")
-    out = HI.emit(plan, event, res.context)
     return O.ok("hooks", message=out, stdout=out, result=res.result, note=res.note)
 
 

@@ -17,7 +17,7 @@ from ..declared.reporting import BY_TOOL as REPORTING_BY_TOOL
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
 from ..registry import add_commands
 
-#: The canonical lifecycle events `ddflow hooks run` accepts. Written out here, not read from
+#: The canonical lifecycle events `ddflow hooks run` documents. Written out here, not read from
 #: `services.harnessreg`, because the parser is built on EVERY invocation and a surface may not
 #: import a service; `tests/test_hook_core.py` pins it equal to `harnessreg.CANONICAL_EVENTS`.
 _HOOK_EVENTS = (
@@ -189,7 +189,10 @@ def register(s: argparse._SubParsersAction) -> None:
     hkr.add_argument(
         "hook_event",
         metavar="event",
-        choices=list(_HOOK_EVENTS),
+        nargs="?",
+        default="",
+        # No `choices`: argparse would exit 2 on an event a newer or older agent config names,
+        # and exit 2 BLOCKS in Claude Code and Codex. The handler says it is unknown on stderr.
         help="the lifecycle event: " + ", ".join(_HOOK_EVENTS),
     )
     hkr.add_argument(

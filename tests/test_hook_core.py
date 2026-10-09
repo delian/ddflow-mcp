@@ -257,10 +257,35 @@ def test_a_plugin_style_agent_has_no_command_hook(repo):
     assert code == 0 and out == "" and "no command-hook descriptor" in err
 
 
-def test_an_unknown_event_is_refused_by_the_parser_not_run(repo):
+def test_an_unknown_or_missing_event_exits_zero_and_says_so_on_stderr(repo):
+    """argparse would exit 2 here, and exit 2 blocks the turn in Claude Code and Codex."""
     run_cli(repo, "init")
-    code, _out, err = _run(repo, "hooks", "run", "sparkle", stdin="{}")
-    assert code == 2 and "invalid choice" in err
+    code, out, err = _run(repo, "hooks", "run", "sparkle", stdin="{}")
+    assert code == 0 and out == "" and "unknown event 'sparkle'" in err
+    code, out, err = _run(repo, "hooks", "run", stdin="{}")
+    assert code == 0 and out == "" and "unknown event ''" in err
+
+
+def test_the_reply_names_the_event_in_the_agents_own_vocabulary():
+    plan = hookio.plan_for("gemini")
+    assert plan is not None
+    # Gemini's prompt event is BeforeAgent; were it injectable, the reply must say so.
+    forced = hookio.Plan(
+        plan.harness, plan.normalizer, plan.emitter, ("prompt",), dict(plan.events)
+    )
+    out = json.loads(hookio.emit(forced, "prompt", "B"))
+    assert out["hookSpecificOutput"]["hookEventName"] == "BeforeAgent"
+
+
+def test_a_failing_emitter_still_exits_zero(repo, monkeypatch):
+    from ddflow import api
+
+    def boom(*_a, **_k):
+        raise RuntimeError("emitter exploded")
+
+    monkeypatch.setitem(hookio.EMITTERS, "claude", boom)
+    out = api.hooks(repo, action="run", event="stop", harness="claude", stdin="{}")
+    assert out.data["stdout"] == "" and "emitter exploded" in out.data["note"]
 
 
 def test_pre_compact_stays_silent_on_stdout_and_notes_a_skip_on_stderr(repo):

@@ -186,44 +186,46 @@ def normalize(normalizer: str, event: str, harness: str, stdin: str) -> HookPayl
 # --- emitters --------------------------------------------------------------------------
 
 #: An emitter: (canonical event, the context ddflow wants shown or "", whether this agent
-#: honours injection at this event) -> the exact stdout text. The exit code is always 0.
-Emitter = Callable[[str, str, bool], str]
+#: honours injection at this event, the agent's OWN name for the event) -> the exact stdout
+#: text. The exit code is always 0.
+Emitter = Callable[[str, str, bool, str], str]
 
-_SESSION_EVENT_NAMES = {"session_start": "SessionStart", "prompt": "UserPromptSubmit"}
 
-
-def _plain(event: str, text: str, inject: bool) -> str:
+def _plain(event: str, text: str, inject: bool, native: str) -> str:
     """Stdout IS the context (Claude Code, Codex): print it, or nothing."""
     return text if inject and text else ""
 
 
-def _json_context(event: str, text: str, inject: bool) -> str:
+def _json_context(event: str, text: str, inject: bool, native: str) -> str:
     """`hookSpecificOutput.additionalContext` (Gemini, VS Code): JSON only, `{}` when silent."""
     if not (inject and text):
         return "{}"
-    name = _SESSION_EVENT_NAMES.get(event, "SessionStart")
-    return json.dumps({"hookSpecificOutput": {"hookEventName": name, "additionalContext": text}})
+    # The reply names the event that fired, in the AGENT's vocabulary (Gemini's prompt event is
+    # BeforeAgent, not UserPromptSubmit), as the descriptor's event map gives it.
+    return json.dumps(
+        {"hookSpecificOutput": {"hookEventName": native or event, "additionalContext": text}}
+    )
 
 
-def _copilot(event: str, text: str, inject: bool) -> str:
+def _copilot(event: str, text: str, inject: bool, native: str) -> str:
     return json.dumps({"additionalContext": text}) if inject and text else ""
 
 
-def _cursor(event: str, text: str, inject: bool) -> str:
+def _cursor(event: str, text: str, inject: bool, native: str) -> str:
     return json.dumps({"additional_context": text}) if inject and text else "{}"
 
 
-def _cline(event: str, text: str, inject: bool) -> str:
+def _cline(event: str, text: str, inject: bool, native: str) -> str:
     return json.dumps({"contextModification": text}) if inject and text else "{}"
 
 
-def _antigravity(event: str, text: str, inject: bool) -> str:
+def _antigravity(event: str, text: str, inject: bool, native: str) -> str:
     # PreInvocation's `injectSteps` entry shape is NOT VERIFIED (docs/RESEARCH.md R-hx), so
     # this emitter stays silent until a recorded fixture shows it: `{}` is a no-op reply.
     return "{}"
 
 
-def _silent(event: str, text: str, inject: bool) -> str:
+def _silent(event: str, text: str, inject: bool, native: str) -> str:
     """Agents whose hook output cannot reach the model (Windsurf Cascade) or is unverified."""
     return ""
 
@@ -250,6 +252,7 @@ class Plan:
     normalizer: str
     emitter: str
     inject: tuple[str, ...]
+    events: dict[str, str] = field(default_factory=dict)  #: canonical event -> the agent's name
 
 
 def plan_for(harness: str) -> Plan | None:
@@ -258,10 +261,10 @@ def plan_for(harness: str) -> Plan | None:
     h = harnessreg.get(harness)
     if h is None or h.hooks is None or h.hooks.style not in harnessreg.COMMAND_HOOK_STYLES:
         return None
-    return Plan(harness, h.hooks.normalizer, h.hooks.emitter, h.hooks.inject)
+    return Plan(harness, h.hooks.normalizer, h.hooks.emitter, h.hooks.inject, dict(h.hooks.events))
 
 
 def emit(plan: Plan, event: str, text: str) -> str:
     """The stdout for ``event`` under ``plan``: ``text`` shaped for the agent, or its neutral reply."""
     fn = EMITTERS.get(plan.emitter, _silent)
-    return fn(event, text, event in plan.inject)
+    return fn(event, text, event in plan.inject, plan.events.get(event, ""))
