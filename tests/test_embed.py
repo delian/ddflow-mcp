@@ -67,7 +67,8 @@ def test_nothing_to_embed_answers_without_starting_the_companion(tmp_path):
         ('print(\'{"model": "m", "vectors": [[NaN], [1.0]]}\')\n', "not finite"),
         ("print(json.dumps({'model': 'm', 'vectors': [['x'], [1.0]]}))\n", "not finite"),
         ("print(json.dumps({'model': 'm', 'vectors': [[True], [1.0]]}))\n", "not finite"),
-        ("print('[' * 20000 + ']' * 20000)\n", "did not print JSON"),
+        # deep enough to be a RecursionError on 3.11-3.13 (3.14 reads it as a non-object)
+        ("print('[' * 20000 + ']' * 20000)\n", "JSON"),
         ("print('{\"model\": \"m\", \"vectors\": [[1' + '0' * 400 + '], [1.0]]}')\n", "not finite"),
     ],
 )
