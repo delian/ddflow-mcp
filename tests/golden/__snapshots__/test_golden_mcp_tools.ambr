@@ -3338,7 +3338,7 @@
     'ddflow_upgrade': '''
       {
        "name": "ddflow_upgrade",
-       "description": "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`) and returns the plan left and `applied`; exit 3 while an item needs `confirm`. `restore` undoes an apply; `check` asks if a newer release exists; `self` upgrades ddflow itself (confirm [\"self\"] + reason). Plan exit: 0 up to date, 1 items.",
+       "description": "What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. Writes nothing unless `apply` (`plan` false = all): saves originals, applies, returns the plan left; exit 3 while an item needs `confirm`. Alone: `restore`, `check` (newer release?), `status`, `history`, `self` (confirm [\"self\"] + reason). `resume` finishes an interrupted apply. Exit 0 up to date, 1 items.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -3367,7 +3367,7 @@
          },
          "snapshot": {
           "type": "boolean",
-          "description": "apply: git snapshot backup."
+          "description": "apply: git snapshot."
          },
          "restore": {
           "type": "string",
@@ -3376,6 +3376,18 @@
          "check": {
           "type": "boolean",
           "description": "Newer ddflow out? Alone."
+         },
+         "status": {
+          "type": "boolean",
+          "description": "Show state."
+         },
+         "history": {
+          "type": "boolean",
+          "description": "List upgrades."
+         },
+         "resume": {
+          "type": "boolean",
+          "description": "Finish interrupted."
          },
          "self": {
           "type": "string",
