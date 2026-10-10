@@ -248,7 +248,7 @@ cannot run is recorded `unavailable`, never passed:
 `services/prompts.py` still carries a standard-library fallback renderer so a stripped
 deployment starts; it is a tested, loud degraded path, not a second implementation.
 
-**`infra/proc.py` is 50 lines and exists for one reason.** ddflow runs as an MCP server
+**`infra/proc.py` exists for one reason.** ddflow runs as an MCP server
 over **stdio**: the JSON-RPC session is this process's stdin and stdout.
 `subprocess.run(...)` with no explicit `stdin=` hands the child that same pipe, so a
 child that reads stdin — an arbitrary shell command in a gate, a reviewer CLI, an `npx`
