@@ -120,7 +120,10 @@ def _table(repo: Path) -> dict[str, list]:
         for json_mode in (False, True):
             full = (("--json",) if json_mode else ()) + argv
             code, out, err = run_cli(repo, *full, agent="pin")
-            rows[" ".join(full)] = [code, _norm(out, repo), _norm(err, repo)]
+            key = " ".join(full)
+            while key in rows:  # a scenario repeated after a state change is a second row
+                key += " (again)"
+            rows[key] = [code, _norm(out, repo), _norm(err, repo)]
     return rows
 
 
