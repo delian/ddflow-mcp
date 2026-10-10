@@ -302,8 +302,8 @@ import-linter contract counts the stragglers and can only go down.
 
 Measured at the end of the cleanup (newline count of every `.py` file, `ddflow/` 105,182
 lines in 386 modules, `tests/` 123,571 in 582): `services/` 48,021, `api/` 18,409,
-`surfaces/` 15,798, `core/` 10,479, `infra/` 7,481, `config_sections/` 2,547, `views/`
-1,456, `config.py` 966. The cleanup slices changed `ddflow/` by -186 lines and `tests/` by
+`surfaces/` 15,798, `core/` 10,479, `infra/` 7,481, `config_sections/` 2,547, `views/
+1,456, `config.py` 966, `__init__.py` and `__main__.py` 25. The cleanup slices changed `ddflow/` by -186 lines and `tests/` by
 +3,630 (the pins they added outweigh the helpers they removed), so the interfaces above
 removed duplicated *patterns* (the guard baselines fell: deferred imports 534 -> 37,
 subprocess calls 13 -> 1, `write_text` 10 -> 0, tempfile 6 -> 0, complexity D-or-worse
