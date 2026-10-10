@@ -30,6 +30,7 @@ import os
 from pathlib import Path
 
 from ..core.agentname import is_valid
+from .fsio import replace_text
 from .paths import common_dir
 
 #: Under the primary checkout's `.git`.
@@ -142,7 +143,7 @@ def declare(repo: Path | str, agent: str) -> str:
             f = d / key
             if agent:
                 d.mkdir(exist_ok=True)
-                f.write_text(agent + "\n")
+                replace_text(f, agent + "\n", fsync=False)
             else:
                 f.unlink(missing_ok=True)
     except OSError as exc:

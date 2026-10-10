@@ -22,17 +22,21 @@ layers keeps working.
 
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 from functools import lru_cache
 from pathlib import Path
 
+import ddflow
+
 from . import git as G
+from . import proc as P
 
 
 @lru_cache(maxsize=1)
 def package_dir() -> Path:
     """The `ddflow/` package directory itself."""
-    import ddflow
-
     return Path(ddflow.__file__).resolve().parent
 
 
@@ -134,8 +138,6 @@ def launch_parent() -> Path:
     is where the latest code lands, so a line written from a worktree points there
     (bug B-adopt-worktree-path). `DDFLOW_LAUNCH_ROOT` overrides both.
     """
-    import os
-
     forced = os.environ.get(LAUNCH_ROOT_ENV)
     if forced:
         return Path(forced)
@@ -149,9 +151,6 @@ def launch_python() -> str:
     worktree -- in which case the primary checkout's own venv, when it has one, else an
     interpreter outside the worktree that is PROBED to import the primary's MCP server,
     else `sys.executable`, which `enforce.redirect_note` then warns about."""
-    import os
-    import sys
-
     here, target = package_parent(), launch_parent()
     # The venv DIRECTORY resolved, not the interpreter: a venv's python is a symlink to
     # the system one, while its directory is what lives (or not) inside the worktree --
@@ -174,7 +173,6 @@ def launch_python() -> str:
     # No venv in the primary: any interpreter OUTSIDE the worktree that can import the
     # primary's MCP server -- deps and all -- outlives the worktree. Probed, because a
     # base python without the dependencies would fail as surely as a deleted one.
-    import shutil
 
     outside = [getattr(sys, "_base_executable", ""), shutil.which("python3") or ""]
     for cand in dict.fromkeys(c for c in outside if c):
@@ -186,36 +184,18 @@ def launch_python() -> str:
 
 def _imports_ddflow(python: str, root: str) -> bool:
     """Whether `python` imports ddflow's MCP server from `root` (cheap, bounded)."""
-    import os
-    import subprocess
-
-    from .proc import run
-
     env = {**os.environ, "PYTHONPATH": root}
-    try:
-        return (
-            # Through `proc.run`: stdin detached, since in the MCP server stdin IS the
-            # JSON-RPC stream and a child holding it would eat the next request.
-            run(
-                [python, "-c", "import ddflow.surfaces.mcp"],
-                env=env,
-                # `-c` puts the working directory first on sys.path: run it FROM the root,
-                # or whatever ddflow sits in the caller's directory answers instead.
-                cwd=root,
-                capture_output=True,
-                timeout=30,
-            ).returncode
-            == 0
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
+    # Through `proc`: stdin detached, since in the MCP server stdin IS the JSON-RPC stream
+    # and a child holding it would eat the next request. `-c` puts the working directory
+    # first on sys.path: run it FROM the root, or whatever ddflow sits in the caller's
+    # directory answers instead.
+    done = P.capture([python, "-c", "import ddflow.surfaces.mcp"], env=env, cwd=root, timeout=30)
+    return done.ran and done.returncode == 0
 
 
 def redirected_from() -> Path | None:
     """The linked worktree launch lines were redirected away from -- only when the
     redirect is the worktree one, never for an explicit `DDFLOW_LAUNCH_ROOT`."""
-    import os
-
     if os.environ.get(LAUNCH_ROOT_ENV):
         return None
     here = package_parent()

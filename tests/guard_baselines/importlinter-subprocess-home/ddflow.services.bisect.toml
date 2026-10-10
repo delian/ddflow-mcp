@@ -1,5 +1,0 @@
-# The `ignore_imports` of .importlinter contract `subprocess-home` whose source is ddflow.services.bisect.
-# See tests/test_architecture_guards.py: entries only shrink, never grow.
-ignore_imports = [
-    "ddflow.services.bisect -> subprocess",
-]
