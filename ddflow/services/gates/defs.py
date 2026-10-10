@@ -69,6 +69,13 @@ class GateDef:
     require_output: str = ""
     fail_output: str = ""
 
+    #: The command reads a COMMITTED ref (`ddflow ci run` merges the branch's commits in a
+    #: scratch worktree), not the working tree. `gate verify` then commits the mutation on
+    #: a throwaway commit and runs the gate in a scratch checkout of it: an uncommitted
+    #: edit is invisible to such a gate, so it could never prove it can fail
+    #: (B-verify-ci-blind).
+    reads_ref: bool = False
+
     #: This gate is satisfied by a PERSON, not by the agent and not by a command.
     #: See :meth:`is_human_gate`.
     human: bool = False
@@ -217,6 +224,7 @@ DEFAULT_GATES: dict[str, GateDef] = {
         evidence=True,
         applies_to="both",
         command="ddflow ci run",
+        reads_ref=True,
         timeout_s=3600,
         unavailable_exits=[2],
         description="The exact pre-push/CI checks pass on the branch merged with the base.",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,136 @@ class MutationResult:
     @property
     def ok(self) -> bool:
         return self.applied and self.detected
+
+
+def _branch_mutations(
+    repo: Path, cfg: Config, tree: Path | None, gdef: GateDef
+) -> list[dict[str, str]]:
+    """The registered mutations, plus any the item's own tree adds (B-verify-ci-blind).
+
+    The registry used to be read from the primary alone, so a mutation committed on a
+    branch could not be verified before it merged. Entries the tree repeats are not
+    doubled."""
+    muts = list(gdef.mutations)
+    if tree is None or tree.resolve() == Path(repo).resolve():
+        return muts
+    try:
+        mine = load_gates(tree, cfg).get(gdef.id)
+    except Exception:  # an unreadable branch config must not hide the primary's registry
+        return muts
+    return muts + [m for m in (mine.mutations if mine else []) if m not in muts]
+
+
+def _mutated_commit(cwd: Path, rel: str, text: str) -> tuple[str, str]:
+    """(sha, "") of a throwaway commit: HEAD with ``rel`` holding ``text``; or ("", why).
+
+    Built with a temporary index, so neither the branch, the real index nor the working
+    tree moves; the commit is unreferenced and left to git's gc."""
+    head = W.git(cwd, "rev-parse", "--verify", "HEAD")
+    if not head.ok:
+        return "", f"no HEAD commit in {cwd}: {head.err.strip()[:200]}"
+    entry = W.git(cwd, "ls-tree", "HEAD", "--", rel).out.split("\t")[0].split()
+    mode = entry[0] if entry else "100644"
+    with fsio.scratch_dir("ddflow-mut-", ignore_cleanup_errors=True) as tmp:
+        env = {
+            "GIT_INDEX_FILE": str(tmp / "index"),
+            "GIT_AUTHOR_NAME": "ddflow",
+            "GIT_AUTHOR_EMAIL": "ddflow@localhost",
+            "GIT_COMMITTER_NAME": "ddflow",
+            "GIT_COMMITTER_EMAIL": "ddflow@localhost",
+        }
+        steps = [
+            W.git(cwd, "read-tree", "HEAD", env=env),
+            W.git(cwd, "hash-object", "-w", "--stdin", input=text, env=env),
+        ]
+        if not all(r.ok for r in steps):
+            return "", f"could not build the mutated commit: {(steps[0].err or steps[1].err)[:200]}"
+        blob = steps[1].out.strip()
+        upd = W.git(cwd, "update-index", "--add", "--cacheinfo", f"{mode},{blob},{rel}", env=env)
+        tree = W.git(cwd, "write-tree", env=env) if upd.ok else upd
+        if not tree.ok:
+            return "", f"could not build the mutated commit: {tree.err[:200]}"
+        commit = W.git(
+            cwd,
+            "commit-tree",
+            tree.out.strip(),
+            "-p",
+            head.out.strip(),
+            "-m",
+            "ddflow gate verify: throwaway mutation",
+            env=env,
+        )
+    if not commit.ok:
+        return "", f"could not build the mutated commit: {commit.err[:200]}"
+    return commit.out.strip(), ""
+
+
+def _run_committed(
+    gdef: GateDef, cwd: Path, rel: str, text: str | None
+) -> tuple[str, dict[str, Any]]:
+    """Run a gate that reads a COMMITTED ref in a scratch checkout of the commit under
+    test: a throwaway commit holding the mutation, or HEAD itself for the baseline
+    (``text`` None). Nothing of ``cwd`` is touched."""
+    # ``text`` None: the unmutated HEAD, the baseline in the SAME kind of checkout the
+    # mutated runs get (a bare checkout has no untracked or ignored files to lean on).
+    if text is None:
+        head = W.git(cwd, "rev-parse", "--verify", "HEAD")
+        sha, why = head.out.strip(), head.err.strip()[:200]
+    else:
+        sha, why = _mutated_commit(cwd, rel, text)
+    if not sha:
+        return "unavailable", {"reason": why}
+    with W.scratch_tree(cwd, sha, detach=True, prefix="ddflow-mut.", quiet=True) as s:
+        if s.path is None:
+            return "unavailable", {
+                "reason": f"could not check out the commit under test: {s.add.err[:200]}"
+            }
+        return run_command_gate(gdef, s.path)
+
+
+def _try_mutation(gdef: GateDef, cwd: Path, mut: dict[str, str]) -> MutationResult:
+    """Apply one registered mutation, run the gate, and restore whatever was touched."""
+    gate_id, rel = gdef.id, mut.get("file", "")
+    target = cwd / rel
+    old, new = mut.get("old", ""), mut.get("new", "")
+    if not target.is_file():
+        return MutationResult(gate_id, rel, False, False, "file not found")
+    src = target.read_text("utf-8")
+    count = src.count(old)
+    if count != 1:
+        return MutationResult(
+            gate_id,
+            rel,
+            False,
+            False,
+            f"`old` appears {count} time(s); the edit must be unambiguous. "
+            f"A mutation that did not apply is NOT a passed mutation test.",
+        )
+    mutated = src.replace(old, new, 1)
+    try:
+        if gdef.reads_ref:
+            # The gate reads a commit (ci), so an uncommitted edit is invisible to it
+            # and it would report PASSED on mutated source (B-verify-ci-blind).
+            outcome, ev = _run_committed(gdef, cwd, rel, mutated)
+        else:
+            fsio.replace_text(target, mutated, fsync=False)
+            outcome, ev = run_command_gate(gdef, cwd)
+    finally:
+        if not gdef.reads_ref:
+            fsio.replace_text(target, src, fsync=False)
+    detected = outcome == "failed"
+    detail = ""
+    if not detected:
+        detail = (
+            f"the gate reported {outcome!r} on mutated source — it cannot "
+            f"see this class of change. {ev.get('reason', '')}"
+        )[:300]
+        if re.search(r"\bHEAD\b", gdef.command) and not gdef.reads_ref:
+            detail += (
+                " (its command reads HEAD: declare `reads_ref = true` so the "
+                "mutation is committed on a throwaway commit)"
+            )
+    return MutationResult(gate_id, rel, True, detected, detail)
 
 
 def verify(
@@ -88,13 +219,6 @@ def verify(
             f"{gate_id} is an agent gate — it has no command to run, so there is "
             f"nothing to mutate. Its honesty rests on the evidence contract instead."
         )
-    if not gdef.mutations:
-        return [], (
-            f"{gate_id} has NO registered mutations, so nothing has ever shown it can "
-            f"fail. Add `mutations = [{{ file = '...', old = '...', new = '...' }}]` to "
-            f"[gate.{gate_id}]: an edit that this gate must catch."
-        )
-
     cwd = repo
     if item is not None and gdef.cwd == "worktree" and item.worktree:
         # No `or repo` fallback. An item that HAS a worktree whose path no longer
@@ -110,9 +234,20 @@ def verify(
             )
         cwd = resolved
 
+    own = W.load_path(repo, item.worktree) if item is not None and item.worktree else None
+    mutations = _branch_mutations(repo, cfg, own, gdef)
+    if not mutations:
+        return [], (
+            f"{gate_id} has NO registered mutations, so nothing has ever shown it can "
+            f"fail. Add `mutations = [{{ file = '...', old = '...', new = '...' }}]` to "
+            f"[gate.{gate_id}]: an edit that this gate must catch."
+        )
+
     # The baseline. Everything below compares against it, and without it a red gate
     # "detects" every mutation.
-    baseline, base_ev = run_command_gate(gdef, cwd)
+    baseline, base_ev = (
+        _run_committed(gdef, cwd, "", None) if gdef.reads_ref else run_command_gate(gdef, cwd)
+    )
     if baseline != "passed":
         return [], (
             f"{gate_id} does not pass on the UNMUTATED source — it reported "
@@ -121,48 +256,7 @@ def verify(
             f"{base_ev.get('reason', '')}".strip()[:400]
         )
 
-    results: list[MutationResult] = []
-    for mut in gdef.mutations:
-        target = cwd / mut.get("file", "")
-        old, new = mut.get("old", ""), mut.get("new", "")
-        if not target.is_file():
-            results.append(
-                MutationResult(gate_id, mut.get("file", ""), False, False, "file not found")
-            )
-            continue
-        src = target.read_text("utf-8")
-        count = src.count(old)
-        if count != 1:
-            results.append(
-                MutationResult(
-                    gate_id,
-                    mut.get("file", ""),
-                    False,
-                    False,
-                    f"`old` appears {count} time(s); the edit must be unambiguous. "
-                    f"A mutation that did not apply is NOT a passed mutation test.",
-                )
-            )
-            continue
-        try:
-            fsio.replace_text(target, src.replace(old, new, 1), fsync=False)
-            outcome, ev = run_command_gate(gdef, cwd)
-            detected = outcome == "failed"
-            results.append(
-                MutationResult(
-                    gate_id,
-                    mut.get("file", ""),
-                    True,
-                    detected,
-                    ""
-                    if detected
-                    else f"the gate reported {outcome!r} on mutated source — it cannot "
-                    f"see this class of change. {ev.get('reason', '')}"[:300],
-                )
-            )
-        finally:
-            fsio.replace_text(target, src, fsync=False)
-    return results, ""
+    return [_try_mutation(gdef, cwd, mut) for mut in mutations], ""
 
 
 #: What `verify_regression_test` returns. `verified` is the only pass; the caller REFUSES
