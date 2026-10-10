@@ -1,7 +1,7 @@
 """`wait` -- the one loop verb that stays a hand-written command: it streams progress to
-stderr while it sleeps, which `Command.call` + `render` has no place for. The others
-(`next`, `claim`, `complete`, `merge` and friends) run on the executor; how they read is in
-`declared/lifecycle_cli.py`.
+stderr while it sleeps, which `Command.call` + `render` has no place for -- and the answer
+`board` gives for an unknown `--phase`. The other verbs (`next`, `claim`, `complete`,
+`merge` and friends) run on the executor; how they read is in `declared/lifecycle_cli.py`.
 """
 
 from __future__ import annotations
@@ -9,8 +9,18 @@ from __future__ import annotations
 import sys
 
 from ...api import lifecycle as A
-from ..context import OK, Ctx
+from ..context import FAIL, OK, Ctx
 from ..render import emit_json
+
+
+def _next_without_plan(out, c: Ctx) -> int:
+    """`board`'s answer to an unknown `--phase` (Bc2acd426f4), said as `next` says it: the
+    JSON body, and the reason on stderr in either mode, with its exit code."""
+    if c.json:
+        emit_json(out.body())
+    if out.exit == FAIL and out.reason:
+        print(out.reason, file=sys.stderr)
+    return out.exit
 
 
 def cmd_wait(a, c: Ctx) -> int:

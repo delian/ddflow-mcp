@@ -22,7 +22,7 @@ from conftest import pass_pipeline, run_cli
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.surfaces import mcp
-from ddflow.surfaces.commands.lifecycle import MERGE_PAYLOAD
+from ddflow.surfaces.declared.lifecycle_cli import MERGE_PAYLOAD
 
 
 def _git(where: Path, *args: str) -> str:
