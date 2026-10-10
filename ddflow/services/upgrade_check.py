@@ -17,8 +17,9 @@ A ddflow running from a source checkout is never proposed an upgrade by the peri
 (its newer version is a merge, not a release) and makes no request on its own.
 
 The proposal line is said ONCE per version on this machine, by the first surface that speaks
-(the brief or the MCP handshake: `proposal(consume=True)`); `status`, `doctor` and
-`ddflow upgrade --check` read the cache and say it whenever a newer release is known.
+(the brief or the MCP handshake: `proposal(consume=True)`); `status` and `doctor` say it
+whenever a newer release is known, and `ddflow upgrade --check` asks the index at once,
+whatever the interval.
 Time and transport are arguments, so tests need neither a network nor a sleep.
 """
 
