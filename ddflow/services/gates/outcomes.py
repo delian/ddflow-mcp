@@ -12,6 +12,7 @@ from ...config import Config
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra import hostinfo as H
 from ...infra.log import EventLog
+from .. import reviewer_trust as RT
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
@@ -394,7 +395,6 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
         # WHICH entry reviewed, as configured right now: what reviewer independence
         # checks against `reviewer.configured`/`reviewer.approved` (D-reviewer-trust).
         # Only `ddflow review` writes a `reviewer` key; `gate record` cannot.
-        from .. import reviewer_trust as RT
 
         if dig := RT.digest_of(log.root, str(evidence["reviewer"])):
             evidence = {**evidence, "reviewer_digest": dig}
