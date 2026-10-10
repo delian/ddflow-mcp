@@ -1176,19 +1176,12 @@ def upgrade(
     could not be reached.
     """
     others = bool(apply or plan is not None or confirm or reason or backup or snapshot)
-    for alone, name in ((check, "check"), (restore, "restore")):
-        if alone and (others or (name == "check" and restore)):
-            return O.refused("upgrade", f"--{name} stands alone: choose it or the plan or --apply")
-    if check:
-        return _upgrade_check(repo, agent)
-    if restore:
-        return _upgrade_restore(repo, restore, agent)
+    if check or restore:
+        return _upgrade_alone(repo, check, restore, others, agent)
     if snapshot:
         # `snapshot` is `backup="snapshot"` for one run; naming another mode too is a contradiction.
-        if backup and backup != "snapshot":
-            return O.refused("upgrade", f"--snapshot and --backup {backup} disagree: choose one")
-        if not (apply or plan is False):
-            return O.refused("upgrade", "--snapshot saves the originals of an --apply: add --apply")
+        if why := _snapshot_conflict(backup, bool(apply or plan is False)):
+            return O.refused("upgrade", why)
         backup = "snapshot"
     if apply and plan is True:
         return O.refused("upgrade", "choose the plan or --apply, not both")
@@ -1205,6 +1198,23 @@ def upgrade(
         exit=O.FAIL,
         reason=f"{data['total']} upgrade item(s) pending",
     )
+
+
+def _upgrade_alone(repo: Path, check: bool, restore: str, others: bool, agent: str) -> O.Outcome:
+    """``--check`` and ``--restore`` stand alone: refuse them beside anything else."""
+    name = "check" if check else "restore"
+    if others or (check and restore):
+        return O.refused("upgrade", f"--{name} stands alone: choose it or the plan or --apply")
+    return _upgrade_check(repo, agent) if check else _upgrade_restore(repo, restore, agent)
+
+
+def _snapshot_conflict(backup: str, applying: bool) -> str:
+    """Why ``--snapshot`` cannot be honoured, "" when it can."""
+    if backup and backup != "snapshot":
+        return f"--snapshot and --backup {backup} disagree: choose one"
+    if not applying:
+        return "--snapshot saves the originals of an --apply: add --apply"
+    return ""
 
 
 UPGRADE_CHECK_PAYLOAD = (
