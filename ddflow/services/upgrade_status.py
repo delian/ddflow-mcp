@@ -78,6 +78,8 @@ def _steps(
             rec = by_id.get(it["id"])
             if rec:
                 state, detail = _STEP_STATE.get(rec["status"], PENDING), rec["detail"]
+            elif it["action"] == UP.NOTE and cat not in UA._VERSIONED:
+                state, detail = WAIVED, "a note: an apply lists it and changes nothing"
             elif UA._needs_confirmation(it, config_changes):
                 state, detail = NEEDS_OPERATOR, ""
             elif it["id"] == current:

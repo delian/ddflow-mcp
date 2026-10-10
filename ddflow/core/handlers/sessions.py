@@ -175,6 +175,7 @@ def _upgrade_run(st: State, run_id: str, ev: Event) -> dict[str, Any]:
         )
     else:
         run["closed"] = "failed" if status == "failed" else "done"
+        run["summary"] = str(d.get("summary", ""))
     return run
 
 
