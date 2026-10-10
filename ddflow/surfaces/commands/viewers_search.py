@@ -13,7 +13,7 @@ from ...api import surf_reporting as R
 from ...api import view_read
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param
-from ..render import emit_json
+from ..render import emit_json, id_cell
 
 
 def view_head(c: Ctx, out) -> int | None:
@@ -56,7 +56,7 @@ def cmd_search(a, c: Ctx) -> int:
         return NOTHING
     for r in d["rows"]:
         print(
-            f"  {r['kind']:<9} {r['id']:<22.22s} {r['state']:<12.12s} {r['date'][:10]:<10}  "
+            f"  {r['kind']:<9} {id_cell(r['id'])} {r['state']:<12.12s} {r['date'][:10]:<10}  "
             f"{r['snippet']}"
         )
     if d["truncated"]:

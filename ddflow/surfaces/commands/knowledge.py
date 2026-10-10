@@ -22,7 +22,7 @@ from ..declared.records import BUG_INVALID_FIELDS
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
-from ..render import emit_json
+from ..render import emit_json, id_cell
 
 
 def cmd_lesson(a, c: Ctx) -> int:
@@ -548,7 +548,7 @@ def _history_line(ev) -> str:
     if d.get(OLDER_MARK):  # after the cut: the mark is the part that must never be lost
         detail = f"{detail} [older ddflow {d[OLDER_MARK]}]"
     return (
-        f"  {clock.fmt_minute(ev.ts)}  {ev.agent:<14.14s} {ev.subject:<22.22s} {verb:<22s} {detail}"
+        f"  {clock.fmt_minute(ev.ts)}  {ev.agent:<14.14s} {id_cell(ev.subject)} {verb:<22s} {detail}"
     )
 
 
