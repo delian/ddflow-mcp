@@ -3881,6 +3881,53 @@ old `config --set` key writes the new one. An unknown command, MCP tool or argum
 closest known one (`Did you mean 'ddflow_probe'?`). A command's alias is the same command to
 the parity test.
 
+### Upgrading ddflow
+
+One command, `ddflow upgrade`, and one MCP tool, `ddflow_upgrade`, cover everything an operator
+asks about an upgrade (decision D-self-upgrade). Each mode below is a flag on the CLI and an
+argument over MCP, so "is ddflow up to date?" and "upgrade ddflow" can be put to an agent.
+
+| ask | CLI | MCP argument |
+|---|---|---|
+| is a newer ddflow out, is this project behind? | `ddflow upgrade --check` | `check` |
+| what would change in this project? | `ddflow upgrade --plan` | `plan` |
+| change it, after saving the originals | `ddflow upgrade --apply [CATEGORIES]` | `apply` |
+| upgrade ddflow itself | `ddflow upgrade --self [--dry-run] [--rollback]` | `self` |
+| where does it stand? | `ddflow upgrade --status` | `status` |
+| what did past upgrades do? | `ddflow upgrade --history` | `history` |
+| finish an interrupted apply | `ddflow upgrade --resume` | `resume` |
+| undo an apply | `ddflow upgrade --restore [NAME]` | `restore` |
+
+**Check and proposal.** The release check (at most once per `[upgrade].check_interval_h`, never
+a daemon) PROPOSES a newer release in the brief, `status` and `doctor`; it installs nothing. See
+"Is a newer ddflow out?" below. **Self-upgrade** installs the newer ddflow with the tool that
+installed this one and needs the operator's consent (`--yes --reason`; `[upgrade].self`); the
+version it replaced is remembered so `--self --rollback` reinstalls it. **Containers and MCP
+servers** compare their version with the project's stamp on start and run the safe migrations
+(`[upgrade].on_start`); they serve even while a migration waits. **Backups** are `local` (a copy
+under `.ddflow/backups/`) or `snapshot` (a git tag); `--restore` puts either back.
+
+**Monitor.** `--status` prints the running version, the newest release and when it was last
+asked, this project's stamp, the plan with each step's state (`pending`, `running`, `done`,
+`failed`, `needs operator confirmation`, `waived`), the backups, and the agents and MCP servers
+last seen on an older ddflow, which must restart (from the `ddflow.seen` stamps and
+`skew.overridden` events). It exits 0 when nothing is pending and 1 otherwise. `--history` lists
+the upgrades the log records. Both only read.
+
+**Orchestrate and resume.** Every step of an `--apply` is an `upgrade.applied` event (a `run` id
+and `status`: `started`, one `step` per item, then the closing `done` or `failed`; no new event
+kind), so replay explains the upgrade and an interruption (a crash, a closed terminal, a
+timeout) leaves a run `--status` calls `interrupted`. `ddflow upgrade --resume` finishes it:
+the steps the run settled are not run again, the rest are, and a second `--resume` finds nothing
+(exit 2). Over MCP an apply reports each finished step as a progress notification when the
+client sent a `progressToken`.
+
+**Turning each off.** `ddflow config upgrade.release_check off` (or `DDFLOW_NO_UPDATE_CHECK=1`)
+stops the release check, `upgrade.on_start off` the check at server or container start,
+`upgrade.auto off` the notice after an upgrade, `upgrade.self operator` keeps an agent from
+installing, and `upgrade.backup none` skips the originals. `ddflow help upgrade` is the same
+for an agent.
+
 ### Upgrading a project: the whole picture
 
 A project is brought up to a newer ddflow in three steps, and ddflow does only the first on its own.
@@ -5104,7 +5151,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=de1b88693f8f -->
+<!-- ddflow:begin README/tools sha=d787dfa113e7 -->
 <details><summary>All 112 MCP tools: 32 in the `core` tier, 47 more in `standard`, 33 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5219,7 +5266,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_rebuild` | all | Re-derive the search index from the event log. |
 | When something is wrong | `ddflow_recover` | standard | Find work left behind by a crashed agent: expired leases, orphaned worktrees, items stuck running. |
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
-| When something is wrong | `ddflow_upgrade` | all | What upgrading this project to the running ddflow would change, by category (repairs, migrations, config… |
+| When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
 
 </details>

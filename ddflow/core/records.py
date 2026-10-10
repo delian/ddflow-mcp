@@ -924,6 +924,11 @@ class State:
     #: Upgrades applied (`upgrade.applied`), oldest first: {"from", "to", "categories",
     #: "backup", "agent", "at"}.
     upgrades: list[dict[str, Any]] = field(default_factory=list)
+    #: Upgrade RUNS (`upgrade.applied` with a `run` id), by run id in start order: {"from", "to",
+    #: "categories", "items" (planned), "steps" ([{"id", "status", "detail", "at"}]), "closed"
+    #: ("" while open, else "done" or "failed"), "started", "agent", "starts"}. A run that is
+    #: still open was interrupted; `ddflow upgrade --resume` finishes it.
+    upgrade_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: repair id -> each application of that versioned data repair (`repair.applied`),
     #: oldest first: {"findings" (the keys it settled), "since", "version", "events",
     #: "agent", "at"}. `services.repairs` never offers a finding whose key is listed here.
