@@ -4,5 +4,5 @@
 kind = "knob_added"
 key = "upgrade.check_interval_h"
 new = "24.0"
-why = "Hours between release checks (default 24); a failed check is retried after at most an hour."
+why = "Hours between release checks (default 24); a failed check counts as a check, so there is at most one request per interval."
 impact = "additive"
