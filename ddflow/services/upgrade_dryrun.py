@@ -408,7 +408,8 @@ def upcast_problems(repo: Path) -> tuple[str, list[str]]:
     The event-evolution machinery has never met a real bump (`core.upcasters` ships empty), so
     the first real upcaster would be its first production run. This is that run, on the log
     being rehearsed: the most common kind is bumped by a step that only adds a key, so the
-    handlers (which ignore it) must fold the same state, every event of the kind must go
+    handlers (which ignore it) must fold the same records (ids per collection: a handler that
+    keeps a whole payload keeps the added key too, which is not a defect), every event of the kind must go
     through the step with its id kept, and an older reader (no bump) must skip a payload
     stamped with the new version instead of guessing at it."""
     log = EventLog(repo, "dry-digest", log_cfg=Config.load(repo).log)
@@ -1075,7 +1076,7 @@ class Rehearsal:
             "an event upcaster over the old log",
             not problems,
             "; ".join(problems)
-            or f"every {kind} event upcast with its id kept, the state unchanged, "
+            or f"every {kind} event upcast with its id kept, the same records folded, "
             "an older reader skips the new version",
         )
 

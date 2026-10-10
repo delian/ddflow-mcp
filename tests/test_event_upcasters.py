@@ -573,7 +573,9 @@ def test_an_older_reader_skips_what_the_bumped_writer_appended(
 #: Every version constant ddflow declares: (module, name). The contract page lists them all.
 VERSION_CONSTANTS = (
     ("ddflow", "FORMAT_LEVEL"),
+    ("ddflow.config", "CONFIG_FORMAT"),
     ("ddflow.core.events", "SCHEMA_VERSION"),
+    ("ddflow.infra.log", "SNAPSHOT_FORMAT"),
     ("ddflow.infra.store", "SCHEMA"),
     ("ddflow.core.textsim", "VERSION"),
     ("ddflow.services.ticks", "FORMAT"),
@@ -582,7 +584,7 @@ VERSION_CONSTANTS = (
 
 
 def test_the_contract_lists_every_version_number_with_its_value() -> None:
-    """Seven independent version numbers and no common statement of them was a finding of the
+    """Independent version numbers and no common statement of them was a finding of the
     upgrade-path review: a number the code declares and this page does not name fails here."""
     import importlib
 
@@ -600,7 +602,7 @@ def test_the_contract_lists_every_version_number_with_its_value() -> None:
     assert "PAYLOAD_VERSIONS" in page and 'data["v"]' in page
 
 
-VERSION_NAME = re.compile(r"(SCHEMA|FORMAT|VERSION|FORMAT_LEVEL|[A-Z_]*_VERSION)")
+VERSION_NAME = re.compile(r"(SCHEMA|FORMAT|VERSION|FORMAT_LEVEL|[A-Z_]*_VERSION|[A-Z_]*_FORMAT)")
 
 
 def test_every_module_level_version_constant_is_in_the_list() -> None:
