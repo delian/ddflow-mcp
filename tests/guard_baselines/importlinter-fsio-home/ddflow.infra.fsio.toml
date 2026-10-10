@@ -3,4 +3,5 @@
 # home: permanent, the one module allowed to own this import.
 ignore_imports = [
     "ddflow.infra.fsio -> fcntl",
+    "ddflow.infra.fsio -> tempfile",
 ]

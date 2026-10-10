@@ -38,13 +38,13 @@ import re
 import select
 import shutil
 import signal
-import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import _is_code_tree
-from ..infra import paths
+from ..config import Config, _is_code_tree
+from ..infra import fsio, paths, tomlcfg
 from ..infra import proc as P
 from ..infra.fsio import atomic_write
 from . import mcpconfig as MC
@@ -260,8 +260,6 @@ def load(repo: Path) -> list[Companion]:
     `companions add` would write into an agent's config as a launch line failing
     mid-task.
     """
-    from ..infra import tomlcfg
-
     out: dict[str, Companion] = {}
     shipped = paths.templates_dir() / "companions.toml"
     sources = [shipped, *tomlcfg.config_paths(repo, "companions.toml")]
@@ -303,21 +301,14 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
     exe = shutil.which(c.detect[0])
     if not exe:
         return False, f"{c.detect[0]} is not on PATH"
-    try:
-        p = P.run(
-            c.detect,
-            capture_output=True,
-            text=True,
-            timeout=DETECT_TIMEOUT_S,
-            check=False,
-        )
-    except P.TimeoutExpired:
+    p = P.capture(c.detect, timeout=DETECT_TIMEOUT_S)
+    if p.timed_out:
         return None, (
             f"`{' '.join(c.detect)}` did not answer within {DETECT_TIMEOUT_S}s — could "
             f"not tell. Not the same as absent: re-run, or check it by hand."
         )
-    except (OSError, P.SubprocessError) as exc:
-        return None, f"the probe could not be run at all ({exc}) — could not tell"
+    if p.error is not None:
+        return None, f"the probe could not be run at all ({p.error}) — could not tell"
     if p.returncode != 0:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
     said = [*_said(p.stdout or ""), *_said(p.stderr or "")]
@@ -487,16 +478,9 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
             "clientInfo": {"name": "ddflow-verify", "version": "0"},
         },
     }
-    with tempfile.TemporaryFile() as err:
+    with fsio.scratch_file() as err:
         try:
-            proc = P.popen(
-                [exe, *c.args],
-                stdin=P.PIPE,
-                stdout=P.PIPE,
-                stderr=err,
-                env={**os.environ, **c.env},
-                start_new_session=True,
-            )
+            proc = P.spawn_stdio([exe, *c.args], env={**os.environ, **c.env}, stderr=err)
         except OSError as exc:
             return done(False, f"could not launch `{c.command}`: {exc}")
 
@@ -559,8 +543,6 @@ def verify(
 
     NEVER called from `scan`. Concurrent because each launch may be an `npx` cold start.
     """
-    from concurrent.futures import ThreadPoolExecutor
-
     comps = [c for c in load(repo) if c.is_mcp and (ids is None or c.id in ids)]
     if not comps:
         return []
@@ -842,8 +824,6 @@ def scan(repo: Path, *, probe: bool = True, ttl_s: int | None = None) -> list[St
     whole window and report `unknown` about a tool sitting right there.
     """
     if ttl_s is None:
-        from ..config import Config
-
         ttl_s = Config.load(repo).companions.probe_cache_ttl_s
     cached = _read_cache(repo, ttl_s) if probe else {}
     out, fresh = [], dict(cached)

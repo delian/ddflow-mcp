@@ -25,7 +25,6 @@ as a pass or a fail.
 from __future__ import annotations
 
 import shlex
-import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -111,23 +110,24 @@ def command_probe(
         detail = ""
         for _ in range(max(1, repeat)):
             try:
-                p = P.run(
+                p = P.capture(
                     argv_for(tests),
                     cwd=cwd,
-                    capture_output=True,
-                    text=True,
                     encoding="utf-8",
                     errors="replace",  # a stray byte in a test's output is not a failed run
                     timeout=timeout_s,
-                    check=False,
                 )
-            except subprocess.TimeoutExpired:
+            except UnicodeError as exc:  # an argv that cannot be encoded
+                verdicts.append(None)
+                detail = f"could not run: {exc}"
+                continue
+            if p.timed_out:
                 verdicts.append(None)
                 detail = f"timed out after {timeout_s:g}s"
                 continue
-            except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
+            if p.error is not None:
                 verdicts.append(None)
-                detail = f"could not run: {exc}"
+                detail = f"could not run: {p.error}"
                 continue
             verdicts.append(p.returncode == 0)
             if p.returncode != 0:

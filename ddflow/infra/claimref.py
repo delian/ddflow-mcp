@@ -14,12 +14,12 @@ treated as success -- the caller refuses the claim rather than silently going lo
 from __future__ import annotations
 
 import re
-import subprocess
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import proc as P
 from .worktree import git
 
 PREFIX = "refs/ddflow/claims/"
@@ -61,8 +61,8 @@ def ref_name(item: str) -> str:
 def _run(root: Path, *args: str, env: dict[str, str] | None = None):
     try:
         return git(root, *args, timeout=TIMEOUT_S, env=env)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return None if isinstance(exc, subprocess.TimeoutExpired) else exc
+    except (P.TimeoutExpired, OSError) as exc:
+        return None if isinstance(exc, P.TimeoutExpired) else exc
 
 
 def _make_commit(root: Path, item: str, holder: str, expires: float, parent: str = "") -> str:

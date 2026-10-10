@@ -13,18 +13,20 @@ from __future__ import annotations
 import json
 import os
 import select
-import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..core.model import fold
+from ..infra import fsio
 from ..infra import proc as P
 from ..infra import worktree as W
+from ..infra.log import EventLog
 from . import harness as H
 from . import legacy as L
 from . import onboard_tests as T
+from .gates import load_gates
 
 #: How long the registered server may take to answer initialize + tools/list.
 _HANDSHAKE_TIMEOUT = P.TIMEOUTS["probe"]
@@ -73,16 +75,7 @@ def _handshake(repo: Path, entry: object) -> Check:
         return Check("mcp handshake", "unavailable", "no ddflow entry registered in .mcp.json")
     argv = [str(entry["command"]), *[str(a) for a in entry.get("args") or []]]
     env = {**os.environ, **{str(k): str(v) for k, v in (entry.get("env") or {}).items()}}
-    proc = P.popen(
-        argv,
-        cwd=repo,
-        env=env,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
+    proc = P.spawn_stdio(argv, cwd=repo, env=env, text=True)
     try:
         init = json.dumps(
             {
@@ -128,19 +121,15 @@ def _handshake(repo: Path, entry: object) -> Check:
         _stop(proc)
 
 
-def _line(proc: subprocess.Popen, timeout: float) -> str | None:
+def _line(proc: P.Popen, timeout: float) -> str | None:
     readable, _, _ = select.select([proc.stdout], [], [], timeout)
     if not readable:
         return None
     return proc.stdout.readline()
 
 
-def _stop(proc: subprocess.Popen) -> None:
-    P.kill_group(proc)
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        pass
+def _stop(proc: P.Popen) -> None:
+    P.stop_group(proc)
 
 
 def _hooks_dir(repo: Path) -> Path:
@@ -191,29 +180,21 @@ def _trailer_refused(repo: Path) -> Check:
             "passed",
             f"refused the trailer (exit {bad.returncode}) and accepted a clean message",
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except (OSError, P.TimeoutExpired) as exc:
         return Check("trailer refused", "unavailable", f"the hook could not be probed: {exc}")
 
 
-def _run_hook(hook: Path, repo: Path, text: str) -> subprocess.CompletedProcess:
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
-        handle.write(text)
-        message = handle.name
-    try:
-        return P.run([str(hook), message], cwd=repo, capture_output=True, text=True, timeout=60)
-    finally:
-        Path(message).unlink(missing_ok=True)
+def _run_hook(hook: Path, repo: Path, text: str) -> P.Captured:
+    with fsio.temp_text(text, ".txt") as message:
+        return P.capture([str(hook), str(message)], cwd=repo, timeout=60).unwrap()
 
 
 def _answers(repo: Path) -> Check:
     """`brief` and `next` answer on stdout. Exit 2 means nothing READY for `next` (a
     real answer with text); `brief` exiting 2 is a failure to run, never a pass."""
-    brief = P.run(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "brief"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    brief = P.capture(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "brief"], timeout=120
+    ).unwrap()
     if brief.returncode != 0:
         return Check(
             "brief/next answer",
@@ -222,12 +203,9 @@ def _answers(repo: Path) -> Check:
         )
     if not (brief.stdout or "").strip():
         return Check("brief/next answer", "failed", "brief printed nothing")
-    nxt = P.run(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "next"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    nxt = P.capture(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "next"], timeout=120
+    ).unwrap()
     if nxt.returncode not in (0, 2) or not (nxt.stdout or "").strip():
         return Check(
             "brief/next answer",
@@ -250,9 +228,6 @@ def _has_imports(repo: Path) -> bool | None:
     branch was dead (roborev on c61278a4). None means the log could not be read at all:
     "could not tell" is not "nothing was imported".
     """
-    from ..core.model import fold
-    from ..infra.log import EventLog
-
     try:
         state = fold(
             EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log).read_all(),
@@ -300,8 +275,6 @@ def _suite_command(repo: Path, cfg: Config) -> str:
     the earlier lookup always answered "none", so the configured suite never ran
     (roborev on 079824c6).
     """
-    from .gates import load_gates
-
     try:
         gate = load_gates(Path(repo), cfg).get("unit_tests")
     except Exception:
