@@ -1,6 +1,6 @@
 """`next_` (`ddflow next`): what may start now, and why everything else may not.
 
-Part of `ddflow.api.lifecycle`, which re-exports every name defined here."""
+Part of `ddflow.api.lifecycle`, which re-exports the public functions and classes defined here."""
 
 from __future__ import annotations
 

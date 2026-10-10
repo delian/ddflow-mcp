@@ -36,8 +36,7 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
         )
         where = runs / item_id
         where.mkdir(exist_ok=True)
-        # Imported here, not at the top: every top-level name of a gates module is
-        # re-exported by the package (tests/test_module_splits.py).
+        # Imported here, not at the top (deferred, as it was before the area split).
         from ...core.clock import compact_at
 
         stamp = compact_at()
@@ -255,8 +254,7 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     recorded as a test failure (bug B8ea7a90aea). The config-knob half of the same
     class warns "merge main" from `config._warn_unknown`.
     """
-    # Function-level: the package re-exports every top-level name of its areas, and
-    # `tomlcfg` is not one of them (tests/test_module_splits.py).
+    # Function-level (deferred, as it was before the area split).
     from ...infra import tomlcfg
 
     try:

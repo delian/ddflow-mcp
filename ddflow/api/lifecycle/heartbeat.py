@@ -1,6 +1,6 @@
 """`heartbeat` and `release`: keeping a lease alive and giving it back.
 
-Part of `ddflow.api.lifecycle`, which re-exports every name defined here."""
+Part of `ddflow.api.lifecycle`, which re-exports the public functions and classes defined here."""
 
 from __future__ import annotations
 
