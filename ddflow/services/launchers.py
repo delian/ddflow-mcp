@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import Any
 
 from ..infra.fsio import Unreadable, read_json
+from . import enforce as E
+from .adopt import AGENT_TARGETS, get_server
+from .claudehooks import HOOKS, _ours
 
 #: Written by `command_line`: the probe that decides whether the recorded launcher runs.
 _PROBE = re.compile(r'\[ -([xf]) "([^"]+)" \]')
@@ -56,11 +59,6 @@ def _needs(command: str) -> list[tuple[str, bool]]:
         found = [(p, True) for p in _LEGACY_EXEC.findall(command)]
         found += [(f"{r}/ddflow/__init__.py", False) for r in _LEGACY_PYPATH.findall(command)]
     return list(dict.fromkeys(found))
-
-
-def recorded_paths(command: str) -> list[str]:
-    """The files a hook line needs, in the order it records them."""
-    return list(dict.fromkeys(p for p, _x in _needs(command)))
 
 
 def _gone(needs: list[tuple[str, bool]]) -> tuple[str, ...]:
@@ -110,7 +108,6 @@ def _commands(data: Any) -> list[str]:
 
 def check_settings(repo: Path) -> list[Dangling]:
     """ddflow's own hook commands in `.claude/settings.json` and `.gemini/settings.json`."""
-    from .claudehooks import HOOKS, _ours
 
     # Every hook ddflow installs, the pre-compact one included (B4af8a88294): the table
     # is the list, so a hook added to it is checked here without anyone remembering to.
@@ -143,7 +140,6 @@ def _entry_parts(entry: Any) -> tuple[str, dict[str, str]]:
 
 def check_mcp(repo: Path) -> list[Dangling]:
     """The `ddflow` server entry of every agent config the project has."""
-    from .adopt import AGENT_TARGETS, get_server
 
     out: list[Dangling] = []
     seen: set[str] = set()
@@ -185,7 +181,6 @@ def check_mcp(repo: Path) -> list[Dangling]:
 
 def findings(repo: Path) -> list[Dangling]:
     """Every dangling launcher in this project: git hooks, harness hooks, MCP entries."""
-    from . import enforce as E
 
     out: list[Dangling] = []
     try:

@@ -16,6 +16,7 @@ import json
 import re
 import tomllib
 from dataclasses import asdict, dataclass
+from importlib import metadata
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -58,7 +59,6 @@ def own_distribution(root: Path | None = None):
 
     Looked up in the directory holding the package rather than by name across
     `sys.path`: a second copy installed elsewhere says nothing about this one."""
-    from importlib import metadata
 
     for dist in metadata.distributions(
         name=DIST_NAME, path=[str(root if root is not None else _paths.package_parent())]
@@ -101,7 +101,6 @@ def _editable_record(root: Path) -> dict | None:
 
     An editable install leaves its dist-info in site-packages, not beside the package,
     so `own_distribution()` (which looks beside the package) cannot see it."""
-    from importlib import metadata
 
     for dist in metadata.distributions(name=DIST_NAME):
         record = _direct_url(dist)

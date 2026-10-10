@@ -32,22 +32,26 @@ import json
 import os
 import re
 import socket
-import subprocess
 import threading
 import time
+import time as _time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..config import family_for
+from ..config import Config, _is_code_tree, family_for
 from ..core import unidiff
 from ..core.digest import content_digest
 from ..infra import proc as P
+from ..infra import tomlcfg
+from ..infra.container import rewrite_localhost
 from ..services import cmdrunner as CR
+from ..services import prompts as PR
 from ..services.cmdrunner import Declared
 from ..services.gates.reviewers import git_state, git_state_change
 
@@ -401,8 +405,6 @@ def load_reviewers(root: Path) -> list[Reviewer]:
     configure. ``.ddflow/reviewers.toml`` is also read if present, for operators who
     prefer to split it; entries merge by name, with the dedicated file winning.
     """
-    from ..config import Config, _is_code_tree
-    from ..infra import tomlcfg
 
     blocks = tomlcfg.overlay_array(
         tomlcfg.config_paths(root, "reviewers.toml"),
@@ -535,7 +537,7 @@ class _Cancel:
 
 def _abort(thing: Any) -> None:
     try:
-        if isinstance(thing, subprocess.Popen):
+        if isinstance(thing, P.Popen):
             P.kill_group(thing)  # the shell AND the reviewer it started
         else:
             thing.shutdown(socket.SHUT_RDWR)
@@ -603,7 +605,6 @@ def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
     Deliberately short-timeout and exception-swallowing: this runs against a list of
     candidate ports, and a closed port must cost milliseconds, not a stack trace.
     """
-    from ..infra.container import rewrite_localhost
 
     url = rewrite_localhost(base_url).rstrip("/") + "/models"
     try:
@@ -788,7 +789,7 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     _attach_to_running(p)
     try:
         stdout, stderr = p.communicate(f"{system}\n\n{user}", timeout=timeout_s)
-    except subprocess.TimeoutExpired:
+    except P.TimeoutExpired:
         _abort(p)
         p.communicate()
         return "", _tool_moved(state_before) or f"command timed out after {timeout_s:.0f}s"
@@ -832,7 +833,6 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
     an in-house proxy — all ordinary setups) reported UNAVAILABLE. Container support
     silently covered two thirds of the backends.
     """
-    from ..infra.container import rewrite_localhost
 
     req = urllib.request.Request(
         rewrite_localhost(url),
@@ -994,7 +994,6 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         "max_tokens": rev.max_tokens,
         **rev.extra_body,
     }
-    from ..infra.container import rewrite_localhost
 
     req = urllib.request.Request(
         rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
@@ -1184,7 +1183,6 @@ def _race(
     agent watching a silent tool kills it (bug B9d8bd466c3); meanwhile the lease it
     held expired (bugs Bc6ec4fd40d, Bf0cccb8fb1).
     """
-    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     if not users:  # `review` refuses an empty diff first; this is for any other caller
         return []
@@ -1360,7 +1358,6 @@ def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
     is returned. A reviewer stuck "starting" forever is indistinguishable from one that
     is down, except that it also holds a process.
     """
-    import time as _time
 
     if rev.kind == "command":
         return True, ""
@@ -1419,7 +1416,6 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
     A 401 or 404 counts: it means a server exists and is reachable, which is the
     question. Only a connection error or a 5xx means "not there".
     """
-    from ..infra.container import rewrite_localhost
 
     try:
         with _open(rewrite_localhost(url), timeout=timeout_s) as r:
@@ -1475,25 +1471,23 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         return res
     res.requested = sorted(set(only or ()))
 
-    from ..services import prompts as P
-
     overrides = dict(prompt_overrides or {})
     if rev.system_prompt_path:
         # A per-reviewer override still wins: two reviewers may want different
         # instructions, which a single project-wide template cannot express.
         overrides["review_system"] = rev.system_prompt_path
     try:
-        system = P.render(
-            P.resolve("review_system", repo, overrides), extra_rules=rev.extra_rules.strip()
+        system = PR.render(
+            PR.resolve("review_system", repo, overrides), extra_rules=rev.extra_rules.strip()
         )
-        user_tmpl = P.resolve("review_user", repo, overrides)
-    except P.TemplateError as exc:
+        user_tmpl = PR.resolve("review_user", repo, overrides)
+    except PR.TemplateError as exc:
         res.status, res.reason = ERROR, str(exc)
         return res
 
     def render(chunk: str, i: int) -> str:
         # ONE renderer for the first pass and the truncation retry, so they cannot drift.
-        return P.render(
+        return PR.render(
             user_tmpl,
             intent=intent,
             context=context,
@@ -1505,7 +1499,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
 
     try:
         users = [render(chunks[n - 1], n) for n in wanted]
-    except P.TemplateError as exc:
+    except PR.TemplateError as exc:
         res.status, res.reason = ERROR, f"review_user template: {exc}"
         return res
 

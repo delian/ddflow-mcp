@@ -21,7 +21,7 @@ from ..services import choices as CH
 from ..services import items as IT
 from ..services import leases as L
 from ._base import _load
-from .lifecycle import _worktree_held_by
+from .lifecycle.claim import _worktree_held_by
 
 
 @dataclass

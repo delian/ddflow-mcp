@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 import pytest
+from hook_support import recorded_paths
 
 from ddflow.api import setup as API
 from ddflow.services import adopt as A
@@ -227,9 +228,9 @@ def test_the_table_names_every_harness_hook_once() -> None:
 @pytest.mark.parametrize("h", CH.HOOKS, ids=lambda h: f"{h.agent}-{h.name}")
 def test_launchers_recognise_every_table_hook_with_a_dead_launcher(repo: Path, h) -> None:
     line = CH.command(h)
-    for p in LA.recorded_paths(line):
+    for p in recorded_paths(line):
         line = line.replace(p, "/nonexistent-ddflow-venv" + p)
-    assert LA.recorded_paths(line), "the line records no launcher, so this proves nothing"
+    assert recorded_paths(line), "the line records no launcher, so this proves nothing"
     CH.install(repo, line, event=h.event, marker=h.marker, matcher=h.matcher, rel=h.file)
     found = LA.check_settings(repo)
     assert len(found) == 1, found

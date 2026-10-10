@@ -14,12 +14,12 @@ from pathlib import Path
 
 import pytest
 from conftest import run_cli
+from hook_support import recorded_paths
 
 from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog, running_version
 from ddflow.services import enforce as E
-from ddflow.services import launchers as LA
 from ddflow.services import upgrade_manifest as UM
 from ddflow.services import upgrade_plan as UP
 
@@ -83,7 +83,7 @@ def test_a_dangling_pre_commit_binary_is_a_hooks_item(old: Path) -> None:
     E.install(old)
     hook = E.hooks_dir(old) / "pre-commit"
     text = hook.read_text()
-    for p in LA.recorded_paths(text):
+    for p in recorded_paths(text):
         text = text.replace(p, "/nonexistent-ddflow-venv" + p)
     hook.write_text(text)
 

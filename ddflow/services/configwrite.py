@@ -47,7 +47,9 @@ from ..infra import fsio
 from ..infra import tomlcfg as TC
 from . import install_info as II
 from . import reviewer_trust as RT
+from . import shared_files as SF
 from . import workflow as WF
+from .gates import GateDef, load_gates, pipelined
 from .review import Reviewer
 
 #: The git-ignored machine-local layer (decision D-no-own-services-local-dir). Read
@@ -101,7 +103,6 @@ def _effective(repo: Path, text: str, local: bool):
     of it -- a local `task_pipeline` that drops a committed human gate is a deletion
     of the operator's checkpoint even though the local file never names the gate.
     """
-    import tomllib
 
     data = tomllib.loads(text)
     cfg = Config()
@@ -166,7 +167,6 @@ def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str
     report -- `Config.check` is what catches that, and reporting it twice in different
     words is how an operator learns to read neither message.
     """
-    from .gates import load_gates
 
     try:
         data, cfg = _effective(repo, text, local)
@@ -274,7 +274,6 @@ def _gate_table_problems(data: dict) -> set[tuple[str, str, str]]:
     dotted id nested one: `[gate.a.b]`), or a field no gate has. Tuples, not messages,
     so a pre-existing `[gate."a.b"]` cannot mask a new nested `[gate.a.b]` that would
     render the same words (roborev on 45abe764)."""
-    from .gates import GateDef
 
     known = set(GateDef.__dataclass_fields__)
     out: set[tuple[str, str, str]] = set()
@@ -412,7 +411,6 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
     omission. Whether the operator's approval step exists is the operator's decision, and
     the flag and the pipeline membership are two ways of saying it.
     """
-    from .gates import load_gates, pipelined
 
     try:
         data, cfg = _effective(repo, text, local)
@@ -821,7 +819,5 @@ def apply_edit(
                 return EditResult(ReviewerRefusal(str(exc)), text)
     added: list[str] = []
     if layer == "file" and own == "config.toml" and not dry_run:
-        from . import shared_files as SF
-
         added = SF.sync_attributes(repo)
     return EditResult("", text, path, added)

@@ -439,7 +439,7 @@ def test_a_flood_of_untracked_files_degrades_LOUDLY_rather_than_silently(repo, m
     monkeypatch.setattr(G.evidence, "MAX_UNTRACKED_HASHED", 2)
     for i in range(5):
         (repo / f"scratch{i}.py").write_text(f"x = {i}\n")
-    assert "names-only:5" in G._untracked_digest(repo)
+    assert "names-only:5" in G.evidence._untracked_digest(repo)
 
 
 def test_an_unchanged_tree_keeps_the_same_sha(repo):
@@ -630,10 +630,10 @@ def test_an_untracked_file_named_like_an_option_is_hashed_not_obeyed(repo):
     (repo / "a.txt").write_text("a\n")
     (repo / "-w").write_text("one\n")
     before = _objects(repo)
-    first = G._untracked_digest(repo)
+    first = G.evidence._untracked_digest(repo)
     assert _objects(repo) == before, "the fingerprint wrote to the object store"
     (repo / "-w").write_text("two\n")
-    assert G._untracked_digest(repo) != first, "the -w file's content is not covered"
+    assert G.evidence._untracked_digest(repo) != first, "the -w file's content is not covered"
 
 
 def test_ddflows_own_untracked_files_do_not_count_against_the_cap(repo, monkeypatch):
