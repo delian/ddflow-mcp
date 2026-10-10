@@ -127,7 +127,7 @@ def test_a_newer_release_is_proposed_once_and_the_second_run_makes_no_request(pr
 def test_the_cache_lives_under_ddflow_local_and_is_ignored_by_git(project) -> None:
     UC.check(project, Config(), fetch=Index(doc("0.1.10")), now=NOW, running=RUNNING)
     cache = project / ".ddflow" / "local" / "release-check.json"
-    assert json.loads(cache.read_text())["newest"] == "0.1.10"
+    assert json.loads(cache.read_text())["data"]["newest"] == "0.1.10"
     ignored = (project / ".ddflow" / "local" / ".gitignore").read_text()
     assert "*" in ignored
 

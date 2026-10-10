@@ -25,7 +25,6 @@ Time and transport are arguments, so tests need neither a network nor a sleep.
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from collections.abc import Callable
@@ -34,7 +33,8 @@ from typing import Any
 
 from ..config import Config
 from ..core.events import is_older
-from ..infra import fsio, release_index
+from ..infra import release_index
+from ..infra.localstore import LocalStore
 from ..infra.log import running_version
 from . import install_info as II
 
@@ -60,20 +60,29 @@ def _dev_tree() -> bool:
     return II.running_from_source()
 
 
+def _store(repo: Path | str) -> LocalStore:
+    return LocalStore(Path(repo) / CACHE.parent)
+
+
 def read_cache(repo: Path | str) -> dict[str, Any]:
     """The cached answer, ``{}`` when there is none or it cannot be read."""
-    data = fsio.read_json(Path(repo) / CACHE)
+    try:
+        data = _store(repo).read(CACHE.name, default={}, derived=True)
+    except Exception:  # unreadable or torn: a cache is rebuilt by the next check
+        return {}
     return dict(data) if isinstance(data, dict) else {}
 
 
-def _write_cache(repo: Path | str, data: dict[str, Any]) -> None:
-    """Best effort: a cache that cannot be written costs a repeat request, nothing else."""
-    path = Path(repo) / CACHE
+def _update_cache(repo: Path | str, fn: Callable[[dict[str, Any]], dict[str, Any]]) -> bool:
+    """Read-modify-write the cache under its lock (two sessions on one machine both land).
+    Best effort: a cache that cannot be written costs a repeat request, nothing else."""
     try:
-        fsio.ensure_ignored_dir(path.parent)
-        fsio.atomic_write(path, json.dumps(data, sort_keys=True) + "\n")
-    except OSError:
-        pass
+        _store(repo).update(
+            CACHE.name, lambda cur: fn(dict(cur) if isinstance(cur, dict) else {}), derived=True
+        )
+    except Exception:
+        return False
+    return True
 
 
 def _due(cache: dict[str, Any], cfg: Config, now: float) -> bool:
@@ -123,12 +132,13 @@ def check(
                 prereleases=cfg.upgrade.prereleases,
                 fetch=fetch,
             )
-            cache.update(checked_at=when, newest=newest, error="")
+            fields = {"checked_at": when, "newest": newest, "error": ""}
             out.update(status="checked", newest=newest)
         except Exception as exc:  # ReleaseIndexError, or anything an injected fetch raised
-            cache.update(checked_at=when, error=f"{type(exc).__name__}: {exc}"[:200])
-            out.update(status="offline", error=cache["error"])
-        _write_cache(repo, cache)
+            fields = {"checked_at": when, "error": f"{type(exc).__name__}: {exc}"[:200]}
+            out.update(status="offline", error=fields["error"])
+        cache.update(fields)
+        _update_cache(repo, lambda cur: {**cur, **fields})
     out["newer"] = bool(out["newest"]) and is_older(running, out["newest"])
     out["checked_at"] = cache.get("checked_at")
     return out
@@ -172,11 +182,16 @@ def proposal(
         if not newest:
             return ""
         if consume:
-            cache = read_cache(repo)
-            if cache.get("proposed") == newest:
-                return ""
-            cache["proposed"] = newest
-            _write_cache(repo, cache)
+            first: list[bool] = []
+
+            def mark(cur: dict[str, Any]) -> dict[str, Any]:
+                if cur.get("proposed") != newest:  # decided under the lock: said once
+                    first.append(True)
+                    cur["proposed"] = newest
+                return cur
+
+            if _update_cache(repo, mark) and not first:
+                return ""  # already said; a store that cannot be written repeats instead
         return line(running, newest)
     except Exception:
         return ""
