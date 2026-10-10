@@ -123,7 +123,7 @@ default = false
 id = "sequential"
 title = "Structured step-by-step reasoning"
 gates = ["research", "rubber_duck", "bug_hunt"]
-why = """Gives the agent an explicit scratchpad for multi-step reasoning it can revise: a thought can be marked a revision of an earlier one, or branch into an alternative line, instead of being appended to a transcript that only grows. That maps onto the three gates that are REASONING rather than tool-running. `research` asks for a falsifiable claim and the probe that would kill it -- which is a chain whose middle steps get retracted, and a linear transcript records the retraction as one more assertion. `bug_hunt` and `rubber_duck` want the hypothesis that was considered and DISCARDED to stay visible, because the recurring failure here is an agent converging early on a plausible-wrong cause and never recording what it ruled out."""
+why = """A scratchpad that records and counts the thoughts you send it, and nothing more: it echoes a short status (thought number, total, whether another is needed, branch names, history length), returns no thought text, keeps nothing between runs, and has no search and no validation. It does not check a chain, and ddflow has not measured that it improves the `research`, `rubber_duck` or `bug_hunt` gates (unmeasured). Anthropic recommends native extended thinking over a dedicated think tool in most cases, so this is opt-in, not proposed by default."""
 # `--help` is not actually supported by this server: it starts, reads EOF from the
 # closed stdin the probe gives it, and exits 0. That is still a usable signal -- "npx
 # could start it from what is already here" -- but it is worth knowing that a pass
@@ -134,7 +134,7 @@ args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
 install = "npx -y @modelcontextprotocol/server-sequential-thinking"
 note = "npx fetches it on first use; there is nothing to install ahead of time."
 url = "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking"
-default = true
+default = false
 
 [[companion]]
 id = "optmem"
