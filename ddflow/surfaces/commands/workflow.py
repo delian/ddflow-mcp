@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 
 from ...api import workflow as A
+from ...api.workflow_state import workflow_state
 from ..context import FAIL, NOTHING, REFUSED, Ctx
 from ..render import emit_json
 
@@ -218,7 +219,6 @@ def _workflow_drop(a, c: Ctx) -> int:
 
 def _workflow_state(a, c: Ctx) -> int:
     """The one-page overview: workflow, rules, decisions, queue, bugs."""
-    from ...api.workflow_state import workflow_state
 
     out = workflow_state(c.repo)
     if c.json:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from ...api import operations as A
+from ...api import surf_setup as SS
 from ...core import provenance as PV
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..render import emit_json
@@ -114,8 +115,6 @@ def cmd_import(a, c: Ctx) -> int:
     Reads and reports by default; `--apply` writes. Exit 2 when there is nothing to
     propose — "no data" reported as itself.
     """
-    from ...services import importer as IM
-
     if a.verify:
         # `--include-done` and `--max-tasks` shape an IMPORT. Reading past them here would
         # be the silent-knob-drop shape, standing next to a flag that is loudly refused
@@ -171,7 +170,7 @@ def cmd_import(a, c: Ctx) -> int:
 
     preview = out.data["_render"]["preview_rows"]
     lines = ["What this project already has (nothing written yet):", ""]
-    for kind in IM.KINDS:
+    for kind in SS.IMPORT_KINDS:
         rows = plan.by_kind(kind)
         if not rows:
             continue
@@ -205,9 +204,7 @@ def cmd_import(a, c: Ctx) -> int:
 
 
 def cmd_external(a, c: Ctx) -> int:
-    from ...api import operations as AO
-
-    out = AO.external_sync(c.repo, agent=c.requested_agent)
+    out = A.external_sync(c.repo, agent=c.requested_agent)
     if c.json:
         emit_json(out.body("observed"))
         return out.exit
