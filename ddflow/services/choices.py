@@ -24,17 +24,11 @@ from typing import Any
 
 from ..config import Config
 from ..core import flow as F
+from ..core.flow import config_wins
 from ..core.model import State
 from ..infra.log import EventLog
 
 EXPLICIT, DEFAULT = "explicit", "default"
-
-
-def config_wins(source: str) -> bool:
-    """Does a CONFIG layer (file, local, env, ...) set this knob, so a recorded choice is
-    not applied? The one rule `overlay`, `report` and `flow choose` share: each once spelled
-    it separately, and `("file", "env")` missed the local layer (B025c8de942)."""
-    return source != "default" and not source.startswith("log:")
 
 
 def overlay(cfg: Config, st: State) -> None:

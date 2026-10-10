@@ -10,9 +10,15 @@ from __future__ import annotations
 
 from ...core.defaults import DEFAULT_NEXT_KIND, DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import GATE_OUTCOMES
+from ...core.outcome import NOTHING, OK
 from ..argtypes import GLOBS_HELP, _Globs
-from ..registry import Command, Param, by_tool
+from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
+from . import lifecycle_cli as L
+
+#: `api.lifecycle.DEFAULT_CHECK_RECOVERY`, spelled here so declaring the commands does not
+#: import the api (tests/test_uc_surf_loop_brief.py holds the two together).
+DEFAULT_CHECK_RECOVERY = True
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -30,6 +36,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload="",
+        cli=CliPolicy(notes=L.next_notes, human=L.next_text),
         params=(
             Param(
                 "phase",
@@ -43,6 +50,48 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
                 default=DEFAULT_NEXT_KIND,
                 choices=("task", "phase"),
+            ),
+        ),
+    ),
+    Command(
+        path=("brief",),
+        summary="budgeted session-start pack",
+        tool="ddflow_brief",
+        description=(
+            "START HERE every session. Returns a budgeted pack: work recoverable after "
+            "a crash, the current item, what is ready to start now, why everything else "
+            "is blocked, and the past lessons ranked as relevant to this task. Use this "
+            "INSTEAD of reading the project's lesson or rule files — it is the same "
+            "information retrieved for the task at hand, at a fraction of the tokens."
+        ),
+        kind="brief",
+        prose=True,
+        prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
+        call=lambda repo, a, agent: _api().brief(
+            repo,
+            item=a.get("item", "") or "",
+            phase=a.get("phase", "") or "",
+            check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
+            agent=agent,
+        ),
+        payload="text",
+        cli=CliPolicy(notes=L.brief_notes, body=L.brief_body, human=L.brief_text),
+        params=(
+            Param(
+                "item", help="Focus on this phase or task id (optional).", cli_help="", default=""
+            ),
+            Param(
+                "phase",
+                help="Restrict the ready set to this phase (optional).",
+                cli_help="",
+                default="",
+            ),
+            Param(
+                "check_recovery",
+                type="boolean",
+                help="Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new.",
+                cli_help="",
+                default=DEFAULT_CHECK_RECOVERY,
             ),
         ),
     ),
@@ -82,6 +131,7 @@ COMMANDS: tuple[Command, ...] = (
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
+        cli=CliPolicy(shown=(OK,), human=L.claim_text, body=L.claim_body),
         wants_called_from=True,
         params=(
             Param("id", help="Item id to claim.", cli_help="", positional=True),
@@ -123,6 +173,11 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], agent=agent, called_from=called_from
         ),
         payload=("renewed", "waiters", "globs_withheld"),
+        render=L.heartbeat_text,
+        cli=CliPolicy(
+            notes=L.heartbeat_notes,
+            body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
+        ),
         # The item's own tree renews its lease whoever claimed it -- identity is derived
         # from the tree, so without WHERE the caller is this said "no lease held" from
         # exactly the tree `claim` made.
@@ -141,6 +196,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], note=a.get("note", "") or "", agent=agent
         ),
         payload=("released", "woke"),
+        render=L.release_text,
+        cli=CliPolicy(),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("note", help="Why you are releasing it.", cli_help=""),
@@ -237,6 +294,8 @@ COMMANDS: tuple[Command, ...] = (
         # PROSE: the body carries the next gate's INSTRUCTION, which is the half an
         # agent acts on. `--json` gives the structured pipeline instead.
         payload="text",
+        render=L.gate_text,
+        cli=CliPolicy(shown=L.gate_listed, body=lambda out, a: out.body("status")),
         params=(Param("id", help="Item id.", cli_help="", positional=True),),
     ),
     Command(
@@ -252,6 +311,11 @@ COMMANDS: tuple[Command, ...] = (
             repo, refuted=bool(a.get("refuted")), since=str(a.get("since") or ""), agent=agent
         ),
         payload="text",
+        render=L.gate_text,
+        cli=CliPolicy(
+            shown=L.gate_listed,
+            body=lambda out, a: out.body(("refuted", "count", "passes", "gates")),
+        ),
         params=(
             Param(
                 "refuted",
@@ -277,6 +341,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], a["gate"], agent=agent, called_from=called_from
         ),
         payload=("gate", "outcome", "evidence"),
+        render=L.run_text,
+        cli=CliPolicy(shown=L.run_shown),
         wants_called_from=True,
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
@@ -296,6 +362,8 @@ COMMANDS: tuple[Command, ...] = (
         "source.",
         call=lambda repo, a, agent: _api().gate_verify(repo, a["id"], a["gate"], agent=agent),
         payload=("gate", "reason", "results", "verified"),
+        render=L.verify_text,
+        cli=CliPolicy(notes=L.verify_notes),
         params=(
             Param("id", help="Item whose worktree to mutate in.", cli_help="", positional=True),
             Param("gate", help="Gate id. Must be a command gate.", cli_help="", positional=True),
@@ -327,6 +395,12 @@ COMMANDS: tuple[Command, ...] = (
             called_from=called_from,
         ),
         payload=("gate", "outcome", "warning"),
+        render=L.record_text,
+        cli=CliPolicy(
+            shown=(OK,),
+            notes=L.record_notes,
+            body=lambda out, a: out.body(("gate", "outcome")),
+        ),
         wants_called_from=True,
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
@@ -410,9 +484,23 @@ COMMANDS: tuple[Command, ...] = (
         },
         description="Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. `gates.require_outcome` means a silent gate BLOCKS completion, so the alternative to a skip is forcing past everything at once; a skip names the single step dropped and why, permanently in the log. A gate in `gates.required` still blocks when skipped.",
         call=lambda repo, a, agent: _api().gate_record(
-            repo, a["id"], a["gate"], skip=True, reason=a.get("reason", "") or "", agent=agent
+            repo,
+            a["id"],
+            a["gate"],
+            skip=True,
+            reason=a.get("reason", "") or "",
+            evidence=_api().GateEvidence(
+                note=a.get("evidence", "") or "",
+                command=a.get("command", "") or "",
+                exit_code=a.get("exit_code"),
+                model=a.get("model", "") or "",
+                output_file=a.get("output_file", "") or "",
+            ),
+            agent=agent,
         ),
         payload=("gate", "outcome"),
+        render=L.record_text,
+        cli=CliPolicy(shown=(OK,), notes=L.record_notes),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("gate", help="Gate id.", cli_help="", positional=True),
@@ -474,6 +562,9 @@ COMMANDS: tuple[Command, ...] = (
             "umbrella_refused",
             "refuted_passes",
         ),
+        cli=CliPolicy(
+            shown=(OK,), notes=L.complete_notes, human=L.complete_text, body=L.complete_body
+        ),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("sha", help="Commit sha this shipped as.", cli_help="", default=""),
@@ -518,6 +609,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], reason=a.get("reason", "") or "", force=bool(a.get("force")), agent=agent
         ),
         payload=("id", "reason"),
+        render=L.abandon_text,
+        cli=CliPolicy(shown=(OK,)),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("reason", help="Why it is being dropped.", cli_help="", required=True),
@@ -541,6 +634,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], reason=a.get("reason", "") or "", force=bool(a.get("force")), agent=agent
         ),
         payload=("id",),
+        render=L.remove_text,
+        cli=CliPolicy(shown=(OK,)),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("reason", help="Why.", cli_help="", default=""),
@@ -567,6 +662,8 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload=("id",),
+        render=L.block_text,
+        cli=CliPolicy(shown=(OK,)),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("reason", help="What it is waiting on.", cli_help="", required=True),
@@ -592,6 +689,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], note=a.get("note", "") or "", agent=agent
         ),
         payload=("id", "was", "released"),
+        render=L.unblock_text,
+        cli=CliPolicy(shown=(OK, NOTHING)),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param(
@@ -610,7 +709,7 @@ COMMANDS: tuple[Command, ...] = (
         "[flow].integration = 'pr' it pushes and opens (or updates) a pull request "
         "instead, releases your lease and parks the item in REVIEW — take the next "
         "item; `ddflow_pr_sync` completes it once a person merges it.",
-        call=lambda repo, a, agent, called_from=None: _api().merge_item(
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().merge_item(
             repo,
             a["id"],
             message=a.get("message", "") or "",
@@ -620,20 +719,17 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             branch=a.get("branch", "") or "",
             called_from=called_from,
+            shell_cwd=shell_cwd,
             agent=agent,
         ),
-        payload=(
-            "id",
-            "sha",
-            "branch_head",
-            "base",
-            "pr",
-            "branch",
-            "outside_globs",
-            "outside_globs_unknown",
-            "merge_gate_human",
-            "worktree",
-            "worktree_removed",
+        payload=L.MERGE_PAYLOAD,
+        render=L.merge_text,
+        cli=CliPolicy(
+            shown=L.merge_shown,
+            reason=L.merge_reason,
+            notes=L.merge_notes,
+            body=L.merge_body,
+            call_kwargs=L.merge_kwargs,
         ),
         wants_called_from=True,
         params=(

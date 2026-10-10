@@ -56,12 +56,6 @@ EXEMPTIONS: tuple[Command, ...] = (
             "--regex": "carried by `mode`=regex",
         },
     ),
-    Command(
-        path=(),
-        tool="ddflow_brief",
-        prose=True,
-        prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
-    ),
 )
 
 #: Every declaration about the two surfaces' differences: these, and those a migrated command

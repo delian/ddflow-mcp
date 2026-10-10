@@ -7,7 +7,8 @@ own: `ddflow_bug_invalid` with `reopen` serves it.
 
 from __future__ import annotations
 
-from ..registry import Command, Param, by_tool
+from ...core.outcome import OK
+from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 
@@ -323,6 +324,21 @@ COMMANDS: tuple[Command, ...] = (
         path=("bug", "reopen"),
         via=("ddflow_bug_invalid", "reopen"),
         summary="reopen a bug closed by mistake (fixed or invalid), saying why",
+        call=lambda repo, a, agent: _bug_reopen(repo, a, agent=agent),
+        payload=(
+            "id",
+            "was",
+            "reason_given",
+            "fix_task",
+            "fix_task_state",
+            "previous_fix_task",
+            "next",
+        ),
+        render=lambda out, a: (
+            f"bug {a['id']} reopened (was {out.data['was']}): {out.data['reason_given']}\n"
+            f"{out.data['next']}"
+        ),
+        cli=CliPolicy(shown=(OK,)),
         params=(
             Param("id", positional=True),
             Param("reason", help="why the closure was wrong", required=True),

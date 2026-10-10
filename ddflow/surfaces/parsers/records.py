@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 
-from ..commands.bug_reopen import cmd_bug_reopen
+from .. import cliexec
 from ..commands.knowledge import cmd_bug, cmd_research, cmd_session
 from ..commands.reporting import cmd_status
 from ..commands.viewers_sessions import COMMANDS as SESSION_VIEWS
@@ -26,7 +26,6 @@ HANDLERS = {
     ("bug", "file-tasks"): cmd_bug,
     ("bug", "fixed"): cmd_bug,
     ("bug", "invalid"): cmd_bug,
-    ("bug", "reopen"): cmd_bug_reopen,
     ("session", "start"): cmd_session,
     ("session", "prompt"): cmd_session,
     ("session", "note"): cmd_session,
@@ -38,4 +37,4 @@ HANDLERS = {
 def register(s: argparse._SubParsersAction) -> None:
     """Add the records subcommands to `s`, the root `ddflow` subparsers."""
     add_commands(s, [REPORTING["status"]], handlers={("status",): cmd_status})
-    add_commands(s, [*COMMANDS, *SESSION_VIEWS], handlers=HANDLERS)
+    add_commands(s, [*COMMANDS, *SESSION_VIEWS], handlers=HANDLERS, executor=cliexec.handler)

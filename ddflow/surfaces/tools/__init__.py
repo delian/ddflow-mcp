@@ -28,7 +28,6 @@ from ..declared import setup as _setup
 from ..registry import by_tool
 from ..vocabulary import provide
 from . import items, operations
-from . import lifecycle as brief
 from . import reporting as onboarding
 from .order import TOOL_ORDER
 
@@ -45,7 +44,6 @@ DECLARED = by_tool(
 
 #: The hand-written entries: tools no declaration covers yet (their families migrate them).
 HAND_WRITTEN: dict[str, dict[str, Any]] = {
-    **brief.TOOLS,
     **operations.TOOLS,
     **items.TOOLS,
     **onboarding.TOOLS,
