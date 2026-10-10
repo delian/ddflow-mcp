@@ -169,8 +169,8 @@ gate `unavailable` rather than passing it on your own word.
   store, and not something to propose installing.
 - **sequential-thinking** — opt-in, not proposed by default. It only records and counts
   the thoughts you send: no thought text comes back, nothing persists, and it neither
-  searches nor validates. ddflow has not measured a benefit to `research`, `rubber_duck`
-  or `bug_hunt`; native extended thinking is usually the better choice.
+  searches nor validates. Any benefit to the reasoning gates (`research`, `rubber_duck`,
+  `bug_hunt`) is unmeasured; native extended thinking is usually better.
 
 **Your stack needs servers this list cannot know about.** `ddflow_prompts` with
 action `show` and name `research-companions` walks you from this pipeline's *uncovered* gates, through the
