@@ -44,19 +44,24 @@ def _triage(a, c: Ctx, item: str) -> int:
     return OK
 
 
-def cmd_review(a, c: Ctx) -> int:
-    ids = list(a.id or [])
-    if ids[:1] == ["triage"]:  # `review triage <id>`: a verb, not an item named "triage"
-        if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
-            print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
-            return FAIL
-        if a.chunk:
-            print("--chunk re-reviews; `review triage` only records a verdict", file=sys.stderr)
-            return FAIL
-        return _triage(a, c, ids[1])
-    # The triage flags are accepted by this parser (it is the verb's parser too) but mean
-    # nothing to a review. Ignoring them started a 25-minute reviewer run the caller never
-    # asked for (bug B3531d304ec), so refuse BEFORE any reviewer is contacted.
+def _triage_verb(a, c: Ctx, ids: list[str]) -> int:
+    """`review triage <id>`: a verb, not an item named "triage"."""
+    if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
+        print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
+        return FAIL
+    if a.chunk:
+        print("--chunk re-reviews; `review triage` only records a verdict", file=sys.stderr)
+        return FAIL
+    return _triage(a, c, ids[1])
+
+
+def _stray_triage_flags(a, ids: list[str]) -> str:
+    """The message for triage flags given without the verb, or "".
+
+    The triage flags are accepted by this parser (it is the verb's parser too) but mean
+    nothing to a review. Ignoring them started a 25-minute reviewer run the caller never
+    asked for (bug B3531d304ec), so refuse BEFORE any reviewer is contacted.
+    """
     stray = [
         flag
         for flag, given in (
@@ -67,15 +72,23 @@ def cmd_review(a, c: Ctx) -> int:
         )
         if given is not None and given is not False  # `--finding 0`, `--probe ""` still count
     ]
-    if stray:
-        item = ids[0] if len(ids) == 1 else "<id>"
-        print(
-            f"{', '.join(stray)} record a verdict on a finding and need the `triage` verb; "
-            "without it this would start a full re-review. Did you mean:\n"
-            f"  ddflow review triage {item} --gate {a.gate or 'critic'} --finding N "
-            '--refuted|--confirmed --probe "..."',
-            file=sys.stderr,
-        )
+    if not stray:
+        return ""
+    item = ids[0] if len(ids) == 1 else "<id>"
+    return (
+        f"{', '.join(stray)} record a verdict on a finding and need the `triage` verb; "
+        "without it this would start a full re-review. Did you mean:\n"
+        f"  ddflow review triage {item} --gate {a.gate or 'critic'} --finding N "
+        '--refuted|--confirmed --probe "..."'
+    )
+
+
+def cmd_review(a, c: Ctx) -> int:
+    ids = list(a.id or [])
+    if ids[:1] == ["triage"]:
+        return _triage_verb(a, c, ids)
+    if message := _stray_triage_flags(a, ids):
+        print(message, file=sys.stderr)
         return FAIL
     if len(ids) > 1:
         print(f"review takes one item id; got {ids}", file=sys.stderr)
