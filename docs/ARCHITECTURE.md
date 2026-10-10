@@ -267,8 +267,8 @@ import-linter contract counts the stragglers and can only go down.
 | Concern | The one module | What it gives |
 |---|---|---|
 | git | `infra/git.py` | every git call: timeouts, status and path parsing, `GitResult` |
-| processes | `infra/proc.py` | `run`, `popen`, `spawn_shell`, `kill_group`: stdin detached, process group killed |
-| files | `infra/fsio.py` | `atomic_write`, `replace_text`, `file_lock`, `ensure_ignored_dir`, `repo_rel`, managed regions |
+| processes | `infra/proc.py` | `run`, `popen`, `capture` (timeout, optional input, a `Captured` result), `spawn_stdio` (a child whose pipes are spoken to, as a stdio probe does), `spawn_shell`, `kill_group`: stdin detached, process group killed |
+| files | `infra/fsio.py` | `atomic_write`, `replace_text`, `file_lock`, `ensure_ignored_dir`, `repo_rel`, managed regions; `scratch_dir` and `temp_text` for temporary directories and files |
 | TOML writes | `infra/tomlcfg.py` | `upsert`, `remove`, `move_keys` (tomlkit), the overlay readers; `services/configwrite.py` validates then writes `config.toml` |
 | time | `core/clock.py` | the one timestamp parser and writer, durations, ages |
 | graphs | `core/graph.py` | closure, cycles, topological order, longest chains, transitive reduction |
@@ -277,8 +277,9 @@ import-linter contract counts the stragglers and can only go down.
 | definition records | `core/defs.py`, `core/records.py` | the managed-definition record every kind shares; the fold's record dataclasses |
 | event evolution | `core/upcasters.py` | per-kind payload versions and the upcasters that read old events |
 | overlay loader | `services/overlay.py` | `OverlayLoader`: config path, then `.ddflow/<dir>/`, then shipped; eject, drift, validate |
-| machine-local state | `infra/localstore.py`, `services/slots.py`, `services/changes.py` | `LocalStore` (read, write, lock, trim `.ddflow/local`), counting-semaphore `Slots`, content-based `ChangeDetector` |
+| machine-local state | `infra/localstore.py`, `services/slots.py`, `services/changes.py` | `LocalStore` (read, write, lock, trim `.ddflow/local`; no module outside its own tests has adopted it yet, so the ticks, waits and quota stores keep their own files), counting-semaphore `Slots`, content-based `ChangeDetector` |
 | command registry | `surfaces/registry.py`, `surfaces/declared/` | `Command` and `Param`: one declaration generates the argparse parser, the MCP tool, its schema and the parity exemptions |
+| CLI executor | `surfaces/cliexec.py`, `registry.CliPolicy` | a declared command with `call` and `render` runs with no `cmd_*` function: `--json` prints the MCP tool's body, a refusal has the tool's lead, the human reads `render`; a `CliPolicy` states what prints differently (the identity as typed, stderr notes, which exits show a result) |
 | record surface | `api/records.py`, `surfaces/records.py` | `RecordKind`: the seven verbs (list, show, add, edit, remove, search, revise) on the CLI and MCP |
 | MCP protocol | `surfaces/mcp_protocol.py` | which protocol revisions are served and how a reply is shaped for each |
 | search | `services/searchcore/`, `services/search.py` | `SearchSource` registry, rankers (`core/rank.py`), bounded regex check; `ddflow search --source` |
@@ -297,14 +298,30 @@ import-linter contract counts the stragglers and can only go down.
 | config knobs | `config_sections/_docs.py` | `knob()` and `declare()`: a knob is declared once, on its field |
 | compatibility | `services/upgrade_plan.py`, `services/migrations/`, `services/repairs/` | `ddflow upgrade --plan`, versioned migrations and data repairs |
 
+### Where the remaining lines are
+
+Measured at the end of the cleanup (newline count of every `.py` file, `ddflow/` 105,182
+lines in 386 modules, `tests/` 123,571 in 582): `services/` 48,021, `api/` 18,409,
+`surfaces/` 15,798, `core/` 10,479, `infra/` 7,481, `config_sections/` 2,547, `views/
+1,456, `config.py` 966, `__init__.py` and `__main__.py` 25. The cleanup slices changed `ddflow/` by -186 lines and `tests/` by
++3,630 (the pins they added outweigh the helpers they removed), so the interfaces above
+removed duplicated *patterns* (the guard baselines fell: deferred imports 534 -> 37,
+subprocess calls 13 -> 1, `write_text` 10 -> 0, tempfile 6 -> 0, complexity D-or-worse
+100 -> 58) far more than they removed *lines*. The lines are features, not duplication:
+ddflow grew from 73,400 lines at the start of D-unify because upgrade, scheduling,
+adaptive flow, harness adapters, id schemes, exports and reporting landed beside it.
+
 ## Adding a feature as data
 
 Each of these is a declaration; none needs a new branch in a surface, the fold or a
 renderer. The guards fail the suite if a change reintroduces the pattern by hand.
 
-- **A command.** Add a `Command(path=..., summary=..., tool=..., params=..., call=...)` to
-  the group's module under `surfaces/declared/` (`GROUPS` gives its help line). The CLI
-  parser and the MCP tool, with its schema, are generated; what a command deliberately does
+- **A command.** Add a `Command(path=..., summary=..., tool=..., params=..., call=..., render=...)`
+  to the group's module under `surfaces/declared/` (`GROUPS` gives its help line). The CLI
+  parser, the MCP tool with its schema, and the CLI function (`surfaces/cliexec.py`, from
+  `call` and `render`) are generated; a command whose output cannot be one `render` of the
+  tool's Outcome (stdin, streaming, an exit code that is not the Outcome's) keeps a `cmd_*`
+  handler in `surfaces/commands/`; what a command deliberately does
   not do on the other surface is a field (`surfaces/exemptions.py`), not a test table.
   `python -m ddflow.surfaces.tool_table` rewrites the README tool table.
 - **A record kind.** Declare a `RecordKind` with `declare(...)` in `api/records.py` (name,
