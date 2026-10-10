@@ -33,6 +33,7 @@ from ...services import repairs as RP
 from ...services import sessions as SS
 from ...services import shared_files as SF
 from ...services import upgrade as UP
+from ...services import upgrade_check as UC
 from ...services import workflow as WF
 from ...services.adopt import MISSING, NOT_BINDING, rules_status
 from ...services.completion import verdict
@@ -337,6 +338,8 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
         notes.append(UP.skipped_kinds_advice(st))
 
     notes.extend(UP.doctor_notes(st))
+    if release := UC.proposal(repo, cfg):  # a newer ddflow release (D-self-upgrade 2)
+        notes.append(release)
     notes.extend(fold_problem_notes(st))
 
     p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
