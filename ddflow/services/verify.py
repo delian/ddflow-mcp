@@ -28,6 +28,7 @@ from ..config import Config
 from ..core.events import Event
 from ..core.model import GateOutcome, State
 from ..core.schedule import path_in_glob
+from ..infra.worktree import default_branch, git, git_paths
 from . import backfill as BF
 from . import gates as G
 from . import ledger as LG
@@ -77,7 +78,6 @@ class Report:
 
 
 def _git_ok(repo: Path, *args: str) -> bool | None:
-    from ..infra.worktree import git
 
     r = git(repo, *args, timeout=60)
     return None if r.unavailable else r.ok
@@ -87,7 +87,6 @@ def _ever_existed(repo: Path, path: str, rev: str) -> bool:
     """Was `path` ever in the history `rev` descends from? Scoped to that history, not
     `--all`: a sibling branch that creates it says nothing about this landing. When git
     cannot answer, say yes -- an unanswered question must not become an accusation."""
-    from ..infra.worktree import git
 
     try:
         r = git(repo, "log", "--oneline", "-1", rev, "--", path, timeout=60)
@@ -97,7 +96,6 @@ def _ever_existed(repo: Path, path: str, rev: str) -> bool:
 
 
 def _tracked(repo: Path) -> set[str] | None:
-    from ..infra.worktree import git_paths
 
     got = git_paths(repo, "ls-files")
     return None if got is None else set(got)
@@ -114,7 +112,6 @@ def _rewritten_twin(repo: Path, sha: str, branches: list[str]) -> str:
     A rebase or history rewrite gives the same work a new hash; the recorded one then
     survives only on an old branch. The subject is a weak identity, so this only softens a
     failure to a warning, never to ok."""
-    from ..infra.worktree import git
 
     subj = git(repo, "log", "-1", "--format=%s", sha, timeout=60)
     if not subj.ok or len(subj.out) < _MIN_SUBJECT:
@@ -132,7 +129,6 @@ def _rewritten_twin(repo: Path, sha: str, branches: list[str]) -> str:
 
 
 def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
-    from ..infra.worktree import default_branch
 
     sha = led["sha"]
     if not sha:

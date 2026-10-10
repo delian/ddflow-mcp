@@ -27,15 +27,18 @@ from typing import Any
 from ..config import Config
 from ..core import flow as F
 from ..core.model import DONE, REVIEW, GateRecord, Item, State, fold
+from ..core.schedule import inherited_deps
 from ..infra import forge as FG
 from ..infra import git as GIT
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.log import EventLog
+from . import choices as CH
 from . import completion as CM
 from . import gates as G
 from . import leases as L
 from .cleanup import dispose_tree
+from .export.query import EXIT_REFUSED, ExportError
 from .gates import measured as GR
 
 
@@ -60,7 +63,6 @@ def stacked_on(st: State, it: Item) -> Item | None:
 
 def fork_point(repo: Path, cfg: Config, st: State, it: Item) -> tuple[str, str]:
     """(base, branch) for a new worktree: stacked on a dependency, or off the target."""
-    from ..core.schedule import inherited_deps
 
     branch = F.branch_name(it, cfg)
     stack = F.stack_base(st, it, cfg, [d for _, d in inherited_deps(st, it)])
@@ -201,7 +203,6 @@ def open_request(
     L.release(log, item_id, note=f"in review: {info.url}")
     # The first request is where review policy starts to matter: record whatever was not
     # chosen, so it is followed from here rather than re-decided by the next ddflow.
-    from . import choices as CH
 
     CH.adopt_defaults(log, cfg, ["pr_merge", "on_changes_requested", "stack"])
     out.ok, out.number, out.url = True, info.number, info.url
@@ -1154,6 +1155,34 @@ class Cut:
     version_files: list[str] = field(default_factory=list)  # files the cut bumped (B174)
 
 
+def _cut_refusal(repo: Path, cfg: Config, st, vp: VersionPlan, out: Cut, bump: str) -> bool:
+    """True once ``out`` records why nothing can be cut: a refused plan, nothing to
+    release, a tag that exists, a release already awaiting review. Else it names the tag."""
+    if bump and bump not in F.BUMPS:
+        vp.problems.append(f"bump {bump!r} is not one of {', '.join(F.BUMPS)}")
+    if vp.problems:
+        out.refused, out.reason = True, "; ".join(vp.problems)
+        return True
+    if not vp.next:
+        out.nothing = True
+        out.reason = (
+            f"nothing to release: no commits on {vp.ref} since {vp.current_tag or 'the start'}"
+        )
+        return True
+    out.tag = f"{cfg.flow.tag_prefix}{vp.next}"
+    if W.rev(repo, f"refs/tags/{out.tag}"):
+        out.refused, out.reason = True, f"tag {out.tag} already exists"
+        return True
+    if vp.next in st.pending_releases:
+        pending = st.pending_releases[vp.next]
+        out.refused, out.reason = (
+            True,
+            f"release {vp.next} is already awaiting review: {pending.get('url')}",
+        )
+        return True
+    return False
+
+
 def cut(
     repo: Path,
     cfg: Config,
@@ -1183,27 +1212,7 @@ def cut(
     st = _state(log)
     vp = plan_version(repo, cfg, st, bump=bump, version=version, line=line)
     out = Cut(plan=vp, version=vp.next)
-    if bump and bump not in F.BUMPS:
-        vp.problems.append(f"bump {bump!r} is not one of {', '.join(F.BUMPS)}")
-    if vp.problems:
-        out.refused, out.reason = True, "; ".join(vp.problems)
-        return out
-    if not vp.next:
-        out.nothing = True
-        out.reason = (
-            f"nothing to release: no commits on {vp.ref} since {vp.current_tag or 'the start'}"
-        )
-        return out
-    out.tag = f"{cfg.flow.tag_prefix}{vp.next}"
-    if W.rev(repo, f"refs/tags/{out.tag}"):
-        out.refused, out.reason = True, f"tag {out.tag} already exists"
-        return out
-    if vp.next in st.pending_releases:
-        pending = st.pending_releases[vp.next]
-        out.refused, out.reason = (
-            True,
-            f"release {vp.next} is already awaiting review: {pending.get('url')}",
-        )
+    if _cut_refusal(repo, cfg, st, vp, out, bump):
         return out
     direct = cfg.flow.model != F.GITFLOW or F.is_maintenance(cfg, line)
     planned, vfiles = _plan_version_files(repo, cfg, out, vp, direct=direct)
@@ -1280,6 +1289,8 @@ def _plan_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan, *, d
 
 def _prepare_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan):
     """The new text of every `[flow.version_files]` file, or None after recording why not."""
+    # Deferred: at module level this import reaches `reached` in this module while it is
+    # still initialising (ImportError, an import cycle through changelog_cut).
     from . import version_files as VF
 
     try:
@@ -1293,6 +1304,8 @@ def _write_version_files(
     repo: Path, cfg: Config, out: Cut, branch: str, prep, version: str
 ) -> bool:
     """Commit the bump on ``branch``; False (with the reason on ``out``) if it cannot be."""
+    # Deferred: at module level this import reaches `reached` in this module while it is
+    # still initialising (ImportError, an import cycle through changelog_cut).
     from . import version_files as VF
 
     try:
@@ -1313,7 +1326,6 @@ def _export_failed(out: Cut, exc: Exception) -> None:
     file), exit 2 when it could not run (git, the log)."""
     out.ok = False
     out.reason = str(exc)
-    from .export.query import EXIT_REFUSED
 
     if getattr(exc, "code", 0) == EXIT_REFUSED:
         out.refused = True
@@ -1325,8 +1337,9 @@ def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry
     """The rendered changelog for the cut, or None after recording why not on ``out``.
     The version's section also becomes the tag message (the request body in pr mode, where
     `pr sync` writes the tag's message later)."""
+    # Deferred: at module level this import reaches `reached` in this module while it is
+    # still initialising (ImportError, an import cycle).
     from . import changelog_cut as CC
-    from .export.query import ExportError
 
     try:
         prep = CC.prepare(repo, cfg, version=vp.next, ref=vp.ref, fallback_notes=vp.notes)
@@ -1343,8 +1356,9 @@ def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry
 
 def _write_changelog(repo, cfg, out: Cut, branch: str, prep, version: str, *, force: bool) -> bool:
     """Commit the prepared changelog on ``branch``; False (with the reason on ``out``) if not."""
+    # Deferred: at module level this import reaches `reached` in this module while it is
+    # still initialising (ImportError, an import cycle).
     from . import changelog_cut as CC
-    from .export.query import ExportError
 
     try:
         action = CC.commit_on(

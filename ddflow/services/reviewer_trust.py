@@ -37,7 +37,6 @@ from . import approval as AP
 from . import identity as ID
 from .approval import os_user as _user
 from .identity import HARNESS_MARKERS, agent_marker  # noqa: F401
-from .review import load_reviewers
 
 #: The fields that decide WHO is reviewing and what it is called. A change to any of
 #: them is a different reviewer; a change to a tuning knob (max_tokens, hedge, gates)
@@ -59,6 +58,8 @@ def digest(rev: Any) -> str:
 
 def snapshot(repo: Path) -> dict[str, tuple[str, str]] | None:
     """name -> (digest, kind) for every reviewer configured now; None if they do not load."""
+
+    from .review import load_reviewers  # deferred: review -> gates -> reviewer_trust
 
     try:
         return {r.name: (digest(r), r.kind) for r in load_reviewers(Path(repo))}
@@ -173,6 +174,8 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
 
     if why := agent_marker(requested_agent):  # before anything is read: not an agent's to see
         raise ReviewerRefused(AP.refusal(why))
+    from .review import load_reviewers  # deferred: review -> gates -> reviewer_trust
+
     revs = {r.name: r for r in load_reviewers(Path(repo))}
     rev = revs.get(name)
     if rev is None:
