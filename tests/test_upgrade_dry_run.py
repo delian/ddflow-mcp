@@ -169,6 +169,31 @@ def test_an_unknown_commit_could_not_run(tmp_path: Path) -> None:
     assert report.exit_code == 2 and "no commit" in rows(report)[1].detail
 
 
+def test_history_that_already_holds_an_upgrade_is_not_taken_for_a_premature_apply(
+    tmp_path: Path,
+) -> None:
+    """A project upgraded before has `upgrade.applied` events in its log: only NEW ones, written
+    during the connect, mean something was applied before the operator consented."""
+    from ddflow.core.events import Event
+
+    root = project(tmp_path, confirm_free=True)
+    shard = sorted((root / ".ddflow" / "events").glob("*.jsonl"))[0]
+    past = Event(
+        kind="upgrade.applied",
+        subject="upgrade",
+        data={"from": "0.0.1", "to": "0.0.2", "categories": [], "items": []},
+        agent="someone",
+        lamport=10**6,
+        ts="2026-01-01T00:00:00.000000Z",
+    )
+    shard.write_text(shard.read_text("utf-8") + past.to_json() + "\n", "utf-8")
+    git(root, "add", "-A")
+    git(root, "commit", "--quiet", "--no-verify", "-m", "upgraded before")
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    assert rehearsal.step_clone()
+    assert rehearsal.step_connect(), rehearsal.report.table()
+
+
 def test_the_new_ddflow_is_never_the_clones_own_package(tmp_path: Path) -> None:
     """Rehearsing ddflow's own repository: `python -m ddflow` run inside the clone imports the
     clone's `ddflow` package first (the working directory leads sys.path) unless told not to, and

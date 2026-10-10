@@ -3944,7 +3944,10 @@ runs two agents through a task and merges shards two old-version agents wrote. T
 `--old-cmd`, `--build-old` (installed from the clone with uv) or `--simulate-old VERSION`; without
 one those rows say `unavailable`. Exit 0 all passed, 1 a check failed, 2 it could not run;
 `--report FILE` and `--preview FILE` write the Markdown report and the plan. `scripts/release.sh`
-and the publish workflow run it from the previous release and refuse a release whose upgrade is red.
+and the publish workflow run it from the previous release and refuse a release whose upgrade is red;
+they pass `--confirmations-ok`, which names the items the operator would be asked to confirm in the
+preview without failing the row, because those come from this project's own config, not from the
+release (run without it, as an operator does, they fail the row).
 
 **Turning each off.** `ddflow config upgrade.release_check off` (or `DDFLOW_NO_UPDATE_CHECK=1`)
 stops the release check, `upgrade.on_start off` the check at server or container start,
