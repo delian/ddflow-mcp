@@ -212,11 +212,11 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `infra/container.py` | container detection, loopback rewriting |
 | `infra/tomlcfg.py` | one TOML overlay loader, one unknown-key policy |
 | `api/__init__.py` | the typed operation surface: one entry point per operation, called by both surfaces |
-| `api/lifecycle/claim.py`, `wait.py`, `ready.py`, `heartbeat.py`, `complete.py`, `merge.py`, `brief.py`, `reservations.py` | the work queue, one module per area (`api/lifecycle/` re-exports every name): claim and worktree adoption, wait, next, heartbeat/release, complete, merge, brief, and the reservation queue they share |
-| `api/knowledge/lessons.py`, `retrieval.py`, `pairs.py`, `research.py`, `bugs.py`, `bug_close.py`, `regression.py`, `sessions.py`, `memory.py` | what the project remembers, one module per area (`api/knowledge/` re-exports every name) |
-| `api/reporting/overview.py`, `records.py`, `health.py`, `views.py` | read-only questions, one module per area (`api/reporting/` re-exports every name): status, show, doctor and recover, board and render |
+| `api/lifecycle/claim.py`, `wait.py`, `ready.py`, `heartbeat.py`, `complete.py`, `merge.py`, `brief.py`, `reservations.py` | the work queue, one module per area (`api/lifecycle/` re-exports the public names): claim and worktree adoption, wait, next, heartbeat/release, complete, merge, brief, and the reservation queue they share |
+| `api/knowledge/lessons.py`, `retrieval.py`, `pairs.py`, `research.py`, `bugs.py`, `bug_close.py`, `regression.py`, `sessions.py`, `memory.py` | what the project remembers, one module per area (`api/knowledge/` re-exports the public names) |
+| `api/reporting/overview.py`, `records.py`, `health.py`, `views.py` | read-only questions, one module per area (`api/reporting/` re-exports the public names): status, show, doctor and recover, board and render |
 | `services/leases.py` | acquire/renew/release, crash scanning, salvage advice |
-| `services/gates/defs.py`, `runner.py`, `testcmd.py`, `evidence.py`, `mutation.py`, `outcomes.py`, `reviewers.py` | gates, one module per area (`services/gates/` re-exports every name): definitions, execution, the test-command advice, evidence fingerprints, mutation and regression-test verification, recorded outcomes, reviewer independence |
+| `services/gates/defs.py`, `runner.py`, `testcmd.py`, `evidence.py`, `mutation.py`, `outcomes.py`, `reviewers.py` | gates, one module per area (`services/gates/` re-exports the public names): definitions, execution, the test-command advice, evidence fingerprints, mutation and regression-test verification, recorded outcomes, reviewer independence |
 | `services/flow.py` | open a request, `pr sync` (merged / changes requested / closed / approved), version plans and cuts ([R16](RESEARCH.md)) |
 | `services/review.py` | reviewer backends — any LLM, four wire formats |
 | `services/sessions.py` | prompt provenance, redaction, replay, bundles |

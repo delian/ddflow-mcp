@@ -44,7 +44,9 @@ from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
 from ..views.markdown import new_reports_line
 from ._base import _load
-from .lifecycle import _new_report_count, _session_model, callers_tree
+from .lifecycle import callers_tree
+from .lifecycle.claim import _new_report_count
+from .lifecycle.complete import _session_model
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.

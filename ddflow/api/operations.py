@@ -41,7 +41,7 @@ from ..services.gates import load_gates, parallel_test_advice
 from ..services.schedule import calendar as schedule_calendar
 from ..services.schedule import count_unit, done_counts
 from ._base import _load
-from .lifecycle import _tree_of
+from .lifecycle.claim import _tree_of
 
 
 def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:

@@ -44,7 +44,8 @@ from ...services.review import load_reviewers
 from ...views import human
 from ...views.markdown import may_hold_work
 from .._base import _load
-from ..knowledge import _sweep_records, pairs_from
+from ..knowledge import pairs_from
+from ..knowledge.pairs import _sweep_records
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
 

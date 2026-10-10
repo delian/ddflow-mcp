@@ -1,8 +1,8 @@
 """B-uni-splits: `api/reporting`, `services/gates` and `api/knowledge` are packages, one
 module per domain, behind the same imports.
 
-Every name the single module defined is still an attribute of the package, the same object
-the area module holds, so `from ddflow.services import gates as G; G.run_command_gate(...)`
+Every public name the single module defined is still an attribute of the package, the same
+object the area module holds, so `from ddflow.services import gates as G; G.run_command_gate(...)`
 and every other call site are unchanged. A test that REPLACES a name must patch the area
 module that defines it: patching the package rebinds a name no function reads.
 """
@@ -51,7 +51,7 @@ DEFINED = {
         _looks_like_several _member _memory_row _needs_fix_task _open_phase_of _origin
         _own_fix_id _record_kind _research_fields _research_id_taken _settled
         _split_outside_brackets _store _sweep_records _titled _unknown_bug _unresolved_tests
-        _verify_regression _wire_hit bug_file_tasks bug_fixed bug_found bug_invalid dupes
+        _verify_regression bug_file_tasks bug_fixed bug_found bug_invalid dupes
         history lesson_add lesson_search lessons_verify link_record memory_add memory_forget
         memory_list pair_records pairs_from recall research_add session_adopt_orphans
         session_end session_note session_prompt session_start similar upstream_offer
@@ -68,18 +68,14 @@ def _areas(pkg):
     ]
 
 
-def _top_level_names(path: Path) -> set[str]:
-    """Every name a module binds at top level: defs, classes, assignments, imports."""
-    names: set[str] = set()
-    for n in ast.parse(path.read_text("utf-8")).body:
-        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            names.add(n.name)
-        elif isinstance(n, ast.Assign | ast.AnnAssign):
-            targets = n.targets if isinstance(n, ast.Assign) else [n.target]
-            names |= {x.id for t in targets for x in ast.walk(t) if isinstance(x, ast.Name)}
-        elif isinstance(n, ast.Import | ast.ImportFrom):
-            names |= {a.asname or a.name.split(".")[0] for a in n.names}
-    return names - {"annotations"}
+def _public_definitions(path: Path) -> set[str]:
+    """The public functions and classes a module defines at top level."""
+    return {
+        n.name
+        for n in ast.parse(path.read_text("utf-8")).body
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        and not n.name.startswith("_")
+    }
 
 
 @pytest.fixture(params=sorted(DEFINED), ids=lambda m: m.rsplit(".", 1)[1])
@@ -95,23 +91,18 @@ def test_it_is_a_package_and_the_init_defines_nothing(pkg):
     assert not defs, [ast.unparse(d)[:60] for d in defs]
 
 
-def test_no_name_the_single_module_defined_is_lost(pkg):
-    missing = [n for n in DEFINED[pkg.__name__] if not hasattr(pkg, n)]
+def test_no_public_name_the_single_module_defined_is_lost(pkg):
+    missing = [n for n in DEFINED[pkg.__name__] if not n.startswith("_") and not hasattr(pkg, n)]
     assert not missing, missing
 
 
-#: Modules .importlinter confines to one home: an area that uses one imports it, and the
-#: package does not import it again just to re-export it.
-CONFINED = {"subprocess", "tempfile", "hashlib", "fcntl"}
-
-
-def test_every_name_an_area_binds_is_the_same_object_on_the_package(pkg):
-    """Functions, constants and the modules an area imports alike: whatever an area binds
-    is reachable as `<package>.<name>`, the same object (two areas binding one name would
-    leave the package holding only one of them). The one exception is CONFINED: a module
-    .importlinter keeps in its one home is not imported by the package to re-export it."""
+def test_every_public_definition_an_area_makes_is_the_same_object_on_the_package(pkg):
+    """The public functions and classes an area defines are reachable as
+    `<package>.<name>`, the same object (two areas defining one name would leave the
+    package holding only one of them). Constants, private helpers and imported modules are
+    not re-exported unless a caller needs them."""
     for mod in _areas(pkg):
-        for name in _top_level_names(Path(mod.__file__)) - CONFINED:
+        for name in _public_definitions(Path(mod.__file__)):
             assert getattr(pkg, name, None) is getattr(mod, name), (
                 f"{pkg.__name__}.{name} is not {mod.__name__}.{name}"
             )
