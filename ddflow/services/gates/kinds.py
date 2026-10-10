@@ -37,8 +37,21 @@ def gate_applies(gdef: Any, item: Item) -> str:
     gate without patterns and an item that declares no globs always apply, so a gate is
     never left out for want of information. The reason names the patterns and the globs it
     was judged against, because a gate that does not apply is reported, not silently
-    absent."""
-    if gdef is None or not gdef.applies_when or not item.globs:
+    absent.
+
+    A gate that `needs_branch` (merge) does not apply to a PHASE with no branch and no
+    worktree: a phase is a container that is never claimed, so it cannot have one.
+    Derived from the item's recorded facts, so there is nothing to skip or hand-record. A
+    task that has merely not been claimed yet still owes the gate."""
+    if gdef is None:
+        return ""
+    if (
+        getattr(gdef, "needs_branch", False)
+        and item.kind == "phase"
+        and not (item.branch or item.worktree)
+    ):
+        return f"no branch: the phase {item.id} has no branch of its own, so nothing to merge"
+    if not gdef.applies_when or not item.globs:
         return ""
     if any(overlap(p, g) for p in gdef.applies_when for g in item.globs):
         return ""
