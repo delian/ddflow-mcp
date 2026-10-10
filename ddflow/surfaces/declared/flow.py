@@ -1,6 +1,6 @@
 """The flow commands, declared once: pr, version, promote and flow, with the tools they have.
 
-`surfaces/parsers/flow.py` registers their command-line halves and `surfaces/tools/flow.py`
+`surfaces/parsers/flow.py` registers their command-line halves and `surfaces/tools/__init__.py`
 takes their MCP entries (D-unify 4, 6f-flow). `version lint` has no tool, and says why.
 """
 
