@@ -2736,6 +2736,13 @@ already has a recorded outcome always applies, and so does every gate of an item
 declares no globs: a gate is never left out for want of information. It is a gate field,
 not a knob -- empty by default, so a project that never sets it sees no change.
 
+A gate that concerns a branch (`needs_branch`, set on `merge`) has the same shape: it
+does not apply to a phase with no branch and no worktree -- a phase has no branch of its
+own -- so it shows `[-] merge  -- not applicable: no branch ...` and completes
+without a hand-recorded pass. What stands in for it is a fact: `complete <phase>` refuses
+while a finished task below it still has a branch the base lacks. An ordinary claimed
+task still needs `merge`.
+
 ### A pass that must name its evidence
 
 `[gate.<id>] requires_evidence = ["report", "link"]` and `evidence_fields = ["intent",
