@@ -15,7 +15,6 @@ from pathlib import Path
 from ...api import lifecycle as A
 from ...core import clock
 from ...core.tier import tier_of
-from ...views.markdown import new_reports_line
 from ..context import FAIL, MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
 from ..render import emit_json
 
@@ -175,42 +174,6 @@ def _waiting(rows: list, head: str) -> str:
     return "\n" + "\n".join(lines)
 
 
-def cmd_heartbeat(a, c: Ctx) -> int:
-    # WHERE THE CALLER IS: the item's own tree renews its lease whoever claimed it.
-    out = A.heartbeat(c.repo, a.id, agent=c.requested_agent, called_from=c.called_from)
-    if out.data.get("globs_withheld"):
-        print(
-            f"  lease renewed WITHOUT {a.id}'s newer globs/resources: {out.data['globs_withheld']}",
-            file=sys.stderr,
-        )
-    waiters = out.data.get("waiters", [])
-    c.out(
-        (f"renewed {a.id}" if out.data["renewed"] else out.reason)
-        + _waiting(
-            waiters,
-            f"{len(waiters)} agent(s) are waiting on {a.id}. Finishing, narrowing its "
-            f"globs, or releasing it wakes them:",
-        )
-        + (
-            "\n" + new_reports_line(a.id, out.data.get("new_reports", 0))
-            if out.data.get("new_reports")
-            else ""
-        ),
-        out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
-    )
-    return out.exit
-
-
-def cmd_release(a, c: Ctx) -> int:
-    out = A.release(c.repo, a.id, note=a.note or "", agent=c.requested_agent)
-    c.out(
-        f"{'released' if out.data['released'] else 'no lease on'} {a.id}"
-        + _waiting(out.data.get("woke", []), "woke:"),
-        out.body(("released", "woke")),
-    )
-    return out.exit
-
-
 def cmd_wait(a, c: Ctx) -> int:
     """Sleep until the item (or anything) can be claimed. Progress goes to stderr, so a
     harness watching the process -- a background shell, a monitor -- sees it move."""
@@ -303,47 +266,6 @@ def cmd_complete(a, c: Ctx) -> int:
 def _refuted_text(data: dict) -> str:
     """The completion's gates passed on refutation (D-unify 5), one line each."""
     return "".join(f"\nPASSED ON REFUTATION: {line}" for line in data.get("refuted_passes", []))
-
-
-def cmd_abandon(a, c: Ctx) -> int:
-    out = A.abandon(c.repo, a.id, reason=a.reason, force=a.force, agent=c.requested_agent)
-    if out.exit != OK:
-        return _refused(out)
-    c.out(f"{a.id} abandoned: {a.reason}", out.body(("id", "reason")))
-    return OK
-
-
-def cmd_remove(a, c: Ctx) -> int:
-    out = A.remove(c.repo, a.id, reason=a.reason or "", force=a.force, agent=c.requested_agent)
-    if out.exit != OK:
-        return _refused(out)
-    c.out(f"{a.id} removed from the queue", out.body(("id",)))
-    return OK
-
-
-def cmd_block(a, c: Ctx) -> int:
-    out = A.block(c.repo, a.id, reason=a.reason, reopen=a.reopen, agent=c.requested_agent)
-    if out.exit != OK:
-        return _refused(out)
-    c.out(f"{a.id} blocked: {a.reason}", out.body(("id",)))
-    return OK
-
-
-def cmd_unblock(a, c: Ctx) -> int:
-    out = A.unblock(c.repo, a.id, note=a.note or "", agent=c.requested_agent)
-    if out.exit not in (OK, NOTHING):
-        return _refused(out)
-    keys = ("id", "was", "released")
-    if out.exit == NOTHING:
-        c.out(out.reason, out.body(keys))
-        return NOTHING
-    released = out.data["released"]
-    c.out(
-        f"released {len(released)} item(s): {', '.join(released[:MAX_LISTED_FILES])}"
-        + (" ..." if len(released) > MAX_LISTED_FILES else ""),
-        out.body(keys),
-    )
-    return OK
 
 
 def cmd_merge(a, c: Ctx) -> int:
