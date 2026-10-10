@@ -27,7 +27,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import ids as IDS
 from ..core.admission import is_shared
-from ..core.model import State
+from ..core.model import Item, State
 from ..infra import worktree as W
 from . import changes as CH
 from . import gates as G
@@ -202,6 +202,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     v.warnings += _reported_bug_warnings(state, cfg, item_id)
 
     if it.kind == "phase":
+        v.blockers += _unmerged_branches(state, cfg, it, repo)
         # Periodic passes counted in phases (architecture review, mutation tests, lessons)
         # are the ones a phase close exists to run; task-counted ones stay advisory. Here,
         # not in `api.complete`, so the PR-merge settle path enforces it too.
@@ -255,6 +256,25 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"{note.why}. Re-run it if the change was not cosmetic."
         )
     return v
+
+
+def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> list[str]:
+    """A phase has no branch of its own, so its merge gate does not apply (`needs_branch`);
+    what stands in for it is this fact: no finished task below it still has a branch whose
+    commits the base lacks. Git unable to answer is not a blocker."""
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    left = [
+        t.id
+        for k in sorted(state.descendants(phase.id))
+        if (t := state.items[k]).branch
+        and t.state == "done"
+        and W.branch_exists(repo, t.branch)
+        and not W.is_merged(repo, t.branch, t.base or base)
+        and W.git(repo, "rev-parse", "--verify", "--quiet", t.base or base).ok
+    ]
+    if not left:
+        return []
+    return [f"task branch(es) not merged into {base}: {', '.join(left)} (`ddflow merge <id>`)"]
 
 
 README_UNKNOWN = (
