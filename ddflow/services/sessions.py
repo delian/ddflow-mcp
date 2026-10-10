@@ -38,12 +38,17 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import clock
+from ..core import ids as IDS
+from ..core.digest import content_digest
 from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
 from ..core.slug import safe_filename
 from ..infra.fsio import replace_text
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
+from ..infra.worktree import git
+from ..views.markdown import render_views
 from .guidance import ruleview as RV
+from .jobs import proc_start
 from .redact_report import redactor
 
 
@@ -60,8 +65,6 @@ def redact(text: str, cfg: Config) -> tuple[str, int]:
 def new_session_id(cfg: Config | None = None, events: Iterable = ()) -> str:
     """A new session's id, from `[ids].session` (`s<UTC time>-<pid>` by default) through
     the id service, checked against the sessions ``events`` already started."""
-    from ..core import ids as IDS
-
     used = {e.subject: "session" for e in events if e.kind == "session.started"}
     return IDS.make(cfg if cfg is not None else Config(), "session", used=used).id
 
@@ -114,8 +117,6 @@ def process_started_at() -> float:
     machine stretches past any short window (B72b9ab33fc). Linux keeps the start in
     /proc on the boot clock; its distance from the boot clock now is the process's age.
     """
-    from .jobs import proc_start
-
     try:
         ticks = int(proc_start(os.getpid()))  # "" where there is no /proc
         age = time.clock_gettime(time.CLOCK_BOOTTIME) - ticks / os.sysconf("SC_CLK_TCK")
@@ -277,7 +278,6 @@ def harness_session_id(raw: str) -> str:
         return ""
     if safe != raw:
         # Sanitising or truncating made distinct ids collide; a digest keeps them apart.
-        from ..core.digest import content_digest
 
         safe += "-" + content_digest(raw, length=16)
     return f"h-{safe}"
@@ -708,8 +708,6 @@ def verify(state: State, repo: Path, cfg: Config) -> list[str]:
     corruption — a rebased or squashed branch loses shas legitimately — so the report
     says which and lets a human judge rather than declaring the log broken.
     """
-    from ..infra.worktree import git
-
     problems: list[str] = []
     if not cfg.session.replay_verify_diffs:
         return ["verification disabled ([session].replay_verify_diffs=false)"]
@@ -740,13 +738,11 @@ def bundle(
     used the same map. Pinned by
     `tests/test_generated_views.py::test_rendering_is_deterministic_and_the_bundle_writes_the_same_bytes`.
     """
-    from ..views.markdown import render_views
-
     out_dir.mkdir(parents=True, exist_ok=True)
     written = [out_dir / "RECONSTRUCTION.md"]
-    written[0].write_text(render_reconstruction(state, steps, project=project), "utf-8")
+    replace_text(written[0], render_reconstruction(state, steps, project=project))
     for name, text in render_views(state, cfg).items():
-        (out_dir / name).write_text(text, "utf-8")
+        replace_text(out_dir / name, text)
         written.append(out_dir / name)
     # The rule files are a view of the rule definitions (D-unify 7): rebuilt from the log.
     for rid in RV.live_rule_ids(state):

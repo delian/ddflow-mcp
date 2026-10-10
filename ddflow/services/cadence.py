@@ -20,6 +20,7 @@ from typing import Any
 
 from ..config import Config
 from ..core.model import State
+from .export import ops
 from .schedule import (
     calendar,
     calendar_due,
@@ -122,7 +123,6 @@ def export_cadence(repo, cfg) -> list[dict[str, Any]]:
     operator decides that); nothing is read, and nothing written, when no document opted in.
     Run the pass with ``ddflow export <doc> --update`` (the refresh triggers do it themselves).
     """
-    from .export import ops
 
     try:
         docs = [

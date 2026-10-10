@@ -14,6 +14,7 @@ Nothing here may block or fail a compaction: every problem is a reason, never a 
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -100,7 +101,6 @@ def record(
 
 def latest(log: EventLog, harness_id: str, *, within_s: float = RECENT_S) -> str:
     """The text of this harness session's most recent compaction note, if it is recent."""
-    import time
 
     sid = S.harness_session_id(harness_id)
     if not sid:

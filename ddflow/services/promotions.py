@@ -19,6 +19,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import flow as F
+from ..core import ids as IDS
 from ..core.bookkeeping import EVENTS_EXCLUDE
 from ..core.model import DONE, Item, State
 from ..infra import git as GIT
@@ -73,7 +74,6 @@ def add(
         )
     if ahead == 0 and not force:
         return {"id": "", "from": frm, "to": to, "ahead": 0}
-    from ..core import ids as IDS
 
     n = 1 + sum(1 for i in st.items.values() if i.promote_to == to)
     minted = IDS.make(cfg, "promotion", used=IDS.taken(st), env=F.safe_name(to), seq=n)

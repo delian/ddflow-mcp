@@ -24,6 +24,7 @@ from ...core.events import Event
 from ...core.graph import closure
 from ...core.model import Bug, Item, State, fold
 from ...core.outcome import NOTHING, REFUSED
+from ...infra.log import EventLog
 
 T = TypeVar("T")
 
@@ -205,7 +206,6 @@ def build(events: Iterable[Event], skipped_lines: int = 0) -> Query:
 def load(root: Path | str, log_cfg: Any = None) -> Query:
     """Read ``<root>/.ddflow/events`` and fold it. Raises ``ExportError`` (exit 2) if the
     log is missing or cannot be read -- never returns an empty Query for a broken log."""
-    from ...infra.log import EventLog
 
     root = Path(root)
     if not (root / ".ddflow" / "events").is_dir():

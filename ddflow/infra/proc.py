@@ -61,6 +61,97 @@ def popen(*args: Any, **kwargs: Any) -> subprocess.Popen:
     return subprocess.Popen(*args, **kwargs)
 
 
+@dataclass
+class Captured:
+    """How an argv run ended, as a value: `capture`'s answer.
+
+    ``returncode``/``stdout``/``stderr`` are what `subprocess.run` would hold (None and
+    empty when the command did not finish); ``error`` is the exception that stopped it
+    (a `TimeoutExpired` when ``timed_out``, else the OSError / SubprocessError that
+    kept it from running), None when it ran to an exit status.
+    """
+
+    returncode: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    error: BaseException | None = None
+
+    @property
+    def timed_out(self) -> bool:
+        return isinstance(self.error, subprocess.TimeoutExpired)
+
+    @property
+    def ran(self) -> bool:
+        return self.error is None
+
+    def unwrap(self) -> Captured:
+        """``self`` when it ran; else raise ``error`` as `run` would have."""
+        if self.error is not None:
+            raise self.error
+        return self
+
+
+def capture(
+    argv: list[str],
+    *,
+    timeout: float | None,
+    cwd: Any = None,
+    env: dict[str, str] | None = None,
+    input: str | None = None,
+    encoding: str | None = None,
+    errors: str | None = None,
+) -> Captured:
+    """Run ``argv`` to completion with its output captured as text, never raising for the
+    command's own trouble: a timeout, a missing binary or an OSError comes back in
+    ``error`` (`unwrap` raises it for a caller that lets it through). stdin is /dev/null
+    unless ``input`` is given (see `run`)."""
+    try:
+        done = run(
+            argv,
+            cwd=cwd,
+            env=env,
+            input=input,
+            capture_output=True,
+            text=True,
+            encoding=encoding,
+            errors=errors,
+            timeout=timeout,
+            check=False,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        return Captured(error=exc)
+    return Captured(done.returncode, done.stdout or "", done.stderr or "")
+
+
+def spawn_stdio(
+    argv: list[str],
+    *,
+    cwd: Any = None,
+    env: dict[str, str] | None = None,
+    stderr: Any = subprocess.PIPE,
+    text: bool = False,
+) -> subprocess.Popen:
+    """Start a long-lived server that is spoken to over stdin/stdout pipes, in a session
+    of its own so `stop_group` reaches everything it started. May raise OSError."""
+    return popen(
+        argv,
+        cwd=cwd,
+        env=env,
+        stdin=PIPE,
+        stdout=PIPE,
+        stderr=stderr,
+        text=text,
+        start_new_session=True,
+    )
+
+
+def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:
+    """Kill ``p`` and everything it started, then reap it (waiting at most ``reap_s``)."""
+    kill_group(p)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        p.wait(timeout=reap_s)
+
+
 def spawn_shell(
     command: str,
     *,

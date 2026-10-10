@@ -37,7 +37,6 @@ from . import choices as CH
 from . import completion as CM
 from . import gates as G
 from . import leases as L
-from . import version_files as VF
 from .cleanup import dispose_tree
 from .export.query import EXIT_REFUSED, ExportError
 from .gates import measured as GR
@@ -1290,6 +1289,9 @@ def _plan_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan, *, d
 
 def _prepare_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan):
     """The new text of every `[flow.version_files]` file, or None after recording why not."""
+    # Deferred: at module level this import reaches `reached` in this module while it is
+    # still initialising (ImportError, an import cycle through changelog_cut).
+    from . import version_files as VF
 
     try:
         return VF.prepare(repo, cfg, version=vp.next, ref=vp.ref)
@@ -1302,6 +1304,9 @@ def _write_version_files(
     repo: Path, cfg: Config, out: Cut, branch: str, prep, version: str
 ) -> bool:
     """Commit the bump on ``branch``; False (with the reason on ``out``) if it cannot be."""
+    # Deferred: at module level this import reaches `reached` in this module while it is
+    # still initialising (ImportError, an import cycle through changelog_cut).
+    from . import version_files as VF
 
     try:
         changed = VF.commit_on(repo, cfg, branch, prep, message=f"chore: bump version to {version}")

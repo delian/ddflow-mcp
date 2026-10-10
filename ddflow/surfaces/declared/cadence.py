@@ -1,7 +1,7 @@
 """The cadence and pins commands, declared once, with the tools they have.
 
 `surfaces/parsers/maintenance.py` registers their command-line halves and
-`surfaces/tools/maintenance.py` takes their MCP entries (D-unify 4,
+`surfaces/tools/__init__.py` takes their MCP entries (D-unify 4,
 B-uni-cmd-migrate.6g-memory). Their handlers stay in `surfaces/commands/operations.py`.
 """
 

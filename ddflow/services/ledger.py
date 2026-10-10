@@ -22,6 +22,7 @@ from ..core.bookkeeping import QUEUE_STATE
 from ..core.digest import content_digest
 from ..core.events import Event
 from ..core.model import Item, fold
+from ..infra.worktree import git_paths
 
 MAX_FILES = 100
 _TEST = re.compile(
@@ -45,7 +46,6 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
     `files` is empty (and `files_known` false) when there is no sha or git could not list
     it: a missing fact is recorded as missing, never as "no files changed".
     """
-    from ..infra.worktree import git_paths
 
     facts: dict[str, Any] = {"req": item_digest(it), "files_known": False}
     if not sha:
@@ -68,6 +68,32 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
     return facts
 
 
+def _gate_rows(it) -> dict[str, dict[str, Any]]:
+    return {
+        g: {"outcome": r.outcome, **({"reason": r.reason[:200]} if r.reason else {})}
+        for g, r in sorted(it.gates.items())
+    }
+
+
+def _amendments(later: Sequence[Event], item_id: str) -> list[dict[str, Any]]:
+    """The edits made to the item after it was completed."""
+    return [
+        {"at": ev.ts, "by": ev.agent, "fields": sorted(k for k in ev.data if k != "id")}
+        for ev in later
+        if ev.subject == item_id and ev.kind.endswith(".updated")
+    ]
+
+
+def _done_rows(stored: dict[str, Any]) -> dict[str, Any]:
+    """What was done, from the ledger stored with the completion."""
+    return {
+        "files_known": bool(stored.get("files_known")),
+        "files_total": stored.get("files_total", 0),
+        "files": list(stored.get("files") or []),
+        "tests": list(stored.get("tests") or []),
+    }
+
+
 def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
     """The ledger of one completed item, or None when it was never completed."""
     # Only this item's own events: its state at completion depends on nothing else, another
@@ -87,15 +113,8 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
     if it is None:
         return None
     stored = done.data.get("ledger") if isinstance(done.data.get("ledger"), dict) else {}
-    gates = {
-        g: {"outcome": r.outcome, **({"reason": r.reason[:200]} if r.reason else {})}
-        for g, r in sorted(it.gates.items())
-    }
-    amendments = [
-        {"at": ev.ts, "by": ev.agent, "fields": sorted(k for k in ev.data if k != "id")}
-        for ev in events[idx + 1 :]
-        if ev.subject == item_id and ev.kind.endswith(".updated")
-    ]
+    gates = _gate_rows(it)
+    amendments = _amendments(events[idx + 1 :], item_id)
     now = fold(events, strict=False).items.get(item_id)
     at_completion = stored.get("req") or item_digest(it)  # the folded item IS completion-time
     drifted = bool(now and item_digest(now) != at_completion)
@@ -115,12 +134,7 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
             "body": it.body,
             "body_chars": len(it.body),
         },
-        "done": {
-            "files_known": bool(stored.get("files_known")),
-            "files_total": stored.get("files_total", 0),
-            "files": list(stored.get("files") or []),
-            "tests": list(stored.get("tests") or []),
-        },
+        "done": _done_rows(stored),
         "gates": gates,
         "skipped": sorted(g for g, v in gates.items() if v["outcome"] == "skipped"),
         "changelog": done.data.get("changelog") or {},

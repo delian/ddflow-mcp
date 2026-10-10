@@ -61,16 +61,9 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
     exe = shutil.which("roborev")
     if not exe:
         return None, f"roborev is not on PATH; the reviewer of {sha[:10]} is unchecked"
-    try:
-        p = proc.run(
-            [exe, "list", "--json", "--limit", str(_LIMIT)],
-            cwd=where,
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT_S,
-        )
-    except (OSError, proc.SubprocessError) as exc:
-        return None, f"could not ask roborev which agent reviewed {sha[:10]} ({exc})"
+    p = proc.capture([exe, "list", "--json", "--limit", str(_LIMIT)], cwd=where, timeout=_TIMEOUT_S)
+    if p.error is not None:
+        return None, f"could not ask roborev which agent reviewed {sha[:10]} ({p.error})"
     if p.returncode != 0:
         why = (p.stderr or p.stdout).strip().splitlines()[-1:] or [f"exit {p.returncode}"]
         return None, f"could not ask roborev which agent reviewed {sha[:10]} ({why[0][:160]})"
