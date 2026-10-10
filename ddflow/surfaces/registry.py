@@ -463,6 +463,40 @@ def properties_schema(
 
 
 @dataclass(frozen=True)
+class CliPolicy:
+    """How the CLI executor (`cliexec.run`) differs from its default for one command.
+
+    The default is the rule verbs': the caller is the resolved identity, a refusal under
+    ``--json`` is the body with the MCP tool's lead, and the human reads ``render``. The
+    work-loop verbs keep what they always did, and each difference is one field here:
+
+    * ``typed_agent``: the ``agent`` given to ``call`` is the ``--agent`` the caller typed
+      (``""`` for none), not the resolved id: passing the resolved one makes a person at
+      a terminal look like an agent that said so, which `agent_marker` reads;
+    * ``shown``: the exit codes whose result is printed (stdout, or the ``--json`` body), or
+      a predicate on the Outcome; any other exit prints only ``out.reason`` on stderr (or
+      what ``reason`` makes of it). ``None``: every exit;
+    * ``notes(out, args, ctx)``: lines for stderr, printed first whatever the exit and
+      the mode (a caveat that on stdout would corrupt ``--json``);
+    * ``body(out, args)``: the ``--json`` body, when the CLI's has never been the MCP
+      tool's ``payload``;
+    * ``human(out, args, ctx)``: the human text when it needs the context (the identity,
+      the tree the caller stands in) that ``render(out, args)`` is not given; ``None``
+      prints nothing;
+    * ``extra(ctx)``: more keyword arguments for ``call``, which only the CLI knows (the
+      directory the caller's shell stands in).
+    """
+
+    typed_agent: bool = True
+    shown: tuple[int, ...] | Callable[[Any], bool] | None = None
+    reason: Callable[[Any], str] | None = None
+    notes: Callable[..., Iterable[str]] | None = None
+    body: Callable[..., Any] | None = None
+    human: Callable[..., str] | None = None
+    extra: Callable[..., Mapping[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
 class Command:
     """One operation, declared once.
 
@@ -487,6 +521,8 @@ class Command:
     prose: bool | Callable[..., bool] = False
     tier: str = "standard"
     render: Callable[..., Any] | None = None
+    #: How the CLI executor differs from its default for this command (`CliPolicy`).
+    cli: CliPolicy | None = None
     handler: Callable[..., Any] | None = None
     kind: str = ""
     identify: bool = False
@@ -695,7 +731,7 @@ def _with_handler(
         return cmd
     if handlers and cmd.path in handlers:
         return dataclasses.replace(cmd, handler=handlers[cmd.path])
-    if executor and cmd.render is not None:
+    if executor and (cmd.render is not None or cmd.cli is not None):
         return dataclasses.replace(cmd, handler=executor(cmd))
     return cmd
 
