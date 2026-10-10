@@ -8,7 +8,6 @@ byte-identical (history is never rewritten).
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import replace
@@ -18,6 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.config import Config
 from ddflow.core.events import Event
@@ -28,10 +28,6 @@ from ddflow.services.export import frame as F
 
 OLD = "old-agent"
 _clock = {"n": 0}
-
-
-def _git(repo: Path, *argv: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *argv], check=True, capture_output=True)
 
 
 def _raw(repo: Path, kind: str, subject: str, data: dict, *, agent: str = OLD) -> Event:

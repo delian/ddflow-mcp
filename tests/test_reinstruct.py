@@ -21,15 +21,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import state as _state
 
 from ddflow.config import Config
-from ddflow.core.model import fold
-from ddflow.infra.log import EventLog
 from ddflow.services import obligations as OB
-
-
-def _state(repo):
-    return fold(EventLog(repo).read_all(), strict=False)
 
 
 def _eager(repo, **knobs):

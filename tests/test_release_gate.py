@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from helpers import git_raw as git
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
@@ -35,12 +36,6 @@ def _fragment(name: str, impact: str) -> str:
         f'[[change]]\nkind = "feature"\nkey = "{name}"\nwhy = "{name}"\n'
         f'impact = "{impact}"\nenable = "ddflow {name}"\n'
     )
-
-
-def git(repo: Path, *argv: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *argv], check=True, capture_output=True, text=True
-    ).stdout
 
 
 @pytest.fixture

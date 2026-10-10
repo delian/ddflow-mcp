@@ -15,14 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from helpers import git_quiet as _git
+
 from ddflow.api import onboard as api_onboard
 from ddflow.services import onboard as ON
 
 OK, FAIL, NOTHING = 0, 1, 2
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def _commit(repo: Path, name: str) -> None:
