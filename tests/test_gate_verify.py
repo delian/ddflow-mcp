@@ -186,3 +186,112 @@ def test_the_baseline_failure_is_visible_in_the_json_too(repo):
     data = json.loads(out)
     assert data["verified"] is False
     assert "baseline" in data["reason"].lower(), data["reason"]
+
+
+# --- B-verify-ci-blind: a gate that reads a COMMITTED ref (ci) -------------------------
+
+HEAD_GATE = (
+    "[gate.unit_tests]\n"
+    "command = \"git show HEAD:src/calc.py | grep -q 'return a [+] b'\"\n"
+    'cwd = "repo"\n'
+    "reads_ref = true\n"
+    'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
+)
+
+
+def test_a_gate_that_reads_head_sees_the_mutation(repo):
+    """`ci run` merges the COMMITTED branch, so an uncommitted edit is invisible to it and
+    `verify` reported PASSED on mutated source (B-verify-ci-blind). A gate whose command
+    reads HEAD must come back detected, with the mutation committed on a throwaway
+    commit and nothing left behind."""
+    _project(repo)
+    (repo / ".ddflow" / "gates.toml").write_text(HEAD_GATE)
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == OK, f"a HEAD-reading gate could not see the mutation:\n{out}\n{err}"
+    assert (repo / "src" / "calc.py").read_text() == CALC
+    after = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout
+    assert after == head, "verify moved HEAD"
+    status = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain", "--", "src"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status.strip() == "", status
+
+
+def test_reads_ref_is_declarable_and_ci_has_it():
+    from ddflow.services.gates.defs import DEFAULT_GATES
+
+    assert DEFAULT_GATES["ci"].reads_ref is True
+    assert DEFAULT_GATES["unit_tests"].reads_ref is False
+
+
+def test_a_mutation_registered_only_on_the_branch_is_verifiable(repo):
+    """The registry is read from the item's worktree too: a mutation committed on the
+    branch could not be verified before it merged."""
+    _project(repo)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "python -m pytest -q"\ncwd = "repo"\n'
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "gates"], check=True)
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == OK, out + err
+    wt = next(
+        Path(line.split()[1])
+        for line in subprocess.run(
+            ["git", "-C", str(repo), "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        if line.startswith("worktree ") and "T1" in line
+    )
+    (wt / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "python -m pytest -q"\ncwd = "worktree"\n'
+        'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
+    )
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == OK, f"a branch-only mutation was not found:\n{out}\n{err}"
+
+
+def test_a_worktree_vs_head_gate_is_still_mutated_in_the_working_tree(repo):
+    """Naming HEAD does not make a gate blind to an uncommitted edit (`git diff HEAD`)."""
+    _project(repo)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        "[gate.unit_tests]\n"
+        'command = "git diff --quiet HEAD -- src/calc.py"\n'
+        'cwd = "repo"\n'
+        'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
+    )
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == OK, f"{out}\n{err}"
+
+
+def test_a_ref_gate_needing_an_untracked_file_has_no_green_baseline(repo):
+    """The baseline of a `reads_ref` gate runs in the same bare checkout as its mutations:
+    a gate that passes only thanks to an untracked file must be refused, not certified."""
+    _project(repo)
+    (repo / "marker.txt").write_text("x")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        "[gate.unit_tests]\n"
+        "command = \"test -f marker.txt && git show HEAD:src/calc.py | grep -q 'return a [+] b'\"\n"
+        'cwd = "repo"\n'
+        "reads_ref = true\n"
+        'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
+    )
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == FAIL, out
+    assert "baseline" in (out + err).lower(), out + err
+
+
+def test_a_head_gate_without_reads_ref_gets_the_remedy_in_the_message(repo):
+    _project(repo)
+    (repo / ".ddflow" / "gates.toml").write_text(HEAD_GATE.replace("reads_ref = true\n", ""))
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == FAIL, out
+    assert "reads_ref = true" in (out + err), out + err
