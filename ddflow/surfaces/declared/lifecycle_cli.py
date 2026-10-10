@@ -325,7 +325,7 @@ def complete_text(out, a, ctx) -> str:
 
 # -- merge -----------------------------------------------------------------------------
 
-MERGE_BODY = (
+MERGE_PAYLOAD = (
     "id",
     "sha",
     "branch_head",
@@ -377,7 +377,7 @@ def merge_body(out, a) -> Any:
     local = (
         () if out.data.get("pr") else tuple(k for k in ("export_refresh", "ci") if k in out.data)
     )
-    return out.body(MERGE_BODY + local)
+    return out.body(MERGE_PAYLOAD + local)
 
 
 def merge_notes(out, a, ctx) -> Iterator[str]:
