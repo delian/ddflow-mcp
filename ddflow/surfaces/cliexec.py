@@ -27,6 +27,16 @@ from .registry import Command
 from .render import emit_json
 
 
+def _asked_duplicates(out: Any) -> bool:
+    """A non-zero Outcome whose data lists ``candidates`` is a duplicate check's answer
+    (a count under that name, as bisect's, is not)."""
+    return (
+        bool(out.exit)
+        and isinstance(out.data.get("candidates"), list)
+        and bool(out.data["candidates"])
+    )
+
+
 def arguments(cmd: Command, ns: argparse.Namespace) -> dict[str, Any]:
     """The MCP-shaped argument dict of a parse: each CLI parameter the command declares,
     under its own name, left out when the line did not supply it (argparse's ``None``)."""
@@ -98,14 +108,14 @@ def run(cmd: Command, ns: argparse.Namespace, ctx: Any) -> int:
         print(out.reason, file=sys.stderr)
         return int(FAIL)
     if ctx.json:
-        if out.exit and out.data.get("candidates"):
+        if _asked_duplicates(out):
             print(out.reason, file=sys.stderr)
         body = out.body(cmd.payload)
         if out.exit == REFUSED and isinstance(body, dict):
             lead = {"reason": out.reason, "outcome": EXIT_NAMES[REFUSED], "exit": REFUSED}
             body = {"refusal": lead, **body}
         emit_json(body)
-    elif out.exit == REFUSED or (out.exit and out.data.get("candidates")):
+    elif out.exit == REFUSED or _asked_duplicates(out):
         print(out.reason, file=sys.stderr)
     else:
         print((cmd.render(out, args) if cmd.render else "") or out.reason)
