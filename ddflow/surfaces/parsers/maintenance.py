@@ -89,7 +89,7 @@ def register(s: argparse._SubParsersAction) -> None:
         action="store_true",
         default=False,
         help="where the upgrade stands: running version, newest release and when it was asked, "
-        "this project's stamp, the plan with each step's state (pending, running, done, failed, "
+        "this project's stamp, the plan with each step's state (pending, running, done, failed, unavailable, "
         "needs operator confirmation, waived), the backups, and the agents and MCP servers last "
         "seen on an older version (exit 0 up to date, 1 steps pending or a run interrupted); "
         "stands alone",

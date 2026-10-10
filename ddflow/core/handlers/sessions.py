@@ -144,6 +144,7 @@ def _upgrade_run(st: State, run_id: str, ev: Event) -> dict[str, Any]:
             "items": [],
             "steps": [],
             "backup": "",
+            "confirmed": {},
             "closed": "",
             "started": ev.ts,
             "agent": ev.agent,
@@ -161,6 +162,8 @@ def _upgrade_run(st: State, run_id: str, ev: Event) -> dict[str, Any]:
             run["categories"] = list(d.get("categories") or [])
             run["items"] = [i for i in d.get("items") or [] if isinstance(i, str)]
         run["backup"] = d.get("backup", "") or run["backup"]
+        if isinstance(d.get("confirmed"), dict):  # what the operator accepted, kept across resumes
+            run["confirmed"] = {**run["confirmed"], **d["confirmed"]}
     elif status == "step":
         run["steps"].append(
             {

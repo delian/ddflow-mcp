@@ -321,11 +321,13 @@ def apply(
     saved = {p.resolve() for p in files} if backup_dir else set()
     late_backup = _late_saver(repo, cfg, backup, (frm, to), saved)
 
-    run = _start(log, watch, todo, (frm, to), backup_dir)
+    run = _start(log, watch, todo, (frm, to), backup_dir, confirm)
+    prior_reasons = (st.upgrade_runs.get(watch.resume) or {}).get("confirmed") or {}
     results += _execute(
         repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
     )
     ok, done_cats, reasons = _summarise(results, selected, confirm)
+    reasons = {**prior_reasons, **reasons}  # what the operator confirmed before the interruption
     ok |= earlier  # settled by the interrupted run this one finishes
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
@@ -343,7 +345,12 @@ def _not_saved(
 
 
 def _start(
-    log: Any, watch: Watch, todo: list[dict[str, Any]], versions: tuple[str, str], backup: str
+    log: Any,
+    watch: Watch,
+    todo: list[dict[str, Any]],
+    versions: tuple[str, str],
+    backup: str,
+    confirm: Mapping[str, str],
 ) -> str:
     """The run's id (the interrupted run's when resuming, else a new one), and its first record."""
     if not todo:
@@ -359,6 +366,7 @@ def _start(
         categories=_cats_of(todo),
         items=_ids(_in_order(todo)),
         backup=backup,
+        confirmed={_ident(i): why for i in todo if (why := _confirmed(i, confirm))},
     )
     return run
 

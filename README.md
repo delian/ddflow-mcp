@@ -3909,7 +3909,7 @@ under `.ddflow/backups/`) or `snapshot` (a git tag); `--restore` puts either bac
 
 **Monitor.** `--status` prints the running version, the newest release and when it was last
 asked, this project's stamp, the plan with each step's state (`pending`, `running`, `done`,
-`failed`, `needs operator confirmation`, `waived`), the backups, and the agents and MCP servers
+`failed`, `unavailable`, `needs operator confirmation`, `waived`), the backups, and the agents and MCP servers
 last seen on an older ddflow, which must restart (from the `ddflow.seen` stamps and
 `skew.overridden` events). It exits 0 when nothing is pending and 1 otherwise. `--history` lists
 the upgrades the log records. Both only read.

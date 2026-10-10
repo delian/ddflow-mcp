@@ -342,6 +342,9 @@ def test_resume_does_not_refuse_an_operator_item_it_applied_before(project, monk
     rid, _run = UST.open_run(st)
     out = apply(project, plan, watch=UA.Watch(resume=rid))  # no --confirm again
     assert out["exit"] == 0 and out["refused"] == 0 and out["categories"] == ["features"]
+    assert out["confirmed"] == {"f1": "operator said yes"}
+    _log, _cfg, st = state(project)
+    assert st.upgrades[-1]["confirmed"] == {"f1": "operator said yes"}
 
 
 def test_history_does_not_call_a_run_an_upgrade(project, monkeypatch) -> None:
