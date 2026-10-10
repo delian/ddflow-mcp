@@ -27,6 +27,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -213,7 +214,9 @@ def _rule_docs(c: Ctx, kinds: set[str]) -> list[Doc]:
             if r.id in have:
                 continue
             text = _join(r.id, r.title, r.content, " ".join(r.tags))
-            out.append(Doc("rule", r.id, "active", r.updated.isoformat(), "", "", text))
+            # A rule read from its file carries the stamp as the string it was written as.
+            stamp = r.updated.isoformat() if isinstance(r.updated, datetime) else str(r.updated)
+            out.append(Doc("rule", r.id, "active", stamp, "", "", text))
         # the instruction files other tools read (.cursor/rules, .kilo, CLAUDE.md, AGENTS.md)
         out += [
             Doc("rule", e.path, "active", "", "", "", _join(e.path, e.text))
