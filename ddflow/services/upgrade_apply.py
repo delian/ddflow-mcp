@@ -318,7 +318,7 @@ def apply(
     )
     ok, done_cats, reasons = _summarise(results, selected, confirm)
     ok |= earlier & {i["id"] for i in selected}  # settled by the interrupted run this one finishes
-    done_cats = _with_earlier(done_cats, plan, earlier)
+    done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
@@ -354,9 +354,13 @@ def _start(
     return run
 
 
-def _with_earlier(cats: list[str], plan: dict[str, Any], earlier: set[str]) -> list[str]:
-    """``cats`` plus the categories of the steps an interrupted run settled, in plan order."""
-    more = _earlier_cats(plan, earlier)
+def _with_earlier(
+    cats: list[str], plan: dict[str, Any], earlier: set[str], results: list[dict[str, Any]]
+) -> list[str]:
+    """``cats`` plus the categories an interrupted run settled steps of (``earlier``), unless
+    a step of that category did not settle in this run."""
+    unsettled = {r["category"] for r in results if r["status"] not in (APPLIED, ACKNOWLEDGED)}
+    more = _earlier_cats(plan, earlier) - unsettled
     return [c for c in UP.CATEGORIES if c in cats or c in more]
 
 

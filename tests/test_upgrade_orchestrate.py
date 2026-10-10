@@ -131,6 +131,26 @@ def test_a_failed_run_closes_and_is_not_an_upgrade(project, monkeypatch) -> None
     assert run["closed"] == "failed" and run["steps"][0]["status"] == UA.FAILED
 
 
+def test_a_category_with_a_step_that_fails_on_resume_is_not_recorded_as_done(
+    project, monkeypatch
+) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    real = UA._run
+
+    def second_fails(repo, cfg, item, agent):
+        return (UA.FAILED, "boom") if item["id"] == "f2" else real(repo, cfg, item, agent)
+
+    monkeypatch.setattr(UA, "_run", second_fails)
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))
+    assert out["exit"] == 1 and "features" not in out["categories"]
+
+
 def test_status_names_an_agent_still_on_the_old_version(project) -> None:
     _log, cfg, st = state(project)
     st.ddflow_versions = {
@@ -157,13 +177,14 @@ def test_a_resumed_upgrade_records_every_settled_item_and_the_first_backup(
     project, monkeypatch
 ) -> None:
     plan = plan_of("f1", "f2")
+    monkeypatch.setattr(UA, "_save", lambda *a, **k: ("bk-1", "", False))
     interrupt_at(monkeypatch, "f2")
     with pytest.raises(KeyboardInterrupt):
         apply(project, plan)
     monkeypatch.undo()
     _log, _cfg, st = state(project)
     rid, run = UST.open_run(st)
-    assert run["backup"] == "" and run["items"] == ["f1", "f2"]
+    assert run["backup"] == "bk-1" and run["items"] == ["f1", "f2"]
     apply(project, plan, watch=UA.Watch(resume=rid))
     _log, _cfg, st = state(project)
     assert st.upgrades[-1]["items"] == ["f1", "f2"]
