@@ -147,7 +147,7 @@ def test_a_review_of_an_id_no_item_has_is_refused_not_recorded(repo, tmp_path):
     _reviewed_repo(repo, tmp_path)
     out = api.review(repo, gate="critic", item="NOPE", branch="feat", intent="add x.py")
 
-    assert out.exit != 0 and "no such item" in out.data["text"], out
+    assert out.exit != 0 and "no such item" in out.reason, out
     assert "NOPE" not in fold(EventLog(repo, "reader").read_all(), strict=False).items
 
 
