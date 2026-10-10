@@ -277,7 +277,7 @@ import-linter contract counts the stragglers and can only go down.
 | definition records | `core/defs.py`, `core/records.py` | the managed-definition record every kind shares; the fold's record dataclasses |
 | event evolution | `core/upcasters.py` | per-kind payload versions and the upcasters that read old events |
 | overlay loader | `services/overlay.py` | `OverlayLoader`: config path, then `.ddflow/<dir>/`, then shipped; eject, drift, validate |
-| machine-local state | `infra/localstore.py`, `services/slots.py`, `services/changes.py` | `LocalStore` (read, write, lock, trim `.ddflow/local`; no module outside its own tests has adopted it yet, so the ticks, waits and quota stores keep their own files), counting-semaphore `Slots`, content-based `ChangeDetector` |
+| machine-local state | `infra/localstore.py`, `services/slots.py`, `services/changes.py` | `LocalStore` (read, write, lock, trim `.ddflow/local`; the release check and the self-upgrade state use it, while the ticks, waits, quota, upgrade-notice and flake stores keep their own flat files), counting-semaphore `Slots`, content-based `ChangeDetector` |
 | command registry | `surfaces/registry.py`, `surfaces/declared/` | `Command` and `Param`: one declaration generates the argparse parser, the MCP tool, its schema and the parity exemptions |
 | CLI executor | `surfaces/cliexec.py`, `registry.CliPolicy` | a declared command with `call` and `render` runs with no `cmd_*` function: `--json` prints the MCP tool's body, a refusal has the tool's lead, the human reads `render`; a `CliPolicy` states what prints differently (the identity as typed, stderr notes, which exits show a result) |
 | record surface | `api/records.py`, `surfaces/records.py` | `RecordKind`: the seven verbs (list, show, add, edit, remove, search, revise) on the CLI and MCP |
@@ -287,7 +287,7 @@ import-linter contract counts the stragglers and can only go down.
 | approval | `services/approval.py` | approve-by-digest: `grant`, `check`, `use` |
 | command running | `services/cmdrunner.py` | `CommandRunner`: every operator-configured command, with timeouts and an `unavailable` outcome |
 | guidance | `services/guidance/` | one engine for rules and decisions: scope, resolve, inject, checks, waivers, review |
-| kind pipeline | `config_sections/_kinds.py`, `services/gates/kinds.py` | item kind to gate pipeline, `applies_when`, evidence rules |
+| kind pipeline | `config_sections/_kinds.py`, `services/gates/kinds.py` | item kind to gate pipeline, `gate_applies` (`applies_when`, and `needs_branch`: a phase has no branch, so its merge gate reads not applicable), evidence rules |
 | item creation | `services/items.py` | `add_task`: the one way a task is created |
 | identity | `services/identity.py`, `core/agentname.py` | who is calling, and what an agent name may contain |
 | host | `infra/hostinfo.py`, `infra/signals.py` | this machine's names; load, memory and disk signals |
@@ -297,6 +297,13 @@ import-linter contract counts the stragglers and can only go down.
 | text | `core/slug.py`, `core/textcut.py`, `core/budget.py` | slugs and safe names, the one clipper, the token and character budget |
 | config knobs | `config_sections/_docs.py` | `knob()` and `declare()`: a knob is declared once, on its field |
 | compatibility | `services/upgrade_plan.py`, `services/migrations/`, `services/repairs/` | `ddflow upgrade --plan`, versioned migrations and data repairs |
+| upgrade chain | `services/upgrade_manifest.py`, `services/upgrade_apply.py`, `services/backups.py`, `services/upgrade_status.py` | the shipped `templates/upgrade/changes.toml` manifest, `--apply` with a backup first, local backups and snapshots, `--status`/`--history`/`--resume` |
+| upgrade at run time | `services/upgrade_start.py`, `services/upgrade_notice.py`, `services/upgrade_check.py`, `services/selfupgrade.py`, `services/upgrade_dryrun.py`, `infra/release_index.py`, `services/install_info.py` | the proposal at server start, the one-line notice, the cached release check (the one HTTP GET, in `infra/release_index.py`), `--self` by install method, the rehearsal on a throwaway clone |
+| harness registry | `services/harnessreg.py`, `ddflow/harnesses/*.toml` | one strict TOML descriptor per coding agent (MCP file shape, rules surface, slash commands, hook style); absent, `none = true` and a value are three different facts |
+| hook core | `services/hookio.py`, `surfaces/declared/hooks.py` | `NORMALIZERS` and `EMITTERS`: the agent's hook payload to one `HookPayload` and the reply back in its dialect; the handler per event is in `api/setup.py` |
+| harness identity | `infra/harness_identity.py` | the identity declared on an MCP connection, recorded against the harness process so its shell commands share it |
+| flake log | `services/flakes.py` | failing test ids and tails from a runner's output, and `.ddflow/local/flakes.jsonl` (a test that failed and then passed on the same tree) |
+| id column | `surfaces/render.id_cell` | an id padded to a column and never cut (a shortened id is one `show` rejects) |
 
 ### Where the remaining lines are
 
@@ -343,6 +350,10 @@ renderer. The guards fail the suite if a change reintroduces the pattern by hand
 - **A search source.** `searchcore.register(FuncSource(name, kinds, fn))` returning `Hit`
   rows, as `services/search.py` does for the log, rules, skills, agents, jobs and schedules.
   `ddflow search --source` and the context pack pick it up.
+- **A harness.** Add `ddflow/harnesses/<id>.toml` (the file name is the id). The loader in
+  `services/harnessreg.py` rejects an unknown key, a wrong type or a duplicate rank, and a
+  command-hook style names a normalizer and an emitter that must exist in
+  `services/hookio.py`; `adopt`'s MCP, rules and command tables are views over it.
 - **A pipeline.** Register an item kind in `config_sections/_kinds.py` (`KindSpec`), or
   set `[gates].kind_pipelines.<kind>` in config; `services/gates/kinds.py` resolves the
   gates, and `[gate.<id>] applies_when` narrows them by the files the item declares.
