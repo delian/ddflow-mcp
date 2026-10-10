@@ -1182,11 +1182,7 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
     exits 0 done, 1 the installer failed, 2 not attempted or nothing to roll back to, 3
     without consent.
     """
-    # `--self` carries its consent in `confirm` ("self") and `reason`: neither is another mode.
-    keys = [c for c in confirm if not (selfup is not None and c == SU.CONSENT)]
-    others = bool(
-        apply or plan is not None or keys or (reason and selfup is None) or backup or snapshot
-    )
+    others = _other_modes(apply, plan, confirm, reason, backup, snapshot, selfup)
     if check or restore or selfup is not None:
         return _upgrade_alone(repo, check, restore, selfup, others, agent)
     if snapshot:
@@ -1208,6 +1204,24 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
         data=data,
         exit=O.FAIL,
         reason=f"{data['total']} upgrade item(s) pending",
+    )
+
+
+def _other_modes(  # noqa: PLR0913 -- the arguments of `upgrade`, as they are
+    apply: str,
+    plan: bool | None,
+    confirm: Sequence[str],
+    reason: str,
+    backup: str,
+    snapshot: bool,
+    selfup: SU.Request | None,
+) -> bool:
+    """Did the caller also ask for something the stand-alone modes (`--check`, `--restore`,
+    `--self`) refuse beside themselves? `--self` carries its consent in `confirm` ("self") and
+    `reason`: neither is another mode there."""
+    keys = [c for c in confirm if not (selfup is not None and c == SU.CONSENT)]
+    return bool(
+        apply or plan is not None or keys or (reason and selfup is None) or backup or snapshot
     )
 
 
