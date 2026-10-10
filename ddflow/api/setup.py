@@ -42,6 +42,7 @@ from ..services import hookio as HI
 from ..services import identity as ID
 from ..services import launchers as LA
 from ..services import prompts as P
+from ..services import selfupgrade as SU
 from ..services import sessions as S
 from ..services import upgrade_apply as UA
 from ..services import upgrade_check as UC
@@ -1144,7 +1145,7 @@ _APPLIED_FIELDS = (
 )
 
 
-def upgrade(
+def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI and MCP map 1:1
     repo: Path,
     *,
     plan: bool | None = None,
@@ -1155,6 +1156,7 @@ def upgrade(
     snapshot: bool = False,
     restore: str = "",
     check: bool = False,
+    selfup: SU.Request | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """What upgrading this project to the running ddflow would change (the plan, written
@@ -1174,10 +1176,15 @@ def upgrade(
     running version, the newest release, the project's stamp and how to upgrade; exit 0 when
     this is the newest, 1 when a newer release exists, 2 when the check is off or the index
     could not be reached.
+
+    ``selfup`` stands alone too: it upgrades ddflow ITSELF (`services.selfupgrade`) as its
+    fields say -- a dry run, a rollback, a target version, the operator's consent -- and
+    exits 0 done, 1 the installer failed, 2 not attempted or nothing to roll back to, 3
+    without consent.
     """
     others = bool(apply or plan is not None or confirm or reason or backup or snapshot)
-    if check or restore:
-        return _upgrade_alone(repo, check, restore, others, agent)
+    if check or restore or selfup is not None:
+        return _upgrade_alone(repo, check, restore, selfup, others, agent)
     if snapshot:
         # `snapshot` is `backup="snapshot"` for one run; naming another mode too is a contradiction.
         if why := _snapshot_conflict(backup, bool(apply or plan is False)):
@@ -1200,12 +1207,47 @@ def upgrade(
     )
 
 
-def _upgrade_alone(repo: Path, check: bool, restore: str, others: bool, agent: str) -> O.Outcome:
-    """``--check`` and ``--restore`` stand alone: refuse them beside anything else."""
-    name = "check" if check else "restore"
-    if others or (check and restore):
-        return O.refused("upgrade", f"--{name} stands alone: choose it or the plan or --apply")
+def _upgrade_alone(
+    repo: Path,
+    check: bool,
+    restore: str,
+    selfup: SU.Request | None,
+    others: bool,
+    agent: str,
+) -> O.Outcome:
+    """``--check``, ``--restore`` and ``--self`` stand alone: refuse them beside anything else."""
+    modes = [n for n, on in (("check", check), ("restore", restore), ("self", selfup)) if on]
+    if others or len(modes) > 1:
+        return O.refused("upgrade", f"--{modes[0]} stands alone: choose it or the plan or --apply")
+    if selfup is not None:
+        return _upgrade_self(repo, selfup, agent)
     return _upgrade_check(repo, agent) if check else _upgrade_restore(repo, restore, agent)
+
+
+#: The self-upgrade request the surfaces build (`services.selfupgrade.Request`).
+SelfUpgrade = SU.Request
+
+UPGRADE_SELF_PAYLOAD = (
+    "status",
+    "method",
+    "running",
+    "target",
+    "to",
+    "command",
+    "rollback",
+    "text",
+)
+
+
+def _upgrade_self(repo: Path, req: SU.Request, agent: str) -> O.Outcome:
+    """`ddflow upgrade --self`: install a newer (or, with ``rollback``, the previous) ddflow."""
+    log, cfg, _st = _load(repo, agent)
+    req.newest = req.newest or UC.newer_known(repo)  # the cached answer: this asks no one
+    data = SU.run(repo, cfg, log, req)
+    code = data.pop("exit")
+    why = {"refused": "consent needed", "manual": f"not attempted for a {data['method']} install"}
+    reason = why.get(data["status"], data["status"]) if code else ""
+    return O.Outcome(kind="upgrade", data=data, exit=code, reason=reason)
 
 
 def _snapshot_conflict(backup: str, applying: bool) -> str:
