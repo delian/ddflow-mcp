@@ -1,0 +1,478 @@
+"""B-upgrade.11-orchestrate-monitor: `ddflow upgrade --status | --history | --resume`.
+
+D-self-upgrade (6). A throwaway project, no network: the plan is built by hand (three
+opt-in-feature steps, which an apply only acknowledges) and the "interruption" is a
+KeyboardInterrupt raised from the applier of one step.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+from conftest import run_cli
+
+from ddflow import api as A
+from ddflow.api._base import _load
+from ddflow.services import upgrade_apply as UA
+from ddflow.services import upgrade_status as UST
+from ddflow.surfaces.mcp import Server
+
+RUNNING = "9.9.9"
+
+
+@pytest.fixture
+def project(repo: Path) -> Path:
+    (repo / ".ddflow").mkdir()
+    return repo
+
+
+def plan_of(*ids: str, running: str = RUNNING) -> dict[str, Any]:
+    items = [
+        {
+            "id": i,
+            "category": "features",
+            "action": "note",
+            "summary": f"feature {i}",
+            "fix": "",
+        }
+        for i in ids
+    ]
+    return {
+        "running": running,
+        "project_version": "9.0.0",
+        "up_to_date": not items,
+        "total": len(items),
+        "categories": {"features": items},
+    }
+
+
+def apply(project: Path, plan: dict[str, Any], **kw: Any) -> dict[str, Any]:
+    log, cfg, st = _load(project, "orch")
+    kw.setdefault("categories", "features")
+    return UA.apply(project, log, cfg, st, backup="none", agent="orch", plan=plan, **kw)
+
+
+def state(project: Path):
+    return _load(project, "orch")
+
+
+def interrupt_at(monkeypatch: pytest.MonkeyPatch, step: str | None) -> list[str]:
+    """Make the applier stop the whole run at ``step`` (None: let everything through)."""
+    ran: list[str] = []
+    real = UA._run
+
+    def fake(repo, cfg, item, agent):
+        if item["id"] == step:
+            raise KeyboardInterrupt
+        ran.append(item["id"])
+        return real(repo, cfg, item, agent)
+
+    monkeypatch.setattr(UA, "_run", fake)
+    return ran
+
+
+def by_id(data: dict[str, Any]) -> dict[str, str]:
+    return {s["id"]: s["state"] for s in data["steps"]}
+
+
+def test_steps_show_their_state_through_an_interrupted_run(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2", "f3")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    _log, cfg, st = state(project)
+    # just now: the run looks alive; f1 is done, the one it was on is running, f3 waits
+    live = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert live["run"]["state"] == "running"
+    assert by_id(live) == {"f1": "done", "f2": "running", "f3": "pending"}
+    # an hour on, nobody is working on it
+    later = UST.status(project, cfg, st, plan=plan, running=RUNNING, now=time.time() + 3600)
+    assert later["run"]["state"] == "interrupted"
+    assert by_id(later) == {"f1": "done", "f2": "pending", "f3": "pending"}
+    assert "ddflow upgrade --resume" in later["text"]
+
+
+def test_resume_finishes_without_repeating_done_steps(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2", "f3")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    ran = interrupt_at(monkeypatch, None)
+    _log, _cfg, st = state(project)
+    rid, run = UST.open_run(st)
+    assert rid and run["categories"] == ["features"]
+    done = apply(project, plan, watch=UA.Watch(resume=rid))
+    assert ran == ["f2", "f3"], "f1 was settled by the interrupted run and must not run again"
+    assert done["exit"] == 0 and done["to"] == RUNNING
+    _log, cfg, st = state(project)
+    assert UST.open_run(st) == ("", {})
+    assert [u["items"] for u in st.upgrades] == [["f1", "f2", "f3"]]
+    assert st.upgrades[0]["run"] == rid
+    final = UST.status(project, cfg, st, plan=plan_of(), running=RUNNING)
+    assert final["run"] == {} and final["up_to_date"]
+
+
+def test_a_failed_run_closes_and_is_not_an_upgrade(project, monkeypatch) -> None:
+    def broken(repo, cfg, item, agent):
+        return UA.FAILED, "boom"
+
+    monkeypatch.setattr(UA, "_run", broken)
+    out = apply(project, plan_of("f1"))
+    assert out["exit"] == 1
+    _log, _cfg, st = state(project)
+    assert st.upgrades == [] and UST.open_run(st) == ("", {})
+    (run,) = st.upgrade_runs.values()
+    assert run["closed"] == "failed" and run["steps"][0]["status"] == UA.FAILED
+
+
+def test_a_category_with_a_step_that_fails_on_resume_is_not_recorded_as_done(
+    project, monkeypatch
+) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    real = UA._run
+
+    def second_fails(repo, cfg, item, agent):
+        return (UA.FAILED, "boom") if item["id"] == "f2" else real(repo, cfg, item, agent)
+
+    monkeypatch.setattr(UA, "_run", second_fails)
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))
+    assert out["exit"] == 1 and "features" not in out["categories"]
+
+
+def test_a_second_interruption_keeps_the_plan_and_the_settled_steps(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2", "f3")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    interrupt_at(monkeypatch, "f3")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, watch=UA.Watch(resume=rid))
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid2, run = UST.open_run(st)
+    assert rid2 == rid and run["starts"] == 2 and run["items"] == ["f1", "f2", "f3"]
+    ran = interrupt_at(monkeypatch, None)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))
+    assert ran == ["f3"] and out["to"] == RUNNING
+
+
+def test_only_the_item_in_flight_shows_as_running(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2", "f3")
+    plan["categories"]["features"][0]["action"] = "needs operator confirmation"
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, confirm={"f1": "ok"})
+    _log, cfg, st = state(project)
+    live = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert by_id(live) == {"f1": "done", "f2": "running", "f3": "pending"}
+
+
+def test_the_run_lists_its_items_in_the_order_they_execute(project, monkeypatch) -> None:
+    plan = plan_of("f1")
+    plan["categories"]["repairs"] = [
+        {"id": "r1", "category": "repairs", "action": "agent", "summary": "x", "repair": "r1"}
+    ]
+    monkeypatch.setattr(
+        UA, "_run_repairs", lambda repo, log, cfg, items: [UA._rec(items[0], UA.APPLIED, "ok")]
+    )
+    apply(project, plan, categories=None)
+    _log, _cfg, st = state(project)
+    (run,) = st.upgrade_runs.values()
+    assert run["items"] == ["f1", "r1"]
+    assert [s["id"] for s in run["steps"]] == ["f1", "r1"]
+
+
+def test_status_names_an_agent_still_on_the_old_version(project) -> None:
+    _log, cfg, st = state(project)
+    st.ddflow_versions = {
+        "9.0.0": {"agents": ["laggard", "keeper"], "at": "2026-01-01T00:00:00Z"},
+        RUNNING: {"agents": ["keeper"], "at": "2026-02-01T00:00:00Z"},
+    }
+    data = UST.status(project, cfg, st, plan=plan_of(), running=RUNNING)
+    assert [b["agent"] for b in data["behind"]] == ["laggard"]
+    assert "laggard: 9.0.0" in data["text"]
+
+
+def test_an_override_from_before_an_agent_upgraded_does_not_list_it(project) -> None:
+    _log, cfg, st = state(project)
+    st.ddflow_versions = {RUNNING: {"agents": ["fixed"], "at": "2026-02-01T00:00:00Z"}}
+    st.skew_overrides = [
+        {"agent": "fixed", "running": "9.0.0", "at": "2026-01-01T00:00:00Z", "reason": "x"},
+        {"agent": "never-stamped", "running": "9.0.0", "at": "2026-01-01T00:00:00Z", "reason": "x"},
+    ]
+    data = UST.status(project, cfg, st, plan=plan_of(), running=RUNNING)
+    assert [b["agent"] for b in data["behind"]] == ["never-stamped"]
+
+
+def test_a_resumed_upgrade_records_every_settled_item_and_the_first_backup(
+    project, monkeypatch
+) -> None:
+    plan = plan_of("f1", "f2")
+    saves: list[int] = []
+    monkeypatch.setattr(UA, "_save", lambda *a, **k: (saves.append(1), "bk-1", "", False)[1:])
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, run = UST.open_run(st)
+    assert run["backup"] == "bk-1" and run["items"] == ["f1", "f2"]
+    apply(project, plan, watch=UA.Watch(resume=rid))
+    _log, _cfg, st = state(project)
+    assert st.upgrades[-1]["items"] == ["f1", "f2"]
+    assert st.upgrades[-1]["backup"] == "bk-1" and saves == [1], "no second, partial backup"
+
+
+def test_history_lists_two_upgrades(project) -> None:
+    apply(project, plan_of("a"))
+    apply(project, plan_of("b", running="10.0.0"))
+    _log, _cfg, st = state(project)
+    rows = UST.history(st)
+    assert [r["to"] for r in rows] == [RUNNING, "10.0.0"]
+    text = UST.render_history(rows)
+    assert "2 upgrade(s)" in text and "-> 10.0.0" in text
+
+
+def test_nothing_to_resume_is_exit_2(project) -> None:
+    out = A.upgrade(project, resume=True)
+    assert out.exit == 2 and "nothing to resume" in out.reason
+
+
+def test_the_modes_stand_alone(project) -> None:
+    assert A.upgrade(project, status=True, apply="all").exit == 3
+    assert A.upgrade(project, history=True, check=True).exit == 3
+    assert A.upgrade(project, resume=True, apply="all").exit == 3
+    assert A.upgrade(project, resume=True, snapshot=True).exit == 3
+
+
+def test_status_reports_the_cached_release_and_the_backups(project) -> None:
+    from ddflow.services import upgrade_check as UC
+
+    UC._update_cache(project, lambda cur: {**cur, "newest": "99.0.0", "checked_at": 1700000000.0})
+    (project / ".ddflow" / "backups" / "20260101T000000-a-to-b").mkdir(parents=True)
+    (project / ".ddflow" / "backups" / "20260101T000000-a-to-b" / "manifest.json").write_text("{}")
+    _log, cfg, st = state(project)
+    data = UST.status(project, cfg, st, plan=plan_of(), running=RUNNING)
+    assert data["newest"] == "99.0.0" and data["newer"]
+    assert "2023-11-14" in data["text"]
+    assert data["backups"] == ["20260101T000000-a-to-b"]
+
+
+def test_cli_and_mcp_mirror_each_other(project) -> None:
+    code, out, _err = run_cli(project, "upgrade", "--history", "--json")
+    assert code == 0
+    cli = json.loads(out)
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"history": True}},
+        }
+    )
+    mcp = json.loads(reply["result"]["content"][0]["text"])
+    assert cli == mcp and cli["upgrades"] == []
+    code, out, _err = run_cli(project, "upgrade", "--status", "--json")
+    cli = json.loads(out)
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"status": True}},
+        }
+    )
+    mcp = json.loads(reply["result"]["content"][0]["text"])
+    assert set(cli) == set(mcp) and cli["running"] == mcp["running"]
+    assert code in (0, 1)
+
+
+def test_resume_over_mcp_answers_like_the_cli(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    monkeypatch.setattr(UST, "LIVE_S", 0.0)
+    from ddflow.services import upgrade_plan as UP
+
+    monkeypatch.setattr(UP, "build", lambda *a, **k: plan)
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"resume": True}},
+        }
+    )
+    body = json.loads(reply["result"]["content"][0]["text"])
+    assert "applied" in body and body["applied"]["applied"] == 1, body
+    again = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"resume": True}},
+        }
+    )
+    assert "nothing to resume" in json.dumps(again["result"])
+
+
+def test_resume_does_not_refuse_an_operator_item_it_applied_before(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    plan["categories"]["features"][0]["action"] = UA.UP.OPERATOR
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, confirm={"f1": "operator said yes"})
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))  # no --confirm again
+    assert out["exit"] == 0 and out["refused"] == 0 and out["categories"] == ["features"]
+    assert out["confirmed"] == {"f1": "operator said yes"}
+    _log, _cfg, st = state(project)
+    assert st.upgrades[-1]["confirmed"] == {"f1": "operator said yes"}
+
+
+def test_history_does_not_call_a_run_an_upgrade(project, monkeypatch) -> None:
+    from ddflow.infra.log import EventLog
+    from ddflow.surfaces.commands.knowledge import _history_line
+
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan_of("f1", "f2"))
+    lines = [
+        _history_line(e)
+        for e in EventLog(project, "orch").read_all()
+        if e.kind == "upgrade.applied"
+    ]
+    assert all("unstamped -> ?" not in line for line in lines) and "started" in lines[0]
+
+
+def test_resume_refuses_a_run_that_may_still_be_applying(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    out = A.upgrade(project, resume=True)  # the last record is seconds old
+    assert out.exit == 3 and "may still be applying" in out.reason
+    from ddflow.services import upgrade_plan as UP
+
+    monkeypatch.undo()
+    monkeypatch.setattr(UST, "LIVE_S", 0.0)
+    monkeypatch.setattr(UP, "build", lambda *a, **k: plan)
+    assert A.upgrade(project, resume=True).exit == 0
+
+
+def test_resume_applies_a_step_confirmed_before_the_interruption(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    plan["categories"]["features"][1]["action"] = UA.UP.OPERATOR
+    interrupt_at(monkeypatch, "f1")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, confirm={"f2": "operator said yes"})
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))  # no --confirm again
+    assert out["refused"] == 0 and out["confirmed"] == {"f2": "operator said yes"}
+
+
+def test_status_uses_the_applys_own_confirmation_rule(project) -> None:
+    _log, cfg, st = state(project)
+    plan = plan_of("c1")
+    plan["categories"]["config"] = [
+        {"id": "config:x", "category": "config", "action": UA.UP.AGENT, "summary": "k"}
+    ]
+    cfg.upgrade.config_changes = "ask"
+    data = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert by_id(data)["config:x"] == "needs operator confirmation"
+
+
+def test_a_note_outside_the_versioned_categories_is_waived(project) -> None:
+    _log, cfg, st = state(project)
+    plan = plan_of("f1")
+    plan["categories"]["hooks"] = [
+        {"id": "h:1", "category": "hooks", "action": UA.UP.NOTE, "summary": "n"}
+    ]
+    data = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert by_id(data) == {"h:1": "waived", "f1": "pending"}
+
+
+def test_replay_tells_a_run_from_an_upgrade(project, monkeypatch) -> None:
+    from ddflow.services.sessions import replay
+
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan_of("f1", "f2"))
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    apply(project, plan_of("f1", "f2"), watch=UA.Watch(resume=rid))
+    from ddflow.infra.log import EventLog
+
+    text = "\n".join(step.text for step in replay(EventLog(project, "orch").read_all()))
+    assert text.count("Upgraded the project") == 1
+    assert "started: 2 item(s)" in text and "f1 acknowledged" in text and "to ?" not in text
+
+
+def test_nothing_to_resume_has_the_same_body_on_both_surfaces(project) -> None:
+    code, out, _err = run_cli(project, "upgrade", "--resume", "--json")
+    assert code == 2
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"resume": True}},
+        }
+    )
+    cli, mcp = json.loads(out), json.loads(reply["result"]["content"][0]["text"])
+    assert set(cli) <= set(mcp), "MCP adds its envelope, never drops a field"
+
+
+def test_mcp_reports_each_step_as_progress(project, monkeypatch) -> None:
+    from ddflow.services import upgrade_plan as UP
+
+    monkeypatch.setattr(UP, "build", lambda *a, **k: plan_of("f1", "f2"))
+    sent: list[dict] = []
+    server = Server(project)
+    server.notify = sent.append
+    reply = server.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_upgrade",
+                "arguments": {"apply": "features", "backup": "none"},
+                "_meta": {"progressToken": "tok"},
+            },
+        }
+    )
+    assert reply["result"].get("isError") is not True
+    steps = [f["params"]["message"] for f in sent if f["method"] == "notifications/progress"]
+    assert steps == ["[acknowledged] f1", "[acknowledged] f2"]
+
+
+def test_help_topic_and_readme_section_exist() -> None:
+    root = Path(__file__).parent.parent
+    readme = (root / "README.md").read_text()
+    assert "### Upgrading ddflow" in readme
+    for mode in ("--check", "--status", "--history", "--resume", "--restore", "--self"):
+        assert mode in readme
+    topic = (root / "ddflow/templates/prompts/help/upgrade.md").read_text()
+    assert "--resume" in topic and "never install" in topic
