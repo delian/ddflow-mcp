@@ -10,7 +10,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from conftest import run_cli, write_config
+from conftest import append_config, run_cli, write_config
 
 ME = "u5pin"
 OTHER = "other"
@@ -120,6 +120,62 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
     ("complete", "T9"),
     ("brief",),
     ("--json", "brief", "--check-recovery"),
+    ("task", "add", "S1", "--title", "splittable", "--globs", "s/*"),
+    ("task", "add", "S2", "--title", "also splittable", "--globs", "t/*"),
+    ("split", "S1", "--into", "S1a=first", "--into", "S1b"),
+    ("--json", "split", "S2", "--into", "S2a=one", "--into", "S2b=two", "--globs", "t/a/*"),
+    ("split", "S1", "--into", "S1c=again", "--into", "S1d=twice"),
+    ("split", "S2"),
+    ("split", "nope", "--into", "a", "--into", "b"),
+    ("resolve", "S1", "--keep", "someone"),
+    ("--json", "resolve", "S1", "--keep", "someone"),
+    ("resolve", "nope", "--keep", "x"),
+    ("pr", "status"),
+    ("--json", "pr", "status"),
+    ("pr", "sync"),
+    ("--json", "pr", "sync"),
+    ("pr", "sync", "--item", "nope"),
+    ("pr", "threads", "S1"),
+    ("--json", "pr", "threads", "S1"),
+    ("pr", "threads", "nope"),
+    ("version", "show"),
+    ("--json", "version", "show"),
+    ("version", "show", "--bump", "minor", "--line", "nowhere"),
+    ("version", "lint"),
+    ("--json", "version", "lint"),
+    ("version", "lint", "--waive", "knob:x"),
+    ("version", "cut", "--dry-run"),
+    ("--json", "version", "cut", "--dry-run"),
+    ("version", "cut", "--version", "bad"),
+    ("flow", "show"),
+    ("--json", "flow", "show"),
+    ("flow", "choose", "port_strategy", "cherry-pick", "--reason", "pinned"),
+    ("--json", "flow", "choose", "model", "trunk"),
+    ("flow", "choose", "nope", "y"),
+    ("flow", "choose", "model", "nope"),
+    ("flow", "show"),
+    ("promote", "status"),
+    ("--json", "promote", "status"),
+    ("promote", "add", "staging"),
+    ("promote", "deployed", "staging"),
+    ("!append", '[flow]\nenvironments = ["staging"]\n'),
+    ("promote", "status"),
+    ("--json", "promote", "status"),
+    ("promote", "add", "staging"),
+    ("promote", "add", "staging", "--force"),
+    ("--json", "promote", "add", "staging"),
+    ("promote", "deployed", "staging"),
+    ("--json", "promote", "deployed", "staging", "--sha", "abc"),
+    ("promote", "status"),
+    ("!git", "branch", "staging", "main"),
+    ("promote", "status"),
+    ("promote", "add", "staging"),
+    ("promote", "add", "staging", "--force"),
+    ("promote", "add", "staging"),
+    ("promote", "deployed", "staging"),
+    ("--json", "promote", "deployed", "staging"),
+    ("promote", "status"),
+    ("--json", "promote", "status"),
 )
 
 
@@ -129,6 +185,7 @@ def normalise(text: str, repo: Path) -> str:
     text = re.sub(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", "<hex>", text)
     text = re.sub(r"(after |)\b\d+(\.\d+)?s\b", r"\1<n>s", text)
     text = re.sub(r"\b\d+[ms]( \d+s)? so far", "<n> so far", text)
+    text = re.sub(r'"user": "[^"]*"', '"user": "<user>"', text)
     return re.sub(
         r'"(at|waited_s|waiting_s|ts|expires|acquired_at|approx_tokens)": [\d.]+',
         r'"\1": <n>',
@@ -151,6 +208,13 @@ def transcript(repo: Path) -> list[tuple[tuple[str, ...], int, str, str]]:
             (wt / argv[2]).write_text(f"{argv[1]}\n")
             subprocess.run(["git", "-C", str(wt), "add", argv[2]], check=True)
             subprocess.run(["git", "-C", str(wt), "commit", "-qm", f"add {argv[2]}"], check=True)
+            continue
+        if argv[0] == "!git":
+            subprocess.run(["git", "-C", str(repo), *argv[1:]], check=True)
+            continue
+        if argv[0] == "!append":
+            err, _ = append_config(repo, argv[1])
+            assert not err, err
             continue
         if argv[0] == "!dirty":
             (_worktree(repo, argv[1]) / argv[2]).write_text("wip\n")
@@ -1425,6 +1489,505 @@ EXPECTED = [
         '  "item": "T5",\n'
         '  "ready": [],\n'
         '  "approx_tokens": <n>\n'
+        "}\n",
+        "",
+    ),
+    (
+        ("task", "add", "S1", "--title", "splittable", "--globs", "s/*"),
+        0,
+        "task S1 added to (no phase)\n",
+        "",
+    ),
+    (
+        ("task", "add", "S2", "--title", "also splittable", "--globs", "t/*"),
+        0,
+        "task S2 added to (no phase)\n",
+        "",
+    ),
+    (
+        ("split", "S1", "--into", "S1a=first", "--into", "S1b"),
+        0,
+        "S1 split into 2 sub-task(s): S1a, S1b\n"
+        "  It keeps its id and history, and now completes when they do.\n"
+        "  Give each its own --globs with `ddflow update <id> --globs ...` if they write different files "
+        "— they inherited S1's, so they cannot run in parallel until they differ.\n",
+        "",
+    ),
+    (
+        ("--json", "split", "S2", "--into", "S2a=one", "--into", "S2b=two", "--globs", "t/a/*"),
+        0,
+        '{\n  "schema": "split@1",\n  "item": "S2",\n  "created": [\n    "S2a",\n    "S2b"\n  ]\n}\n',
+        "",
+    ),
+    (
+        ("split", "S1", "--into", "S1c=again", "--into", "S1d=twice"),
+        0,
+        "S1 split into 2 sub-task(s): S1c, S1d\n"
+        "  It keeps its id and history, and now completes when they do.\n"
+        "  Give each its own --globs with `ddflow update <id> --globs ...` if they write different files "
+        "— they inherited S1's, so they cannot run in parallel until they differ.\n",
+        "",
+    ),
+    (
+        ("split", "S2"),
+        1,
+        "",
+        "--into must be given at least twice: splitting into one piece is not a split, it is a rename "
+        "(`ddflow update <id> --title ...`).\n",
+    ),
+    (("split", "nope", "--into", "a", "--into", "b"), 1, "", "no such item 'nope'\n"),
+    (
+        ("resolve", "S1", "--keep", "someone"),
+        3,
+        "",
+        "S1 is not contested: there is nothing to resolve. `ddflow update` changes an item; `ddflow "
+        "release` gives up a claim.\n",
+    ),
+    (
+        ("--json", "resolve", "S1", "--keep", "someone"),
+        3,
+        "",
+        "S1 is not contested: there is nothing to resolve. `ddflow update` changes an item; `ddflow "
+        "release` gives up a claim.\n",
+    ),
+    (("resolve", "nope", "--keep", "x"), 1, "", "no such item 'nope'\n"),
+    (("pr", "status"), 0, "no pull requests recorded\n", ""),
+    (
+        ("--json", "pr", "status"),
+        0,
+        "{\n"
+        '  "schema": "pr_status@1",\n'
+        '  "rows": [],\n'
+        '  "in_review": 0,\n'
+        '  "releases": [],\n'
+        '  "back_merges": []\n'
+        "}\n",
+        "",
+    ),
+    (("pr", "sync"), 2, "", "nothing is in review\n"),
+    (
+        ("--json", "pr", "sync"),
+        2,
+        "{\n"
+        '  "schema": "pr_sync@1",\n'
+        '  "checked": 0,\n'
+        '  "changes": [],\n'
+        '  "waiting": [],\n'
+        '  "unavailable": [],\n'
+        '  "refused": []\n'
+        "}\n",
+        "nothing is in review\n",
+    ),
+    (("pr", "sync", "--item", "nope"), 2, "", "nothing is in review\n"),
+    (("pr", "threads", "S1"), 3, "", "S1 has no pull request: nothing to read threads from\n"),
+    (
+        ("--json", "pr", "threads", "S1"),
+        3,
+        "{\n"
+        '  "schema": "pr_threads@1",\n'
+        '  "item": "S1",\n'
+        '  "number": 0,\n'
+        '  "url": "",\n'
+        '  "threads": [],\n'
+        '  "unresolved": 0,\n'
+        '  "replied": false,\n'
+        '  "resolved": false\n'
+        "}\n",
+        "S1 has no pull request: nothing to read threads from\n",
+    ),
+    (("pr", "threads", "nope"), 3, "", "nope has no pull request: nothing to read threads from\n"),
+    (
+        ("version", "show"),
+        0,
+        "on main: current (none) (no tag)\n"
+        "next: 0.1.0  (patch, 6 commit(s), 1 item(s))\n"
+        "\n"
+        "## v0.1.0\n"
+        "\n"
+        "### Other\n"
+        "- nine [T9]\n"
+        "\n",
+        "",
+    ),
+    (
+        ("--json", "version", "show"),
+        0,
+        "{\n"
+        '  "schema": "version_show@1",\n'
+        '  "ref": "main",\n'
+        '  "current": "",\n'
+        '  "current_tag": "",\n'
+        '  "next": "0.1.0",\n'
+        '  "bump": "patch",\n'
+        '  "reasons": [],\n'
+        '  "commits": 6,\n'
+        '  "items": [\n'
+        '    "T9"\n'
+        "  ],\n"
+        '  "notes": "## v0.1.0\\n\\n### Other\\n- nine [T9]\\n",\n'
+        '  "problems": [],\n'
+        '  "line": "current"\n'
+        "}\n",
+        "",
+    ),
+    (
+        ("version", "show", "--bump", "minor", "--line", "nowhere"),
+        3,
+        "on main: current (none) (no tag)\nunknown release line 'nowhere'; lines: current\n",
+        "",
+    ),
+    (("version", "lint"), 0, "release manifest lint (block): 0 unmanifested, 0 waived\n", ""),
+    (
+        ("--json", "version", "lint"),
+        0,
+        "{\n"
+        '  "schema": "version_lint@1",\n'
+        '  "policy": "block",\n'
+        '  "unmanifested": [],\n'
+        '  "waived": [],\n'
+        '  "warning": ""\n'
+        "}\n",
+        "",
+    ),
+    (
+        ("version", "lint", "--waive", "knob:x"),
+        0,
+        "release manifest lint (block): 0 unmanifested, 0 waived\n",
+        "",
+    ),
+    (("version", "cut", "--dry-run"), 0, "  dry run: nothing written\nv0.1.0 (dry run)\n", ""),
+    (
+        ("--json", "version", "cut", "--dry-run"),
+        0,
+        "{\n"
+        '  "schema": "version_cut@1",\n'
+        '  "version": "0.1.0",\n'
+        '  "tag": "v0.1.0",\n'
+        '  "sha": "",\n'
+        '  "pushed": false,\n'
+        '  "url": "",\n'
+        '  "steps": [\n'
+        '    "dry run: nothing written"\n'
+        "  ],\n"
+        '  "dry_run": true,\n'
+        '  "changelog": "",\n'
+        '  "version_files": [],\n'
+        '  "notes": "## v0.1.0\\n\\n### Other\\n- nine [T9]\\n",\n'
+        '  "unavailable": "",\n'
+        '  "warning": ""\n'
+        "}\n",
+        "",
+    ),
+    (("version", "cut", "--version", "bad"), 3, "", "'bad' is not MAJOR.MINOR.PATCH\n"),
+    (
+        ("flow", "show"),
+        0,
+        "  model                  trunk          DEFAULT (nobody chose) by u5pin at <time>\n"
+        "  integration            merge          DEFAULT (nobody chose) by u5pin at <time>\n"
+        "· pr_merge               on_approval    UNDECIDED — the default applies at first use\n"
+        "· on_changes_requested   reopen         UNDECIDED — the default applies at first use\n"
+        "· stack                  true           UNDECIDED — the default applies at first use\n"
+        "· port_strategy          forward-merge  UNDECIDED — the default applies at first use\n",
+        "",
+    ),
+    (
+        ("--json", "flow", "show"),
+        0,
+        "{\n"
+        '  "schema": "flow_show@1",\n'
+        '  "choices": [\n'
+        "    {\n"
+        '      "knob": "model",\n'
+        '      "value": "trunk",\n'
+        '      "options": [\n'
+        '        "trunk",\n'
+        '        "gitflow"\n'
+        "      ],\n"
+        '      "question": "Branching model: one trunk, or gitflow (develop + production + release '
+        'branches)?",\n'
+        '      "relevant": true,\n'
+        '      "source": "log:default",\n'
+        '      "decided": true,\n'
+        '      "recorded": {\n'
+        '        "value": "trunk",\n'
+        '        "by": "default",\n'
+        '        "agent": "u5pin",\n'
+        '        "user": "<user>",\n'
+        '        "at": "<time>",\n'
+        '        "reason": "nobody chose; the default was applied at first use and is followed from '
+        'here"\n'
+        "      }\n"
+        "    },\n"
+        "    {\n"
+        '      "knob": "integration",\n'
+        '      "value": "merge",\n'
+        '      "options": [\n'
+        '        "merge",\n'
+        '        "pr"\n'
+        "      ],\n"
+        '      "question": "Land work by merging locally, or through pull/merge requests a person '
+        'approves?",\n'
+        '      "relevant": true,\n'
+        '      "source": "log:default",\n'
+        '      "decided": true,\n'
+        '      "recorded": {\n'
+        '        "value": "merge",\n'
+        '        "by": "default",\n'
+        '        "agent": "u5pin",\n'
+        '        "user": "<user>",\n'
+        '        "at": "<time>",\n'
+        '        "reason": "nobody chose; the default was applied at first use and is followed from '
+        'here"\n'
+        "      }\n"
+        "    },\n"
+        "    {\n"
+        '      "knob": "pr_merge",\n'
+        '      "value": "on_approval",\n'
+        '      "options": [\n'
+        '        "on_approval",\n'
+        '        "auto",\n'
+        '        "human"\n'
+        "      ],\n"
+        '      "question": "Who presses merge on an approved request: ddflow (on_approval), the forge '
+        '(auto), or only a person (human)?",\n'
+        '      "relevant": false,\n'
+        '      "source": "default",\n'
+        '      "decided": false,\n'
+        '      "recorded": {}\n'
+        "    },\n"
+        "    {\n"
+        '      "knob": "on_changes_requested",\n'
+        '      "value": "reopen",\n'
+        '      "options": [\n'
+        '        "reopen",\n'
+        '        "block"\n'
+        "      ],\n"
+        '      "question": "When a reviewer requests changes: return the item to the queue for an agent '
+        '(reopen), or park it for a person (block)?",\n'
+        '      "relevant": false,\n'
+        '      "source": "default",\n'
+        '      "decided": false,\n'
+        '      "recorded": {}\n'
+        "    },\n"
+        "    {\n"
+        '      "knob": "stack",\n'
+        '      "value": "true",\n'
+        '      "options": [\n'
+        '        "true",\n'
+        '        "false"\n'
+        "      ],\n"
+        '      "question": "May work start on top of a dependency that is still in review (stacked '
+        'requests), or wait for its merge?",\n'
+        '      "relevant": false,\n'
+        '      "source": "default",\n'
+        '      "decided": false,\n'
+        '      "recorded": {}\n'
+        "    },\n"
+        "    {\n"
+        '      "knob": "port_strategy",\n'
+        '      "value": "forward-merge",\n'
+        '      "options": [\n'
+        '        "forward-merge",\n'
+        '        "cherry-pick"\n'
+        "      ],\n"
+        '      "question": "How does a fix reach several release lines: written on the oldest and merged '
+        'forward (forward-merge), or written on the newest and cherry-picked back (cherry-pick)?",\n'
+        '      "relevant": false,\n'
+        '      "source": "default",\n'
+        '      "decided": false,\n'
+        '      "recorded": {}\n'
+        "    }\n"
+        "  ],\n"
+        '  "pending": [],\n'
+        '  "lines": [\n'
+        "    {\n"
+        '      "line": "current",\n'
+        '      "branch": "",\n'
+        '      "current": true\n'
+        "    }\n"
+        "  ],\n"
+        '  "problems": []\n'
+        "}\n",
+        "",
+    ),
+    (
+        ("flow", "choose", "port_strategy", "cherry-pick", "--reason", "pinned"),
+        0,
+        "port_strategy = cherry-pick recorded\n",
+        "",
+    ),
+    (
+        ("--json", "flow", "choose", "model", "trunk"),
+        0,
+        "{\n"
+        '  "schema": "flow_choose@1",\n'
+        '  "knob": "model",\n'
+        '  "value": "trunk",\n'
+        '  "in_effect": true,\n'
+        '  "note": "1 item(s) in flight (T5) were started under the previous value and keep their '
+        'branches; the new value applies to new work."\n'
+        "}\n",
+        "",
+    ),
+    (
+        ("flow", "choose", "nope", "y"),
+        1,
+        "",
+        "'nope' is not a workflow choice. Choices: model, integration, pr_merge, on_changes_requested, "
+        "stack, port_strategy\n",
+    ),
+    (
+        ("flow", "choose", "model", "nope"),
+        1,
+        "",
+        "model must be one of trunk, gitflow, not 'nope'\n",
+    ),
+    (
+        ("flow", "show"),
+        0,
+        "  model                  trunk          chosen by u5pin at <time>\n"
+        "  integration            merge          DEFAULT (nobody chose) by u5pin at <time>\n"
+        "· pr_merge               on_approval    UNDECIDED — the default applies at first use\n"
+        "· on_changes_requested   reopen         UNDECIDED — the default applies at first use\n"
+        "· stack                  true           UNDECIDED — the default applies at first use\n"
+        "· port_strategy          cherry-pick    chosen by u5pin at <time> — pinned\n",
+        "",
+    ),
+    (("promote", "status"), 2, "no environments: set [flow].environments\n", ""),
+    (
+        ("--json", "promote", "status"),
+        2,
+        '{\n  "schema": "promote_status@1",\n  "rows": []\n}\n',
+        "no environments: set [flow].environments\n",
+    ),
+    (
+        ("promote", "add", "staging"),
+        3,
+        "",
+        "'staging' is not an environment ([flow].environments: none are configured)\n",
+    ),
+    (
+        ("promote", "deployed", "staging"),
+        3,
+        "",
+        "'staging' is not an environment (none configured)\n",
+    ),
+    (
+        ("promote", "status"),
+        0,
+        "  staging          MISSING — create it: git branch staging main\n",
+        "",
+    ),
+    (
+        ("--json", "promote", "status"),
+        0,
+        "{\n"
+        '  "schema": "promote_status@1",\n'
+        '  "rows": [\n'
+        "    {\n"
+        '      "env": "staging",\n'
+        '      "deployed": "",\n'
+        '      "deployed_at": "",\n'
+        '      "undeployed": -1,\n'
+        '      "from": "main",\n'
+        '      "exists": false,\n'
+        '      "head": "",\n'
+        '      "behind": -1,\n'
+        '      "open": [],\n'
+        '      "last": "",\n'
+        '      "last_at": "",\n'
+        '      "auto": false\n'
+        "    }\n"
+        "  ]\n"
+        "}\n",
+        "",
+    ),
+    (
+        ("promote", "add", "staging"),
+        3,
+        "",
+        "branch staging does not exist. Create the environment branch first (e.g. `git branch staging "
+        "main`).\n",
+    ),
+    (
+        ("promote", "add", "staging", "--force"),
+        3,
+        "",
+        "branch staging does not exist. Create the environment branch first (e.g. `git branch staging "
+        "main`).\n",
+    ),
+    (
+        ("--json", "promote", "add", "staging"),
+        3,
+        '{\n  "schema": "promote_add@1",\n  "id": "",\n  "env": "staging",\n  "ahead": 0\n}\n',
+        "branch staging does not exist. Create the environment branch first (e.g. `git branch staging "
+        "main`).\n",
+    ),
+    (("promote", "deployed", "staging"), 3, "", "branch staging is missing\n"),
+    (
+        ("--json", "promote", "deployed", "staging", "--sha", "abc"),
+        3,
+        '{\n  "schema": "promote_deployed@1",\n  "env": "staging",\n  "sha": ""\n}\n',
+        "'abc' is not a commit in this repository\n",
+    ),
+    (
+        ("promote", "status"),
+        0,
+        "  staging          MISSING — create it: git branch staging main\n",
+        "",
+    ),
+    (("promote", "status"), 0, "  staging          <hex>  up to date\n", ""),
+    (("promote", "add", "staging"), 2, "staging already has everything on main\n", ""),
+    (
+        ("promote", "add", "staging", "--force"),
+        0,
+        "promote-staging-1: promote main to staging (0 commit(s)). Claim it like any task; it lands on "
+        "staging after the promotion gates.\n",
+        "",
+    ),
+    (
+        ("promote", "add", "staging"),
+        3,
+        "",
+        "a promotion to staging is already open (promote-staging-1, open). One at a time: two would each "
+        "carry a different snapshot of main.\n",
+    ),
+    (("promote", "deployed", "staging"), 0, "staging: live is now <hex>\n", ""),
+    (
+        ("--json", "promote", "deployed", "staging"),
+        0,
+        '{\n  "schema": "promote_deployed@1",\n  "env": "staging",\n  "sha": "<hex>"\n}\n',
+        "",
+    ),
+    (
+        ("promote", "status"),
+        0,
+        "  staging          <hex>  up to date; open: promote-staging-1  live <hex>\n",
+        "",
+    ),
+    (
+        ("--json", "promote", "status"),
+        0,
+        "{\n"
+        '  "schema": "promote_status@1",\n'
+        '  "rows": [\n'
+        "    {\n"
+        '      "env": "staging",\n'
+        '      "deployed": "<hex>",\n'
+        '      "deployed_at": "<time>",\n'
+        '      "undeployed": 0,\n'
+        '      "from": "main",\n'
+        '      "exists": true,\n'
+        '      "head": "<hex>",\n'
+        '      "behind": 0,\n'
+        '      "open": [\n'
+        '        "promote-staging-1"\n'
+        "      ],\n"
+        '      "last": "",\n'
+        '      "last_at": "",\n'
+        '      "auto": false\n'
+        "    }\n"
+        "  ]\n"
         "}\n",
         "",
     ),
