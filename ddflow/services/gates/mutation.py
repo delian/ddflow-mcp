@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,8 +94,9 @@ def _mutated_commit(cwd: Path, rel: str, text: str) -> tuple[str, str]:
 def _run_committed(
     gdef: GateDef, cwd: Path, rel: str, text: str | None
 ) -> tuple[str, dict[str, Any]]:
-    """Run a gate that reads a COMMITTED ref against a throwaway commit holding the
-    mutation, in a scratch checkout of it. Nothing of ``cwd`` is touched."""
+    """Run a gate that reads a COMMITTED ref in a scratch checkout of the commit under
+    test: a throwaway commit holding the mutation, or HEAD itself for the baseline
+    (``text`` None). Nothing of ``cwd`` is touched."""
     # ``text`` None: the unmutated HEAD, the baseline in the SAME kind of checkout the
     # mutated runs get (a bare checkout has no untracked or ignored files to lean on).
     if text is None:
@@ -107,9 +109,54 @@ def _run_committed(
     with W.scratch_tree(cwd, sha, detach=True, prefix="ddflow-mut.", quiet=True) as s:
         if s.path is None:
             return "unavailable", {
-                "reason": f"could not check out the mutated commit: {s.add.err[:200]}"
+                "reason": f"could not check out the commit under test: {s.add.err[:200]}"
             }
         return run_command_gate(gdef, s.path)
+
+
+def _try_mutation(gdef: GateDef, cwd: Path, mut: dict[str, str]) -> MutationResult:
+    """Apply one registered mutation, run the gate, and restore whatever was touched."""
+    gate_id, rel = gdef.id, mut.get("file", "")
+    target = cwd / rel
+    old, new = mut.get("old", ""), mut.get("new", "")
+    if not target.is_file():
+        return MutationResult(gate_id, rel, False, False, "file not found")
+    src = target.read_text("utf-8")
+    count = src.count(old)
+    if count != 1:
+        return MutationResult(
+            gate_id,
+            rel,
+            False,
+            False,
+            f"`old` appears {count} time(s); the edit must be unambiguous. "
+            f"A mutation that did not apply is NOT a passed mutation test.",
+        )
+    mutated = src.replace(old, new, 1)
+    try:
+        if gdef.reads_ref:
+            # The gate reads a commit (ci), so an uncommitted edit is invisible to it
+            # and it would report PASSED on mutated source (B-verify-ci-blind).
+            outcome, ev = _run_committed(gdef, cwd, rel, mutated)
+        else:
+            fsio.replace_text(target, mutated, fsync=False)
+            outcome, ev = run_command_gate(gdef, cwd)
+    finally:
+        if not gdef.reads_ref:
+            fsio.replace_text(target, src, fsync=False)
+    detected = outcome == "failed"
+    detail = ""
+    if not detected:
+        detail = (
+            f"the gate reported {outcome!r} on mutated source — it cannot "
+            f"see this class of change. {ev.get('reason', '')}"
+        )[:300]
+        if re.search(r"\bHEAD\b", gdef.command) and not gdef.reads_ref:
+            detail += (
+                " (its command reads HEAD: declare `reads_ref = true` so the "
+                "mutation is committed on a throwaway commit)"
+            )
+    return MutationResult(gate_id, rel, True, detected, detail)
 
 
 def verify(
@@ -209,55 +256,7 @@ def verify(
             f"{base_ev.get('reason', '')}".strip()[:400]
         )
 
-    results: list[MutationResult] = []
-    for mut in mutations:
-        target = cwd / mut.get("file", "")
-        old, new = mut.get("old", ""), mut.get("new", "")
-        if not target.is_file():
-            results.append(
-                MutationResult(gate_id, mut.get("file", ""), False, False, "file not found")
-            )
-            continue
-        src = target.read_text("utf-8")
-        count = src.count(old)
-        if count != 1:
-            results.append(
-                MutationResult(
-                    gate_id,
-                    mut.get("file", ""),
-                    False,
-                    False,
-                    f"`old` appears {count} time(s); the edit must be unambiguous. "
-                    f"A mutation that did not apply is NOT a passed mutation test.",
-                )
-            )
-            continue
-        mutated = src.replace(old, new, 1)
-        try:
-            if gdef.reads_ref:
-                # The gate reads a commit (ci), so an uncommitted edit is invisible to it
-                # and it would report PASSED on mutated source (B-verify-ci-blind).
-                outcome, ev = _run_committed(gdef, cwd, mut["file"], mutated)
-            else:
-                fsio.replace_text(target, mutated, fsync=False)
-                outcome, ev = run_command_gate(gdef, cwd)
-            detected = outcome == "failed"
-            results.append(
-                MutationResult(
-                    gate_id,
-                    mut.get("file", ""),
-                    True,
-                    detected,
-                    ""
-                    if detected
-                    else f"the gate reported {outcome!r} on mutated source — it cannot "
-                    f"see this class of change. {ev.get('reason', '')}"[:300],
-                )
-            )
-        finally:
-            if not gdef.reads_ref:
-                fsio.replace_text(target, src, fsync=False)
-    return results, ""
+    return [_try_mutation(gdef, cwd, mut) for mut in mutations], ""
 
 
 #: What `verify_regression_test` returns. `verified` is the only pass; the caller REFUSES

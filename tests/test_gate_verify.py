@@ -270,3 +270,28 @@ def test_a_worktree_vs_head_gate_is_still_mutated_in_the_working_tree(repo):
     )
     code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
     assert code == OK, f"{out}\n{err}"
+
+
+def test_a_ref_gate_needing_an_untracked_file_has_no_green_baseline(repo):
+    """The baseline of a `reads_ref` gate runs in the same bare checkout as its mutations:
+    a gate that passes only thanks to an untracked file must be refused, not certified."""
+    _project(repo)
+    (repo / "marker.txt").write_text("x")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        "[gate.unit_tests]\n"
+        "command = \"test -f marker.txt && git show HEAD:src/calc.py | grep -q 'return a [+] b'\"\n"
+        'cwd = "repo"\n'
+        "reads_ref = true\n"
+        'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
+    )
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == FAIL, out
+    assert "baseline" in (out + err).lower(), out + err
+
+
+def test_a_head_gate_without_reads_ref_gets_the_remedy_in_the_message(repo):
+    _project(repo)
+    (repo / ".ddflow" / "gates.toml").write_text(HEAD_GATE.replace("reads_ref = true\n", ""))
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == FAIL, out
+    assert "reads_ref = true" in (out + err), out + err
