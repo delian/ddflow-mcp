@@ -9,6 +9,8 @@ tool is declared here.
 from __future__ import annotations
 
 from ...core.budget import RECALL_MAX_CHARS
+from ...core.model import LINK_RELATIONS
+from ..dedupe_flags import candidate_lines
 from ..registry import Command, Param, by_tool
 from ..tools._common import _answer, _api
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
@@ -18,6 +20,92 @@ _RELATION_FLAG_REASON = "the relation is MCP `relation` + `target`, not one flag
 LINK_FLAG_EXEMPT = dict.fromkeys(
     ("--extends", "--duplicate-of", "--related", "--distinct"), _RELATION_FLAG_REASON
 )
+
+
+def _decision_text(out, a) -> str:
+    d = out.data["decision"]
+    head = f"{d['id']} — {d['title']}\n  status {d['status']}"
+    if d.get("superseded_by"):
+        head += f" (superseded by {d['superseded_by']})"
+    if d.get("decided_by"):
+        head += f" · decided by {d['decided_by']}"
+    lines = [head]
+    for label, key in (
+        ("Context", "context"),
+        ("Decision", "decision"),
+        ("Consequences", "consequences"),
+        ("Alternatives rejected", "alternatives"),
+    ):
+        if d.get(key):
+            lines.append(f"\n{label}:\n  {d[key]}")
+    if d.get("globs"):
+        lines.append(f"\nGoverns: {', '.join(d['globs'])}")
+    return "\n".join(lines)
+
+
+def _applicable_text(out, a) -> str:
+    lines = [f"  [{d['id']}] {d['title']}\n      {d['decision']}" for d in out.data["applicable"]]
+    lines += [
+        f"  [{d['id']}] {d['title']}  (project-wide)\n      {d['decision']}"
+        for d in out.data["project_wide"]
+    ]
+    return "\n".join(lines)
+
+
+def _lesson_hits(out, a) -> str:
+    cut = out.data["snippet_chars"]
+    return "\n".join(f"- {h['title']}\n    {(h.get('rule') or '')[:cut]}" for h in out.data["hits"])
+
+
+def _dupe_pairs(out, a) -> str:
+    d = out.data
+    lines = []
+    for p in d["pairs"]:
+        lines.append(f"{p['score']:.2f}  {p['a']} ({p['a_kind']}) ~ {p['b']} ({p['b_kind']})")
+        lines.append(f"      {p['a_title']}")
+        lines.append(f"      {p['b_title']}")
+    lines.append(
+        f"{d['count']} unsettled pair(s) at floor {d['floor']:g}. Settle each: "
+        f"`ddflow link <a> --duplicate-of <b>` (or --extends/--related), or "
+        f"`--distinct` to dismiss it for good."
+    )
+    return "\n".join(lines)
+
+
+#: Help text of each relation flag; a relation added to the model falls back to a generic one.
+_LINK_HELP = {
+    "extends": "subject adds to ID",
+    "duplicate_of": "subject is the same thing as ID",
+    "related": "subject is related to ID",
+    "distinct": "subject is NOT a duplicate of ID: dismiss the pair for good",
+}
+
+
+def _link_call(repo, a, agent):
+    """`link_record` from MCP's ``relation`` + ``target`` or the CLI's one flag per relation
+    (the first of LINK_RELATIONS given)."""
+    relation, target = a.get("relation", "") or "", a.get("target", "") or ""
+    if not relation:
+        for rel in LINK_RELATIONS:
+            if a.get(rel):
+                relation, target = rel, a[rel]
+                break
+    return _api().link_record(
+        repo,
+        a.get("subject", "") or "",
+        relation,
+        target,
+        reason=a.get("reason", "") or "",
+        agent=agent,
+    )
+
+
+def _linked(out, a) -> str:
+    d = out.data
+    merged = d.get("merged") or {}
+    tail = f"; {merged['superseded']} superseded by {merged['by']}" if merged else ""
+    return f"{d['subject']} {d['relation']} {d['target']}{tail}"
+
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -107,6 +195,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("lesson", "search"),
+        render=_lesson_hits,
         tool="ddflow_lesson_search",
         description="Search past lessons by relevance (BM25). Use before starting "
         "work, and whenever something surprises you.",
@@ -172,6 +261,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("similar",),
+        render=lambda out, a: "\n".join(candidate_lines(out.data["candidates"])),
         summary="'is this already filed?' -- the existing bugs, tasks, lessons and other records most like a text, before you add it (read-only; exit 2 when none)",
         tool="ddflow_similar",
         description="'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state, score (0-1), shared words and flags, per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2.",
@@ -196,6 +286,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("dupes",),
+        render=_dupe_pairs,
         summary="'is anything filed twice?' -- the near-duplicate PAIRS already in the log, skipping pairs already linked or dismissed (read-only; exit 2 when none)",
         tool="ddflow_dupes",
         description="'IS ANYTHING FILED TWICE?' -- the near-duplicate PAIRS already in the log, "
@@ -241,30 +332,26 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
-        path=(),
+        path=("link",),
+        summary="settle a near-duplicate pair: say how one record relates to another",
         tool="ddflow_link",
         flag_exempt=LINK_FLAG_EXEMPT,
+        render=_linked,
         description="Settle a near-duplicate pair: say how record `subject` relates to record "
         "`target`. `duplicate_of` / `extends` link them -- and MERGE two lessons (the "
         "target keeps both texts' tags and seen_in; the duplicate is superseded by it); "
         "`related` links both ways; `distinct` records a DISMISSAL ('I looked, these "
         "are different') so the pair never returns. One relation per call. Nothing is "
         "closed here except a merged lesson.",
-        call=lambda repo, a, agent: _api().link_record(
-            repo,
-            a.get("subject", "") or "",
-            a.get("relation", "") or "",
-            a.get("target", "") or "",
-            reason=a.get("reason", "") or "",
-            agent=agent,
-        ),
+        call=_link_call,
         payload=("subject", "relation", "target", "merged"),
         params=(
             Param(
                 "subject",
                 help="The record being related (the duplicate, for a merge).",
+                cli_help="the record being related (the duplicate, for a merge)",
                 required=True,
-                mcp_only=True,
+                positional=True,
             ),
             Param(
                 "relation",
@@ -273,7 +360,24 @@ COMMANDS: tuple[Command, ...] = (
                 mcp_only=True,
             ),
             Param("target", help="The record it is related to.", required=True, mcp_only=True),
-            Param("reason", help="Why, recorded with the link.", mcp_only=True),
+            *(
+                Param(
+                    rel,
+                    cli_only=True,
+                    default="",
+                    metavar="ID",
+                    exclusive="relation",
+                    exclusive_required=True,
+                    cli_help=_LINK_HELP.get(rel, f"subject {rel.replace('_', ' ')} ID"),
+                )
+                for rel in LINK_RELATIONS
+            ),
+            Param(
+                "reason",
+                help="Why, recorded with the link.",
+                cli_help="why, recorded with the link",
+                default="",
+            ),
         ),
     ),
     Command(
@@ -415,6 +519,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("decision", "show"),
+        render=_decision_text,
         tool="ddflow_decision_show",
         description="Read ONE architectural decision in full — its context, what was decided, "
         "the consequences, and what was rejected. `ddflow_decision_list` gives "
@@ -434,6 +539,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("decision", "applicable"),
+        render=_applicable_text,
         summary="decisions governing an item's declared files",
         tool="ddflow_decision_applicable",
         description="The architectural decisions that govern a specific item's declared files. "
@@ -446,6 +552,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("decision", "supersede"),
+        render=lambda out, a: f"{out.data['id']} superseded by {out.data['by']}",
         tool="ddflow_decision_supersede",
         description="Mark a decision replaced by a newer one. Decisions are never "
         "edited or deleted; a reversal is a new decision that names the "
