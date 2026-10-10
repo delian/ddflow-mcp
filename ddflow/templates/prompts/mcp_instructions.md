@@ -167,12 +167,10 @@ gate `unavailable` rather than passing it on your own word.
   research, bugs and past prompts. OptMem (`memo`) and the memory MCP server did this
   job first; they are opt-in now, for a project that wants a separate
   store, and not something to propose installing.
-- **sequential-thinking** — `research`, `rubber_duck`, `bug_hunt`. The three gates that
-  are reasoning rather than tool-running. Use it where a chain has middle steps you
-  expect to RETRACT: a falsifiable claim and the probe that would kill it, or a bug
-  hunt's competing causes. In a plain transcript a retraction is just one more
-  assertion, and what you ruled out disappears — which is how an early, plausible-wrong
-  cause survives to the end.
+- **sequential-thinking** — opt-in, not proposed by default. It only records and counts
+  the thoughts you send: no thought text comes back, nothing persists, and it neither
+  searches nor validates. ddflow has not measured a benefit to `research`, `rubber_duck`
+  or `bug_hunt`; native extended thinking is usually the better choice.
 
 **Your stack needs servers this list cannot know about.** `ddflow_prompts` with
 action `show` and name `research-companions` walks you from this pipeline's *uncovered* gates, through the

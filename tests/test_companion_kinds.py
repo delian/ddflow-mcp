@@ -191,7 +191,11 @@ def test_the_shipped_registry_recommends_sequential_thinking_and_optmem(tmp_path
     reg = {c.id: c for c in CO.load(tmp_path)}
     assert "sequential" in reg, "sequential-thinking is not in the shipped registry"
     assert reg["sequential"].kind == "mcp"
-    assert reg["sequential"].default is True, "recommended means proposed by adopt"
+    assert reg["sequential"].default is False, "it stores and returns nothing: opt-in only"
+    why = reg["sequential"].why.lower()
+    for claim in ("maps onto", "revision", "stays visible"):
+        assert claim not in why, claim
+    assert "no search" in why and "no validation" in why and "unmeasured" in why
     assert "optmem" in reg
     assert reg["optmem"].kind == "cli", "OptMem has no MCP mode; claiming one would lie"
 
