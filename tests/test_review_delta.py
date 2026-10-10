@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import json
 import stat
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
 
 import ddflow.api.review as api
 from ddflow.config import Config
@@ -26,12 +26,6 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _delta_on(review_toml: str) -> str:

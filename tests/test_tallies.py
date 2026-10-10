@@ -14,12 +14,11 @@ from types import SimpleNamespace
 
 import pytest
 from conftest import run_cli
+from helpers import state as _state
 
 from ddflow import api
 from ddflow.config import Config
 from ddflow.core import progress as PR
-from ddflow.core.model import fold
-from ddflow.infra.log import EventLog
 from ddflow.services import progress_line as PL
 from ddflow.services.export import kind_roadmap, registry
 from ddflow.services.export import query as Q
@@ -100,10 +99,6 @@ def proj(repo):
     _ok(repo, "abandon", "T3", "--reason", "not needed")
     _ok(repo, "bug", "found", "--summary", "t one breaks", "--item", "T1", "--new")
     return repo
-
-
-def _state(repo):
-    return fold(EventLog(repo).read_all(), strict=False)
 
 
 def test_phase_tally_counts_every_depth_and_fix_tasks_and_leaves_abandoned_out(proj):

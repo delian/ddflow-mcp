@@ -18,12 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
+from helpers import git as _git
 
 
 @pytest.fixture

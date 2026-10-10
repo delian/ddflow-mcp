@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import write_text_at as _write
 
 from ddflow.config import Config
 from ddflow.core.model import State, fold
@@ -26,12 +27,6 @@ from ddflow.services import importer as IM
 from ddflow.services import schedule as SV
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
-
-
-def _write(repo: Path, rel: str, text: str) -> None:
-    p = repo / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
 
 
 def _tasks(repo: Path, **kw) -> dict[str, IM.Found]:
