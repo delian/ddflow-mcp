@@ -255,44 +255,6 @@ def cmd_pins(a, c: Ctx) -> int:
     return OK
 
 
-def cmd_tests(a, c: Ctx) -> int:
-    """The tests the change reaches, and the parallel command to run them (B16)."""
-    out = A.relevant_tests(c.repo, item=a.item, where=c.called_from, base=a.base)
-    if out.exit == FAIL:
-        print(out.reason, file=sys.stderr)
-        return FAIL
-    if c.json:
-        emit_json(out.body())
-        return out.exit
-    d = out.data
-    if out.exit == NOTHING:
-        print(out.reason)
-    else:
-        print(
-            f"{len(d['tests'])} test file(s) reach {len(d['changed'])} changed file(s) since {d['base']}:"
-        )
-        for t in d["tests"]:
-            print(f"  {t['path']}  -- {t['reason']}")
-        if d["command"]:
-            print(f"\nRun them now, in parallel:\n  {d['command']}")
-    g = d.get("unit_tests_gate") or {}
-    if g.get("scope") == "selected":
-        print(f"\nThe unit_tests gate runs only the selected tests ({g['why']}):")
-        for t in g["tests"]:
-            print(f"  {t['path']}  -- {t['reason']}")
-        print(f"  {g['command']}")
-    elif g:
-        print(f"\nThe unit_tests gate runs the whole suite: {g['why']}\n  {d['full_suite']}")
-    elif d["full_suite"]:
-        print(
-            "\nThe unit_tests gate may run the whole suite; pass --item <id> to see which "
-            f"mode it would use for that item:\n  {d['full_suite']}"
-        )
-    if d["advice"]:
-        print(f"  NOTE: that command {d['advice']}")
-    return out.exit
-
-
 def cmd_precommit(a, c: Ctx) -> int:
     """A `.pre-commit-config.yaml` proposed for this repository's stacks."""
     out = A.precommit(c.repo, where=c.called_from, ddflow_cmd=a.ddflow_cmd, write=a.write)

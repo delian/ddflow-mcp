@@ -118,7 +118,10 @@ def _bisect(repo, a):
         a.get("victim", "") or "",
         a.get("cmd", "") or "",
         candidates=a.get("candidates", "") or "",
+        glob=a.get("glob", "") or "",
         timeout_s=float(a.get("timeout") or 600),
+        repeat=a.get("repeat", 1),
+        max_runs=a.get("max_runs", 200),
     )
 
 
