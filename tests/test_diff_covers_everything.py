@@ -10,7 +10,6 @@ name came back C-quoted and `git add -N` never added it: the reviewer did not se
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -18,11 +17,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from helpers import git_quiet as _git
+
 from ddflow.infra import worktree as W
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def _commit(repo: Path, name: str, text: str = "one\n") -> None:

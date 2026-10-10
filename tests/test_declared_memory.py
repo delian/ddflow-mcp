@@ -8,14 +8,10 @@ may be absent), the duplicate-check answer flags on `memory add` and the group d
 from __future__ import annotations
 
 import pytest
+from helpers import parse_cli as _parse
 
-from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.declared import memory
 from ddflow.surfaces.tools import TOOLS
-
-
-def _parse(*argv):
-    return build_parser().parse_args(list(argv))
 
 
 def test_every_job_and_memory_tool_is_served_by_its_declaration():

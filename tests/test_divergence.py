@@ -19,6 +19,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from helpers import git_raw as _git
+from helpers import make_event as _ev
 
 from ddflow.api import reporting
 from ddflow.config import Config
@@ -28,12 +30,6 @@ from ddflow.core.schedule import plan
 from ddflow.infra.log import EventLog
 from ddflow.services import leases as L
 from tests.conftest import run_cli
-
-
-def _git(cwd: Path, *argv: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *argv], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def _clone(remote: Path, dest: Path) -> Path:
@@ -154,11 +150,6 @@ def test_show_marks_the_item_contested(rival_adds):
 
 
 # -- non-contests: every legitimate path to a second add or a new holder ---------------
-
-
-def _ev(kind: str, subject: str, lamport: int, agent: str = "x", **data) -> Event:
-    e = Event(kind=kind, subject=subject, data=data, agent=agent, lamport=lamport, ts=f"t{lamport}")
-    return Event(**{**e.__dict__, "id": e.compute_id()})
 
 
 def _acq(lamport: int, holder: str, at: float, ttl: int = 100) -> Event:

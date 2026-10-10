@@ -18,33 +18,18 @@ from pathlib import Path
 import pytest
 from conftest import pass_pipeline, run_cli
 from fakeforge import STATE_ENV, Forge, install
+from helpers import flow_config as _cfg
+from helpers import git as _git
+from helpers import state_as_reader as _state
 
 from ddflow.config import Config
 from ddflow.core import flow as F
-from ddflow.core.model import REVIEW, Item, State, fold
+from ddflow.core.model import REVIEW, Item, State
 from ddflow.infra import forge as FG
 from ddflow.infra import worktree as W
-from ddflow.infra.log import EventLog
 from ddflow.services.flow import SyncReport, _report_queue
 
 AUTHOR = "claude-opus-5"
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
-def _cfg(**flow) -> Config:
-    c = Config()
-    for k, v in flow.items():
-        setattr(c.flow, k, v)
-    return c
-
-
-def _state(repo: Path) -> State:
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
 # -- core: pure rules ---------------------------------------------------------------
