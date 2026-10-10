@@ -1,4 +1,4 @@
-"""LocalStore (B-uni-local-worker.3-store): documents, rings, the coalescing queue and
+"""LocalStore (B-uni-local-worker.3-store): documents, the coalescing queue and
 Retention, on real files with a fake clock."""
 
 from __future__ import annotations
@@ -128,26 +128,6 @@ def test_concurrent_updates_from_threads_and_processes_all_land(store):
     for t in (*threads, *procs):
         t.join()
     assert store.read("count.json") == 70
-
-
-# -- rings ---------------------------------------------------------------------------
-
-
-def test_a_ring_keeps_the_last_n_records_oldest_first(store):
-    for i in range(7):
-        store.ring_append("r.json", i, capacity=3)
-    assert store.ring("r.json") == [4, 5, 6]
-
-
-def test_a_ring_below_capacity_keeps_everything_and_a_missing_ring_is_empty(store):
-    assert store.ring("none.json") == []
-    store.ring_append("r.json", "a", capacity=5)
-    assert store.ring_append("r.json", "b", capacity=5) == ["a", "b"]
-
-
-def test_a_ring_needs_room_for_one_record(store):
-    with pytest.raises(ValueError, match="at least one"):
-        store.ring_append("r.json", 1, capacity=0)
 
 
 # -- the coalescing queue ------------------------------------------------------------

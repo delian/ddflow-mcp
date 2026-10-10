@@ -19,6 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..core.model import DONE
+from .adopt import rules_status
+
 
 @dataclass
 class Obligation:
@@ -52,7 +55,6 @@ def outstanding(state, cfg, *, repo=None, limit: int = MAX_REPORTED) -> list[Obl
     single call and clearing it makes the next report shorter — which is what keeps the
     mechanism from being ignored.
     """
-    from ..core.model import DONE
 
     found: list[Obligation] = []
 
@@ -63,8 +65,6 @@ def outstanding(state, cfg, *, repo=None, limit: int = MAX_REPORTED) -> list[Obl
     #    as adopted because `.ddflow/config.toml` existed. Adoption is a config file; the
     #    INSTRUCTIONS are a separate fact, and this is the one that checks it.
     try:
-        from .adopt import rules_status
-
         stale = [r for r in rules_status(repo) if r.needs_attention] if repo else []
     except Exception:
         stale = []

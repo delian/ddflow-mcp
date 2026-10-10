@@ -17,11 +17,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
 from ..api import identity as ID
-from ..config import Config
+from ..api import surf_context as surf
+from ..config import Config, csv_list
 from ..core.ids import auto_id
 from ..core.model import fold
 from ..core.outcome import (  # noqa: F401  (the commands import these from here)
@@ -31,10 +33,10 @@ from ..core.outcome import (  # noqa: F401  (the commands import these from here
     REFUSED,
 )
 from ..core.plain import plain
+from ..infra import harness_identity
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
-from ..services import gates as G
 from .render import emit_json
 
 #: Splitting into one piece is a rename, not a split.
@@ -86,7 +88,6 @@ class Ctx:
             # claim and heartbeat across two names (Bfad021e8d9). A declaration, so it
             # rides in `requested_agent`: the api calls re-resolve from that, and
             # leaving it out would split them again.
-            from ..infra import harness_identity
 
             harness = self.requested_agent = harness_identity.declared(self.repo)
         who = ID.resolve(self.repo, self.cfg, self.requested_agent)
@@ -102,7 +103,7 @@ class Ctx:
             log_cfg=self.cfg.log,
         )
         self.store = Store(self.repo, self.cfg)
-        self.gates = G.load_gates(self.repo, self.cfg)
+        self.gates = surf.load_gates(self.repo, self.cfg)
         self.json = bool(getattr(args, "json", False))
 
     @property
@@ -118,9 +119,7 @@ class Ctx:
         the item, not the caller's location, decides. Read lazily: it reads the log.
         """
         if self._where is None:
-            from ..services.tree_owner import foreign_tree_owner
-
-            self.tree_owner = foreign_tree_owner(
+            self.tree_owner = surf.foreign_tree_owner(
                 self.repo, self._start, self.log.agent_id, self.log.read_all()
             )
             self._where = self.repo if self.tree_owner else self._start
@@ -143,7 +142,6 @@ _plain = plain
 
 def _csv(v: str | None) -> list[str]:
     """`config.csv_list` — one parser for the comma-separated notation, not two."""
-    from ..config import csv_list
 
     return csv_list(v)
 
@@ -158,7 +156,6 @@ def _wrap(text: str, width: int) -> list[str]:
     """Reflow a config knob's documentation to a column. Here rather than in `cli` because
     `commands/setup.py` renders `config --explain` and may not import the surface it was
     extracted out of."""
-    import textwrap
 
     return textwrap.wrap(" ".join(text.split()), width)
 

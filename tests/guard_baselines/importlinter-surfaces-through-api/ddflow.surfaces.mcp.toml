@@ -5,13 +5,4 @@ ignore_imports = [
     "ddflow.surfaces.mcp -> ddflow.infra.log",
     "ddflow.surfaces.mcp -> ddflow.infra.proc",
     "ddflow.surfaces.mcp -> ddflow.infra.worktree",
-    "ddflow.surfaces.mcp -> ddflow.services.adopt",
-    "ddflow.surfaces.mcp -> ddflow.services.companions",
-    "ddflow.surfaces.mcp -> ddflow.services.gates",
-    "ddflow.surfaces.mcp -> ddflow.services.importer",
-    "ddflow.surfaces.mcp -> ddflow.services.leases",
-    "ddflow.surfaces.mcp -> ddflow.services.macros",
-    "ddflow.surfaces.mcp -> ddflow.services.obligations",
-    "ddflow.surfaces.mcp -> ddflow.services.prompts",
-    "ddflow.surfaces.mcp -> ddflow.services.review",
 ]
