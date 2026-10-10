@@ -182,16 +182,18 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
 def normalise(text: str, repo: Path) -> str:
     text = text.replace(str(repo), "<repo>")
     text = re.sub(r"\d{4}-\d\d-\d\dT[\d:.+Z-]+", "<time>", text)
-    text = re.sub(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", "<hex>", text)
-    # How long a waiter has waited, before the plain seconds rule takes the "30s" out of "1m 30s".
-    text = re.sub(r"\b\d+[ms]( \d+s)? so far", "<n> so far", text)
-    text = re.sub(r"(after |)\b\d+(\.\d+)?s\b", r"\1<n>s", text)
     text = re.sub(r'"user": "[^"]*"', '"user": "<user>"', text)
-    return re.sub(
+    text = re.sub(
         r'"(at|waited_s|waiting_s|ts|expires|acquired_at|approx_tokens)": [\d.]+',
         r'"\1": <n>',
         text,
     )
+    # How long a waiter has waited, before the plain seconds rule takes the "30s" out of "1m 30s".
+    text = re.sub(r"\b\d+[ms]( \d+s)? so far", "<n> so far", text)
+    text = re.sub(r"(after |)\b\d+(\.\d+)?s\b", r"\1<n>s", text)
+    # Every abbreviated or full commit id: a hash of digits only is one as well, so no
+    # run in ten fails on a hash that happens to have no letter in it.
+    return re.sub(r"\b[0-9a-f]{7,40}\b", "<hex>", text)
 
 
 def _worktree(repo: Path, item: str) -> Path:
