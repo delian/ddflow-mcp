@@ -16,7 +16,10 @@ def test_the_declared_default_is_the_apis():
 def test_brief_has_no_hand_written_half_left():
     assert "ddflow_brief" not in tools.HAND_WRITTEN
     assert not hasattr(commands, "cmd_brief")
-    assert "ddflow_brief" in declared.BY_TOOL
+    served = tools.TOOLS["ddflow_brief"]
+    assert served["description"].startswith("START HERE every session. Returns a budgeted pack")
+    assert list(served["properties"]) == ["item", "phase", "check_recovery"]
+    assert (served["payload"], served["kind"]) == ("text", "brief")
 
 
 def test_declaring_the_loop_commands_needs_no_template_engine():
