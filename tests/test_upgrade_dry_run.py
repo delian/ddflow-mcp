@@ -61,11 +61,11 @@ def options(tmp_path: Path, root: Path, **kw) -> DR.Options:
 
 
 @pytest.fixture(scope="module")
-def clean(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, DR.Report, str]:
-    """One full rehearsal of a project that needs no confirmation, with the live fingerprint."""
+def clean(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, DR.Report, DR.Live]:
+    """One full rehearsal of a project that needs no confirmation, with the live project as it was before."""
     tmp = tmp_path_factory.mktemp("dry")
     root = project(tmp, confirm_free=True)
-    before = DR.fingerprint(root)
+    before = DR.snapshot_live(root)
     report = DR.run_all(options(tmp, root))
     return root, report, before
 
@@ -83,7 +83,7 @@ def test_a_smooth_upgrade_passes_every_check(clean) -> None:
 
 def test_the_live_project_is_left_alone(clean) -> None:
     root, report, before = clean
-    assert DR.fingerprint(root) == before
+    assert DR.live_problems(before, DR.snapshot_live(root)) == []
     assert rows(report)[9].status == DR.PASS
     # the scratch directory is gone; nothing of the rehearsal is left in the project
     assert not (root / ".ddflow" / "backups").exists()
@@ -169,12 +169,39 @@ def test_an_unknown_commit_could_not_run(tmp_path: Path) -> None:
     assert report.exit_code == 2 and "no commit" in rows(report)[1].detail
 
 
-def test_the_fingerprint_notices_a_change_to_the_log(tmp_path: Path) -> None:
+def test_the_new_ddflow_is_never_the_clones_own_package(tmp_path: Path) -> None:
+    """Rehearsing ddflow's own repository: `python -m ddflow` run inside the clone imports the
+    clone's `ddflow` package first (the working directory leads sys.path) unless told not to, and
+    the "new" ddflow would be the OLD source."""
     root = project(tmp_path, confirm_free=True)
-    before = DR.fingerprint(root)
+    shadow = root / "ddflow"
+    shadow.mkdir()
+    (shadow / "__init__.py").write_text('raise RuntimeError("the clone package was imported")\n')
+    (shadow / "__main__.py").write_text("")
+    git(root, "add", "-A")
+    git(root, "commit", "--quiet", "--no-verify", "-m", "a package called ddflow")
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    assert rehearsal.step_clone()
+    assert rehearsal.step_read(), rehearsal.report.table()
+    assert rows(rehearsal.report)[2].status == DR.PASS
+
+
+def test_the_live_check_tells_our_trace_from_other_agents_work(tmp_path: Path) -> None:
+    root = project(tmp_path, confirm_free=True)
+    before = DR.snapshot_live(root)
     shard = next((root / ".ddflow" / "events").glob("*.jsonl"))
+    # another agent appending to the live log is not the rehearsal's doing
     shard.write_text(shard.read_text("utf-8") + "\n", "utf-8")
-    assert DR.fingerprint(root) != before
+    (root / ".ddflow" / "events" / "someone-else.jsonl").write_text("{}\n", "utf-8")
+    assert DR.live_problems(before, DR.snapshot_live(root)) == []
+    # ...but a changed byte, a shard of ours, a snapshot tag or a backup is
+    (root / ".ddflow" / "events" / "dry-apply.jsonl").write_text("{}\n", "utf-8")
+    (root / ".ddflow" / "backups" / "x").mkdir(parents=True)
+    git(root, "tag", "ddflow-upgrade-snapshot/x")
+    shard.write_text("rewritten", "utf-8")
+    text = "; ".join(DR.live_problems(before, DR.snapshot_live(root)))
+    assert "changed under the run" in text and "dry-apply.jsonl" in text
+    assert "snapshot tag" in text and "a backup appeared" in text
 
 
 def test_a_restore_that_loses_a_shard_byte_is_noticed() -> None:

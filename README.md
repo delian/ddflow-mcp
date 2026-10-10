@@ -3934,8 +3934,8 @@ client sent a `progressToken`.
 **Rehearsing it first.** `scripts/ci/upgrade-dry-run --installed-version X` (or `--from-commit SHA`,
 `--previous-release`) upgrades a throwaway clone of the project from the version you run now to
 this tree and prints a PASS/FAIL table; nothing touches the project, its `.ddflow`, the installed
-ddflow or a running MCP server (the clone gets a private HOME and no network, and the project is
-fingerprinted before and after). It reads the clone with the new code, shows the plan (the items
+ddflow or a running MCP server (the clone gets a private HOME and no network, and the project's
+log, snapshot tags and backups are compared before and after). It reads the clone with the new code, shows the plan (the items
 you would be asked to confirm fail the row), applies it with a snapshot, applies again (a no-op),
 restores (the files return, every shard keeps its bytes), lets the OLD ddflow read the upgraded
 clone (its write is refused with the remedy or lands without disturbing a byte), connects the new

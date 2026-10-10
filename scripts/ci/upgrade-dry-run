@@ -10,7 +10,7 @@ Clones SOURCE (default: this repository) at the commit the installed ddflow was 
 the clone with THIS source tree as the new ddflow, and prints a PASS/FAIL table. Nothing touches
 the project, its `.ddflow`, the ddflow installed on the machine or a running MCP server: the
 clone lives in a scratch directory, every command gets a private HOME and no network, and the
-project is fingerprinted before and after so the table can say so.
+project's log, snapshot tags and backups are compared before and after so the table can say so.
 
 The old ddflow (steps 5 and 8) is, in order of preference: `--old-cmd` (a ddflow you installed,
 e.g. a release's venv), `--build-old` (installed from the clone with uv; needs the package
