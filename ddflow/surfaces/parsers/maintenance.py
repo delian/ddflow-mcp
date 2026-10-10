@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import argparse
 
-from ..commands.bisect import cmd_bisect
+from .. import cliexec
 from ..commands.export import cmd_export
-from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit, cmd_tests
+from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit
 from ..commands.setup import cmd_config, cmd_upgrade
 from ..declared.cadence import COMMANDS as COMMANDS_CADENCE
 from ..declared.export import BY_TOOL as EXPORT_BY_TOOL
@@ -81,7 +81,8 @@ def register(s: argparse._SubParsersAction) -> None:
     add_commands(
         s,
         [EXPORT_BY_TOOL["ddflow_export"], EXPORT_BY_TOOL["ddflow_bisect"]],
-        handlers={("export",): cmd_export, ("bisect",): cmd_bisect},
+        handlers={("export",): cmd_export},
+        executor=cliexec.handler,
     )
 
     add_commands(s, COMMANDS_CADENCE, handlers={("cadence",): cmd_cadence, ("pins",): cmd_pins})
@@ -89,5 +90,6 @@ def register(s: argparse._SubParsersAction) -> None:
     add_commands(
         s,
         [EXPORT_BY_TOOL["ddflow_tests"], EXPORT_BY_TOOL["ddflow_precommit"]],
-        handlers={("tests",): cmd_tests, ("precommit",): cmd_precommit},
+        handlers={("precommit",): cmd_precommit},
+        executor=cliexec.handler,
     )

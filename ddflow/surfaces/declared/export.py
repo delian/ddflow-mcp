@@ -9,12 +9,62 @@ purpose are `flag_exempt`, each with its reason.
 
 from __future__ import annotations
 
+from ...core.outcome import NOTHING
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api, _bisect
 
 #: Where `bisect` takes its candidates from when `--glob` is not given (`api.bisect.DEFAULT_GLOB`;
 #: `tests/test_declared_export.py` holds the two together).
 BISECT_DEFAULT_GLOB = "tests/**/test_*.py"
+
+
+def _bisect_text(out, a) -> str:
+    """`bisect`'s report: the polluters, or why there is nothing to report, then each run."""
+    d = out.data
+    lines = [f"victim: {d['victim']}", f"candidates before it: {d['candidates']}", ""]
+    if d["state"] == "found":
+        lines.append("Run before the victim, these make it fail (remove any one and it passes):")
+        lines += [f"  {p}" for p in d["polluters"]]
+    else:
+        lines.append(f"Nothing to report ({d['state']}): {d['summary']}")
+        if d["polluters"]:
+            lines.append("Smallest set that still fails so far:")
+            lines += [f"  {p}" for p in d["polluters"]]
+    lines += ["", f"{len(d['runs'])} run(s)"]
+    for r in d["runs"]:
+        note = f" -- {r['detail']}" if r["detail"] and r["outcome"] != "passed" else ""
+        lines.append(f"  {r['outcome']:<13s} {r['tests']:>4d} test(s)  {r['seconds']}s{note}")
+    return "\n".join(lines)
+
+
+def _tests_text(out, a) -> str:
+    """`tests`: what the change reaches, the command to run it, and the unit_tests gate's mode."""
+    d = out.data
+    if out.exit == NOTHING:
+        lines = [out.reason]
+    else:
+        lines = [
+            f"{len(d['tests'])} test file(s) reach {len(d['changed'])} changed file(s) since {d['base']}:"
+        ]
+        lines += [f"  {t['path']}  -- {t['reason']}" for t in d["tests"]]
+        if d["command"]:
+            lines.append(f"\nRun them now, in parallel:\n  {d['command']}")
+    g = d.get("unit_tests_gate") or {}
+    if g.get("scope") == "selected":
+        lines.append(f"\nThe unit_tests gate runs only the selected tests ({g['why']}):")
+        lines += [f"  {t['path']}  -- {t['reason']}" for t in g["tests"]]
+        lines.append(f"  {g['command']}")
+    elif g:
+        lines.append(f"\nThe unit_tests gate runs the whole suite: {g['why']}\n  {d['full_suite']}")
+    elif d["full_suite"]:
+        lines.append(
+            "\nThe unit_tests gate may run the whole suite; pass --item <id> to see which "
+            f"mode it would use for that item:\n  {d['full_suite']}"
+        )
+    if d["advice"]:
+        lines.append(f"  NOTE: that command {d['advice']}")
+    return "\n".join(lines)
+
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -252,6 +302,7 @@ COMMANDS: tuple[Command, ...] = (
         },
         call=lambda repo, a, agent: _bisect(repo, a),
         payload=("state", "victim", "polluters", "candidates", "summary", "runs"),
+        render=_bisect_text,
     ),
     Command(
         path=("tests",),
@@ -282,6 +333,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload="",
+        render=_tests_text,
         # Without `item`, the diff is the caller's own checkout -- the worktree it is
         # standing in, not the primary the server was started on.
         wants_called_from=True,
