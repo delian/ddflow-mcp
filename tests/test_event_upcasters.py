@@ -600,6 +600,9 @@ def test_the_contract_lists_every_version_number_with_its_value() -> None:
     assert "PAYLOAD_VERSIONS" in page and 'data["v"]' in page
 
 
+VERSION_NAME = re.compile(r"(SCHEMA|FORMAT|VERSION|FORMAT_LEVEL|[A-Z_]*_VERSION)")
+
+
 def test_every_module_level_version_constant_is_in_the_list() -> None:
     """A new `*_VERSION` / `SCHEMA` / `FORMAT` constant must be added to the page (and here)."""
     import ast
@@ -611,16 +614,15 @@ def test_every_module_level_version_constant_is_in_the_list() -> None:
             continue
         module = ".".join(path.relative_to(ROOT).with_suffix("").parts).removesuffix(".__init__")
         for node in ast.parse(path.read_text(encoding="utf-8")).body:
-            if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
+            # `X = 1`, `X: int = 1` and `X = Y = 1`: every module-level name bound to an int
+            if isinstance(node, ast.Assign):
+                names, value = [t for t in node.targets if isinstance(t, ast.Name)], node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                names, value = [node.target], node.value
+            else:
                 continue
-            target = node.targets[0]
-            is_int = isinstance(node.value, ast.Constant) and isinstance(node.value.value, int)
-            if (
-                isinstance(target, ast.Name)
-                and is_int
-                and re.fullmatch(r"(SCHEMA|FORMAT|VERSION|FORMAT_LEVEL|[A-Z_]*_VERSION)", target.id)
-            ):
-                found.add((module, target.id))
+            if isinstance(value, ast.Constant) and isinstance(value.value, int):
+                found.update((module, n.id) for n in names if VERSION_NAME.fullmatch(n.id))
     assert found == set(VERSION_CONSTANTS), (
         "version constants and the contract page disagree: "
         f"undeclared here {sorted(found - set(VERSION_CONSTANTS))}, "
