@@ -8,17 +8,12 @@ data the refusal carried (the alternatives it names) projected away. A machine r
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from conftest import run_cli
+from helpers import tool_json as _first
 
 from ddflow.core import outcome as O
 from ddflow.surfaces.mcp import TOOLS, Server, _outcome_result
-
-
-def _first(res: dict) -> object:
-    return json.loads(res["content"][0]["text"])
 
 
 def test_a_refused_claim_leads_with_the_refusal_and_its_payload(repo):
