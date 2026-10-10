@@ -3915,12 +3915,12 @@ that version. A server that was already running when ddflow was upgraded says `r
 server` in its replies.
 
 **Is a newer ddflow out? The release check.** At most once per `[upgrade].check_interval_h`
-(default 24), when a brief, `ddflow doctor` or `ddflow upgrade --check` runs, ddflow asks the
+(default 24), when a brief or `ddflow doctor` runs, ddflow asks the
 package index it was installed from whether a newer release exists, and PROPOSES it: one line
 (`ddflow 0.1.10 is available (you run 0.1.9): upgrade ddflow-mcp ... then restart the MCP
 server`) in the brief and the MCP handshake once per version on this machine, and in `status`
 and `doctor` whenever one is known. It installs nothing. `ddflow upgrade --check` (MCP
-`ddflow_upgrade` with `check`) forces the check and prints the running version, the newest
+`ddflow_upgrade` with `check`) asks at once, whatever the interval, and prints the running version, the newest
 release, this project's stamp and the command that upgrades THIS install; exit 0 when this is the
 newest, 1 when a newer release exists, 2 when the check is off or the index is unreachable.
 
@@ -3928,7 +3928,7 @@ What leaves the machine: one `GET <index_url>/ddflow-mcp/json` (the public packa
 `https://pypi.org/pypi/ddflow-mcp/json` by default; `[upgrade].index_url` points a private mirror
 that serves the same document) with a 3 s timeout. It carries nothing about the project or the
 machine, and the answer is cached in the git-ignored `.ddflow/local/release-check.json`. Offline,
-a timeout or a bad reply is silent (retried within the hour, not at every command). Pre-releases
+a timeout or a bad reply is silent, and counts as a check: at most one request per interval. Pre-releases
 are ignored unless `[upgrade].prereleases`. A ddflow running from a source checkout is never
 proposed an index release by the periodic check. Turn it off with `ddflow config
 upgrade.release_check off` or, for one shell or container, `DDFLOW_NO_UPDATE_CHECK=1`: then no
