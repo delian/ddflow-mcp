@@ -348,7 +348,7 @@ def _start(
         source=frm,
         target=to,
         categories=_cats_of(todo),
-        items=_ids(todo),
+        items=_ids(_in_order(todo)),
         backup=backup,
     )
     return run
@@ -566,28 +566,33 @@ def _execute(
     """Run each item's applier, one at a time.
     ``on_step`` hears each outcome as soon as it is known."""
     out: list[dict[str, Any]] = []
-
-    def took(records: list[dict[str, Any]]) -> None:
+    # One item at a time, so each is recorded the moment it ends: an interruption leaves the
+    # ones before it settled, and a resume does not repeat them.
+    for item in _in_order(todo):
+        cat = item["category"]
+        if cat == "repairs":
+            records = _run_repairs(repo, log, cfg, [item])
+        elif cat == "migrations":
+            records = _run_migrations(repo, log, cfg, [item], late_backup)
+        elif cat == "instructions":
+            records = _run_instructions(repo, [item])
+        else:
+            records = [_rec(item, *_run(repo, cfg, item, agent))]
         out.extend(records)
         for r in records:
             if on_step:
                 on_step(r)
-
-    for item in todo:
-        if item["category"] not in ("repairs", "migrations", "instructions"):
-            took([_rec(item, *_run(repo, cfg, item, agent))])
-    repairs = [i for i in todo if i["category"] == "repairs"]
-    migrations = [i for i in todo if i["category"] == "migrations"]
-    docs = [i for i in todo if i["category"] == "instructions"]
-    # One item at a time, so each is recorded the moment it ends: an interruption leaves the
-    # ones before it settled, and a resume does not repeat them.
-    for item in repairs:
-        took(_run_repairs(repo, log, cfg, [item]))
-    for item in migrations:
-        took(_run_migrations(repo, log, cfg, [item], late_backup))
-    for item in docs:
-        took(_run_instructions(repo, [item]))
     return out
+
+
+#: The categories that run after every other one, in this order.
+_LAST = ("repairs", "migrations", "instructions")
+
+
+def _in_order(todo: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The items in the order they are executed (and recorded in the run's `started` event)."""
+    rest = [i for i in todo if i["category"] not in _LAST]
+    return rest + [i for c in _LAST for i in todo if i["category"] == c]
 
 
 def _refusal(item: dict[str, Any], config_changes: str) -> str:

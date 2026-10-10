@@ -3916,7 +3916,7 @@ the upgrades the log records. Both only read.
 
 **Orchestrate and resume.** Every step of an `--apply` is an `upgrade.applied` event (a `run` id
 and `status`: `started`, one `step` per item, then the closing `done` or `failed`; no new event
-kind), so replay explains the upgrade and an interruption (a crash, a closed terminal, a
+kind; an older ddflow reading the log shows these progress records as empty rows in its history), so replay explains the upgrade and an interruption (a crash, a closed terminal, a
 timeout) leaves a run `--status` calls `interrupted`. `ddflow upgrade --resume` finishes it:
 the steps the run settled are not run again, the rest are, and a second `--resume` finds nothing
 (exit 2). Over MCP an apply reports each finished step as a progress notification when the
