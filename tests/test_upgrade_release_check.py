@@ -349,4 +349,4 @@ def test_a_refused_check_has_the_check_body_on_both_surfaces(project) -> None:
     )
     assert "stands alone" in json.dumps(reply["result"])
     # the CLI body is selected by the request, as the MCP declaration does: no plan fields
-    assert "categories" not in (json.loads(out) if out.strip() else {})
+    assert out.strip() and "categories" not in json.loads(out)
