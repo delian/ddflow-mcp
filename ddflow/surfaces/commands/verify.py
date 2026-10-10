@@ -90,37 +90,34 @@ def _judge(a, c: Ctx) -> int:
     return out.exit
 
 
-def cmd_verify(a, c: Ctx) -> int:
+_PACK_ALONE = "--pack or --judge (one of them) takes one task id and nothing else"
+_ONE_NOT_SWEEP = "--all, --phase, --limit and --file-bugs are for a sweep, not a single task"
+
+
+def _pack_problem(a) -> bool:
+    """--pack / --judge take an id and nothing else, and not both."""
+    extras = (a.all, a.phase, a.file_bugs, a.reopen, a.reason, a.force, a.limit is not None)
+    return not a.id or any(extras) or bool(a.pack and a.judge)
+
+
+def _refusal(a) -> str:
+    """What is wrong with the combination of arguments, or "" when it is a mode of its own."""
     if a.pack or a.judge:
-        if (
-            not a.id
-            or a.all
-            or a.phase
-            or a.file_bugs
-            or a.reopen
-            or a.reason
-            or a.force
-            or a.limit is not None
-            or (a.pack and a.judge)
-        ):
-            print(
-                "--pack or --judge (one of them) takes one task id and nothing else",
-                file=sys.stderr,
-            )
-            return FAIL
-        return _pack(a, c) if a.pack else _judge(a, c)
+        return _PACK_ALONE if _pack_problem(a) else ""
     if a.id:
-        if a.file_bugs or a.all or a.phase or a.limit is not None:
-            print(
-                "--all, --phase, --limit and --file-bugs are for a sweep, not a single task",
-                file=sys.stderr,
-            )
-            return FAIL
-        return _one(a, c)
+        sweep = (a.file_bugs, a.all, a.phase, a.limit is not None)
+        return _ONE_NOT_SWEEP if any(sweep) else ""
     if a.reopen or a.reason or a.force:
-        print("--reopen, --reason and --force need a task id", file=sys.stderr)
-        return FAIL
+        return "--reopen, --reason and --force need a task id"
     if a.all or a.phase:
-        return _sweep(a, c)
-    print("verify what? give a task id, or --all / --phase P for a sweep", file=sys.stderr)
-    return FAIL
+        return ""
+    return "verify what? give a task id, or --all / --phase P for a sweep"
+
+
+def cmd_verify(a, c: Ctx) -> int:
+    if problem := _refusal(a):
+        print(problem, file=sys.stderr)
+        return FAIL
+    if a.pack or a.judge:
+        return _pack(a, c) if a.pack else _judge(a, c)
+    return _one(a, c) if a.id else _sweep(a, c)

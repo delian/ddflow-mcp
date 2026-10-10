@@ -17,6 +17,9 @@ import sys
 # form reads `ddflow.api.review` out of sys.modules and cannot be shadowed.
 import ddflow.api.review as A
 
+from ...api import surf_setup as SS
+from ...api._base import _load
+from ...config import csv_list
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 
 
@@ -41,19 +44,24 @@ def _triage(a, c: Ctx, item: str) -> int:
     return OK
 
 
-def cmd_review(a, c: Ctx) -> int:
-    ids = list(a.id or [])
-    if ids[:1] == ["triage"]:  # `review triage <id>`: a verb, not an item named "triage"
-        if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
-            print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
-            return FAIL
-        if a.chunk:
-            print("--chunk re-reviews; `review triage` only records a verdict", file=sys.stderr)
-            return FAIL
-        return _triage(a, c, ids[1])
-    # The triage flags are accepted by this parser (it is the verb's parser too) but mean
-    # nothing to a review. Ignoring them started a 25-minute reviewer run the caller never
-    # asked for (bug B3531d304ec), so refuse BEFORE any reviewer is contacted.
+def _triage_verb(a, c: Ctx, ids: list[str]) -> int:
+    """`review triage <id>`: a verb, not an item named "triage"."""
+    if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
+        print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
+        return FAIL
+    if a.chunk:
+        print("--chunk re-reviews; `review triage` only records a verdict", file=sys.stderr)
+        return FAIL
+    return _triage(a, c, ids[1])
+
+
+def _stray_triage_flags(a, ids: list[str]) -> str:
+    """The message for triage flags given without the verb, or "".
+
+    The triage flags are accepted by this parser (it is the verb's parser too) but mean
+    nothing to a review. Ignoring them started a 25-minute reviewer run the caller never
+    asked for (bug B3531d304ec), so refuse BEFORE any reviewer is contacted.
+    """
     stray = [
         flag
         for flag, given in (
@@ -64,15 +72,23 @@ def cmd_review(a, c: Ctx) -> int:
         )
         if given is not None and given is not False  # `--finding 0`, `--probe ""` still count
     ]
-    if stray:
-        item = ids[0] if len(ids) == 1 else "<id>"
-        print(
-            f"{', '.join(stray)} record a verdict on a finding and need the `triage` verb; "
-            "without it this would start a full re-review. Did you mean:\n"
-            f"  ddflow review triage {item} --gate {a.gate or 'critic'} --finding N "
-            '--refuted|--confirmed --probe "..."',
-            file=sys.stderr,
-        )
+    if not stray:
+        return ""
+    item = ids[0] if len(ids) == 1 else "<id>"
+    return (
+        f"{', '.join(stray)} record a verdict on a finding and need the `triage` verb; "
+        "without it this would start a full re-review. Did you mean:\n"
+        f"  ddflow review triage {item} --gate {a.gate or 'critic'} --finding N "
+        '--refuted|--confirmed --probe "..."'
+    )
+
+
+def cmd_review(a, c: Ctx) -> int:
+    ids = list(a.id or [])
+    if ids[:1] == ["triage"]:
+        return _triage_verb(a, c, ids)
+    if message := _stray_triage_flags(a, ids):
+        print(message, file=sys.stderr)
         return FAIL
     if len(ids) > 1:
         print(f"review takes one item id; got {ids}", file=sys.stderr)
@@ -125,9 +141,7 @@ def _reviewers_list(a, c: Ctx) -> int:
 
 
 def _reviewers_presets(_a, _c: Ctx) -> int:
-    from ...services import review as R
-
-    for name, spec in sorted(R.PRESETS.items()):
+    for name, spec in sorted(SS.reviewer_presets().items()):
         where = spec.get("base_url") or spec.get("command", "")
         print(f"  {name:<12} {spec['kind']:<9} {where}")
     print("\nAdd one with:  ddflow reviewers add --preset <name> [--model M]")
@@ -136,12 +150,9 @@ def _reviewers_presets(_a, _c: Ctx) -> int:
 
 def _reviewers_add(a, c: Ctx) -> int:
     """Append a `[[reviewer]]` block (`api.review.reviewers_add`)."""
-    from ...config import csv_list
-    from ...services import reviewer_trust as RT
-
     # A command reviewer only from a person (decision D-reviewer-trust): nothing about
     # this invocation may say it is an agent's.
-    why = RT.agent_marker(c.requested_agent)
+    why = SS.reviewer_agent_marker(c.requested_agent)
     out = A.reviewers_add(
         c.repo,
         preset=a.preset or "",
@@ -170,15 +181,13 @@ def _reviewers_test(a, c: Ctx) -> int:
     Deliberately not the project's diff: this answers "does this endpoint answer at all",
     and running it over real work would make a connectivity check look like a review.
     """
-    from ...services import review as R
-
-    targets = [r for r in R.load_reviewers(c.repo) if not a.name or r.name == a.name]
+    targets = SS.reviewers_named(c.repo, a.name)
     if not targets:
         print(f"no reviewer named {a.name!r}; `ddflow reviewers list`", file=sys.stderr)
         return FAIL
     worst = OK
     for r in targets:
-        res = R.review(
+        res = SS.probe_reviewer(
             r,
             "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n"
             "@@ -1,3 +1,3 @@\n def f(items):\n-    return sum(items) / len(items)\n"
@@ -191,7 +200,7 @@ def _reviewers_test(a, c: Ctx) -> int:
         )
         for f in res.findings[:3]:
             print(f"      [{f.severity}] {f.title[:90]}")
-        worst = max(worst, 0 if res.status == R.REVIEWED else res.status)
+        worst = max(worst, 0 if res.status == SS.REVIEWED else res.status)
     return worst
 
 
@@ -202,12 +211,9 @@ def _reviewers_approve(a, c: Ctx) -> int:
     could approve the reviewer it wrote would make the record decorative. With no name,
     lists the entries waiting for approval.
     """
-    from ...api._base import _load
-    from ...services import reviewer_trust as RT
-
     if not getattr(a, "name", ""):
         _log, _cfg, st = _load(c.repo, c.requested_agent)
-        rows = RT.pending(c.repo, st)
+        rows = SS.reviewers_pending(c.repo, st)
         if not rows:
             c.out("No tool-written reviewer is waiting for approval.", {"pending": []})
             return NOTHING
@@ -223,8 +229,10 @@ def _reviewers_approve(a, c: Ctx) -> int:
         )
         return OK
     try:
-        line = RT.approve(c.repo, a.name, requested_agent=c.requested_agent, note=a.note or "")
-    except RT.ReviewerRefused as exc:
+        line = SS.approve_reviewer(
+            c.repo, a.name, requested_agent=c.requested_agent, note=a.note or ""
+        )
+    except SS.ReviewerRefused as exc:
         print(str(exc), file=sys.stderr)
         return REFUSED
     c.out(line, {"name": a.name, "approved": True, "line": line})

@@ -11,12 +11,14 @@ without "here is what to do about it" is a report nobody acts on.
 from __future__ import annotations
 
 import os
+import select
 import sys
+import threading
 import time
 from pathlib import Path
 
 from ...api import setup as A
-from ...infra import worktree as W
+from ...api import surf_setup as SS
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx, _wrap
 from ..render import emit_json
 
@@ -333,8 +335,6 @@ def _hook_stdin(timeout_s: float = 2.0) -> str:
     except Exception:
         return ""
     try:
-        import select
-
         chunks: list[bytes] = []
         deadline = time.monotonic() + timeout_s
         while (left := deadline - time.monotonic()) > 0:
@@ -349,7 +349,6 @@ def _hook_stdin(timeout_s: float = 2.0) -> str:
     except Exception:
         # select() takes only sockets on Windows: read chunks in a thread we can abandon,
         # keeping what arrived even if the pipe is never closed.
-        import threading
 
         got: list[bytes] = []
 
@@ -437,13 +436,10 @@ def cmd_hooks(a, c: Ctx) -> int:
 def help_topics() -> list[str]:
     """The topic names, read from the one place that defines them.
 
-    Imported lazily and inside a function so `build_parser` does not drag the MCP tool
-    table in through `help.grouped_tools`: the parser is built on EVERY invocation,
-    including `ddflow next` in a hot loop.
+    A function, not a module constant, so the parser reads it when it is built.
     """
-    from ...services.help import TOPICS
 
-    return list(TOPICS)
+    return SS.help_topics()
 
 
 def cmd_help(a, c: Ctx) -> int:
@@ -535,7 +531,7 @@ def _report_init(c: Ctx, tree: Path | None = None) -> int:
             "docs/ddflow",
         )
         # An unreadable status counts as touched: the hint is only advice to commit.
-        if (tree / rel).exists() and W.status(tree, rel) != []
+        if (tree / rel).exists() and SS.tree_is_dirty(tree, rel)
     ]
     commit_hint = ""
     if touched:
@@ -549,9 +545,7 @@ def _report_init(c: Ctx, tree: Path | None = None) -> int:
     # theirs and usually has their own content in it. Reporting it here is what stops a
     # repo sitting "initialised" with an agent that has no project rules — which nothing
     # noticed before, since adoption is judged by the config file alone.
-    from ...services.adopt import rules_status
-
-    drift = [r for r in rules_status(tree) if r.needs_attention]
+    drift = SS.rules_needing_attention(tree)
     rules_hint = ""
     if drift:
         rules_hint = (
