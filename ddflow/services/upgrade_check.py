@@ -40,11 +40,6 @@ from . import install_info as II
 #: Machine-local, beside the upgrade notice: the last answer and the version already proposed.
 CACHE = Path(".ddflow") / "local" / "release-check.json"
 ENV_OFF = "DDFLOW_NO_UPDATE_CHECK"
-#: After a failed request (offline, timeout) the next try waits this long at most, so a
-#: machine without a network does not pay the timeout in every brief, nor wait a day to notice
-#: it is back.
-RETRY_AFTER_FAILURE_S = 3600.0
-
 Clock = Callable[[], float]
 
 
@@ -84,10 +79,9 @@ def _due(cache: dict[str, Any], cfg: Config, now: float) -> bool:
     at = cache.get("checked_at")
     if not isinstance(at, (int, float)) or at > now:
         return True  # never checked, or a clock that moved back
-    wait = max(0.0, float(cfg.upgrade.check_interval_h)) * 3600.0
-    if cache.get("error"):
-        wait = min(wait, RETRY_AFTER_FAILURE_S)
-    return now - at >= wait
+    # A failed request (offline, timeout) counts as a check: at most one request per interval,
+    # and a machine without a network pays the timeout once a day, not in every brief.
+    return now - at >= max(0.0, float(cfg.upgrade.check_interval_h)) * 3600.0
 
 
 def newer_known(repo: Path | str, running: str = "") -> str:

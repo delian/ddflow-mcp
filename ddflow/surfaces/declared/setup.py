@@ -181,9 +181,7 @@ COMMANDS: tuple[Command, ...] = (
             else _api().setup.UPGRADE_PAYLOAD
         ),
         params=(
-            Param(
-                "plan", type="boolean", help="Dry run (default); false applies.", mcp_only=True
-            ),
+            Param("plan", type="boolean", help="Dry run (default); false applies.", mcp_only=True),
             Param("apply", help="Categories: all, or a comma list.", mcp_only=True),
             Param(
                 "confirm",

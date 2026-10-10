@@ -72,13 +72,13 @@ class UpgradeConfig:
 
     release_check: str = knob(
         "on",
-        doc="Whether ddflow looks for a newer release of itself (decision D-self-upgrade 1). `on` (default): at most once per `check_interval_h`, when a brief, `ddflow doctor` or `ddflow upgrade --check` runs, ddflow makes ONE short request (3 s timeout) for the public version list of `ddflow-mcp` at the package index it was installed from (`index_url`), remembers the answer in the git-ignored `.ddflow/local/release-check.json`, and PROPOSES a newer release in a single line (the brief and the MCP handshake once per version on this machine; `status`, `doctor` and `ddflow upgrade --check` whenever one is known). It never installs anything, never blocks or fails a command, and says nothing offline. The request carries nothing about the project or the machine: it is the same GET any `pip` makes. `off`: no request is ever made, for an air-gapped machine; the environment variable `DDFLOW_NO_UPDATE_CHECK` (set to anything but `0`, `false`, `no` or `off`) also turns it off, for one shell or one container.",
+        doc="Whether ddflow looks for a newer release of itself (decision D-self-upgrade 1). `on` (default): at most once per `check_interval_h`, when a brief or `ddflow doctor` runs (`ddflow upgrade --check` asks at once, whenever the operator wants), ddflow makes ONE short request (3 s timeout) for the public version list of `ddflow-mcp` at the package index it was installed from (`index_url`), remembers the answer in the git-ignored `.ddflow/local/release-check.json`, and PROPOSES a newer release in a single line (the brief and the MCP handshake once per version on this machine; `status` and `doctor` whenever one is known). It never installs anything, never blocks or fails a command, and says nothing offline. The request carries nothing about the project or the machine: it is the same GET any `pip` makes. `off`: no request is ever made, for an air-gapped machine; the environment variable `DDFLOW_NO_UPDATE_CHECK` (set to anything but `0`, `false`, `no` or `off`) also turns it off, for one shell or one container.",
         choices=UPGRADE_RELEASE_CHECK,
         strictest=("off", "a bad value makes no request at all"),
     )
     check_interval_h: float = knob(
         24.0,
-        doc="Hours between release checks (`release_check`): a check newer than this is not repeated, and a failed one (offline, timeout) is retried after at most an hour. 0 checks at every brief and `doctor`.",
+        doc="Hours between release checks (`release_check`): a check newer than this is not repeated, and neither is a failed one (offline, timeout): at most one request per interval; `ddflow upgrade --check` asks at once regardless. 0 checks at every brief and `doctor`.",
     )
     index_url: str = knob(
         "",

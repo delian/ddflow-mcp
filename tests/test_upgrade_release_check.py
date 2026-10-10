@@ -144,14 +144,15 @@ def test_the_interval_is_honoured_and_a_new_release_after_it_is_proposed_again(p
 
 
 @pytest.mark.parametrize("failure", [ConnectionError("offline"), TimeoutError(), b"<html>"])
-def test_offline_or_timeout_is_silent_and_retried_within_the_hour(project, failure) -> None:
+def test_offline_or_timeout_is_silent_and_not_retried_within_the_interval(project, failure) -> None:
     fake = Index(failure)
     assert UC.proposal(project, Config(), consume=True, fetch=fake, now=NOW, running=RUNNING) == ""
-    out = UC.check(project, Config(), fetch=fake, now=NOW + 60, running=RUNNING)
-    assert out["status"] == "cached", "a failure is not retried in every brief"
-    assert len(fake.urls) == 1
-    UC.check(project, Config(), fetch=fake, now=NOW + 3700, running=RUNNING)
-    assert len(fake.urls) == 2, "but it is retried within the hour, not after a day"
+    out = UC.check(project, Config(), fetch=fake, now=NOW + 3700, running=RUNNING)
+    assert out["status"] == "cached" and len(fake.urls) == 1, "at most one request per interval"
+    UC.check(project, Config(), fetch=fake, now=NOW + 24 * 3600 + 1, running=RUNNING)
+    assert len(fake.urls) == 2
+    UC.check(project, Config(), force=True, fetch=fake, now=NOW + 24 * 3600 + 2, running=RUNNING)
+    assert len(fake.urls) == 3, "an explicit check asks at once"
 
 
 def test_off_and_the_environment_make_no_request_at_all(project, monkeypatch) -> None:
