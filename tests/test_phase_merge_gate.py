@@ -2,7 +2,8 @@
 
 B-phase-merge-gate: the gate used to be hand-recorded `passed` ("main holds everything")
 because `gate skip merge` and `merge <phase>` were both refused. `merge` now `needs_branch`,
-so any branchless item reports it not applicable; a phase additionally refuses to complete
+so a branchless PHASE reports it not applicable (an unclaimed task still owes it); a phase
+additionally refuses to complete
 while a finished task's branch is not on the base.
 """
 
