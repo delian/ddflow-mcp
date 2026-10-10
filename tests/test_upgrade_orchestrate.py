@@ -331,6 +331,38 @@ def test_resume_over_mcp_answers_like_the_cli(project, monkeypatch) -> None:
     assert "nothing to resume" in json.dumps(again["result"])
 
 
+def test_replay_tells_a_run_from_an_upgrade(project, monkeypatch) -> None:
+    from ddflow.services.sessions import replay
+
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan_of("f1", "f2"))
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    apply(project, plan_of("f1", "f2"), watch=UA.Watch(resume=rid))
+    from ddflow.infra.log import EventLog
+
+    text = "\n".join(step.text for step in replay(EventLog(project, "orch").read_all()))
+    assert text.count("Upgraded the project") == 1
+    assert "started: 2 item(s)" in text and "f1 acknowledged" in text and "to ?" not in text
+
+
+def test_nothing_to_resume_has_the_same_body_on_both_surfaces(project) -> None:
+    code, out, _err = run_cli(project, "upgrade", "--resume", "--json")
+    assert code == 2
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"resume": True}},
+        }
+    )
+    cli, mcp = json.loads(out), json.loads(reply["result"]["content"][0]["text"])
+    assert set(cli) <= set(mcp), "MCP adds its envelope, never drops a field"
+
+
 def test_mcp_reports_each_step_as_progress(project, monkeypatch) -> None:
     from ddflow.services import upgrade_plan as UP
 
