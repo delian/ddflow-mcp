@@ -33,7 +33,10 @@ def _finish(repo: Path, tid: str, *, merge: bool) -> None:
     if merge:
         assert run_cli(repo, "merge", tid)[0] == 0
     pass_pipeline(repo, tid, omit=() if merge else ("merge",))
-    run_cli(repo, "complete", tid, "--model", "claude-opus-5", "--force", "--reason", "fixture")
+    code, out, err = run_cli(
+        repo, "complete", tid, "--model", "claude-opus-5", "--force", "--reason", "fixture"
+    )
+    assert code == 0, out + err
 
 
 def test_a_phase_reports_merge_not_applicable(repo):
