@@ -385,8 +385,23 @@ def _rs_skew_overridden(n, ev):
     )
 
 
+def _rs_upgrade_progress(n, ev):
+    """A run's progress record (`status` started, step or failed): what happened, not an upgrade."""
+    d = ev.data
+    run = d.get("run", "?")
+    if d.get("status") == "started":
+        text = f"Upgrade run {run} started: {len(d.get('items') or [])} item(s)"
+    elif d.get("status") == "step":
+        text = f"Upgrade run {run}: {d.get('step', '?')} {d.get('step_status', '?')}"
+    else:
+        text = f"Upgrade run {run} ended without an upgrade: {d.get('summary', '')}"
+    return ReplayStep(n, ev.ts, "session", text)
+
+
 def _rs_upgrade_applied(n, ev):
     d = ev.data
+    if d.get("status", "done") != "done":
+        return _rs_upgrade_progress(n, ev)
     cats = ", ".join(d.get("categories") or []) or "nothing"
     backup = f"; originals saved in {d['backup']}" if d.get("backup") else ""
     confirmed = ", ".join(sorted(d.get("confirmed") or {}))
