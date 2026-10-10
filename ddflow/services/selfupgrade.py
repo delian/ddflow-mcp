@@ -58,8 +58,8 @@ Runner = Callable[[list[str], float], P.Captured]
 
 #: Why the method is not attempted, and what the operator runs instead (``{dist}``, ``{spec}``).
 _MANUAL = {
-    "container": "pull the newer image and restart the container: docker pull <your-ddflow-image>",
-    "source": "update the checkout, then restart the MCP server: git pull (merge main)",
+    "container": "pull the image{tag} and restart the container: docker pull <your-ddflow-image>{tag_colon}",
+    "source": "update the checkout{tag}, then restart the MCP server: git pull (merge main)",
     "uvx": "an ephemeral environment: run it again with a refresh: uvx --refresh --from {spec} ddflow ...",
     "readonly": "this install is not writable by this user: ask whoever owns it, or reinstall with: uv tool install --force {spec}",
     "other": "ddflow does not guess how this was installed; reinstall it the way you installed it, e.g.: uv tool install --force {spec}   (or: pipx install --force {spec}   or: pip install -U {spec})",
@@ -89,7 +89,11 @@ def command(method: str, target: str = "") -> list[str] | None:
 
 def manual(method: str, target: str = "") -> str:
     """What the operator runs for a method ddflow does not attempt."""
-    return _MANUAL.get(method, _MANUAL["other"]).format(spec=_spec(target))
+    return _MANUAL.get(method, _MANUAL["other"]).format(
+        spec=_spec(target),
+        tag=f" for version {target}" if target else "",
+        tag_colon=f":{target}" if target else "",
+    )
 
 
 def _state() -> LocalStore:
@@ -226,7 +230,8 @@ def _success(
 ) -> dict[str, Any]:
     running, method = out["running"], out["method"]
     to = out["target"] or _installed_version(run_, req.newest)
-    _remember(running, to, method)
+    # After a rollback nothing earlier is known: a second rollback must not undo the first.
+    _remember("" if req.rollback else running, to, method)
     if (repo / ".ddflow").is_dir():
         try:
             _record(log, running, to, req.rollback, method, req.reason)
@@ -239,7 +244,9 @@ def _success(
         "RESTART needed: this process still runs the old code; restart your MCP server / "
         "reconnect your client.",
     ]
-    if applied:
+    if applied.startswith("FAILED"):
+        lines.append(f"the [upgrade].auto = safe apply did not happen: {applied}")
+    elif applied:
         lines.append(f"applied by [upgrade].auto = safe: {applied}")
     if plan:
         lines.append(f"project plan under the new ddflow:\n{plan}")
