@@ -12,23 +12,17 @@ A PHASE has no tree by design -- its gates test the merged result -- so it runs 
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 # Passes only where the item's change is: a.py exists on its branch and nowhere else.
 PROBE = f"{sys.executable} -c \"import pathlib,sys; sys.exit(0 if pathlib.Path('a.py').exists() else 1)\""
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _setup(repo: Path) -> Path:

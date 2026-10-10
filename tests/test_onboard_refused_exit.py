@@ -10,13 +10,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from helpers import git_quiet as _git
+
 from ddflow.api import onboard as api_onboard
 
 OK, REFUSED = 0, 3
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def _merged_branch(repo: Path, name: str) -> None:

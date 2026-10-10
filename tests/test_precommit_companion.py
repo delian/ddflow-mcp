@@ -15,16 +15,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from helpers import git_quiet as _git
 
 from ddflow.api import operations as OPS
 from ddflow.services import companions as C
 from ddflow.services import precommit as PC
 
 REFUSED = 3
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 @pytest.fixture

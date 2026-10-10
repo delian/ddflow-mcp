@@ -13,16 +13,11 @@ from pathlib import Path
 
 import pytest
 from conftest import run_cli
+from helpers import git as _git
 
 import ddflow.api.lifecycle as A
 from ddflow.config import Config
 from ddflow.infra import claimref as CR
-
-
-def _git(cwd, *args):
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 @pytest.fixture

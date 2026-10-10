@@ -14,14 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from helpers import write_file as _write
+
 from ddflow.services import onboard_tests as OT
-
-
-def _write(repo: Path, rel: str, text: str) -> Path:
-    path = repo / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def _commit(repo: Path, rel: str) -> None:
