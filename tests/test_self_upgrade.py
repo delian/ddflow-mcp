@@ -340,3 +340,22 @@ def test_install_method_edges() -> None:
     assert II.install_method(_info(), prefix="/tmp/cache/environments-v2/ab", **kw) == "uvx"
     got = II.install_method(_info(), prefix="/opt/uv/tools/ddflow-mcp", **{**kw, "writable": False})
     assert got == "readonly", "a managed install this user cannot write is not attempted"
+
+
+def test_a_second_rollback_does_not_undo_the_first(project) -> None:
+    go(project, Fake(), target="0.2.0")
+    go(project, Fake(), rollback=True, running="0.2.0")
+    again = go(project, Fake(), rollback=True, running=RUNNING)
+    assert again["exit"] == 2 and again["status"] == "nothing"
+
+
+def test_the_manual_command_keeps_the_requested_version(project) -> None:
+    out = go(project, Fake(), method="container", target="0.1.5")
+    assert "0.1.5" in out["text"] and out["exit"] == 2
+    assert "0.1.5" in go(project, Fake(), method="source", target="0.1.5")["text"]
+
+
+def test_pipx_home_relocation_is_recognised(monkeypatch) -> None:
+    monkeypatch.setenv("PIPX_HOME", "/opt/py-tools")
+    kw = {"container": False, "writable": True, "base_prefix": "/usr"}
+    assert II.install_method(_info(), prefix="/opt/py-tools/venvs/ddflow-mcp", **kw) == "pipx"

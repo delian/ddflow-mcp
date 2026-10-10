@@ -285,7 +285,10 @@ def install_method(
     if not (writable if writable is not None else os.access(pre, os.W_OK)):
         return "readonly"  # a managed install this user cannot write is not upgraded from here
     tool_dir = os.environ.get("UV_TOOL_DIR", "") if tool_dir is None else tool_dir
-    if _under(pre, "pipx", "venvs"):
+    pipx_venvs = os.environ.get("PIPX_LOCAL_VENVS") or (
+        str(Path(os.environ["PIPX_HOME"]) / "venvs") if os.environ.get("PIPX_HOME") else ""
+    )
+    if _under(pre, "pipx", "venvs") or (pipx_venvs and pre.is_relative_to(pipx_venvs)):
         return "pipx"
     if _under(pre, "uv", "tools") or (tool_dir and pre.is_relative_to(tool_dir)):
         return "uv-tool"
