@@ -66,67 +66,6 @@ def _decision_add(a, c: Ctx, st) -> int:
     return OK
 
 
-def _decision_supersede(a, c: Ctx, st) -> int:
-    out = A.decision_supersede(
-        c.repo, a.id, by=a.by or "", reason=a.reason or "", agent=c.requested_agent
-    )
-    if out.exit == FAIL:
-        print(out.reason, file=sys.stderr)
-        return FAIL
-    c.out(
-        f"{out.data['id']} superseded by {out.data['by']}",
-        {"id": out.data["id"], "by": out.data["by"]},
-    )
-    return OK
-
-
-def _decision_show(a, c: Ctx, st) -> int:
-    out = A.decision_show(c.repo, a.id)
-    if out.exit == FAIL:
-        print(out.reason, file=sys.stderr)
-        return FAIL
-    if c.json:
-        return _emit(c, out, "decision")
-    d = out.data["decision"]
-    head = f"{d['id']} — {d['title']}\n  status {d['status']}"
-    if d.get("superseded_by"):
-        head += f" (superseded by {d['superseded_by']})"
-    if d.get("decided_by"):
-        head += f" · decided by {d['decided_by']}"
-    print(head)
-    for label, key in (
-        ("Context", "context"),
-        ("Decision", "decision"),
-        ("Consequences", "consequences"),
-        ("Alternatives rejected", "alternatives"),
-    ):
-        if d.get(key):
-            print(f"\n{label}:\n  {d[key]}")
-    if d.get("globs"):
-        print(f"\nGoverns: {', '.join(d['globs'])}")
-    return OK
-
-
-def _decision_applicable(a, c: Ctx, st) -> int:
-    out = A.decision_applicable(c.repo, a.id)
-    if out.exit == FAIL:
-        print(out.reason, file=sys.stderr)
-        return FAIL
-    if c.json:
-        # The object with both lists, unchanged: `{"applicable": [...],
-        # "project_wide": [...]}`. Callers index both keys.
-        emit_json({"applicable": out.data["applicable"], "project_wide": out.data["project_wide"]})
-        return OK if out.exit == OK else NOTHING
-    if out.exit == NOTHING:
-        print(out.reason)
-        return NOTHING
-    for d in out.data["applicable"]:
-        print(f"  [{d['id']}] {d['title']}\n      {d['decision']}")
-    for d in out.data["project_wide"]:
-        print(f"  [{d['id']}] {d['title']}  (project-wide)\n      {d['decision']}")
-    return OK
-
-
 def _decision_search(a, c: Ctx, st) -> int:
     out = A.decision_search(c.repo, a.query, limit=a.limit)
     if c.json:
@@ -183,9 +122,6 @@ def cmd_decision(a, c: Ctx) -> int:
     st = c.store.ensure(c.log)
     return {
         "add": _decision_add,
-        "supersede": _decision_supersede,
-        "show": _decision_show,
-        "applicable": _decision_applicable,
         "search": _decision_search,
         "list": _decision_list,
     }.get(getattr(a, "decision_cmd", "") or "list", _decision_list)(a, c, st)
