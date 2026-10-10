@@ -50,7 +50,8 @@ def url_for(dist: str, index_url: str = "") -> str:
 
 def _get(url: str, timeout: float) -> bytes:
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    # `url_for` has refused every scheme but http(s), so B310's file:/custom-scheme risk is closed.
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
         return resp.read(MAX_BYTES)
 
 
