@@ -322,10 +322,10 @@ def users_part(digests: dict[str, str]) -> dict[str, str]:
 def tree_digest(repo: Path, kept: Iterable[str] = KEPT) -> str:
     """A digest of every file the working tree holds (tracked or not, ignored ones excluded)
     except those under ``kept``: what a restore must bring back byte for byte."""
-    names = G.run(repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard", z=False)
+    listed = G.paths(repo, "ls-files", "--cached", "--others", "--exclude-standard")
     rows: list[str] = []
-    for name in sorted(names.out.split("\0")) if names.ok else []:
-        if not name or name.startswith(tuple(kept)):
+    for name in sorted(listed or []):
+        if name.startswith(tuple(kept)):
             continue
         path = Path(repo) / name
         if path.is_file():
@@ -468,7 +468,9 @@ class Rehearsal:
     def run(self) -> Report:
         self.report.started = clock.now_iso(timespec="seconds")
         self.report.facts["new"] = self.report.new_label
-        before = self.guard(1, "live project snapshot", lambda: snapshot_live(self.opt.source))
+        before = self.guard(
+            1, "read the live project first", lambda: snapshot_live(self.opt.source)
+        )
         if self.guard(1, "clone at the installed version's commit", self.step_clone):
             if self.opt.old is None and self.opt.build_old:
                 self.guard(1, "build the old ddflow from the clone", self.step_build_old)
@@ -483,7 +485,9 @@ class Rehearsal:
             )
             self.guard(7, "two agents, one task", self.step_agents)
             self.guard(8, "shards from the old version merge", self.step_shards)
-        after = self.guard(9, "live project untouched", lambda: snapshot_live(self.opt.source))
+        after = self.guard(
+            9, "read the live project afterwards", lambda: snapshot_live(self.opt.source)
+        )
         if before is not None and after is not None:
             moved = live_problems(before, after)
             same = after.shards == before.shards
@@ -601,7 +605,7 @@ class Rehearsal:
             "read with the new code",
             not bad,
             "; ".join(bad)
-            or f"{len(READS)} read commands and {min(len(st.items), self.opt.max_show)} item(s), state unchanged",
+            or f"{len(READS)} read commands and {min(len(st.items), self.opt.max_show or len(st.items))} item(s), state unchanged",
         )
 
     def step_plan(self) -> dict[str, Any]:
@@ -645,11 +649,13 @@ class Rehearsal:
             )
         problems += self._after_apply(repo, before_users)
         self.commit_all(repo, "applied")
+        # a second apply changes nothing: no file, no event (the notes a plan keeps listing are
+        # acknowledged again, which writes nothing)
+        events, tree = len(events_of(repo)), tree_digest(repo)
         again = self.ddflow(
-            self.new, repo, "upgrade", "--apply", "--backup", "none", "--json", agent="dry-apply"
+            self.new, repo, "upgrade", "--apply", "--backup", "none", agent="dry-apply"
         )
-        applied = _applied(again)
-        if again.returncode != 0 or not applied.get("noop"):
+        if again.returncode != 0 or len(events_of(repo)) != events or tree_digest(repo) != tree:
             problems.append(f"a second apply was not a no-op (exit {again.returncode})")
         problems += self._restore(repo, before_tree, before_shards)
         self.report.facts["apply"] = "ok" if not problems else "problems"
@@ -689,9 +695,10 @@ class Rehearsal:
             out.append(
                 f"doctor after the apply exited {doctor.returncode}: {doctor.stdout.strip()[-160:]}"
             )
-        plan = self.ddflow(self.new, repo, "upgrade", "--plan", agent="dry-apply")
-        if plan.returncode != 0:
-            out.append("the plan after the apply is not empty")
+        left = self.ddflow(self.new, repo, "upgrade", "--plan", "--json", agent="dry-apply")
+        todo = [i["id"] for i in _items(left) if i["action"] != "note"]
+        if todo:
+            out.append(f"the plan after the apply still holds {', '.join(todo[:5])}")
         return out
 
     def _restore(self, repo: Path, tree: str, shards: dict[str, bytes]) -> list[str]:
@@ -745,8 +752,14 @@ class Rehearsal:
         bad: list[str] = []
         for args in (("status", "--json"), ("doctor",), ("brief",)):
             done = self.ddflow(old, repo, *args, agent="dry-old")
-            if not done.ran or "Traceback" in done.stderr:
-                bad.append(f"old {' '.join(args)} crashed: {done.stderr.strip()[-120:]}")
+            if (
+                not done.ran
+                or done.returncode not in (O.OK, O.FAIL, O.NOTHING)
+                or "Traceback" in done.stderr
+            ):
+                bad.append(
+                    f"old {' '.join(args)} exited {done.returncode}: {done.stderr.strip()[-120:]}"
+                )
         write = self.ddflow(
             old,
             repo,
@@ -776,84 +789,16 @@ class Rehearsal:
     def step_connect(self) -> bool:
         repo = self.clone("connect")
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
-        msgs = [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-06-18",
-                    "capabilities": {},
-                    "clientInfo": {"name": "dry-run", "version": "0"},
-                },
-            },
-            {"jsonrpc": "2.0", "method": "notifications/initialized"},
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-            {
-                "jsonrpc": "2.0",
-                "id": 3,
-                "method": "tools/call",
-                "params": {"name": "ddflow_brief", "arguments": {}},
-            },
-        ]
-        first = self._serve(repo, msgs)
-        problems: list[str] = []
-        text = (first.get(1) or {}).get("instructions", "")
-        if "newer than this project" not in text or "Ask the operator" not in text:
-            problems.append("the handshake did not propose the upgrade and ask the operator")
-        tools = (first.get(2) or {}).get("tools") or []
-        size, bad = tools_problems(tools, self.opt.tools_budget)
-        problems += bad
+        first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
+        size, problems = self._proposed(first)
         applied = [
             e for e in events_of(repo) if e.get("id") not in known and e.get("kind") in APPLYING
         ]
         if applied or tree_digest(repo) != before_tree:
             problems.append("something was applied before the operator consented")
-        keys = self.confirms
-        consent = {
-            "jsonrpc": "2.0",
-            "id": 4,
-            "method": "tools/call",
-            "params": {
-                "name": "ddflow_upgrade",
-                "arguments": {
-                    "apply": "all",
-                    "backup": "none",
-                    "confirm": keys,
-                    "reason": self.opt.reason,
-                },
-            },
-        }
-        done = self._serve(repo, [msgs[0], msgs[1], consent])
-        body = _tool_body(done.get(4))
-        if (body.get("applied") or {}).get("failed", 1):
-            problems.append(
-                f"the confirmed apply over MCP did not finish: {json.dumps(body)[:160]}"
-            )
-        doctor = self.ddflow(self.new, repo, "doctor", agent="dry-connect")
-        if doctor.returncode != 0:
-            problems.append(f"doctor after the consent exited {doctor.returncode}")
-        status = _tool_body(
-            self._serve(
-                repo,
-                [
-                    msgs[0],
-                    msgs[1],
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 5,
-                        "method": "tools/call",
-                        "params": {"name": "ddflow_upgrade", "arguments": {"status": True}},
-                    },
-                ],
-            ).get(5)
-        )
-        stale = [b["agent"] for b in status.get("behind", [])]
-        self.report.facts["restart"] = stale
-        folded = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
-        running = V.running()
-        if any(is_older(v, running) for v in folded.ddflow_versions) and not stale:
-            problems.append("the log holds older-version agents but none was told to restart")
+        problems += self._consented(repo)
+        stale, more = self._told_to_restart(repo)
+        problems += more
         told = (
             f"{len(stale)} older agent(s) told to restart"
             if stale
@@ -864,11 +809,54 @@ class Rehearsal:
             "MCP connect: propose, wait for consent, apply",
             not problems,
             "; ".join(problems)
-            or f"proposed on connect, nothing applied until consent, then applied; tools/list {size} bytes; {told}",
+            or f"proposed on connect, nothing applied until consent, then applied; "
+            f"tools/list {size} bytes; {told}",
         )
 
+    def _proposed(self, first: dict[int, dict[str, Any]]) -> tuple[int, list[str]]:
+        """What the first session shows: the handshake asks the operator, the tools fit."""
+        problems: list[str] = []
+        text = (first.get(1) or {}).get("instructions", "")
+        if "newer than this project" not in text or "Ask the operator" not in text:
+            problems.append("the handshake did not propose the upgrade and ask the operator")
+        size, bad = tools_problems((first.get(2) or {}).get("tools") or [], self.opt.tools_budget)
+        return size, problems + bad
+
+    def _consented(self, repo: Path) -> list[str]:
+        """The operator says yes: the confirmed apply over MCP finishes and doctor is clean."""
+        arguments = {
+            "apply": "all",
+            "backup": "none",
+            "confirm": self.confirms,
+            "reason": self.opt.reason,
+        }
+        done = self._serve(repo, [*_HELLO, _call(4, "ddflow_upgrade", arguments)])
+        body = _tool_body(done.get(4))
+        out: list[str] = []
+        if (body.get("applied") or {}).get("failed", 1):
+            out.append(f"the confirmed apply over MCP did not finish: {json.dumps(body)[:160]}")
+        doctor = self.ddflow(self.new, repo, "doctor", agent="dry-connect")
+        if doctor.returncode != 0:
+            out.append(f"doctor after the consent exited {doctor.returncode}")
+        return out
+
+    def _told_to_restart(self, repo: Path) -> tuple[list[str], list[str]]:
+        """`(the agents `status` says must restart, problems)`: a log holding agents stamped by
+        an older ddflow must name them."""
+        status = _tool_body(
+            self._serve(repo, [*_HELLO, _call(5, "ddflow_upgrade", {"status": True})]).get(5)
+        )
+        stale = [b["agent"] for b in status.get("behind", [])]
+        self.report.facts["restart"] = stale
+        folded = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+        running = V.running()
+        if any(is_older(v, running) for v in folded.ddflow_versions) and not stale:
+            return stale, ["the log holds older-version agents but none was told to restart"]
+        return stale, []
+
     def _serve(self, repo: Path, msgs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
-        """Talk to the new MCP server over stdio for these messages; replies by request id."""
+        """Talk to the new MCP server over stdio for these messages; replies by request id.
+        Raises `CouldNotRun` when the server did not run to its end."""
         argv = [sys.executable, "-m", "ddflow.surfaces.mcp", "--repo", str(repo)]
         done = P.capture(
             argv,
@@ -877,6 +865,8 @@ class Rehearsal:
             env=self.env(self.new),
             input="\n".join(json.dumps(m) for m in msgs) + "\n",
         )
+        if not done.ran:
+            raise CouldNotRun(f"the MCP server did not run: {done.error}")
         replies: dict[int, dict[str, Any]] = {}
         for line in done.stdout.splitlines():
             try:
@@ -1038,13 +1028,44 @@ def tools_problems(tools: list[dict[str, Any]], budget: int) -> tuple[int, list[
     return size, out
 
 
-def _asked(plan: P.Captured) -> list[dict[str, Any]]:
-    """The items of a plan (`upgrade --plan --json`) the operator would be asked to confirm."""
+#: The opening of every MCP session the rehearsal holds.
+_HELLO = (
+    {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "dry-run", "version": "0"},
+        },
+    },
+    {"jsonrpc": "2.0", "method": "notifications/initialized"},
+)
+_TOOLS_LIST = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+
+
+def _call(at: int, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": at,
+        "method": "tools/call",
+        "params": {"name": tool, "arguments": arguments},
+    }
+
+
+def _items(plan: P.Captured) -> list[dict[str, Any]]:
+    """Every item of a plan (`upgrade --plan --json`); none when it is not one."""
     try:
         cats = json.loads(plan.stdout)["categories"]
     except (ValueError, KeyError, TypeError):
         return []
-    return [i for v in cats.values() for i in v if i["action"] == "needs operator confirmation"]
+    return [i for v in cats.values() for i in v]
+
+
+def _asked(plan: P.Captured) -> list[dict[str, Any]]:
+    """The items of a plan the operator would be asked to confirm."""
+    return [i for i in _items(plan) if i["action"] == "needs operator confirmation"]
 
 
 def _edit_kept(repo: Path, name: str) -> bool:
@@ -1062,13 +1083,6 @@ def _key(item: dict[str, Any]) -> str:
         or item.get("path")
         or item["id"]
     )
-
-
-def _applied(done: P.Captured) -> dict[str, Any]:
-    try:
-        return dict(json.loads(done.stdout).get("applied") or {})
-    except (ValueError, AttributeError):
-        return {}
 
 
 def _tool_body(result: dict[str, Any] | None) -> dict[str, Any]:
