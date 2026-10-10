@@ -11,6 +11,17 @@ from ..registry import Command, Param, by_tool
 from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 
+#: The body of `bug invalid`, on both surfaces (`ddflow bug invalid --json` and the tool).
+BUG_INVALID_FIELDS = (
+    "id",
+    "invalid_reason",
+    "evidence",
+    "unchecked",
+    "fix_task",
+    "fix_task_removed",
+    "fix_task_kept",
+)
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("research",),
@@ -289,15 +300,7 @@ COMMANDS: tuple[Command, ...] = (
         payload=lambda a: (
             ("id", "was", "reason_given", "fix_task", "fix_task_state", "previous_fix_task", "next")
             if _reopening(a)
-            else (
-                "id",
-                "invalid_reason",
-                "evidence",
-                "unchecked",
-                "fix_task",
-                "fix_task_removed",
-                "fix_task_kept",
-            )
+            else BUG_INVALID_FIELDS
         ),
         params=(
             Param("id", help="Bug id.", cli_help="", positional=True),
