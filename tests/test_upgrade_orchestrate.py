@@ -142,6 +142,33 @@ def test_status_names_an_agent_still_on_the_old_version(project) -> None:
     assert "laggard: 9.0.0" in data["text"]
 
 
+def test_an_override_from_before_an_agent_upgraded_does_not_list_it(project) -> None:
+    _log, cfg, st = state(project)
+    st.ddflow_versions = {RUNNING: {"agents": ["fixed"], "at": "2026-02-01T00:00:00Z"}}
+    st.skew_overrides = [
+        {"agent": "fixed", "running": "9.0.0", "at": "2026-01-01T00:00:00Z", "reason": "x"},
+        {"agent": "never-stamped", "running": "9.0.0", "at": "2026-01-01T00:00:00Z", "reason": "x"},
+    ]
+    data = UST.status(project, cfg, st, plan=plan_of(), running=RUNNING)
+    assert [b["agent"] for b in data["behind"]] == ["never-stamped"]
+
+
+def test_a_resumed_upgrade_records_every_settled_item_and_the_first_backup(
+    project, monkeypatch
+) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, run = UST.open_run(st)
+    assert run["backup"] == "" and run["items"] == ["f1", "f2"]
+    apply(project, plan, watch=UA.Watch(resume=rid))
+    _log, _cfg, st = state(project)
+    assert st.upgrades[-1]["items"] == ["f1", "f2"]
+
+
 def test_history_lists_two_upgrades(project) -> None:
     apply(project, plan_of("a"))
     apply(project, plan_of("b", running="10.0.0"))
@@ -161,6 +188,7 @@ def test_the_modes_stand_alone(project) -> None:
     assert A.upgrade(project, status=True, apply="all").exit == 3
     assert A.upgrade(project, history=True, check=True).exit == 3
     assert A.upgrade(project, resume=True, apply="all").exit == 3
+    assert A.upgrade(project, resume=True, snapshot=True).exit == 3
 
 
 def test_status_reports_the_cached_release_and_the_backups(project) -> None:

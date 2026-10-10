@@ -118,7 +118,13 @@ def behind(st: State, running: str) -> list[dict[str, str]]:
         if is_older(v, running)
     ]
     for o in st.skew_overrides:
-        if is_older(o["running"], running) and not any(x["agent"] == o["agent"] for x in out):
+        # an agent with a stamp is judged by its newest one above; an override only speaks for
+        # an agent that never stamped
+        if (
+            o["agent"] not in last
+            and is_older(o["running"], running)
+            and not any(x["agent"] == o["agent"] for x in out)
+        ):
             out.append({"agent": o["agent"], "version": o["running"], "at": o["at"]})
     return out
 

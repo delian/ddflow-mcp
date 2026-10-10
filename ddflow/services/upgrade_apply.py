@@ -301,8 +301,8 @@ def apply(
     results, todo = _select(plan, parse_categories(categories), confirm, config_changes)
     watch = watch or Watch()
     earlier = _settled_steps(st, watch.resume)
-    todo_ids = {i["id"] for i in todo}
-    todo = [i for i in todo if i["id"] not in earlier]
+    selected = todo
+    todo = [i for i in selected if i["id"] not in earlier]
 
     files = [p for i in todo for p in touched(repo, cfg, i)]
     backup_dir, why, refused = _save(repo, cfg, backup, files, frm, to)
@@ -312,15 +312,15 @@ def apply(
     saved = {p.resolve() for p in files} if backup_dir else set()
     late_backup = _late_saver(repo, cfg, backup, (frm, to), saved)
 
-    run = _start(log, watch, todo, (frm, to))
+    run = _start(log, watch, todo, (frm, to), backup_dir)
     results += _execute(
         repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
     )
-    ok, done_cats, reasons = _summarise(results, todo, confirm)
-    ok |= earlier & todo_ids  # settled by the interrupted run this one finishes
+    ok, done_cats, reasons = _summarise(results, selected, confirm)
+    ok |= earlier & {i["id"] for i in selected}  # settled by the interrupted run this one finishes
     done_cats = _with_earlier(done_cats, plan, earlier)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
-    _close(log, run, todo, ok, (frm, new_to, to), done_cats, backup_dir, reasons)
+    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
 
 
@@ -333,13 +333,24 @@ def _not_saved(
     return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
 
 
-def _start(log: Any, watch: Watch, todo: list[dict[str, Any]], versions: tuple[str, str]) -> str:
+def _start(
+    log: Any, watch: Watch, todo: list[dict[str, Any]], versions: tuple[str, str], backup: str
+) -> str:
     """The run's id (the interrupted run's when resuming, else a new one), and its first record."""
     if not todo:
         return watch.resume
     run = watch.resume or uuid.uuid4().hex[:10]
     frm, to = versions
-    _note(log, run, "started", source=frm, target=to, categories=_cats_of(todo), items=_ids(todo))
+    _note(
+        log,
+        run,
+        "started",
+        source=frm,
+        target=to,
+        categories=_cats_of(todo),
+        items=_ids(todo),
+        backup=backup,
+    )
     return run
 
 
@@ -548,7 +559,7 @@ def _execute(
     late_backup: Callable[[list[Path]], str] | None = None,
     on_step: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run each item's applier; repairs and instruction files go in one batch each.
+    """Run each item's applier, one at a time.
     ``on_step`` hears each outcome as soon as it is known."""
     out: list[dict[str, Any]] = []
 
@@ -564,12 +575,14 @@ def _execute(
     repairs = [i for i in todo if i["category"] == "repairs"]
     migrations = [i for i in todo if i["category"] == "migrations"]
     docs = [i for i in todo if i["category"] == "instructions"]
-    if repairs:
-        took(_run_repairs(repo, log, cfg, repairs))
-    if migrations:
-        took(_run_migrations(repo, log, cfg, migrations, late_backup))
-    if docs:
-        took(_run_instructions(repo, docs))
+    # One item at a time, so each is recorded the moment it ends: an interruption leaves the
+    # ones before it settled, and a resume does not repeat them.
+    for item in repairs:
+        took(_run_repairs(repo, log, cfg, [item]))
+    for item in migrations:
+        took(_run_migrations(repo, log, cfg, [item], late_backup))
+    for item in docs:
+        took(_run_instructions(repo, [item]))
     return out
 
 

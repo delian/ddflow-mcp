@@ -1212,7 +1212,7 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
     others = _other_modes(apply, plan, confirm, reason, backup, snapshot, selfup)
     alone = (check, bool(restore), selfup is not None, status, history)
     if resume:
-        if any((*alone, apply, plan is not None)):
+        if any((*alone, apply, plan is not None, snapshot)):
             return O.refused(
                 "upgrade", "--resume continues an interrupted apply: nothing else beside it"
             )
