@@ -49,6 +49,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..config import Config
 from ..core import clock
 from ..core import digest as D
 from ..core import outcome as O
@@ -303,10 +304,17 @@ def live_problems(before: Live, after: Live) -> list[str]:
     return out
 
 
+def folded_state(repo: Path) -> State:
+    """What a project's log folds into with the running code, read as the project configures
+    its log (`[log]`); non-strict, so an event this code does not know is counted, not fatal."""
+    log = EventLog(repo, "dry-digest", log_cfg=Config.load(repo).log)
+    return fold(log.read_all(), strict=False)
+
+
 def state_digests(repo: Path) -> dict[str, str]:
     """One digest per part of the state the log folds into (`State` field by field), so a
     difference names where it is."""
-    st = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+    st = folded_state(repo)
     return {name: D.of_obj(value, size=8) for name, value in _fields(st).items()}
 
 
@@ -528,7 +536,7 @@ class Rehearsal:
                 False,
                 "the clone has no event log (is .ddflow/events committed?)",
             )
-        st = fold(EventLog(self.pristine, "dry-digest").read_all(), strict=False)
+        st = folded_state(self.pristine)
         self.report.facts.update(
             events=st.event_count,
             stamps=sorted(st.ddflow_versions),
@@ -588,7 +596,7 @@ class Rehearsal:
             done = self.ddflow(self.new, repo, *args, agent="dry-read")
             if not done.ran or done.returncode not in (0, 1, 2) or "Traceback" in done.stderr:
                 bad.append(f"{' '.join(args)} -> {done.returncode} {done.stderr.strip()[-120:]}")
-        st = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+        st = folded_state(repo)
         for item in sorted(st.items)[: self.opt.max_show or None]:
             done = self.ddflow(self.new, repo, "show", item, agent="dry-read")
             if not done.ran or done.returncode not in (0, 1, 2) or "Traceback" in done.stderr:
@@ -778,7 +786,7 @@ class Rehearsal:
             )
         if lost := prefixes_kept(shards, shard_bytes(repo)):
             bad.append(f"the old ddflow disturbed the shard(s) {', '.join(lost)}")
-        after = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+        after = folded_state(repo)
         if after.fold_problems or after.skipped_kinds:
             bad.append("the new code cannot fold what the old one left")
         how = "refused its write with the remedy" if refused else "wrote without disturbing a byte"
@@ -848,7 +856,7 @@ class Rehearsal:
         )
         stale = [b["agent"] for b in status.get("behind", [])]
         self.report.facts["restart"] = stale
-        folded = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+        folded = folded_state(repo)
         running = V.running()
         if any(is_older(v, running) for v in folded.ddflow_versions) and not stale:
             return stale, ["the log holds older-version agents but none was told to restart"]
@@ -1101,7 +1109,7 @@ def _pipeline(shown: P.Captured) -> list[str]:
 
 
 def _first_phase(repo: Path) -> str:
-    st = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+    st = folded_state(repo)
     for item in st.items.values():
         if item.kind == "phase":
             return item.id
