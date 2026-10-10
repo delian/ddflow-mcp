@@ -1,7 +1,7 @@
 """Pins what the reporting and viewer commands print, byte for byte (B-uc-surf-reporting).
 
 Recorded against the code before the slice moved: every command in `COMMANDS` is run on the
-golden project in its human and its `--json` form, with the exit code and both streams.
+golden project in its human and its `--json` form, with the exit code and the two streams apart.
 The slice changes where the code lives, not a byte of this.
 """
 
@@ -11,7 +11,9 @@ from __future__ import annotations
 import re
 
 import pytest
-from goldenfix import _pinned_environment, ddflow, project  # noqa: F401 -- fixtures
+from goldenfix import _pinned_environment, normalise, project  # noqa: F401 -- fixtures
+
+from ddflow.surfaces.cli import main
 
 COMMANDS = [
     ["status"],
@@ -60,10 +62,25 @@ COMMANDS = [
 ]
 
 
-def _steady(result: tuple[int, str]) -> tuple[int, str]:
+@pytest.fixture
+def ddflow(project, capsys):
+    """One command in this process: (exit code, stdout, stderr), normalised -- the two
+    streams apart, since which one a line goes to is part of the contract."""
+
+    def run(*argv: str) -> tuple[int, str, str]:
+        capsys.readouterr()
+        code = main(["--repo", str(project), "--agent", "golden", *argv])
+        cap = capsys.readouterr()
+        out, err = (normalise(t, project, project.parent) for t in (cap.out, cap.err))
+        return code, out, err
+
+    return run
+
+
+def _steady(result: tuple[int, str, str]) -> tuple[int, str, str]:
     """`rebuild` prints how long it took."""
-    code, text = result
-    return code, re.sub(r"in \d+\.\d\ds", "in <S>s", text)
+    code, out, err = result
+    return code, re.sub(r"in \d+\.\d\ds", "in <S>s", out), err
 
 
 def _id(argv: list[str]) -> str:

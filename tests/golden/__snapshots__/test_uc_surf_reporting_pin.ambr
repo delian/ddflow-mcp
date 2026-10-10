@@ -25,11 +25,13 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_human[board --phase nope]
   tuple(
     1,
+    '',
     '''
       no such phase or item 'nope'.
   
@@ -62,6 +64,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_human[bug list --all]
@@ -71,6 +74,7 @@
         B1                 open       Tokenizer drops a trailing comment  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[bug list --item T1]
@@ -82,6 +86,7 @@
       (open bugs only; --all includes fixed and invalid)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[bug list]
@@ -93,6 +98,7 @@
       (open bugs only; --all includes fixed and invalid)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[history]
@@ -116,6 +122,7 @@
         sorting a merged history by timestamp interleaves them wrongly.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[lesson list --all]
@@ -125,6 +132,7 @@
         L1                 live       Pin the grammar before refactoring it  [@golden 2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[lesson list]
@@ -136,6 +144,7 @@
       (live lessons only; --all includes superseded)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[loops]
@@ -146,6 +155,7 @@
       Checked: dependency cycles, repeat claims, gate flapping, repeated failures, reopened items, duplicate work, stalled queue.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[phase list --state done]
@@ -155,6 +165,7 @@
       No phase records matching {'state': 'done'}.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[phase list]
@@ -164,6 +175,7 @@
         P1                 open       1/3    Ship the parser  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[progress T1]
@@ -178,6 +190,7 @@
       1 item(s) · 0.0 agent-hours recorded · 0 commit(s)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[progress]
@@ -193,6 +206,7 @@
       4 item(s) · 0.0 agent-hours recorded · 0 commit(s)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[rebuild]
@@ -202,6 +216,7 @@
       rebuilt index from 10 events in <S>s (4 items, 1 lessons)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[recover]
@@ -211,6 +226,7 @@
       Nothing to recover — no expired leases, no orphan worktrees.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[render --show board]
@@ -239,11 +255,13 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_human[render --show bogus]
   tuple(
     1,
+    '',
     '''
       unknown view 'bogus'; known: board, bugs, decisions, lessons, lessons-summary, research, sessions
   
@@ -270,6 +288,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_human[replay --verify]
@@ -351,6 +370,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_human[replay]
@@ -432,6 +452,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_human[research list --limit 1]
@@ -441,6 +462,7 @@
         R49b608db82        confirmed  Is recursive descent fast enough?  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[research list]
@@ -450,6 +472,7 @@
         R49b608db82        confirmed  Is recursive descent fast enough?  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[search --exact tok]
@@ -460,11 +483,13 @@
         bug       B1                     open         2026-01-01  Tokenizer drops a trailing comment
   
     ''',
+    '',
   )
 # ---
 # name: test_human[search --regex (a+)+$]
   tuple(
     3,
+    '',
     '''
       regex refused: a repeat of variable length inside another repeat can take exponential time
   
@@ -479,6 +504,7 @@
         bug       B1                     open         2026-01-01  Tokenizer drops a trailing comment
   
     ''',
+    '',
   )
 # ---
 # name: test_human[search tokenizer]
@@ -489,6 +515,7 @@
         bug       B1                     open         2026-01-01  Tokenizer drops a trailing comment
   
     ''',
+    '',
   )
 # ---
 # name: test_human[search zzzzqq]
@@ -498,6 +525,7 @@
       No matches for 'zzzzqq' (ranked); searched 10 records.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[session list --state open]
@@ -507,6 +535,7 @@
       No sessions matching {'state': 'open'}. (Prompts recorded with no session are attached by `ddflow session adopt-orphans`.)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[session list]
@@ -516,11 +545,13 @@
       No sessions. (Prompts recorded with no session are attached by `ddflow session adopt-orphans`.)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[session show nope]
   tuple(
     3,
+    '',
     '''
       no session 'nope' (`ddflow session list` shows them)
   
@@ -537,11 +568,13 @@
       Tokenizer drops a trailing comment
   
     ''',
+    '',
   )
 # ---
 # name: test_human[show NOPE]
   tuple(
     1,
+    '',
     '''
       no such item or bug 'NOPE'
   
@@ -571,6 +604,7 @@
         files changed: UNKNOWN (no sha, or git could not list it)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[show T2]
@@ -593,6 +627,7 @@
         [ ] merge
   
     ''',
+    '',
   )
 # ---
 # name: test_human[status]
@@ -618,6 +653,7 @@
       Nothing looping, nothing to recover.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list --owner nobody]
@@ -627,6 +663,7 @@
       No task records matching {'agent': 'nobody'}.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list --phase P1 --limit 1]
@@ -638,6 +675,7 @@
       (showing 1 of 3; raise --limit)
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list --since 2020-01-01]
@@ -649,6 +687,7 @@
         T2                 open       Grammar  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list --state bogus]
@@ -658,6 +697,7 @@
       No task records matching {'state': 'bogus'}.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list --state done]
@@ -667,6 +707,7 @@
         T1                 done       Tokenizer  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list --tag x]
@@ -676,6 +717,7 @@
       No task records matching {'tag': 'x'}.
   
     ''',
+    '',
   )
 # ---
 # name: test_human[task list]
@@ -687,6 +729,7 @@
         T2                 open       Grammar  [2026-01-01]
   
     ''',
+    '',
   )
 # ---
 # name: test_json[board --phase P1]
@@ -792,6 +835,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[board --phase nope]
@@ -803,6 +847,9 @@
         "phase": "nope",
         "text": ""
       }
+  
+    ''',
+    '''
       no such phase or item 'nope'.
   
     ''',
@@ -911,6 +958,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[bug list --all]
@@ -943,6 +991,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[bug list --item T1]
@@ -978,6 +1027,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[bug list]
@@ -1012,6 +1062,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[history]
@@ -1204,6 +1255,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[lesson list --all]
@@ -1233,6 +1285,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[lesson list]
@@ -1264,6 +1317,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[loops]
@@ -1273,6 +1327,7 @@
       []
   
     ''',
+    '',
   )
 # ---
 # name: test_json[phase list --state done]
@@ -1294,6 +1349,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[phase list]
@@ -1325,6 +1381,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[progress T1]
@@ -1347,6 +1404,7 @@
       ]
   
     ''',
+    '',
   )
 # ---
 # name: test_json[progress]
@@ -1405,6 +1463,7 @@
       ]
   
     ''',
+    '',
   )
 # ---
 # name: test_json[rebuild]
@@ -1418,6 +1477,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[recover]
@@ -1427,6 +1487,7 @@
       []
   
     ''',
+    '',
   )
 # ---
 # name: test_json[render --show board]
@@ -1455,11 +1516,13 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_json[render --show bogus]
   tuple(
     1,
+    '',
     '''
       unknown view 'bogus'; known: board, bugs, decisions, lessons, lessons-summary, research, sessions
   
@@ -1486,6 +1549,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_json[replay --verify]
@@ -1567,6 +1631,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_json[replay]
@@ -1648,6 +1713,7 @@
       
   
     ''',
+    '',
   )
 # ---
 # name: test_json[research list --limit 1]
@@ -1677,6 +1743,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[research list]
@@ -1706,6 +1773,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[search --exact tok]
@@ -1747,11 +1815,13 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[search --regex (a+)+$]
   tuple(
     3,
+    '',
     '''
       regex refused: a repeat of variable length inside another repeat can take exponential time
   
@@ -1797,6 +1867,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[search tokenizer]
@@ -1838,6 +1909,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[search zzzzqq]
@@ -1860,6 +1932,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[session list --state open]
@@ -1880,6 +1953,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[session list]
@@ -1898,11 +1972,13 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[session show nope]
   tuple(
     3,
+    '',
     '''
       no session 'nope' (`ddflow session list` shows them)
   
@@ -1949,11 +2025,13 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[show NOPE]
   tuple(
     1,
+    '',
     '''
       no such item or bug 'NOPE'
   
@@ -2030,6 +2108,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[show T2]
@@ -2090,6 +2169,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[status]
@@ -2140,6 +2220,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list --owner nobody]
@@ -2161,6 +2242,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list --phase P1 --limit 1]
@@ -2192,6 +2274,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list --since 2020-01-01]
@@ -2243,6 +2326,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list --state bogus]
@@ -2264,6 +2348,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list --state done]
@@ -2295,6 +2380,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list --tag x]
@@ -2316,6 +2402,7 @@
       }
   
     ''',
+    '',
   )
 # ---
 # name: test_json[task list]
@@ -2365,5 +2452,6 @@
       }
   
     ''',
+    '',
   )
 # ---
