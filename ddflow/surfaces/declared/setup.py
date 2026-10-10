@@ -14,6 +14,22 @@ from ..registry import Command, Param, by_tool
 from ..tools._common import _AGENT_KEYS, _api, _configure_reported
 from ..vocabulary import sources
 
+
+def _self_request(a):
+    """`ddflow_upgrade`'s `self` argument as the self-upgrade request, None without it."""
+    mode = str(a.get("self") or "")
+    if not mode:
+        return None
+    return _api().setup.SelfUpgrade(
+        target=str(a.get("to") or ""),
+        dry_run=mode == "dry-run",
+        rollback=mode == "rollback",
+        confirm=[str(x) for x in (a.get("confirm") or [])],
+        reason=str(a.get("reason") or ""),
+        surface="mcp",
+    )
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("config",),
@@ -156,7 +172,12 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=(),
         tool="ddflow_upgrade",
-        description="What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`) and returns the plan left and `applied`; exit 3 while an item needs `confirm`. `restore` undoes an apply; `check` asks if a newer release exists. Plan exit: 0 up to date, 1 items.",
+        flag_exempt={
+            "--dry-run": "the `self` argument is run, dry-run or rollback (tools/list byte budget)",
+            "--rollback": "the `self` argument is run, dry-run or rollback (tools/list byte budget)",
+            "--yes": 'over MCP the operator\'s consent is confirm ["self"] and reason, as for every confirm',
+        },
+        description='What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`) and returns the plan left and `applied`; exit 3 while an item needs `confirm`. `restore` undoes an apply; `check` asks if a newer release exists; `self` upgrades ddflow itself (confirm ["self"] + reason). Plan exit: 0 up to date, 1 items.',
         call=lambda repo, a, agent: _api().upgrade(
             repo,
             plan=a.get("plan") if isinstance(a.get("plan"), bool) else None,
@@ -167,12 +188,15 @@ COMMANDS: tuple[Command, ...] = (
             snapshot=bool(a.get("snapshot")),
             restore=str(a.get("restore") or ""),
             check=bool(a.get("check")),
+            selfup=_self_request(a),
             agent=agent,
         ),
         # The plan's fields; an apply also carries what it did (`applied`) and a restore what
         # it put back (`restored`), so the body is the same parsed value as the CLI's `--json`.
         payload=lambda a: (
-            _api().setup.UPGRADE_CHECK_PAYLOAD
+            _api().setup.UPGRADE_SELF_PAYLOAD
+            if a.get("self")
+            else _api().setup.UPGRADE_CHECK_PAYLOAD
             if a.get("check")
             else _api().setup.UPGRADE_RESTORE_PAYLOAD
             if a.get("restore")
@@ -194,6 +218,8 @@ COMMANDS: tuple[Command, ...] = (
             Param("snapshot", type="boolean", help="apply: git snapshot backup.", mcp_only=True),
             Param("restore", help="Undo: backup name or latest; alone.", mcp_only=True),
             Param("check", type="boolean", help="Newer ddflow out? Alone.", mcp_only=True),
+            Param("self", help="Upgrade ddflow itself: run, dry-run or rollback.", mcp_only=True),
+            Param("to", help="With self: the version.", mcp_only=True),
         ),
     ),
     Command(

@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 from ...api import setup as A
 from ...api import surf_setup as SS
@@ -181,11 +182,41 @@ def _config_key_value(a) -> tuple[str, str]:
     return "", ""
 
 
+def _self_request(a) -> tuple[Any, str]:
+    """`(the self-upgrade request, "")` for `--self`, `(None, "")` without it, `(None, why)`
+    for `--to`, `--dry-run`, `--rollback` or `--yes` given without `--self`."""
+    if not getattr(a, "self", False):
+        stray = [
+            f
+            for f, on in (
+                ("--to", getattr(a, "to", "")),
+                ("--dry-run", getattr(a, "dry_run", False)),
+                ("--rollback", getattr(a, "rollback", False)),
+                ("--yes", getattr(a, "yes", False)),
+            )
+            if on
+        ]
+        return None, (f"{', '.join(stray)} only go with --self" if stray else "")
+    req = A.SelfUpgrade(
+        target=a.to,
+        dry_run=a.dry_run,
+        rollback=a.rollback,
+        confirm=["self"] if a.yes else [],
+        reason=getattr(a, "reason", "") or "",
+        surface="cli",
+    )
+    return req, ""
+
+
 def cmd_upgrade(a, c: Ctx) -> int:
     """What upgrading would change (the plan; nothing is written), or -- with `--apply` --
     doing it. The plan exits 0 up to date, 1 while it has anything in it; an apply exits 0
     done, 1 a step failed, 2 a step could not run, 3 an item needs `--confirm`."""
     apply = getattr(a, "apply", None)
+    selfup, bad = _self_request(a)
+    if bad:
+        print(bad, file=sys.stderr)
+        return REFUSED
     out = A.upgrade(
         c.repo,
         plan=True if getattr(a, "plan", False) else None,
@@ -196,11 +227,14 @@ def cmd_upgrade(a, c: Ctx) -> int:
         snapshot=bool(getattr(a, "snapshot", False)),
         restore=getattr(a, "restore", None) or "",
         check=bool(getattr(a, "check", False)),
+        selfup=selfup,
         agent=c.requested_agent,
     )
     if c.json:
         payload = (
-            A.UPGRADE_CHECK_PAYLOAD
+            A.UPGRADE_SELF_PAYLOAD
+            if selfup is not None
+            else A.UPGRADE_CHECK_PAYLOAD
             if getattr(a, "check", False)
             else A.UPGRADE_RESTORE_PAYLOAD
             if "restored" in out.data
