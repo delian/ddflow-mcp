@@ -9,7 +9,7 @@ from ...api import view_read
 from ...core import clock
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param
-from ..render import emit_json
+from ..render import emit_json, id_cell
 from .viewers_search import view_head
 
 
@@ -35,7 +35,7 @@ def cmd_session_list(a, c: Ctx) -> int:
         flags = r["state"] + (", implicit" if r["implicit"] else "")
         span = f"{_day(r['started'])} .. {_day(r['ended']) if r['ended'] else 'now'}"
         print(
-            f"  {r['id']:<22s} {r['agent']:<14.14s} {span}  "
+            f"  {id_cell(r['id'])} {r['agent']:<14.14s} {span}  "
             f"{r['prompts']}p {r['notes']}n {r['items']} item(s)  [{flags}]"
         )
     if d["truncated"]:
