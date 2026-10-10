@@ -127,7 +127,11 @@ def touched(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
     if cat == "config":
         return _config_files(repo, cfg, item) if _writes_config(item) else []
     if cat == "instructions":
-        return [_abs(repo, item["path"])]
+        doc = _abs(repo, item["path"])
+        # A refresh of a hand-edited document keeps the edit in a NEW `.local-edits[.N]` file
+        # beside it (the first free name, as the writer will take it): a file the apply creates,
+        # so the backup must name it for a restore to remove it again.
+        return [doc, AD.local_edits_path(doc)]
     out = [_abs(repo, p) for p in item.get("paths", [])]
     if cat == "hooks" and item["id"].startswith("hooks:dangling:") and item.get("paths"):
         # `hooks install` refreshes both git hooks, so both are saved.
