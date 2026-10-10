@@ -22,6 +22,10 @@ def test_unit_tests_has_a_registered_mutation() -> None:
     assert any(gid == "unit_tests" for gid, _ in _registered())
 
 
+def test_ci_has_a_registered_mutation() -> None:
+    assert any(gid == "ci" for gid, _ in _registered())
+
+
 def test_every_registered_mutation_still_applies_exactly_once() -> None:
     for gid, mut in _registered():
         src = (ROOT / mut["file"]).read_text("utf-8")
