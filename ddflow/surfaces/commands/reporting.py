@@ -12,7 +12,7 @@ import sys
 import time
 
 from ...api import reporting as A
-from ...infra import worktree as W
+from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..render import emit_json
@@ -207,7 +207,7 @@ def cmd_show(a, c: Ctx) -> int:
             + taken_over_note(it)
         )
     if it.worktree:
-        print(f"  worktree {W.load_path(c.repo, it.worktree)} [{it.branch}]")
+        print(f"  worktree {R.worktree_path(c.repo, it.worktree)} [{it.branch}]")
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 
+from ...api import surf_reporting as R
 from ...api import view_read
 from ...core import clock
-from ...services import session_view as V
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param
 from ..render import emit_json
@@ -39,14 +39,16 @@ def cmd_session_list(a, c: Ctx) -> int:
             f"{r['prompts']}p {r['notes']}n {r['items']} item(s)  [{flags}]"
         )
     if d["truncated"]:
-        print(f"\n(showing {len(d['rows'])} of {d['total']}; raise --limit, at most {V.MAX_LIMIT})")
+        print(
+            f"\n(showing {len(d['rows'])} of {d['total']}; raise --limit, at most {R.SESSION_MAX_LIMIT})"
+        )
     return OK
 
 
 def cmd_session_show(a, c: Ctx) -> int:
     try:
-        d = V.show_session(c.log.read_all(), c.cfg, a.id)
-    except V.SessionViewError as exc:
+        d = R.show_session(c.log.read_all(), c.cfg, a.id)
+    except R.SessionViewError as exc:
         print(str(exc), file=sys.stderr)
         return REFUSED
     if c.json:
@@ -81,7 +83,7 @@ COMMANDS = (
                 help="only sessions of this agent (not --agent, which is who YOU are)",
             ),
             Param("since", default="", help="ISO date or timestamp: last activity at or after"),
-            Param("limit", type="integer", default=V.DEFAULT_LIMIT),
+            Param("limit", type="integer", default=R.SESSION_DEFAULT_LIMIT),
         ),
         handler=cmd_session_list,
         via=("ddflow_list", "session"),

@@ -8,6 +8,8 @@ The slice changes where the code lives, not a byte of this.
 # ruff: noqa: F811 -- the goldenfix fixtures are imported, then named as parameters
 from __future__ import annotations
 
+import re
+
 import pytest
 from goldenfix import _pinned_environment, ddflow, project  # noqa: F401 -- fixtures
 
@@ -53,18 +55,24 @@ COMMANDS = [
 ]
 
 
+def _steady(result: tuple[int, str]) -> tuple[int, str]:
+    """`rebuild` prints how long it took."""
+    code, text = result
+    return code, re.sub(r"in \d+\.\d\ds", "in <S>s", text)
+
+
 def _id(argv: list[str]) -> str:
     return " ".join(argv)
 
 
 @pytest.mark.parametrize("argv", COMMANDS, ids=_id)
 def test_human(argv, ddflow, snapshot):
-    assert ddflow(*argv) == snapshot
+    assert _steady(ddflow(*argv)) == snapshot
 
 
 @pytest.mark.parametrize("argv", COMMANDS, ids=_id)
 def test_json(argv, ddflow, snapshot):
-    assert ddflow("--json", *argv) == snapshot
+    assert _steady(ddflow("--json", *argv)) == snapshot
 
 
 def test_a_list_flag_on_the_record_form_is_refused_by_the_parser(project, capsys):
