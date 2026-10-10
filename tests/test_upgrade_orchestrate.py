@@ -331,6 +331,34 @@ def test_resume_over_mcp_answers_like_the_cli(project, monkeypatch) -> None:
     assert "nothing to resume" in json.dumps(again["result"])
 
 
+def test_resume_does_not_refuse_an_operator_item_it_applied_before(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    plan["categories"]["features"][0]["action"] = UA.UP.OPERATOR
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, confirm={"f1": "operator said yes"})
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))  # no --confirm again
+    assert out["exit"] == 0 and out["refused"] == 0 and out["categories"] == ["features"]
+
+
+def test_history_does_not_call_a_run_an_upgrade(project, monkeypatch) -> None:
+    from ddflow.infra.log import EventLog
+    from ddflow.surfaces.commands.knowledge import _history_line
+
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan_of("f1", "f2"))
+    lines = [
+        _history_line(e)
+        for e in EventLog(project, "orch").read_all()
+        if e.kind == "upgrade.applied"
+    ]
+    assert all("unstamped -> ?" not in line for line in lines) and "started" in lines[0]
+
+
 def test_replay_tells_a_run_from_an_upgrade(project, monkeypatch) -> None:
     from ddflow.services.sessions import replay
 

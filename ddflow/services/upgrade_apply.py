@@ -303,6 +303,9 @@ def apply(
     earlier = _settled_steps(st, watch.resume)
     selected = todo
     todo = [i for i in selected if i["id"] not in earlier]
+    # what the interrupted run settled is settled: not judged again (an operator item it applied
+    # with a confirmation is not refused now) and not able to un-settle its category
+    results = [r for r in results if r["id"] not in earlier]
 
     files = [p for i in todo for p in touched(repo, cfg, i)]
     # A resume keeps the restore point the interrupted run made (it holds the originals of the
