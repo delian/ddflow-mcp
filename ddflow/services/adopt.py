@@ -28,7 +28,6 @@ from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
 from ..infra.paths import launch_parent, launch_python
-from . import claudehooks as CH
 from . import harnessreg as HR
 from . import install_info as _INSTALL
 from . import shared_files as SF
@@ -1040,6 +1039,9 @@ def _install_prompt_hooks(repo: Path, agents: list[str]) -> list[str]:
     A settings file ddflow cannot parse is reported, not overwritten, and never fails the
     adoption.
     """
+    # Deferred: claudehooks imports enforce, which the engine must not load.
+    from . import claudehooks as CH
+
     out: list[str] = []
     for h in CH.HOOKS:
         if h.name != "prompt" or h.agent not in agents:

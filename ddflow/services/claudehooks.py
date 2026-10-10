@@ -27,8 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..infra import tomlcfg
 from ..infra.fsio import Managed, NewerContent, RegionError, Unreadable, read_json
-from ..infra.tomlcfg import atomic_write
 from .enforce import backup_edited, command_line
 
 #: What identifies OUR hook among the operator's: the subcommand it runs. Matched as a
@@ -360,4 +360,4 @@ def _write(path: Path, data: dict[str, Any]) -> None:
     file, which `_read` takes as `{}` -- the operator's permissions and hooks gone, and
     the next install reporting success over the loss (roborev 826)."""
 
-    atomic_write(path, json.dumps(data, indent=2) + "\n")
+    tomlcfg.atomic_write(path, json.dumps(data, indent=2) + "\n")
