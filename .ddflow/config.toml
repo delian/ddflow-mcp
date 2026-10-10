@@ -63,6 +63,13 @@ brief_max_tokens = 1200
 # git-ignored .ddflow/gates.toml.
 command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
 
+# Mutation pass 2026-10-10 (U4): `gate verify <item> unit_tests` breaks the one place a
+# timestamp is parsed and requires the suite to notice.
+[[gate.unit_tests.mutations]]
+file = "ddflow/core/clock.py"
+old = "UNPARSEABLE = (ValueError, TypeError, OverflowError, OSError)"
+new = "UNPARSEABLE = (TypeError, OverflowError, OSError)"
+
 # This project's reviewers (the cross-family critic) are NOT committed: an endpoint, a
 # model name and an API-key variable belong to whoever runs the project. Put yours in
 # the git-ignored .ddflow/reviewers.toml, e.g.
@@ -83,6 +90,8 @@ command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
 # no [ci].command is set.
 # ---------------------------------------------------------------------------------
 [ci]
+# No mutation is registered for ci: `gate verify <item> ci` writes the mutation uncommitted and
+# `ddflow ci run` checks the committed HEAD, so it can never see one (B-verify-ci-blind).
 
 [gates]
 task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "standards", "ci", "unit_tests", "bug_hunt", "dedupe", "merge"]
