@@ -21,6 +21,7 @@ Two rules here are worth reading before changing anything:
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -32,6 +33,7 @@ from ..core import progress as PR
 from ..core.model import GateOutcome
 from ..core.plain import plain
 from ..infra import worktree as W
+from ..services import flakes as FK
 from ..services import gates as G
 from ..services import leases as L
 from ..services import prompts as P
@@ -309,8 +311,108 @@ def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outco
     return None
 
 
+def _fail_fast(command: str) -> bool:
+    """Whether a test command stops at its first failure (`-x`, `--exitfirst`, `--maxfail`)."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return True  # cannot tell: do not read a missing failure line as a pass
+    return any(t in ("-x", "--exitfirst") or t.startswith("--maxfail") for t in tokens)
+
+
+def _flakes_after_pass(repo, cfg, it, gate, cwd, ev) -> None:
+    """A gate that PASSED on the very tree and command its previous run FAILED on: the
+    tests that run named are flakes -- minus those `--rerun-failed` already logged."""
+    prior = it.gates.get(gate)
+    pev = prior.evidence if prior is not None and prior.outcome == "failed" else {}
+    same = pev.get("tree_sha") and pev.get("tree_sha") == ev.get("tree_sha")
+    if not (pev.get("failed_tests") and same and pev.get("command") == ev.get("command")):
+        return
+    logged = (pev.get("rerun") or {}).get("flaked", [])
+    n = FK.record(
+        repo, [t for t in pev["failed_tests"] if t not in logged], item=it.id, gate=gate,
+        commit=W.head_sha(cwd), how="the gate re-run passed on the same tree",
+        why=pev.get("failed_reasons"), tails=pev.get("failure_tails"), cfg=cfg,
+    )  # fmt: skip
+    if n:
+        ev["flakes_logged"] = n
+
+
+def _rerun_failed_tests(repo, cfg, it, gate, gdef, cwd, ev, rerun) -> None:
+    """`--rerun-failed`: run ONLY the failed tests once more; both outcomes go in ``ev``.
+
+    The gate stays FAILED whatever the rerun says (D-failed-gate-rerun). Tests that passed
+    alone are flakes -- all of them when the rerun passed, the ones it did not name when
+    it failed on others (never when it stops at its first failure: the rest never ran)."""
+    ids = ev.get("failed_tests") or []
+    cmd = TS.run_command(gdef.command, ids, cwd) if ids else ""
+    if not cmd:
+        ev["rerun"] = {
+            "outcome": "not run",
+            "note": "no failing test id was read from the output" if not ids
+            else "the gate's command does not run pytest, so the failed tests cannot be run alone",
+        }  # fmt: skip
+        return
+    outcome, rev = rerun(replace(gdef, command=cmd))
+    still = rev.get("failed_tests") or []
+    flaked = ids if outcome == "passed" else [t for t in ids if t not in still] if still else []
+    if outcome not in ("passed", "failed") or (outcome == "failed" and _fail_fast(gdef.command)):
+        flaked = []  # only a rerun that RAN to a verdict (and was not fail-fast) proves a pass
+    verdict = "all passed" if outcome == "passed" else outcome
+    ev["rerun"] = {
+        "command": cmd, "tests": ids, "outcome": outcome, "exit": rev.get("exit"),
+        "still_failing": still, "tail": rev.get("tail", "")[-800:], "flaked": flaked,
+        "note": f"{len(ids)} failed test(s) run alone once: {verdict}"
+        + (f"; {len(flaked)} passed alone -- logged as flakes" if flaked else "")
+        + "; the gate stays FAILED -- re-run the gate itself",
+    }  # fmt: skip
+    n = FK.record(
+        repo, flaked, item=it.id, gate=gate, commit=W.head_sha(cwd) if cwd.exists() else "",
+        how="the failed tests passed on a rerun", why=ev.get("failed_reasons"),
+        tails=ev.get("failure_tails"), cfg=cfg,
+    )  # fmt: skip
+    if n:
+        ev["flakes_logged"] = n
+
+
+def _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed) -> None:
+    """Flake bookkeeping for a command gate that just ran; notes it in ``ev``.
+
+    A test that FAILED on a tree and PASSED on the same tree is a flake, and goes to the
+    machine-local log (`ddflow tests --flakes`): the gate run again on identical content
+    and passed, or ``rerun_failed`` ran the failed tests alone. Neither changes the gate's
+    outcome: a failed gate is re-run through ddflow until it passes (D-failed-gate-rerun).
+    """
+    if result == "passed":
+        _flakes_after_pass(repo, cfg, it, gate, cwd, ev)
+    elif result == "failed" and rerun_failed:
+        _rerun_failed_tests(repo, cfg, it, gate, gdef, cwd, ev, rerun)
+
+
+def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
+    """The reason a command gate's non-pass is recorded with.
+
+    Synthesised from what actually happened. The requirement that a non-pass carries a
+    reason exists so a human can act on it; for a command gate the exit code and the
+    output tail ARE that reason, and demanding the caller retype them would mean the
+    commonest outcome of all -- a failing suite -- could not be recorded at all."""
+    reason = ev.get("reason", "")
+    if reason or result == "passed":
+        return reason
+    tail = ev.get("tail", "").strip()
+    return f"`{gdef.command}` exited {ev.get('exit')}" + (
+        f": {tail.splitlines()[-1][:160]}" if tail else ""
+    )
+
+
 def run(
-    repo: Path, item: str, gate: str, *, agent: str = "", called_from: Path | None = None
+    repo: Path,
+    item: str,
+    gate: str,
+    *,
+    agent: str = "",
+    called_from: Path | None = None,
+    rerun_failed: bool = False,
 ) -> O.Outcome:
     """Execute a command gate and record what it said.
 
@@ -387,19 +489,19 @@ def run(
     )
     if scope is not None:
         ev.update(scope.evidence())
-    reason = ev.get("reason", "")
-    if not reason and result != "passed":
-        # Synthesised from what actually happened. The requirement that a non-pass carries
-        # a reason exists so a human can act on it; for a command gate the exit code and
-        # the output tail ARE that reason, and demanding the caller retype them would mean
-        # the commonest outcome of all -- a failing suite -- could not be recorded at all.
-        tail = ev.get("tail", "").strip()
-        reason = f"`{gdef.command}` exited {ev.get('exit')}" + (
-            f": {tail.splitlines()[-1][:160]}" if tail else ""
+
+    def rerun(g):
+        return G.run_command_gate(
+            g, cwd, on_tick=keeper, tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0
         )
+
+    _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)
+    reason = _failure_reason(gdef, result, ev)
     # Unmeasured here: `run_command_gate` measured the tree the command ran on.
     R.record_measured(log, cfg, repo, it, gate, result, reason=reason, evidence=ev, gates=gates)
     data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
+    if failing := FK.failure_text(ev):
+        data["failure_text"] = failing  # for the terminal; the evidence carries the same facts
     exit_code = OUTCOME_EXIT[result]
     if exit_code == O.OK:
         return O.ok("gate.run", **data)

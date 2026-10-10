@@ -54,6 +54,14 @@ def cmd_ci(a, c: Ctx) -> int:
         print("ci: passed")
         return 0
     print(out.reason, file=sys.stderr)
-    if out.exit == 1 and d.get("output_tail"):
-        print(d["output_tail"], file=sys.stderr)
+    if out.exit == 1:
+        _print_failure(d)
     return out.exit
+
+
+def _print_failure(d: dict) -> None:
+    """The output's end, then the failing tests read from ALL of it (the tail is only its
+    last 4000 characters)."""
+    for key in ("output_tail", "failure_text"):
+        if d.get(key):
+            print(d[key], file=sys.stderr)

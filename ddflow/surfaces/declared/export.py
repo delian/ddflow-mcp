@@ -40,6 +40,8 @@ def _bisect_text(out, a) -> str:
 def _tests_text(out, a) -> str:
     """`tests`: what the change reaches, the command to run it, and the unit_tests gate's mode."""
     d = out.data
+    if a.get("flakes") and "flakes_text" in d:
+        return d["flakes_text"]
     if out.exit == NOTHING:
         lines = [out.reason]
     else:
@@ -324,9 +326,19 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
                 cli_help="compare against this ref (default: the base)",
             ),
+            Param(
+                "flakes",
+                type="boolean",
+                cli_only=True,
+                cli_help="show the flake log instead: every test that failed and then passed on the same tree through ddflow on this machine (.ddflow/local/flakes.jsonl)",
+            ),
         ),
+        flag_exempt={
+            "--flakes": "the flake log is machine-local history for the operator's terminal; an agent reads `failed_tests` in the gate evidence (tools/list byte budget)",
+        },
         call=lambda repo, a, agent, called_from=None: _api().relevant_tests(
             repo,
+            flakes=bool(a.get("flakes")),
             item=a.get("item", "") or "",
             where=called_from,
             base=a.get("base", "") or "",

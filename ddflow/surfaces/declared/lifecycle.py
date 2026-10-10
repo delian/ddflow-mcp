@@ -338,7 +338,12 @@ COMMANDS: tuple[Command, ...] = (
         "with its evidence. Agent gates cannot be run this way; they are "
         "recorded with ddflow_gate_record.",
         call=lambda repo, a, agent, called_from=None: _api().gate_run(
-            repo, a["id"], a["gate"], agent=agent, called_from=called_from
+            repo,
+            a["id"],
+            a["gate"],
+            agent=agent,
+            called_from=called_from,
+            rerun_failed=bool(a.get("rerun_failed")),
         ),
         payload=("gate", "outcome", "evidence"),
         render=L.run_text,
@@ -347,7 +352,16 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("gate", help="Gate id, e.g. unit_tests.", cli_help="", positional=True),
+            Param(
+                "rerun_failed",
+                type="boolean",
+                cli_only=True,
+                cli_help="when the gate fails, run ONLY the failed tests once more and record both outcomes (the gate stays failed; a test that passes alone goes to the flake log)",
+            ),
         ),
+        flag_exempt={
+            "--rerun-failed": "a terminal-side diagnosis of a flaky failure; the gate stays FAILED either way, so an agent gains nothing from it over the evidence's failed_tests (tools/list byte budget)",
+        },
     ),
     Command(
         path=("gate", "verify"),
