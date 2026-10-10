@@ -24,9 +24,11 @@ from .registry import tag_body
 _COMMAND: ContextVar[str] = ContextVar("ddflow_command", default="")
 
 
-def id_cell(ident: str, width: int = 22) -> str:
-    """An id padded to `width` columns, never cut: a shortened id is one `show` rejects."""
-    return f"{ident:<{width}s}"
+def id_cell(ident: str, width: int = 22, *, cut: bool = False) -> str:
+    """An id padded to `width` columns, never cut: a shortened id is one `show` rejects.
+
+    `cut=True` is only for a log event's id (a long hash no command takes), shown as a prefix."""
+    return f"{ident:<{width}.{width}s}" if cut else f"{ident:<{width}s}"
 
 
 def set_command(name: str) -> Token[str]:
