@@ -27,8 +27,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..infra import tomlcfg
 from ..infra.fsio import Managed, NewerContent, RegionError, Unreadable, read_json
-from .enforce import backup_edited
+from .enforce import backup_edited, command_line
 
 #: What identifies OUR hook among the operator's: the subcommand it runs. Matched as a
 #: substring of the command, because the interpreter path in front of it varies.
@@ -136,7 +137,6 @@ def spec(agent: str, name: str) -> HookSpec:
 
 def command(h: HookSpec) -> str:
     """The shell line `h` runs, through `enforce.command_line`'s launcher fallback."""
-    from .enforce import command_line
 
     line = command_line(h.subcommand, extra=h.extra, refresh=f"ddflow hooks install {h.flag}")
     return line + " || true" if h.fail_open else line
@@ -359,6 +359,5 @@ def _write(path: Path, data: dict[str, Any]) -> None:
     """Atomically: a truncate-then-write interrupted midway leaves an EMPTY settings
     file, which `_read` takes as `{}` -- the operator's permissions and hooks gone, and
     the next install reporting success over the loss (roborev 826)."""
-    from ..infra.tomlcfg import atomic_write
 
-    atomic_write(path, json.dumps(data, indent=2) + "\n")
+    tomlcfg.atomic_write(path, json.dumps(data, indent=2) + "\n")
