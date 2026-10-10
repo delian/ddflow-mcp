@@ -90,10 +90,18 @@ def _mutated_commit(cwd: Path, rel: str, text: str) -> tuple[str, str]:
     return commit.out.strip(), ""
 
 
-def _run_committed(gdef: GateDef, cwd: Path, rel: str, text: str) -> tuple[str, dict[str, Any]]:
+def _run_committed(
+    gdef: GateDef, cwd: Path, rel: str, text: str | None
+) -> tuple[str, dict[str, Any]]:
     """Run a gate that reads a COMMITTED ref against a throwaway commit holding the
     mutation, in a scratch checkout of it. Nothing of ``cwd`` is touched."""
-    sha, why = _mutated_commit(cwd, rel, text)
+    # ``text`` None: the unmutated HEAD, the baseline in the SAME kind of checkout the
+    # mutated runs get (a bare checkout has no untracked or ignored files to lean on).
+    if text is None:
+        head = W.git(cwd, "rev-parse", "--verify", "HEAD")
+        sha, why = head.out.strip(), head.err.strip()[:200]
+    else:
+        sha, why = _mutated_commit(cwd, rel, text)
     if not sha:
         return "unavailable", {"reason": why}
     with W.scratch_tree(cwd, sha, detach=True, prefix="ddflow-mut.", quiet=True) as s:
@@ -190,7 +198,9 @@ def verify(
 
     # The baseline. Everything below compares against it, and without it a red gate
     # "detects" every mutation.
-    baseline, base_ev = run_command_gate(gdef, cwd)
+    baseline, base_ev = (
+        _run_committed(gdef, cwd, "", None) if gdef.reads_ref else run_command_gate(gdef, cwd)
+    )
     if baseline != "passed":
         return [], (
             f"{gate_id} does not pass on the UNMUTATED source — it reported "
@@ -224,7 +234,7 @@ def verify(
             continue
         mutated = src.replace(old, new, 1)
         try:
-            if gdef.reads_committed:
+            if gdef.reads_ref:
                 # The gate reads a commit (ci), so an uncommitted edit is invisible to it
                 # and it would report PASSED on mutated source (B-verify-ci-blind).
                 outcome, ev = _run_committed(gdef, cwd, mut["file"], mutated)
@@ -245,7 +255,7 @@ def verify(
                 )
             )
         finally:
-            if not gdef.reads_committed:
+            if not gdef.reads_ref:
                 fsio.replace_text(target, src, fsync=False)
     return results, ""
 

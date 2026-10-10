@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -74,17 +73,12 @@ class GateDef:
     #: scratch worktree), not the working tree. `gate verify` then commits the mutation on
     #: a throwaway commit and runs the gate in a scratch checkout of it: an uncommitted
     #: edit is invisible to such a gate, so it could never prove it can fail
-    #: (B-verify-ci-blind). A command naming `HEAD` counts without the flag.
+    #: (B-verify-ci-blind).
     reads_ref: bool = False
 
     #: This gate is satisfied by a PERSON, not by the agent and not by a command.
     #: See :meth:`is_human_gate`.
     human: bool = False
-
-    @property
-    def reads_committed(self) -> bool:
-        """Whether a working-tree edit is invisible to this gate's command."""
-        return self.reads_ref or bool(re.search(r"\bHEAD\b", self.command))
 
     @property
     def is_command_gate(self) -> bool:
