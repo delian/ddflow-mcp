@@ -65,6 +65,8 @@ def test_the_groups_keep_their_dispatch_words_and_run_on_the_executor():
         ns = _parse(*argv)
         assert getattr(ns, dest) == argv[1]
         assert ns.fn.__module__ == "ddflow.surfaces.cliexec"
+        # the executor is bound to THIS command (`cliexec.handler` closes over it)
+        assert ns.fn.__closure__[0].cell_contents.path == tuple(argv[:2])
 
 
 def test_the_required_positionals_are_required_on_the_tools_too():
