@@ -1309,7 +1309,9 @@ def _upgrade_status(repo: Path, agent: str) -> O.Outcome:
         kind="upgrade",
         data=data,
         exit=O.FAIL if pending else O.OK,
-        reason=f"{len(data['steps'])} upgrade step(s) pending" if pending else "",
+        reason=f"{sum(s['state'] != UST.DONE for s in data['steps'])} upgrade step(s) pending"
+        if pending
+        else "",
     )
 
 
