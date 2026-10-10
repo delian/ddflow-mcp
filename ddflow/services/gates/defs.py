@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -69,9 +70,21 @@ class GateDef:
     require_output: str = ""
     fail_output: str = ""
 
+    #: The command reads a COMMITTED ref (`ddflow ci run` merges the branch's commits in a
+    #: scratch worktree), not the working tree. `gate verify` then commits the mutation on
+    #: a throwaway commit and runs the gate in a scratch checkout of it: an uncommitted
+    #: edit is invisible to such a gate, so it could never prove it can fail
+    #: (B-verify-ci-blind). A command naming `HEAD` counts without the flag.
+    reads_ref: bool = False
+
     #: This gate is satisfied by a PERSON, not by the agent and not by a command.
     #: See :meth:`is_human_gate`.
     human: bool = False
+
+    @property
+    def reads_committed(self) -> bool:
+        """Whether a working-tree edit is invisible to this gate's command."""
+        return self.reads_ref or bool(re.search(r"\bHEAD\b", self.command))
 
     @property
     def is_command_gate(self) -> bool:
@@ -217,6 +230,7 @@ DEFAULT_GATES: dict[str, GateDef] = {
         evidence=True,
         applies_to="both",
         command="ddflow ci run",
+        reads_ref=True,
         timeout_s=3600,
         unavailable_exits=[2],
         description="The exact pre-push/CI checks pass on the branch merged with the base.",
