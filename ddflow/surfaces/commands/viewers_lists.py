@@ -95,41 +95,33 @@ def _line(kind: str, r: dict[str, Any]) -> str:
 _NARROW_TO = {"bug": "open", "lesson": "live"}
 
 
-def cmd_list(a, c: Ctx) -> int:
-    kind = a.list_kind
+def _query(a, kind: str) -> tuple[dict[str, Any], bool]:
+    """The engine's arguments for a parsed `<kind> list`, and whether the default narrowing
+    (open bugs, live lessons) was applied because the line gave no state and no --all."""
     state = getattr(a, "state", "") or ""
     defaulted = kind in _NARROW_TO and not state and not getattr(a, "all", False)
     if defaulted:
         state = _NARROW_TO[kind]
-    out = view_list(
-        c.repo,
-        kind,
-        state=state,
-        phase=getattr(a, "phase", "") or "",
-        tag=getattr(a, "tag", "") or "",
-        agent=getattr(a, "owner", "") or "",
-        since=getattr(a, "since", "") or "",
-        item=getattr(a, "item", "") or "",
-        limit=R.LIST_DEFAULT_LIMIT if a.limit is None else a.limit,
-    )
-    if "rows" in out.data and kind == "phase":
-        st = c.store.ensure(c.log)
-        for r in out.data["rows"]:
-            r["done"], r["total"] = phase_progress(st, r["id"])
-    if c.json:
-        body = {**out.data, "reason": out.reason} if out.exit != OK else dict(out.data)
-        # Echo the filter under the flag's own name: replaying `agent` would be identity.
-        if "agent" in body.get("filters", {}):
-            body["filters"] = {
-                ("owner" if k == "agent" else k): v for k, v in body["filters"].items()
-            }
-        emit_json(body)
-        if out.exit not in (OK, NOTHING):
-            print(out.reason, file=sys.stderr)
-        return out.exit
-    if out.exit != OK:
-        print(out.reason, file=sys.stdout if out.exit == NOTHING else sys.stderr)
-        return out.exit
+    return {
+        "state": state,
+        "phase": getattr(a, "phase", "") or "",
+        "tag": getattr(a, "tag", "") or "",
+        "agent": getattr(a, "owner", "") or "",
+        "since": getattr(a, "since", "") or "",
+        "item": getattr(a, "item", "") or "",
+        "limit": R.LIST_DEFAULT_LIMIT if a.limit is None else a.limit,
+    }, defaulted
+
+
+def _json_body(out) -> dict[str, Any]:
+    body = {**out.data, "reason": out.reason} if out.exit != OK else dict(out.data)
+    # Echo the filter under the flag's own name: replaying `agent` would be identity.
+    if "agent" in body.get("filters", {}):
+        body["filters"] = {("owner" if k == "agent" else k): v for k, v in body["filters"].items()}
+    return body
+
+
+def _print_rows(kind: str, out, defaulted: bool) -> None:
     for r in out.data["rows"]:
         print(_line(kind, r))
     if out.data["truncated"]:
@@ -137,6 +129,25 @@ def cmd_list(a, c: Ctx) -> int:
     if defaulted:
         what = "fixed and invalid" if kind == "bug" else "superseded"
         print(f"\n({_NARROW_TO[kind]} {kind}s only; --all includes {what})")
+
+
+def cmd_list(a, c: Ctx) -> int:
+    kind = a.list_kind
+    query, defaulted = _query(a, kind)
+    out = view_list(c.repo, kind, **query)
+    if "rows" in out.data and kind == "phase":
+        st = c.store.ensure(c.log)
+        for r in out.data["rows"]:
+            r["done"], r["total"] = phase_progress(st, r["id"])
+    if c.json:
+        emit_json(_json_body(out))
+        if out.exit not in (OK, NOTHING):
+            print(out.reason, file=sys.stderr)
+        return out.exit
+    if out.exit != OK:
+        print(out.reason, file=sys.stdout if out.exit == NOTHING else sys.stderr)
+        return out.exit
+    _print_rows(kind, out, defaulted)
     return OK
 
 
