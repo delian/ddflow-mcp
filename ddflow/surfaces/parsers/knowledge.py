@@ -1,9 +1,9 @@
 """`ddflow` subcommands: lessons, recall, similar, dupes, links and decisions.
 
-Registered by `cli.build_parser`, in the order `ddflow --help` lists them. Every command but
-`link` is generated from its declaration (`surfaces/declared/knowledge.py`); `link` names
-the relation with one flag each, in a mutually exclusive group, which a declaration does not
-express."""
+Registered by `cli.build_parser`, in the order `ddflow --help` lists them. Every command is
+generated from its declaration (`surfaces/declared/knowledge.py`), `link` included: its relation
+flags are a required, mutually exclusive group of CLI-only parameters. A command that declares
+a `render` runs on the CLI executor; the others are named in `HANDLERS`."""
 
 from __future__ import annotations
 
