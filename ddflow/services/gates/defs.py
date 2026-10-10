@@ -46,6 +46,10 @@ class GateDef:
     #: globs cannot be judged, so every gate applies to it -- a gate is never dropped on a
     #: guess.
     applies_when: list[str] = field(default_factory=list)
+    #: The gate concerns a branch: it does not apply to a phase, which has none of its own
+    #: (and no worktree), so it is reported not applicable instead of waiting on a
+    #: hand-recorded pass (`gate_applies`).
+    needs_branch: bool = False
     #: What a bare pass must carry (`evidence_problems`): any of "report" (a report or
     #: output digest), "link" (a record id whose item is this one) and "fields" (every
     #: ``evidence_fields`` name filled in). Empty, the default, asks nothing more than
@@ -328,6 +332,7 @@ DEFAULT_GATES: dict[str, GateDef] = {
         title="Merge",
         required=True,
         applies_to="both",
+        needs_branch=True,
         description="Land the work on the base branch.",
         prompt="`ddflow merge <id>` — merges from the primary checkout without a checkout.",
     ),
