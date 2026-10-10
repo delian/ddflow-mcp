@@ -1207,7 +1207,7 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
     )
 
 
-def _other_modes(  # noqa: PLR0913 -- the arguments of `upgrade`, as they are
+def _other_modes(
     apply: str,
     plan: bool | None,
     confirm: Sequence[str],
