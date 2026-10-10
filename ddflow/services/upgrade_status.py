@@ -67,7 +67,8 @@ def _steps(plan: dict[str, Any], rid: str, run: dict[str, Any], live: bool) -> l
     by_id = {s["id"]: s for s in run.get("steps", [])} if rid else {}
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    first_waiting = True
+    # the apply works through the run's items in order: the first without a record is in flight
+    current = next((i for i in run.get("items", []) if i not in by_id), "") if live else ""
     for cat in UP.CATEGORIES:
         for it in plan["categories"].get(cat) or []:
             seen.add(it["id"])
@@ -76,8 +77,8 @@ def _steps(plan: dict[str, Any], rid: str, run: dict[str, Any], live: bool) -> l
                 state, detail = _STEP_STATE.get(rec["status"], PENDING), rec["detail"]
             elif it["action"] == UP.OPERATOR:
                 state, detail = NEEDS_OPERATOR, ""
-            elif live and it["id"] in run.get("items", []) and first_waiting:
-                state, detail, first_waiting = RUNNING, "", False
+            elif it["id"] == current:
+                state, detail = RUNNING, ""
             else:
                 state, detail = PENDING, ""
             out.append(

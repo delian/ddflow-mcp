@@ -317,7 +317,7 @@ def apply(
         repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
     )
     ok, done_cats, reasons = _summarise(results, selected, confirm)
-    ok |= earlier & {i["id"] for i in selected}  # settled by the interrupted run this one finishes
+    ok |= earlier  # settled by the interrupted run this one finishes
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons)

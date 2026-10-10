@@ -152,11 +152,14 @@ def _upgrade_run(st: State, run_id: str, ev: Event) -> dict[str, Any]:
     )
     if status == "started":
         run["starts"] += 1
+        run["closed"] = ""  # a run is open again once it is started again
+        # The FIRST start names the plan; a resume's start repeats only what was left of it.
         # `source` and `target`, not `from` and `to`: an older ddflow folds this event as a
         # finished upgrade and must not read the version a run is only heading for as reached.
-        run["from"], run["to"] = d.get("source", ""), d.get("target", "")
-        run["categories"] = list(d.get("categories") or [])
-        run["items"] = [i for i in d.get("items") or [] if isinstance(i, str)]
+        if run["starts"] == 1:
+            run["from"], run["to"] = d.get("source", ""), d.get("target", "")
+            run["categories"] = list(d.get("categories") or [])
+            run["items"] = [i for i in d.get("items") or [] if isinstance(i, str)]
         run["backup"] = d.get("backup", "") or run["backup"]
     elif status == "step":
         run["steps"].append(
