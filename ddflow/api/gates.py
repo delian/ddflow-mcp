@@ -320,6 +320,14 @@ def _fail_fast(command: str) -> bool:
     return any(t in ("-x", "--exitfirst") or t.startswith("--maxfail") for t in tokens)
 
 
+def _note_logged(ev: dict[str, Any], n: int | None) -> None:
+    """Say in the evidence how many flakes reached the log, or that it could not be written."""
+    if n is None:
+        ev["flakes_log_error"] = "the flake log could not be written (.ddflow/local/flakes.jsonl)"
+    elif n:
+        ev["flakes_logged"] = n
+
+
 def _flakes_after_pass(repo, cfg, it, gate, cwd, ev) -> None:
     """A gate that PASSED on the very tree and command its previous run FAILED on: the
     tests that run named are flakes -- minus those `--rerun-failed` already logged."""
@@ -334,8 +342,7 @@ def _flakes_after_pass(repo, cfg, it, gate, cwd, ev) -> None:
         commit=W.head_sha(cwd), how="the gate re-run passed on the same tree",
         why=pev.get("failed_reasons"), tails=pev.get("failure_tails"), cfg=cfg,
     )  # fmt: skip
-    if n:
-        ev["flakes_logged"] = n
+    _note_logged(ev, n)
 
 
 def _rerun_failed_tests(repo, cfg, it, gate, gdef, cwd, ev, rerun) -> None:
@@ -371,8 +378,7 @@ def _rerun_failed_tests(repo, cfg, it, gate, gdef, cwd, ev, rerun) -> None:
         how="the failed tests passed on a rerun", why=ev.get("failed_reasons"),
         tails=ev.get("failure_tails"), cfg=cfg,
     )  # fmt: skip
-    if n:
-        ev["flakes_logged"] = n
+    _note_logged(ev, n)
 
 
 def _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed) -> None:

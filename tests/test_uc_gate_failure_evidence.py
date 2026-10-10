@@ -317,3 +317,29 @@ def test_the_flake_log_masks_a_secret_in_the_test_id_too(repo) -> None:
     FK.record(repo, [f"tests/t.py::test_h[token={FAKE_KEY}]"])
     (row,) = FK.read(repo)
     assert FAKE_KEY not in row["test"]
+
+
+def test_an_unreadable_flake_log_is_not_reported_as_no_flakes(repo) -> None:
+    run_cli(repo, "init")
+    FK.record(repo, ["tests/t.py::test_a"])
+    FK.log_path(repo).chmod(0)
+    try:
+        if os.access(FK.log_path(repo), os.R_OK):
+            return  # running as root: permissions do not apply
+        assert "Could not read" in FK.flakes_text(repo)
+        assert "cannot be read" in FK.doctor_notes(repo)[0]
+    finally:
+        FK.log_path(repo).chmod(0o644)
+
+
+def test_a_flake_log_that_cannot_be_written_is_said_in_the_evidence(repo) -> None:
+    from ddflow.api.gates import _note_logged
+
+    ev: dict = {}
+    _note_logged(ev, None)
+    assert "could not be written" in ev["flakes_log_error"]
+    ev = {}
+    _note_logged(ev, 0)
+    assert ev == {}
+    (repo / ".ddflow").write_text("a file, not a directory")
+    assert FK.record(repo, ["tests/t.py::test_a"]) is None
