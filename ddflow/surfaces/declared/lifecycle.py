@@ -729,7 +729,7 @@ COMMANDS: tuple[Command, ...] = (
             reason=L.merge_reason,
             notes=L.merge_notes,
             body=L.merge_body,
-            extra=L.merge_extra,
+            call_kwargs=L.merge_kwargs,
         ),
         wants_called_from=True,
         params=(
