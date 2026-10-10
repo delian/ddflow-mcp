@@ -20,11 +20,6 @@ from .._base import _load
 from .lessons import _store
 
 
-def _wire_hit(table: str, label: str, r: dict) -> dict:
-    """One hit as the `--json` / MCP body carries it (see `contextpack.candidate`)."""
-    return CP.candidate(table, label, r).hit
-
-
 def _origin(st, table: str, ident):
     """The `Origin` of a recalled decision, lesson or memory; None for the other kinds."""
 

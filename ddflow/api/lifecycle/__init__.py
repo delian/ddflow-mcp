@@ -20,196 +20,24 @@ and cost something:
   success.
 """
 
-# The operations live one module per area in this package; every name -- public, private
-# and the modules the single file imported (`L`, `W`, `O` ...) -- is re-exported, so
-# `from ddflow.api import lifecycle as L; L.claim(...)` and `L.L` keep working. A REBINDING is
+# The operations live one module per area in this package; the public functions and classes
+# are re-exported, so
+# `from ddflow.api import lifecycle as L; L.claim(...)` keeps working. A REBINDING is
 # not shared: each function reads names from its own module, so to replace a helper or a
 # default in a test, patch the module that defines it (`lifecycle.wait.DEFAULT_WAIT_TIMEOUT_S`),
 # not this package. (Nothing patched the single module's names when it was split.)
 
 from __future__ import annotations
 
-import time  # noqa: F401
-from datetime import (
-    UTC,  # noqa: F401
-    datetime,  # noqa: F401
-)
-from pathlib import Path  # noqa: F401
-from typing import (  # noqa: F401
-    TYPE_CHECKING,
-    Any,
-    NamedTuple,
-)
-
-from ...config import csv_list  # noqa: F401
-from ...core import clock  # noqa: F401
-from ...core import flow as F  # noqa: F401
-from ...core import globspec as GS  # noqa: F401
-from ...core import outcome as O  # noqa: F401
-from ...core import progress as PR  # noqa: F401
-from ...core import provenance as PV  # noqa: F401
-from ...core.admission import glob_conflict  # noqa: F401
-from ...core.budget import Budget, approx_tokens  # noqa: F401
-from ...core.events import parse_changelog  # noqa: F401
-from ...core.model import (
-    ABANDONED,  # noqa: F401
-    BLOCKED,  # noqa: F401
-    DONE,  # noqa: F401
-    REVIEW,  # noqa: F401
-    State,  # noqa: F401
-)
-from ...core.plain import plain  # noqa: F401
-from ...core.schedule import (  # noqa: F401
-    Blocked,
-    capacities,
-    critical_path,
-    find_cycles,
-    is_external,
-    item_blocker,
-    needs_tree,
-    path_in_glob,
-    plan,
-    resource_shortfall,
-)
-from ...core.tier import tier_of  # noqa: F401
-from ...infra import worktree as W  # noqa: F401
-from ...infra.log import EventLog  # noqa: F401
-from ...infra.store import Store  # noqa: F401
-from ...services import changes as CH  # noqa: F401
-from ...services import choices as CHO  # noqa: F401
-from ...services import completion as CM  # noqa: F401
-from ...services import eventcommit as EC  # noqa: F401
-from ...services import flow as FS  # noqa: F401
-from ...services import flowstate as FL  # noqa: F401
-from ...services import gates as G  # noqa: F401
-from ...services import leases as L  # noqa: F401
-from ...services import ledger as LG  # noqa: F401
-from ...services import ports as PT  # noqa: F401
-from ...services import progress_line as PL  # noqa: F401
-from ...services import promotions as PM  # noqa: F401
-from ...services import searchcore as SC  # noqa: F401
-from ...services import skills as SK  # noqa: F401
-from ...services import upgrade_notice as UN  # noqa: F401
-from ...services import upgrade_start as US  # noqa: F401
-from ...services import waits as WT  # noqa: F401
-from ...services.enforce import SELF_MANAGED  # noqa: F401
-from ...services.export import refresh as RF  # noqa: F401
-from ...services.export import select as export_select  # noqa: F401
-from ...services.gates import measured as GM  # noqa: F401
-from ...services.guidance import inject as GI  # noqa: F401
-from ...views import markdown as render_md  # noqa: F401
-from .._base import _load  # noqa: F401
-from ..bug_reopen import refile_reported  # noqa: F401
-from ..ci import check_after_merge  # noqa: F401
-from ..knowledge import bug_fixed  # noqa: F401
-from ..reporting import new_reports  # noqa: F401
-from ._common import (  # noqa: F401
-    _require,
-)
-from .brief import (  # noqa: F401
-    _REFUTED_SHOWN,
-    _governing,
-    _refuted_line,
-    _rules_block,
-    _waiting_on_you,
-    brief,
-)
-from .claim import (  # noqa: F401
-    _acquire,
-    _adopt,
-    _apply_port,
-    _bind_tree,
-    _blocking_items,
-    _Bound,
-    _bring_local_files,
-    _claimed,
-    _create_tree,
-    _early_refusal,
-    _in_leased_tree,
-    _is_items_tree,
-    _join_line,
-    _leave_line,
-    _new_report_count,
-    _prior_lease,
-    _rebind,
-    _recorded_tree,
-    _refuse_if_reserved,
-    _refuse_looping,
-    _tree_let_go,
-    _tree_of,
-    _undo_claim,
-    _worktree_held_by,
-    callers_tree,
-    claim,
-)
-from .complete import (  # noqa: F401
-    _abandon_refused,
-    _complete_umbrellas_above,
-    _refuted_extra,
-    _session_model,
-    _umbrella_children,
-    abandon,
-    block,
-    complete,
-    fold,
-    remove,
-    unblock,
-)
-from .heartbeat import (  # noqa: F401
-    _catch_up_globs,
-    _commit_events,
-    _waiters,
-    heartbeat,
-    release,
-)
-from .merge import (  # noqa: F401
-    _branch_to_land,
-    _dispose_tree,
-    _lands_nothing,
-    _open_request,
-    _outside_globs,
-    _refresh_documents,
-    _scope_fields,
-    _stands_in,
-    _what_to_land,
-    dispose_tree,
-    merge,
-    record_item_removed,
-)
+from .brief import brief
+from .claim import callers_tree, claim
+from .complete import abandon, block, complete, fold, remove, unblock  # noqa: F401
+from .heartbeat import heartbeat, release
+from .merge import dispose_tree, merge, record_item_removed  # noqa: F401
 from .planning import PURPOSES, alternatives_offer, plan_for  # noqa: F401
-from .ready import (  # noqa: F401
-    _PREFIX_SHOWN,
-    DEFAULT_CHECK_RECOVERY,
-    DEFAULT_NEXT_KIND,
-    _ready_rows,
-    _unknown_phase,
-    _wait_hint,
-    next_,
-)
-from .reservations import (  # noqa: F401
-    WAITABLE,
-    _blocking_leases,
-    _claim_blocker,
-    _clears_on_release,
-    _expired_blocker,
-    _fmt_since,
-    _in_motion,
-    _reservation_hold,
-    _reserved_for,
-    _reserved_msg,
-    _resource_blocker,
-)
-from .wait import (  # noqa: F401
-    DEFAULT_WAIT_TIMEOUT_S,
-    WAIT_MAX_S,
-    _end_wait,
-    _freed,
-    _judge_any,
-    _judge_wait,
-    _note_cap,
-    _wait_globs,
-    wait,
-)
+from .ready import DEFAULT_CHECK_RECOVERY, DEFAULT_NEXT_KIND, next_
+from .reservations import WAITABLE
+from .wait import DEFAULT_WAIT_TIMEOUT_S, WAIT_MAX_S, wait  # noqa: F401
 
 #: The public operations and constants, as the single module exposed them.
 __all__ = [

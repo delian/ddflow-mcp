@@ -161,7 +161,7 @@ def test_each_bookkeeping_set_is_the_one_in_core():
     )
     assert BK.QUEUE_STATE == (".ddflow/events/", ".ddflow/local/", ".ddflow/index.db")
     assert BK.EVENTS_EXCLUDE == (":(exclude).ddflow/events",)
-    assert GT.is_state is BK.is_state
+    assert EV.is_state is BK.is_state
 
 
 @pytest.mark.parametrize(
