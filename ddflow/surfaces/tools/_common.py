@@ -4,13 +4,20 @@ helpers, the duplicate-check answer, and the few tools whose builder is a functi
 Lives beside the table, not in the engine (`surfaces/mcp.py`): every name here is read by a
 `TOOLS` entry. `surfaces/mcp.py` re-exports them, so `ddflow.surfaces.mcp._opt` and friends
 keep working.
+
+The imports left inside functions are deliberate: `ddflow.api` reaches jinja2 and this
+module is imported while the tool table is built (`scripts/bump.sh` imports it under an
+interpreter that has none), and `TOOLS` is a real cycle with the package assembling it.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from ...config import csv_list
+from ...core import outcome as O
 from ...core.clock import WAIT_MAX_S
+from ...services.adopt import AGENT_TARGETS
 from ..vocabulary import sources
 
 
@@ -24,7 +31,6 @@ def _AGENT_KEYS() -> list[str]:
     accurate statement is that the list has ONE source, and a hand-kept copy in the tool
     description has drifted twice.
     """
-    from ...services.adopt import AGENT_TARGETS
 
     return list(AGENT_TARGETS)
 
@@ -129,7 +135,6 @@ def _bug_reopen(repo, a: dict[str, Any], *, agent: str):
     """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`. Evidence
     a reopen cannot record is refused (exit 3), not dropped; an empty one carries nothing."""
     from ...api.bug_reopen import bug_reopen
-    from ...core import outcome as O
 
     if a.get("evidence"):
         return O.refused(
@@ -181,7 +186,6 @@ def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:
     """
     if key not in args or args[key] is None:
         return None
-    from ...config import csv_list
 
     return csv_list(args[key]) if isinstance(args[key], str) else list(args[key])
 

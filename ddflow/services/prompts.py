@@ -34,7 +34,6 @@ from typing import Any
 
 from ..config import Config
 from ..infra.paths import templates_dir
-from .gates import load_gates
 from .overlay import OverlayError, OverlayLoader
 
 #: Every template the system uses. Registered here so `ddflow prompts list` can show
@@ -564,6 +563,10 @@ def suite_gates(repo: Path) -> list[str]:
     """
     try:
         cfg = Config.load(repo)
+        from .gates import (
+            load_gates,  # deferred: services.gates imports reviewer_trust -> review -> prompts
+        )
+
         gates = load_gates(repo, cfg)
     except Exception:
         return []

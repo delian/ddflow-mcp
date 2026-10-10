@@ -5,6 +5,4 @@ ignore_imports = [
     "ddflow.surfaces.context -> ddflow.infra.log",
     "ddflow.surfaces.context -> ddflow.infra.store",
     "ddflow.surfaces.context -> ddflow.infra.worktree",
-    "ddflow.surfaces.context -> ddflow.services.gates",
-    "ddflow.surfaces.context -> ddflow.services.tree_owner",
 ]

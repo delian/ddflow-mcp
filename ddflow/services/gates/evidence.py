@@ -64,7 +64,6 @@ def _untracked_digest(cwd: Path) -> str:
     the object store, so this stays an observation. Binary content is covered here for
     free, because hash-object hashes bytes and does not care what they are.
     """
-    from ...infra import worktree as W
 
     listed = _untracked_listing(cwd)
     if listed is None:
@@ -112,7 +111,6 @@ def diff_stat(cwd: Path) -> dict[str, int]:
     is not -- but the keys are always present, so a reader never has to distinguish
     "no change" from "the field did not exist yet".
     """
-    from ...infra import worktree as W
 
     out = {"files": 0, "insertions": 0, "deletions": 0, "untracked": 0}
     # Untracked FIRST, and outside the HEAD guard: it needs no commit. A repository
@@ -217,7 +215,6 @@ def tree_fingerprint(cwd: Path) -> str:
 def _dirt_parts(cwd: Path) -> tuple[str, list[str]]:
     """(HEAD's first 12 characters, the three parts whose digest is a tree's "dirt"), or
     ("", []) outside a repository."""
-    from ...infra import worktree as W
 
     head = W.git(cwd, "rev-parse", "HEAD")
     if not head.ok:
@@ -345,7 +342,6 @@ def worktree_entries(cwd: Path | str) -> TreeEntries | None:
     None when it cannot be told: not a repository, an unmerged index, or more untracked
     files than MAX_UNTRACKED_HASHED.
     """
-    from ...infra import worktree as W
 
     top = W.git(cwd, "rev-parse", "--show-toplevel")
     if not top.ok:
@@ -386,7 +382,6 @@ def _working_entry(
 ) -> tuple[str, Any]:
     """How ``path``'s working copy enters the tree, as `git add` would record it:
     ("drop", None), ("set", (mode, id)), ("hash", mode) or ("keep", None)."""
-    from ...infra import worktree as W
 
     full = root / path
     if not os.path.lexists(full):
@@ -426,7 +421,6 @@ def _index_entries(rows: list[str]) -> TreeEntries | None:
 
 def _hash_into(root: Path, out: TreeEntries, to_hash: list[tuple[str, str]]) -> bool:
     """Blob ids for ``to_hash`` ((path, mode)) into ``out``, without writing objects."""
-    from ...infra import worktree as W
 
     for i in range(0, len(to_hash), 200):
         chunk = to_hash[i : i + 200]
