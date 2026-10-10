@@ -8,24 +8,12 @@ from __future__ import annotations
 import argparse
 
 from .. import cliexec
-from ..commands.lifecycle import (
-    cmd_claim,
-    cmd_complete,
-    cmd_merge,
-    cmd_next,
-    cmd_wait,
-)
+from ..commands.lifecycle import cmd_wait
 from ..declared.lifecycle import COMMANDS
 from ..registry import add_commands
 
 #: The CLI function of each declared command (`approve`'s lives in `cli.py`: see `register`).
-HANDLERS = {
-    ("next",): cmd_next,
-    ("claim",): cmd_claim,
-    ("wait",): cmd_wait,
-    ("complete",): cmd_complete,
-    ("merge",): cmd_merge,
-}
+HANDLERS = {("wait",): cmd_wait}
 
 
 def register(s: argparse._SubParsersAction) -> None:
@@ -35,7 +23,8 @@ def register(s: argparse._SubParsersAction) -> None:
 
     add_commands(
         s,
-        COMMANDS,
+        # `brief` is registered with the session verbs (`parsers/jobs.py`), where `--help` lists it.
+        [c for c in COMMANDS if c.path != ("brief",)],
         groups={"gate": "run / record / inspect a gate"},
         handlers={**HANDLERS, ("approve",): cmd_approve},
         executor=cliexec.handler,
