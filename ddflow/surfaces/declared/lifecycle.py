@@ -66,7 +66,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         kind="brief",
         prose=True,
-        prose_reason="the budgeted reading pack is text to read",
+        prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
         call=lambda repo, a, agent: _api().brief(
             repo,
             item=a.get("item", "") or "",
