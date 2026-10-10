@@ -27,6 +27,7 @@ PENDING = "pending"
 RUNNING = "running"
 DONE = "done"
 FAILED = "failed"
+UNAVAILABLE = "unavailable"
 NEEDS_OPERATOR = "needs operator confirmation"
 WAIVED = "waived"
 
@@ -37,7 +38,7 @@ _STEP_STATE = {
     UA.APPLIED: DONE,
     UA.ACKNOWLEDGED: DONE,
     UA.FAILED: FAILED,
-    UA.UNAVAILABLE: FAILED,
+    UA.UNAVAILABLE: UNAVAILABLE,
     UA.REFUSED: NEEDS_OPERATOR,
     UA.SKIPPED: WAIVED,
 }
@@ -210,7 +211,7 @@ def render(d: dict[str, Any]) -> str:
     if d["behind"]:
         lines.append("still on an older ddflow (restart the agent or its MCP server):")
         for b in d["behind"]:
-            lines.append(f"  {b['agent']}: {b['version']} (last seen {b['at'][:16]})")
+            lines.append(f"  {b['agent']}: {b['version']} (on that version since {b['at'][:16]})")
     return "\n".join(lines)
 
 

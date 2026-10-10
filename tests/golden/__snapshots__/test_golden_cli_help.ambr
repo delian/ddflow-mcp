@@ -2171,9 +2171,9 @@
                           0 newest, 1 a newer release, 2 off or unreachable); stands alone
     --status              where the upgrade stands: running version, newest release and when it was
                           asked, this project's stamp, the plan with each step's state (pending,
-                          running, done, failed, needs operator confirmation, waived), the backups,
-                          and the agents and MCP servers last seen on an older version (exit 0 up to
-                          date, 1 steps pending or a run interrupted); stands alone
+                          running, done, failed, unavailable, needs operator confirmation, waived),
+                          the backups, and the agents and MCP servers last seen on an older version
+                          (exit 0 up to date, 1 steps pending or a run interrupted); stands alone
     --history             list the upgrades this project's log records, oldest first; stands alone
     --resume              finish an --apply that was interrupted, without repeating the steps it
                           settled (--confirm/--reason/--backup go with it; exit 2 when none was
