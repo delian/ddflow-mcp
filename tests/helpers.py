@@ -9,16 +9,15 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ddflow.api._base import _load
 from ddflow.config import Config
 from ddflow.core.events import Event
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-from ddflow.services import upgrade_plan as UP
-from ddflow.surfaces.cli import build_parser
-from ddflow.surfaces.mcp import Server
+
+if TYPE_CHECKING:  # the surfaces load only for the helpers that need them
+    from ddflow.surfaces.mcp import Server
 
 
 def flow_config(**flow) -> Config:
@@ -64,6 +63,8 @@ def make_event(kind: str, subject: str, lamport: int, agent: str = "x", **data) 
 
 
 def parse_cli(*argv):
+    from ddflow.surfaces.cli import build_parser
+
     return build_parser().parse_args(list(argv))
 
 
@@ -93,6 +94,9 @@ def tool_json(result: dict) -> dict:
 
 
 def upgrade_plan(repo: Path) -> dict[str, Any]:
+    from ddflow.api._base import _load
+    from ddflow.services import upgrade_plan as UP
+
     log, cfg, st = _load(repo, "upgrader")
     return UP.build(repo, log, cfg, st)
 
