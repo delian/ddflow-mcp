@@ -5,8 +5,8 @@ B-upgrade.12-dry-run. Before an operator upgrades a project, this proves on a CO
 from the ddflow they run now to the one on the tree is smooth. Nothing here touches the
 project it rehearses, the ddflow installed on the machine or an MCP server that is running:
 
-- the project is only READ, by `git clone --local` (and fingerprinted before and after, so the
-  report can say it was left alone);
+- the project is only READ, by `git clone --local` (and its log, snapshot tags and backups compared before and after, so
+  the report can say the rehearsal left no trace);
 - every command runs in a scratch directory with a private HOME, no `DDFLOW_*` variables and no
   network (`DDFLOW_NO_UPDATE_CHECK`), against a clone;
 - the NEW ddflow is this source tree, run as a subprocess with PYTHONPATH; the OLD one is a
@@ -253,20 +253,48 @@ def previous_release(source: Path, current: str) -> str:
     return ""
 
 
-def fingerprint(source: Path) -> str:
-    """What identifies the live project's state without touching it: HEAD, whether the tree is
-    dirty, and the name, size and mtime of everything under `.ddflow` (the log and its
-    config). The report compares it before and after the rehearsal."""
-    parts = [
-        G.run(source, "rev-parse", "HEAD").out,
-        G.run(source, "--no-optional-locks", "status", "--porcelain").out,
+@dataclass
+class Live:
+    """The parts of the LIVE project a rehearsal could disturb, as they were when read."""
+
+    shards: dict[str, bytes]
+    tags: list[str]
+    backups: list[str]
+
+
+def snapshot_live(source: Path) -> Live:
+    """What to compare after the run. Other agents may be working in the live project, so its
+    log may GROW meanwhile; what must not happen is that it changes under us, or that anything
+    of the rehearsal (an agent named `dry-*`, a snapshot tag, a backup) shows up in it."""
+    tags = G.run(source, "tag", "--list", "ddflow-upgrade-snapshot/*")
+    backups = Path(source) / ".ddflow" / "backups"
+    return Live(
+        shard_bytes(source),
+        tags.out.splitlines() if tags.ok else [],
+        sorted(p.name for p in backups.iterdir()) if backups.is_dir() else [],
+    )
+
+
+def live_problems(before: Live, after: Live) -> list[str]:
+    """How the live project differs from before in a way a rehearsal must not cause."""
+    out = [
+        f"the live shard {n} changed under the run"
+        for n in prefixes_kept(before.shards, after.shards)
     ]
-    root = Path(source) / ".ddflow"
-    for p in sorted(root.rglob("*")) if root.is_dir() else []:
-        if p.is_file():
-            st = p.stat()
-            parts.append(f"{p.relative_to(source)} {st.st_size} {st.st_mtime_ns}")
-    return D.of_obj(parts)
+    out += [
+        f"the live log has a shard of the rehearsal: {n}"
+        for n in after.shards
+        if n.startswith("dry-")
+    ]
+    out += [
+        f"a snapshot tag appeared in the live project: {t}"
+        for t in sorted(set(after.tags) - set(before.tags))
+    ]
+    out += [
+        f"a backup appeared in the live project: {b}"
+        for b in sorted(set(after.backups) - set(before.backups))
+    ]
+    return out
 
 
 def state_digests(repo: Path) -> dict[str, str]:
@@ -364,6 +392,10 @@ class Rehearsal:
             "XDG_CONFIG_HOME": str(self.home / "config"),
             "LC_ALL": "C.UTF-8",
             "NO_COLOR": "1",
+            # `python -m ddflow` run in a clone of ddflow's OWN repository would otherwise
+            # import the clone's package (the working directory comes first on sys.path), and
+            # the "new" code would be the old one
+            "PYTHONSAFEPATH": "1",
             "COLUMNS": "200",
             "DDFLOW_NO_UPDATE_CHECK": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
@@ -423,7 +455,7 @@ class Rehearsal:
     def run(self) -> Report:
         self.report.started = clock.now_iso(timespec="seconds")
         self.report.facts["new"] = self.report.new_label
-        before = self.guard(1, "live project fingerprint", lambda: fingerprint(self.opt.source))
+        before = self.guard(1, "live project snapshot", lambda: snapshot_live(self.opt.source))
         if self.guard(1, "clone at the installed version's commit", self.step_clone):
             if self.opt.old is None and self.opt.build_old:
                 self.guard(1, "build the old ddflow from the clone", self.step_build_old)
@@ -438,13 +470,17 @@ class Rehearsal:
             )
             self.guard(7, "two agents, one task", self.step_agents)
             self.guard(8, "shards from the old version merge", self.step_shards)
-        after = self.guard(9, "live project untouched", lambda: fingerprint(self.opt.source))
+        after = self.guard(9, "live project untouched", lambda: snapshot_live(self.opt.source))
         if before is not None and after is not None:
+            moved = live_problems(before, after)
+            grew = len(after.shards) - len(before.shards)
             self.add(
                 9,
                 "live project untouched",
-                before == after,
-                "fingerprint of HEAD, tree and .ddflow",
+                not moved,
+                "; ".join(moved) or "no shard, tag or backup of the rehearsal; its log only grew"
+                if grew or after.shards != before.shards
+                else "nothing of the live project changed",
             )
         return self.report
 
@@ -997,6 +1033,17 @@ def _first_phase(repo: Path) -> str:
     return "P1"
 
 
+def _event_lines(lines: list[str]) -> list[Event]:
+    """The events these lines hold; one that does not parse is skipped, as the log skips it."""
+    out = []
+    for ln in lines:
+        try:
+            out.append(Event.from_json(ln))
+        except (ValueError, KeyError, TypeError):
+            continue
+    return out
+
+
 def _lines(shards: dict[str, bytes]) -> list[str]:
     return [
         ln
@@ -1009,7 +1056,7 @@ def _lines(shards: dict[str, bytes]) -> list[str]:
 def _digest_of(lines: list[str]) -> str:
     """The digest of what raw event lines fold into, read the way the log reads them: sorted,
     each event once."""
-    by_id = {e.id: e for e in (Event.from_json(ln) for ln in lines)}
+    by_id = {e.id: e for e in _event_lines(lines)}
     st = fold(sorted(by_id.values(), key=Event.sort_key), strict=False)
     return D.of_obj(users_part({k: D.of_obj(v) for k, v in _fields(st).items()}))
 
