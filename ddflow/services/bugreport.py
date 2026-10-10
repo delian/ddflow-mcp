@@ -358,27 +358,19 @@ def _command(failure: Failure | None, clean: Callable[[object], str]) -> dict[st
         "error_class": clean(cls),
     }
     if failure.stderr:
-        out["stderr"] = clip(
-            clean(normalise_traceback(failure.stderr)),
-            STDERR_MAX,
-            side="tail",
-            marker="[...]\n",
-            rstrip=False,
-        )
+        out["stderr"] = _tail(clean(normalise_traceback(failure.stderr)), STDERR_MAX)
     if failure.traceback:
-        out["traceback"] = clip(
-            clean(normalise_traceback(failure.traceback)),
-            TRACEBACK_MAX,
-            side="tail",
-            marker="[...]\n",
-            rstrip=False,
-        )
+        out["traceback"] = _tail(clean(normalise_traceback(failure.traceback)), TRACEBACK_MAX)
     return out
 
 
 def _cut(text: str, n: int) -> str:
     """The first `n` characters, not ending inside a `[REDACTED:...]` marker."""
     return whole_marks(text[:n])
+
+
+def _tail(text: str, limit: int) -> str:
+    return clip(text, limit, side="tail", marker="[...]\n", rstrip=False)
 
 
 def _excerpt(events: Iterable[Event], agents: _Aliases) -> list[dict[str, Any]]:
