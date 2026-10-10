@@ -80,3 +80,23 @@ def test_an_unclaimed_task_still_owes_merge(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t")
     assert "[ ] merge" in run_cli(repo, "gate", "status", "T1")[1]
+
+
+def test_a_task_base_that_no_longer_exists_does_not_hide_unmerged_work(repo):
+    """The backstop judges against the phase's base when the task's recorded base branch
+    has since been deleted, rather than calling the work merged."""
+    from ddflow.config import Config
+    from ddflow.core.model import Item, State
+    from ddflow.services.completion import _unmerged_branches
+
+    _git(repo, "checkout", "-q", "-b", "t/T")
+    (repo / "x.txt").write_text("x\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "work")
+    _git(repo, "checkout", "-q", "main")
+    st = State()
+    phase = Item(id="P", kind="phase", title="p")
+    task = Item(id="T", kind="task", title="t", branch="t/T", base="gone/base", state="done")
+    task.parent = "P"
+    st.items = {"P": phase, "T": task}
+    assert _unmerged_branches(st, Config(), phase, repo) != []

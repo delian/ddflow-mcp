@@ -263,14 +263,23 @@ def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> li
     what stands in for it is this fact: no finished task below it still has a branch whose
     commits the base lacks. Git unable to answer is not a blocker."""
     base = cfg.worktree.base_ref or W.default_branch(repo)
+
+    def _ref(t: Item) -> str:
+        # The task's recorded base may be a branch since deleted: judge against the
+        # phase's base then, or the unmerged work would be called merged.
+        return (
+            t.base
+            if t.base and W.git(repo, "rev-parse", "--verify", "--quiet", t.base).ok
+            else base
+        )
+
     left = [
         t.id
         for k in sorted(state.descendants(phase.id))
         if (t := state.items[k]).branch
         and t.state == "done"
         and W.branch_exists(repo, t.branch)
-        and not W.is_merged(repo, t.branch, t.base or base)
-        and W.git(repo, "rev-parse", "--verify", "--quiet", t.base or base).ok
+        and not W.is_merged(repo, t.branch, _ref(t))
     ]
     if not left:
         return []
