@@ -1246,6 +1246,21 @@ def _with_guidance(context: str, cfg, st, item: str, gate: str, say: Callable[[s
     return f"{context}\n\n{found.text}".strip() if context else found.text.strip()
 
 
+def _unknown_item(repo: Path, item: str, agent: str, gate: str) -> O.Outcome | None:
+    """A refusal for an `item` the queue does not hold, else None.
+
+    Checked before anything is recorded: the fold creates an item for an unknown subject, so
+    a typo'd id would otherwise gain a phantom task carrying the review's outcome (B8d9e8108f8).
+    """
+    if not item:
+        return None
+    it = _load(repo, agent)[2].items.get(item)
+    if it is not None and not it.removed:
+        return None
+    gone = " (it was removed from the queue)" if it is not None else ""
+    return O.failed("review", f"no such item {item!r}{gone}", id=item, gate=gate)
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -1272,7 +1287,9 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     otherwise one review per gate (`_review_gates`, decision D-gate-economy 2).
     One gate is `_review_gate`, whose docstring has the rest.
     """
-    args = dict(locals())
+    args = dict(locals())  # first: every later local would leak into the kwargs
+    if (refused := _unknown_item(repo, item, agent, gate)) is not None:  # a refusal is falsy
+        return refused
     asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
     if len(asked) > 1:
         return _review_gates(asked, args)
