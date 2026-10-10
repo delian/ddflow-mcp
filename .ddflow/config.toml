@@ -90,11 +90,8 @@ new = "UNPARSEABLE = (TypeError, OverflowError, OSError)"
 # no [ci].command is set.
 # ---------------------------------------------------------------------------------
 [ci]
-# Mutation pass 2026-10-10 (U4): an unused import ruff-check must refuse.
-[[gate.ci.mutations]]
-file = "ddflow/core/clock.py"
-old = "import math\nimport re\n"
-new = "import math\nimport os\nimport re\n"
+# No mutation is registered for ci: `gate verify <item> ci` writes the mutation uncommitted and
+# `ddflow ci run` checks the committed HEAD, so it can never see one (B-verify-ci-blind).
 
 [gates]
 task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "standards", "ci", "unit_tests", "bug_hunt", "dedupe", "merge"]
