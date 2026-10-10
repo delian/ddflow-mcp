@@ -194,6 +194,36 @@ def test_history_that_already_holds_an_upgrade_is_not_taken_for_a_premature_appl
     assert rehearsal.step_connect(), rehearsal.report.table()
 
 
+def test_a_hand_edit_inside_a_stamped_block_is_written_and_found_again(tmp_path: Path) -> None:
+    root = project(tmp_path, confirm_free=True)
+    (root / "CLAUDE.md").write_text(
+        "# mine\n<!-- ddflow:begin rules/work-queue ddflow=0.1.0 fmt=1 sha=abc -->\nbody\n"
+        "<!-- ddflow:end rules/work-queue -->\n",
+        "utf-8",
+    )
+    git(root, "add", "-A")
+    git(root, "commit", "--quiet", "--no-verify", "-m", "a stamped block")
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    assert rehearsal.step_clone()
+    repo = rehearsal.clone("edit")
+    assert rehearsal._hand_edit(repo) == "CLAUDE.md"
+    text = (repo / "CLAUDE.md").read_text("utf-8").splitlines()
+    assert text[2] == DR.HAND_EDIT  # inside the block, right after its begin marker
+    assert DR._edit_kept(repo, "CLAUDE.md")
+    # an apply that rewrote the file but kept the line beside it did not lose it
+    (repo / "CLAUDE.md").write_text("rewritten\n", "utf-8")
+    assert not DR._edit_kept(repo, "CLAUDE.md")
+    (repo / "CLAUDE.md.local-edits").write_text(DR.HAND_EDIT, "utf-8")
+    assert DR._edit_kept(repo, "CLAUDE.md")
+
+
+def test_a_project_without_a_stamped_block_has_nothing_to_hand_edit(tmp_path: Path) -> None:
+    root = project(tmp_path, confirm_free=True)
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    assert rehearsal.step_clone()
+    assert rehearsal._hand_edit(rehearsal.clone("edit")) == ""
+
+
 def test_the_new_ddflow_is_never_the_clones_own_package(tmp_path: Path) -> None:
     """Rehearsing ddflow's own repository: `python -m ddflow` run inside the clone imports the
     clone's `ddflow` package first (the working directory leads sys.path) unless told not to, and
@@ -241,6 +271,11 @@ def test_the_live_check_tells_our_trace_from_other_agents_work(tmp_path: Path) -
     shard.write_text("rewritten", "utf-8")
     text = "; ".join(DR.live_problems(before, DR.snapshot_live(root)))
     assert "changed under the run" in text and "dry-apply.jsonl" in text
+    # a leak into a project whose log did not change is named in the row, not hidden
+    leak = DR.Rehearsal(options(tmp_path, root))
+    leak.report.checks.clear()
+    leak.add(9, "x", False, "; ".join(DR.live_problems(before, DR.snapshot_live(root))) or "?")
+    assert "snapshot tag" in leak.report.checks[0].detail
     assert "snapshot tag" in text and "a backup appeared" in text
 
 

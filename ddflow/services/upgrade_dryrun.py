@@ -85,6 +85,9 @@ UPGRADE_OWNED = frozenset(
     }
 )
 
+#: The line the rehearsal writes by hand inside a stamped block.
+HAND_EDIT = "DRYRUN-HAND-EDIT: a line an operator wrote"
+
 #: The event kinds an apply writes: any of them new in the log means something was applied.
 APPLYING = frozenset({"upgrade.applied", "repair.applied"})
 
@@ -440,10 +443,10 @@ class Rehearsal:
         self.git(dest, "config", "commit.gpgsign", "false")
         return dest
 
-    def apply_args(self, backup: str) -> list[str]:
+    def apply_args(self, backup: str, keys: Iterable[str] = ()) -> list[str]:
         """`upgrade --apply` with the confirmations the plan asked for (the rehearsal gives them:
         what the operator would be asked is judged by the plan step, not by stopping here)."""
-        asked = [x for k in self.confirms for x in ("--confirm", k)]
+        asked = [x for k in sorted({*self.confirms, *keys}) for x in ("--confirm", k)]
         return ["upgrade", "--apply", "--backup", backup, *asked, "--reason", self.opt.reason]
 
     def commit_all(self, repo: Path, message: str) -> None:
@@ -476,15 +479,13 @@ class Rehearsal:
         after = self.guard(9, "live project untouched", lambda: snapshot_live(self.opt.source))
         if before is not None and after is not None:
             moved = live_problems(before, after)
-            grew = len(after.shards) - len(before.shards)
-            self.add(
-                9,
-                "live project untouched",
-                not moved,
-                "; ".join(moved) or "no shard, tag or backup of the rehearsal; its log only grew"
-                if grew or after.shards != before.shards
-                else "nothing of the live project changed",
+            same = after.shards == before.shards
+            fine = (
+                "nothing of the live project changed"
+                if same
+                else ("no shard, tag or backup of the rehearsal; its log only grew")
             )
+            self.add(9, "live project untouched", not moved, "; ".join(moved) or fine)
         return self.report
 
     def step_clone(self) -> bool:
@@ -624,10 +625,15 @@ class Rehearsal:
 
     def step_apply(self) -> bool:
         repo = self.clone("apply")
+        edited = self._hand_edit(repo)
         before_users = users_part(state_digests(repo))
         before_tree, before_shards = tree_digest(repo), shard_bytes(repo)
-        done = self.ddflow(self.new, repo, *self.apply_args("snapshot"), agent="dry-apply")
+        planned = self.ddflow(self.new, repo, "upgrade", "--plan", "--json", agent="dry-apply")
+        keys = [_key(i) for i in _asked(planned)]
+        done = self.ddflow(self.new, repo, *self.apply_args("snapshot", keys), agent="dry-apply")
         problems: list[str] = []
+        if edited and not _edit_kept(repo, edited):
+            problems.append(f"the hand edit inside the stamped block of {edited} was lost")
         if done.returncode != 0:
             problems.append(
                 f"apply exited {done.returncode}: {(done.stderr or done.stdout).strip()[-200:]}"
@@ -647,8 +653,25 @@ class Rehearsal:
             "apply with a snapshot, again, restore",
             not problems,
             "; ".join(problems)
-            or "users' records unchanged, doctor clean, second apply a no-op, restore exact",
+            or "users' records unchanged, "
+            + (f"hand edit in {edited} kept, " if edited else "no stamped block to hand-edit, ")
+            + "doctor clean, second apply a no-op, restore exact",
         )
+
+    def _hand_edit(self, repo: Path) -> str:
+        """Write a line of our own inside a stamped block of a managed instruction file and
+        commit it, as an operator's hand edit would sit: the apply must not lose it. The name
+        of the file, or "" when the project has no stamped block."""
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            path = Path(repo) / name
+            lines = path.read_text("utf-8").splitlines(keepends=True) if path.is_file() else []
+            for at, line in enumerate(lines):
+                if "ddflow:begin" in line and "sha=" in line:
+                    lines.insert(at + 1, f"{HAND_EDIT}\n")
+                    fsio.replace_text(path, "".join(lines))
+                    self.commit_all(repo, "a hand edit")
+                    return name
+        return ""
 
     def _after_apply(self, repo: Path, before_users: dict[str, str]) -> list[str]:
         out: list[str] = []
@@ -996,6 +1019,22 @@ def tools_problems(tools: list[dict[str, Any]], budget: int) -> tuple[int, list[
     if any("outputSchema" in t for t in tools):
         out.append("tools/list carries output schemas ([mcp].output_schemas should be off)")
     return size, out
+
+
+def _asked(plan: P.Captured) -> list[dict[str, Any]]:
+    """The items of a plan (`upgrade --plan --json`) the operator would be asked to confirm."""
+    try:
+        cats = json.loads(plan.stdout)["categories"]
+    except (ValueError, KeyError, TypeError):
+        return []
+    return [i for v in cats.values() for i in v if i["action"] == "needs operator confirmation"]
+
+
+def _edit_kept(repo: Path, name: str) -> bool:
+    """Is the rehearsal's hand edit still in ``name``, or kept beside it in a `.local-edits`?"""
+    here = Path(repo) / name
+    held = [here, *sorted(here.parent.glob(name + ".local-edits*"))]
+    return any(HAND_EDIT in p.read_text("utf-8", "replace") for p in held if p.is_file())
 
 
 def _key(item: dict[str, Any]) -> str:
