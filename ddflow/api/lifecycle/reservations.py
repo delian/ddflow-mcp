@@ -1,6 +1,6 @@
 """Who is in line for which files, and what blocks a claim: the reservation queue.
 
-Part of `ddflow.api.lifecycle`, which re-exports the public functions and classes defined here."""
+Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."""
 
 from __future__ import annotations
 

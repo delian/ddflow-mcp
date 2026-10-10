@@ -1,6 +1,6 @@
 """`complete`, `abandon`, `remove`, `block`, `unblock`.
 
-Part of `ddflow.api.lifecycle`, which re-exports the public functions and classes defined here."""
+Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."""
 
 from __future__ import annotations
 
