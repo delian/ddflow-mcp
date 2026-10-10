@@ -176,6 +176,16 @@ SCRIPT: tuple[tuple[str, ...], ...] = (
     ("--json", "promote", "deployed", "staging"),
     ("promote", "status"),
     ("--json", "promote", "status"),
+    ("bug", "found", "--id", "Bx", "--summary", "first problem", "--no-task"),
+    ("bug", "found", "--id", "By", "--summary", "second one", "--no-task"),
+    ("bug", "reopen", "Bx", "--reason", "early"),
+    ("bug", "invalid", "Bx", "--reason", "false", "--evidence", "probe"),
+    ("bug", "reopen", "Bx", "--reason", "wrong"),
+    ("--json", "bug", "reopen", "Bx", "--reason", "again"),
+    ("bug", "invalid", "By", "--reason", "false too"),
+    ("--json", "bug", "reopen", "By", "--reason", "regress"),
+    ("bug", "reopen", "Bnope", "--reason", "x"),
+    ("bug", "reopen", "Bx"),
 )
 
 
@@ -1993,5 +2003,71 @@ EXPECTED = [
         "  ]\n"
         "}\n",
         "",
+    ),
+    (
+        ("bug", "found", "--id", "Bx", "--summary", "first problem", "--no-task"),
+        0,
+        "bug Bx recorded\n",
+        "",
+    ),
+    (
+        ("bug", "found", "--id", "By", "--summary", "second one", "--no-task"),
+        0,
+        "bug By recorded\n",
+        "",
+    ),
+    (
+        ("bug", "reopen", "Bx", "--reason", "early"),
+        3,
+        "",
+        "bug Bx is open; there is nothing to reopen.\n",
+    ),
+    (
+        ("bug", "invalid", "Bx", "--reason", "false", "--evidence", "probe"),
+        0,
+        "bug Bx closed as invalid: false (evidence: probe)\n",
+        "",
+    ),
+    (
+        ("bug", "reopen", "Bx", "--reason", "wrong"),
+        0,
+        "bug Bx reopened (was invalid): wrong\n"
+        "no task was filed to fix it: `ddflow bug file-tasks` files one\n",
+        "",
+    ),
+    (
+        ("--json", "bug", "reopen", "Bx", "--reason", "again"),
+        3,
+        "",
+        "bug Bx is open; there is nothing to reopen.\n",
+    ),
+    (
+        ("bug", "invalid", "By", "--reason", "false too"),
+        0,
+        "bug By closed as invalid: false too\n",
+        "",
+    ),
+    (
+        ("--json", "bug", "reopen", "By", "--reason", "regress"),
+        0,
+        "{\n"
+        '  "schema": "bug_invalid@1",\n'
+        '  "id": "By",\n'
+        '  "was": "invalid",\n'
+        '  "reason_given": "regress",\n'
+        '  "fix_task": "",\n'
+        '  "fix_task_state": "",\n'
+        '  "previous_fix_task": "",\n'
+        '  "next": "no task was filed to fix it: `ddflow bug file-tasks` files one"\n'
+        "}\n",
+        "",
+    ),
+    (("bug", "reopen", "Bnope", "--reason", "x"), 3, "", "no bug Bnope is recorded in this log.\n"),
+    (
+        ("bug", "reopen", "Bx"),
+        2,
+        "",
+        "usage: ddflow bug reopen [-h] --reason REASON id\n"
+        "ddflow bug reopen: error: the following arguments are required: --reason\n",
     ),
 ]
