@@ -45,8 +45,8 @@ def _call(cmd: Command, args: dict[str, Any], ctx: Any) -> Any:
     more: dict[str, Any] = {}
     if cmd.wants_called_from:
         more["called_from"] = ctx.called_from
-    if policy is not None and policy.extra is not None:
-        more.update(policy.extra(ctx))
+    if policy is not None and policy.call_kwargs is not None:
+        more.update(policy.call_kwargs(ctx))
     return cmd.call(ctx.repo, args, agent, **more)
 
 

@@ -340,7 +340,7 @@ MERGE_PAYLOAD = (
 )
 
 
-def merge_extra(ctx) -> dict[str, Any]:
+def merge_kwargs(ctx) -> dict[str, Any]:
     """The directory this process -- and so the caller's shell -- stands in, if any."""
     try:
         return {"shell_cwd": Path.cwd()}

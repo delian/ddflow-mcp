@@ -486,7 +486,7 @@ class CliPolicy:
     * ``human(out, args, ctx)``: the human text when it needs the context (the identity,
       the tree the caller stands in) that ``render(out, args)`` is not given; ``None``
       prints nothing;
-    * ``extra(ctx)``: more keyword arguments for ``call``, which only the CLI knows (the
+    * ``call_kwargs(ctx)``: more keyword arguments for ``call``, which only the CLI knows (the
       directory the caller's shell stands in).
     """
 
@@ -497,7 +497,7 @@ class CliPolicy:
     notes: Callable[..., Iterable[str]] | None = None
     body: Callable[..., Any] | None = None
     human: Callable[..., str] | None = None
-    extra: Callable[..., Mapping[str, Any]] | None = None
+    call_kwargs: Callable[..., Mapping[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
