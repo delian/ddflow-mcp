@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping
@@ -474,6 +475,161 @@ def test_merge_is_additive() -> None:
     got = merged(snap, {"task.added": {"body": {"str"}, "title": {"null"}}})
     assert got["kinds"]["task.added"]["fields"] == {"body": ["str"], "title": ["null", "str"]}
     assert known_kinds() <= set(got["kinds"])
+
+
+# -- a real bump, rehearsed over the logs releases wrote ----------------------------------
+
+RELEASES = ROOT / "tests" / "fixtures" / "releases"
+RELEASE_PROJECTS = sorted(
+    p for p in RELEASES.glob("*/project") if (p / ".ddflow" / "events").is_dir()
+)
+
+
+def bump_phase_title_to_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What the first real bump looks like end to end: `phase.added` goes to v2, whose payload
+    calls its title `name`; the upcaster turns a v1 payload into it, and the handler (as the
+    release that bumped it would have written it) reads only the new shape."""
+    from dataclasses import replace
+
+    from ddflow.core import model as M
+
+    original = M.HANDLERS["phase.added"]
+
+    def handler(st, ev):
+        assert "title" not in ev.data and "name" in ev.data, "the handler saw the old shape"
+        original(st, replace(ev, data={**ev.data, "title": ev.data["name"]}))
+
+    def step(kind, data):
+        return kind, {**{k: v for k, v in data.items() if k != "title"}, "name": data["title"]}
+
+    monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
+    monkeypatch.setitem(U.UPCASTERS, ("phase.added", 1), step)
+    monkeypatch.setitem(M.HANDLERS, "phase.added", handler)
+
+
+def titles(st) -> dict[str, str]:
+    return {i.id: i.title for i in st.items.values()}
+
+
+def test_the_release_fixtures_are_there() -> None:
+    """The tests below are parametrized over them: an empty set would skip, not fail."""
+    assert len(RELEASE_PROJECTS) >= 3, RELEASE_PROJECTS
+
+
+@pytest.mark.parametrize("project", RELEASE_PROJECTS, ids=lambda p: p.parent.name)
+def test_every_released_log_folds_through_a_real_upcaster(project: Path, tmp_path, monkeypatch):
+    """The event-evolution machinery had only ever met in-memory events: here every release's
+    own shards are read from disk by the log, upcast by a rename, and handed to a handler that
+    knows only the new shape. The state is what it was; the events keep their ids."""
+    from ddflow.infra.log import EventLog
+
+    shutil.copytree(project, tmp_path / "p")
+    root = tmp_path / "p"
+    before = EventLog(root, agent_id="reader").read_all()
+    baseline = fold(before, strict=False)
+    phases = [e for e in before if e.kind == "phase.added"]
+    assert phases, "the release fixture has no phase to bump"
+    bump_phase_title_to_name(monkeypatch)
+    after = EventLog(root, agent_id="reader").read_all()
+    state = fold(after, strict=True)
+    assert titles(state) == titles(baseline)
+    assert state.skipped_kinds == {} and state.fold_problems == []
+    upcast = [U.upcast(e) for e in after if e.kind == "phase.added"]
+    assert [e.id for e in upcast] == [e.id for e in phases]
+    assert all("name" in e.data and "title" not in e.data and e.data["v"] == 2 for e in upcast)
+
+
+@pytest.mark.parametrize("project", RELEASE_PROJECTS[-1:], ids=lambda p: p.parent.name)
+def test_an_older_reader_skips_what_the_bumped_writer_appended(
+    project: Path, tmp_path, monkeypatch
+):
+    """The other half: the bumped release appends a v2 phase to a released log; a reader of the
+    release before the bump (no bump registered) preserves it, counts it and folds the rest."""
+    from ddflow.infra.log import EventLog
+
+    shutil.copytree(project, tmp_path / "p")
+    root = tmp_path / "p"
+    with monkeypatch.context() as bumped:
+        bump_phase_title_to_name(bumped)
+        written = EventLog(root, agent_id="bumped").append("phase.added", "P99", {"name": "new"})
+        assert written.data["v"] == 2
+        assert titles(fold(EventLog(root, agent_id="r").read_all()))["P99"] == "new"
+    # back to the code before the bump
+    events = EventLog(root, agent_id="old").read_all()
+    state = fold(events, strict=False)
+    assert state.skipped_kinds == {"phase.added (payload v2)": 1}
+    assert "P99" not in state.items
+    with pytest.raises(U.NewerPayload):
+        fold(events, strict=True)
+    # nothing was lost: the line is still on disk, byte for byte
+    lines = [
+        ln
+        for p in (root / ".ddflow" / "events").glob("*.jsonl")
+        for ln in p.read_text().splitlines()
+    ]
+    assert any(json.loads(ln).get("id") == written.id for ln in lines if ln.strip())
+
+
+#: Every version constant ddflow declares: (module, name). The contract page lists them all.
+VERSION_CONSTANTS = (
+    ("ddflow", "FORMAT_LEVEL"),
+    ("ddflow.config", "CONFIG_FORMAT"),
+    ("ddflow.core.events", "SCHEMA_VERSION"),
+    ("ddflow.infra.log", "SNAPSHOT_FORMAT"),
+    ("ddflow.infra.store", "SCHEMA"),
+    ("ddflow.core.textsim", "VERSION"),
+    ("ddflow.services.ticks", "FORMAT"),
+    ("ddflow.services.quota", "STORE_VERSION"),
+)
+
+
+def test_the_contract_lists_every_version_number_with_its_value() -> None:
+    """Independent version numbers and no common statement of them was a finding of the
+    upgrade-path review: a number the code declares and this page does not name fails here."""
+    import importlib
+
+    page = CONTRACT.read_text(encoding="utf-8")
+    assert "## Every version number" in page
+    for module, name in VERSION_CONSTANTS:
+        value = getattr(importlib.import_module(module), name)
+        short = module.removeprefix("ddflow.") if module != "ddflow" else "ddflow"
+        row = re.search(rf"^\| `{re.escape(short)}\.{name}` \| (\d+) \|", page, re.M)
+        assert row, f"{module}.{name} is not in the version table of {CONTRACT.name}"
+        assert int(row.group(1)) == value, (
+            f"{module}.{name} is {value}, the page says {row.group(1)}"
+        )
+    assert re.search(r"^\| `ddflow\.__version__` \|", page, re.M)
+    assert "PAYLOAD_VERSIONS" in page and 'data["v"]' in page
+
+
+VERSION_NAME = re.compile(r"(SCHEMA|FORMAT|VERSION|FORMAT_LEVEL|[A-Z_]*_VERSION|[A-Z_]*_FORMAT)")
+
+
+def test_every_module_level_version_constant_is_in_the_list() -> None:
+    """A new `*_VERSION` / `SCHEMA` / `FORMAT` constant must be added to the page (and here)."""
+    import ast
+
+    pkg = ROOT / "ddflow"
+    found: set[tuple[str, str]] = set()
+    for path in pkg.rglob("*.py"):
+        if "templates" in path.parts:
+            continue
+        module = ".".join(path.relative_to(ROOT).with_suffix("").parts).removesuffix(".__init__")
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            # `X = 1`, `X: int = 1` and `X = Y = 1`: every module-level name bound to an int
+            if isinstance(node, ast.Assign):
+                names, value = [t for t in node.targets if isinstance(t, ast.Name)], node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                names, value = [node.target], node.value
+            else:
+                continue
+            if isinstance(value, ast.Constant) and isinstance(value.value, int):
+                found.update((module, n.id) for n in names if VERSION_NAME.fullmatch(n.id))
+    assert found == set(VERSION_CONSTANTS), (
+        "version constants and the contract page disagree: "
+        f"undeclared here {sorted(found - set(VERSION_CONSTANTS))}, "
+        f"gone from the code {sorted(set(VERSION_CONSTANTS) - found)}"
+    )
 
 
 def dump(snapshot: Mapping[str, Any]) -> str:

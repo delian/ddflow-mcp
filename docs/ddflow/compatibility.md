@@ -64,6 +64,35 @@ that needs an upcaster, a config section rewritten in a new shape. Additive chan
 raise it. It is separate from `__version__` because many releases change nothing on disk,
 and a version comparison would refuse an older clone over a release that only added a flag.
 
+## Every version number
+
+ddflow carries several independent version numbers. None of them is derived from another, and
+each answers a different question; this table is the one place that says which an upgrade may
+change and how the data behind it moves. `tests/test_event_upcasters.py` checks that every
+constant below is named here with its current value (the release version, which changes every
+release, is checked by name only).
+
+| Number | Value | What it versions | An upgrade may change it | How existing data moves |
+|---|---|---|---|---|
+| `ddflow.__version__` | the release | the code a PROCESS imported; stamped into the log by `ddflow.seen`; the skew guard compares it with the log's highest stamp, so a long-lived MCP server that outlives a self-upgrade keeps the old number, refuses writes once newer code has stamped the log and says to restart (`tests/test_upgrade_running_server.py`); `ddflow upgrade --plan` compares the project's stamp with it | every release | `ddflow upgrade --plan` / `--apply` bring the project to it (config, migrations, repairs, instruction files, hooks) |
+| `ddflow.FORMAT_LEVEL` | 1 | the on-disk shape an older ddflow cannot read or write safely | only for a breaking on-disk change | a registered migration (`ddflow upgrade --apply migrations`) rewrites what it must and `verify`s; an older ddflow is refused a conflicting write |
+| `config.CONFIG_FORMAT` | 1 | the optional top-level `format = N` of `.ddflow/config.toml` | only when a section's SHAPE changes in a way an older ddflow could not edit without losing something; an added knob never does | a file with a higher `format` is read (what this version knows applies) and not written (exit 3, upgrade advice); a file with none is format 1; `ddflow upgrade --apply config` rewrites by the manifest |
+| `core.events.SCHEMA_VERSION` | 1 | the envelope of every event (id, kind, subject, agent, lamport, ts, schema) | only with a `FORMAT_LEVEL` bump | none: the log is never rewritten. A reader meeting a higher `schema` counts the event as skipped and says to upgrade; it never guesses |
+| payload versions (`core.upcasters.PAYLOAD_VERSIONS`) | none above 1 yet | one event kind's `data` shape, per kind (`data["v"]`, absent = 1) | a kind at a time, with an upcaster for each step and an entry on this page | the fold upcasts when it reads, so old events keep folding unchanged on disk; an older reader skips a newer payload and counts it |
+| `infra.log.SNAPSHOT_FORMAT` | 1 | the local read snapshot of the parsed log (`read-snapshot.bin`, machine-local, never committed) | any release that changes how events are stored in it | none to run: a snapshot whose format, ddflow version, field layout or parser differs is ignored and the log is parsed again; one snapshot is kept per fingerprint and stale ones are collected |
+| `infra.store.SCHEMA` | 10 | the derived SQLite index (search, recall) | any release that changes its tables | none to run: the index is disposable, and a different SCHEMA, similarity version or code fingerprint rebuilds it from the log on the next read |
+| `core.textsim.VERSION` | 2 | the similarity tokens, weights and record digest | any release that changes how text is compared | the index stores it and rebuilds when it differs; nothing outside the index keeps it |
+| `services.ticks.FORMAT` | 1 | `.ddflow/local/ticks.json`, machine-local schedule state | rarely | written beside the data but not checked by readers yet: a shape change must stay readable by the old reader or be recomputed (an unreadable file reads as empty) |
+| `services.quota.STORE_VERSION` | 1 | the user-level `quotas.json` (usage quotas) | when the file shape changes | a newer file is read for the fields this version knows and kept whole when this one writes; an older or missing version is refused |
+
+The local state files that carry NO version are the markers and caches under `.ddflow/local/`
+(`upgrade-notice.json`, `upgrade-start.json`, `release-check.json`, `companion-probes.json`, the
+wait records) and the user-level `self-upgrade.json`. They are rebuilt or ignored when
+unreadable, so a change to one has to stay readable by the previous release or be harmless to
+lose; B-arch-local-state adds a format key to them. Nothing in this table is stored in the
+project's committed files except the event log (`schema`, `v`) and the `ddflow.seen` stamps
+(`version`, `format_level`).
+
 ## An older ddflow meeting newer data
 
 Several clones of a project run different ddflow versions. An older ddflow that meets data
