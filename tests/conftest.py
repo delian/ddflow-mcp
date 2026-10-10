@@ -28,6 +28,14 @@ def _dedupe_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_release_check_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The release check (``[upgrade].release_check``, default on) must never reach a network
+    from the suite; ``run_cli`` subprocesses inherit this. tests/test_upgrade_release_check.py
+    turns it back on with a fake index."""
+    monkeypatch.setenv("DDFLOW_NO_UPDATE_CHECK", "1")
+
+
+@pytest.fixture(autouse=True)
 def _no_ambient_mcp_tool_tier(monkeypatch: pytest.MonkeyPatch) -> None:
     """``DDFLOW_MCP_TOOLS`` is a documented env knob; one exported in a developer's shell
     must not narrow ``tools/list`` under every test (and `run_cli` subprocesses inherit)."""

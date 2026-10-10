@@ -14,6 +14,7 @@ from ...core.plain import plain
 from ...infra.log import EventLog
 from ...services import gates as G
 from ...services import leases as L
+from ...services import upgrade_check as UC
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..lifecycle.planning import plan_for
@@ -210,6 +211,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
             "highest": st.highest_version,
             "seen": sorted(st.ddflow_versions, key=lambda v: (version_key(v), v)),
         }
+    if release := UC.known_line(repo, cfg):  # cached answer only: status never asks the network
+        data["release"] = release
     if not full:
         _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
@@ -235,6 +238,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "lessons": len(st.lessons),
         "open_bugs": len(open_bugs),
         "refuted": len(flagged),
+        "release": release,
     }
     return O.ok("status", **data)
 

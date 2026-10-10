@@ -157,6 +157,7 @@ def cmd_status(a, c: Ctx) -> int:
         *_queue_lines(r),
         *_recorded_line(r),
         *_warning_lines(r),
+        *(["", r["release"]] if r.get("release") else []),
     ]
     print("\n".join(lines))
     return out.exit

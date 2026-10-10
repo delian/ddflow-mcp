@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.prereleases"
+new = "false"
+why = "Whether the release check proposes pre-releases (default false)."
+impact = "additive"

@@ -195,11 +195,14 @@ def cmd_upgrade(a, c: Ctx) -> int:
         backup=getattr(a, "backup", "") or "",
         snapshot=bool(getattr(a, "snapshot", False)),
         restore=getattr(a, "restore", None) or "",
+        check=bool(getattr(a, "check", False)),
         agent=c.requested_agent,
     )
     if c.json:
         payload = (
-            A.UPGRADE_RESTORE_PAYLOAD
+            A.UPGRADE_CHECK_PAYLOAD
+            if "newest" in out.data
+            else A.UPGRADE_RESTORE_PAYLOAD
             if "restored" in out.data
             else A.UPGRADE_APPLY_PAYLOAD
             if "applied" in out.data
