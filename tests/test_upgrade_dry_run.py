@@ -77,14 +77,14 @@ def rows(report: DR.Report) -> dict[int, DR.Check]:
 def test_a_smooth_upgrade_passes_every_check(clean) -> None:
     _root, report, _before = clean
     assert report.exit_code == 0, report.table()
-    assert sorted(rows(report)) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert sorted(rows(report)) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     assert all(c.status == DR.PASS for c in report.checks), report.table()
 
 
 def test_the_live_project_is_left_alone(clean) -> None:
     root, report, before = clean
     assert DR.live_problems(before, DR.snapshot_live(root)) == []
-    assert rows(report)[9].status == DR.PASS
+    assert rows(report)[10].status == DR.PASS
     # the scratch directory is gone; nothing of the rehearsal is left in the project
     assert not (root / ".ddflow" / "backups").exists()
 
@@ -256,6 +256,32 @@ def test_merged_shards_with_a_torn_line_fold_as_the_log_reads_them(tmp_path: Pat
     assert rehearsal.step_shards(), rehearsal.report.table()
 
 
+def test_the_old_log_folds_through_a_registered_upcaster(tmp_path: Path) -> None:
+    from ddflow.core import upcasters as U
+
+    root = project(tmp_path, confirm_free=True)
+    kind, problems = DR.upcast_problems(root)
+    assert kind and problems == []
+    assert U.PAYLOAD_VERSIONS == {} and U.UPCASTERS == {}  # the registries are put back
+
+
+def test_the_registries_come_back_even_when_the_block_raises() -> None:
+    from ddflow.core import upcasters as U
+
+    with (
+        pytest.raises(RuntimeError),
+        DR.registered_upcaster("task.added", lambda k, d: (k, dict(d))),
+    ):
+        assert U.PAYLOAD_VERSIONS == {"task.added": 2}
+        raise RuntimeError("boom")
+    assert U.PAYLOAD_VERSIONS == {} and U.UPCASTERS == {}
+
+
+def test_a_log_with_no_events_cannot_be_rehearsed_with_an_upcaster(tmp_path: Path) -> None:
+    (tmp_path / ".ddflow" / "events").mkdir(parents=True)
+    assert DR.upcast_problems(tmp_path)[1] == ["the log holds no events"]
+
+
 def test_the_live_check_tells_our_trace_from_other_agents_work(tmp_path: Path) -> None:
     root = project(tmp_path, confirm_free=True)
     before = DR.snapshot_live(root)
@@ -274,7 +300,7 @@ def test_the_live_check_tells_our_trace_from_other_agents_work(tmp_path: Path) -
     # a leak into a project whose log did not change is named in the row, not hidden
     leak = DR.Rehearsal(options(tmp_path, root))
     leak.report.checks.clear()
-    leak.add(9, "x", False, "; ".join(DR.live_problems(before, DR.snapshot_live(root))) or "?")
+    leak.add(10, "x", False, "; ".join(DR.live_problems(before, DR.snapshot_live(root))) or "?")
     assert "snapshot tag" in leak.report.checks[0].detail
     assert "snapshot tag" in text and "a backup appeared" in text
 

@@ -3940,7 +3940,8 @@ you would be asked to confirm fail the row), applies it with a snapshot, applies
 restores (the files return, every shard keeps its bytes), lets the OLD ddflow read the upgraded
 clone (its write is refused with the remedy or lands without disturbing a byte), connects the new
 MCP server to the old project (it proposes the upgrade, applies nothing until consent, then applies),
-runs two agents through a task and merges shards two old-version agents wrote. The old ddflow is
+runs two agents through a task, merges shards two old-version agents wrote and folds the old log
+through one registered event upcaster (the machinery has never met a real payload bump). The old ddflow is
 `--old-cmd`, `--build-old` (installed from the clone with uv) or `--simulate-old VERSION`; without
 one those rows say `unavailable`. Exit 0 all passed, 1 a check failed, 2 it could not run;
 `--max-show N` sets how many items the read pass renders with `show` (25; 0 is every item);
