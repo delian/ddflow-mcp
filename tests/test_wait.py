@@ -22,6 +22,7 @@ from conftest import run_cli
 
 from ddflow.api import lifecycle as A
 from ddflow.core import outcome as O
+from ddflow.services import leases
 from ddflow.services import waits as WT
 
 HOLDER, WAITER = "agent-holder", "agent-waiter"
@@ -367,7 +368,7 @@ def test_the_holder_hears_who_woke_even_when_the_waiter_is_quick(proj, monkeypat
     """Waiters are read BEFORE the lease is let go. Read after, a waiter that wakes and
     unregisters inside that window was never reported to the holder at all."""
     WT.register(proj, WT.Waiter(agent=WAITER, item="T2", waiting_on=["T1"], until=time.time() + 60))
-    real = A.L.release
+    real = leases.release
 
     def release_then_waiter_leaves(*a, **k):
         ok = real(*a, **k)
@@ -375,7 +376,7 @@ def test_the_holder_hears_who_woke_even_when_the_waiter_is_quick(proj, monkeypat
             WT.unregister(w)
         return ok
 
-    monkeypatch.setattr(A.L, "release", release_then_waiter_leaves)
+    monkeypatch.setattr(leases, "release", release_then_waiter_leaves)
     out = A.release(proj, "T1", agent=HOLDER)
     assert [w["agent"] for w in out.data["woke"]] == [WAITER]
 
