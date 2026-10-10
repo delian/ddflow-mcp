@@ -24,6 +24,11 @@ from .registry import tag_body
 _COMMAND: ContextVar[str] = ContextVar("ddflow_command", default="")
 
 
+def id_cell(ident: str, width: int = 22) -> str:
+    """An id padded to `width` columns, never cut: a shortened id is one `show` rejects."""
+    return f"{ident:<{width}s}"
+
+
 def set_command(name: str) -> Token[str]:
     """Name the command whose bodies `emit_json` now tags. The token puts the previous name
     back (`reset_command`): a run that ends must not tag what is printed after it."""
