@@ -56,7 +56,7 @@ def cmd_search(a, c: Ctx) -> int:
         return NOTHING
     for r in d["rows"]:
         print(
-            f"  {r['kind']:<9} {id_cell(r['id'])} {r['state']:<12.12s} {r['date'][:10]:<10}  "
+            f"  {r['kind']:<9} {id_cell(r['id'], cut=r['kind'] == 'log')} {r['state']:<12.12s} {r['date'][:10]:<10}  "
             f"{r['snippet']}"
         )
     if d["truncated"]:
