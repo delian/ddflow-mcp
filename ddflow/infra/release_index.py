@@ -86,10 +86,9 @@ def newest(
             if all(isinstance(f, dict) and f.get("yanked") for f in files):
                 continue
             candidates.append(str(version))
-    else:
-        info = doc.get("info")
-        if isinstance(info, dict) and isinstance(info.get("version"), str):
-            candidates.append(info["version"])
+    info = doc.get("info")
+    if not candidates and isinstance(info, dict) and isinstance(info.get("version"), str):
+        candidates.append(info["version"])  # a mirror that serves only the summary
     usable = [v for v in candidates if version_key(v) and (prereleases or not is_prerelease(v))]
     if not usable:
         raise ReleaseIndexError("the index lists no usable release")
