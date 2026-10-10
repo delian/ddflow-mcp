@@ -7,19 +7,12 @@ asserts the check says so, and that an honest completion is not accused.
 
 from __future__ import annotations
 
-import subprocess
-
 from conftest import run_cli
+from helpers import git as _git
 
 from ddflow.api.verify import verify
 from ddflow.core import outcome as O
 from ddflow.infra.log import EventLog
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _commit(repo, files: dict[str, str], msg="work"):

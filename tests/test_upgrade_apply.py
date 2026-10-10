@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 from conftest import run_cli
+from helpers import upgrade_plan as plan
 
 from ddflow.api._base import _load
 from ddflow.config import Config
@@ -43,11 +44,6 @@ def go(repo: Path, categories: Any = None, **kw: Any) -> dict[str, Any]:
     if "config_changes" in kw:  # the policy is the knob: plan and apply both read it
         cfg.upgrade.config_changes = kw.pop("config_changes")
     return UA.apply(repo, log, cfg, st, categories=categories, agent="upgrader", **kw)
-
-
-def plan(repo: Path) -> dict[str, Any]:
-    log, cfg, st = _load(repo, "upgrader")
-    return UP.build(repo, log, cfg, st)
 
 
 def upgrades(repo: Path) -> list[dict[str, Any]]:
