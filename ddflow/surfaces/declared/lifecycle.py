@@ -363,7 +363,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().gate_verify(repo, a["id"], a["gate"], agent=agent),
         payload=("gate", "reason", "results", "verified"),
         render=L.verify_text,
-        cli=CliPolicy(notes=L.verify_notes, human=lambda out, a, ctx: L.verify_text(out, a)),
+        cli=CliPolicy(notes=L.verify_notes),
         params=(
             Param("id", help="Item whose worktree to mutate in.", cli_help="", positional=True),
             Param("gate", help="Gate id. Must be a command gate.", cli_help="", positional=True),

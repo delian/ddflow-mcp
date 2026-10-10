@@ -21,7 +21,7 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
-from ..core.outcome import EXIT_NAMES, FAIL, REFUSED
+from ..core.outcome import EXIT_NAMES, FAIL, OK, REFUSED
 from ..core.plain import plain
 from .registry import Command
 from .render import emit_json
@@ -52,20 +52,25 @@ def _call(cmd: Command, args: dict[str, Any], ctx: Any) -> Any:
 
 def _run_policy(cmd: Command, args: dict[str, Any], out: Any, ctx: Any) -> int:
     """Print ``out`` the way ``cmd.cli`` says: the notes, then the result when the exit is
-    one the command shows, else the reason alone on stderr."""
+    one the command shows, else the reason alone on stderr. A ``render`` or ``human`` that
+    returns ``None`` prints nothing."""
     policy = cmd.cli
+    if ctx.json and policy.body_always:
+        emit_json(plain(policy.body(out, args) if policy.body else out.body(cmd.payload)))
+        if out.exit != OK and out.reason:
+            print(out.reason, file=sys.stderr)
+        return int(out.exit)
     for line in policy.notes(out, args, ctx) if policy.notes else ():
         print(line, file=sys.stderr)
     if not _shown(policy.shown, out):
         print(policy.reason(out) if policy.reason else out.reason, file=sys.stderr)
     elif ctx.json:
-        body = policy.body(out, args) if policy.body else out.body(cmd.payload)
-        emit_json(plain(body))
+        emit_json(plain(policy.body(out, args) if policy.body else out.body(cmd.payload)))
     else:
         text = (
             policy.human(out, args, ctx)
             if policy.human
-            else (cmd.render(out, args) if cmd.render else "") or out.reason
+            else (cmd.render(out, args) if cmd.render else None)
         )
         if text is not None:
             print(text)
