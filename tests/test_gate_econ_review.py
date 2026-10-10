@@ -11,12 +11,12 @@ decision: a bug fix took 2.9 rounds of each gate, most failing on findings later
 from __future__ import annotations
 
 import stat
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
 
 import ddflow.api.review as api
 from ddflow.config import Config
@@ -24,12 +24,6 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 GATES = "rubber_duck,critic"
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "", lines: int = 3) -> Path:

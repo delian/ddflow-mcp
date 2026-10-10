@@ -7,12 +7,12 @@ selection that cannot be made -- runs the whole suite, and says why (B-gate-econ
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.config import KNOB_CHOICES, KNOB_DOCS, KNOB_STRICTEST, Config
 
@@ -30,10 +30,6 @@ REACHES_F = (
 UNRELATED_RED = "def test_elsewhere_is_red():\n    assert False\n"
 
 CI_PIPELINE = json.dumps(["research", "implement", "standards", "ci", "unit_tests", "merge"])
-
-
-def _git(tree: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(tree), *args], check=True, capture_output=True)
 
 
 def _commit(tree: Path, msg: str) -> None:

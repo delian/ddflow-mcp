@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
+from helpers import git_raw as _git
 
 from ddflow.core import unidiff
 from ddflow.infra import worktree as W
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout
 
 
 @pytest.fixture
