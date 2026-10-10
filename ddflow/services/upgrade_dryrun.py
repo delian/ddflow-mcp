@@ -53,7 +53,7 @@ from ..core import clock
 from ..core import digest as D
 from ..core import outcome as O
 from ..core import version as V
-from ..core.events import Event, is_older
+from ..core.events import is_older
 from ..core.model import State, fold
 from ..infra import fsio
 from ..infra import git as G
@@ -927,6 +927,17 @@ class Rehearsal:
             "; ".join(problems) or f"claim, refusal of the second agent, edit, gates, merge; {how}",
         )
 
+    def union_of(self, one: Path, two: Path) -> Path:
+        """A directory holding the shards of both clones side by side, as they were written:
+        the log reads it, so a torn line is recovered the way it is in a real log."""
+        union = self.opt.work / "union"
+        events = union / ".ddflow" / "events"
+        events.mkdir(parents=True)
+        for tag, repo in (("one", one), ("two", two)):
+            for shard in sorted((Path(repo) / ".ddflow" / "events").glob("*.jsonl")):
+                shutil.copyfile(shard, events / f"{tag}--{shard.name}")
+        return union
+
     def step_shards(self) -> bool | None:
         if self.opt.old is None:
             return self.add(8, "shards from the old version merge", None, "no old ddflow given")
@@ -943,7 +954,7 @@ class Rehearsal:
                 False,
                 "the project has no merge=union for its shards",
             )
-        written = _lines(shard_bytes(one)) + _lines(shard_bytes(two))
+        written = self.union_of(one, two)
         self.git(one, "remote", "add", "two", str(two))
         self.git(one, "fetch", "--quiet", "two")
         merged = self.git(one, "merge", "--no-edit", "--quiet", "two/dryrun")
@@ -954,17 +965,8 @@ class Rehearsal:
                 False,
                 f"merge failed: {merged.text()[-160:]}",
             )
-        want = _digest_of(written)
-        got = D.of_obj(
-            users_part(
-                {
-                    k: D.of_obj(v)
-                    for k, v in _fields(
-                        fold(EventLog(one, "dry-digest").read_all(), strict=False)
-                    ).items()
-                }
-            )
-        )
+        want = state_part_digest(written)
+        got = state_part_digest(one)
         ok = want == got
         return self.add(
             8,
@@ -1033,32 +1035,9 @@ def _first_phase(repo: Path) -> str:
     return "P1"
 
 
-def _event_lines(lines: list[str]) -> list[Event]:
-    """The events these lines hold; one that does not parse is skipped, as the log skips it."""
-    out = []
-    for ln in lines:
-        try:
-            out.append(Event.from_json(ln))
-        except (ValueError, KeyError, TypeError):
-            continue
-    return out
-
-
-def _lines(shards: dict[str, bytes]) -> list[str]:
-    return [
-        ln
-        for raw in shards.values()
-        for ln in raw.decode("utf-8", "replace").splitlines()
-        if ln.strip()
-    ]
-
-
-def _digest_of(lines: list[str]) -> str:
-    """The digest of what raw event lines fold into, read the way the log reads them: sorted,
-    each event once."""
-    by_id = {e.id: e for e in _event_lines(lines)}
-    st = fold(sorted(by_id.values(), key=Event.sort_key), strict=False)
-    return D.of_obj(users_part({k: D.of_obj(v) for k, v in _fields(st).items()}))
+def state_part_digest(repo: Path) -> str:
+    """One digest of the user's records, folded from a project's log the way the log reads it."""
+    return D.of_obj(users_part(state_digests(repo)))
 
 
 def run_all(opt: Options) -> Report:
