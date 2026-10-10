@@ -302,6 +302,35 @@ def _bug_lines(b: dict) -> str:
     return "\n".join(lines)
 
 
+def render_recover(out, a) -> str:
+    """`recover`'s prose: every situation, flagged `!!` when it may hold work, and what to do
+    with the flagged ones. Empty when there is nothing (the outcome's reason says so)."""
+    found, salvageable = out.data["_render"]["found"], out.data["_render"]["salvageable"]
+    if not found:
+        return ""
+    lines = [f"{len(found)} recoverable situation(s); {len(salvageable)} may contain work:\n"]
+    for r in found:
+        flag = "!! " if may_hold_work(r) else "   "
+        lines.append(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
+        if r.worktree:
+            lines.append(f"     worktree {r.worktree}")
+        lines.append(f"     {r.advice}\n")
+    if salvageable:
+        lines.append(
+            "Entries marked !! are NOT touched automatically. Inspect, salvage (or resume), "
+            "then release."
+        )
+    return "\n".join(lines)
+
+
+def render_rebuild(out, a) -> str:
+    d = out.data
+    return (
+        f"rebuilt index from {d['events']} events in {d['seconds']:.2f}s "
+        f"({d['items']} items, {d['lessons']} lessons)"
+    )
+
+
 def cmd_doctor(a, c: Ctx) -> int:
     """Everything wrong with this project, and everything worth knowing.
 

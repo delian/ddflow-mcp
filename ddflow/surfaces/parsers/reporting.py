@@ -5,6 +5,7 @@ Registered by `cli.build_parser`, in the order `ddflow --help` lists them."""
 from __future__ import annotations
 
 import argparse
+import dataclasses
 
 from .. import cliexec
 from ..commands.operations import cmd_cleanup
@@ -14,6 +15,8 @@ from ..commands.reporting import (
     cmd_render,
     cmd_replay,
     cmd_show,
+    render_rebuild,
+    render_recover,
 )
 from ..declared.reporting import COMMANDS
 from ..declared.setup import BY_TOOL as SETUP_BY_TOOL
@@ -36,6 +39,10 @@ def register(s: argparse._SubParsersAction) -> None:
     }
 
     by = {c.path: c for c in COMMANDS}
+    # The prose is rendered here, not in the declaration: `declared/` is imported by the MCP
+    # engine, which must import without the view layer's template engine.
+    for path, render in ((("recover",), render_recover), (("rebuild",), render_rebuild)):
+        by[path] = dataclasses.replace(by[path], render=render)
     add_commands(
         s,
         [by[("replay",)], by[("recover",)], by[("progress",)], by[("loops",)]],
