@@ -466,9 +466,10 @@ def properties_schema(
 class CliPolicy:
     """How the CLI executor (`cliexec.run`) differs from its default for one command.
 
-    The default is the rule verbs': the caller is the resolved identity, a refusal under
-    ``--json`` is the body with the MCP tool's lead, and the human reads ``render``. The
-    work-loop verbs keep what they always did, and each difference is one field here:
+    A command with no policy prints as the rule verbs do: the caller is the resolved
+    identity, a refusal under ``--json`` is the body with the MCP tool's lead, and the human
+    reads ``render``. The work-loop verbs keep what they always did, and a command with a
+    policy prints as these fields say (``typed_agent`` is on unless the policy turns it off):
 
     * ``typed_agent``: the ``agent`` given to ``call`` is the ``--agent`` the caller typed
       (``""`` for none), not the resolved id: passing the resolved one makes a person at
