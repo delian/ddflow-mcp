@@ -84,6 +84,34 @@ def register(s: argparse._SubParsersAction) -> None:
         "version, the newest, this project's stamp and how to upgrade (exit 0 newest, "
         "1 a newer release, 2 off or unreachable); stands alone",
     )
+    up.add_argument(
+        "--self",
+        action="store_true",
+        default=False,
+        help="upgrade ddflow ITSELF with the tool that installed it (uv tool, pipx, a virtualenv's "
+        "pip); where it cannot (uvx, a container image, a source checkout, a read-only install) "
+        "it prints the exact command and exits 2. Needs the operator's consent: --yes --reason "
+        "([upgrade].self); stands alone",
+    )
+    up.add_argument("--to", default="", metavar="VERSION", help="with --self: install this version")
+    up.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="with --self: name the command and run nothing",
+    )
+    up.add_argument(
+        "--rollback",
+        action="store_true",
+        default=False,
+        help="with --self: reinstall the version that ran before the last --self",
+    )
+    up.add_argument(
+        "--yes",
+        action="store_true",
+        default=False,
+        help="with --self: the operator consents to installing a new ddflow (needs --reason)",
+    )
     up.set_defaults(fn=cmd_upgrade)
 
     add_commands(

@@ -13,7 +13,9 @@ carry credentials and says nothing a kind plus a commit does not.
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
 import tomllib
 from dataclasses import asdict, dataclass
 from importlib import metadata
@@ -26,6 +28,7 @@ from ..core import version as V
 from ..infra import git as G
 from ..infra import paths as _paths
 from ..infra import proc as P
+from ..infra.container import in_container
 
 #: The distribution name on the index, and what `uvx` resolves.
 DIST_NAME = "ddflow-mcp"
@@ -226,8 +229,10 @@ def upgrade_advice(highest: str = "", install: InstallInfo | None = None) -> str
 __all__ = [
     "DIST_NAME",
     "KINDS",
+    "METHODS",
     "InstallInfo",
     "install_info",
+    "install_method",
     "installed_from_index",
     "is_own_dev_tree",
     "normalise_path",
@@ -235,3 +240,66 @@ __all__ = [
     "running_from_source",
     "upgrade_advice",
 ]
+
+
+#: How an installed ddflow can be brought up to date (`install_method`). `unknown` and the
+#: kinds that are not an index install are never upgraded by ddflow itself.
+METHODS = ("uv-tool", "pipx", "pip-venv", "uvx", "container", "source", "readonly", "other")
+
+
+def _under(prefix: Path, *parts: str) -> bool:
+    """Is ``prefix`` inside a directory chain ``.../p0/p1/...``? (path components, in order)"""
+    names = prefix.parts
+    for i in range(len(names) - len(parts) + 1):
+        if names[i : i + len(parts)] == parts:
+            return True
+    return False
+
+
+def _managed_by(pre: Path, tool_dir: str | None) -> str:
+    """``pipx`` or ``uv-tool`` when ``pre`` is one of their environments (the default
+    locations, or where ``PIPX_HOME``/``PIPX_LOCAL_VENVS``/``UV_TOOL_DIR`` moved them), else ""."""
+    uv_dir = os.environ.get("UV_TOOL_DIR", "") if tool_dir is None else tool_dir
+    pipx_venvs = os.environ.get("PIPX_LOCAL_VENVS") or (
+        str(Path(os.environ["PIPX_HOME"]) / "venvs") if os.environ.get("PIPX_HOME") else ""
+    )
+    if _under(pre, "pipx", "venvs") or (pipx_venvs and pre.is_relative_to(pipx_venvs)):
+        return "pipx"
+    if _under(pre, "uv", "tools") or (uv_dir and pre.is_relative_to(uv_dir)):
+        return "uv-tool"
+    return ""
+
+
+def install_method(
+    info: InstallInfo | None = None,
+    *,
+    prefix: str | Path | None = None,
+    base_prefix: str | Path | None = None,
+    container: bool | None = None,
+    writable: bool | None = None,
+    tool_dir: str | None = None,
+) -> str:
+    """Which tool installed THIS ddflow, so the right command can upgrade it (D-self-upgrade 3).
+
+    One of `METHODS`: ``container`` (an image: pull it and restart), ``source`` (a checkout or
+    an editable install: git pull), ``uvx`` (an ephemeral environment: re-run it), ``uv-tool``,
+    ``pipx``, ``pip-venv`` (a virtual environment's own pip), ``readonly`` (an install this
+    user cannot write) and ``other`` (a system or user-site pip, a VCS or archive install:
+    ddflow does not guess, the operator reinstalls). The arguments are the facts, injectable
+    for tests; by default they are read from the running interpreter (and ``UV_TOOL_DIR``)."""
+    info = info or install_info()
+    pre = Path(prefix if prefix is not None else sys.prefix)
+    base = Path(base_prefix if base_prefix is not None else sys.base_prefix)
+    if container if container is not None else in_container():
+        return "container"
+    if info.kind in ("source-tree", "editable"):
+        return "source"
+    if any(p.startswith(("archive-v", "environments-v")) for p in pre.parts):
+        return "uvx"  # uv's ephemeral environments, wherever UV_CACHE_DIR put them
+    if not (writable if writable is not None else os.access(pre, os.W_OK)):
+        return "readonly"  # a managed install this user cannot write is not upgraded from here
+    if managed := _managed_by(pre, tool_dir):
+        return managed
+    if info.kind != "index":
+        return "other"
+    return "pip-venv" if pre != base else "other"

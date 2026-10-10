@@ -20,6 +20,8 @@ UPGRADE_AUTO = ("off", "check", "safe")
 UPGRADE_ON_START = ("off", "check", "safe")
 #: What `[upgrade].release_check` accepts (decision D-self-upgrade 1).
 UPGRADE_RELEASE_CHECK = ("on", "off")
+#: What `[upgrade].self` accepts (decision D-self-upgrade 3).
+UPGRADE_SELF = ("ask", "operator", "auto")
 
 
 @declare("upgrade")
@@ -87,4 +89,11 @@ class UpgradeConfig:
     prereleases: bool = knob(
         False,
         doc="Whether the release check proposes a pre-release (`0.2.0rc1`, `0.2.0.dev3`). False (default): only final releases.",
+    )
+
+    self: str = knob(
+        "ask",
+        doc="Who may have ddflow install a newer ddflow (`ddflow upgrade --self`, MCP `ddflow_upgrade` with `self`; decision D-self-upgrade 3). Installing new code is the operator's decision, and nothing ever does it unasked: not the release check, not a session start. `ask` (default): the command runs the installer only with the operator's consent passed and recorded -- `--yes --reason WHY` on the command line, `confirm: [\"self\"]` and `reason` over MCP; without it the call is refused (exit 3) and shows the proposal. `operator`: an agent over MCP is refused outright; the operator runs it in a terminal with `--yes --reason`. `auto`: no consent is asked for, but `--self` must still be requested. Whatever the policy, `--dry-run` only names the command, and a method ddflow does not run an installer for (an ephemeral `uvx` environment, a container image, a source checkout, a read-only install, a system pip) prints the exact command for the operator and exits 2.",
+        choices=UPGRADE_SELF,
+        strictest=("operator", "a bad value leaves the installing to the operator"),
     )

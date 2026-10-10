@@ -2148,7 +2148,7 @@
 # ---
 # name: test_help[ddflow upgrade]
   '''
-  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]] [--check]
+  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]] [--check] [--self] [--to VERSION] [--dry-run] [--rollback] [--yes]
   
   options:
     -h, --help            show this help message and exit
@@ -2169,6 +2169,16 @@
     --check               ask the package index now whether a newer ddflow exists and say the
                           running version, the newest, this project's stamp and how to upgrade (exit
                           0 newest, 1 a newer release, 2 off or unreachable); stands alone
+    --self                upgrade ddflow ITSELF with the tool that installed it (uv tool, pipx, a
+                          virtualenv's pip); where it cannot (uvx, a container image, a source
+                          checkout, a read-only install) it prints the exact command and exits 2.
+                          Needs the operator's consent: --yes --reason ([upgrade].self); stands
+                          alone
+    --to VERSION          with --self: install this version
+    --dry-run             with --self: name the command and run nothing
+    --rollback            with --self: reinstall the version that ran before the last --self
+    --yes                 with --self: the operator consents to installing a new ddflow (needs
+                          --reason)
   
   '''
 # ---

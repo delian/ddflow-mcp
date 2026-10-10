@@ -925,7 +925,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 208 knobs.
+cadences, and the rest of the 209 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3935,6 +3935,31 @@ upgrade.release_check off` or, for one shell or container, `DDFLOW_NO_UPDATE_CHE
 request is made at all. In a container the image registry tag is not consulted; the package index
 answers for every install.
 
+**Upgrading ddflow itself.** `ddflow upgrade --self [--to VERSION] [--dry-run]` (MCP
+`ddflow_upgrade` with `self` = `run`, `dry-run` or `rollback`, and `to`) installs the newer ddflow
+with the tool that installed this one: `uv tool upgrade ddflow-mcp` for a uv tool, `pipx upgrade
+ddflow-mcp` for pipx, that interpreter's own `pip install -U` for a virtualenv (`--to 0.1.10` pins
+a version with `uv tool install --force` / `pipx install --force` / `pip install ddflow-mcp==...`).
+Where ddflow cannot do it safely it does NOT try: an ephemeral `uvx` environment, a container image,
+a source checkout, an install this user cannot write, a system pip or a VCS install each print the
+exact command for the operator (pull the image and restart; `git pull`; reinstall) and exit 2.
+`--dry-run` names the command and runs nothing.
+
+Installing new code is the operator's decision (`[upgrade].self`): `ask` (default) runs the
+installer only with `--yes --reason WHY` (MCP: `confirm: ["self"]` and `reason`), which is recorded
+in the `upgrade.applied` event (category `self`, from and to); without it the call is refused
+(exit 3) and shows the command it would run. `operator` refuses an agent over MCP altogether;
+`auto` asks for no consent but still needs `--self`. The installer runs as a subprocess with a
+10-minute bound and its output captured; a failed or timed-out installer leaves the old version
+installed and working and says so (exit 1). The running process never replaces its own code
+mid-command: it finishes, says `RESTART needed` (an MCP server also says it in its replies), and
+the NEW code, in a fresh process, shows `ddflow upgrade --plan` (and under `[upgrade].auto = safe`
+applies hooks and instructions after a backup, which re-points a hook or MCP entry that pinned the
+old path). The version it replaced is remembered in the user's state directory
+(`$XDG_STATE_HOME/ddflow/self-upgrade.json`, default `~/.local/state/ddflow`) because it belongs to
+the install, not to a project; `ddflow upgrade --self --rollback` reinstalls it from any directory,
+with the same consent.
+
 **Undo and downgrade.** The log is append-only, so an upgrade is never undone by deleting events.
 `ddflow upgrade --restore [NAME]` puts back the files a backup holds (the default `local` backup,
 or the opt-in git `snapshot` tag: see "Backups: local or snapshot" above), and `git revert` of
@@ -4821,7 +4846,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 208): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 209): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5320,7 +5345,7 @@ declared once and persists — see
 
 ## Configuration
 
-208 knobs across 29 sections, every one documented in place and listed, with its default
+209 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5387,8 +5412,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=45d911e76663 -->
-<details><summary>All 208 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=c04ed1ac0b73 -->
+<details><summary>All 209 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5557,6 +5582,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.check_interval_h` | `24.0` |  |
 | `upgrade.index_url` | `""` |  |
 | `upgrade.prereleases` | `false` |  |
+| `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
