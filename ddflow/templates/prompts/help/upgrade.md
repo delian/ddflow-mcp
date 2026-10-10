@@ -9,8 +9,9 @@
     ddflow upgrade --resume     finish an interrupted --apply without repeating its finished steps
     ddflow upgrade --restore    put back what a backup holds
 
-Over MCP these are the one tool `ddflow_upgrade`: `check`, `plan`, `apply`, `self`, `status`,
-`history`, `resume`, `restore`. An apply reports each step as progress while it runs.
+Over MCP these are the one tool `ddflow_upgrade`, one argument per mode (`check: true`,
+`plan: true`, `apply: "all"`, `self: "run"`, `status: true`, `history: true`, `resume: true`,
+`restore: "latest"`); a mode that stands alone refuses another beside it. An apply reports each step as progress while it runs.
 
 ## For an agent
 
