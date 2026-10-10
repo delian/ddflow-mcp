@@ -32,6 +32,7 @@ from ..services import cleanup as CL
 from ..services import companions as C
 from ..services import enforce as E
 from ..services import external as EX
+from ..services import flakes as FK
 from ..services import importer as IM
 from ..services import precommit as PC
 from ..services import prosepin as PP
@@ -304,6 +305,7 @@ def relevant_tests(
     where: Path | None = None,
     base: str = "",
     agent: str = "",
+    flakes: bool = False,
 ) -> O.Outcome:
     """B16: the tests the current change reaches, and a PARALLEL command to run them.
 
@@ -315,6 +317,17 @@ def relevant_tests(
     configured base ref, else the default branch.
     """
 
+    if flakes:  # the machine-local log of tests that failed and then passed
+        try:
+            rows = FK.read(repo)
+        except OSError as exc:
+            return O.failed("tests", f"could not read the flake log: {exc}")
+        return O.ok(
+            "tests",
+            flakes=rows,
+            counts=dict(FK.counts(rows)),
+            flakes_text=FK.flakes_text(repo),
+        )
     _log, cfg, st = _load(repo, agent)
     tree = _caller_tree(repo, where)
     if item:

@@ -5201,13 +5201,13 @@ ddflow release <id>             give it up
 
 ddflow gate status <id>         pipeline position + the next gate's instruction
 ddflow gate list [--refuted [--since D]]    the defined gates; --refuted: every gate passed on refutation (spot-check), --since: recorded at or after D
-ddflow gate run <id> <gate>     execute a command gate, record its evidence
+ddflow gate run <id> <gate>     execute a command gate, record its evidence  (--rerun-failed: run ONLY the failed tests once more; the gate stays failed)
 ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model, --reviewer-model, --reviewed-sha)
 ddflow gate skip <id> <gate>    skip, with a mandatory reason
 ddflow approve <id> <gate>      a PERSON clears a human gate  (no MCP equivalent)
 ddflow approve .. --reject      ...or refuses it, with --reason
 ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
-ddflow tests [--item <id>]      tests the change reaches + a parallel command  (2 = none)
+ddflow tests [--item <id>]      tests the change reaches + a parallel command  (2 = none); --flakes: the flake log
 
 ddflow merge <id>               merge from the primary checkout, no checkout
 ddflow merge <id> --allow-empty land a branch with nothing ahead of its target (refused otherwise)
@@ -5942,6 +5942,20 @@ checks with a module-level `GOVERNS = ("ddflow/api/**", ...)` of globs — each 
 with the project's own runner and worker flags. The agent driver tells agents to run it
 after each change; `ddflow workflow` and `ddflow doctor` say when the configured test
 command uses one core.
+
+**A failing gate keeps which tests failed.** The evidence of a `ci` or `unit_tests` run that fails
+holds `failed_tests` (the ids, from pytest's short summary or unittest's `FAIL:`/`ERROR:`
+headings, read from ALL of the output, capped at 50), `failed_reasons` and `failure_tails`
+(the last lines of each failure section, capped), and `gate run` and `ci run` print them: the
+summary line alone said "3 failed" and nobody could tell which three. A test that FAILED
+and then PASSED on the same tree is a flake, and goes to the machine-local log
+`.ddflow/local/flakes.jsonl` (never committed) with its commit, the host load and the failure
+text: either the gate was run again on identical content and passed, or `ddflow gate run <id>
+<gate> --rerun-failed` ran only the failed tests once more and they passed. `ddflow tests
+--flakes` shows the log; `ddflow doctor` names a test that flaked three times. The rerun
+changes nothing about the verdict (decision D-failed-gate-rerun): both outcomes are in the
+evidence (`rerun`), the first failure stays, and the gate is passed only by running the gate
+itself again until it passes.
 
 **Where the whole suite runs** (decision D-gate-economy 1). The `ci` gate runs it on the
 branch merged with the base. Once ci has **passed on the commit the item's tree holds
