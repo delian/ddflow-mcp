@@ -12,11 +12,12 @@ import sys
 import time
 
 from ...api import reporting as A
-from ...infra import worktree as W
+from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
-from ..context import FAIL, NOTHING, OK, Ctx
+from ..context import FAIL, OK, Ctx
 from ..render import emit_json
 from ..vocabulary import sources
+from .lifecycle import _next_without_plan
 from .setup import cmd_upgrade
 
 
@@ -207,7 +208,7 @@ def cmd_show(a, c: Ctx) -> int:
             + taken_over_note(it)
         )
     if it.worktree:
-        print(f"  worktree {W.load_path(c.repo, it.worktree)} [{it.branch}]")
+        print(f"  worktree {R.worktree_path(c.repo, it.worktree)} [{it.branch}]")
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())
@@ -251,9 +252,8 @@ def _ledger_lines(led: dict) -> str:
     return "\n".join(lines)
 
 
-def _bug_lines(b: dict) -> str:
-    """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
-    how it was closed."""
+def _bug_opening(b: dict) -> list[str]:
+    """`show`'s head for a bug: what it is, where it was found, what fixes it."""
     found = f"found {b['found_at']}" + (f" on {b['item']}" if b["item"] else "")
     lines = [f"{b['id']} [bug] {b['state']}"]
     if b.get("title"):
@@ -269,6 +269,12 @@ def _bug_lines(b: dict) -> str:
         lines.append(f"  fix task(s): {', '.join(b['fixing'])}")
     if b["mentioned_by"]:
         lines.append(f"  mentioned by: {', '.join(b['mentioned_by'])}")
+    return lines
+
+
+def _bug_closure(b: dict) -> list[str]:
+    """How a bug was closed: by a fix (and the tests that guard it), or as invalid."""
+    lines: list[str] = []
     if b["fixed_at"]:
         tests = [t for t in b["regression_tests"] or [b["regression_test"]] if t]
         lines.append(
@@ -282,6 +288,13 @@ def _bug_lines(b: dict) -> str:
         lines.append(f"  {was} {b['invalid_at']} as invalid: {b['invalid_reason']}{tail}")
         if b["evidence"]:
             lines.append(f"    evidence: {b['evidence']}")
+    return lines
+
+
+def _bug_lines(b: dict) -> str:
+    """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
+    how it was closed."""
+    lines = [*_bug_opening(b), *_bug_closure(b)]
     if b["lesson"]:
         lines.append(f"  lesson {b['lesson']}")
     lines += ["", b["summary"]]
@@ -289,40 +302,33 @@ def _bug_lines(b: dict) -> str:
     return "\n".join(lines)
 
 
-def cmd_recover(a, c: Ctx) -> int:
-    out = A.recover(c.repo, item=a.item or "", apply=a.apply, agent=c.requested_agent)
-    if c.json:
-        emit_json(out.body("found"))
-        return out.exit
-    if out.exit == NOTHING:
-        print(out.reason)
-        return NOTHING
-    found = out.data["_render"]["found"]
-    salv = out.data["_render"]["salvageable"]
-    print(f"{len(found)} recoverable situation(s); {len(salv)} may contain work:\n")
+def render_recover(out, a) -> str:
+    """`recover`'s prose: every situation, flagged `!!` when it may hold work, and what to do
+    with the flagged ones. Empty when there is nothing (the outcome's reason says so)."""
+    found, salvageable = out.data["_render"]["found"], out.data["_render"]["salvageable"]
+    if not found:
+        return ""
+    lines = [f"{len(found)} recoverable situation(s); {len(salvageable)} may contain work:\n"]
     for r in found:
         flag = "!! " if may_hold_work(r) else "   "
-        print(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
+        lines.append(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
         if r.worktree:
-            print(f"     worktree {r.worktree}")
-        print(f"     {r.advice}\n")
-    if salv:
-        print(
+            lines.append(f"     worktree {r.worktree}")
+        lines.append(f"     {r.advice}\n")
+    if salvageable:
+        lines.append(
             "Entries marked !! are NOT touched automatically. Inspect, salvage (or resume), "
             "then release."
         )
-    return OK
+    return "\n".join(lines)
 
 
-def cmd_rebuild(a, c: Ctx) -> int:
-    out = A.rebuild(c.repo, agent=c.requested_agent)
+def render_rebuild(out, a) -> str:
     d = out.data
-    c.out(
+    return (
         f"rebuilt index from {d['events']} events in {d['seconds']:.2f}s "
-        f"({d['items']} items, {d['lessons']} lessons)",
-        out.body(("events", "items")),
+        f"({d['items']} items, {d['lessons']} lessons)"
     )
-    return out.exit
 
 
 def cmd_doctor(a, c: Ctx) -> int:
@@ -346,8 +352,6 @@ def cmd_doctor(a, c: Ctx) -> int:
 def cmd_board(a, c: Ctx) -> int:
     out = A.board(c.repo, phase=a.phase or "", agent=c.requested_agent)
     if out.exit == FAIL:  # an unknown --phase (Bc2acd426f4): said as `next` says it
-        from .lifecycle import _next_without_plan
-
         return _next_without_plan(out, c)
     c.out(out.data["text"], out.body())
     return OK

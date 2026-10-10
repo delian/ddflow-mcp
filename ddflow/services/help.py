@@ -21,7 +21,6 @@ code, and the reader who finds a wrong answer trusts it.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -141,43 +140,6 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Help", ("help",)),
 )
 
-#: `ddflow_gate_run` / `ddflow gate run` / `ddflow doctor`, with the SEPARATOR captured
-#: -- an underscore names an MCP tool and a space names a CLI invocation, and they are
-#: checked against different registries. Conflating them let `ddflow gate check` pass
-#: the anti-rot test because `ddflow_gate_run` exists.
-COMMAND_MENTION = re.compile(r"\bddflow([_ ])([a-z][a-z_]*(?: [a-z][a-z_]*){0,2})\b")
-#: Text between single backticks.
-_CODE_SPAN = re.compile(r"`([^`\n]+)`")
-
-
-def command_mentions(text: str) -> list[tuple[str, str]]:
-    """Every `(separator, command)` a page NAMES, from code context only.
-
-    Only backticked spans and indented lines count. Scanning bare prose as well was
-    always slightly wrong and only ever got away with it because the tool's name used
-    to be capitalised: renaming it to a lowercase word turned the ordinary sentence
-    "ddflow runs it and the exit code is the evidence" into a claim that
-    `ddflow runs it and` is a command.
-
-    The convention this relies on holds in every shipped page and is worth stating: a
-    command appears in backticks or in an indented block, and prose starts at column
-    zero. That is also how a reader tells them apart.
-    """
-    out: list[tuple[str, str]] = []
-    fenced = False
-    for line in text.splitlines():
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            continue
-        # A fenced block sits at column ZERO, so "indented or backticked" alone skipped
-        # every command in one -- and `help cli` and `help import` are mostly fenced
-        # transcripts. The rule has to name all three code contexts or it silently
-        # checks the smallest one.
-        fragments = [line] if fenced or line[:1].isspace() else _CODE_SPAN.findall(line)
-        for fragment in fragments:
-            out.extend(COMMAND_MENTION.findall(fragment))
-    return out
-
 
 def help_dir() -> Path:
     return builtin_dir() / "help"
@@ -245,14 +207,6 @@ def grouped_tools(tools: Iterable[str]) -> list[tuple[str, list[str]]]:
     if unmapped:
         out.append(("Unmapped — add a prefix to `_GROUPS`", unmapped))
     return out
-
-
-def unmapped_tools(tools: Iterable[str]) -> list[str]:
-    """Tools no group claims. Must stay empty; `tests/test_help.py` is the ratchet."""
-    for title, members in grouped_tools(tools):
-        if title.startswith("Unmapped"):
-            return members
-    return []
 
 
 def render_index(repo: Path | None = None, *, tools: Iterable[str] = ()) -> str:

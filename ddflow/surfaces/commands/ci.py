@@ -3,23 +3,11 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 from ...api import ci as A
-from ...infra import worktree as W
+from ...api import surf_setup as SS
 from ..context import Ctx
 from ..render import emit_json
-
-
-def _here_or_head(repo: Path) -> str:
-    """HEAD of the current directory when it is a worktree of THIS repository, else HEAD."""
-    here = Path.cwd()
-    common = [
-        W.git(p, "rev-parse", "--path-format=absolute", "--git-common-dir") for p in (here, repo)
-    ]
-    if all(r.ok for r in common) and Path(common[0].out).resolve() == Path(common[1].out).resolve():
-        return W.rev(here, "HEAD") or "HEAD"
-    return "HEAD"
 
 
 def cmd_ci(a, c: Ctx) -> int:
@@ -48,7 +36,7 @@ def cmd_ci(a, c: Ctx) -> int:
         return out.exit
     # The default is the HEAD of the tree the command runs in: as a gate it runs in the
     # item's worktree, while c.repo is the primary checkout (whose HEAD is main).
-    ref = a.ref or _here_or_head(c.repo)
+    ref = a.ref or SS.head_here_or_repo(c.repo)
     out = A.run(c.repo, ref=ref, base=a.base, command=a.command)
     if c.json:
         emit_json(out.body(""))

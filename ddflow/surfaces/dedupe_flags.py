@@ -18,7 +18,7 @@ from typing import Any
 
 from ..api._dedupe import Answer
 from ..core.outcome import REFUSED, Outcome
-from .declared.answer import ANSWER_CLI_PARAMS
+from .declared.answer import ANSWER_CLI_PARAMS, candidate_lines
 
 
 def add_flags(parser) -> None:
@@ -74,24 +74,6 @@ def _interactive() -> bool:
         return sys.stdin.isatty() and sys.stdout.isatty()
     except (AttributeError, ValueError):
         return False
-
-
-def candidate_lines(rows: list[dict[str, Any]], *, numbered: bool = False) -> list[str]:
-    lines = []
-    for i, r in enumerate(rows, 1):
-        flags = f"  [{', '.join(r['flags'])}]" if r.get("flags") else ""
-        lead = f"{i}. " if numbered else ""
-        # A bug may carry a severity and a scope (`bug found --severity --scope`).
-        marks = "".join(
-            f"  {r[k]}" for k in ("severity", "scope") if r.get(k) not in (None, "", "project")
-        )
-        lines.append(
-            f"{lead}{r['id']}  {r['kind']}  {r['score']:.2f}  {r['state']}{marks}{flags}"
-            f"\n    {r['title']}"
-        )
-        if r.get("shared"):
-            lines[-1] += f"\n    shares: {', '.join(r['shared'])}"
-    return lines
 
 
 MENU = "[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort"

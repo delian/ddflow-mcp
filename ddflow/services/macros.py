@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import _is_code_tree
+from ..infra import tomlcfg
 
 
 @dataclass
@@ -97,6 +98,14 @@ class MacroError(RuntimeError):
     pass
 
 
+def _prompts():
+    """`services.prompts`, imported on first use: it imports this module for the macro
+    loader, so neither side can import the other at module level."""
+    from . import prompts
+
+    return prompts
+
+
 def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
     """``(macros, refused)``: the usable `[[macro]]` blocks, and why each other one is not.
 
@@ -112,9 +121,7 @@ def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
     the error, and one clashing block made every other macro vanish from `prompts list`,
     MCP `prompts/list` and `prompts show` while doctor said nothing (B-macro-clash-silent).
     """
-    from ..infra import tomlcfg
-    from .prompts import COMMANDS
-
+    COMMANDS = _prompts().COMMANDS
     blocks = tomlcfg.overlay_array(
         tomlcfg.config_paths(root, "macros.toml"),
         "macro",
@@ -183,8 +190,7 @@ def render(macro: Macro, root: Path, params: dict[str, str]) -> str:
     so `{% if %}` and `{% for %}` work here too and a project that installs Jinja2 gets the
     full language.
     """
-    from . import prompts as P
-
+    P = _prompts()
     missing = [p for p in macro.params if not str(params.get(p, "")).strip()]
     if missing:
         raise MacroError(

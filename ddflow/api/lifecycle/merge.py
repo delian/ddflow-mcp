@@ -1,6 +1,6 @@
 """`merge`: landing an item's branch, and what it refreshes after.
 
-Part of `ddflow.api.lifecycle`, which re-exports every name defined here."""
+Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."""
 
 from __future__ import annotations
 

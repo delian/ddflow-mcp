@@ -26,58 +26,18 @@ coordination refused. ``2`` is never collapsed into ``0``; "no data" is reported
 treated as "no problem".
 """
 
-# The gate machinery lives one module per area in this package (B-uni-splits); every name --
-# public, private and the modules the single file imported, except the two below -- is
+# The gate machinery lives one module per area in this package (B-uni-splits); the public
+# functions and classes are
 # re-exported, so `from ddflow.services import gates as G; G.run_command_gate(...)` keeps
 # working. A REBINDING is not shared: each function reads names from its own module, so to
 # replace a helper or a constant in a test, patch the module that defines it
 # (`gates.evidence.MAX_UNTRACKED_HASHED`), not this package.
 
-# `subprocess` and `tempfile` are imported by the areas that use them and NOT re-exported
-# here: each is confined to its one home by .importlinter, and the package importing them
-# again would be one more violation (nothing reads `gates.subprocess`). Digests go
-# through `core.digest`, re-exported like any other name an area binds.
-
 from __future__ import annotations
 
-import getpass  # noqa: F401
-import json  # noqa: F401
-import os  # noqa: F401
-import re  # noqa: F401
-import shlex  # noqa: F401
-import shutil  # noqa: F401
-import socket  # noqa: F401
-import sys  # noqa: F401
-import time  # noqa: F401
-import tomllib  # noqa: F401
-from collections.abc import Callable, Iterable, Mapping  # noqa: F401
-from dataclasses import dataclass, field, fields  # noqa: F401
-from datetime import UTC, datetime  # noqa: F401
-from pathlib import Path  # noqa: F401
-from typing import Any, NamedTuple  # noqa: F401
-
-from ...config import Config, _is_code_tree  # noqa: F401
-from ...core.bookkeeping import STATE_EXCLUDE, is_state  # noqa: F401
-from ...core.digest import content_digest, hasher  # noqa: F401
-from ...core.globs import overlap  # noqa: F401
-from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
-from ...core.records import GateOutcome  # noqa: F401
-from ...infra import (
-    fsio,  # noqa: F401
-    tomlcfg,  # noqa: F401
-)
-from ...infra import git as GIT  # noqa: F401
-from ...infra import hostinfo as H  # noqa: F401
-from ...infra import proc as P  # noqa: F401
-from ...infra import worktree as W  # noqa: F401
-from ...infra.log import EventLog  # noqa: F401
-from .. import cmdrunner  # noqa: F401
-from .. import reviewer_trust as RT  # noqa: F401
 from .defs import (  # noqa: F401
-    _REQUIRED_WARNED,
     DEFAULT_GATES,
     GateDef,
-    _required_in_gate_table,
     inert_requirements,
     load_gates,
     pipeline_for,
@@ -86,23 +46,11 @@ from .defs import (  # noqa: F401
     required_gates,
 )
 from .evidence import (  # noqa: F401
-    _NUMSTAT_FIELDS,
     FINGERPRINT_EXCLUDE,
     LEGACY_CLEAN,
     MAX_UNTRACKED_HASHED,
     UNLISTED,
     TreeEntries,
-    _blob_id,
-    _dirt,
-    _dirt_parts,
-    _git_z,
-    _hash_into,
-    _index_entries,
-    _ours,
-    _untracked_digest,
-    _untracked_listing,
-    _untracked_paths,
-    _working_entry,
     commit_source_tree,
     commit_tree_entries,
     content_id,
@@ -123,10 +71,6 @@ from .kinds import (  # noqa: F401
     EVIDENCE_FORMS,
     KINDS,
     REPORT_KEYS,
-    _fields_problem,
-    _filled,
-    _link_problem,
-    _report_problem,
     evidence_forms,
     evidence_problems,
     gate_applies,
@@ -137,7 +81,6 @@ from .kinds import (  # noqa: F401
 )
 from .measured import (  # noqa: F401
     Order,
-    _landed_if_only_untracked_differs,
     check_order,
     gates_ahead_of,
     measure_tree,
@@ -157,11 +100,6 @@ from .mutation import (  # noqa: F401
 from .outcomes import (  # noqa: F401
     GateStatus,
     StaleNote,
-    _pass_mark,
-    _round_notes,
-    _triage_notes,
-    _what_differs,
-    _with_outcome,
     approve,
     on_refutation,
     record,
@@ -175,14 +113,7 @@ from .outcomes import (  # noqa: F401
     triage_line,
 )
 from .reviewers import (  # noqa: F401
-    _BIG_UNTRACKED,
-    _OURS,
-    _UNREADABLE,
     REVIEWER_GATES,
-    _declared_family,
-    _file_digest,
-    _unapproved_reviewer,
-    _untracked_content_digest,
     family_for,
     family_of,
     git_state,
@@ -194,19 +125,10 @@ from .reviewers import (  # noqa: F401
     run_watching_git,
 )
 from .runner import (  # noqa: F401
-    _RUN_FIELDS,
-    _SHELL_BUILTINS,
-    _SHELL_META,
     KEEP_RUN_LOGS,
     OUTPUT_TAIL_CHARS,
     RUNS_DIR,
     Classified,
-    _account_for_drift,
-    _looks_like_not_found,
-    _missing_executable,
-    _read_text,
-    _run_spec,
-    _unavailable_evidence,
     classify_exit,
     gate_config_drift,
     output_evidence,
@@ -214,19 +136,8 @@ from .runner import (  # noqa: F401
     run_log_writer,
 )
 from .testcmd import (  # noqa: F401
-    _COMMENT,
-    _COUNT,
-    _PY_MANIFESTS,
-    _PYTEST,
-    _PYTEST_NAME,
-    _SUMMARY_LINE,
-    _VERDICT,
-    _XDIST_CHOSEN,
-    _XDIST_NAME,
     MAX_SUMMARY_LINES,
     Runner,
-    _manifest_texts,
-    _named_in,
     counts_of,
     declares_xdist,
     detect,

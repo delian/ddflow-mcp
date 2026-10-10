@@ -1,6 +1,6 @@
 """One way to ask the scheduler what is ready: `plan_for`.
 
-Part of `ddflow.api.lifecycle`, which re-exports every name defined here.
+Part of `ddflow.api.lifecycle`, which re-exports the public names defined here.
 
 `plan()` takes five optional arguments and ten call sites once filled them differently:
 `next` and `wait` passed the waiters' reservation hold and the parallelism limit, `status`

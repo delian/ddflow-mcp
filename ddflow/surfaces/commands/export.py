@@ -26,6 +26,18 @@ def _confirm(rel: str, diff: str) -> bool:
 VERBS = ("enable", "disable", "ack", "eject", "validate")
 
 
+def _state_text(r: dict) -> str:
+    """The STATE column of one document row."""
+    state = r["state"] + (f" ({r['detail']})" if r["detail"] else "")
+    if r.get("locked"):
+        state += " (locked by the operator)"
+    if r.get("enabled_by"):
+        when = clock.fmt_minute(str(r.get("enabled_at", "")))
+        state += f" -- enabled by {r['enabled_by']} {when}"
+        state += " (not acknowledged)" if r.get("by_agent") and not r.get("acknowledged") else ""
+    return state
+
+
 def _list(c: Ctx, *, may_ack: bool = True) -> int:
     out = A.export_list(c.repo, c.requested_agent)
     if c.json:
@@ -39,15 +51,7 @@ def _list(c: Ctx, *, may_ack: bool = True) -> int:
     t = max(len(r["target"]) for r in rows)
     print(f"{'DOCUMENT':<{w}}  {'TARGET':<{t}}  {'MODE':<6}  STATE")
     for r in rows:
-        state = r["state"] + (f" ({r['detail']})" if r["detail"] else "")
-        if r.get("locked"):
-            state += " (locked by the operator)"
-        if r.get("enabled_by"):
-            when = clock.fmt_minute(str(r.get("enabled_at", "")))
-            state += f" -- enabled by {r['enabled_by']} {when}"
-            state += (
-                " (not acknowledged)" if r.get("by_agent") and not r.get("acknowledged") else ""
-            )
+        state = _state_text(r)
         print(f"{r['doc']:<{w}}  {r['target']:<{t}}  {r['mode']:<6}  {state}")
     sel = out.data["selected"]
     print(
@@ -126,6 +130,26 @@ def _verb(a, c: Ctx) -> int:
     return _plain(A.export_eject(c.repo, doc, force=a.force), c)
 
 
+def _show_results(results: list[dict]) -> None:
+    """Each document's result: its text on stdout, a refusal on stderr."""
+    for i, r in enumerate(results):
+        if r["action"] == "print":
+            if i:
+                print()
+            sys.stdout.write(r["text"])
+        elif r["action"] == "diff":
+            sys.stdout.write(r["text"] or f"{r['path']}: no changes\n")
+        elif r["action"] in ("refused", "failed"):
+            print(f"{r['doc']}: {r['message']}", file=sys.stderr)
+            if r["text"]:
+                sys.stderr.write(r["text"])
+        elif r["action"] == "stale":
+            print(f"{r['path']}: stale ({r['doc']})")
+            sys.stdout.write(r["text"])
+        else:
+            print(f"{r['doc']}: {r['message']}")
+
+
 def cmd_export(a, c: Ctx) -> int:
     if a.doc in VERBS:
         return _verb(a, c)
@@ -165,22 +189,7 @@ def cmd_export(a, c: Ctx) -> int:
     if not results:
         print(out.reason, file=sys.stderr)
         return out.exit
-    for i, r in enumerate(results):
-        if r["action"] == "print":
-            if i:
-                print()
-            sys.stdout.write(r["text"])
-        elif r["action"] == "diff":
-            sys.stdout.write(r["text"] or f"{r['path']}: no changes\n")
-        elif r["action"] in ("refused", "failed"):
-            print(f"{r['doc']}: {r['message']}", file=sys.stderr)
-            if r["text"]:
-                sys.stderr.write(r["text"])
-        elif r["action"] == "stale":
-            print(f"{r['path']}: stale ({r['doc']})")
-            sys.stdout.write(r["text"])
-        else:
-            print(f"{r['doc']}: {r['message']}")
+    _show_results(results)
     if out.data.get("note") and out.exit == OK:
         print(out.data["note"], file=sys.stderr)
     return out.exit if out.exit != NOTHING or results else NOTHING

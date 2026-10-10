@@ -1,8 +1,8 @@
 """B-split-api-lifecycle: `api/lifecycle` is a package, one module per operation area.
 
 `from ddflow.api import lifecycle as L` and every `L.<name>` call site are unchanged: the
-package re-exports every name the single module defined (and the modules it imported,
-`L.L` among them), and `__all__` names exactly the public operations it exposed.
+package re-exports every public function and class the single module defined, and
+`__all__` names exactly the public operations it exposed.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import pkgutil
 from pathlib import Path
 
 from ddflow.api import lifecycle as LC
-from ddflow.services import leases
 
 #: What this checks, read by `ddflow tests --item` (B2a1eaa259e): a change under one of
 #: these paths selects this test, even where nothing it imports changed.
@@ -64,34 +63,25 @@ def test_no_public_name_is_lost():
     assert callable(LC.claim) and callable(LC.wait) and callable(LC.brief)
 
 
-def _top_level_names(path: Path) -> set[str]:
-    """Every name a module binds at top level: defs, classes, assignments, imports."""
-    names: set[str] = set()
-    for n in ast.parse(path.read_text("utf-8")).body:
-        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            names.add(n.name)
-        elif isinstance(n, ast.Assign | ast.AnnAssign):
-            targets = n.targets if isinstance(n, ast.Assign) else [n.target]
-            names |= {x.id for t in targets for x in ast.walk(t) if isinstance(x, ast.Name)}
-        elif isinstance(n, ast.Import | ast.ImportFrom):
-            names |= {a.asname or a.name.split(".")[0] for a in n.names}
-    return names - {"annotations"}
+def _public_definitions(path: Path) -> set[str]:
+    """The public functions and classes a module defines at top level."""
+    return {
+        n.name
+        for n in ast.parse(path.read_text("utf-8")).body
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        and not n.name.startswith("_")
+    }
 
 
-def test_every_name_an_area_defines_is_re_exported():
-    """Functions, constants (`_PREFIX_SHOWN`) and the modules an area imports (`W`, `O`)
-    alike: whatever an area binds is reachable as `lifecycle.<name>`, the same object."""
+def test_every_public_definition_an_area_makes_is_re_exported():
+    """The public functions and classes an area defines are reachable as
+    `lifecycle.<name>`, the same object. Constants, private helpers and the modules an
+    area imports are not re-exported unless a caller needs them."""
     for mod in _areas():
-        for name in _top_level_names(Path(mod.__file__)):
+        for name in _public_definitions(Path(mod.__file__)):
             assert getattr(LC, name, None) is getattr(mod, name), (
                 f"lifecycle.{name} is not {mod.__name__}.{name}"
             )
-
-
-def test_the_modules_the_single_file_imported_are_still_attributes():
-    """`monkeypatch.setattr(A.L, "release", ...)` (tests/test_wait.py) reaches the leases
-    module through the lifecycle namespace."""
-    assert LC.L is leases
 
 
 def test_no_area_module_is_a_monolith_again():

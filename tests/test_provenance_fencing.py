@@ -259,7 +259,7 @@ def test_doctor_notes_a_shard_from_an_unknown_author(repo):
 
 
 def test_doctor_says_unavailable_when_git_cannot(tmp_path):
-    from ddflow.api.reporting import _unknown_author_notes
+    from ddflow.api.reporting.health import _unknown_author_notes
 
     plain = tmp_path / "nogit"
     log = EventLog(plain, "me")

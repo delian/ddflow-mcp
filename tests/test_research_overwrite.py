@@ -81,7 +81,7 @@ def test_every_recorded_field_is_a_note_attribute():
     hold would make every re-add read as changed (or, missing, as unchanged)."""
     from dataclasses import fields
 
-    from ddflow.api.knowledge import _research_fields
+    from ddflow.api.knowledge.research import _research_fields
     from ddflow.core.model import ResearchNote
 
     names = {f.name for f in fields(ResearchNote)}
@@ -133,7 +133,7 @@ def test_an_id_filed_after_the_state_was_read_is_still_refused(repo, monkeypatch
 def test_every_recorded_field_round_trips_through_the_fold(repo):
     """The idempotence compare reads the folded note: a field the fold dropped would make
     every re-add read as changed."""
-    from ddflow.api.knowledge import _research_fields
+    from ddflow.api.knowledge.research import _research_fields
 
     run_cli(repo, "init")
     rc, _, err = run_cli(repo, "task", "add", "T9", "--title", "a task", "--globs", "x.py")

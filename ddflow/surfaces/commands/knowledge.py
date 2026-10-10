@@ -12,12 +12,13 @@ from __future__ import annotations
 import sys
 
 from ...api import knowledge as A
+from ...api.surf_knowledge import summarise_row
 from ...core import clock
 from ...core import provenance as PV
 from ...core.events import OLDER_MARK
-from ...core.model import LINK_RELATIONS
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..declared.records import BUG_INVALID_FIELDS
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
@@ -62,17 +63,6 @@ def cmd_lesson(a, c: Ctx) -> int:
         out = A.lessons_verify(c.repo, agent=c.requested_agent)
         c.out(out.data.get("text", "") or out.reason, out.body())
         return out.exit
-    if a.lesson_cmd == "search":
-        out = A.lesson_search(c.repo, a.query, limit=a.limit, agent=c.requested_agent)
-        if c.json:
-            emit_json(out.body("hits"))
-            return out.exit
-        if out.exit == NOTHING:
-            print(out.reason)
-            return NOTHING
-        for h in out.data["hits"]:
-            print(f"- {h['title']}\n    {(h.get('rule') or '')[: out.data['snippet_chars']]}")
-        return OK
     return FAIL
 
 
@@ -184,8 +174,6 @@ def cmd_memory(a, c: Ctx) -> int:
 
 def cmd_recall(a, c: Ctx) -> int:
     """One query across everything the project remembers, printed under a budget."""
-    from ...infra.store import summarise_row
-
     out = A.recall(
         c.repo,
         a.query,
@@ -248,78 +236,6 @@ def _recall_block(table: str, r: dict, head: str, body: str) -> str:
     return f"  [{r.get('id', '?')}] ({origin.label()})\n      {fenced}\n"
 
 
-def cmd_similar(a, c: Ctx) -> int:
-    """Existing records like a text, before it is filed. Exit 0 with candidates, 2 with none."""
-    out = A.similar(c.repo, a.text, kinds=a.kind or "", agent=c.requested_agent)
-    if c.json:
-        emit_json(out.body("candidates"))
-        return out.exit
-    if out.exit != OK:
-        print(out.reason)
-        return out.exit
-    print("\n".join(D.candidate_lines(out.data["candidates"])))
-    return OK
-
-
-def cmd_dupes(a, c: Ctx) -> int:
-    """Near-duplicate pairs already in the log. Exit 0 with pairs, 2 with none."""
-    out = A.dupes(
-        c.repo,
-        kinds=a.kind or "",
-        open_only=a.open_only,
-        floor=a.floor,
-        limit=a.limit,
-        agent=c.requested_agent,
-    )
-    keys = ("pairs", "count", "kinds", "open_only", "floor", "limit")
-    if c.json:
-        emit_json(out.body(keys))
-        return out.exit
-    if out.exit != OK:
-        print(out.reason)
-        return out.exit
-    for p in out.data["pairs"]:
-        print(f"{p['score']:.2f}  {p['a']} ({p['a_kind']}) ~ {p['b']} ({p['b_kind']})")
-        print(f"      {p['a_title']}")
-        print(f"      {p['b_title']}")
-    print(
-        f"{out.data['count']} unsettled pair(s) at floor {out.data['floor']:g}. Settle each: "
-        f"`ddflow link <a> --duplicate-of <b>` (or --extends/--related), or "
-        f"`--distinct` to dismiss it for good."
-    )
-    return OK
-
-
-#: The `ddflow link` relations come from the model's LINK_RELATIONS, so the parser's
-#: mutually-exclusive flags, the API's accepted set and this lookup cannot drift apart.
-def cmd_link(a, c: Ctx) -> int:
-    """Say how one record relates to another, settling a near-duplicate pair."""
-    relation, target = "", ""
-    for rel in LINK_RELATIONS:
-        target = getattr(a, rel, "") or ""
-        if target:
-            relation = rel
-            break
-    out = A.link_record(
-        c.repo,
-        a.subject,
-        relation,
-        target,
-        reason=a.reason or "",
-        agent=c.requested_agent,
-    )
-    if out.exit != OK:
-        print(out.reason, file=sys.stderr)
-        return out.exit
-    merged = out.data.get("merged") or {}
-    tail = f"; {merged['superseded']} superseded by {merged['by']}" if merged else ""
-    c.out(
-        f"{a.subject} {relation} {target}{tail}",
-        out.body(("subject", "relation", "target", "merged")),
-    )
-    return OK
-
-
 def cmd_research(a, c: Ctx) -> int:
     out = D.run(
         a,
@@ -354,85 +270,81 @@ def cmd_research(a, c: Ctx) -> int:
     return OK
 
 
-def cmd_bug(a, c: Ctx) -> int:
-    if a.bug_cmd == "found":
-        out = D.run(
-            a,
-            c,
-            lambda answer: A.bug_found(
-                c.repo,
-                summary=a.summary,
-                item=a.item or "",
-                id=a.id or "",
-                title=a.title,
-                severity=a.severity,
-                scope=a.scope,
-                globs=a.globs,
-                no_task=a.no_task,
-                answer=answer,
-                agent=c.requested_agent,
-            ),
-        )
-        done = D.finish(a, c, out)
-        if done is not None:
-            return done
-        closed = out.data.get("resolution", "")
-        note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
-        offer = out.data.get("offer", "")
-        fix = out.data.get("fix_task", "")
-        task = ""
-        if fix and out.data.get("fix_task_filed"):
-            task = f"\nfix task {fix} filed in the queue (claim it to fix; `complete {fix} --regression-test <test>` closes the bug)"
-        elif fix:
-            task = f"\nfix task: {fix}"
-        c.out(
-            f"bug {out.data['id']} recorded{note}{task}" + (f"\n{offer}" if offer else ""),
-            out.body(("id", "offer", "fix_task", "fix_task_filed")),
-        )
-        return OK
-    if a.bug_cmd == "file-tasks":
-        out = A.bug_file_tasks(c.repo, dry_run=a.dry_run, agent=c.requested_agent)
-        if out.exit not in (OK, NOTHING):
-            print(out.reason, file=sys.stderr)
-            return out.exit
-        if out.exit == NOTHING:
-            c.out(out.reason, out.body(("filed", "linked", "tasks", "links", "dry_run")))
-            return NOTHING
-        would = "would file" if a.dry_run else "filed"
-        lines = [f"{would} {len(out.data['filed'])} fix task(s), linked {len(out.data['linked'])}"]
-        lines += [f"  {b} -> {t}" for b, t in out.data["tasks"].items()]
-        links = out.data["links"]
-        lines += [f"  {b} -> {links[b]['task']} ({links[b]['state']})" for b in out.data["linked"]]
-        c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "links", "dry_run")))
-        return OK
-    if a.bug_cmd == "invalid":
-        out = A.bug_invalid(
+def _bug_found(a, c: Ctx) -> int:
+    out = D.run(
+        a,
+        c,
+        lambda answer: A.bug_found(
             c.repo,
-            a.id,
-            reason=a.reason or "",
-            evidence=a.evidence or "",
+            summary=a.summary,
+            item=a.item or "",
+            id=a.id or "",
+            title=a.title,
+            severity=a.severity,
+            scope=a.scope,
+            globs=a.globs,
+            no_task=a.no_task,
+            answer=answer,
             agent=c.requested_agent,
-        )
-        if out.exit != OK:
-            print(out.reason, file=sys.stderr)
-            return out.exit
-        probe = f" (evidence: {a.evidence})" if a.evidence else ""
-        c.out(
-            f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}"
-            + _fix_task_tail(out.data),
-            out.body(
-                (
-                    "id",
-                    "invalid_reason",
-                    "evidence",
-                    "unchecked",
-                    "fix_task",
-                    "fix_task_removed",
-                    "fix_task_kept",
-                )
-            ),
-        )
-        return OK
+        ),
+    )
+    done = D.finish(a, c, out)
+    if done is not None:
+        return done
+    closed = out.data.get("resolution", "")
+    note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
+    offer = out.data.get("offer", "")
+    fix = out.data.get("fix_task", "")
+    task = ""
+    if fix and out.data.get("fix_task_filed"):
+        task = f"\nfix task {fix} filed in the queue (claim it to fix; `complete {fix} --regression-test <test>` closes the bug)"
+    elif fix:
+        task = f"\nfix task: {fix}"
+    c.out(
+        f"bug {out.data['id']} recorded{note}{task}" + (f"\n{offer}" if offer else ""),
+        out.body(("id", "offer", "fix_task", "fix_task_filed")),
+    )
+    return OK
+
+
+def _bug_file_tasks(a, c: Ctx) -> int:
+    out = A.bug_file_tasks(c.repo, dry_run=a.dry_run, agent=c.requested_agent)
+    if out.exit not in (OK, NOTHING):
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    if out.exit == NOTHING:
+        c.out(out.reason, out.body(("filed", "linked", "tasks", "links", "dry_run")))
+        return NOTHING
+    would = "would file" if a.dry_run else "filed"
+    lines = [f"{would} {len(out.data['filed'])} fix task(s), linked {len(out.data['linked'])}"]
+    lines += [f"  {b} -> {t}" for b, t in out.data["tasks"].items()]
+    links = out.data["links"]
+    lines += [f"  {b} -> {links[b]['task']} ({links[b]['state']})" for b in out.data["linked"]]
+    c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "links", "dry_run")))
+    return OK
+
+
+def _bug_invalid(a, c: Ctx) -> int:
+    out = A.bug_invalid(
+        c.repo,
+        a.id,
+        reason=a.reason or "",
+        evidence=a.evidence or "",
+        agent=c.requested_agent,
+    )
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    probe = f" (evidence: {a.evidence})" if a.evidence else ""
+    c.out(
+        f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}"
+        + _fix_task_tail(out.data),
+        out.body(BUG_INVALID_FIELDS),
+    )
+    return OK
+
+
+def _bug_fixed(a, c: Ctx) -> int:
     out = A.bug_fixed(
         c.repo,
         a.id,
@@ -458,6 +370,11 @@ def cmd_bug(a, c: Ctx) -> int:
         out.body(("id", "regression_verified", "lesson_captured", "lesson_capture")),
     )
     return OK
+
+
+def cmd_bug(a, c: Ctx) -> int:
+    verbs = {"found": _bug_found, "file-tasks": _bug_file_tasks, "invalid": _bug_invalid}
+    return verbs.get(a.bug_cmd, _bug_fixed)(a, c)
 
 
 def _lesson_tail(cap: dict) -> str:

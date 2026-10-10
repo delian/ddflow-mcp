@@ -1,6 +1,6 @@
 """What every lifecycle module shares: requiring an item to exist.
 
-Part of `ddflow.api.lifecycle`, which re-exports every name defined here."""
+Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."""
 
 from __future__ import annotations
 
