@@ -1,0 +1,212 @@
+{
+ "--json decision applicable T-nope": [
+  1,
+  "",
+  "no such item 'T-nope'\n"
+ ],
+ "--json decision applicable T1": [
+  0,
+  "{\n  \"schema\": \"decision_applicable@1\",\n  \"applicable\": [\n    {\n      \"id\": \"D-one\",\n      \"title\": \"Use X\",\n      \"context\": \"\",\n      \"decision\": \"we use X for storage\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [\n        \"src/x/*\"\n      ],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    }\n  ],\n  \"project_wide\": [\n    {\n      \"id\": \"D-two\",\n      \"title\": \"Use Y\",\n      \"context\": \"\",\n      \"decision\": \"we use Y for queues\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    }\n  ]\n}\n",
+  ""
+ ],
+ "--json decision show D-nope": [
+  1,
+  "",
+  "no such decision 'D-nope'\n"
+ ],
+ "--json decision show D-one": [
+  0,
+  "{\n  \"schema\": \"decision_show@1\",\n  \"id\": \"D-one\",\n  \"title\": \"Use X\",\n  \"context\": \"\",\n  \"decision\": \"we use X for storage\",\n  \"consequences\": \"\",\n  \"alternatives\": \"\",\n  \"globs\": [\n    \"src/x/*\"\n  ],\n  \"tags\": [],\n  \"sources\": [],\n  \"status\": \"superseded\",\n  \"decided_by\": \"\",\n  \"supersedes\": [],\n  \"superseded_by\": \"D-two\",\n  \"at\": \"<ts>\",\n  \"item\": \"\",\n  \"by\": \"pin\"\n}\n",
+  ""
+ ],
+ "--json decision supersede D-nope --by D-two": [
+  1,
+  "",
+  "no such decision 'D-nope'\n"
+ ],
+ "--json decision supersede D-one --by D-two --reason y wins": [
+  0,
+  "{\n  \"schema\": \"decision_supersede@1\",\n  \"id\": \"D-one\",\n  \"by\": \"D-two\"\n}\n",
+  ""
+ ],
+ "--json decision supersede D-two --by D-nope": [
+  0,
+  "{\n  \"schema\": \"decision_supersede@1\",\n  \"id\": \"D-two\",\n  \"by\": \"D-nope\"\n}\n",
+  ""
+ ],
+ "--json dupes": [
+  0,
+  "{\n  \"schema\": \"dupes@1\",\n  \"pairs\": [\n    {\n      \"score\": 1.0,\n      \"a\": \"L-one\",\n      \"b\": \"L-two\",\n      \"a_kind\": \"lesson\",\n      \"b_kind\": \"lesson\",\n      \"a_title\": \"Probe before you claim\",\n      \"b_title\": \"Probe before you claim again\"\n    },\n    {\n      \"score\": 0.658431238,\n      \"a\": \"D-one\",\n      \"b\": \"D-two\",\n      \"a_kind\": \"decision\",\n      \"b_kind\": \"decision\",\n      \"a_title\": \"Use X\",\n      \"b_title\": \"Use Y\"\n    }\n  ],\n  \"count\": 2,\n  \"kinds\": [\n    \"bug\",\n    \"task\",\n    \"phase\",\n    \"lesson\",\n    \"decision\",\n    \"research\",\n    \"memory\",\n    \"rule\"\n  ],\n  \"open_only\": false,\n  \"floor\": 0.35,\n  \"limit\": 0\n}\n",
+  ""
+ ],
+ "--json dupes --floor 0.99": [
+  0,
+  "{\n  \"schema\": \"dupes@1\",\n  \"pairs\": [\n    {\n      \"score\": 1.0,\n      \"a\": \"L-one\",\n      \"b\": \"L-two\",\n      \"a_kind\": \"lesson\",\n      \"b_kind\": \"lesson\",\n      \"a_title\": \"Probe before you claim\",\n      \"b_title\": \"Probe before you claim again\"\n    }\n  ],\n  \"count\": 1,\n  \"kinds\": [\n    \"bug\",\n    \"task\",\n    \"phase\",\n    \"lesson\",\n    \"decision\",\n    \"research\",\n    \"memory\",\n    \"rule\"\n  ],\n  \"open_only\": false,\n  \"floor\": 0.99,\n  \"limit\": 0\n}\n",
+  ""
+ ],
+ "--json dupes --kind nosuchkind": [
+  1,
+  "",
+  "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
+ ],
+ "--json lesson search probe": [
+  0,
+  "[\n  {\n    \"id\": \"L-one\",\n    \"title\": \"Probe before you claim\",\n    \"rule\": \"always probe first\",\n    \"why\": \"\",\n    \"how\": \"\",\n    \"seen_in\": \"[]\",\n    \"tags\": \"[]\",\n    \"at\": \"<ts>\",\n    \"superseded_by\": \"\"\n  },\n  {\n    \"id\": \"L-two\",\n    \"title\": \"Probe before you claim again\",\n    \"rule\": \"always probe first\",\n    \"why\": \"\",\n    \"how\": \"\",\n    \"seen_in\": \"[]\",\n    \"tags\": \"[]\",\n    \"at\": \"<ts>\",\n    \"superseded_by\": \"\"\n  }\n]\n",
+  ""
+ ],
+ "--json lesson search zzzznothingqqqq": [
+  2,
+  "[]\n",
+  ""
+ ],
+ "--json lesson verify": [
+  2,
+  "{\n  \"schema\": \"lesson_verify@1\",\n  \"checked\": 0,\n  \"live\": 3,\n  \"text\": \"No lesson declares a pattern, so nothing was checked (3 live lesson(s)). Add `--pattern` to a lesson whose mistake is mechanical.\"\n}\n",
+  ""
+ ],
+ "--json link L-nope --related L-one": [
+  3,
+  "{\n  \"refusal\": {\n    \"reason\": \"no record 'L-nope' in this log: `ddflow recall` or `ddflow status` lists them\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"link@1\",\n  \"subject\": \"L-nope\",\n  \"relation\": null,\n  \"target\": \"L-one\",\n  \"merged\": null\n}\n",
+  ""
+ ],
+ "--json link L-one": [
+  2,
+  "",
+  "usage: ddflow link [-h] (--extends ID | --duplicate-of ID | --related ID |\n                   --distinct ID) [--reason REASON]\n                   subject\nddflow link: error: one of the arguments --extends --duplicate-of --related --distinct is required\n"
+ ],
+ "--json link L-one --related L-one": [
+  3,
+  "{\n  \"refusal\": {\n    \"reason\": \"a record cannot link to itself\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"link@1\",\n  \"subject\": \"L-one\",\n  \"relation\": null,\n  \"target\": \"L-one\",\n  \"merged\": null\n}\n",
+  ""
+ ],
+ "--json link L-three --related L-one --reason same area": [
+  0,
+  "{\n  \"schema\": \"link@1\",\n  \"subject\": \"L-three\",\n  \"relation\": \"related\",\n  \"target\": \"L-one\",\n  \"merged\": {}\n}\n",
+  ""
+ ],
+ "--json link L-two --duplicate-of L-one": [
+  0,
+  "{\n  \"schema\": \"link@1\",\n  \"subject\": \"L-two\",\n  \"relation\": \"duplicate_of\",\n  \"target\": \"L-one\",\n  \"merged\": {\n    \"superseded\": \"L-two\",\n    \"by\": \"L-one\"\n  }\n}\n",
+  ""
+ ],
+ "--json similar always probe first": [
+  0,
+  "[\n  {\n    \"id\": \"L-one\",\n    \"kind\": \"lesson\",\n    \"title\": \"Probe before you claim\",\n    \"state\": \"active\",\n    \"score\": 0.880313363,\n    \"shared\": [\n      \"alway\",\n      \"first\",\n      \"probe\"\n    ],\n    \"flags\": []\n  },\n  {\n    \"id\": \"L-two\",\n    \"kind\": \"lesson\",\n    \"title\": \"Probe before you claim again\",\n    \"state\": \"active\",\n    \"score\": 0.880313363,\n    \"shared\": [\n      \"alway\",\n      \"first\",\n      \"probe\"\n    ],\n    \"flags\": []\n  }\n]\n",
+  ""
+ ],
+ "--json similar always probe first --kind nosuchkind": [
+  1,
+  "",
+  "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
+ ],
+ "--json similar zzzz nothing like it qqqq": [
+  2,
+  "[]\n",
+  ""
+ ],
+ "decision applicable T-nope": [
+  1,
+  "",
+  "no such item 'T-nope'\n"
+ ],
+ "decision applicable T1": [
+  0,
+  "  [D-one] Use X\n      we use X for storage\n  [D-two] Use Y  (project-wide)\n      we use Y for queues\n",
+  ""
+ ],
+ "decision show D-nope": [
+  1,
+  "",
+  "no such decision 'D-nope'\n"
+ ],
+ "decision show D-one": [
+  0,
+  "D-one \u2014 Use X\n  status superseded (superseded by D-two)\n\nDecision:\n  we use X for storage\n\nGoverns: src/x/*\n",
+  ""
+ ],
+ "decision supersede D-nope --by D-two": [
+  1,
+  "",
+  "no such decision 'D-nope'\n"
+ ],
+ "decision supersede D-one --by D-two --reason y wins": [
+  0,
+  "D-one superseded by D-two\n",
+  ""
+ ],
+ "decision supersede D-two --by D-nope": [
+  0,
+  "D-two superseded by D-nope\n",
+  ""
+ ],
+ "dupes": [
+  0,
+  "1.00  L-one (lesson) ~ L-two (lesson)\n      Probe before you claim\n      Probe before you claim again\n0.66  D-one (decision) ~ D-two (decision)\n      Use X\n      Use Y\n2 unsettled pair(s) at floor 0.35. Settle each: `ddflow link <a> --duplicate-of <b>` (or --extends/--related), or `--distinct` to dismiss it for good.\n",
+  ""
+ ],
+ "dupes --floor 0.99": [
+  0,
+  "1.00  L-one (lesson) ~ L-two (lesson)\n      Probe before you claim\n      Probe before you claim again\n1 unsettled pair(s) at floor 0.99. Settle each: `ddflow link <a> --duplicate-of <b>` (or --extends/--related), or `--distinct` to dismiss it for good.\n",
+  ""
+ ],
+ "dupes --kind nosuchkind": [
+  1,
+  "",
+  "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
+ ],
+ "lesson search probe": [
+  0,
+  "- Probe before you claim\n    always probe first\n- Probe before you claim again\n    always probe first\n",
+  ""
+ ],
+ "lesson search zzzznothingqqqq": [
+  2,
+  "no matching lessons\n",
+  ""
+ ],
+ "lesson verify": [
+  2,
+  "No lesson declares a pattern, so nothing was checked (3 live lesson(s)). Add `--pattern` to a lesson whose mistake is mechanical.\n",
+  ""
+ ],
+ "link L-nope --related L-one": [
+  3,
+  "",
+  "no record 'L-nope' in this log: `ddflow recall` or `ddflow status` lists them\n"
+ ],
+ "link L-one": [
+  2,
+  "",
+  "usage: ddflow link [-h] (--extends ID | --duplicate-of ID | --related ID |\n                   --distinct ID) [--reason REASON]\n                   subject\nddflow link: error: one of the arguments --extends --duplicate-of --related --distinct is required\n"
+ ],
+ "link L-one --related L-one": [
+  3,
+  "",
+  "a record cannot link to itself\n"
+ ],
+ "link L-three --related L-one --reason same area": [
+  0,
+  "L-three related L-one\n",
+  ""
+ ],
+ "link L-two --duplicate-of L-one": [
+  0,
+  "L-two duplicate_of L-one; L-two superseded by L-one\n",
+  ""
+ ],
+ "similar always probe first": [
+  0,
+  "L-one  lesson  0.88  active\n    Probe before you claim\n    shares: alway, first, probe\nL-two  lesson  0.88  active\n    Probe before you claim again\n    shares: alway, first, probe\n",
+  ""
+ ],
+ "similar always probe first --kind nosuchkind": [
+  1,
+  "",
+  "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
+ ],
+ "similar zzzz nothing like it qqqq": [
+  2,
+  "Nothing in bug, task, phase, lesson, decision, research, memory, rule scores 0.35 or more against that text.\n",
+  ""
+ ]
+}
