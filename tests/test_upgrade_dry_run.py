@@ -265,6 +265,19 @@ def test_the_old_log_folds_through_a_registered_upcaster(tmp_path: Path) -> None
     assert U.PAYLOAD_VERSIONS == {} and U.UPCASTERS == {}  # the registries are put back
 
 
+def test_an_upcaster_the_fold_never_calls_is_a_finding_not_a_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The check must be able to fail: with the fold's upcasting switched off, no event goes
+    through the registered step and the rehearsal says so."""
+    from ddflow.core import model as M
+
+    root = project(tmp_path, confirm_free=True)
+    monkeypatch.setattr(M, "upcast", lambda ev: ev)
+    _kind, problems = DR.upcast_problems(root)
+    assert any("went through the upcaster" in p for p in problems), problems
+
+
 def test_the_registries_come_back_even_when_the_block_raises() -> None:
     from ddflow.core import upcasters as U
 
