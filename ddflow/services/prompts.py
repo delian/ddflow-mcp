@@ -28,10 +28,13 @@ reviews nothing and reports no findings.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
+from ..config import Config
+from ..infra.paths import templates_dir
+from .gates import load_gates
 from .overlay import OverlayError, OverlayLoader
 
 #: Every template the system uses. Registered here so `ddflow prompts list` can show
@@ -165,13 +168,20 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
 
 
 def builtin_dir() -> Path:
-    from ..infra.paths import templates_dir
 
     return templates_dir() / "prompts"
 
 
 def command_dir() -> Path:
     return builtin_dir() / "commands"
+
+
+def _macros():
+    """`services.macros`, imported on first use: it imports this module for `COMMANDS` and
+    `render`, so neither side can import the other at module level."""
+    from . import macros
+
+    return macros
 
 
 def _macro_report(repo: Path | None) -> tuple[dict, dict[str, str]]:
@@ -184,11 +194,10 @@ def _macro_report(repo: Path | None) -> tuple[dict, dict[str, str]]:
     """
     if repo is None:
         return {}, {}
-    from .macros import MacroError, load_macros_report
-
+    M = _macros()
     try:
-        return load_macros_report(repo)
-    except (MacroError, ValueError, OSError):
+        return M.load_macros_report(repo)
+    except (M.MacroError, ValueError, OSError):
         return {}, {}
 
 
@@ -201,9 +210,7 @@ def not_loaded_note(repo: Path | None) -> str:
     """
     if not repo:
         return ""
-    from .macros import macro_problems
-
-    return "".join(f"\n  not loaded: {p}" for p in macro_problems(Path(repo)))
+    return "".join(f"\n  not loaded: {p}" for p in _macros().macro_problems(Path(repo)))
 
 
 def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str]]]:
@@ -249,22 +256,19 @@ def resolve_command(name: str, repo: Path | None = None) -> Template:
     Falls through to `[[macro]]` blocks, so an operator-defined mode resolves by the same
     call every surface already makes.
     """
-    from .macros import load_macros
-
+    M = _macros()
     if name not in COMMANDS:
-        macro = (load_macros(repo) if repo else {}).get(name)
+        macro = (M.load_macros(repo) if repo else {}).get(name)
         if macro is not None:
             # A macro's body is its own; there is no shipped default to fall back to, and
             # its `source` says `config` so `ddflow prompts list` shows where it came from.
-            from .macros import MacroError
-
             try:
                 return Template(
                     name, macro.body(Path(repo)), "config", macro.file(Path(repo)), "command"
                 )
-            except MacroError as exc:
+            except M.MacroError as exc:
                 raise TemplateError(str(exc)) from exc
-        known = sorted({*COMMANDS, *(load_macros(repo) if repo else {})})
+        known = sorted({*COMMANDS, *(M.load_macros(repo) if repo else {})})
         raise TemplateError(f"unknown command {name!r}. Known: {', '.join(known)}")
     try:
         got = _command_loader().resolve(name, repo)
@@ -289,7 +293,6 @@ def overrides_from(cfg) -> dict[str, str]:
     overrides honoured without reaching up into a surface. Three call sites, one of which
     is the gate instruction an agent is handed.
     """
-    from dataclasses import fields
 
     return {
         f.name: getattr(cfg.prompts, f.name)
@@ -560,9 +563,6 @@ def suite_gates(repo: Path) -> list[str]:
     that actually exist here, rather than a generic list the reader has to translate.
     """
     try:
-        from ..config import Config
-        from .gates import load_gates
-
         cfg = Config.load(repo)
         gates = load_gates(repo, cfg)
     except Exception:
@@ -600,8 +600,7 @@ def render_command(name: str, repo: Path, args: dict[str, Any] | None = None) ->
         return render(
             resolve_command(name, repo), **{**declared, **args, "test_gates": suite_gates(repo)}
         )
-    from . import macros as M
-
+    M = _macros()
     macro = _macro_report(repo)[0].get(name)
     if macro is None:
         raise TemplateError(

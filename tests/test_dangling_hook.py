@@ -22,6 +22,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from hook_support import recorded_paths
 
 from ddflow.services import claudehooks as CH
 from ddflow.services import enforce as E
@@ -61,7 +62,7 @@ def _dead_launcher(repo: Path) -> None:
     for name in ("pre-commit", "commit-msg"):
         h = _hook(repo, name)
         text = h.read_text()
-        for path in LA.recorded_paths(text):
+        for path in recorded_paths(text):
             text = text.replace(path, "/nonexistent-ddflow-venv/" + path.lstrip("/"))
         h.write_text(text)
 
@@ -129,7 +130,7 @@ def test_the_path_ddflow_is_run_not_failed_open_even_when_it_refuses(repo, tmp_p
 def test_a_live_recorded_launcher_is_still_used(repo, tmp_path, monkeypatch):
     """The recorded launcher comes FIRST, so a source checkout runs its own code."""
     line = E.command_line("hooks check-commit", exec_=True, extra='"$@"')
-    assert LA.recorded_paths(line)
+    assert recorded_paths(line)
     assert not LA.check_command("x", line, "fix")
 
 
@@ -138,9 +139,9 @@ def test_a_live_recorded_launcher_is_still_used(repo, tmp_path, monkeypatch):
 
 def test_the_recorded_paths_are_read_back_from_both_hook_formats():
     new = E.command_line("hooks check-commit", exec_=True, extra='"$@"')
-    assert LA.recorded_paths(new) and all(p.startswith("/") for p in LA.recorded_paths(new))
-    assert LA.recorded_paths(f'exec "{GONE}" hooks check-commit "$@"') == [GONE]
-    assert LA.recorded_paths('PYTHONPATH="/x/y${PYTHONPATH:+:$PYTHONPATH}" exec "/p/py" -m ddflow a') == [
+    assert recorded_paths(new) and all(p.startswith("/") for p in recorded_paths(new))
+    assert recorded_paths(f'exec "{GONE}" hooks check-commit "$@"') == [GONE]
+    assert recorded_paths('PYTHONPATH="/x/y${PYTHONPATH:+:$PYTHONPATH}" exec "/p/py" -m ddflow a') == [
         "/p/py",
         "/x/y/ddflow/__init__.py",
     ]  # fmt: skip
@@ -205,7 +206,7 @@ def test_hooks_install_refreshes_a_dangling_hook(repo, bare_path):
 
 def test_a_dangling_claude_hook_command_is_reported_and_refreshed(repo, bare_path):
     line = E.command_line(CH.MARKER)
-    for p in LA.recorded_paths(line):
+    for p in recorded_paths(line):
         line = line.replace(p, "/nonexistent-ddflow-venv" + p)
     CH.install(repo, line)
     found = LA.findings(repo)
@@ -218,7 +219,7 @@ def test_a_dangling_claude_hook_command_is_reported_and_refreshed(repo, bare_pat
 
 def test_a_claude_hook_command_fails_open_when_ddflow_is_gone(repo, bare_path):
     line = E.command_line(CH.MARKER)
-    for p in LA.recorded_paths(line):
+    for p in recorded_paths(line):
         line = line.replace(p, "/nonexistent-ddflow-venv" + p)
     r = subprocess.run(["sh", "-c", line], capture_output=True, text=True, cwd=repo)
     assert r.returncode == 0 and "ddflow: not found" in r.stderr
@@ -286,7 +287,7 @@ def test_one_good_pythonpath_entry_is_enough_for_an_mcp_entry(repo, tmp_path):
 
 def test_the_notice_names_the_refresh_that_fits_the_hook(repo, bare_path):
     line = E.command_line(CH.MARKER, refresh="ddflow hooks install --claude")
-    for p in LA.recorded_paths(line):
+    for p in recorded_paths(line):
         line = line.replace(p, "/nonexistent-ddflow-venv" + p)
     r = subprocess.run(["sh", "-c", line], capture_output=True, text=True, cwd=repo)
     assert "run: ddflow hooks install --claude" in r.stderr, r.stderr

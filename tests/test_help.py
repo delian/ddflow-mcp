@@ -13,7 +13,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
@@ -47,20 +46,46 @@ def _cli_leaves() -> set[str]:
     return out
 
 
-#: `H.COMMAND_MENTION` with hyphenated words captured whole. That one stops at a
+#: The command pattern with hyphenated words captured whole. A plain one stops at a
 #: hyphen, so `ddflow hooks check-msg` reached the checker as `hooks check` -- and no
 #: rule over the truncated word can tell it from a literal `ddflow hooks check`
-#: (Bf3819cdb35). The fix belongs in services/help.py; until it lands there, the
-#: checks judge what was really written through this. A word must still START with a
+#: (Bf3819cdb35). The checks judge what was really written through this. A word must still START with a
 #: letter, so `ddflow cleanup --apply` stays `cleanup`.
 HYPHENATED_MENTION = re.compile(r"\bddflow([_ ])([a-z][a-z_-]*(?: [a-z][a-z_-]*){0,2})\b")
 
 
+#: Text between single backticks.
+_CODE_SPAN = re.compile(r"`([^`\n]+)`")
+
+
 def mentions(text: str) -> list[tuple[str, str]]:
-    """`H.command_mentions` -- same code-context rules, not a copy of them -- with
-    hyphenated words kept whole."""
-    with mock.patch.object(H, "COMMAND_MENTION", HYPHENATED_MENTION):
-        return H.command_mentions(text)
+    """Every `(separator, command)` a page NAMES, from code context only, with hyphenated
+    words kept whole.
+
+    Only backticked spans, indented lines and fenced blocks count. Scanning bare prose as
+    well was always slightly wrong ("ddflow runs it and the exit code is the evidence"
+    would claim `ddflow runs it and` is a command). The convention holds in every shipped
+    page: a command appears in backticks or in an indented block, and prose starts at
+    column zero. A fenced block sits at column ZERO, so all three contexts are named.
+    """
+    out: list[tuple[str, str]] = []
+    fenced = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        fragments = [line] if fenced or line[:1].isspace() else _CODE_SPAN.findall(line)
+        for fragment in fragments:
+            out.extend(HYPHENATED_MENTION.findall(fragment))
+    return out
+
+
+def unmapped_tools(tools) -> list[str]:
+    """Tools no group claims. Must stay empty."""
+    for title, members in H.grouped_tools(tools):
+        if title.startswith("Unmapped"):
+            return members
+    return []
 
 
 def unknown_cli_mentions(mentions: list[str], leaves: set[str] | None = None) -> list[str]:
@@ -166,9 +191,9 @@ def test_every_tool_is_classified(repo):
     """Unmapped tools fall into a visible bucket rather than vanishing from an
     inventory that claims to be complete — and this keeps that bucket empty, so a new
     capability has to be given a group instead of silently disappearing."""
-    assert H.unmapped_tools(TOOLS) == [], (
+    assert unmapped_tools(TOOLS) == [], (
         f"these tools belong to no group, so `ddflow help` files them under "
-        f"'Unmapped': {H.unmapped_tools(TOOLS)}. Add a prefix to `_GROUPS`."
+        f"'Unmapped': {unmapped_tools(TOOLS)}. Add a prefix to `_GROUPS`."
     )
 
 
