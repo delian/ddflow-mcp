@@ -9,7 +9,6 @@ a worktree IS that worktree's code -- the trap is one `cd` away.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
@@ -17,13 +16,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from helpers import git_quiet as _git
+
 from ddflow.infra import paths as PATHS
 from ddflow.services import adopt as A
 from ddflow.services import enforce as E
-
-
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
 
 
 @pytest.fixture

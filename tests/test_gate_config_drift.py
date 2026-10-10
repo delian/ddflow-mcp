@@ -15,21 +15,17 @@ a test FAILURE -- sending its author to fix tests that were not broken.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING = 0, 1, 2
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def _commit_gates(repo: Path, command: str, msg: str) -> None:

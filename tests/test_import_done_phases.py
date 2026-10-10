@@ -21,8 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import state as _state
 
-from ddflow.core.model import ABANDONED, BLOCKED, DONE, OPEN, fold
+from ddflow.core.model import ABANDONED, BLOCKED, DONE, OPEN
 from ddflow.infra.log import EventLog
 from ddflow.services import importer as IM
 
@@ -67,10 +68,6 @@ def _import(repo: Path, *flags: str) -> dict:
     code, out, err = run_cli(repo, "--json", "import", *flags)
     assert code in (OK, 2), err
     return json.loads(out)
-
-
-def _state(repo: Path):
-    return fold(EventLog(repo).read_all(), strict=False)
 
 
 def _as_human(repo: Path, kind: str, subject: str, data: dict) -> None:

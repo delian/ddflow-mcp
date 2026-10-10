@@ -11,18 +11,13 @@ So a lesson stores the LIST of sites, and `lessons verify` names the ones that a
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import inventory as INV
-
-
-def _git(repo, *args):
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def _track(repo, **files: str):
