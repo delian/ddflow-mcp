@@ -32,7 +32,7 @@ NEEDS_OPERATOR = "needs operator confirmation"
 WAIVED = "waived"
 
 #: A run whose last record is younger than this is taken to be running; older, interrupted.
-LIVE_S = 600.0
+LIVE_S = 180.0
 
 _STEP_STATE = {
     UA.APPLIED: DONE,
@@ -63,7 +63,9 @@ def run_state(run: dict[str, Any], now: float) -> str:
     return RUNNING if clock.age_s(_last_touch(run), now) < LIVE_S else "interrupted"
 
 
-def _steps(plan: dict[str, Any], rid: str, run: dict[str, Any], live: bool) -> list[dict[str, Any]]:
+def _steps(
+    plan: dict[str, Any], rid: str, run: dict[str, Any], live: bool, config_changes: str
+) -> list[dict[str, Any]]:
     """Each step of the plan (and of the open run) with its state."""
     by_id = {s["id"]: s for s in run.get("steps", [])} if rid else {}
     out: list[dict[str, Any]] = []
@@ -76,7 +78,7 @@ def _steps(plan: dict[str, Any], rid: str, run: dict[str, Any], live: bool) -> l
             rec = by_id.get(it["id"])
             if rec:
                 state, detail = _STEP_STATE.get(rec["status"], PENDING), rec["detail"]
-            elif it["action"] == UP.OPERATOR:
+            elif UA._needs_confirmation(it, config_changes):
                 state, detail = NEEDS_OPERATOR, ""
             elif it["id"] == current:
                 state, detail = RUNNING, ""
@@ -157,7 +159,7 @@ def status(
     state = run_state(run, now) if rid else ""
     cache = UC.read_cache(repo)
     newest = str(cache.get("newest", ""))
-    steps = _steps(plan, rid, run, state == RUNNING)
+    steps = _steps(plan, rid, run, state == RUNNING, cfg.upgrade.config_changes)
     data: dict[str, Any] = {
         "running": running,
         "newest": newest,

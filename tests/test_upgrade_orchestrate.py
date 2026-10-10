@@ -307,6 +307,7 @@ def test_resume_over_mcp_answers_like_the_cli(project, monkeypatch) -> None:
     with pytest.raises(KeyboardInterrupt):
         apply(project, plan)
     monkeypatch.undo()
+    monkeypatch.setattr(UST, "LIVE_S", 0.0)
     from ddflow.services import upgrade_plan as UP
 
     monkeypatch.setattr(UP, "build", lambda *a, **k: plan)
@@ -360,6 +361,45 @@ def test_history_does_not_call_a_run_an_upgrade(project, monkeypatch) -> None:
         if e.kind == "upgrade.applied"
     ]
     assert all("unstamped -> ?" not in line for line in lines) and "started" in lines[0]
+
+
+def test_resume_refuses_a_run_that_may_still_be_applying(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    out = A.upgrade(project, resume=True)  # the last record is seconds old
+    assert out.exit == 3 and "may still be applying" in out.reason
+    from ddflow.services import upgrade_plan as UP
+
+    monkeypatch.undo()
+    monkeypatch.setattr(UST, "LIVE_S", 0.0)
+    monkeypatch.setattr(UP, "build", lambda *a, **k: plan)
+    assert A.upgrade(project, resume=True).exit == 0
+
+
+def test_resume_applies_a_step_confirmed_before_the_interruption(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    plan["categories"]["features"][1]["action"] = UA.UP.OPERATOR
+    interrupt_at(monkeypatch, "f1")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, confirm={"f2": "operator said yes"})
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))  # no --confirm again
+    assert out["refused"] == 0 and out["confirmed"] == {"f2": "operator said yes"}
+
+
+def test_status_uses_the_applys_own_confirmation_rule(project) -> None:
+    _log, cfg, st = state(project)
+    plan = plan_of("c1")
+    plan["categories"]["config"] = [
+        {"id": "config:x", "category": "config", "action": UA.UP.AGENT, "summary": "k"}
+    ]
+    cfg.upgrade.config_changes = "ask"
+    data = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert by_id(data)["config:x"] == "needs operator confirmation"
 
 
 def test_replay_tells_a_run_from_an_upgrade(project, monkeypatch) -> None:

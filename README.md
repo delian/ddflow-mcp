@@ -3918,8 +3918,10 @@ the upgrades the log records. Both only read.
 and `status`: `started`, one `step` per item, then the closing `done` or `failed`; no new event
 kind; an older ddflow reading the log shows these progress records as empty rows in its history), so replay explains the upgrade and an interruption (a crash, a closed terminal, a
 timeout) leaves a run `--status` calls `interrupted`. `ddflow upgrade --resume` finishes it:
-the steps the run settled are not run again, the rest are, and a second `--resume` finds nothing
-(exit 2). Over MCP an apply reports each finished step as a progress notification when the
+the steps the run settled are not run again, the rest are, what the operator confirmed before the
+interruption still counts, and a second `--resume` finds nothing (exit 2). A run that recorded a
+step in the last 3 minutes may still be applying, so `--resume` refuses it (exit 3) until it has
+been quiet that long. Over MCP an apply reports each finished step as a progress notification when the
 client sent a `progressToken`.
 
 **Turning each off.** `ddflow config upgrade.release_check off` (or `DDFLOW_NO_UPDATE_CHECK=1`)
