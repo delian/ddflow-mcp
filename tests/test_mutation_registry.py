@@ -25,5 +25,9 @@ def test_unit_tests_has_a_registered_mutation() -> None:
 def test_every_registered_mutation_still_applies_exactly_once() -> None:
     for gid, mut in _registered():
         src = (ROOT / mut["file"]).read_text("utf-8")
-        assert src.count(mut["old"]) == 1, f"{gid}: {mut['file']} no longer has exactly one `old`"
+        # `gate verify` runs this suite with the mutation APPLIED, so the file then holds
+        # `new` and not `old`: accept either, or this test would turn the unit_tests gate
+        # red for ANY mutation and the verification would prove nothing.
+        applied = src.count(mut["new"]) == 1 and mut["old"] not in src
+        assert src.count(mut["old"]) == 1 or applied, f"{gid}: {mut['file']} lost its `old`"
         assert mut["old"] != mut["new"], f"{gid}: the mutation changes nothing"
