@@ -208,6 +208,24 @@ def _self_request(a) -> tuple[Any, str]:
     return req, ""
 
 
+def _upgrade_payload(a, out, selfup: bool) -> tuple[str, ...]:
+    """The fields `ddflow upgrade --json` prints: by the mode asked, else by what came back."""
+    if selfup:
+        return A.UPGRADE_SELF_PAYLOAD
+    for flag, fields in (
+        ("status", A.UPGRADE_STATUS_PAYLOAD),
+        ("history", A.UPGRADE_HISTORY_PAYLOAD),
+        ("check", A.UPGRADE_CHECK_PAYLOAD),
+    ):
+        if getattr(a, flag, False):
+            return fields
+    if "restored" in out.data:
+        return A.UPGRADE_RESTORE_PAYLOAD
+    if "applied" in out.data or getattr(a, "resume", False):
+        return A.UPGRADE_APPLY_PAYLOAD
+    return A.UPGRADE_PAYLOAD
+
+
 def cmd_upgrade(a, c: Ctx) -> int:
     """What upgrading would change (the plan; nothing is written), or -- with `--apply` --
     doing it. The plan exits 0 up to date, 1 while it has anything in it; an apply exits 0
@@ -235,21 +253,7 @@ def cmd_upgrade(a, c: Ctx) -> int:
         agent=c.requested_agent,
     )
     if c.json:
-        payload = (
-            A.UPGRADE_SELF_PAYLOAD
-            if selfup is not None
-            else A.UPGRADE_STATUS_PAYLOAD
-            if getattr(a, "status", False)
-            else A.UPGRADE_HISTORY_PAYLOAD
-            if getattr(a, "history", False)
-            else A.UPGRADE_CHECK_PAYLOAD
-            if getattr(a, "check", False)
-            else A.UPGRADE_RESTORE_PAYLOAD
-            if "restored" in out.data
-            else A.UPGRADE_APPLY_PAYLOAD
-            if "applied" in out.data
-            else A.UPGRADE_PAYLOAD
-        )
+        payload = _upgrade_payload(a, out, selfup is not None)
         emit_json(out.body(payload))
     elif out.data.get("text"):
         print(out.data["text"])

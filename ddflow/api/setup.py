@@ -1304,7 +1304,7 @@ def _upgrade_status(repo: Path, agent: str) -> O.Outcome:
     """`ddflow upgrade --status`: where the upgrade stands (`upgrade_status.status`)."""
     log, cfg, st = _load(repo, agent)
     data = UST.status(repo, cfg, st, log=log)
-    pending = not data["up_to_date"] or bool(data["run"] and data["run"]["state"] != UST.DONE)
+    pending = not data["up_to_date"] or bool(data["run"])  # an open run is never a finished one
     return O.Outcome(
         kind="upgrade",
         data=data,
