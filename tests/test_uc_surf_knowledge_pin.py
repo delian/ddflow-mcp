@@ -50,6 +50,39 @@ SEED = [
         "--new",
     ),
     (
+        "lesson",
+        "add",
+        "--id",
+        "L-four",
+        "--title",
+        "Pin the clock",
+        "--rule",
+        "inject time never read it",
+        "--new",
+    ),
+    (
+        "lesson",
+        "add",
+        "--id",
+        "L-five",
+        "--title",
+        "Seed the dice",
+        "--rule",
+        "random needs a fixed seed",
+        "--new",
+    ),
+    (
+        "lesson",
+        "add",
+        "--id",
+        "L-six",
+        "--title",
+        "Close the file",
+        "--rule",
+        "use a context manager for handles",
+        "--new",
+    ),
+    (
         "decision",
         "add",
         "--id",
@@ -72,34 +105,49 @@ SEED = [
         "we use Y for queues",
         "--new",
     ),
+    (
+        "decision",
+        "add",
+        "--id",
+        "D-three",
+        "--title",
+        "Use Z",
+        "--decision",
+        "we use Z for caches",
+        "--new",
+    ),
     ("task", "add", "T1", "--title", "touch x", "--globs", "src/x/a.py"),
 ]
 
+#: (argv, modes): "h" human, "j" --json, "hj" both. A command that changes state is run in
+#: ONE mode per target, so each mode pins the first (success) application, never a repeat.
 SCENARIOS = [
-    ("similar", "always probe first"),
-    ("similar", "zzzz nothing like it qqqq"),
-    ("similar", "always probe first", "--kind", "nosuchkind"),
-    ("dupes",),
-    ("dupes", "--floor", "0.99"),
-    ("dupes", "--kind", "nosuchkind"),
-    ("lesson", "search", "probe"),
-    ("lesson", "search", "zzzznothingqqqq"),
-    ("lesson", "verify"),
-    ("link", "L-two", "--duplicate-of", "L-one"),
-    ("link", "L-three", "--related", "L-one", "--reason", "same area"),
-    ("link", "L-nope", "--related", "L-one"),
-    ("link", "L-one", "--related", "L-one"),
-    ("link", "L-one"),
-    ("decision", "show", "D-one"),
-    ("decision", "show", "D-nope"),
-    ("decision", "applicable", "T1"),
-    ("decision", "applicable", "T-nope"),
-    ("decision", "supersede", "D-one", "--by", "D-two", "--reason", "y wins"),
-    ("decision", "supersede", "D-nope", "--by", "D-two"),
-    ("decision", "supersede", "D-two", "--by", "D-nope"),
-    ("decision", "show", "D-one"),
+    (("similar", "always probe first"), "hj"),
+    (("similar", "zzzz nothing like it qqqq"), "hj"),
+    (("similar", "always probe first", "--kind", "nosuchkind"), "hj"),
+    (("dupes",), "hj"),
+    (("dupes", "--floor", "0.99"), "hj"),
+    (("dupes", "--kind", "nosuchkind"), "hj"),
+    (("lesson", "search", "probe"), "hj"),
+    (("lesson", "search", "zzzznothingqqqq"), "hj"),
+    (("lesson", "verify"), "hj"),
+    (("link", "L-two", "--duplicate-of", "L-one"), "h"),
+    (("link", "L-five", "--duplicate-of", "L-four"), "j"),
+    (("link", "L-three", "--related", "L-one", "--reason", "same area"), "h"),
+    (("link", "L-six", "--related", "L-four", "--reason", "same area"), "j"),
+    (("link", "L-nope", "--related", "L-one"), "hj"),
+    (("link", "L-one", "--related", "L-one"), "hj"),
+    (("link", "L-one"), "hj"),
+    (("decision", "show", "D-one"), "hj"),
+    (("decision", "show", "D-nope"), "hj"),
+    (("decision", "applicable", "T1"), "hj"),
+    (("decision", "applicable", "T-nope"), "hj"),
+    (("decision", "supersede", "D-one", "--by", "D-two", "--reason", "y wins"), "h"),
+    (("decision", "supersede", "D-three", "--by", "D-two"), "j"),
+    (("decision", "supersede", "D-nope", "--by", "D-two"), "hj"),
+    (("decision", "show", "D-one"), "hj"),
+    (("decision", "show", "D-three"), "hj"),
 ]
-# Each scenario is run twice: as typed and with the global --json before the command.
 
 
 def _seeded(repo: Path) -> None:
@@ -116,8 +164,10 @@ def _norm(text: str, repo: Path) -> str:
 def _table(repo: Path) -> dict[str, list]:
     _seeded(repo)
     rows: dict[str, list] = {}
-    for argv in SCENARIOS:
+    for argv, modes in SCENARIOS:
         for json_mode in (False, True):
+            if ("j" if json_mode else "h") not in modes:
+                continue
             full = (("--json",) if json_mode else ()) + argv
             code, out, err = run_cli(repo, *full, agent="pin")
             key = " ".join(full)
