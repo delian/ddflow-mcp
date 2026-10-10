@@ -12,20 +12,14 @@ uncommitted changes is exactly what must not be co-opted, and still is not.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _first_item_worked_in_the_harness_tree(repo: Path) -> Path:
