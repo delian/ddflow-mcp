@@ -1309,10 +1309,14 @@ def _upgrade_status(repo: Path, agent: str) -> O.Outcome:
         kind="upgrade",
         data=data,
         exit=O.FAIL if pending else O.OK,
-        reason=f"{sum(s['state'] != UST.DONE for s in data['steps'])} upgrade step(s) pending"
-        if pending
-        else "",
+        reason=_status_reason(data) if pending else "",
     )
+
+
+def _status_reason(data: dict[str, Any]) -> str:
+    """Why `--status` exits 1: steps still to do, else the run that was never finished."""
+    left = sum(s["state"] != UST.DONE for s in data["steps"])
+    return f"{left} upgrade step(s) pending" if left else "an upgrade run was interrupted"
 
 
 def _upgrade_history(repo: Path, agent: str) -> O.Outcome:

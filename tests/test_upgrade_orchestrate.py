@@ -52,9 +52,8 @@ def plan_of(*ids: str, running: str = RUNNING) -> dict[str, Any]:
 
 def apply(project: Path, plan: dict[str, Any], **kw: Any) -> dict[str, Any]:
     log, cfg, st = _load(project, "orch")
-    return UA.apply(
-        project, log, cfg, st, categories="features", backup="none", agent="orch", plan=plan, **kw
-    )
+    kw.setdefault("categories", "features")
+    return UA.apply(project, log, cfg, st, backup="none", agent="orch", plan=plan, **kw)
 
 
 def state(project: Path):
@@ -180,6 +179,21 @@ def test_only_the_item_in_flight_shows_as_running(project, monkeypatch) -> None:
     _log, cfg, st = state(project)
     live = UST.status(project, cfg, st, plan=plan, running=RUNNING)
     assert by_id(live) == {"f1": "done", "f2": "running", "f3": "pending"}
+
+
+def test_the_run_lists_its_items_in_the_order_they_execute(project, monkeypatch) -> None:
+    plan = plan_of("f1")
+    plan["categories"]["repairs"] = [
+        {"id": "r1", "category": "repairs", "action": "agent", "summary": "x", "repair": "r1"}
+    ]
+    monkeypatch.setattr(
+        UA, "_run_repairs", lambda repo, log, cfg, items: [UA._rec(items[0], UA.APPLIED, "ok")]
+    )
+    apply(project, plan, categories=None)
+    _log, _cfg, st = state(project)
+    (run,) = st.upgrade_runs.values()
+    assert run["items"] == ["f1", "r1"]
+    assert [s["id"] for s in run["steps"]] == ["f1", "r1"]
 
 
 def test_status_names_an_agent_still_on_the_old_version(project) -> None:
