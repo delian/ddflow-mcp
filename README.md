@@ -1515,7 +1515,7 @@ companions below were once recommended for.
 | **codeguide** | `standards` | Checks against a written standard instead of the reviewer's taste |
 | **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
 | **memory** *(opt-in)* | `rules` | A machine-local knowledge graph, for a project that wants one. ddflow already keeps operational facts itself (`ddflow memory`), so this is a second store outside the committed log |
-| **sequential** | opt-in | Records and counts the thoughts you send it; returns no thought text, persists nothing, no search or validation. Benefit to the reasoning gates is unmeasured |
+| **sequential** *(opt-in)* | `research`, `rubber_duck`, `bug_hunt` | Records and counts the thoughts you send it; returns no thought text, persists nothing, no search or validation. Benefit to the reasoning gates is unmeasured |
 | **optmem** *(cli, opt-in)* | `rules` | Superseded by `ddflow memory`, which holds the operational facts OptMem was recommended for; listed for a project that wants an OptMem store anyway. An existing OptMem `LOG.txt` imports as ddflow memories |
 
 **Servers and command-line tools are different things**, and the registry says which:
@@ -1783,7 +1783,7 @@ what happens when one is absent, and the answer is deliberately never "the gate 
 | **roborev** *(cli)* | `standards`, `bug_hunt`, `dedupe` | Record the gate `unavailable` with the reason. A second opinion is missing and the log says so. |
 | **codeguide** | `standards` | The standards gate falls back to the reviewer's taste. Still recordable — but say which it was. |
 | **context7** | `research`, `standards` | Claims about a library's API rest on the model's memory, which is exactly the claim that is cheap to check and often wrong. |
-| **sequential-thinking** | opt-in | Only records and counts thoughts; benefit unmeasured. |
+| **sequential-thinking** *(opt-in)* | `research`, `rubber_duck`, `bug_hunt` | Only records and counts thoughts; benefit unmeasured. |
 | **memory** / **OptMem** *(opt-in)* | `rules` | Nothing: `ddflow memory` keeps the facts about *this machine*, `brief` shows them and `recall` searches them beside the decisions, lessons, research and bugs. |
 
 **The rule, and it is enforced:** a gate whose tool could not run is recorded
