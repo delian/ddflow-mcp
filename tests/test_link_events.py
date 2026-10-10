@@ -14,16 +14,12 @@ from itertools import permutations
 
 import pytest
 from conftest import run_cli
+from helpers import make_event as _ev
 
 from ddflow.core import model
 from ddflow.core.events import PROVENANCE_KINDS, Event
 from ddflow.core.model import fold
 from ddflow.services.sessions import replay
-
-
-def _ev(kind: str, subject: str, lamport: int, agent: str = "x", **data) -> Event:
-    e = Event(kind=kind, subject=subject, data=data, agent=agent, lamport=lamport, ts=f"t{lamport}")
-    return Event(**{**e.__dict__, "id": e.compute_id()})
 
 
 def _ext(lamport: int, agent: str, text: str, score: float = 0.7) -> Event:

@@ -5,21 +5,17 @@ human checkpoint, a failed merge wrote an agent's `failed` outcome onto it."""
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 HUMAN_MERGE = '[gate.merge]\ntitle = "The operator lands it"\nhuman = true\n'
-
-
-def _git(where: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def _claimed_with_a_commit(repo: Path) -> Path:
