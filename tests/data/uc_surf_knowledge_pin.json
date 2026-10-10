@@ -6,7 +6,7 @@
  ],
  "--json decision applicable T1": [
   0,
-  "{\n  \"schema\": \"decision_applicable@1\",\n  \"applicable\": [\n    {\n      \"id\": \"D-one\",\n      \"title\": \"Use X\",\n      \"context\": \"\",\n      \"decision\": \"we use X for storage\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [\n        \"src/x/*\"\n      ],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    }\n  ],\n  \"project_wide\": [\n    {\n      \"id\": \"D-two\",\n      \"title\": \"Use Y\",\n      \"context\": \"\",\n      \"decision\": \"we use Y for queues\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    }\n  ]\n}\n",
+  "{\n  \"schema\": \"decision_applicable@1\",\n  \"applicable\": [\n    {\n      \"id\": \"D-one\",\n      \"title\": \"Use X\",\n      \"context\": \"\",\n      \"decision\": \"we use X for storage\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [\n        \"src/x/*\"\n      ],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    }\n  ],\n  \"project_wide\": [\n    {\n      \"id\": \"D-two\",\n      \"title\": \"Use Y\",\n      \"context\": \"\",\n      \"decision\": \"we use Y for queues\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    },\n    {\n      \"id\": \"D-three\",\n      \"title\": \"Use Z\",\n      \"context\": \"\",\n      \"decision\": \"we use Z for caches\",\n      \"consequences\": \"\",\n      \"alternatives\": \"\",\n      \"globs\": [],\n      \"tags\": [],\n      \"sources\": [],\n      \"status\": \"accepted\",\n      \"decided_by\": \"\",\n      \"supersedes\": [],\n      \"superseded_by\": \"\",\n      \"at\": \"<ts>\",\n      \"item\": \"\",\n      \"by\": \"pin\"\n    }\n  ]\n}\n",
   ""
  ],
  "--json decision show D-nope": [
@@ -24,24 +24,24 @@
   "{\n  \"schema\": \"decision_show@1\",\n  \"id\": \"D-one\",\n  \"title\": \"Use X\",\n  \"context\": \"\",\n  \"decision\": \"we use X for storage\",\n  \"consequences\": \"\",\n  \"alternatives\": \"\",\n  \"globs\": [\n    \"src/x/*\"\n  ],\n  \"tags\": [],\n  \"sources\": [],\n  \"status\": \"superseded\",\n  \"decided_by\": \"\",\n  \"supersedes\": [],\n  \"superseded_by\": \"D-two\",\n  \"at\": \"<ts>\",\n  \"item\": \"\",\n  \"by\": \"pin\"\n}\n",
   ""
  ],
+ "--json decision show D-three": [
+  0,
+  "{\n  \"schema\": \"decision_show@1\",\n  \"id\": \"D-three\",\n  \"title\": \"Use Z\",\n  \"context\": \"\",\n  \"decision\": \"we use Z for caches\",\n  \"consequences\": \"\",\n  \"alternatives\": \"\",\n  \"globs\": [],\n  \"tags\": [],\n  \"sources\": [],\n  \"status\": \"superseded\",\n  \"decided_by\": \"\",\n  \"supersedes\": [],\n  \"superseded_by\": \"D-two\",\n  \"at\": \"<ts>\",\n  \"item\": \"\",\n  \"by\": \"pin\"\n}\n",
+  ""
+ ],
  "--json decision supersede D-nope --by D-two": [
   1,
   "",
   "no such decision 'D-nope'\n"
  ],
- "--json decision supersede D-one --by D-two --reason y wins": [
+ "--json decision supersede D-three --by D-two": [
   0,
-  "{\n  \"schema\": \"decision_supersede@1\",\n  \"id\": \"D-one\",\n  \"by\": \"D-two\"\n}\n",
-  ""
- ],
- "--json decision supersede D-two --by D-nope": [
-  0,
-  "{\n  \"schema\": \"decision_supersede@1\",\n  \"id\": \"D-two\",\n  \"by\": \"D-nope\"\n}\n",
+  "{\n  \"schema\": \"decision_supersede@1\",\n  \"id\": \"D-three\",\n  \"by\": \"D-two\"\n}\n",
   ""
  ],
  "--json dupes": [
   0,
-  "{\n  \"schema\": \"dupes@1\",\n  \"pairs\": [\n    {\n      \"score\": 1.0,\n      \"a\": \"L-one\",\n      \"b\": \"L-two\",\n      \"a_kind\": \"lesson\",\n      \"b_kind\": \"lesson\",\n      \"a_title\": \"Probe before you claim\",\n      \"b_title\": \"Probe before you claim again\"\n    },\n    {\n      \"score\": 0.658431238,\n      \"a\": \"D-one\",\n      \"b\": \"D-two\",\n      \"a_kind\": \"decision\",\n      \"b_kind\": \"decision\",\n      \"a_title\": \"Use X\",\n      \"b_title\": \"Use Y\"\n    }\n  ],\n  \"count\": 2,\n  \"kinds\": [\n    \"bug\",\n    \"task\",\n    \"phase\",\n    \"lesson\",\n    \"decision\",\n    \"research\",\n    \"memory\",\n    \"rule\"\n  ],\n  \"open_only\": false,\n  \"floor\": 0.35,\n  \"limit\": 0\n}\n",
+  "{\n  \"schema\": \"dupes@1\",\n  \"pairs\": [\n    {\n      \"score\": 1.0,\n      \"a\": \"L-one\",\n      \"b\": \"L-two\",\n      \"a_kind\": \"lesson\",\n      \"b_kind\": \"lesson\",\n      \"a_title\": \"Probe before you claim\",\n      \"b_title\": \"Probe before you claim again\"\n    },\n    {\n      \"score\": 0.556228004,\n      \"a\": \"D-one\",\n      \"b\": \"D-three\",\n      \"a_kind\": \"decision\",\n      \"b_kind\": \"decision\",\n      \"a_title\": \"Use X\",\n      \"b_title\": \"Use Z\"\n    },\n    {\n      \"score\": 0.556228004,\n      \"a\": \"D-one\",\n      \"b\": \"D-two\",\n      \"a_kind\": \"decision\",\n      \"b_kind\": \"decision\",\n      \"a_title\": \"Use X\",\n      \"b_title\": \"Use Y\"\n    },\n    {\n      \"score\": 0.556228004,\n      \"a\": \"D-three\",\n      \"b\": \"D-two\",\n      \"a_kind\": \"decision\",\n      \"b_kind\": \"decision\",\n      \"a_title\": \"Use Z\",\n      \"b_title\": \"Use Y\"\n    }\n  ],\n  \"count\": 4,\n  \"kinds\": [\n    \"bug\",\n    \"task\",\n    \"phase\",\n    \"lesson\",\n    \"decision\",\n    \"research\",\n    \"memory\",\n    \"rule\"\n  ],\n  \"open_only\": false,\n  \"floor\": 0.35,\n  \"limit\": 0\n}\n",
   ""
  ],
  "--json dupes --floor 0.99": [
@@ -66,7 +66,12 @@
  ],
  "--json lesson verify": [
   2,
-  "{\n  \"schema\": \"lesson_verify@1\",\n  \"checked\": 0,\n  \"live\": 3,\n  \"text\": \"No lesson declares a pattern, so nothing was checked (3 live lesson(s)). Add `--pattern` to a lesson whose mistake is mechanical.\"\n}\n",
+  "{\n  \"schema\": \"lesson_verify@1\",\n  \"checked\": 0,\n  \"live\": 6,\n  \"text\": \"No lesson declares a pattern, so nothing was checked (6 live lesson(s)). Add `--pattern` to a lesson whose mistake is mechanical.\"\n}\n",
+  ""
+ ],
+ "--json link L-five --duplicate-of L-four": [
+  0,
+  "{\n  \"schema\": \"link@1\",\n  \"subject\": \"L-five\",\n  \"relation\": \"duplicate_of\",\n  \"target\": \"L-four\",\n  \"merged\": {\n    \"superseded\": \"L-five\",\n    \"by\": \"L-four\"\n  }\n}\n",
   ""
  ],
  "--json link L-nope --related L-one": [
@@ -84,14 +89,9 @@
   "{\n  \"refusal\": {\n    \"reason\": \"a record cannot link to itself\",\n    \"outcome\": \"refused\",\n    \"exit\": 3\n  },\n  \"schema\": \"link@1\",\n  \"subject\": \"L-one\",\n  \"relation\": null,\n  \"target\": \"L-one\",\n  \"merged\": null\n}\n",
   ""
  ],
- "--json link L-three --related L-one --reason same area": [
+ "--json link L-six --related L-four --reason same area": [
   0,
-  "{\n  \"schema\": \"link@1\",\n  \"subject\": \"L-three\",\n  \"relation\": \"related\",\n  \"target\": \"L-one\",\n  \"merged\": {}\n}\n",
-  ""
- ],
- "--json link L-two --duplicate-of L-one": [
-  0,
-  "{\n  \"schema\": \"link@1\",\n  \"subject\": \"L-two\",\n  \"relation\": \"duplicate_of\",\n  \"target\": \"L-one\",\n  \"merged\": {\n    \"superseded\": \"L-two\",\n    \"by\": \"L-one\"\n  }\n}\n",
+  "{\n  \"schema\": \"link@1\",\n  \"subject\": \"L-six\",\n  \"relation\": \"related\",\n  \"target\": \"L-four\",\n  \"merged\": {}\n}\n",
   ""
  ],
  "--json similar always probe first": [
@@ -116,7 +116,7 @@
  ],
  "decision applicable T1": [
   0,
-  "  [D-one] Use X\n      we use X for storage\n  [D-two] Use Y  (project-wide)\n      we use Y for queues\n",
+  "  [D-one] Use X\n      we use X for storage\n  [D-two] Use Y  (project-wide)\n      we use Y for queues\n  [D-three] Use Z  (project-wide)\n      we use Z for caches\n",
   ""
  ],
  "decision show D-nope": [
@@ -134,6 +134,11 @@
   "D-one \u2014 Use X\n  status superseded (superseded by D-two)\n\nDecision:\n  we use X for storage\n\nGoverns: src/x/*\n",
   ""
  ],
+ "decision show D-three": [
+  0,
+  "D-three \u2014 Use Z\n  status superseded (superseded by D-two)\n\nDecision:\n  we use Z for caches\n",
+  ""
+ ],
  "decision supersede D-nope --by D-two": [
   1,
   "",
@@ -144,14 +149,9 @@
   "D-one superseded by D-two\n",
   ""
  ],
- "decision supersede D-two --by D-nope": [
-  0,
-  "D-two superseded by D-nope\n",
-  ""
- ],
  "dupes": [
   0,
-  "1.00  L-one (lesson) ~ L-two (lesson)\n      Probe before you claim\n      Probe before you claim again\n0.66  D-one (decision) ~ D-two (decision)\n      Use X\n      Use Y\n2 unsettled pair(s) at floor 0.35. Settle each: `ddflow link <a> --duplicate-of <b>` (or --extends/--related), or `--distinct` to dismiss it for good.\n",
+  "1.00  L-one (lesson) ~ L-two (lesson)\n      Probe before you claim\n      Probe before you claim again\n0.56  D-one (decision) ~ D-three (decision)\n      Use X\n      Use Z\n0.56  D-one (decision) ~ D-two (decision)\n      Use X\n      Use Y\n0.56  D-three (decision) ~ D-two (decision)\n      Use Z\n      Use Y\n4 unsettled pair(s) at floor 0.35. Settle each: `ddflow link <a> --duplicate-of <b>` (or --extends/--related), or `--distinct` to dismiss it for good.\n",
   ""
  ],
  "dupes --floor 0.99": [
@@ -176,7 +176,7 @@
  ],
  "lesson verify": [
   2,
-  "No lesson declares a pattern, so nothing was checked (3 live lesson(s)). Add `--pattern` to a lesson whose mistake is mechanical.\n",
+  "No lesson declares a pattern, so nothing was checked (6 live lesson(s)). Add `--pattern` to a lesson whose mistake is mechanical.\n",
   ""
  ],
  "link L-nope --related L-one": [

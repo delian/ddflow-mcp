@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from ...core.budget import RECALL_MAX_CHARS
 from ...core.model import LINK_RELATIONS
-from ..dedupe_flags import candidate_lines
 from ..registry import Command, Param, by_tool
 from ..tools._common import _answer, _api
-from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
+from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS, candidate_lines
 
 #: `ddflow link` names the relation with a flag each; the tool takes `relation` and `target`.
 _RELATION_FLAG_REASON = "the relation is MCP `relation` + `target`, not one flag per relation"
