@@ -1287,9 +1287,9 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     otherwise one review per gate (`_review_gates`, decision D-gate-economy 2).
     One gate is `_review_gate`, whose docstring has the rest.
     """
-    if refused := _unknown_item(repo, item, agent, gate):
+    args = dict(locals())  # first: every later local would leak into the kwargs
+    if (refused := _unknown_item(repo, item, agent, gate)) is not None:  # a refusal is falsy
         return refused
-    args = dict(locals())
     asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
     if len(asked) > 1:
         return _review_gates(asked, args)
