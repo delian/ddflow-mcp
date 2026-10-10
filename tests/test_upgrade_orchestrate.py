@@ -151,6 +151,37 @@ def test_a_category_with_a_step_that_fails_on_resume_is_not_recorded_as_done(
     assert out["exit"] == 1 and "features" not in out["categories"]
 
 
+def test_a_second_interruption_keeps_the_plan_and_the_settled_steps(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2", "f3")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid, _run = UST.open_run(st)
+    interrupt_at(monkeypatch, "f3")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, watch=UA.Watch(resume=rid))
+    monkeypatch.undo()
+    _log, _cfg, st = state(project)
+    rid2, run = UST.open_run(st)
+    assert rid2 == rid and run["starts"] == 2 and run["items"] == ["f1", "f2", "f3"]
+    ran = interrupt_at(monkeypatch, None)
+    out = apply(project, plan, watch=UA.Watch(resume=rid))
+    assert ran == ["f3"] and out["to"] == RUNNING
+
+
+def test_only_the_item_in_flight_shows_as_running(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2", "f3")
+    plan["categories"]["features"][0]["action"] = "needs operator confirmation"
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan, confirm={"f1": "ok"})
+    _log, cfg, st = state(project)
+    live = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert by_id(live) == {"f1": "done", "f2": "running", "f3": "pending"}
+
+
 def test_status_names_an_agent_still_on_the_old_version(project) -> None:
     _log, cfg, st = state(project)
     st.ddflow_versions = {
