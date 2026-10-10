@@ -49,6 +49,11 @@
   "{\n  \"schema\": \"dupes@1\",\n  \"pairs\": [\n    {\n      \"score\": 1.0,\n      \"a\": \"L-one\",\n      \"b\": \"L-two\",\n      \"a_kind\": \"lesson\",\n      \"b_kind\": \"lesson\",\n      \"a_title\": \"Probe before you claim\",\n      \"b_title\": \"Probe before you claim again\"\n    }\n  ],\n  \"count\": 1,\n  \"kinds\": [\n    \"bug\",\n    \"task\",\n    \"phase\",\n    \"lesson\",\n    \"decision\",\n    \"research\",\n    \"memory\",\n    \"rule\"\n  ],\n  \"open_only\": false,\n  \"floor\": 0.99,\n  \"limit\": 0\n}\n",
   ""
  ],
+ "--json dupes --floor 1.5": [
+  2,
+  "{\n  \"schema\": \"dupes@1\",\n  \"pairs\": [],\n  \"count\": 0,\n  \"kinds\": [\n    \"bug\",\n    \"task\",\n    \"phase\",\n    \"lesson\",\n    \"decision\",\n    \"research\",\n    \"memory\",\n    \"rule\"\n  ],\n  \"open_only\": false,\n  \"floor\": 1.5,\n  \"limit\": 0\n}\n",
+  ""
+ ],
  "--json dupes --kind nosuchkind": [
   1,
   "",
@@ -157,6 +162,11 @@
  "dupes --floor 0.99": [
   0,
   "1.00  L-one (lesson) ~ L-two (lesson)\n      Probe before you claim\n      Probe before you claim again\n1 unsettled pair(s) at floor 0.99. Settle each: `ddflow link <a> --duplicate-of <b>` (or --extends/--related), or `--distinct` to dismiss it for good.\n",
+  ""
+ ],
+ "dupes --floor 1.5": [
+  2,
+  "No unsettled near-duplicate pair in bug, task, phase, lesson, decision, research, memory, rule scores 1.5 or more.\n",
   ""
  ],
  "dupes --kind nosuchkind": [
