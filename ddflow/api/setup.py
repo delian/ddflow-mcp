@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, ReviewConfig, csv_list
+from ..core import clock
 from ..core import outcome as O
 from ..core.model import fold
 from ..infra import fsio
@@ -1343,6 +1344,12 @@ def _upgrade_resume(
             data={"text": "no upgrade run was interrupted: nothing to resume"},
             exit=O.NOTHING,
             reason="nothing to resume",
+        )
+    if UST.run_state(run, clock.now_utc().timestamp()) == UST.RUNNING:
+        return O.refused(
+            "upgrade",
+            f"upgrade run {rid} recorded a step less than {int(UST.LIVE_S)} s ago: it may still be "
+            "applying. Wait for it, or resume once it has been quiet that long",
         )
     return _upgrade_apply(
         repo, ",".join(run["categories"]) or "all", confirm, reason, backup, agent, rid, on_progress

@@ -295,11 +295,13 @@ def apply(
     repo = Path(repo)
     config_changes = cfg.upgrade.config_changes  # the one source: the plan reads it too
     _check_modes(backup, config_changes)
-    confirm = dict(confirm or {})
+    watch = watch or Watch()
+    # a resume keeps what the operator confirmed before the interruption
+    prior_reasons = (st.upgrade_runs.get(watch.resume) or {}).get("confirmed") or {}
+    confirm = {**prior_reasons, **dict(confirm or {})}
     plan = plan or UP.build(repo, log, cfg, st)
     frm, to = plan["project_version"], plan["running"]
     results, todo = _select(plan, parse_categories(categories), confirm, config_changes)
-    watch = watch or Watch()
     earlier = _settled_steps(st, watch.resume)
     selected = todo
     todo = [i for i in selected if i["id"] not in earlier]
@@ -322,13 +324,12 @@ def apply(
     late_backup = _late_saver(repo, cfg, backup, (frm, to), saved)
 
     run = _start(log, watch, todo, (frm, to), backup_dir, confirm)
-    prior_reasons = (st.upgrade_runs.get(watch.resume) or {}).get("confirmed") or {}
     results += _execute(
         repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
     )
     ok, done_cats, reasons = _summarise(results, selected, confirm)
-    reasons = {**prior_reasons, **reasons}  # what the operator confirmed before the interruption
     ok |= earlier  # settled by the interrupted run this one finishes
+    reasons = _reasons(selected, ok, confirm)
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons)
@@ -469,8 +470,14 @@ def _summarise(
     """`(ids settled, categories with something settled, the operator's reasons)`."""
     ok = {r["id"] for r in results if r["status"] in (APPLIED, ACKNOWLEDGED)}
     cats = [c for c in UP.CATEGORIES if any(r["category"] == c and r["id"] in ok for r in results)]
-    reasons = {_ident(i): why for i in todo if i["id"] in ok and (why := _confirmed(i, confirm))}
-    return ok, cats, reasons
+    return ok, cats, _reasons(todo, ok, confirm)
+
+
+def _reasons(
+    items: list[dict[str, Any]], ok: set[str], confirm: Mapping[str, str]
+) -> dict[str, str]:
+    """What the operator confirmed, for the items that were settled."""
+    return {_ident(i): why for i in items if i["id"] in ok and (why := _confirmed(i, confirm))}
 
 
 def _save(
