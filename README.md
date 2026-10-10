@@ -2726,8 +2726,7 @@ own bug, found by a cross-family review of it:
 
 A gate that reads a COMMITTED ref, as `ci` does (`ddflow ci run` merges the branch's
 commits in a scratch worktree), cannot see an uncommitted edit, so verifying it that way
-reported PASSED on mutated source. Such a gate (`reads_ref = true`, the default for `ci`,
-or a command naming `HEAD`) is verified against a throwaway commit holding the mutation,
+reported PASSED on mutated source. Such a gate (`reads_ref = true`, the default for `ci`) is verified against a throwaway commit holding the mutation,
 run in a scratch checkout of it; the branch, the index and the working tree do not move.
 The mutations are read from the item's own worktree as well as the primary, so one
 registered on a branch can be verified before it merges.

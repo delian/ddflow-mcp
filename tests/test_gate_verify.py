@@ -194,6 +194,7 @@ HEAD_GATE = (
     "[gate.unit_tests]\n"
     "command = \"git show HEAD:src/calc.py | grep -q 'return a [+] b'\"\n"
     'cwd = "repo"\n'
+    "reads_ref = true\n"
     'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
 )
 
@@ -256,3 +257,16 @@ def test_a_mutation_registered_only_on_the_branch_is_verifiable(repo):
     )
     code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
     assert code == OK, f"a branch-only mutation was not found:\n{out}\n{err}"
+
+
+def test_a_worktree_vs_head_gate_is_still_mutated_in_the_working_tree(repo):
+    """Naming HEAD does not make a gate blind to an uncommitted edit (`git diff HEAD`)."""
+    _project(repo)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        "[gate.unit_tests]\n"
+        'command = "git diff --quiet HEAD -- src/calc.py"\n'
+        'cwd = "repo"\n'
+        'mutations = [\n  { file = "src/calc.py", old = "return a + b", new = "return a - b" },\n]\n'
+    )
+    code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
+    assert code == OK, f"{out}\n{err}"
