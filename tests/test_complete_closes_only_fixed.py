@@ -16,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
+from helpers import state_as_reader as state
 
 from ddflow.api import knowledge as K
 from ddflow.api import lifecycle as LC
@@ -23,10 +24,6 @@ from ddflow.api.bug_reopen import bug_reopen
 from ddflow.core.model import HANDLERS, fold
 from ddflow.infra.log import EventLog
 from ddflow.services import verify as SV
-
-
-def state(repo: Path):
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
 def seed(repo: Path) -> str:
