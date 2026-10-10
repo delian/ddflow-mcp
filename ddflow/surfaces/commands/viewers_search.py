@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import sys
 
+from ...api import surf_reporting as R
 from ...api import view_read
-from ...services import search as S
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param
 from ..render import emit_json
@@ -60,7 +60,9 @@ def cmd_search(a, c: Ctx) -> int:
             f"{r['snippet']}"
         )
     if d["truncated"]:
-        print(f"\n(showing {len(d['rows'])} of {d['total']}; raise --limit, at most {S.MAX_LIMIT})")
+        print(
+            f"\n(showing {len(d['rows'])} of {d['total']}; raise --limit, at most {R.SEARCH_MAX_LIMIT})"
+        )
     if d["note"]:
         print(f"\n({d['note']})")
     return OK
@@ -88,12 +90,12 @@ COMMAND = Command(
         Param(
             "kind",
             default="",
-            help=f"comma-separated kinds of row to search (default all): {', '.join(S.SOURCES)}",
+            help=f"comma-separated kinds of row to search (default all): {', '.join(R.SEARCH_KINDS)}",
         ),
         Param(
             "source",
             default="",
-            help=f"comma-separated sources to search (default all): {', '.join(S.source_names())}",
+            help=f"comma-separated sources to search (default all): {', '.join(R.search_source_names())}",
         ),
         Param("state", default="", help="only hits in this state"),
         Param("phase", default="", help="only hits under this phase id"),
@@ -104,7 +106,7 @@ COMMAND = Command(
             "not --agent, which is who YOU are",
         ),
         Param("since", default="", help="only hits dated at or after this ISO date"),
-        Param("limit", type="integer", default=S.DEFAULT_LIMIT, help="most hits to show"),
+        Param("limit", type="integer", default=R.SEARCH_DEFAULT_LIMIT, help="most hits to show"),
     ),
     handler=cmd_search,
     via=("ddflow_list", "search"),

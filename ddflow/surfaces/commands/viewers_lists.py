@@ -12,7 +12,7 @@ import sys
 from typing import Any
 
 from ...api import phase_progress, view_list
-from ...services import viewers as V
+from ...api import surf_reporting as R
 from ..context import NOTHING, OK, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
@@ -47,14 +47,14 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
         # global `--agent` (identity) is mirrored onto every subparser under that name.
         Param(flag, default=None, help=_HELP[flag])
         for flag in _SHARED_FLAGS
-        if ("agent" if flag == "owner" else flag) in V._FILTERS[kind]
+        if ("agent" if flag == "owner" else flag) in R.list_filters(kind)
     ]
     out.append(
         Param(
             "limit",
             type="integer",
             default=None,
-            help=f"most rows to show (default {V.DEFAULT_LIMIT})",
+            help=f"most rows to show (default {R.LIST_DEFAULT_LIMIT})",
         )
     )
     if kind == "bug":
@@ -110,7 +110,7 @@ def cmd_list(a, c: Ctx) -> int:
         agent=getattr(a, "owner", "") or "",
         since=getattr(a, "since", "") or "",
         item=getattr(a, "item", "") or "",
-        limit=V.DEFAULT_LIMIT if a.limit is None else a.limit,
+        limit=R.LIST_DEFAULT_LIMIT if a.limit is None else a.limit,
     )
     if "rows" in out.data and kind == "phase":
         st = c.store.ensure(c.log)
