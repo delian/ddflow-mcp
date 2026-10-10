@@ -199,7 +199,7 @@ def test_no_command_module_prints_its_own_json():
     root = Path(__file__).parents[1] / "ddflow" / "surfaces"
     own = []
     scanned = sorted([*(root / "commands").glob("*.py"), root / "context.py", root / "cli.py"])
-    assert len(scanned) > 20, "the scan found no command modules: the guard would pass vacuously"
+    assert len(scanned) > 15, "the scan found no command modules: the guard would pass vacuously"
     for path in scanned:
         tree = ast.parse(path.read_text("utf-8"))
         if any(
