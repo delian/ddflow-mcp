@@ -41,13 +41,16 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import ids as IDS
 from ..core.globs import match as glob_match
 from ..core.ids import free
 from ..core.model import DONE, OPEN, Item, fold
 from ..core.schedule import is_external
 from ..core.slug import slug as _slug
 from ..infra import git as G
+from ..infra import worktree as W
 from ..infra.log import EventLog
+from . import similar
 from .items import TaskDraft, add_task
 
 #: Where projects actually keep these things. Ordered so the most specific wins when a
@@ -864,7 +867,6 @@ def _box_disposition(
 def _ids_config(repo: Path):
     """The project's config for the id templates an import mints with; the shipped
     defaults when it cannot be read (a proposal must not fail for it)."""
-    from ..config import Config
 
     try:
         return Config.load(repo)
@@ -881,7 +883,6 @@ def scan_todos(
     convention rather than a law, which is exactly why the result is a *proposal* the
     agent reviews with the operator rather than something written straight to the log.
     """
-    from ..core import ids as IDS
 
     ids_cfg = _ids_config(repo)
     found: list[Found] = []
@@ -1698,7 +1699,6 @@ def scan_branches(repo: Path) -> list[Found]:
     carry unmerged commits. A project adopting ddflow mid-stream usually has two or
     three, and those are the items whose absence from the queue would be most misleading.
     """
-    from ..infra import worktree as W
 
     base = W.default_branch(repo)
     r = G.run(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/", timeout=60)
@@ -2299,55 +2299,10 @@ def all_source_globs(cfg=None) -> tuple[str, ...]:
     return tuple(g for globs in srcs.values() for g in globs)
 
 
-def plan_import(
-    repo: Path,
-    state=None,
-    *,
-    include_done: bool = False,
-    max_tasks: int = 200,
-    sources: dict[str, tuple[str, ...]] | None = None,
-    archive: tuple[str, ...] = (),
-    events: list | None = None,
-) -> ImportPlan:
-    """Read everything importable. Writes NOTHING.
-
-    ``state`` is the already-folded queue, if there is one: anything whose id is
-    already present is reported as skipped rather than proposed again, which is what
-    makes a second run safe after the operator edits the todo file.
-
-    **Completed tasks are excluded by default.** Run against the repository this was
-    extracted from, the scan finds 4,799 ticked boxes — a faithful history and useless
-    as a queue, because none of it is work anyone will do. What matters for "continue
-    from where we left off" is the OPEN items, the branches still in flight, and the
-    memory (lessons, decisions). `include_done=True` imports the rest as closed items
-    when the history itself is what you want. Open items the source itself DISPOSES of
-    (declined, refuted, struck through) are history too and follow the same rule; items
-    it DEFERS import as blocked.
-
-    ``max_tasks`` is a guard rail rather than a policy: an import that silently writes
-    five thousand events into a log that is committed to git is not recoverable by
-    anything short of editing history. Over the cap, the plan reports the overflow and
-    refuses to propose it — narrow the scope, or raise the cap deliberately.
-
-    ``sources`` maps a family (`todo`, `lesson`, ...) to the globs to read for it; a
-    family absent from it reads its defaults. `sources_from(cfg)` builds it from config.
-    ``archive`` names todo files whose open items are history until released: they import
-    as BLOCKED (`[importer] archive_globs`).
-
-    With ``include_done`` a phase whose every task is done or closed is proposed DONE --
-    and an imported phase already in the queue gets a `completion` once the re-run has
-    filled it in (`_settle_phases`). ``events`` is the log ``state`` was folded from, which
-    says whether somebody touched such a phase since; read from ``repo`` when omitted.
-    """
-    plan = ImportPlan()
-    known = _known_ids(state)
-    sources = sources or {}
-
-    closed: list[Found] = []
-    held: list[str] = []
-    deferred_done: dict[str, Found] = {}
-    proposed: set[str] = set()
-    existing_phases: dict[str, Found] = {}
+def _scan_sources(
+    repo: Path, plan: ImportPlan, sources: dict[str, tuple[str, ...]], archive: tuple[str, ...]
+) -> list[Found]:
+    """Run every scanner over its globs; what it found, with the summaries attached."""
     scanned: list[Found] = []
     for family, scan, default in _scanners():
         globs = sources.get(family) or default
@@ -2355,6 +2310,22 @@ def plan_import(
         plan.empty_sources.extend(empty)
         scanned.extend(items)
     _attach_summaries(scanned, plan)
+    return scanned
+
+
+def _triage_found(
+    plan: ImportPlan,
+    scanned: list[Found],
+    known: set[str],
+    proposed: set[str],
+    include_done: bool,
+) -> tuple[list[Found], list[str], dict[str, Found], dict[str, Found]]:
+    """Sort what the scanners found into the plan, the already-imported, and the
+    finished-or-closed items withheld. (closed, held, deferred_done, existing_phases)."""
+    closed: list[Found] = []
+    held: list[str] = []
+    deferred_done: dict[str, Found] = {}
+    existing_phases: dict[str, Found] = {}
     for f in scanned:
         # Uniquify BEFORE the already-imported check, and against what THIS scan
         # proposed rather than against what is in the queue. Both halves matter:
@@ -2388,17 +2359,21 @@ def plan_import(
         if f.kind == "task" and f.extra.get("disposition") == "hold":
             held.append(f.ident)
         plan.found.append(f)
+    return closed, held, deferred_done, existing_phases
 
-    # A finished task that an OPEN task depends on has to come too, as done. Skipping
-    # it leaves the open one blocked on an id the queue has never heard of — and an
-    # unknown dependency is treated as unmet, deliberately, so the import would land
-    # permanently stuck work and look like it had succeeded.
-    _pull_in_needed(plan, deferred_done, held)
-    in_plan = {id(f) for f in plan.found}
-    ticked = [f for f in deferred_done.values() if f.done and id(f) not in in_plan]
-    plan.ticked_left_out = len(ticked)
-    _note_withheld(plan, ticked, [f.ident for f in closed if id(f) not in in_plan], held)
 
+def _cap_or_settle(
+    repo: Path,
+    plan: ImportPlan,
+    state,
+    known: set[str],
+    max_tasks: int,
+    include_done: bool,
+    events: list | None,
+    deferred_done: dict[str, Found],
+    existing_phases: dict[str, Found],
+) -> None:
+    """Refuse an over-cap import, or drop empty phases and settle the finished ones."""
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:
         plan.found = [f for f in plan.found if f.kind not in ("task", "phase")]
@@ -2443,6 +2418,71 @@ def plan_import(
             _settle_phases(plan, state, touched, existing_phases)
         else:
             _settle_needed_phases(plan, deferred_done, state, touched, existing_phases)
+
+
+def plan_import(
+    repo: Path,
+    state=None,
+    *,
+    include_done: bool = False,
+    max_tasks: int = 200,
+    sources: dict[str, tuple[str, ...]] | None = None,
+    archive: tuple[str, ...] = (),
+    events: list | None = None,
+) -> ImportPlan:
+    """Read everything importable. Writes NOTHING.
+
+    ``state`` is the already-folded queue, if there is one: anything whose id is
+    already present is reported as skipped rather than proposed again, which is what
+    makes a second run safe after the operator edits the todo file.
+
+    **Completed tasks are excluded by default.** Run against the repository this was
+    extracted from, the scan finds 4,799 ticked boxes — a faithful history and useless
+    as a queue, because none of it is work anyone will do. What matters for "continue
+    from where we left off" is the OPEN items, the branches still in flight, and the
+    memory (lessons, decisions). `include_done=True` imports the rest as closed items
+    when the history itself is what you want. Open items the source itself DISPOSES of
+    (declined, refuted, struck through) are history too and follow the same rule; items
+    it DEFERS import as blocked.
+
+    ``max_tasks`` is a guard rail rather than a policy: an import that silently writes
+    five thousand events into a log that is committed to git is not recoverable by
+    anything short of editing history. Over the cap, the plan reports the overflow and
+    refuses to propose it — narrow the scope, or raise the cap deliberately.
+
+    ``sources`` maps a family (`todo`, `lesson`, ...) to the globs to read for it; a
+    family absent from it reads its defaults. `sources_from(cfg)` builds it from config.
+    ``archive`` names todo files whose open items are history until released: they import
+    as BLOCKED (`[importer] archive_globs`).
+
+    With ``include_done`` a phase whose every task is done or closed is proposed DONE --
+    and an imported phase already in the queue gets a `completion` once the re-run has
+    filled it in (`_settle_phases`). ``events`` is the log ``state`` was folded from, which
+    says whether somebody touched such a phase since; read from ``repo`` when omitted.
+    """
+    plan = ImportPlan()
+    known = _known_ids(state)
+    sources = sources or {}
+
+    proposed: set[str] = set()
+    scanned = _scan_sources(repo, plan, sources, archive)
+    closed, held, deferred_done, existing_phases = _triage_found(
+        plan, scanned, known, proposed, include_done
+    )
+
+    # A finished task that an OPEN task depends on has to come too, as done. Skipping
+    # it leaves the open one blocked on an id the queue has never heard of — and an
+    # unknown dependency is treated as unmet, deliberately, so the import would land
+    # permanently stuck work and look like it had succeeded.
+    _pull_in_needed(plan, deferred_done, held)
+    in_plan = {id(f) for f in plan.found}
+    ticked = [f for f in deferred_done.values() if f.done and id(f) not in in_plan]
+    plan.ticked_left_out = len(ticked)
+    _note_withheld(plan, ticked, [f.ident for f in closed if id(f) not in in_plan], held)
+
+    _cap_or_settle(
+        repo, plan, state, known, max_tasks, include_done, events, deferred_done, existing_phases
+    )
     _leave_out_long_memories(repo, plan)
     _dedupe_found(repo, state, plan)
     for f in scan_branches(repo):
@@ -2882,7 +2922,6 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     and the operator answers that. Naming an existing id does not count: an imported
     lesson citing `L12` is not a copy of it.
     """
-    from . import similar
 
     cfg = Config.load(repo)
     dd = cfg.dedupe

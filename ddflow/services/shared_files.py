@@ -32,6 +32,7 @@ from ..core.admission import is_shared
 from ..core.globs import regex
 from ..infra import git as G
 from ..infra import proc as P
+from ..infra.fsio import replace_text
 
 
 def export_targets(cfg: Config, *, generated_only: bool = False) -> list[str]:
@@ -311,7 +312,7 @@ def sync_attributes(repo: Path) -> list[str]:
             continue  # the project's own rule covers the whole glob: its call, or union already
         rows, placed = _placed(repo, glob, line)
         if placed != rows:
-            (Path(repo) / ".gitattributes").write_text("\n".join(placed) + "\n", "utf-8")
+            replace_text(Path(repo) / ".gitattributes", "\n".join(placed) + "\n")
             added.append(line)
     return added
 

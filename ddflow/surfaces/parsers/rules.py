@@ -6,26 +6,14 @@ from __future__ import annotations
 
 import argparse
 
+from .. import cliexec
 from ..commands.ci import cmd_ci
 from ..commands.onboard import add_onboard_parser
-from ..commands.rule_sync import cmd_rule_sync
-from ..commands.rules import cmd_rule
 from ..commands.verify import cmd_verify
 from ..declared.export import BY_TOOL as _EXPORT_BY_TOOL
 from ..declared.review import BY_TOOL as _REVIEW_BY_TOOL
-from ..declared.rules import COMMANDS
+from ..declared.rules import BY_TOOL, COMMANDS
 from ..registry import add_commands
-
-#: The CLI function of each declared command.
-HANDLERS = {
-    ("rule", "add"): cmd_rule,
-    ("rule", "edit"): cmd_rule,
-    ("rule", "list"): cmd_rule,
-    ("rule", "search"): cmd_rule,
-    ("rule", "show"): cmd_rule,
-    ("rule", "remove"): cmd_rule,
-    ("rule", "sync"): cmd_rule_sync,
-}
 
 
 def register(s: argparse._SubParsersAction) -> None:
@@ -34,12 +22,14 @@ def register(s: argparse._SubParsersAction) -> None:
         s,
         COMMANDS,
         groups={"rule": "project rules: add, edit, list, search, show, remove"},
-        handlers=HANDLERS,
+        executor=cliexec.handler,
     )
     # `ddflow rule` alone lists them.
     ru = s.choices["rule"]
     next(a for a in ru._actions if isinstance(a, argparse._SubParsersAction)).required = False
-    ru.set_defaults(fn=cmd_rule, rule_cmd="list", tag="", scope="")
+    ru.set_defaults(
+        fn=cliexec.handler(BY_TOOL["ddflow_rule_list"]), rule_cmd="list", tag="", scope=""
+    )
 
     add_commands(s, [_REVIEW_BY_TOOL["ddflow_verify"]], handlers={("verify",): cmd_verify})
     add_commands(s, [_EXPORT_BY_TOOL["ddflow_ci"]], handlers={("ci",): cmd_ci})

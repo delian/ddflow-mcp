@@ -52,7 +52,7 @@ def test_since_without_refuted_is_refused_not_ignored(repo, tmp_path):
 
 
 def test_the_mcp_tool_takes_since(repo, tmp_path):
-    from ddflow.surfaces.tools.lifecycle import TOOLS
+    from ddflow.surfaces.tools import TOOLS
 
     _flag(repo, tmp_path)
     tool = TOOLS["ddflow_gate_list"]

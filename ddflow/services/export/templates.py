@@ -25,6 +25,7 @@ from ...config import Config
 from ...infra.fsio import repo_rel
 from ...infra.paths import templates_dir
 from ..overlay import OverlayError, OverlayLoader
+from . import ops
 from . import registry as R
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
@@ -143,7 +144,6 @@ def validate(repo: Path, cfg: Config, docs: list[str]) -> dict[str, Any]:
     Nothing is written. ``results`` has one row per document: ``ok``, the template used
     (``template``, ``source``) and, for a failure, ``message`` (file:line when known) and
     ``code``. ``notes`` lists ejected copies older than the shipped default."""
-    from . import ops
 
     q = ops.load(repo, cfg)  # an unreadable log is "could not run" (exit 2), not a pass
     results: list[dict[str, Any]] = []

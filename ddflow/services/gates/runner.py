@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 import tomllib
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -12,6 +11,7 @@ from typing import Any, NamedTuple
 
 from ...core.records import GateOutcome
 from ...infra import fsio
+from ...infra import worktree as W
 from .. import cmdrunner
 from .defs import GateDef
 from .evidence import diff_stat, digest, tree_identity
@@ -42,7 +42,7 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
 
         stamp = compact_at()
         path = where / f"{gate}-{stamp}-{os.getpid()}.log"
-        path.write_text(out, "utf-8", errors="replace")
+        fsio.replace_text(path, out.encode("utf-8", "replace").decode("utf-8"), fsync=False)
         # THIS gate's logs only -- `unit-*.log` would also match gate `unit-fast`'s --
         # ordered by the stamp in the name, never by mtime (coarse on some filesystems,
         # which could rank the log just written as the oldest), and never the new one.
@@ -147,11 +147,11 @@ def run_command_gate(
     # bytecode paths inside this throwaway directory in the venv's RECORD. A gate that
     # pays too much sets `env = { PYTHONPYCACHEPREFIX = "" }` -- empty disables the
     # prefix -- and accepts the stale-cache hazard for itself, knowingly.
-    with tempfile.TemporaryDirectory(prefix="ddflow-pyc-", ignore_cleanup_errors=True) as no_cache:
+    with fsio.scratch_dir("ddflow-pyc-", ignore_cleanup_errors=True) as no_cache:
         full_env = {
             **os.environ,
             "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPYCACHEPREFIX": no_cache,
+            "PYTHONPYCACHEPREFIX": str(no_cache),
             **gdef.env,
             **(env or {}),
         }
@@ -255,8 +255,9 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     recorded as a test failure (bug B8ea7a90aea). The config-knob half of the same
     class warns "merge main" from `config._warn_unknown`.
     """
+    # Function-level: the package re-exports every top-level name of its areas, and
+    # `tomlcfg` is not one of them (tests/test_module_splits.py).
     from ...infra import tomlcfg
-    from ...infra import worktree as W
 
     try:
         primary = W.repo_root(tree)

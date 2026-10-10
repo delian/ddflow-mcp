@@ -29,8 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
+from ..infra import fsio, tomlcfg
 from ..infra import git as GIT
-from ..infra import tomlcfg
 from ..infra import worktree as W
 from .export import frame as F
 from .export import kind_changelog as KC
@@ -118,17 +118,15 @@ def _whole(path: str, doc: str) -> Callable[..., str]:
             return EW.write_whole(tree, path, doc, force=force).action
         # A dry run must refuse what the real write refuses, and write_whole's diff mode
         # does not: run the real write on a copy of the file in a scratch directory.
-        import tempfile
-
         target, rel = EW.safe_target(tree, path)
         old = EW._read(target)
-        with tempfile.TemporaryDirectory() as scratch:
-            copy = Path(scratch) / rel
+        with fsio.scratch_dir() as scratch:
+            copy = scratch / rel
             copy.parent.mkdir(parents=True, exist_ok=True)
             if old is not None:
                 copy.write_bytes(old.encode("utf-8"))
-            (Path(scratch) / ".ddflow" / "local").mkdir(parents=True, exist_ok=True)
-            return EW.write_whole(scratch, path, doc, force=force).action
+            (scratch / ".ddflow" / "local").mkdir(parents=True, exist_ok=True)
+            return EW.write_whole(str(scratch), path, doc, force=force).action
 
     return apply
 
