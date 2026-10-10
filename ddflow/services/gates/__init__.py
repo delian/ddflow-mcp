@@ -62,13 +62,17 @@ from ...core.digest import content_digest, hasher  # noqa: F401
 from ...core.globs import overlap  # noqa: F401
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, Item, State  # noqa: F401
 from ...core.records import GateOutcome  # noqa: F401
-from ...infra import fsio  # noqa: F401
+from ...infra import (
+    fsio,  # noqa: F401
+    tomlcfg,  # noqa: F401
+)
 from ...infra import git as GIT  # noqa: F401
 from ...infra import hostinfo as H  # noqa: F401
 from ...infra import proc as P  # noqa: F401
 from ...infra import worktree as W  # noqa: F401
 from ...infra.log import EventLog  # noqa: F401
 from .. import cmdrunner  # noqa: F401
+from .. import reviewer_trust as RT  # noqa: F401
 from .defs import (  # noqa: F401
     _REQUIRED_WARNED,
     DEFAULT_GATES,

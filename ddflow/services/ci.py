@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import CI_ON_MERGE_MODES, Config
+from ..core import ids as IDS
 from ..core.digest import content_digest
 from ..core.slug import ascii_slug
 from ..infra import worktree as W
@@ -122,6 +123,27 @@ def parse_checks(output: str) -> list[Check]:
     return checks
 
 
+def _merge_base(
+    repo: Path, cfg: Config, base: str, cmd: str, sha: str
+) -> tuple[str, Result | None]:
+    """(the ref to merge ``sha`` with, None); or ("", why that ref cannot be used)."""
+    named = base or cfg.ci.base
+    base = named or W.default_branch(repo)
+    if W.git(repo, "rev-parse", "--verify", "--quiet", base).ok:
+        return base, None
+    remote = f"origin/{base}"  # origin/HEAD names a branch that may exist only as a remote ref
+    if not named and W.git(repo, "rev-parse", "--verify", "--quiet", remote).ok:
+        return remote, None
+    return "", Result(
+        "failed" if named else "unavailable",
+        command=cmd,
+        sha=sha,
+        reason=f"base {base!r} is not a commit"
+        + (" (misconfigured [ci].base or --base?)" if named else "")
+        + ", so the merge result cannot be checked",
+    )
+
+
 def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: str = "") -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch)."""
     repo = Path(repo)
@@ -138,21 +160,9 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
     sha = W.rev(repo, ref)
     if not sha:
         return Result("unavailable", command=cmd, reason=f"{ref!r} is not a commit")
-    named = base or cfg.ci.base
-    base = named or W.default_branch(repo)
-    if not W.git(repo, "rev-parse", "--verify", "--quiet", base).ok:
-        remote = f"origin/{base}"  # origin/HEAD names a branch that may exist only as a remote ref
-        if not named and W.git(repo, "rev-parse", "--verify", "--quiet", remote).ok:
-            base = remote
-        else:
-            return Result(
-                "failed" if named else "unavailable",
-                command=cmd,
-                sha=sha,
-                reason=f"base {base!r} is not a commit"
-                + (" (misconfigured [ci].base or --base?)" if named else "")
-                + ", so the merge result cannot be checked",
-            )
+    base, refused = _merge_base(repo, cfg, base, cmd, sha)
+    if refused is not None:
+        return refused
     with merge_tree(repo, sha, base) as (tree, failure):
         if tree is None:
             status = "failed" if "does not merge" in failure else "unavailable"
@@ -214,7 +224,6 @@ def bug_id(check: str, cfg: Config | None = None) -> str:
 
     The slug is for people; the digest of the whole check id is what keeps two long ids
     that share a prefix (pytest node ids) from being one bug."""
-    from ..core import ids as IDS
 
     slug = ascii_slug(check, 30)
     digest = content_digest(check, "sha1", length=10)
@@ -224,7 +233,6 @@ def bug_id(check: str, cfg: Config | None = None) -> str:
 def is_filing_of(bug: str, base: str, cfg: Config | None = None) -> bool:
     """Whether ``bug`` is the CI bug ``base`` itself or one of its re-filings (the id
     service decides, from the `[ids].ci_bug` template)."""
-    from ..core import ids as IDS
 
     return IDS.is_filing_of(cfg if cfg is not None else Config(), "ci_bug", bug, base)
 
@@ -232,6 +240,5 @@ def is_filing_of(bug: str, base: str, cfg: Config | None = None) -> bool:
 def refile_id(base: str, sha: str) -> str:
     """A failing check's bug filed AGAIN after its first bug was fixed: a new bug, not a
     reopening, minted by the id service (`ids.refile`)."""
-    from ..core import ids as IDS
 
     return IDS.refile(base, sha)
