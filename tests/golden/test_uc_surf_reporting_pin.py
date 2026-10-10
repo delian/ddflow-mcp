@@ -80,7 +80,7 @@ def ddflow(project, capsys):
 def _steady(result: tuple[int, str, str]) -> tuple[int, str, str]:
     """`rebuild` prints how long it took."""
     code, out, err = result
-    return code, re.sub(r"in \d+\.\d\ds", "in <S>s", out), err
+    return code, *(re.sub(r"in \d+\.\d\ds", "in <S>s", t) for t in (out, err))
 
 
 def _id(argv: list[str]) -> str:
