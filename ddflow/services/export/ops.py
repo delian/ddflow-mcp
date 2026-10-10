@@ -26,6 +26,7 @@ docs_gate decides when a selected whole-file document regenerates itself; the tr
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -309,7 +310,6 @@ def appender(doc: str):
     ``produce(last) -> (entries_text, new_last_event_id)`` for ``write.append_entries``
     (``kind_changelog`` is the one today). A kind without one cannot be appended to.
     """
-    import sys
 
     R.get(doc)  # imports every kind module; an unknown kind is refused here
     mod = sys.modules.get(f"{__package__}.kind_{doc}")

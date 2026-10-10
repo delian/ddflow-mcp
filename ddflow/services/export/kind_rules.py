@@ -15,6 +15,9 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from ...config import Config
+from ..gates import load_gates
+from ..workflow import describe
 from . import registry
 from .frame import one_line
 from .query import ExportError, Query, _parse_ts
@@ -104,9 +107,6 @@ def workflow_data(q: Query) -> dict[str, Any] | None:
     a rules document with the workflow silently missing would read as "no workflow"."""
     if q.repo is None:
         return None
-    from ...config import Config
-    from ..gates import load_gates
-    from ..workflow import describe
 
     try:
         cfg = Config.load(q.repo)

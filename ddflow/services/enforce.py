@@ -28,13 +28,18 @@ where the agent is not the one running it.
 
 from __future__ import annotations
 
+import difflib
 import itertools
 import os
 import re
 import shlex
+import shutil
+import sqlite3
 import stat
+import sys
 import time
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,7 +49,7 @@ from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
 from ..core.globs import overlap as globs_overlap
-from ..core.model import Lease, fold
+from ..core.model import ABANDONED, DONE, Lease, fold
 from ..core.outcome import FAIL, NOTHING, OK, Verdict
 from ..core.schedule import is_shared, shared_globs
 from ..infra import git as G
@@ -52,10 +57,20 @@ from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
 from ..infra.log import EventLog
+from ..infra.paths import LAUNCH_ROOT_ENV, launch_parent, launch_python, redirected_from
+from ..infra.store import Store
+from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
+from . import docsync
 from .backups import make_backup
+from .export import frame as F
+from .export import ops as X
+from .export import registry as R
+from .export import write as XW
+from .export.query import ExportError
 from .guidance import ruleview as RV
 from .install_info import running_from_source
+from .shared_files import doc_exclude
 
 #: The line every ddflow git hook has carried since the first. Kept INSIDE the stamped
 #: region (below) so an older ddflow, which knows only this line, still sees the hook as
@@ -125,7 +140,6 @@ def command_line(
     ``extra`` is appended to the arguments in every branch (`"$@"` for a git hook);
     ``refresh`` is the command the one-line notice names.
     """
-    import shutil
 
     run = "exec " if exec_ else ""
     tail = f" {extra}" if extra else ""
@@ -134,8 +148,6 @@ def command_line(
         probe = f'[ -x "{script}" ]'
         recorded = f'{run}"{script}" {args}{tail}'
     else:
-        from ..infra.paths import launch_parent, launch_python
-
         pkg_parent = str(launch_parent())
         probe = f'[ -x "{launch_python()}" ] && [ -f "{pkg_parent}/ddflow/__init__.py" ]'
         # The environment prefix goes BEFORE `exec`: `exec VAR=x cmd` runs a command
@@ -343,10 +355,6 @@ def redirect_note(line: str | None = None) -> str:
     the ``line`` actually written, nothing is said about one that embeds no path (an
     installed `ddflow` script).
     """
-    import os
-    import sys
-
-    from ..infra.paths import LAUNCH_ROOT_ENV, launch_parent, launch_python, redirected_from
 
     if line is not None and "PYTHONPATH=" not in line:
         return ""
@@ -1316,67 +1324,69 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> V
     return Verdict(code, msg)
 
 
-def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
-    """The lease half of `check_commit`."""
-    policy = getattr(cfg, "enforce", None)
-    mode = getattr(policy, "commit_without_lease", "warn") if policy else "warn"
-    if mode == "off":
-        return Verdict(OK, "")
-
-    staged = staged_paths(repo)
-    if staged is None:
-        return (
-            (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
-        )
-    paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
-    paths = _merge_own_paths(_index_tree(repo), paths)
-    if not paths:
-        return Verdict(OK, "")
-
-    log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
-    state = fold(log.read_all(), strict=False)
-    now = time.time()
-    me = log.agent_id
-    here = _committing_tree(repo)
+def _split_leases(
+    repo: Path, state, me: str, here: Path, now: float, grace_s: float
+) -> tuple[list[str], dict[str, str], bool]:
+    """(globs I hold, glob -> "item (holder)" of every other live lease, whether I hold any)."""
     mine: list[str] = []
     others: dict[str, str] = {}
     holds_any = False
-    for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
+    for item_id, lease in state.active_leases(now, grace_s).items():
         if _counts_as_mine(repo, lease, me, here):
             holds_any = True
             mine.extend(lease.globs)
         else:
             for g in lease.globs:
                 others[g] = f"{item_id} ({lease.holder})"
+    return mine, others, holds_any
 
-    # A shared file (`[lease] shared_globs` / `append_only_globs`) is every live holder's
-    # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
-    shared = shared_globs(cfg) if holds_any else []
-    uncovered = [
+
+def _uncovered_paths(paths: list[str], mine: list[str], shared: list[str]) -> list[str]:
+    """The staged paths neither shared nor inside a glob I hold."""
+    return [
         p for p in paths if not is_shared(p, shared) and not any(path_in_glob(p, g) for g in mine)
     ]
-    if not uncovered:
-        return Verdict(OK, "")
 
-    # A path another agent holds is the dangerous case and gets named separately: the
-    # remedy is not "claim it", it is "stop".
-    stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
 
-    # A lease that WOULD have been mine, by the same two tests, but has lapsed and was
-    # not taken over. Invisible above, so the message said "(no live lease)" and "claim
-    # the work" to the holder committing in its own tree, and the lapse was misread as
-    # an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
-    # Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
-    # globs, and reviving them over someone's live paths is the very race the STOP
-    # text warns against.
-    lapsed = [
+def _lapsed_mine(
+    repo: Path,
+    state,
+    uncovered: list[str],
+    others: dict[str, str],
+    me: str,
+    here: Path,
+    now: float,
+    grace_s: float,
+) -> list:
+    """A lease that WOULD have been mine, by the same two tests, but has lapsed and was
+    not taken over. Invisible above, so the message said "(no live lease)" and "claim
+    the work" to the holder committing in its own tree, and the lapse was misread as
+    an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
+    Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
+    globs, and reviving them over someone's live paths is the very race the STOP
+    text warns against."""
+    return [
         (item_id, lease)
-        for item_id, lease in state.expired_leases(now, cfg.lease.grace_s).items()
+        for item_id, lease in state.expired_leases(now, grace_s).items()
         if _counts_as_mine(repo, lease, me, here)
         and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
         and not any(globs_overlap(g, o) for g in lease.globs for o in others)
     ]
 
+
+def _uncovered_message(
+    cfg: Config,
+    state,
+    uncovered: list[str],
+    stolen: dict[str, str],
+    lapsed: list,
+    mine: list[str],
+    me: str,
+    now: float,
+    mode: str,
+    agent: str,
+) -> str:
+    """The refusal / warning text for staged paths no lease I hold covers."""
     lines = [
         f"ddflow: {len(uncovered)} staged path(s) are not covered by a lease you hold.",
         "",
@@ -1418,7 +1428,45 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
         "",
         f'Policy is [enforce].commit_without_lease = "{mode}" in .ddflow/config.toml.',
     ]
-    msg = "\n".join(lines)
+    return "\n".join(lines)
+
+
+def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
+    """The lease half of `check_commit`."""
+    policy = getattr(cfg, "enforce", None)
+    mode = getattr(policy, "commit_without_lease", "warn") if policy else "warn"
+    if mode == "off":
+        return Verdict(OK, "")
+
+    staged = staged_paths(repo)
+    if staged is None:
+        return (
+            (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
+        )
+    paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
+    paths = _merge_own_paths(_index_tree(repo), paths)
+    if not paths:
+        return Verdict(OK, "")
+
+    log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
+    state = fold(log.read_all(), strict=False)
+    now = time.time()
+    me = log.agent_id
+    here = _committing_tree(repo)
+    mine, others, holds_any = _split_leases(repo, state, me, here, now, cfg.lease.grace_s)
+
+    # A shared file (`[lease] shared_globs` / `append_only_globs`) is every live holder's
+    # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
+    shared = shared_globs(cfg) if holds_any else []
+    uncovered = _uncovered_paths(paths, mine, shared)
+    if not uncovered:
+        return Verdict(OK, "")
+
+    # A path another agent holds is the dangerous case and gets named separately: the
+    # remedy is not "claim it", it is "stop".
+    stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
+    lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
+    msg = _uncovered_message(cfg, state, uncovered, stolen, lapsed, mine, me, now, mode, agent)
     if mode == "warn":
         return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
     return Verdict(FAIL, msg)
@@ -1439,6 +1487,105 @@ def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | 
         timeout=P.TIMEOUTS["git_listing"],
     )
     return r.out_bytes if r.ok else None
+
+
+def _staged_noun(staged: dict, exports: dict) -> str:
+    """What the refusal calls the staged generated files."""
+    return (
+        "generated view or document"
+        if staged and exports
+        else "generated view"
+        if staged
+        else "generated document"
+        if exports
+        else "rule file"
+    )
+
+
+def _unrecorded_log_lines(
+    repo: Path,
+    log: EventLog,
+    tree: Path | None,
+    noun: str,
+    staged: dict,
+    exports: dict,
+    rules: dict,
+) -> list[str]:
+    """Why the event log a staged generated file must agree with is not fully staged
+    (empty when it is)."""
+    probe = _unstaged_under(repo, log.dir, tree)
+    if probe.failed:
+        return [
+            f"ddflow: a {noun} is staged, but git could not report the state of "
+            f"the event log ({_rel(repo, log.dir)}) it must agree with.",
+            "",
+            "Refusing rather than guessing: an unreadable log state is not a clean one.",
+            "Check `git status`; a locked or damaged index is the usual cause.",
+        ]
+    if not probe.paths:
+        return []
+    # Each case gets the command that CLEARS it. A plain `git add` stages nothing for
+    # an ignored file and exits 0, so the one remedy for every case left an ignored
+    # shard refused forever with identical output (roborev on 8b167e9, reproduced).
+    remedy = []
+    if probe.ignored:
+        remedy += [
+            "These are GITIGNORED, so a plain `git add` skips them. Force them in, or",
+            "stop ignoring shards (a committed log with some shards ignored cannot",
+            "match a view rendered from all of them):",
+            "    git add -f " + " ".join(shlex.quote(p) for p in probe.ignored),
+        ]
+    if set(probe.paths) - set(probe.ignored):
+        remedy += [f"    git add {shlex.quote(_rel(repo, log.dir))}"]
+    return [
+        f"ddflow: a {noun} is staged, but the event log it is rendered from "
+        f"has {len(probe.paths)} change(s) the commit does not record:",
+        "",
+        *(
+            f"  {p}" + ("   (gitignored)" if p in probe.ignored else "")
+            for p in probe.paths[:MAX_LISTED_PATHS]
+        ),
+        "",
+        "A committed view must agree with the log committed beside it. Stage both:",
+        *remedy,
+        *(["    ddflow render" + _out_hint(sorted(staged))] if staged else []),
+        *(
+            [f"    ddflow export {d} --update" for d in sorted({d for d, _ in exports.values()})]
+            if exports
+            else []
+        ),
+        "    git add " + " ".join(shlex.quote(p) for p in sorted({**staged, **exports, **rules})),
+    ]
+
+
+def _disagreements(
+    repo: Path, log: EventLog, fresh_cfg: Config, staged: dict, exports: dict, rules: dict
+) -> tuple[list[str], list[str]]:
+    """(error lines, disagreement lines) of the staged rule files, views and exports
+    against what the log regenerates now. An export error ends the check at once."""
+    lines: list[str] = []
+    if rules:
+        lines += _wrong_rule_files(repo, log, fresh_cfg, rules)
+    if staged:
+        lines += [*([""] if lines else []), *_wrong_views(log, fresh_cfg, staged)]
+    if exports:
+        err, bad = _wrong_exports(repo, fresh_cfg, exports)
+        if err:
+            return [*lines, *([""] if lines else []), err], []
+        if bad:
+            lines += [
+                *([""] if lines else []),
+                f"ddflow: {len(bad)} staged exported document(s) differ from what "
+                "`ddflow export` regenerates now:",
+                "",
+                *(f"  {p}  ({why})" for p, _d, why in bad),
+                "",
+                "An exported document is regenerated from the log, never edited: either it was",
+                "changed by hand, or the log moved after it was exported. Regenerate and stage:",
+                *(f"    ddflow export {d} --update" for d in sorted({d for _p, d, _w in bad})),
+                "    git add " + " ".join(shlex.quote(p) for p, _d, _w in bad),
+            ]
+    return [], lines
 
 
 def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Verdict:
@@ -1466,7 +1613,6 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     has no such first line, so it is not a generated file and is left to `export --check`;
     an append-mode log (`last=` in its header) grows by design and is skipped.
     """
-    from ..views.markdown import VIEWS
 
     cfg = cfg or Config.load(repo)
     mode = cfg.enforce.generated_views
@@ -1483,15 +1629,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     rules = _staged_rule_files(repo, listed, tree)
     if not staged and not exports and not rules:
         return Verdict(OK, "")
-    noun = (
-        "generated view or document"
-        if staged and exports
-        else "generated view"
-        if staged
-        else "generated document"
-        if exports
-        else "rule file"
-    )
+    noun = _staged_noun(staged, exports)
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     # The view is committed WITH a log, and must agree with THAT log -- not with the
@@ -1500,82 +1638,15 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
     # be fully staged: then the log on disk IS the committed log, and the comparison
     # below is exact.
-    probe = _unstaged_under(repo, log.dir, tree)
-    if probe.failed:
-        return _verdict(
-            mode,
-            [
-                f"ddflow: a {noun} is staged, but git could not report the state of "
-                f"the event log ({_rel(repo, log.dir)}) it must agree with.",
-                "",
-                "Refusing rather than guessing: an unreadable log state is not a clean one.",
-                "Check `git status`; a locked or damaged index is the usual cause.",
-            ],
-        )
-    if probe.paths:
-        # Each case gets the command that CLEARS it. A plain `git add` stages nothing for
-        # an ignored file and exits 0, so the one remedy for every case left an ignored
-        # shard refused forever with identical output (roborev on 8b167e9, reproduced).
-        remedy = []
-        if probe.ignored:
-            remedy += [
-                "These are GITIGNORED, so a plain `git add` skips them. Force them in, or",
-                "stop ignoring shards (a committed log with some shards ignored cannot",
-                "match a view rendered from all of them):",
-                "    git add -f " + " ".join(shlex.quote(p) for p in probe.ignored),
-            ]
-        if set(probe.paths) - set(probe.ignored):
-            remedy += [f"    git add {shlex.quote(_rel(repo, log.dir))}"]
-        return _verdict(
-            mode,
-            [
-                f"ddflow: a {noun} is staged, but the event log it is rendered from "
-                f"has {len(probe.paths)} change(s) the commit does not record:",
-                "",
-                *(
-                    f"  {p}" + ("   (gitignored)" if p in probe.ignored else "")
-                    for p in probe.paths[:MAX_LISTED_PATHS]
-                ),
-                "",
-                "A committed view must agree with the log committed beside it. Stage both:",
-                *remedy,
-                *(["    ddflow render" + _out_hint(sorted(staged))] if staged else []),
-                *(
-                    [
-                        f"    ddflow export {d} --update"
-                        for d in sorted({d for d, _ in exports.values()})
-                    ]
-                    if exports
-                    else []
-                ),
-                "    git add " + " ".join(shlex.quote(p) for p in sorted({**staged, **exports})),
-            ],
-        )
+    probe_lines = _unrecorded_log_lines(repo, log, tree, noun, staged, exports, rules)
+    if probe_lines:
+        return _verdict(mode, probe_lines)
     # Config from the FILES, as `ddflow render` writes with: env overrides belong to
     # whoever typed `git commit`, not to the view.
     fresh_cfg = Config.load(repo, env={})
-    lines: list[str] = []
-    if rules:
-        lines += _wrong_rule_files(repo, log, fresh_cfg, rules)
-    if staged:
-        lines += [*([""] if lines else []), *_wrong_views(log, fresh_cfg, staged)]
-    if exports:
-        err, bad = _wrong_exports(repo, fresh_cfg, exports)
-        if err:
-            return _verdict(mode, [*lines, *([""] if lines else []), err])
-        if bad:
-            lines += [
-                *([""] if lines else []),
-                f"ddflow: {len(bad)} staged exported document(s) differ from what "
-                "`ddflow export` regenerates now:",
-                "",
-                *(f"  {p}  ({why})" for p, _d, why in bad),
-                "",
-                "An exported document is regenerated from the log, never edited: either it was",
-                "changed by hand, or the log moved after it was exported. Regenerate and stage:",
-                *(f"    ddflow export {d} --update" for d in sorted({d for _p, d, _w in bad})),
-                "    git add " + " ".join(shlex.quote(p) for p, _d, _w in bad),
-            ]
+    err, lines = _disagreements(repo, log, fresh_cfg, staged, exports, rules)
+    if err:
+        return _verdict(mode, err)
     if not lines:
         return Verdict(OK, "")
     return _verdict(mode, lines)
@@ -1585,7 +1656,6 @@ def _staged_generated(
     repo: Path, listed: list[str], view_names: set[str], tree: Path, configured: set[str]
 ) -> tuple[dict[str, bytes], dict[str, tuple[str, str]]]:
     """The staged views ``{path: bytes}`` and exported documents ``{path: (kind, text)}``."""
-    from ..views.markdown import GENERATED_PREFIX
 
     staged: dict[str, bytes] = {}
     exports: dict[str, tuple[str, str]] = {}
@@ -1647,7 +1717,6 @@ def _wrong_views(log: EventLog, cfg: Config, staged: dict[str, bytes]) -> list[s
     The BODY and what it says about itself are compared, not the bytes of the first line
     (D-compat-json-views): a view stamped by another release, or not stamped at all, is
     fine while its body is what the log renders now."""
-    from ..views.markdown import render_views, view_difference
 
     want = render_views(fold(log.read_all(), strict=False), cfg)
     wrong: list[tuple[str, str]] = []
@@ -1706,8 +1775,6 @@ def _staged_export(
     staged file would otherwise cost a `git show`.
     A file that merely quotes the marker further down, or holds a marker region, is not one.
     """
-    from .export import frame as F
-    from .export import registry as R
 
     if not configured and not path.lower().endswith((".md", ".markdown", ".txt")):
         return None
@@ -1732,10 +1799,6 @@ def _wrong_exports(
     ``error`` is non-empty when the comparison could not run (unreadable log, a template
     failure): that is reported, and under 'block' refuses, never read as fresh.
     """
-    from .export import frame as F
-    from .export import ops as X
-    from .export import write as XW
-    from .export.query import ExportError
 
     bad: list[tuple[str, str, str]] = []
     try:
@@ -1784,14 +1847,12 @@ def check_docs(repo: Path, cfg: Config | None = None) -> Verdict:
     shape as `check_views`. "Git could not tell" is never a pass: it reports, and under
     'block' refuses, exactly like an unreadable staged set.
     """
-    from . import docsync
 
     cfg = cfg or Config.load(repo)
     mode = cfg.enforce.stale_docs
     if mode == "off":
         return Verdict(OK, "")
     # The committing tree: the diff is this commit's, against that tree's own HEAD.
-    from .shared_files import doc_exclude
 
     hits = docsync.stale_mentions(_index_tree(repo), cfg.enforce.doc_globs, doc_exclude(cfg))
     if hits is None:
@@ -1843,9 +1904,10 @@ def rulebooks() -> tuple[str, ...]:
     is the duplicate-then-drift class, and an agent added there would go unwatched here.
     The driver directory is `adopt`'s default `--docs` location, which the rules point at.
     """
-    from .adopt import NATIVE_RULES
 
     fixed = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/config.toml")
+    from .adopt import NATIVE_RULES  # deferred: services.adopt imports this module
+
     native = tuple(r.path for r in NATIVE_RULES.values())
     return tuple(dict.fromkeys((*fixed, "docs/ddflow/drivers/", *native)))
 
@@ -1874,7 +1936,6 @@ def _item_base(repo: Path, here: Path, cfg: Config | None) -> str:
     log that cannot be read is "" -- the caller then measures against the default
     branch, which is still a check, not a pass.
     """
-    from ..core.model import ABANDONED, DONE
 
     try:
         cfg = cfg or Config.load(repo)
@@ -2190,10 +2251,6 @@ def queue_ids(repo: Path, cfg: Config) -> set[str]:
     Raises `QueueUnreadable` when there is no log to read or reading it fails: an
     unverifiable trailer is "could not run", never a pass.
     """
-    import sqlite3
-    from contextlib import closing
-
-    from ..infra.store import Store
 
     log = EventLog(repo, "", log_cfg=cfg.log)
     if not log.dir.is_dir():
@@ -2216,7 +2273,6 @@ def queue_ids(repo: Path, cfg: Config) -> set[str]:
 def _near_ids(value: str, ids: set[str], limit: int = 3) -> list[str]:
     """Cheap guesses at the id `value` meant: the same id in another case, ids that
     extend it (`160.D` -> `160.D.4`), the longest id it extends, then a close spelling."""
-    import difflib
 
     low = value.lower()
     same = sorted(i for i in ids if i.lower() == low)
@@ -2247,6 +2303,96 @@ def _trailers(message: str) -> list[tuple[str, str]] | None:
         if sep:
             out.append((key.strip(), value.strip()))
     return out
+
+
+def _missing_trailer_verdict(accepted: list[str], words: dict[str, list[str]]) -> Verdict:
+    """The refusal for a commit carrying none of the accepted item trailers."""
+    shown = " or ".join(
+        f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`" for k in accepted
+    )
+    return Verdict(
+        FAIL,
+        (
+            f"ddflow: this commit has no {shown} trailer, and "
+            f"[enforce].require_item_trailer is on.\n\n"
+            f"Add a final line to the commit message, e.g.:\n"
+            f"    {accepted[0]}: {words.get(accepted[0].lower(), ['P1.T3'])[0]}\n\n"
+            f"It is what lets an audit match commits to queue items mechanically."
+        ),
+    )
+
+
+def _trailer_problems(
+    checked: list[tuple[str, str]], words: dict[str, list[str]], ids: Callable[[], set[str]]
+) -> tuple[list[str], str, bool]:
+    """(invalid-trailer descriptions, why the queue was unreadable or "", whether an id was
+    unknown). ``ids()`` is called at most once."""
+    bad: list[str] = []
+    known: set[str] | None = None
+    unreadable = ""
+    unknown = False
+    for key, value in checked:
+        allowed = words.get(key.lower())
+        if allowed is not None:
+            if value not in allowed:
+                bad.append(
+                    f"    {key}: {value}\n"
+                    f"        `{key}` marks a commit that ships no item and takes only: "
+                    f"{', '.join(allowed)}"
+                )
+            continue
+        if not value:
+            bad.append(f"    {key}:\n        empty -- it must name an item in the queue")
+            continue
+        if known is None and not unreadable:
+            try:
+                known = ids()
+            except QueueUnreadable as exc:
+                unreadable = str(exc) or type(exc).__name__
+        if known is None:
+            continue
+        if value not in known:
+            unknown = True
+            near = _near_ids(value, known)
+            bad.append(
+                f"    {key}: {value}\n        no item in the queue has this id"
+                + (f" -- did you mean {' or '.join(near)}?" if near else "")
+            )
+    return bad, unreadable, unknown
+
+
+def _trailer_verdict(bad: list[str], unreadable: str, unknown: bool) -> Verdict:
+    """The verdict for the problems `_trailer_problems` found."""
+    if unreadable:
+        why = (
+            f"ddflow: could not read the queue, so the item id(s) in this commit's trailers "
+            f"could not be checked: {unreadable}. This is not a pass; `ddflow doctor` "
+            f"diagnoses the log."
+        )
+        if not bad:
+            return Verdict(NOTHING, why)
+        bad.append("\n" + why)
+    if not bad:
+        return Verdict(OK, "")
+    return Verdict(
+        FAIL,
+        (
+            "ddflow: this commit carries an item trailer that is not valid, and "
+            "[enforce].require_item_trailer is on:\n\n"
+            + "\n".join(bad)
+            + "\n\nThe trailer is what lets an audit match commits to queue items, so it must "
+            "carry the id of a phase or task that has not been removed (`ddflow show <id>` "
+            "checks one)."
+            + (
+                " A key that marks a commit shipping no item takes words instead of ids: "
+                "declare them in [enforce].trailer_waivers."
+                if unknown
+                else ""
+            )
+            + "\nFix the trailer and commit again; to fix one on a commit already made, "
+            "`git commit --amend`."
+        ),
+    )
 
 
 def check_item_trailer(
@@ -2284,6 +2430,8 @@ def check_item_trailer(
     """
     if merging:
         return Verdict(OK, "")
+    if not keys and not waivers:
+        keys = ["Item"]  # the default the missing-trailer message names must also match
     canon = {k.lower(): k for k in keys}
     words = {k.lower(): list(v) for k, v in (waivers or {}).items()}
     trailers = _trailers(message)
@@ -2301,85 +2449,13 @@ def check_item_trailer(
     # required both, and a waiver declared alone sat inert (cross-family reviewers,
     # three rounds).
     spelled = {k.lower(): k for k in (waivers or {})}
-    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)] or ["Item"]
+    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)]
     checked = [
         (canon.get(k.lower()) or spelled[k.lower()], v)
         for k, v in trailers
         if k.lower() in canon or k.lower() in words
     ]
     if not checked:
-        shown = " or ".join(
-            f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`"
-            for k in accepted
-        )
-        return Verdict(
-            FAIL,
-            (
-                f"ddflow: this commit has no {shown} trailer, and "
-                f"[enforce].require_item_trailer is on.\n\n"
-                f"Add a final line to the commit message, e.g.:\n"
-                f"    {accepted[0]}: {words.get(accepted[0].lower(), ['P1.T3'])[0]}\n\n"
-                f"It is what lets an audit match commits to queue items mechanically."
-            ),
-        )
-    bad: list[str] = []
-    known: set[str] | None = None
-    unreadable = ""
-    unknown = False
-    for key, value in checked:
-        allowed = words.get(key.lower())
-        if allowed is not None:
-            if value not in allowed:
-                bad.append(
-                    f"    {key}: {value}\n"
-                    f"        `{key}` marks a commit that ships no item and takes only: "
-                    f"{', '.join(allowed)}"
-                )
-            continue
-        if not value:
-            bad.append(f"    {key}:\n        empty -- it must name an item in the queue")
-            continue
-        if known is None and not unreadable:
-            try:
-                known = ids()
-            except QueueUnreadable as exc:
-                unreadable = str(exc) or type(exc).__name__
-        if known is None:
-            continue
-        if value not in known:
-            unknown = True
-            near = _near_ids(value, known)
-            bad.append(
-                f"    {key}: {value}\n        no item in the queue has this id"
-                + (f" -- did you mean {' or '.join(near)}?" if near else "")
-            )
-    if unreadable:
-        why = (
-            f"ddflow: could not read the queue, so the item id(s) in this commit's trailers "
-            f"could not be checked: {unreadable}. This is not a pass; `ddflow doctor` "
-            f"diagnoses the log."
-        )
-        if not bad:
-            return Verdict(NOTHING, why)
-        bad.append("\n" + why)
-    if not bad:
-        return Verdict(OK, "")
-    return Verdict(
-        FAIL,
-        (
-            "ddflow: this commit carries an item trailer that is not valid, and "
-            "[enforce].require_item_trailer is on:\n\n"
-            + "\n".join(bad)
-            + "\n\nThe trailer is what lets an audit match commits to queue items, so it must "
-            "carry the id of a phase or task that has not been removed (`ddflow show <id>` "
-            "checks one)."
-            + (
-                " A key that marks a commit shipping no item takes words instead of ids: "
-                "declare them in [enforce].trailer_waivers."
-                if unknown
-                else ""
-            )
-            + "\nFix the trailer and commit again; to fix one on a commit already made, "
-            "`git commit --amend`."
-        ),
-    )
+        return _missing_trailer_verdict(accepted, words)
+    bad, unreadable, unknown = _trailer_problems(checked, words, ids)
+    return _trailer_verdict(bad, unreadable, unknown)

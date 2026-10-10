@@ -50,6 +50,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ...config import Config
 from ...core import flow as F
 from ...core.events import CHANGELOG_CATEGORIES
 from ...core.model import DONE, Item
@@ -331,7 +332,6 @@ def build_sections(q: Query) -> dict[str, Any]:
     """Every section (newest first), the baseline tag and the compare links."""
     if q.repo is None:
         raise ExportError("the changelog needs a repository: it reads git tags", EXIT_UNAVAILABLE)
-    from ...config import Config
 
     try:
         cfg = Config.load(q.repo)
