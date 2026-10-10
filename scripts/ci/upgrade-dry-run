@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""Rehearse upgrading a project to this ddflow on a throwaway clone (B-upgrade.12-dry-run).
+
+    scripts/ci/upgrade-dry-run --installed-version 0.1.16
+    scripts/ci/upgrade-dry-run --from-commit <sha> --build-old --report docs/ddflow/UPGRADE-DRYRUN.md
+    scripts/ci/upgrade-dry-run --previous-release --build-old        # the release check
+
+Clones SOURCE (default: this repository) at the commit the installed ddflow was built from
+(D-dry-run-from-running-version), runs the steps in `ddflow/services/upgrade_dryrun.py` against
+the clone with THIS source tree as the new ddflow, and prints a PASS/FAIL table. Nothing touches
+the project, its `.ddflow`, the ddflow installed on the machine or a running MCP server: the
+clone lives in a scratch directory, every command gets a private HOME and no network, and the
+project's log, snapshot tags and backups are compared before and after so the table can say so.
+
+The old ddflow (steps 5 and 8) is, in order of preference: `--old-cmd` (a ddflow you installed,
+e.g. a release's venv), `--build-old` (installed from the clone with uv; needs the package
+index or uv's cache), `--simulate-old VERSION` (this code declaring an older version: a
+stand-in, labelled so). With none of them those steps say `unavailable`, never a pass.
+
+Exit 0 every check passed, 1 a check failed, 2 the rehearsal could not run (no git or uv, no
+such commit, no old ddflow, a scratch directory that is not empty). Idempotent: every run is
+in a new scratch directory, which is removed unless `--keep`.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from ddflow.services.upgrade_dryrun import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main(source=ROOT, doc=__doc__ or ""))

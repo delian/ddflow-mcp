@@ -109,6 +109,19 @@ say "compatibility matrix"
 uv run pytest tests/compat -m slow -q --timeout=1800 \
   || die "the compatibility matrix is red (see tests/compat)"
 
+say "upgrade dry run from the previous release"
+# The project's own upgrade, rehearsed on a throwaway clone at the previous release (decision
+# D-dry-run-from-running-version): read, plan, apply with a snapshot, restore, the old ddflow on
+# the upgraded copy, the MCP connect flow, two agents, merged shards. A release whose upgrade
+# does not go smooth is refused here. Exit 2 (could not run: no uv, no network) refuses too:
+# DDFLOW_SKIP_DRYRUN=<reason> is the recorded way past it.
+if [ -n "${DDFLOW_SKIP_DRYRUN:-}" ]; then
+  echo "  skipped: $DDFLOW_SKIP_DRYRUN"
+else
+  uv run --frozen python scripts/ci/upgrade-dry-run --previous-release --build-old --confirmations-ok \
+    || die "the upgrade dry run from the previous release is red (see above)"
+fi
+
 # ---------------------------------------------------------------- 3. the wheel
 say "wheel"
 rm -rf dist

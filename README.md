@@ -3931,6 +3931,25 @@ step in the last 3 minutes may still be applying, so `--resume` refuses it (exit
 been quiet that long. Over MCP an apply reports each finished step as a progress notification when the
 client sent a `progressToken`.
 
+**Rehearsing it first.** `scripts/ci/upgrade-dry-run --installed-version X` (or `--from-commit SHA`,
+`--previous-release`) upgrades a throwaway clone of the project from the version you run now to
+this tree and prints a PASS/FAIL table; nothing touches the project, its `.ddflow`, the installed
+ddflow or a running MCP server (the clone gets a private HOME and no network, and the project's
+log, snapshot tags and backups are compared before and after). It reads the clone with the new code, shows the plan (the items
+you would be asked to confirm fail the row), applies it with a snapshot, applies again (a no-op),
+restores (the files return, every shard keeps its bytes), lets the OLD ddflow read the upgraded
+clone (its write is refused with the remedy or lands without disturbing a byte), connects the new
+MCP server to the old project (it proposes the upgrade, applies nothing until consent, then applies),
+runs two agents through a task and merges shards two old-version agents wrote. The old ddflow is
+`--old-cmd`, `--build-old` (installed from the clone with uv) or `--simulate-old VERSION`; without
+one those rows say `unavailable`. Exit 0 all passed, 1 a check failed, 2 it could not run;
+`--max-show N` sets how many items the read pass renders with `show` (25; 0 is every item);
+`--report FILE` and `--preview FILE` write the Markdown report and the plan. `scripts/release.sh`
+and the publish workflow run it from the previous release and refuse a release whose upgrade is red;
+they pass `--confirmations-ok`, which names the items the operator would be asked to confirm in the
+preview without failing the row, because those come from this project's own config, not from the
+release (run without it, as an operator does, they fail the row).
+
 **Turning each off.** `ddflow config upgrade.release_check off` (or `DDFLOW_NO_UPDATE_CHECK=1`)
 stops the release check, `upgrade.on_start off` the check at server or container start,
 `upgrade.auto off` the notice after an upgrade, `upgrade.self operator` keeps an agent from
