@@ -130,6 +130,7 @@ SCENARIOS = [
     (("similar", "always probe first", "--kind", "nosuchkind"), "hj"),
     (("dupes",), "hj"),
     (("dupes", "--floor", "0.99"), "hj"),
+    (("dupes", "--floor", "1.5"), "hj"),
     (("dupes", "--kind", "nosuchkind"), "hj"),
     (("lesson", "search", "probe"), "hj"),
     (("lesson", "search", "zzzznothingqqqq"), "hj"),

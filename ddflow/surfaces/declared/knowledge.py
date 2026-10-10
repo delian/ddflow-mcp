@@ -1,9 +1,10 @@
 """The knowledge commands, declared once: lessons, recall, similar, dupes, link and decisions.
 
 `surfaces/parsers/knowledge.py` registers their command-line half and
-`surfaces/tools/` takes their MCP entries (D-unify 4, B-uni-cmd-migrate.4-adapters). `link`'s
-command line stays hand-written (one flag per relation, in a mutually exclusive group); its
-tool is declared here.
+`surfaces/tools/` takes their MCP entries (D-unify 4, B-uni-cmd-migrate.4-adapters). `link`
+names the relation with one flag each (a required, mutually exclusive group of CLI-only
+parameters); its tool takes `relation` and `target`. A command with a `render` runs on the CLI
+executor (`surfaces/cliexec.py`); the others keep a `cmd_*` function in `surfaces/commands/`.
 """
 
 from __future__ import annotations
@@ -58,6 +59,8 @@ def _lesson_hits(out, a) -> str:
 
 def _dupe_pairs(out, a) -> str:
     d = out.data
+    if not d["pairs"]:
+        return ""  # nothing to settle: the executor says why instead
     lines = []
     for p in d["pairs"]:
         lines.append(f"{p['score']:.2f}  {p['a']} ({p['a_kind']}) ~ {p['b']} ({p['b_kind']})")
