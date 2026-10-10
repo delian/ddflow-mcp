@@ -40,6 +40,12 @@ class Fake:
         return P.Captured(0, "plan under new code\n", "")
 
 
+@pytest.fixture(autouse=True)
+def _state_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The remembered version is the user's, not a project's: keep it out of the real home."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+
 @pytest.fixture
 def project(repo: Path) -> Path:
     (repo / ".ddflow").mkdir()
@@ -139,7 +145,7 @@ def test_success_records_the_event_remembers_the_version_and_runs_the_plan(proje
     ups = fold(EventLog(project, "u").read_all()).upgrades
     assert [(u["from"], u["to"], u["categories"]) for u in ups] == [(RUNNING, "0.2.0", ["self"])]
     assert ups[0]["confirmed"] == {"self": "operator said yes"}
-    assert SU.previous_version(project) == RUNNING
+    assert SU.previous_version() == RUNNING
 
 
 def test_safe_auto_applies_the_non_destructive_categories_with_the_new_code(project) -> None:
@@ -161,7 +167,7 @@ def test_a_failed_installer_leaves_the_old_version_and_says_so(project, fake) ->
         and f"ddflow {RUNNING} is still installed" in out["text"]
     )
     assert len(fake.calls) == 1, "no plan, nothing recorded"
-    assert SU.previous_version(project) == ""
+    assert SU.previous_version() == ""
     from ddflow.core.model import fold
 
     assert fold(EventLog(project, "u").read_all()).upgrades == []
@@ -247,3 +253,90 @@ def test_install_method_is_read_from_the_facts(prefix, kind, kw, want) -> None:
     base = {"container": False, "writable": True, "base_prefix": "/usr"}
     got = II.install_method(_info(kind), prefix=prefix, **{**base, **kw})
     assert got == want
+
+
+def test_the_documented_consent_call_reaches_the_installer(project) -> None:
+    """`--self --yes --reason WHY` / MCP confirm ["self"] + reason travel in the top-level
+    `confirm` and `reason`: they are not other modes (the bug reviewers found)."""
+    out = A.upgrade(
+        project,
+        confirm=["self"],
+        reason="operator said yes",
+        selfup=SU.Request(
+            method="pip-venv", dry_run=True, confirm=["self"], reason="operator said yes"
+        ),
+    )
+    assert out.exit == 0 and out.data["status"] == "dry-run", out.reason
+    other = A.upgrade(
+        project, confirm=["somekey"], reason="r", selfup=SU.Request(method="pip-venv")
+    )
+    assert other.exit == 3 and "stands alone" in other.reason, "another confirm key is another mode"
+
+
+def test_the_cli_consent_pair_is_not_refused_as_stand_alone(project, monkeypatch, capsys) -> None:
+    from ddflow.surfaces.cli import main
+
+    monkeypatch.setattr(II, "install_method", lambda *a, **k: "pip-venv")
+    code = main(
+        ["--repo", str(project), "upgrade", "--self", "--dry-run", "--yes", "--reason", "ok"]
+    )
+    assert code == 0 and "would run" in capsys.readouterr().out
+
+
+def test_an_mcp_self_mode_is_validated(project) -> None:
+    def call(args):
+        return Server(project).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "ddflow_upgrade", "arguments": args},
+            }
+        )["result"]
+
+    assert call({"self": "dryrun"}).get("isError") is True
+    assert call({"to": "0.2.0"}).get("isError") is True
+
+
+def test_rollback_works_from_any_directory_and_a_global_upgrade_is_remembered(
+    repo, tmp_path
+) -> None:
+    """No `.ddflow` here: the install is the user's. The event needs a project, the memory does not."""
+    elsewhere = tmp_path / "plain"
+    elsewhere.mkdir()
+    out = SU.run(elsewhere, Config(), None, req(target="0.2.0"), runner=Fake())
+    assert out["exit"] == 0 and SU.previous_version() == RUNNING
+
+
+def test_a_failed_plan_or_apply_after_the_install_is_told_not_claimed(project) -> None:
+    cfg = Config()
+    cfg.upgrade.auto = "safe"
+
+    class Flaky(Fake):
+        def __call__(self, argv, timeout_s):
+            self.calls.append(argv)
+            if len(self.calls) == 1:
+                return P.Captured(0, "installed", "")
+            if argv[-1] == "--version":
+                return P.Captured(0, "ddflow 0.2.0\n", "")
+            if "--apply" in argv:
+                return P.Captured(1, "", "no backup")
+            return P.Captured(1, "plan text", "")
+
+    out = go(project, Flaky(), cfg)
+    assert out["exit"] == 0 and out["to"] == "0.2.0", (
+        "the installed version is asked of the new code"
+    )
+    assert "FAILED" in out["text"] and "no backup" in out["text"]
+
+
+def test_install_method_edges() -> None:
+    kw = {"container": False, "writable": True, "base_prefix": "/usr"}
+    assert II.install_method(_info(), prefix="/x/pipx/venvs", **kw) == "pipx", "exact chain"
+    assert (
+        II.install_method(_info(), prefix="/opt/uvtools/ddflow-mcp", tool_dir="/opt/uvtools", **kw)
+        == "uv-tool"
+    )
+    assert II.install_method(_info(), prefix="/tmp/cache/environments-v2/ab", **kw) == "uvx"
+    got = II.install_method(_info(), prefix="/opt/uv/tools/ddflow-mcp", **{**kw, "writable": False})
+    assert got == "readonly", "a managed install this user cannot write is not attempted"

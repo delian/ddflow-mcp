@@ -19,7 +19,11 @@ def _self_request(a):
     """`ddflow_upgrade`'s `self` argument as the self-upgrade request, None without it."""
     mode = str(a.get("self") or "")
     if not mode:
+        if a.get("to"):
+            raise ValueError("`to` only goes with `self`")
         return None
+    if mode not in ("run", "dry-run", "rollback"):
+        raise ValueError(f"`self` is run, dry-run or rollback, not {mode!r}")
     return _api().setup.SelfUpgrade(
         target=str(a.get("to") or ""),
         dry_run=mode == "dry-run",

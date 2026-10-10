@@ -3955,9 +3955,10 @@ installed and working and says so (exit 1). The running process never replaces i
 mid-command: it finishes, says `RESTART needed` (an MCP server also says it in its replies), and
 the NEW code, in a fresh process, shows `ddflow upgrade --plan` (and under `[upgrade].auto = safe`
 applies hooks and instructions after a backup, which re-points a hook or MCP entry that pinned the
-old path). The version it replaced is remembered in the git-ignored
-`.ddflow/local/self-upgrade.json`; `ddflow upgrade --self --rollback` reinstalls it, with the same
-consent.
+old path). The version it replaced is remembered in the user's state directory
+(`$XDG_STATE_HOME/ddflow/self-upgrade.json`, default `~/.local/state/ddflow`) because it belongs to
+the install, not to a project; `ddflow upgrade --self --rollback` reinstalls it from any directory,
+with the same consent.
 
 **Undo and downgrade.** The log is append-only, so an upgrade is never undone by deleting events.
 `ddflow upgrade --restore [NAME]` puts back the files a backup holds (the default `local` backup,

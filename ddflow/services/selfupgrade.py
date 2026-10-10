@@ -16,7 +16,7 @@ ddflow knows the right command.
 * **The installer is a subprocess** with a bounded time, its output captured. The running
   process never replaces its own code mid-command: it finishes, records
   ``upgrade.applied`` (category ``self``), remembers the previous version in
-  ``.ddflow/local/self-upgrade.json`` and says RESTART (an MCP server reports the same).
+  the user's state directory (``self-upgrade.json``) and says RESTART (an MCP server reports the same).
 * **A failure leaves the old version working**: the installers swap atomically, nothing is
   recorded, and the answer says which version still runs.
 * **Migration follows the install** (D-self-upgrade 4): the NEW code, in a fresh process, shows
@@ -29,6 +29,7 @@ Transport is injectable (``runner``) so tests need neither a network nor an inst
 
 from __future__ import annotations
 
+import os
 import shlex
 import sys
 from collections.abc import Callable
@@ -37,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from ..core.events import UPGRADE_APPLIED_KIND
+from ..core.events import UPGRADE_APPLIED_KIND, version_key
 from ..infra import proc as P
 from ..infra.localstore import LocalStore
 from ..infra.log import running_version
@@ -91,24 +92,26 @@ def manual(method: str, target: str = "") -> str:
     return _MANUAL.get(method, _MANUAL["other"]).format(spec=_spec(target))
 
 
-def _state(repo: Path | str) -> LocalStore:
-    return LocalStore(Path(repo) / ".ddflow" / "local")
+def _state() -> LocalStore:
+    """The previous version belongs to the INSTALL, not to a project: it lives in the user's
+    state directory (``$XDG_STATE_HOME/ddflow``, default ``~/.local/state/ddflow``), so a global
+    tool upgraded from any directory can be rolled back from any directory."""
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return LocalStore(Path(base) / "ddflow")
 
 
-def previous_version(repo: Path | str) -> str:
+def previous_version() -> str:
     """The version before the last successful self-upgrade ("" when there was none)."""
     try:
-        data = _state(repo).read(STATE, default={}, derived=True)
+        data = _state().read(STATE, default={}, derived=True)
     except Exception:
         return ""
     return str(data.get("previous", "")) if isinstance(data, dict) else ""
 
 
-def _remember(repo: Path | str, previous: str, now: str, method: str) -> None:
+def _remember(previous: str, now: str, method: str) -> None:
     try:
-        _state(repo).write(
-            STATE, {"previous": previous, "now": now, "method": method}, derived=True
-        )
+        _state().write(STATE, {"previous": previous, "now": now, "method": method}, derived=True)
     except Exception:
         pass  # a store that cannot be written costs the rollback, not the upgrade
 
@@ -163,13 +166,30 @@ def _follow(repo: Path, cfg: Config, runner: Runner, *, rollback: bool) -> tuple
     ``[upgrade].auto = safe``): `(plan text, what it applied)`. Best effort."""
     base = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
     plan = runner([*base, "upgrade", "--plan"], PLAN_TIMEOUT_S)
-    text = _tail(plan.stdout) if plan.ran else ""
+    # The plan exits 1 while it has items: that is its finding, not a failure.
+    shown = plan.ran and plan.returncode in (0, 1)
+    text = (
+        _tail(plan.stdout)
+        if shown
+        else f"(the plan could not be shown: run `ddflow upgrade --plan`) {_tail(plan.stderr)}"
+    )
     applied = ""
-    if not rollback and cfg.upgrade.auto == "safe" and plan.ran:
+    if not rollback and cfg.upgrade.auto == "safe" and shown:
         cats = ",".join(UN.SAFE_CATEGORIES)
         done = runner([*base, "upgrade", "--apply", cats], PLAN_TIMEOUT_S)
-        applied = _tail(done.stdout) if done.ran else ""
+        if done.ran and done.returncode == 0:
+            applied = _tail(done.stdout)
+        else:
+            applied = f"FAILED, nothing was promised: run `ddflow upgrade --apply {cats}` ({_tail(done.stderr or done.stdout)})"
     return text, applied
+
+
+def _installed_version(run_: Runner, fallback: str) -> str:
+    """The version now installed, asked of the NEW code in a fresh process; ``fallback`` when
+    it cannot be told."""
+    done = run_([sys.executable, "-m", "ddflow", "--version"], 30.0)
+    words = done.stdout.split() if done.ran and done.returncode == 0 else []
+    return words[-1] if words and version_key(words[-1]) else fallback
 
 
 @dataclass
@@ -205,9 +225,9 @@ def _success(
     repo: Path, cfg: Config, log: Any, req: Request, out: dict[str, Any], run_: Runner
 ) -> dict[str, Any]:
     running, method = out["running"], out["method"]
-    to = out["target"] or req.newest or "the newest release"
+    to = out["target"] or _installed_version(run_, req.newest)
+    _remember(running, to, method)
     if (repo / ".ddflow").is_dir():
-        _remember(repo, running, to, method)
         try:
             _record(log, running, to, req.rollback, method, req.reason)
         except Exception:
@@ -215,7 +235,7 @@ def _success(
     plan, applied = _follow(repo, cfg, run_, rollback=req.rollback)
     verb = "rolled back" if req.rollback else "upgraded"
     lines = [
-        f"{verb} ddflow {running} -> {to} with `{out['command']}`.",
+        f"{verb} ddflow {running} -> {to or 'the newest release'} with `{out['command']}`.",
         "RESTART needed: this process still runs the old code; restart your MCP server / "
         "reconnect your client.",
     ]
@@ -234,7 +254,7 @@ def run(
     -- ``exit`` (0, 3, 2, 0, 1, 2) and ``text``. Never raises for the installer's trouble."""
     running = req.running or running_version()
     method = req.method or II.install_method()
-    target = previous_version(repo) if req.rollback else req.target
+    target = previous_version() if req.rollback else req.target
     out: dict[str, Any] = {
         "method": method,
         "running": running,
