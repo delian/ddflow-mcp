@@ -9,6 +9,7 @@ back or failed open.
 from __future__ import annotations
 
 import pytest
+from hook_support import recorded_paths
 
 from ddflow.services import claudehooks as CH
 from ddflow.services import enforce as E
@@ -17,9 +18,9 @@ from ddflow.services import launchers as LA
 
 def _dangling(marker: str) -> str:
     line = E.command_line(marker, refresh="ddflow hooks install --claude")
-    for p in LA.recorded_paths(line):
+    for p in recorded_paths(line):
         line = line.replace(p, "/nonexistent-ddflow-venv" + p)
-    assert LA.recorded_paths(line), "the line records no launcher, so this proves nothing"
+    assert recorded_paths(line), "the line records no launcher, so this proves nothing"
     return line
 
 

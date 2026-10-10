@@ -36,8 +36,10 @@ from ..core.events import Event
 from ..core.model import known_kinds
 from ..core.redact import redact_argv
 from ..core.textcut import clip, whole_marks
+from ..infra.store import Store
 from . import install_info as _install
 from . import searchcore as SC
+from . import similar as sim
 from .redact_report import redactor
 
 #: The only configuration values a report may carry: scalar behaviour switches and
@@ -239,8 +241,6 @@ def local_candidates(repo: Path, cfg: Config, log) -> Callable[[str], list[dict[
     when the index cannot answer; `build_bundle` reports that as unavailable."""
 
     def provider(title: str) -> list[dict[str, Any]]:
-        from ..infra.store import Store
-        from . import similar as sim
 
         kinds = list(cfg.dedupe.kinds)
         scoped = dataclasses.replace(
@@ -414,6 +414,27 @@ def render_json(data: Mapping[str, Any]) -> str:
     return json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
 
 
+def _command_section(cmd: Mapping[str, Any]) -> list[str]:
+    """The `## Command` section: argv, exit code, class, and any stderr / traceback."""
+    lines = ["", "## Command", "", f"    {' '.join(cmd['argv'])}", ""]
+    lines += [f"- exit code: {cmd['exit_code']}", f"- class: {cmd['error_class'] or '(none)'}"]
+    for key in ("stderr", "traceback"):
+        if cmd.get(key):
+            lines += ["", f"### {key}", "", "```", cmd[key], "```"]
+    return lines
+
+
+def _candidate_lines(cands: Mapping[str, Any]) -> list[str]:
+    """The body of the `## Local duplicate candidates` section."""
+    if cands["status"] == "unavailable":
+        return [f"unavailable: the local similarity index could not answer ({cands['reason']})"]
+    if cands["status"] == "not_checked":
+        return ["not checked"]
+    if not cands["items"]:
+        return ["none"]
+    return [f"- {c['id']} ({c['kind']}) score {c['score']}" for c in cands["items"]]
+
+
 def render_markdown(data: Mapping[str, Any]) -> str:
     inst = data["install"]
     cmd = data["command"]
@@ -434,11 +455,7 @@ def render_markdown(data: Mapping[str, Any]) -> str:
     ]
     lines += [f"- {k}: {v}" for k, v in data["environment"].items()]
     if cmd:
-        lines += ["", "## Command", "", f"    {' '.join(cmd['argv'])}", ""]
-        lines += [f"- exit code: {cmd['exit_code']}", f"- class: {cmd['error_class'] or '(none)'}"]
-        for key in ("stderr", "traceback"):
-            if cmd.get(key):
-                lines += ["", f"### {key}", "", "```", cmd[key], "```"]
+        lines += _command_section(cmd)
     lines += ["", "## Knobs", ""]
     lines += [f"- {k} = {v}" for k, v in data["knobs"].items()] or ["(none)"]
     lines += ["", f"## Recent events (last {len(data['recent_events'])})", ""]
@@ -455,16 +472,7 @@ def render_markdown(data: Mapping[str, Any]) -> str:
         "## Local duplicate candidates",
         "",
     ]
-    if cands["status"] == "unavailable":
-        lines.append(
-            f"unavailable: the local similarity index could not answer ({cands['reason']})"
-        )
-    elif cands["status"] == "not_checked":
-        lines.append("not checked")
-    elif not cands["items"]:
-        lines.append("none")
-    else:
-        lines += [f"- {c['id']} ({c['kind']}) score {c['score']}" for c in cands["items"]]
+    lines += _candidate_lines(cands)
     red = data["redactions"]
     lines += ["", "## Redactions", ""]
     lines += [f"- {k}: {v}" for k, v in red.items()] or ["none"]

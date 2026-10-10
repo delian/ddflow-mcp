@@ -216,14 +216,13 @@ def _fit(
     taken = {c.id for c in got.kept.get("guidance", [])}
     kept = [a for a in rest if a.record.id in taken]
     # `pack` folds a repeat by not keeping it; a repeat is not "cut to the budget".
-    seen = {_text_key(a) for a in kept}
-    cut = [a.record.id for a in rest if a.record.id not in taken and _text_key(a) not in seen]
+    seen = {textsim.digest(a.record.title, a.record.body) for a in kept}
+    cut = [
+        a.record.id
+        for a in rest
+        if a.record.id not in taken and textsim.digest(a.record.title, a.record.body) not in seen
+    ]
     return kept, cut, got.duplicates
-
-
-def _text_key(a: Applies) -> str:
-    """The identity `pack` folds repeats by."""
-    return textsim.digest(a.record.title, a.record.body)
 
 
 def _cut_line(trimmed: list[str]) -> str:

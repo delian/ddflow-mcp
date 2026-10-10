@@ -19,6 +19,7 @@ after an upgrade updates the block and leaves your own prose alone.
 from __future__ import annotations
 
 import re
+import shutil
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,8 +27,10 @@ from pathlib import Path
 from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
+from ..infra.paths import launch_parent, launch_python
 from . import harnessreg as HR
 from . import install_info as _INSTALL
+from . import shared_files as SF
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
     SHAPE_COPILOT,
@@ -718,7 +721,6 @@ def init_files(repo: Path) -> list[str]:
         actions.append("added merge=union for .ddflow/events/*.jsonl to .gitattributes")
     # `[lease] append_only_globs` get their union line too (D-shared-globs): re-synced
     # here, so a config edited by hand is caught up by `init` / `adopt`.
-    from . import shared_files as SF
 
     actions += [f"added '{ln}' to .gitattributes" for ln in SF.sync_attributes(repo)]
     return actions
@@ -956,6 +958,8 @@ def adopt(
     launch: str = "auto",
     image: str = "ghcr.io/OWNER/ddflow:latest",
 ) -> list[str]:
+    from . import enforce as E  # deferred: enforce imports this module
+
     repo = Path(repo)
     actions: list[str] = []
     # Templates live INSIDE the package (`ddflow/templates/`), not beside it, so they
@@ -1009,9 +1013,7 @@ def adopt(
         actions.append(_upsert_block(path, section, name))
 
     if install_hooks:
-        from ..services.enforce import install as install_hook
-
-        actions.append(install_hook(repo))
+        actions.append(E.install(repo))
         actions.extend(_install_prompt_hooks(repo, agents))
     for key in agents:
         actions.append(_register_mcp(repo, key, launch=launch, image=image))
@@ -1019,7 +1021,6 @@ def adopt(
             actions.append(_write_native_rule(repo, key, docs_dir))
         for dst, src in AGENT_COMMANDS.get(key, {}).items():
             actions.append(_write_command(repo, dst, templates / src))
-    from .enforce import redirect_note
 
     # Only when a line written here carries a path: a uvx or docker entry has none, and
     # the hooks' own install message already says it for the hooks.
@@ -1027,7 +1028,7 @@ def adopt(
     line = (
         f'PYTHONPATH="{entry["env"]["PYTHONPATH"]}" {entry["command"]}' if entry.get("env") else ""
     )
-    if line and (note := redirect_note(line)) and note not in "\n".join(actions):
+    if line and (note := E.redirect_note(line)) and note not in "\n".join(actions):
         actions.append(note)
     return actions
 
@@ -1038,6 +1039,7 @@ def _install_prompt_hooks(repo: Path, agents: list[str]) -> list[str]:
     A settings file ddflow cannot parse is reported, not overwritten, and never fails the
     adoption.
     """
+    # Deferred: claudehooks imports enforce, which the engine must not load.
     from . import claudehooks as CH
 
     out: list[str] = []
@@ -1313,13 +1315,11 @@ def _package_parent() -> str:
     """The directory containing the `ddflow` package that launch lines point at — what
     goes on PYTHONPATH. The primary checkout when run from a linked worktree of ddflow
     (`infra.paths.launch_parent`)."""
-    from ..infra.paths import launch_parent
 
     return str(launch_parent())
 
 
 def _python() -> str:
-    from ..infra.paths import launch_python
 
     return launch_python()
 
@@ -1342,7 +1342,6 @@ def _launch_entry(
       on the operator's own machine be reachable. Docker Desktop provides the name
       already; on Linux it does not exist without this flag.
     """
-    import shutil
 
     if launch == "auto" and not _running_from_source() and not _installed_from_index():
         # Installed, but not from an index: from git, a local path or an archive URL
