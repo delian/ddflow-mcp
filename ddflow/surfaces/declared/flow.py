@@ -6,8 +6,10 @@ takes their MCP entries (D-unify 4, 6f-flow). `version lint` has no tool, and sa
 
 from __future__ import annotations
 
-from ..registry import Command, Param, by_tool
+from ...core.outcome import NOTHING, OK
+from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _api
+from . import flow_cli as L
 
 #: The words a group is listed under in `ddflow --help`.
 GROUPS: dict[str, str] = {
@@ -43,6 +45,8 @@ COMMANDS: tuple[Command, ...] = (
         ),
         call=lambda repo, a, agent: _api().pr_sync(repo, item=a.get("item", "") or "", agent=agent),
         payload="",
+        render=L.pr_sync_text,
+        cli=CliPolicy(notes=L.pr_sync_notes, body_always=True),
     ),
     Command(
         path=("pr", "status"),
@@ -55,6 +59,8 @@ COMMANDS: tuple[Command, ...] = (
         ),
         call=lambda repo, a, agent: _api().pr_status(repo, agent=agent),
         payload="",
+        render=L.pr_status_text,
+        cli=CliPolicy(body_always=True),
     ),
     Command(
         path=("pr", "threads"),
@@ -95,6 +101,8 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload="",
+        render=L.pr_threads_text,
+        cli=CliPolicy(shown=(OK,), body_always=True),
     ),
     Command(
         path=("version", "show"),
@@ -124,6 +132,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, bump=a.get("bump", "") or "", line=a.get("line", "") or "", agent=agent
         ),
         payload="",
+        render=L.version_show_text,
+        cli=CliPolicy(body_always=True),
     ),
     Command(
         path=("version", "lint"),
@@ -142,6 +152,11 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("reason", default="", cli_help="why --waive"),
         ),
+        call=lambda repo, a, agent: _api().version_lint(
+            repo, waive=a.get("waive", "") or "", reason=a.get("reason", "") or "", agent=agent
+        ),
+        render=L.version_lint_text,
+        cli=CliPolicy(shown=(OK,), notes=L.version_lint_notes, body_always=True),
         reason="the release lint runs inside ddflow_version_cut (also with dry_run), and its waiver is the operator's decision, from the CLI; a tool of its own would cost every client's tools/list for a check only a release-maker runs",
     ),
     Command(
@@ -205,6 +220,8 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload="",
+        render=L.version_cut_text,
+        cli=CliPolicy(notes=L.version_cut_notes, body_always=True),
     ),
     Command(
         path=("promote", "add"),
@@ -235,6 +252,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["env"], force=bool(a.get("force")), agent=agent
         ),
         payload="",
+        render=L.promote_add_text,
+        cli=CliPolicy(shown=(OK, NOTHING), body_always=True),
     ),
     Command(
         path=("promote", "deployed"),
@@ -257,6 +276,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["env"], sha=a.get("sha", "") or "", agent=agent
         ),
         payload="",
+        render=L.promote_deployed_text,
+        cli=CliPolicy(shown=(OK,), body_always=True),
     ),
     Command(
         path=("promote", "status"),
@@ -268,6 +289,8 @@ COMMANDS: tuple[Command, ...] = (
         ),
         call=lambda repo, a, agent: _api().promote_status(repo, agent=agent),
         payload="",
+        render=L.promote_status_text,
+        cli=CliPolicy(body_always=True),
     ),
     Command(
         path=("flow", "show"),
@@ -282,6 +305,8 @@ COMMANDS: tuple[Command, ...] = (
         ),
         call=lambda repo, a, agent: _api().flow_show(repo, agent=agent),
         payload="",
+        render=L.flow_show_text,
+        cli=CliPolicy(notes=L.flow_show_notes, body_always=True),
     ),
     Command(
         path=("flow", "choose"),
@@ -320,6 +345,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["knob"], a["value"], reason=a.get("reason", "") or "", agent=agent
         ),
         payload="",
+        render=L.flow_choose_text,
+        cli=CliPolicy(shown=(OK,), notes=L.flow_choose_notes, body_always=True),
     ),
 )
 

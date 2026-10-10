@@ -478,6 +478,8 @@ class CliPolicy:
       what ``reason`` makes of it). ``None``: every exit;
     * ``notes(out, args, ctx)``: lines for stderr, printed first whatever the exit and
       the mode (a caveat that on stdout would corrupt ``--json``);
+    * ``body_always``: under ``--json`` the body is printed whatever the exit, a refusal's
+      reason follows on stderr, and ``notes`` are not printed (the flow commands' contract);
     * ``body(out, args)``: the ``--json`` body, when the CLI's has never been the MCP
       tool's ``payload``;
     * ``human(out, args, ctx)``: the human text when it needs the context (the identity,
@@ -490,6 +492,7 @@ class CliPolicy:
     typed_agent: bool = True
     shown: tuple[int, ...] | Callable[[Any], bool] | None = None
     reason: Callable[[Any], str] | None = None
+    body_always: bool = False
     notes: Callable[..., Iterable[str]] | None = None
     body: Callable[..., Any] | None = None
     human: Callable[..., str] | None = None

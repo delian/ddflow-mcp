@@ -8,9 +8,11 @@ their MCP entries (D-unify 4, B-uni-cmd-migrate.5-lifecycle). `init` has no tool
 from __future__ import annotations
 
 from ...core.defaults import DEFAULT_PRIORITY
+from ...core.outcome import OK
 from ..argtypes import GLOBS_HELP, _Globs
-from ..registry import Command, Param, by_tool
+from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api, _list_or_none
+from . import queue_cli as L
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 
 COMMANDS: tuple[Command, ...] = (
@@ -200,14 +202,20 @@ COMMANDS: tuple[Command, ...] = (
             repo,
             a["id"],
             # The MCP argument is ONE comma-separated string; the CLI takes repeated
-            # `--into`. Split here rather than in the api, so the api keeps the shape
-            # that cannot lose a spec containing a comma in its title.
-            into=[x.strip() for x in str(a.get("into", "")).split(",") if x.strip()],
+            # `--into`, a list. Split the string here rather than in the api, so the api
+            # keeps the shape that cannot lose a spec containing a comma in its title.
+            into=(
+                list(a["into"])
+                if isinstance(a.get("into"), list)
+                else [x.strip() for x in str(a.get("into", "")).split(",") if x.strip()]
+            ),
             globs=a.get("globs", "") or "",
             needs=a.get("needs", "") or "",
             agent=agent,
         ),
         payload=("item", "created"),
+        render=L.split_text,
+        cli=CliPolicy(shown=(OK,)),
         params=(
             Param("id", help="The item to split.", cli_help="", positional=True),
             Param(
@@ -242,6 +250,8 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], keep=a["keep"], refile_as=a.get("refile_as", "") or "", agent=agent
         ),
         payload=("id", "kept_definition", "kept_holder", "lost", "refiled", "released"),
+        render=L.resolved_text,
+        cli=CliPolicy(shown=(OK,)),
         params=(
             Param("id", help="The contested item.", cli_help="", positional=True),
             Param(
