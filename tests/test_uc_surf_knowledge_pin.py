@@ -1,7 +1,10 @@
 """Characterization of the knowledge and decision commands that run on the CLI executor
 (B-uc-surf-knowledge): stdout, stderr and exit code of each, human and --json, for success,
-refusal, failure and nothing-to-do. The table in tests/data was captured from the
-hand-written handlers BEFORE they were replaced; a diff here is a user-visible change."""
+refusal, failure and nothing-to-do. tests/data/uc_surf_knowledge_pin.json was captured from
+the hand-written handlers BEFORE they were replaced, except six rows that carry the
+corrected behaviour of two filed bugs (B6fdead1799: an unknown --kind fails on stderr with no
+body; B29bee09eba: a refused link under --json carries its refusal) -- their regression tests
+are in test_uc_surf_knowledge_failures.py. Any other diff here is a user-visible change."""
 
 from __future__ import annotations
 
