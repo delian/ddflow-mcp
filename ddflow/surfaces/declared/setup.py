@@ -214,7 +214,7 @@ COMMANDS: tuple[Command, ...] = (
             else _api().setup.UPGRADE_RESTORE_PAYLOAD
             if a.get("restore")
             else _api().setup.UPGRADE_APPLY_PAYLOAD
-            if (a.get("apply") or a.get("plan") is False)
+            if (a.get("apply") or a.get("plan") is False or a.get("resume"))
             else _api().setup.UPGRADE_PAYLOAD
         ),
         params=(

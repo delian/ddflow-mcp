@@ -222,7 +222,8 @@ def test_a_resumed_upgrade_records_every_settled_item_and_the_first_backup(
     project, monkeypatch
 ) -> None:
     plan = plan_of("f1", "f2")
-    monkeypatch.setattr(UA, "_save", lambda *a, **k: ("bk-1", "", False))
+    saves: list[int] = []
+    monkeypatch.setattr(UA, "_save", lambda *a, **k: (saves.append(1), "bk-1", "", False)[1:])
     interrupt_at(monkeypatch, "f2")
     with pytest.raises(KeyboardInterrupt):
         apply(project, plan)
@@ -233,6 +234,7 @@ def test_a_resumed_upgrade_records_every_settled_item_and_the_first_backup(
     apply(project, plan, watch=UA.Watch(resume=rid))
     _log, _cfg, st = state(project)
     assert st.upgrades[-1]["items"] == ["f1", "f2"]
+    assert st.upgrades[-1]["backup"] == "bk-1" and saves == [1], "no second, partial backup"
 
 
 def test_history_lists_two_upgrades(project) -> None:
@@ -297,6 +299,36 @@ def test_cli_and_mcp_mirror_each_other(project) -> None:
     mcp = json.loads(reply["result"]["content"][0]["text"])
     assert set(cli) == set(mcp) and cli["running"] == mcp["running"]
     assert code in (0, 1)
+
+
+def test_resume_over_mcp_answers_like_the_cli(project, monkeypatch) -> None:
+    plan = plan_of("f1", "f2")
+    interrupt_at(monkeypatch, "f2")
+    with pytest.raises(KeyboardInterrupt):
+        apply(project, plan)
+    monkeypatch.undo()
+    from ddflow.services import upgrade_plan as UP
+
+    monkeypatch.setattr(UP, "build", lambda *a, **k: plan)
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"resume": True}},
+        }
+    )
+    body = json.loads(reply["result"]["content"][0]["text"])
+    assert "applied" in body and body["applied"]["applied"] == 1, body
+    again = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"resume": True}},
+        }
+    )
+    assert "nothing to resume" in json.dumps(again["result"])
 
 
 def test_mcp_reports_each_step_as_progress(project, monkeypatch) -> None:

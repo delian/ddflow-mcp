@@ -305,7 +305,13 @@ def apply(
     todo = [i for i in selected if i["id"] not in earlier]
 
     files = [p for i in todo for p in touched(repo, cfg, i)]
-    backup_dir, why, refused = _save(repo, cfg, backup, files, frm, to)
+    # A resume keeps the restore point the interrupted run made (it holds the originals of the
+    # whole run): a second, partial one would be the newest, and `--restore` would undo only half.
+    prior = str((st.upgrade_runs.get(watch.resume) or {}).get("backup") or "")
+    if prior:
+        backup_dir, why, refused = prior, "", False
+    else:
+        backup_dir, why, refused = _save(repo, cfg, backup, files, frm, to)
     if why:
         return _not_saved(results, todo, why, refused, frm)
 
