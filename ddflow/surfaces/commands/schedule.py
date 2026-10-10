@@ -97,6 +97,34 @@ def _decision(d: dict[str, Any]) -> str:
     return f"suppressed {d['trigger']}{key}: {d['reason']} ({d['detail']})"
 
 
+def _trigger_show(d: dict[str, Any]) -> str:
+    lines = [
+        f"{d['id']}  {d.get('title') or ''}\n  event {d['event']}  count {d['count']}"
+        f"  window {d['window']}m  key {d['key'] or '-'}  job {d['action'].get('job')}"
+        f"\n  {'enabled' if d['enabled'] else 'disabled'}  fires {d['fires']}"
+        f"  open {', '.join(d['open']) or '-'}{'  HELD by its breaker' if d['held'] else ''}"
+    ]
+    lines += [
+        f"  suppressed {x['at']} {x['key'] or '-'}: {x['reason']}" for x in d.get("suppressed", [])
+    ]
+    return "\n".join(lines)
+
+
+def _trigger_text(verb: str, out) -> str:
+    """What `schedule trigger <verb>` prints for a result: the decisions, the one trigger,
+    or one line per trigger -- the outcome's own reason when there is nothing to list."""
+    if verb == "show":
+        return _trigger_show(out.data)
+    if verb == "evaluate":
+        lines = [_decision(d) for d in out.data.get("decisions", [])]
+    else:
+        lines = [
+            f"{r['id']:<22} {r['event']:<20} {'on ' if r['enabled'] else 'off'} fires {r['fires']}"
+            for r in out.data.get("rows", [])
+        ]
+    return "\n".join(lines) or out.reason
+
+
 def cmd_trigger(a, c: Ctx) -> int:
     verb = a.trigger_cmd or "list"
     if verb == "show":
@@ -111,28 +139,7 @@ def cmd_trigger(a, c: Ctx) -> int:
     if c.json:
         emit_json(out.body("rows" if verb == "list" else ""))
         return out.exit
-    if verb == "evaluate":
-        lines = [_decision(d) for d in out.data.get("decisions", [])]
-        print("\n".join(lines) or out.reason)
-    elif verb == "show":
-        d = out.data
-        print(
-            f"{d['id']}  {d.get('title') or ''}\n  event {d['event']}  count {d['count']}"
-            f"  window {d['window']}m  key {d['key'] or '-'}  job {d['action'].get('job')}"
-            f"\n  {'enabled' if d['enabled'] else 'disabled'}  fires {d['fires']}"
-            f"  open {', '.join(d['open']) or '-'}{'  HELD by its breaker' if d['held'] else ''}"
-        )
-        for x in d.get("suppressed", []):
-            print(f"  suppressed {x['at']} {x['key'] or '-'}: {x['reason']}")
-    else:
-        rows = out.data.get("rows", [])
-        print(
-            "\n".join(
-                f"{r['id']:<22} {r['event']:<20} {'on ' if r['enabled'] else 'off'} fires {r['fires']}"
-                for r in rows
-            )
-            or out.reason
-        )
+    print(_trigger_text(verb, out))
     for e in out.data.get("errors", []):
         print(f"problem: {e}", file=sys.stderr)
     return out.exit

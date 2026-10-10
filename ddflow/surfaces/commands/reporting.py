@@ -251,9 +251,8 @@ def _ledger_lines(led: dict) -> str:
     return "\n".join(lines)
 
 
-def _bug_lines(b: dict) -> str:
-    """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
-    how it was closed."""
+def _bug_opening(b: dict) -> list[str]:
+    """`show`'s head for a bug: what it is, where it was found, what fixes it."""
     found = f"found {b['found_at']}" + (f" on {b['item']}" if b["item"] else "")
     lines = [f"{b['id']} [bug] {b['state']}"]
     if b.get("title"):
@@ -269,6 +268,12 @@ def _bug_lines(b: dict) -> str:
         lines.append(f"  fix task(s): {', '.join(b['fixing'])}")
     if b["mentioned_by"]:
         lines.append(f"  mentioned by: {', '.join(b['mentioned_by'])}")
+    return lines
+
+
+def _bug_closure(b: dict) -> list[str]:
+    """How a bug was closed: by a fix (and the tests that guard it), or as invalid."""
+    lines: list[str] = []
     if b["fixed_at"]:
         tests = [t for t in b["regression_tests"] or [b["regression_test"]] if t]
         lines.append(
@@ -282,6 +287,13 @@ def _bug_lines(b: dict) -> str:
         lines.append(f"  {was} {b['invalid_at']} as invalid: {b['invalid_reason']}{tail}")
         if b["evidence"]:
             lines.append(f"    evidence: {b['evidence']}")
+    return lines
+
+
+def _bug_lines(b: dict) -> str:
+    """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
+    how it was closed."""
+    lines = [*_bug_opening(b), *_bug_closure(b)]
     if b["lesson"]:
         lines.append(f"  lesson {b['lesson']}")
     lines += ["", b["summary"]]

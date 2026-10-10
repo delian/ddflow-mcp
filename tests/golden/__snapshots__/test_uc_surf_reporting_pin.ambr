@@ -148,6 +148,15 @@
     ''',
   )
 # ---
+# name: test_human[phase list --state done]
+  tuple(
+    2,
+    '''
+      No phase records matching {'state': 'done'}.
+  
+    ''',
+  )
+# ---
 # name: test_human[phase list]
   tuple(
     0,
@@ -425,6 +434,15 @@
     ''',
   )
 # ---
+# name: test_human[research list --limit 1]
+  tuple(
+    0,
+    '''
+        R49b608db82        confirmed  Is recursive descent fast enough?  [2026-01-01]
+  
+    ''',
+  )
+# ---
 # name: test_human[research list]
   tuple(
     0,
@@ -602,6 +620,15 @@
     ''',
   )
 # ---
+# name: test_human[task list --owner nobody]
+  tuple(
+    2,
+    '''
+      No task records matching {'agent': 'nobody'}.
+  
+    ''',
+  )
+# ---
 # name: test_human[task list --phase P1 --limit 1]
   tuple(
     0,
@@ -609,6 +636,17 @@
         T1                 done       Tokenizer  [2026-01-01]
       
       (showing 1 of 3; raise --limit)
+  
+    ''',
+  )
+# ---
+# name: test_human[task list --since 2020-01-01]
+  tuple(
+    0,
+    '''
+        T1                 done       Tokenizer  [2026-01-01]
+        T3                 open       Error messages  [2026-01-01]
+        T2                 open       Grammar  [2026-01-01]
   
     ''',
   )
@@ -627,6 +665,15 @@
     0,
     '''
         T1                 done       Tokenizer  [2026-01-01]
+  
+    ''',
+  )
+# ---
+# name: test_human[task list --tag x]
+  tuple(
+    2,
+    '''
+      No task records matching {'tag': 'x'}.
   
     ''',
   )
@@ -1228,6 +1275,27 @@
     ''',
   )
 # ---
+# name: test_json[phase list --state done]
+  tuple(
+    2,
+    '''
+      {
+        "schema": "list@1",
+        "record_kind": "phase",
+        "rows": [],
+        "total": 0,
+        "shown": 0,
+        "limit": 50,
+        "truncated": false,
+        "filters": {
+          "state": "done"
+        },
+        "reason": "No phase records matching {'state': 'done'}."
+      }
+  
+    ''',
+  )
+# ---
 # name: test_json[phase list]
   tuple(
     0,
@@ -1578,6 +1646,35 @@
       
       T1
       
+  
+    ''',
+  )
+# ---
+# name: test_json[research list --limit 1]
+  tuple(
+    0,
+    '''
+      {
+        "schema": "research_add@1",
+        "record_kind": "research",
+        "rows": [
+          {
+            "id": "R49b608db82",
+            "kind": "research",
+            "state": "confirmed",
+            "title": "Is recursive descent fast enough?",
+            "owner": "",
+            "updated": "2026-01-01T00:09:00Z",
+            "phase": "P1",
+            "tags": []
+          }
+        ],
+        "total": 1,
+        "shown": 1,
+        "limit": 1,
+        "truncated": false,
+        "filters": {}
+      }
   
     ''',
   )
@@ -2045,6 +2142,27 @@
     ''',
   )
 # ---
+# name: test_json[task list --owner nobody]
+  tuple(
+    2,
+    '''
+      {
+        "schema": "list@1",
+        "record_kind": "task",
+        "rows": [],
+        "total": 0,
+        "shown": 0,
+        "limit": 50,
+        "truncated": false,
+        "filters": {
+          "owner": "nobody"
+        },
+        "reason": "No task records matching {'agent': 'nobody'}."
+      }
+  
+    ''',
+  )
+# ---
 # name: test_json[task list --phase P1 --limit 1]
   tuple(
     0,
@@ -2070,6 +2188,57 @@
         "truncated": true,
         "filters": {
           "phase": "P1"
+        }
+      }
+  
+    ''',
+  )
+# ---
+# name: test_json[task list --since 2020-01-01]
+  tuple(
+    0,
+    '''
+      {
+        "schema": "list@1",
+        "record_kind": "task",
+        "rows": [
+          {
+            "id": "T1",
+            "kind": "task",
+            "state": "done",
+            "title": "Tokenizer",
+            "owner": "",
+            "updated": "2026-01-01T00:10:00Z",
+            "phase": "P1",
+            "tags": []
+          },
+          {
+            "id": "T3",
+            "kind": "task",
+            "state": "open",
+            "title": "Error messages",
+            "owner": "",
+            "updated": "2026-01-01T00:04:00Z",
+            "phase": "P1",
+            "tags": []
+          },
+          {
+            "id": "T2",
+            "kind": "task",
+            "state": "open",
+            "title": "Grammar",
+            "owner": "",
+            "updated": "2026-01-01T00:03:00Z",
+            "phase": "P1",
+            "tags": []
+          }
+        ],
+        "total": 3,
+        "shown": 3,
+        "limit": 50,
+        "truncated": false,
+        "filters": {
+          "since": "2020-01-01"
         }
       }
   
@@ -2123,6 +2292,27 @@
         "filters": {
           "state": "done"
         }
+      }
+  
+    ''',
+  )
+# ---
+# name: test_json[task list --tag x]
+  tuple(
+    2,
+    '''
+      {
+        "schema": "list@1",
+        "record_kind": "task",
+        "rows": [],
+        "total": 0,
+        "shown": 0,
+        "limit": 50,
+        "truncated": false,
+        "filters": {
+          "tag": "x"
+        },
+        "reason": "No task records matching {'tag': 'x'}."
       }
   
     ''',
