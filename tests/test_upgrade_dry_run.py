@@ -186,6 +186,21 @@ def test_the_new_ddflow_is_never_the_clones_own_package(tmp_path: Path) -> None:
     assert rows(rehearsal.report)[2].status == DR.PASS
 
 
+def test_merged_shards_with_a_torn_line_fold_as_the_log_reads_them(tmp_path: Path) -> None:
+    """A real log carries lines two events were glued onto (a torn append); the log recovers
+    both, so the check of merged shards must read them the same way (found rehearsing ddflow's
+    own repository: 4 such lines made the union look short by two events)."""
+    root = project(tmp_path, confirm_free=True)
+    shard = sorted((root / ".ddflow" / "events").glob("*.jsonl"))[0]
+    lines = shard.read_text("utf-8").splitlines()
+    shard.write_text("\n".join([*lines[:-2], lines[-2] + lines[-1]]) + "\n", "utf-8")
+    git(root, "add", "-A")
+    git(root, "commit", "--quiet", "--no-verify", "-m", "a torn append")
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    assert rehearsal.step_clone()
+    assert rehearsal.step_shards(), rehearsal.report.table()
+
+
 def test_the_live_check_tells_our_trace_from_other_agents_work(tmp_path: Path) -> None:
     root = project(tmp_path, confirm_free=True)
     before = DR.snapshot_live(root)
