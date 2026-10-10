@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import argparse
 
+from .. import cliexec
 from ..commands.operations import cmd_cleanup
 from ..commands.reporting import (
     cmd_board,
     cmd_doctor,
-    cmd_rebuild,
-    cmd_recover,
     cmd_render,
     cmd_replay,
     cmd_show,
@@ -28,11 +27,9 @@ def register(s: argparse._SubParsersAction) -> None:
 
     HANDLERS = {
         ("replay",): cmd_replay,
-        ("recover",): cmd_recover,
         ("progress",): cmd_progress,
         ("loops",): cmd_loops,
         ("cleanup",): cmd_cleanup,
-        ("rebuild",): cmd_rebuild,
         ("render",): cmd_render,
         ("board",): cmd_board,
         ("show",): cmd_show,
@@ -40,11 +37,17 @@ def register(s: argparse._SubParsersAction) -> None:
 
     by = {c.path: c for c in COMMANDS}
     add_commands(
-        s, [by[("replay",)], by[("recover",)], by[("progress",)], by[("loops",)]], handlers=HANDLERS
+        s,
+        [by[("replay",)], by[("recover",)], by[("progress",)], by[("loops",)]],
+        handlers=HANDLERS,
+        executor=cliexec.handler,
     )
     add_commands(s, [by[("cleanup",)]], handlers=HANDLERS)
 
     add_commands(s, [SETUP_BY_TOOL["ddflow_doctor"]], handlers={("doctor",): cmd_doctor})
     add_commands(
-        s, [by[("rebuild",)], by[("render",)], by[("board",)], by[("show",)]], handlers=HANDLERS
+        s,
+        [by[("rebuild",)], by[("render",)], by[("board",)], by[("show",)]],
+        handlers=HANDLERS,
+        executor=cliexec.handler,
     )

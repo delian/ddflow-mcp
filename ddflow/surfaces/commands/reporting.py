@@ -14,7 +14,7 @@ import time
 from ...api import reporting as A
 from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
-from ..context import FAIL, NOTHING, OK, Ctx
+from ..context import FAIL, OK, Ctx
 from ..render import emit_json
 from ..vocabulary import sources
 from .lifecycle import _next_without_plan
@@ -300,42 +300,6 @@ def _bug_lines(b: dict) -> str:
     lines += ["", b["summary"]]
     lines += addenda_lines(b)
     return "\n".join(lines)
-
-
-def cmd_recover(a, c: Ctx) -> int:
-    out = A.recover(c.repo, item=a.item or "", apply=a.apply, agent=c.requested_agent)
-    if c.json:
-        emit_json(out.body("found"))
-        return out.exit
-    if out.exit == NOTHING:
-        print(out.reason)
-        return NOTHING
-    found = out.data["_render"]["found"]
-    salv = out.data["_render"]["salvageable"]
-    print(f"{len(found)} recoverable situation(s); {len(salv)} may contain work:\n")
-    for r in found:
-        flag = "!! " if may_hold_work(r) else "   "
-        print(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
-        if r.worktree:
-            print(f"     worktree {r.worktree}")
-        print(f"     {r.advice}\n")
-    if salv:
-        print(
-            "Entries marked !! are NOT touched automatically. Inspect, salvage (or resume), "
-            "then release."
-        )
-    return OK
-
-
-def cmd_rebuild(a, c: Ctx) -> int:
-    out = A.rebuild(c.repo, agent=c.requested_agent)
-    d = out.data
-    c.out(
-        f"rebuilt index from {d['events']} events in {d['seconds']:.2f}s "
-        f"({d['items']} items, {d['lessons']} lessons)",
-        out.body(("events", "items")),
-    )
-    return out.exit
 
 
 def cmd_doctor(a, c: Ctx) -> int:
