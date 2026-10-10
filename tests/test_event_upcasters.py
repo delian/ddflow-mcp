@@ -511,6 +511,11 @@ def titles(st) -> dict[str, str]:
     return {i.id: i.title for i in st.items.values()}
 
 
+def test_the_release_fixtures_are_there() -> None:
+    """The tests below are parametrized over them: an empty set would skip, not fail."""
+    assert len(RELEASE_PROJECTS) >= 3, RELEASE_PROJECTS
+
+
 @pytest.mark.parametrize("project", RELEASE_PROJECTS, ids=lambda p: p.parent.name)
 def test_every_released_log_folds_through_a_real_upcaster(project: Path, tmp_path, monkeypatch):
     """The event-evolution machinery had only ever met in-memory events: here every release's
