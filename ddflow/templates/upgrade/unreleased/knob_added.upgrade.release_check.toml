@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.release_check"
+new = "\"on\""
+why = "Whether ddflow looks for a newer release of itself, at most once per check_interval_h, and proposes it (never installs): on (default) or off. DDFLOW_NO_UPDATE_CHECK turns it off for one shell."
+impact = "additive"

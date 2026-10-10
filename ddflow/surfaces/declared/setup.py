@@ -156,7 +156,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=(),
         tool="ddflow_upgrade",
-        description="What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`), returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. `restore` undoes an apply. Plan exit: 0 up to date, 1 items.",
+        description="What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`) and returns the plan left and `applied`; exit 3 while an item needs `confirm`. `restore` undoes an apply; `check` asks if a newer release exists. Plan exit: 0 up to date, 1 items.",
         call=lambda repo, a, agent: _api().upgrade(
             repo,
             plan=a.get("plan") if isinstance(a.get("plan"), bool) else None,
@@ -166,32 +166,34 @@ COMMANDS: tuple[Command, ...] = (
             backup=str(a.get("backup") or ""),
             snapshot=bool(a.get("snapshot")),
             restore=str(a.get("restore") or ""),
+            check=bool(a.get("check")),
             agent=agent,
         ),
         # The plan's fields; an apply also carries what it did (`applied`) and a restore what
         # it put back (`restored`), so the body is the same parsed value as the CLI's `--json`.
         payload=lambda a: (
-            _api().setup.UPGRADE_RESTORE_PAYLOAD
+            _api().setup.UPGRADE_CHECK_PAYLOAD
+            if a.get("check")
+            else _api().setup.UPGRADE_RESTORE_PAYLOAD
             if a.get("restore")
             else _api().setup.UPGRADE_APPLY_PAYLOAD
             if (a.get("apply") or a.get("plan") is False)
             else _api().setup.UPGRADE_PAYLOAD
         ),
         params=(
-            Param(
-                "plan", type="boolean", help="Dry run (default); false applies all.", mcp_only=True
-            ),
-            Param("apply", help="Categories to apply: all, or a comma list.", mcp_only=True),
+            Param("plan", type="boolean", help="Dry run (default); false applies.", mcp_only=True),
+            Param("apply", help="Categories: all, or a comma list.", mcp_only=True),
             Param(
                 "confirm",
                 type="array",
-                help="With apply: keys the operator accepts (needs reason).",
+                help="apply: keys the operator accepts (needs reason).",
                 mcp_only=True,
             ),
             Param("reason", help="Why they accept it.", mcp_only=True),
             Param("backup", help="local, snapshot or none.", mcp_only=True),
             Param("snapshot", type="boolean", help="apply: git snapshot backup.", mcp_only=True),
             Param("restore", help="Undo: backup name or latest; alone.", mcp_only=True),
+            Param("check", type="boolean", help="Newer ddflow out? Alone.", mcp_only=True),
         ),
     ),
     Command(

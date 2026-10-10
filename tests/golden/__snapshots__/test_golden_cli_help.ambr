@@ -2148,7 +2148,7 @@
 # ---
 # name: test_help[ddflow upgrade]
   '''
-  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]]
+  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]] [--check]
   
   options:
     -h, --help            show this help message and exit
@@ -2166,6 +2166,9 @@
     --restore [NAME]      put back what a local backup or a snapshot holds (NAME, or the newest when
                           omitted), saving what it replaces; stands alone: no other option may
                           accompany it
+    --check               ask the package index now whether a newer ddflow exists and say the
+                          running version, the newest, this project's stamp and how to upgrade (exit
+                          0 newest, 1 a newer release, 2 off or unreachable); stands alone
   
   '''
 # ---

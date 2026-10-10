@@ -27,7 +27,9 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # and a longer description (~0.3 KB in all); the list measures 95,2xx with them.
 # 95_700 (raised, B-uni-rules-import.4-view): ddflow_rule_sync is the MCP face of `ddflow rule sync`
 # (~0.3 KB): one tool, no arguments.
-TOOLS_LIST_BUDGET = 95_700
+# 95_800 (raised, B-upgrade.8-release-check): ddflow_upgrade gains `check` (~0.1 KB net after
+# trimming its description); the list measures 95,773 with it.
+TOOLS_LIST_BUDGET = 95_800
 SHARED_DESCRIPTION_MAX = 200
 
 

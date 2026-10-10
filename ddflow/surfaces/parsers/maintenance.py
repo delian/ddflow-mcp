@@ -76,6 +76,14 @@ def register(s: argparse._SubParsersAction) -> None:
         help="put back what a local backup or a snapshot holds (NAME, or the newest when "
         "omitted), saving what it replaces; stands alone: no other option may accompany it",
     )
+    up.add_argument(
+        "--check",
+        action="store_true",
+        default=False,
+        help="ask the package index now whether a newer ddflow exists and say the running "
+        "version, the newest, this project's stamp and how to upgrade (exit 0 newest, "
+        "1 a newer release, 2 off or unreachable); stands alone",
+    )
     up.set_defaults(fn=cmd_upgrade)
 
     add_commands(
