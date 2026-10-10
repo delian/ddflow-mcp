@@ -7,14 +7,9 @@ import shutil
 import subprocess
 
 from conftest import run_cli
+from helpers import git as _git
 
 from ddflow.services import eventcommit as EC
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _project(repo):

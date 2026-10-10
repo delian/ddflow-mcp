@@ -11,31 +11,14 @@ from pathlib import Path
 
 import pytest
 from conftest import pass_pipeline, run_cli
+from helpers import flow_config as _cfg
+from helpers import git as _git
+from helpers import state_as_reader as _state
 
-from ddflow.config import Config
 from ddflow.core import flow as F
-from ddflow.core.model import fold
-from ddflow.infra.log import EventLog
 
 AUTHOR = "claude-opus-5"
 ENVS = ["pre-production", "production"]
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
-def _state(repo: Path):
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
-
-
-def _cfg(**flow) -> Config:
-    c = Config()
-    for k, v in flow.items():
-        setattr(c.flow, k, v)
-    return c
 
 
 # -- pure rules ----------------------------------------------------------------------

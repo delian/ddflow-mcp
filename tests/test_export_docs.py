@@ -4,7 +4,6 @@ result carries `export_refresh` like the CLI's does."""
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -12,6 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_raw as _git
 
 from ddflow import config as C
 from ddflow.api._base import _load
@@ -32,12 +32,6 @@ def test_config_explain_cli_has_no_stale_redaction_text(repo):
     assert code == 0
     block = out[out.index("export.redact") :].split("\nexport.", 1)[0]
     assert "not applied" not in block and "NOT yet" not in block
-
-
-def _git(tree: Path, *argv: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(tree), *argv], check=True, capture_output=True, text=True
-    ).stdout
 
 
 @pytest.fixture
