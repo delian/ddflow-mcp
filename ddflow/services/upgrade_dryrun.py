@@ -449,6 +449,13 @@ class Rehearsal:
         asked = [x for k in sorted({*self.confirms, *keys}) for x in ("--confirm", k)]
         return ["upgrade", "--apply", "--backup", backup, *asked, "--reason", self.opt.reason]
 
+    def apply_in(self, repo: Path, backup: str, agent: str) -> P.Captured:
+        """`upgrade --apply` in ``repo`` with the confirmations ITS plan asks for, plus the
+        earlier plan's (the clone may differ: a hand edit, another history)."""
+        planned = self.ddflow(self.new, repo, "upgrade", "--plan", "--json", agent=agent)
+        keys = [_key(i) for i in _asked(planned)]
+        return self.ddflow(self.new, repo, *self.apply_args(backup, keys), agent=agent)
+
     def commit_all(self, repo: Path, message: str) -> None:
         self.git(repo, "add", "-A")
         self.git(repo, "commit", "--quiet", "--no-verify", "--allow-empty", "-m", message)
@@ -628,9 +635,7 @@ class Rehearsal:
         edited = self._hand_edit(repo)
         before_users = users_part(state_digests(repo))
         before_tree, before_shards = tree_digest(repo), shard_bytes(repo)
-        planned = self.ddflow(self.new, repo, "upgrade", "--plan", "--json", agent="dry-apply")
-        keys = [_key(i) for i in _asked(planned)]
-        done = self.ddflow(self.new, repo, *self.apply_args("snapshot", keys), agent="dry-apply")
+        done = self.apply_in(repo, "snapshot", "dry-apply")
         problems: list[str] = []
         if edited and not _edit_kept(repo, edited):
             problems.append(f"the hand edit inside the stamped block of {edited} was lost")
@@ -726,7 +731,15 @@ class Rehearsal:
             )
         old = self.opt.old
         repo = self.clone("old")
-        self.ddflow(self.new, repo, *self.apply_args("none"), agent="dry-apply")
+        upgraded = self.apply_in(repo, "none", "dry-apply")
+        if upgraded.returncode != O.OK:
+            return self.add(
+                5,
+                "old ddflow on the upgraded copy",
+                False,
+                f"the copy was not upgraded (exit {upgraded.returncode}): "
+                f"{(upgraded.stderr or upgraded.stdout).strip()[-160:]}",
+            )
         self.commit_all(repo, "applied")
         shards = shard_bytes(repo)
         bad: list[str] = []
@@ -873,7 +886,7 @@ class Rehearsal:
     def step_agents(self) -> bool:
         a, b = self.opt.agents
         repo = self.clone("agents")
-        up = self.ddflow(self.new, repo, *self.apply_args("none"), agent=a)
+        up = self.apply_in(repo, "none", a)
         self.commit_all(repo, "applied")
         problems: list[str] = (
             [] if up.returncode in (O.OK, O.REFUSED) else [f"apply exited {up.returncode}"]
