@@ -153,11 +153,12 @@ def load_average() -> float | None:
 
 
 def read(repo: Path) -> list[dict[str, Any]]:
-    """Every readable row of the log, oldest first; a damaged line is skipped."""
+    """Every readable row of the log, oldest first; a damaged line is skipped. Raises OSError
+    when the file exists and cannot be read."""
     try:
         text = log_path(repo).read_text("utf-8", errors="replace")
-    except OSError:
-        return []
+    except FileNotFoundError:
+        return []  # no log yet; any other OSError is "could not read", not "no flakes"
     rows = []
     for line in text.splitlines():
         try:
@@ -180,9 +181,10 @@ def record(
     why: dict[str, str] | None = None,
     tails: list[dict[str, str]] | None = None,
     cfg: Config | None = None,
-) -> int:
+) -> int | None:
     """Append one row per test that failed and then passed on the same tree; returns how
-    many were written. Never raises: a log that cannot be written must not change a gate."""
+    many were written, or None when the log could not be written. Never raises: a log that
+    cannot be written must not change a gate."""
     if not tests:
         return 0
     at = clock.now_iso()
@@ -222,7 +224,7 @@ def record(
                 os.close(fd)
             _trim(path)
     except (OSError, fsio.LockTimeout):
-        return 0
+        return None
     return len(lines)
 
 
@@ -257,7 +259,10 @@ def counts(rows: list[dict[str, Any]]) -> Counter[str]:
 
 def flakes_text(repo: Path, limit: int = 30) -> str:
     """The flake log as `ddflow tests --flakes` prints it."""
-    rows = read(repo)
+    try:
+        rows = read(repo)
+    except OSError as exc:
+        return f"Could not read the flake log {FLAKE_LOG.as_posix()}: {exc}"
     if not rows:
         return (
             f"No flakes logged ({FLAKE_LOG.as_posix()} is empty or missing): no test has failed "
@@ -280,9 +285,15 @@ def flakes_text(repo: Path, limit: int = 30) -> str:
 
 def doctor_notes(repo: Path) -> list[str]:
     """A note for each test that has flaked CHRONIC_FAILS or more times."""
+    try:
+        rows = read(repo)
+    except OSError as exc:
+        return [
+            f"the flake log {FLAKE_LOG.as_posix()} cannot be read ({exc}): flaky tests are not being counted"
+        ]
     return [
         f"flaky test: {test} failed then passed {n} times on one tree "
         f"(`ddflow tests --flakes`) -- fix it or quarantine it"
-        for test, n in counts(read(repo)).most_common()
+        for test, n in counts(rows).most_common()
         if n >= CHRONIC_FAILS
     ]

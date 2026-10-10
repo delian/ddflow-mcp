@@ -318,7 +318,10 @@ def relevant_tests(
     """
 
     if flakes:  # the machine-local log of tests that failed and then passed
-        rows = FK.read(repo)
+        try:
+            rows = FK.read(repo)
+        except OSError as exc:
+            return O.failed("tests", f"could not read the flake log: {exc}")
         return O.ok(
             "tests",
             flakes=rows,
