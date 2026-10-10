@@ -638,14 +638,16 @@
 # ---
 # name: test_help[ddflow gate run]
   '''
-  usage: ddflow gate run [-h] id gate
+  usage: ddflow gate run [-h] [--rerun-failed] id gate
   
   positional arguments:
     id
     gate
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help      show this help message and exit
+    --rerun-failed  when the gate fails, run ONLY the failed tests once more and record both
+                    outcomes (the gate stays failed; a test that passes alone goes to the flake log)
   
   '''
 # ---
@@ -2096,12 +2098,14 @@
 # ---
 # name: test_help[ddflow tests]
   '''
-  usage: ddflow tests [-h] [--item ITEM] [--base BASE]
+  usage: ddflow tests [-h] [--item ITEM] [--base BASE] [--flakes]
   
   options:
     -h, --help   show this help message and exit
     --item ITEM  an item id: use its worktree and base
     --base BASE  compare against this ref (default: the base)
+    --flakes     show the flake log instead: every test that failed and then passed on the same tree
+                 through ddflow on this machine (.ddflow/local/flakes.jsonl)
   
   '''
 # ---

@@ -133,7 +133,11 @@ def run_text(out, a) -> str:
         f" — {ev['reason']}" if ev.get("reason") else ""
     )
     tail = ev.get("tail", "")
-    return f"{tail[-1200:]}\n{head}" if tail else head
+    body = f"{tail[-1200:]}\n{head}" if tail else head
+    # Which tests failed and why: the tail is the END of the output, and under xdist the
+    # failures are not at the end (B-uc-gate-failure-evidence).
+    failing = out.data.get("failure_text", "")
+    return f"{body}\n{failing}" if failing else body
 
 
 def record_notes(out, a, ctx) -> Iterator[str]:
