@@ -16,6 +16,10 @@ from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
 from . import lifecycle_cli as L
 
+#: `api.lifecycle.DEFAULT_CHECK_RECOVERY`, spelled here so declaring the commands does not
+#: import the api (tests/test_uc_surf_loop_brief.py holds the two together).
+DEFAULT_CHECK_RECOVERY = True
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("next",),
@@ -32,6 +36,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload="",
+        cli=CliPolicy(notes=L.next_notes, human=L.next_text),
         params=(
             Param(
                 "phase",
@@ -45,6 +50,48 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
                 default=DEFAULT_NEXT_KIND,
                 choices=("task", "phase"),
+            ),
+        ),
+    ),
+    Command(
+        path=("brief",),
+        summary="budgeted session-start pack",
+        tool="ddflow_brief",
+        description=(
+            "START HERE every session. Returns a budgeted pack: work recoverable after "
+            "a crash, the current item, what is ready to start now, why everything else "
+            "is blocked, and the past lessons ranked as relevant to this task. Use this "
+            "INSTEAD of reading the project's lesson or rule files — it is the same "
+            "information retrieved for the task at hand, at a fraction of the tokens."
+        ),
+        kind="brief",
+        prose=True,
+        prose_reason="the budgeted reading pack is text to read",
+        call=lambda repo, a, agent: _api().brief(
+            repo,
+            item=a.get("item", "") or "",
+            phase=a.get("phase", "") or "",
+            check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
+            agent=agent,
+        ),
+        payload="text",
+        cli=CliPolicy(notes=L.brief_notes, body=L.brief_body, human=L.brief_text),
+        params=(
+            Param(
+                "item", help="Focus on this phase or task id (optional).", cli_help="", default=""
+            ),
+            Param(
+                "phase",
+                help="Restrict the ready set to this phase (optional).",
+                cli_help="",
+                default="",
+            ),
+            Param(
+                "check_recovery",
+                type="boolean",
+                help="Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new.",
+                cli_help="",
+                default=DEFAULT_CHECK_RECOVERY,
             ),
         ),
     ),
@@ -84,6 +131,7 @@ COMMANDS: tuple[Command, ...] = (
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
+        cli=CliPolicy(shown=(OK,), human=L.claim_text, body=L.claim_body),
         wants_called_from=True,
         params=(
             Param("id", help="Item id to claim.", cli_help="", positional=True),
@@ -514,6 +562,9 @@ COMMANDS: tuple[Command, ...] = (
             "umbrella_refused",
             "refuted_passes",
         ),
+        cli=CliPolicy(
+            shown=(OK,), notes=L.complete_notes, human=L.complete_text, body=L.complete_body
+        ),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("sha", help="Commit sha this shipped as.", cli_help="", default=""),
@@ -658,7 +709,7 @@ COMMANDS: tuple[Command, ...] = (
         "[flow].integration = 'pr' it pushes and opens (or updates) a pull request "
         "instead, releases your lease and parks the item in REVIEW — take the next "
         "item; `ddflow_pr_sync` completes it once a person merges it.",
-        call=lambda repo, a, agent, called_from=None: _api().merge_item(
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().merge_item(
             repo,
             a["id"],
             message=a.get("message", "") or "",
@@ -668,6 +719,7 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             branch=a.get("branch", "") or "",
             called_from=called_from,
+            shell_cwd=shell_cwd,
             agent=agent,
         ),
         payload=(
@@ -682,6 +734,14 @@ COMMANDS: tuple[Command, ...] = (
             "merge_gate_human",
             "worktree",
             "worktree_removed",
+        ),
+        render=L.merge_text,
+        cli=CliPolicy(
+            shown=L.merge_shown,
+            reason=L.merge_reason,
+            notes=L.merge_notes,
+            body=L.merge_body,
+            extra=L.merge_extra,
         ),
         wants_called_from=True,
         params=(
