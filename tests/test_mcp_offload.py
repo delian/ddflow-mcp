@@ -113,13 +113,21 @@ def _stop(proc) -> None:
         proc.wait()
 
 
-def _workers(pid: int) -> list[int]:
-    """The server's worker processes: its children running `_worker_main`."""
+def _workers(pid: int, proc: Path = Path("/proc")) -> list[int]:
+    """The server's worker processes: its children running `_worker_main`.
+
+    A server thread can exit between listing the tasks and reading its `children` (a
+    race seen under load, B-offload-test-proc-race): that task has none, it is not an
+    error."""
     kids: list[int] = []
-    for task in Path(f"/proc/{pid}/task").iterdir():
-        for k in (task / "children").read_text().split():
+    for task in (proc / str(pid) / "task").iterdir():
+        try:
+            children = (task / "children").read_text().split()
+        except OSError:
+            continue
+        for k in children:
             try:
-                if b"_worker_main" in Path(f"/proc/{k}/cmdline").read_bytes():
+                if b"_worker_main" in (proc / k / "cmdline").read_bytes():
                     kids.append(int(k))
             except OSError:
                 pass
@@ -133,6 +141,17 @@ def _held(repo: Path) -> Path:
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
     run_cli(repo, "--agent", "holder", "claim", "P1.T1", "--no-worktree")
     return repo
+
+
+def test_a_thread_that_exited_mid_listing_does_not_fail_the_worker_search(tmp_path):
+    (tmp_path / "5" / "task" / "1").mkdir(parents=True)  # exited: no `children` any more
+    (tmp_path / "5" / "task" / "2").mkdir(parents=True)
+    (tmp_path / "5" / "task" / "2" / "children").write_text("7 8")
+    (tmp_path / "7").mkdir()
+    (tmp_path / "7" / "cmdline").write_bytes(b"python\0_worker_main\0")
+    (tmp_path / "8").mkdir()
+    (tmp_path / "8" / "cmdline").write_bytes(b"sleep\0")
+    assert _workers(5, tmp_path) == [7]
 
 
 def test_a_long_call_does_not_hold_up_the_calls_behind_it(repo):
