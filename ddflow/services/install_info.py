@@ -250,7 +250,7 @@ METHODS = ("uv-tool", "pipx", "pip-venv", "uvx", "container", "source", "readonl
 def _under(prefix: Path, *parts: str) -> bool:
     """Is ``prefix`` inside a directory chain ``.../p0/p1/...``? (path components, in order)"""
     names = prefix.parts
-    for i in range(len(names) - len(parts)):
+    for i in range(len(names) - len(parts) + 1):
         if names[i : i + len(parts)] == parts:
             return True
     return False
@@ -263,6 +263,7 @@ def install_method(
     base_prefix: str | Path | None = None,
     container: bool | None = None,
     writable: bool | None = None,
+    tool_dir: str | None = None,
 ) -> str:
     """Which tool installed THIS ddflow, so the right command can upgrade it (D-self-upgrade 3).
 
@@ -271,7 +272,7 @@ def install_method(
     ``pipx``, ``pip-venv`` (a virtual environment's own pip), ``readonly`` (an install this
     user cannot write) and ``other`` (a system or user-site pip, a VCS or archive install:
     ddflow does not guess, the operator reinstalls). The arguments are the facts, injectable
-    for tests; by default they are read from the running interpreter."""
+    for tests; by default they are read from the running interpreter (and ``UV_TOOL_DIR``)."""
     info = info or install_info()
     pre = Path(prefix if prefix is not None else sys.prefix)
     base = Path(base_prefix if base_prefix is not None else sys.base_prefix)
@@ -279,15 +280,15 @@ def install_method(
         return "container"
     if info.kind in ("source-tree", "editable"):
         return "source"
+    if any(p.startswith(("archive-v", "environments-v")) for p in pre.parts):
+        return "uvx"  # uv's ephemeral environments, wherever UV_CACHE_DIR put them
+    if not (writable if writable is not None else os.access(pre, os.W_OK)):
+        return "readonly"  # a managed install this user cannot write is not upgraded from here
+    tool_dir = os.environ.get("UV_TOOL_DIR", "") if tool_dir is None else tool_dir
     if _under(pre, "pipx", "venvs"):
         return "pipx"
-    if _under(pre, "uv", "tools"):
+    if _under(pre, "uv", "tools") or (tool_dir and pre.is_relative_to(tool_dir)):
         return "uv-tool"
-    if _under(pre, "uv") and any(p.startswith(("archive-v", "environments-v")) for p in pre.parts):
-        return "uvx"
-    ok = writable if writable is not None else os.access(pre, os.W_OK)
-    if not ok:
-        return "readonly"
     if info.kind != "index":
         return "other"
     return "pip-venv" if pre != base else "other"
