@@ -181,8 +181,9 @@ COMMANDS: tuple[Command, ...] = (
             "--rollback": "the `self` argument is run, dry-run or rollback (tools/list byte budget)",
             "--yes": 'over MCP the operator\'s consent is confirm ["self"] and reason, as for every confirm',
         },
-        description='What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`) and returns the plan left and `applied`; exit 3 while an item needs `confirm`. `restore` undoes an apply; `check` asks if a newer release exists; `self` upgrades ddflow itself (confirm ["self"] + reason). Plan exit: 0 up to date, 1 items.',
-        call=lambda repo, a, agent: _api().upgrade(
+        description='What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. Writes nothing unless `apply` (`plan` false = all): saves originals, applies, returns the plan left; exit 3 while an item needs `confirm`. Alone: `restore`, `check` (newer release?), `status`, `history`, `self` (confirm ["self"] + reason). `resume` finishes an interrupted apply. Exit 0 up to date, 1 items.',
+        wants_progress=True,
+        call=lambda repo, a, agent, on_progress=None: _api().upgrade(
             repo,
             plan=a.get("plan") if isinstance(a.get("plan"), bool) else None,
             apply=str(a.get("apply") or ""),
@@ -193,6 +194,10 @@ COMMANDS: tuple[Command, ...] = (
             restore=str(a.get("restore") or ""),
             check=bool(a.get("check")),
             selfup=_self_request(a),
+            status=bool(a.get("status")),
+            history=bool(a.get("history")),
+            resume=bool(a.get("resume")),
+            on_progress=on_progress,
             agent=agent,
         ),
         # The plan's fields; an apply also carries what it did (`applied`) and a restore what
@@ -200,12 +205,16 @@ COMMANDS: tuple[Command, ...] = (
         payload=lambda a: (
             _api().setup.UPGRADE_SELF_PAYLOAD
             if a.get("self")
+            else _api().setup.UPGRADE_STATUS_PAYLOAD
+            if a.get("status")
+            else _api().setup.UPGRADE_HISTORY_PAYLOAD
+            if a.get("history")
             else _api().setup.UPGRADE_CHECK_PAYLOAD
             if a.get("check")
             else _api().setup.UPGRADE_RESTORE_PAYLOAD
             if a.get("restore")
             else _api().setup.UPGRADE_APPLY_PAYLOAD
-            if (a.get("apply") or a.get("plan") is False)
+            if (a.get("apply") or a.get("plan") is False or a.get("resume"))
             else _api().setup.UPGRADE_PAYLOAD
         ),
         params=(
@@ -219,9 +228,12 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("reason", help="Why they accept it.", mcp_only=True),
             Param("backup", help="local, snapshot or none.", mcp_only=True),
-            Param("snapshot", type="boolean", help="apply: git snapshot backup.", mcp_only=True),
+            Param("snapshot", type="boolean", help="apply: git snapshot.", mcp_only=True),
             Param("restore", help="Undo: backup name or latest; alone.", mcp_only=True),
             Param("check", type="boolean", help="Newer ddflow out? Alone.", mcp_only=True),
+            Param("status", type="boolean", help="Show state.", mcp_only=True),
+            Param("history", type="boolean", help="List upgrades.", mcp_only=True),
+            Param("resume", type="boolean", help="Finish interrupted.", mcp_only=True),
             Param("self", help="Upgrade ddflow itself: run, dry-run or rollback.", mcp_only=True),
             Param("to", help="With self: the version.", mcp_only=True),
         ),

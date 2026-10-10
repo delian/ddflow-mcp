@@ -500,6 +500,21 @@ def cmd_session(a, c: Ctx) -> int:
     return FAIL
 
 
+def _upgrade_detail(d: dict) -> str:
+    """The history line for an `upgrade.applied` event: an upgrade, or a run's progress record."""
+    status = d.get("status", "done")
+    if status == "started":
+        return f"run {d.get('run', '?')} started: {len(d.get('items') or [])} item(s)"
+    if status == "step":
+        return f"run {d.get('run', '?')}: {d.get('step', '?')} {d.get('step_status', '?')}"
+    if status == "failed":
+        return f"run {d.get('run', '?')} ended, nothing settled"
+    return (
+        f"{d.get('from') or 'unstamped'} -> {d.get('to', '?')}: "
+        f"{', '.join(d.get('categories') or [])}"
+    )
+
+
 def _history_line(ev) -> str:
     """One event, as a line someone can read."""
     verb = HISTORY_VERBS.get(ev.kind, ev.kind)
@@ -524,10 +539,7 @@ def _history_line(ev) -> str:
     elif ev.kind == "ddflow.capabilities":
         detail = f"{d.get('capability', '?')} (ddflow {d.get('version', '?')})"
     elif ev.kind == "upgrade.applied":
-        detail = (
-            f"{d.get('from') or 'unstamped'} -> {d.get('to', '?')}: "
-            f"{', '.join(d.get('categories') or [])}"
-        )
+        detail = _upgrade_detail(d)
     elif ev.kind == "skew.overridden":
         detail = (
             f"{d.get('running', '?')} on a {d.get('log_version', '?')} log: {d.get('reason', '')}"

@@ -651,6 +651,8 @@ class Server:
             if spec.get("wants_progress") and (say := self._progress(params)):
                 extra["on_progress"] = say
             result = spec["api"](self.repo, args, agent, called_from=where, **extra)
+        elif spec.get("wants_progress") and (say := self._progress(params)):
+            result = spec["api"](self.repo, args, agent, on_progress=say)
         else:
             result = spec["api"](self.repo, args, agent)
         return result

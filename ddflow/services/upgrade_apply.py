@@ -30,7 +30,9 @@ from __future__ import annotations
 import contextlib
 import re
 import tomllib
+import uuid
 from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -273,8 +275,14 @@ def apply(
     backup: str = "local",
     agent: str = "",
     plan: dict[str, Any] | None = None,
+    watch: Watch | None = None,
 ) -> dict[str, Any]:
     """Apply the chosen categories of the plan (see the module docstring).
+
+    Every run that has something to do is recorded as it goes (`upgrade.applied` with a
+    ``run`` id: ``started``, one ``step`` per item, then the closing event), so one that is
+    interrupted is shown by `ddflow upgrade --status` and finished by ``watch.resume`` (the run's id,
+    from ``services.upgrade_status``): the steps it already settled are not run again.
 
     Returns plain data: ``results`` (one record per item: id, category, status, detail),
     ``refused``/``failed`` counts, ``backup`` (the directory, "" when nothing was written),
@@ -287,39 +295,173 @@ def apply(
     repo = Path(repo)
     config_changes = cfg.upgrade.config_changes  # the one source: the plan reads it too
     _check_modes(backup, config_changes)
-    confirm = dict(confirm or {})
+    watch = watch or Watch()
+    # a resume keeps what the operator confirmed before the interruption
+    prior_reasons = (st.upgrade_runs.get(watch.resume) or {}).get("confirmed") or {}
+    confirm = {**prior_reasons, **dict(confirm or {})}
     plan = plan or UP.build(repo, log, cfg, st)
     frm, to = plan["project_version"], plan["running"]
     results, todo = _select(plan, parse_categories(categories), confirm, config_changes)
+    earlier = _settled_steps(st, watch.resume)
+    selected = todo
+    todo = [i for i in selected if i["id"] not in earlier]
+    # what the interrupted run settled is settled: not judged again (an operator item it applied
+    # with a confirmation is not refused now) and not able to un-settle its category
+    results = [r for r in results if r["id"] not in earlier]
 
     files = [p for i in todo for p in touched(repo, cfg, i)]
-    backup_dir, why, refused = _save(repo, cfg, backup, files, frm, to)
+    # A resume keeps the restore point the interrupted run made (it holds the originals of the
+    # whole run): a second, partial one would be the newest, and `--restore` would undo only half.
+    prior = str((st.upgrade_runs.get(watch.resume) or {}).get("backup") or "")
+    if prior:
+        backup_dir, why, refused = prior, "", False
+    else:
+        backup_dir, why, refused = _save(repo, cfg, backup, files, frm, to)
     if why:
-        # Nothing was changed: the originals could not be saved, so no item is applied.
-        status = REFUSED if refused else FAILED
-        failed = results + [_rec(i, status, why) for i in todo]
-        return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
+        return _not_saved(results, todo, why, refused, frm)
 
     saved = {p.resolve() for p in files} if backup_dir else set()
+    late_backup = _late_saver(repo, cfg, backup, (frm, to), saved)
+
+    run = _start(log, watch, todo, (frm, to), backup_dir, confirm)
+    results += _execute(
+        repo, log, cfg, todo, agent, late_backup, lambda r: _step(log, run, r, watch.progress)
+    )
+    ok, done_cats, reasons = _summarise(results, selected, confirm)
+    ok |= earlier  # settled by the interrupted run this one finishes
+    reasons = _reasons(selected, ok, confirm)
+    done_cats = _with_earlier(done_cats, plan, earlier, results)
+    new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
+    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons)
+    return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
+
+
+def _not_saved(
+    results: list[dict[str, Any]], todo: list[dict[str, Any]], why: str, refused: bool, frm: str
+) -> dict[str, Any]:
+    """Nothing was changed: the originals could not be saved, so no item is applied."""
+    status = REFUSED if refused else FAILED
+    failed = results + [_rec(i, status, why) for i in todo]
+    return _finish(failed, "", frm, frm or UNSTAMPED, [], {})
+
+
+def _start(
+    log: Any,
+    watch: Watch,
+    todo: list[dict[str, Any]],
+    versions: tuple[str, str],
+    backup: str,
+    confirm: Mapping[str, str],
+) -> str:
+    """The run's id (the interrupted run's when resuming, else a new one), and its first record."""
+    if not todo:
+        return watch.resume
+    run = watch.resume or uuid.uuid4().hex[:10]
+    frm, to = versions
+    _note(
+        log,
+        run,
+        "started",
+        source=frm,
+        target=to,
+        categories=_cats_of(todo),
+        items=_ids(_in_order(todo)),
+        backup=backup,
+        confirmed={_ident(i): why for i in todo if (why := _confirmed(i, confirm))},
+    )
+    return run
+
+
+def _with_earlier(
+    cats: list[str], plan: dict[str, Any], earlier: set[str], results: list[dict[str, Any]]
+) -> list[str]:
+    """``cats`` plus the categories an interrupted run settled steps of (``earlier``), unless
+    a step of that category did not settle in this run."""
+    unsettled = {r["category"] for r in results if r["status"] not in (APPLIED, ACKNOWLEDGED)}
+    more = _earlier_cats(plan, earlier) - unsettled
+    return [c for c in UP.CATEGORIES if c in cats or c in more]
+
+
+def _late_saver(
+    repo: Path, cfg: Config, mode: str, versions: tuple[str, str], saved: set[Path]
+) -> Callable[[list[Path]], str]:
+    """The function a migration calls with files its own detect now plans that the plan's did
+    not name (earlier steps of a run can change what it finds): they are saved too, in the same
+    mode, so none is rewritten without a copy."""
 
     def late_backup(more: list[Path]) -> str:
-        """Files a migration's own detect now plans that the plan's did not name (earlier
-        steps of this run can change what it finds): saved too, in the same mode."""
         fresh = [p for p in more if p.resolve() not in saved]
-        if not fresh or backup == "none":
+        if not fresh or mode == "none":
             return ""
-        where, why, _refused = _save(repo, cfg, backup, fresh, frm, to)
+        where, why, _refused = _save(repo, cfg, mode, fresh, *versions)
         if why:
             raise OSError(why)
         saved.update(p.resolve() for p in fresh)
         return where
 
-    results += _execute(repo, log, cfg, todo, agent, late_backup)
-    ok, done_cats, reasons = _summarise(results, todo, confirm)
-    new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
+    return late_backup
+
+
+@dataclass
+class Watch:
+    """Who follows an apply: the id of the interrupted run it finishes, and a callback that
+    hears each step as it ends."""
+
+    resume: str = ""
+    progress: Callable[[str], None] | None = None
+
+
+def _close(
+    log: Any,
+    run: str,
+    todo: list[dict[str, Any]],
+    ok: set[str],
+    versions: tuple[str, str, str],
+    cats: list[str],
+    backup_dir: str,
+    reasons: dict[str, str],
+) -> None:
+    """End the run's record: the upgrade itself when something was settled, else a failure."""
+    frm, new_to, to = versions
     if ok:
-        _record(log, todo, ok, frm, new_to, done_cats, backup_dir, reasons)
-    return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
+        _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run)
+    elif run:
+        _note(log, run, "failed", summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled")
+
+
+def _ids(items: list[dict[str, Any]]) -> list[str]:
+    return [i["id"] for i in items]
+
+
+def _cats_of(items: list[dict[str, Any]]) -> list[str]:
+    return [c for c in UP.CATEGORIES if any(i["category"] == c for i in items)]
+
+
+def _earlier_cats(plan: dict[str, Any], ids: set[str]) -> set[str]:
+    return {c for c, items in plan["categories"].items() for i in items if i["id"] in ids}
+
+
+def _settled_steps(st: State, run: str) -> set[str]:
+    """The ids of the steps the interrupted run ``run`` already applied or acknowledged."""
+    steps = (st.upgrade_runs.get(run) or {}).get("steps") or [] if run else []
+    return {s["id"] for s in steps if s["status"] in (APPLIED, ACKNOWLEDGED)}
+
+
+def _note(log: Any, run: str, status: str, **fields: Any) -> None:
+    """A progress record of ``run``: the same kind as the upgrade itself, told apart by `status`."""
+    log.append(UPGRADE_APPLIED_KIND, "upgrade", {"run": run, "status": status, **fields})
+
+
+def _step(
+    log: Any, run: str, rec: dict[str, Any], progress: Callable[[str], None] | None = None
+) -> None:
+    """One item's outcome, recorded the moment it is known: what an interruption leaves."""
+    if progress:
+        progress(f"[{rec['status']}] {rec['id']}")
+    if run:
+        _note(
+            log, run, "step", step=rec["id"], step_status=rec["status"], detail=rec["detail"][:300]
+        )
 
 
 def _summarise(
@@ -328,8 +470,14 @@ def _summarise(
     """`(ids settled, categories with something settled, the operator's reasons)`."""
     ok = {r["id"] for r in results if r["status"] in (APPLIED, ACKNOWLEDGED)}
     cats = [c for c in UP.CATEGORIES if any(r["category"] == c and r["id"] in ok for r in results)]
-    reasons = {_ident(i): why for i in todo if i["id"] in ok and (why := _confirmed(i, confirm))}
-    return ok, cats, reasons
+    return ok, cats, _reasons(todo, ok, confirm)
+
+
+def _reasons(
+    items: list[dict[str, Any]], ok: set[str], confirm: Mapping[str, str]
+) -> dict[str, str]:
+    """What the operator confirmed, for the items that were settled."""
+    return {_ident(i): why for i in items if i["id"] in ok and (why := _confirmed(i, confirm))}
 
 
 def _save(
@@ -375,12 +523,14 @@ def _record(
     cats: list[str],
     backup_dir: str,
     reasons: dict[str, str],
+    run: str = "",
 ) -> None:
-    """Append the one `upgrade.applied` event: replay's account of this upgrade."""
+    """Append the closing `upgrade.applied` event: replay's account of this upgrade."""
     log.append(
         UPGRADE_APPLIED_KIND,
         "upgrade",
         {
+            **({"run": run, "status": "done"} if run else {}),
             "from": frm,
             "to": new_to,
             "categories": cats,
@@ -435,22 +585,38 @@ def _execute(
     todo: list[dict[str, Any]],
     agent: str,
     late_backup: Callable[[list[Path]], str] | None = None,
+    on_step: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run each item's applier; repairs and instruction files go in one batch each."""
+    """Run each item's applier, one at a time.
+    ``on_step`` hears each outcome as soon as it is known."""
     out: list[dict[str, Any]] = []
-    for item in todo:
-        if item["category"] not in ("repairs", "migrations", "instructions"):
-            out.append(_rec(item, *_run(repo, cfg, item, agent)))
-    repairs = [i for i in todo if i["category"] == "repairs"]
-    migrations = [i for i in todo if i["category"] == "migrations"]
-    docs = [i for i in todo if i["category"] == "instructions"]
-    if repairs:
-        out += _run_repairs(repo, log, cfg, repairs)
-    if migrations:
-        out += _run_migrations(repo, log, cfg, migrations, late_backup)
-    if docs:
-        out += _run_instructions(repo, docs)
+    # One item at a time, so each is recorded the moment it ends: an interruption leaves the
+    # ones before it settled, and a resume does not repeat them.
+    for item in _in_order(todo):
+        cat = item["category"]
+        if cat == "repairs":
+            records = _run_repairs(repo, log, cfg, [item])
+        elif cat == "migrations":
+            records = _run_migrations(repo, log, cfg, [item], late_backup)
+        elif cat == "instructions":
+            records = _run_instructions(repo, [item])
+        else:
+            records = [_rec(item, *_run(repo, cfg, item, agent))]
+        out.extend(records)
+        for r in records:
+            if on_step:
+                on_step(r)
     return out
+
+
+#: The categories that run after every other one, in this order.
+_LAST = ("repairs", "migrations", "instructions")
+
+
+def _in_order(todo: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The items in the order they are executed (and recorded in the run's `started` event)."""
+    rest = [i for i in todo if i["category"] not in _LAST]
+    return rest + [i for c in _LAST for i in todo if i["category"] == c]
 
 
 def _refusal(item: dict[str, Any], config_changes: str) -> str:
