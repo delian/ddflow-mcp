@@ -16,6 +16,11 @@
  ],
  "--json decision show D-one": [
   0,
+  "{\n  \"schema\": \"decision_show@1\",\n  \"id\": \"D-one\",\n  \"title\": \"Use X\",\n  \"context\": \"\",\n  \"decision\": \"we use X for storage\",\n  \"consequences\": \"\",\n  \"alternatives\": \"\",\n  \"globs\": [\n    \"src/x/*\"\n  ],\n  \"tags\": [],\n  \"sources\": [],\n  \"status\": \"accepted\",\n  \"decided_by\": \"\",\n  \"supersedes\": [],\n  \"superseded_by\": \"\",\n  \"at\": \"<ts>\",\n  \"item\": \"\",\n  \"by\": \"pin\"\n}\n",
+  ""
+ ],
+ "--json decision show D-one (again)": [
+  0,
   "{\n  \"schema\": \"decision_show@1\",\n  \"id\": \"D-one\",\n  \"title\": \"Use X\",\n  \"context\": \"\",\n  \"decision\": \"we use X for storage\",\n  \"consequences\": \"\",\n  \"alternatives\": \"\",\n  \"globs\": [\n    \"src/x/*\"\n  ],\n  \"tags\": [],\n  \"sources\": [],\n  \"status\": \"superseded\",\n  \"decided_by\": \"\",\n  \"supersedes\": [],\n  \"superseded_by\": \"D-two\",\n  \"at\": \"<ts>\",\n  \"item\": \"\",\n  \"by\": \"pin\"\n}\n",
   ""
  ],
@@ -120,6 +125,11 @@
   "no such decision 'D-nope'\n"
  ],
  "decision show D-one": [
+  0,
+  "D-one \u2014 Use X\n  status accepted\n\nDecision:\n  we use X for storage\n\nGoverns: src/x/*\n",
+  ""
+ ],
+ "decision show D-one (again)": [
   0,
   "D-one \u2014 Use X\n  status superseded (superseded by D-two)\n\nDecision:\n  we use X for storage\n\nGoverns: src/x/*\n",
   ""
