@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..config import Config
+from ..config import Config, parallel_range_problems
 from .gates import (
     GateDef,
     inert_requirements,
@@ -37,6 +37,7 @@ from .gates import (
     required_gates,
 )
 from .gates.kinds import kind_pipelines
+from .macros import macro_problems
 
 #: A command gate with no registered mutation has never been shown able to go red.
 #: Advisory, not a defect: `ddflow gate verify` is how you find out, and a project may
@@ -303,7 +304,6 @@ def _parallel_findings(cfg: Config) -> list[Finding]:
     """Advice, never a problem, about what keeps adaptive parallelism from working: an
     inconsistent auto range (the controller clamps it) and the explicit 4s an older
     `adopt` wrote, each with the command that removes it."""
-    from ..config import parallel_range_problems
 
     out = [
         Finding(
@@ -364,7 +364,6 @@ def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:
     can invoke it. Refused at load time and said nowhere, it was the silence of
     B-macro-clash-silent: doctor exited 0 while every macro was gone.
     """
-    from .macros import macro_problems
 
     tests = gates.get("unit_tests")
     advice = parallel_test_advice(tests.command, root) if tests else ""
