@@ -7,22 +7,18 @@ nothing, so the rate could only ever read 0.0 once one merge had succeeded.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.config import Config
 from ddflow.core import flowsignals as FS
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def _git(where: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def test_a_conflicting_merge_is_a_failed_merge_gate_outcome(repo, monkeypatch):

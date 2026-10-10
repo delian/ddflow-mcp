@@ -7,7 +7,6 @@ with a note; a refresh error never fails the merge; a per-document setting wins.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_raw as _git
 
 from ddflow.api._base import _load
 from ddflow.infra import worktree as W
@@ -22,12 +22,6 @@ from ddflow.services.export import frame as F
 from ddflow.services.export import refresh as RF
 
 OK = 0
-
-
-def _git(tree: Path, *argv: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(tree), *argv], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def _config(repo: Path, toml: str) -> None:

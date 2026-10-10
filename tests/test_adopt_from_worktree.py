@@ -15,13 +15,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from helpers import git_raw as _git
+
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def _ddflow(cwd: Path, *argv: str) -> subprocess.CompletedProcess:

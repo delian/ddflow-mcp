@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from helpers import upgrade_plan as plan
 
 from ddflow.api._base import _load
 from ddflow.infra.fsio import Managed
@@ -48,11 +49,6 @@ def project(repo: Path) -> Path:
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "refs"], check=True)
     return repo
-
-
-def plan(repo: Path) -> dict[str, Any]:
-    log, cfg, st = _load(repo, "upgrader")
-    return UP.build(repo, log, cfg, st)
 
 
 def apply(repo: Path, categories: str | None = None) -> dict[str, Any]:

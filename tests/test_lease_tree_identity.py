@@ -14,23 +14,17 @@ tree is orphaned.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_raw as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
-
-
-def _git(where, *args) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def _item(repo: Path, iid: str = "T1"):

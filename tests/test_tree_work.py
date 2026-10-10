@@ -13,18 +13,14 @@ Real git repositories: the property is what git can and cannot read on disk.
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path, PurePosixPath
 
 import pytest
+from helpers import git_quiet as _git
 
 from ddflow import api
 from ddflow.infra import git as G
 from ddflow.infra import worktree as W
-
-
-def _git(where: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def _broken_tree(repo: Path) -> Path:

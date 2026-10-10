@@ -8,14 +8,10 @@ lint stays command-line only with its reason, and the groups keep their dispatch
 from __future__ import annotations
 
 import pytest
+from helpers import parse_cli as _parse
 
-from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.declared import flow
 from ddflow.surfaces.tools import TOOLS
-
-
-def _parse(*argv):
-    return build_parser().parse_args(list(argv))
 
 
 def test_every_flow_tool_is_served_by_its_declaration():

@@ -5,19 +5,15 @@ and the PR flow wrote the item's recorded worktree (`it.worktree`, as `claim` st
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def _git(where: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def test_merge_records_the_worktree_as_claim_recorded_it(repo) -> None:

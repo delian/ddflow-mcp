@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from helpers import git_raw as _git
 
 from ddflow.core import bookkeeping as BK
 from ddflow.infra import git as G
@@ -15,12 +16,6 @@ from ddflow.infra import worktree as W
 from ddflow.services import enforce, ports
 from ddflow.services import gates as GT
 from ddflow.services.gates import evidence as EV
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout
 
 
 @pytest.fixture

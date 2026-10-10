@@ -6,16 +6,13 @@ what the declarations carry that a generated parser or tool entry could lose.
 from __future__ import annotations
 
 import pytest
+from helpers import parse_cli as parse
 
 from ddflow.api import bisect as A_BISECT
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.declared import export as X
 from ddflow.surfaces.exemptions import FLAG_EXEMPT
 from ddflow.surfaces.tools import TOOLS
-
-
-def parse(*argv: str):
-    return build_parser().parse_args(list(argv))
 
 
 def test_the_bisect_default_glob_is_the_apis():

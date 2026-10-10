@@ -16,14 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import state_as_reader as state
 
 from ddflow.api import knowledge as K
-from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def state(repo: Path):
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
 def seed(repo: Path) -> EventLog:

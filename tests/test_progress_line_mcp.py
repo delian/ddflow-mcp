@@ -6,9 +6,9 @@ from __future__ import annotations
 import json
 import os
 import stat
-import subprocess
 
 from conftest import run_cli
+from helpers import git as _git
 
 from ddflow.surfaces.mcp import Server
 
@@ -19,12 +19,6 @@ def _call(repo, name, args):
          "params": {"name": name, "arguments": args}}
     )  # fmt: skip
     return json.loads(reply["result"]["content"][0]["text"])
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def test_mcp_complete_carries_the_progress_block(repo):

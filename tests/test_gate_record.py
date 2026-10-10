@@ -11,23 +11,18 @@ from __future__ import annotations
 
 import json
 import stat
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
+from helpers import item_of as _item
 from test_flow import _state, _work, pr_repo  # noqa: F401  (a fixture, used by name)
 
 import ddflow.api.review as api
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _reviewed_repo(
@@ -55,10 +50,6 @@ def _reviewed_repo(
     _git(repo, "add", "x.py")
     _git(repo, "commit", "-qm", "work")
     return prompts
-
-
-def _item(repo: Path, item: str = "T1"):
-    return fold(EventLog(repo).read_all(), strict=False).items[item]
 
 
 def _kinds(repo: Path) -> list[str]:

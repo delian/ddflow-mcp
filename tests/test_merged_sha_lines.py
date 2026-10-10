@@ -10,7 +10,6 @@ develop's version plan and its bump. Either commit reaching the line ships the i
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -18,17 +17,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
+from helpers import git as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.surfaces import mcp
 from ddflow.surfaces.declared.lifecycle_cli import MERGE_PAYLOAD
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 @pytest.fixture

@@ -2,28 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
-
 from conftest import run_cli
+from helpers import commit as _commit
 
 from ddflow.api.verify import verify
 from ddflow.infra.log import EventLog
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-def _commit(repo, files, msg):
-    for name, text in files.items():
-        p = repo / name
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-qm", msg)
-    return _git(repo, "rev-parse", "HEAD")
 
 
 def _old_completion(repo, tid="T1", **extra):

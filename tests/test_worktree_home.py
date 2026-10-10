@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-import subprocess
-
 from conftest import run_cli
+from helpers import git_raw as _git
 
 from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import adopt as AD
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def test_the_default_root_is_inside_the_project():

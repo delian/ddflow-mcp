@@ -16,16 +16,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_proc as _git
 
 from ddflow.services import docsync as D
 
 DOC_GLOBS = ["**/*.md", "**/*.rst", "**/*.adoc"]
-
-
-def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=180
-    )
 
 
 def _commit(repo: Path, *paths: str) -> subprocess.CompletedProcess:

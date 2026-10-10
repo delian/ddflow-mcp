@@ -17,18 +17,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from helpers import write_file as _write
+
 from ddflow.services import adopt as A
 from ddflow.services import legacy as L
 from ddflow.services.adopt import Refused
 from ddflow.services.enforce import read_precommit_yaml
-
-
-def _write(repo: Path, rel: str, text: str) -> Path:
-    path = repo / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
-
 
 # --- stage 4: the rulebook scan -------------------------------------------------------
 

@@ -14,20 +14,17 @@ adopts -- and an item that already has a tree keeps it, whoever claims it.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
+from helpers import rpc_call as _call
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.surfaces.mcp import Server, _default_agent
-
-
-def _git(where, *args) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def _parent_tree(repo: Path) -> Path:
@@ -35,19 +32,6 @@ def _parent_tree(repo: Path) -> Path:
     path = repo.parent / "parent-tree"
     _git(repo, "worktree", "add", "-q", str(path), "-b", "parent-work")
     return path
-
-
-def _call(srv: Server, name: str, **args) -> dict:
-    reply = srv.handle(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": args},
-        }
-    )
-    assert reply is not None
-    return reply["result"]
 
 
 def _item(repo: Path, iid: str):

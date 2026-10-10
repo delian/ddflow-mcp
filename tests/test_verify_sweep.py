@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
-
 from conftest import run_cli
+from helpers import git as _git
 
 from ddflow.api.verify import verify_sweep
 from ddflow.core import outcome as O
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _commit(repo, files, msg="work"):

@@ -11,17 +11,12 @@ from pathlib import Path
 import pytest
 from conftest import run_cli
 from fakeforge import STATE_ENV, Forge, install
+from helpers import git as _git
 
 from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
 
 REMOTE_URL = "https://example.com/acme/proj"
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
 
 
 def _commit(repo: Path, name: str, msg: str) -> str:

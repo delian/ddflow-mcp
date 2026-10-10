@@ -14,14 +14,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from helpers import git as _git
 
 from ddflow.api import review as RV
-
-
-def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _commit(cwd: Path, path: str, text: str, msg: str) -> str:
