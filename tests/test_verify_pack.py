@@ -4,30 +4,15 @@ from __future__ import annotations
 
 import json
 import stat
-import subprocess
 
 from conftest import run_cli
+from helpers import commit as _commit
+from helpers import git as _git
 
 from ddflow.api.verify import judge, pack
 from ddflow.core import outcome as O
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-def _commit(repo, files, msg):
-    for name, text in files.items():
-        p = repo / name
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-qm", msg)
-    return _git(repo, "rev-parse", "HEAD")
 
 
 def _done(repo, body="make a widget that frobs", globs="w.py,tests/test_w.py", verifier=""):

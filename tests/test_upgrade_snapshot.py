@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 from conftest import run_cli
+from helpers import git
 
 from ddflow.api import setup as A
 from ddflow.api._base import _load
@@ -23,12 +24,6 @@ from ddflow.services import upgrade_apply as UA
 
 OLD = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
 DRIVER = "docs/ddflow/drivers/implement-phase.md"
-
-
-def git(repo: Path, *argv: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *argv], capture_output=True, text=True, check=True
-    ).stdout.strip()
 
 
 @pytest.fixture

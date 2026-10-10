@@ -11,12 +11,12 @@ Real git repositories: the property under test is what git lists.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow import api
 from ddflow.config import Config
@@ -25,10 +25,6 @@ from ddflow.infra.log import EventLog
 from ddflow.services import cleanup as CL
 
 OK = 0
-
-
-def _git(where: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def _notes(repo: Path) -> list[str]:
