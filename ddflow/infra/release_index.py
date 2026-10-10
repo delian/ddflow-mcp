@@ -87,8 +87,13 @@ def newest(
                 continue
             candidates.append(str(version))
     info = doc.get("info")
-    if not candidates and isinstance(info, dict) and isinstance(info.get("version"), str):
-        candidates.append(info["version"])  # a mirror that serves only the summary
+    if (
+        not candidates
+        and not releases
+        and isinstance(info, dict)
+        and isinstance(info.get("version"), str)
+    ):
+        candidates.append(info["version"])  # a mirror that lists no releases, only the summary
     usable = [v for v in candidates if version_key(v) and (prereleases or not is_prerelease(v))]
     if not usable:
         raise ReleaseIndexError("the index lists no usable release")

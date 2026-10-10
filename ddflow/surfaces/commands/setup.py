@@ -201,7 +201,7 @@ def cmd_upgrade(a, c: Ctx) -> int:
     if c.json:
         payload = (
             A.UPGRADE_CHECK_PAYLOAD
-            if "newest" in out.data
+            if getattr(a, "check", False)
             else A.UPGRADE_RESTORE_PAYLOAD
             if "restored" in out.data
             else A.UPGRADE_APPLY_PAYLOAD
