@@ -132,10 +132,6 @@ class RulesStorage:
         """Create the .ddflow/rules directory if it doesn't exist."""
         self.files.ensure_dir()
 
-    def _rule_path(self, rule_id: str) -> Path:
-        """Get the path for a rule's TOML file."""
-        return self.files.path(rule_id)
-
     def add(self, rule: Rule) -> tuple[Rule, dict[str, Any]]:
         """Add a new rule to storage.
 

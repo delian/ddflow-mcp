@@ -31,6 +31,26 @@ def _pct_of(n: PR.Tally) -> str:
     return _pct(n.done, n.live)
 
 
+def _progress(st: State, items: list) -> str:
+    """The `Progress:` line: tasks, bugs and phases done."""
+    work = [it for it in items if it.kind != "phase" and not it.fixes]
+    bugs = [b for b in st.bugs.values() if b.resolution != "invalid"]
+    fixed = sum(b.resolution == "fixed" for b in bugs)
+    still = [b for b in bugs if b.open]
+    severe = sum(b.severity in ("high", "critical") for b in still)
+    phases = [it for it in items if it.kind == "phase"]
+    # A phase counts its tasks at every depth, abandoned ones out of the total
+    # (core.progress; Bb24939611d: direct children only missed every sub-task).
+    closable = [p.id for p in phases if p.state != DONE and PR.phase_tally(st, p.id).complete]
+    return (
+        f"Progress: tasks {_pct_of(PR.tally(work))}"
+        f" · bugs fixed {_pct(fixed, len(bugs))}"
+        + (f", {len(still)} open" + (f" ({severe} high)" if severe else "") if still else "")
+        + f" · phases {_pct(sum(p.state == DONE for p in phases), len(phases))}"
+        + (f", {len(closable)} ready to close" if closable else "")
+    )
+
+
 def report(
     st: State, cfg: Config, item: str = "", *, mode: str = "", plan: S.Plan | None = None
 ) -> str:
@@ -50,22 +70,7 @@ def report(
     items = _live(st)
     phase = PR.phase_of(st, item)
     if mode == "on":
-        work = [it for it in items if it.kind != "phase" and not it.fixes]
-        bugs = [b for b in st.bugs.values() if b.resolution != "invalid"]
-        fixed = sum(b.resolution == "fixed" for b in bugs)
-        still = [b for b in bugs if b.open]
-        severe = sum(b.severity in ("high", "critical") for b in still)
-        phases = [it for it in items if it.kind == "phase"]
-        # A phase counts its tasks at every depth, abandoned ones out of the total
-        # (core.progress; Bb24939611d: direct children only missed every sub-task).
-        closable = [p.id for p in phases if p.state != DONE and PR.phase_tally(st, p.id).complete]
-        lines.append(
-            f"Progress: tasks {_pct_of(PR.tally(work))}"
-            f" · bugs fixed {_pct(fixed, len(bugs))}"
-            + (f", {len(still)} open" + (f" ({severe} high)" if severe else "") if still else "")
-            + f" · phases {_pct(sum(p.state == DONE for p in phases), len(phases))}"
-            + (f", {len(closable)} ready to close" if closable else "")
-        )
+        lines.append(_progress(st, items))
     if phase:
         lines.append(f"Phase {phase}: {_pct_of(PR.phase_tally(st, phase))}")
     plan = plan if plan is not None else S.plan(st, cfg)
