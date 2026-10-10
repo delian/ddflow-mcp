@@ -24,6 +24,7 @@ from ...services import configcompat as CC
 from ...services import embed as EMB
 from ...services import eventcommit as EC
 from ...services import external as EX
+from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
@@ -317,6 +318,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes.extend(FL.doctor_notes(repo))
     notes.extend(FL.history_notes(cfg, events))  # log signals with too little history yet
+    notes.extend(FK.doctor_notes(repo))  # a test that keeps failing and then passing
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)

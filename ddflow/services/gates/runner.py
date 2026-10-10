@@ -13,6 +13,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
+from ..flakes import failure_evidence
 from .defs import GateDef
 from .evidence import diff_stat, digest, tree_identity
 from .testcmd import suggested_test_command, summary_lines
@@ -93,6 +94,9 @@ def output_evidence(text: str) -> dict[str, Any]:
         "output_bytes": len(text),
         "tail": text[-OUTPUT_TAIL_CHARS:],
         "summary": summary_lines(text),
+        # WHICH tests failed and the end of each failure -- the summary line alone says
+        # "3 failed" and nobody can tell which three (B-uc-gate-failure-evidence).
+        **failure_evidence(text),
     }
 
 

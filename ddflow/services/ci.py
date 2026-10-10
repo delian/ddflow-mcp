@@ -25,6 +25,7 @@ from ..core.digest import content_digest
 from ..core.slug import ascii_slug
 from ..infra import worktree as W
 from .cmdrunner import COULD_NOT_RUN, TIMEOUT, CommandRunner, Declared, executable_missing
+from .flakes import failure_evidence, failure_text
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
@@ -48,6 +49,8 @@ class Result:
     merged_with: str = ""
     command: str = ""
     output_tail: str = ""
+    #: failing test ids (and their reasons / failure tails) read from ALL of the output
+    failures: dict = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -66,6 +69,8 @@ class Result:
             "why": self.reason,
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail} for c in self.checks],
             "output_tail": self.output_tail,
+            **self.failures,
+            **({"failure_text": failure_text(self.failures)} if self.failures else {}),
         }
 
 
@@ -196,6 +201,7 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
         command=cmd,
         reason="" if p.code == 0 else f"{cmd} exited {p.code}",
         output_tail=out[-TAIL_CHARS:],
+        failures=failure_evidence(out) if p.code != 0 else {},
     )
 
 
