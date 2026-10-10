@@ -402,6 +402,16 @@ def test_status_uses_the_applys_own_confirmation_rule(project) -> None:
     assert by_id(data)["config:x"] == "needs operator confirmation"
 
 
+def test_a_note_outside_the_versioned_categories_is_waived(project) -> None:
+    _log, cfg, st = state(project)
+    plan = plan_of("f1")
+    plan["categories"]["hooks"] = [
+        {"id": "h:1", "category": "hooks", "action": UA.UP.NOTE, "summary": "n"}
+    ]
+    data = UST.status(project, cfg, st, plan=plan, running=RUNNING)
+    assert by_id(data) == {"h:1": "waived", "f1": "pending"}
+
+
 def test_replay_tells_a_run_from_an_upgrade(project, monkeypatch) -> None:
     from ddflow.services.sessions import replay
 
