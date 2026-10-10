@@ -256,6 +256,20 @@ def _under(prefix: Path, *parts: str) -> bool:
     return False
 
 
+def _managed_by(pre: Path, tool_dir: str | None) -> str:
+    """``pipx`` or ``uv-tool`` when ``pre`` is one of their environments (the default
+    locations, or where ``PIPX_HOME``/``PIPX_LOCAL_VENVS``/``UV_TOOL_DIR`` moved them), else ""."""
+    uv_dir = os.environ.get("UV_TOOL_DIR", "") if tool_dir is None else tool_dir
+    pipx_venvs = os.environ.get("PIPX_LOCAL_VENVS") or (
+        str(Path(os.environ["PIPX_HOME"]) / "venvs") if os.environ.get("PIPX_HOME") else ""
+    )
+    if _under(pre, "pipx", "venvs") or (pipx_venvs and pre.is_relative_to(pipx_venvs)):
+        return "pipx"
+    if _under(pre, "uv", "tools") or (uv_dir and pre.is_relative_to(uv_dir)):
+        return "uv-tool"
+    return ""
+
+
 def install_method(
     info: InstallInfo | None = None,
     *,
@@ -284,14 +298,8 @@ def install_method(
         return "uvx"  # uv's ephemeral environments, wherever UV_CACHE_DIR put them
     if not (writable if writable is not None else os.access(pre, os.W_OK)):
         return "readonly"  # a managed install this user cannot write is not upgraded from here
-    tool_dir = os.environ.get("UV_TOOL_DIR", "") if tool_dir is None else tool_dir
-    pipx_venvs = os.environ.get("PIPX_LOCAL_VENVS") or (
-        str(Path(os.environ["PIPX_HOME"]) / "venvs") if os.environ.get("PIPX_HOME") else ""
-    )
-    if _under(pre, "pipx", "venvs") or (pipx_venvs and pre.is_relative_to(pipx_venvs)):
-        return "pipx"
-    if _under(pre, "uv", "tools") or (tool_dir and pre.is_relative_to(tool_dir)):
-        return "uv-tool"
+    if managed := _managed_by(pre, tool_dir):
+        return managed
     if info.kind != "index":
         return "other"
     return "pip-venv" if pre != base else "other"
