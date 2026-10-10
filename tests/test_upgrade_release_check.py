@@ -331,4 +331,22 @@ def test_unreachable_is_exit_2_even_when_the_cache_knows_a_newer_release(project
     UC.check(project, Config(), fetch=Index(doc("99.0.0")), now=NOW, running=RUNNING)
     run_cli(project, "config", "upgrade.index_url", "http://127.0.0.1:9/pypi")
     code, out, _err = run_cli(project, "--json", "upgrade", "--check")
-    assert code == 2 and json.loads(out)["status"] == "offline"
+    body = json.loads(out)
+    assert code == 2 and body["status"] == "offline"
+    assert body["newer"] is True and body["newest"] == "99.0.0", "the cache did know"
+
+
+def test_a_refused_check_has_the_check_body_on_both_surfaces(project) -> None:
+    code, out, _err = run_cli(project, "--json", "upgrade", "--check", "--apply")
+    assert code == 3
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_upgrade", "arguments": {"check": True, "apply": "all"}},
+        }
+    )
+    assert "stands alone" in json.dumps(reply["result"])
+    # the CLI body is selected by the request, as the MCP declaration does: no plan fields
+    assert "categories" not in (json.loads(out) if out.strip() else {})
