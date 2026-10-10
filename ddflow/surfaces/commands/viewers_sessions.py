@@ -35,7 +35,7 @@ def cmd_session_list(a, c: Ctx) -> int:
         flags = r["state"] + (", implicit" if r["implicit"] else "")
         span = f"{_day(r['started'])} .. {_day(r['ended']) if r['ended'] else 'now'}"
         print(
-            f"  {r['id']:<22.22s} {r['agent']:<14.14s} {span}  "
+            f"  {r['id']:<22s} {r['agent']:<14.14s} {span}  "
             f"{r['prompts']}p {r['notes']}n {r['items']} item(s)  [{flags}]"
         )
     if d["truncated"]:
