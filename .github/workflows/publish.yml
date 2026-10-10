@@ -252,6 +252,13 @@ jobs:
           git fetch --tags --force
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --unshallow; fi
           uv run pytest tests/compat -m slow -q --timeout=1800
+      - name: Upgrade dry run from the previous release
+        # This project's own upgrade rehearsed on a throwaway clone at the previous release
+        # (D-dry-run-from-running-version): a release whose upgrade is not smooth is not published.
+        run: |
+          git fetch --tags --force
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --unshallow; fi
+          uv run python scripts/ci/upgrade-dry-run --previous-release --build-old --confirmations-ok
 
   pypi:
     needs: [gate, verify]
