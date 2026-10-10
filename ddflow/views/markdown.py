@@ -507,12 +507,7 @@ def _reason(x: dict) -> str:
     return f" -- {why}" if why else ""
 
 
-def new_reports_line(item: str, count: int) -> str:
-    """The one line heartbeat and `gate status` carry; "" when there is nothing new."""
-    if not count:
-        return ""
-    s = "" if count == 1 else "s"
-    return f"{count} new report{s} on {item} since you claimed -- `ddflow show {item}`"
+new_reports_line = PR.new_reports_line
 
 
 #: At most this many reports are quoted in a brief, each at most this long: the brief has
