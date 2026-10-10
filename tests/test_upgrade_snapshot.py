@@ -481,3 +481,49 @@ def test_the_mcp_tool_refuses_what_the_cli_refuses(old: Path) -> None:
         out = api(old, args, "upgrader")
         assert out.exit == 3, (args, out.exit, out.reason)
     assert tags(old) == []
+
+
+def _tree(repo: Path) -> dict[str, bytes]:
+    """Every file of the project but git's, the log, and the machine-local backups."""
+    skip = (
+        ".git/",
+        ".ddflow/events/",
+        ".ddflow/local/",
+        ".ddflow/backups/",
+        ".ddflow/worktrees/",
+        ".ddflow/events.lock",
+    )
+    return {
+        p.relative_to(repo).as_posix(): p.read_bytes()
+        for p in sorted(repo.rglob("*"))
+        if p.is_file() and not p.relative_to(repo).as_posix().startswith(skip)
+    }
+
+
+def test_restore_leaves_the_tree_byte_identical_including_what_the_apply_created(
+    old: Path,
+) -> None:
+    """Bug B5498129219: the `.local-edits` file a refresh writes beside a hand-edited
+    document is a file the apply CREATED; the snapshot must name it so a restore removes it
+    (the numbered `.local-edits.2` too, when the first name is taken)."""
+    from ddflow.services import adopt as AD
+
+    AD.refresh_docs(old, backup=False)  # the stamped documents an upgrade leaves
+    for rel in (DRIVER, "AGENTS.md"):
+        doc = old / rel
+        doc.write_text(doc.read_text().replace("Claim before you edit", "Claim whenever"))
+    (old / (DRIVER + ".local-edits")).write_text("an earlier aside\n")  # so the next is .2
+    git(old, "add", "-A")
+    git(old, "commit", "-qm", "hand edits")
+    before = _tree(old)
+
+    go(old, "instructions", backup="snapshot")
+    created = sorted(set(_tree(old)) - set(before))
+    assert created == ["AGENTS.md.local-edits", DRIVER + ".local-edits.2"], created
+
+    BK.restore(old, "latest")
+
+    now = _tree(old)
+    assert sorted(set(now) - set(before)) == [], "the restore left files the apply created"
+    assert sorted(set(before) - set(now)) == []
+    assert [n for n in before if before[n] != now[n]] == []

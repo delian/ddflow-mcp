@@ -16,6 +16,7 @@ import pytest
 from conftest import run_cli
 from helpers import upgrade_plan as plan
 
+import ddflow.surfaces.cli  # noqa: F401 -- registers the command table the reference check needs
 from ddflow.api._base import _load
 from ddflow.config import Config
 from ddflow.core.model import fold
