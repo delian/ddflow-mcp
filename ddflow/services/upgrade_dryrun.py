@@ -583,7 +583,7 @@ class Rehearsal:
             self.guard(8, "shards from the old version merge", self.step_shards)
             self.guard(9, "an event upcaster over the old log", self.step_upcaster)
         after = self.guard(
-            9, "read the live project afterwards", lambda: snapshot_live(self.opt.source)
+            10, "read the live project afterwards", lambda: snapshot_live(self.opt.source)
         )
         if before is not None and after is not None:
             moved = live_problems(before, after)
