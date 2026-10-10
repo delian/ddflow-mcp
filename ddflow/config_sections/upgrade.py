@@ -18,6 +18,8 @@ UPGRADE_CONFIG_CHANGES = ("agent", "ask", "operator")
 UPGRADE_AUTO = ("off", "check", "safe")
 #: What `[upgrade].on_start` accepts (decision D-self-upgrade 5).
 UPGRADE_ON_START = ("off", "check", "safe")
+#: What `[upgrade].release_check` accepts (decision D-self-upgrade 1).
+UPGRADE_RELEASE_CHECK = ("on", "off")
 
 
 @declare("upgrade")
@@ -66,4 +68,23 @@ class UpgradeConfig:
     start_timeout_s: float = knob(
         10.0,
         doc="Seconds a starting MCP server or container spends on the `on_start` work before it serves anyway and reports the rest as pending (decision D-self-upgrade 5: bounded time, never a failed start). 0 or less skips the work entirely.",
+    )
+
+    release_check: str = knob(
+        "on",
+        doc="Whether ddflow looks for a newer release of itself (decision D-self-upgrade 1). `on` (default): at most once per `check_interval_h`, when a brief, `ddflow doctor` or `ddflow upgrade --check` runs, ddflow makes ONE short request (3 s timeout) for the public version list of `ddflow-mcp` at the package index it was installed from (`index_url`), remembers the answer in the git-ignored `.ddflow/local/release-check.json`, and PROPOSES a newer release in a single line (the brief and the MCP handshake once per version on this machine; `status`, `doctor` and `ddflow upgrade --check` whenever one is known). It never installs anything, never blocks or fails a command, and says nothing offline. The request carries nothing about the project or the machine: it is the same GET any `pip` makes. `off`: no request is ever made, for an air-gapped machine; the environment variable `DDFLOW_NO_UPDATE_CHECK` (set to anything but `0`, `false`, `no` or `off`) also turns it off, for one shell or one container.",
+        choices=UPGRADE_RELEASE_CHECK,
+        strictest=("off", "a bad value makes no request at all"),
+    )
+    check_interval_h: float = knob(
+        24.0,
+        doc="Hours between release checks (`release_check`): a check newer than this is not repeated, and a failed one (offline, timeout) is retried after at most an hour. 0 checks at every brief and `doctor`.",
+    )
+    index_url: str = knob(
+        "",
+        doc="Where the release check asks (`release_check`), for a private mirror: an http(s) address that serves `<index_url>/ddflow-mcp/json` as the public package index's JSON API does. Empty (default) is the public Python package index, `https://pypi.org/pypi`. In a container the registry tag is not consulted: the package index answers for every install.",
+    )
+    prereleases: bool = knob(
+        False,
+        doc="Whether the release check proposes a pre-release (`0.2.0rc1`, `0.2.0.dev3`). False (default): only final releases.",
     )

@@ -3338,21 +3338,21 @@
     'ddflow_upgrade': '''
       {
        "name": "ddflow_upgrade",
-       "description": "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = apply all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`), returns the plan left and an `applied` report; exit 3 while an item needs `confirm`. `restore` undoes an apply. Plan exit: 0 up to date, 1 items.",
+       "description": "What upgrading this project to the running ddflow would change, by category (repairs, migrations, config, instructions, hooks, mcp, features); an operator-set value needs their confirmation. Writes nothing unless `apply` is given (`plan` false = all): then it applies the plan after saving originals (.ddflow/backups or a git `snapshot`) and returns the plan left and `applied`; exit 3 while an item needs `confirm`. `restore` undoes an apply; `check` asks if a newer release exists. Plan exit: 0 up to date, 1 items.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "plan": {
           "type": "boolean",
-          "description": "Dry run (default); false applies all."
+          "description": "Dry run (default); false applies."
          },
          "apply": {
           "type": "string",
-          "description": "Categories to apply: all, or a comma list."
+          "description": "Categories: all, or a comma list."
          },
          "confirm": {
           "type": "array",
-          "description": "With apply: keys the operator accepts (needs reason).",
+          "description": "apply: keys the operator accepts (needs reason).",
           "items": {
            "type": "string"
           }
@@ -3372,6 +3372,10 @@
          "restore": {
           "type": "string",
           "description": "Undo: backup name or latest; alone."
+         },
+         "check": {
+          "type": "boolean",
+          "description": "Newer ddflow out? Alone."
          },
          "as_agent": {
           "type": "string",

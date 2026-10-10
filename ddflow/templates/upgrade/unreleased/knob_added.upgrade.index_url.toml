@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "upgrade.index_url"
+new = '""'
+why = "The package index the release check asks, for a private mirror (empty is the public index)."
+impact = "additive"

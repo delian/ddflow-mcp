@@ -18,6 +18,7 @@ from ...services import gates as G
 from ...services import leases as L
 from ...services import searchcore as SC
 from ...services import skills as SK
+from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
 from ...services.export import select as export_select
@@ -97,6 +98,16 @@ def _refuted_line(st) -> str:
         f"Passed on refutation, not yet completed: {shown}{more}. Flagged for the operator's "
         f"spot-check: `ddflow gate list --refuted`."
     )
+
+
+def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
+    """The upgrade lines that lead a brief, "" when none is due. Each is said once per version
+    on this machine (D-upgrade-auto-check, D-self-upgrade 2): FIRST, so the hook, `ddflow brief`
+    and `ddflow_brief` all lead with it whichever is asked first. This ddflow was upgraded
+    (or the start report), then a newer release is out (proposed, never installed)."""
+    notice = US.take_for_brief(repo) or UN.line(repo, log, cfg, st, agent=agent)
+    release = UC.proposal(repo, cfg, consume=True)
+    return "\n\n".join(x for x in (notice, release) if x)
 
 
 def brief(
@@ -213,9 +224,7 @@ def brief(
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
     text += _refuted_line(st)
-    if notice := US.take_for_brief(repo) or UN.line(repo, log, cfg, st, agent=agent):
-        # One line, once per version on this machine (D-upgrade-auto-check): FIRST, so the hook,
-        # `ddflow brief` and `ddflow_brief` all lead with it whichever is asked first.
+    if notice := _upgrade_notices(repo, log, cfg, st, agent):
         text = notice + "\n\n" + text
     if item and item in st.items:
         pr = st.items[item].pr

@@ -925,7 +925,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 204 knobs.
+cadences, and the rest of the 208 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3914,6 +3914,27 @@ kept in the git-ignored `.ddflow/local/upgrade-start.json`; it replaces the one-
 that version. A server that was already running when ddflow was upgraded says `restart the
 server` in its replies.
 
+**Is a newer ddflow out? The release check.** At most once per `[upgrade].check_interval_h`
+(default 24), when a brief, `ddflow doctor` or `ddflow upgrade --check` runs, ddflow asks the
+package index it was installed from whether a newer release exists, and PROPOSES it: one line
+(`ddflow 0.1.10 is available (you run 0.1.9): upgrade ddflow-mcp ... then restart the MCP
+server`) in the brief and the MCP handshake once per version on this machine, and in `status`
+and `doctor` whenever one is known. It installs nothing. `ddflow upgrade --check` (MCP
+`ddflow_upgrade` with `check`) forces the check and prints the running version, the newest
+release, this project's stamp and the command that upgrades THIS install; exit 0 when this is the
+newest, 1 when a newer release exists, 2 when the check is off or the index is unreachable.
+
+What leaves the machine: one `GET <index_url>/ddflow-mcp/json` (the public package index
+`https://pypi.org/pypi/ddflow-mcp/json` by default; `[upgrade].index_url` points a private mirror
+that serves the same document) with a 3 s timeout. It carries nothing about the project or the
+machine, and the answer is cached in the git-ignored `.ddflow/local/release-check.json`. Offline,
+a timeout or a bad reply is silent (retried within the hour, not at every command). Pre-releases
+are ignored unless `[upgrade].prereleases`. A ddflow running from a source checkout is never
+proposed an index release by the periodic check. Turn it off with `ddflow config
+upgrade.release_check off` or, for one shell or container, `DDFLOW_NO_UPDATE_CHECK=1`: then no
+request is made at all. In a container the image registry tag is not consulted; the package index
+answers for every install.
+
 **Undo and downgrade.** The log is append-only, so an upgrade is never undone by deleting events.
 `ddflow upgrade --restore [NAME]` puts back the files a backup holds (the default `local` backup,
 or the opt-in git `snapshot` tag: see "Backups: local or snapshot" above), and `git revert` of
@@ -4800,7 +4821,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 204): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 208): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5299,7 +5320,7 @@ declared once and persists — see
 
 ## Configuration
 
-204 knobs across 29 sections, every one documented in place and listed, with its default
+208 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5366,8 +5387,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2e1c53c9d893 -->
-<details><summary>All 204 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=45d911e76663 -->
+<details><summary>All 208 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5532,6 +5553,10 @@ long default is left to `ddflow config --explain`.
 | `upgrade.auto` | `"check"` | `off` \| `check` \| `safe` |
 | `upgrade.on_start` | `"safe"` | `off` \| `check` \| `safe` |
 | `upgrade.start_timeout_s` | `10.0` |  |
+| `upgrade.release_check` | `"on"` | `on` \| `off` |
+| `upgrade.check_interval_h` | `24.0` |  |
+| `upgrade.index_url` | `""` |  |
+| `upgrade.prereleases` | `false` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |

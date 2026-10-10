@@ -30,7 +30,7 @@ from ..infra import fsio
 from ..infra import git as G
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
-from ..infra.log import EventLog
+from ..infra.log import EventLog, running_version
 from ..services import backups as BK
 from ..services import claudehooks as CH
 from ..services import compaction as CP
@@ -44,6 +44,7 @@ from ..services import launchers as LA
 from ..services import prompts as P
 from ..services import sessions as S
 from ..services import upgrade_apply as UA
+from ..services import upgrade_check as UC
 from ..services import upgrade_notice as UN
 from ..services import upgrade_plan as UP
 from ..services import upgrade_start as US
@@ -679,6 +680,17 @@ def upgrade_notice(repo: Path, *, agent: str = "") -> str:
     return UN.line(repo, log, cfg, st, agent=agent)
 
 
+def release_proposal(repo: Path, *, agent: str = "") -> str:
+    """The one-line proposal to upgrade ddflow (`services.upgrade_check.proposal`) or "": said
+    once per version on this machine, from the cache alone (a handshake must be quick; the
+    brief and `doctor` are what ask the index). Nothing in a directory ddflow was never set
+    up in."""
+    if not (repo / ".ddflow").is_dir():
+        return ""
+    _log, cfg, _st = _load(repo, agent)
+    return UC.proposal(repo, cfg, consume=True, refresh=False)
+
+
 #: The start report per project, for the life of this process: a handshake (`initialize`,
 #: `server/discover`) can be asked for more than once, the start check is made once.
 _START_REPORTS: dict[str, str] = {}
@@ -1142,6 +1154,7 @@ def upgrade(
     backup: str = "",
     snapshot: bool = False,
     restore: str = "",
+    check: bool = False,
     agent: str = "",
 ) -> O.Outcome:
     """What upgrading this project to the running ddflow would change (the plan, written
@@ -1156,10 +1169,19 @@ def upgrade(
     or acknowledged, 3 while an item waits for the operator's confirmation (``confirm`` names
     each by key, ``reason`` says why; both recorded), 1 when a step failed, 2 when one could
     not run. The body is the same on the CLI's `--json` and over MCP.
+
+    ``check`` stands alone: it forces a release check (`services.upgrade_check`) and says the
+    running version, the newest release, the project's stamp and how to upgrade; exit 0 when
+    this is the newest, 1 when a newer release exists, 2 when the check is off or the index
+    could not be reached.
     """
+    others = bool(apply or plan is not None or confirm or reason or backup or snapshot)
+    for alone, name in ((check, "check"), (restore, "restore")):
+        if alone and (others or (name == "check" and restore)):
+            return O.refused("upgrade", f"--{name} stands alone: choose it or the plan or --apply")
+    if check:
+        return _upgrade_check(repo, agent)
     if restore:
-        if apply or plan is not None or confirm or reason or backup or snapshot:
-            return O.refused("upgrade", "--restore stands alone: choose it or the plan or --apply")
         return _upgrade_restore(repo, restore, agent)
     if snapshot:
         # `snapshot` is `backup="snapshot"` for one run; naming another mode too is a contradiction.
@@ -1182,6 +1204,38 @@ def upgrade(
         data=data,
         exit=O.FAIL,
         reason=f"{data['total']} upgrade item(s) pending",
+    )
+
+
+UPGRADE_CHECK_PAYLOAD = (
+    "running",
+    "newest",
+    "newer",
+    "status",
+    "project_version",
+    "install",
+    "checked_at",
+    "text",
+)
+
+
+def _upgrade_check(repo: Path, agent: str) -> O.Outcome:
+    """`ddflow upgrade --check`: force the release check and report (`upgrade_check.report`)."""
+    _log, cfg, st = _load(repo, agent)
+    running = running_version()
+    has_history = bool(st.ddflow_versions or st.upgrades or st.items or st.sessions)
+    data = UC.report(
+        repo, cfg, project_version=UP.project_version(st, has_history, running), running=running
+    )
+    if data["status"] in ("off", "offline") and not data["newer"]:
+        return O.Outcome(
+            kind="upgrade", data=data, exit=O.NOTHING, reason="no release check was made"
+        )
+    return O.Outcome(
+        kind="upgrade",
+        data=data,
+        exit=O.FAIL if data["newer"] else O.OK,
+        reason=f"ddflow {data['newest']} is available" if data["newer"] else "",
     )
 
 
