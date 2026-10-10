@@ -23,11 +23,14 @@ import os
 import sys
 
 from ..api import items as A_ITEMS
+from ..api import loops as _loops
+from ..api import progress as _progress
+from ..api import surf_setup as SS
 from ..api.refs import provide_upgrade_vocabulary
 from ..core import clock
+from ..core import progress as PR
 from ..core.model import fold
 from ..core.outcome import INTERRUPTED, exit_for
-from ..services import gates as G
 from .context import (
     FAIL,
     NOTHING,
@@ -111,7 +114,7 @@ def cmd_approve(a, c: Ctx) -> int:
     if _require_item(c, a.id) is None:
         return FAIL
     try:
-        line = G.approve(
+        line = SS.approve_gate(
             c.log,
             c.cfg,
             a.id,
@@ -130,8 +133,6 @@ def cmd_approve(a, c: Ctx) -> int:
 
 def cmd_progress(a, c: Ctx) -> int:
     """What work has actually been done, aggregated from the log."""
-    from ..api import progress as _progress
-    from ..core import progress as PR
 
     out = _progress(c.repo, a.id or "")
     if out.exit == FAIL:
@@ -191,8 +192,6 @@ def cmd_loops(a, c: Ctx) -> int:
     view of the same answer. That is the B37 shape: one description of a result, two
     presentations derived from it — not two presentations kept in step by hand.
     """
-    from ..api import loops as _loops
-    from ..core import progress as PR
 
     out = _loops(c.repo)
     if c.json:
@@ -220,7 +219,7 @@ def cmd_loops(a, c: Ctx) -> int:
 #: which is honest — a new event type shows up as itself rather than being silently
 #: dropped from the history, which is the failure `replay` had with decisions.
 def cmd_mcp(a, c: Ctx) -> int:
-    from ..surfaces.mcp import serve
+    from ..surfaces.mcp import serve  # deferred: the MCP engine loads only for `ddflow mcp`
 
     # The caller's own start (--repo, DDFLOW_REPO or cwd), as ddflow-mcp passes it: without it every
     # called_from-aware tool treats the caller as standing in the primary (Bc1fe69741f).
@@ -233,7 +232,7 @@ class _PrintVersion(argparse.Action):
     built from `ddflow.__version__`, the one declared version, so the two cannot differ."""
 
     def __call__(self, parser, namespace, values, option_string=None):
-        from .mcp import SERVER_INFO
+        from .mcp import SERVER_INFO  # deferred: only `--version` needs the engine
 
         print(f"ddflow {SERVER_INFO['version']}")
         parser.exit()

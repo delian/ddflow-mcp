@@ -1,6 +1,0 @@
-# The `ignore_imports` of .importlinter contract `surfaces-through-api` whose source is ddflow.surfaces.commands.review.
-# See tests/test_architecture_guards.py: entries only shrink, never grow.
-ignore_imports = [
-    "ddflow.surfaces.commands.review -> ddflow.services.review",
-    "ddflow.surfaces.commands.review -> ddflow.services.reviewer_trust",
-]
