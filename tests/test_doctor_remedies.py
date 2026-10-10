@@ -85,8 +85,9 @@ def test_a_finished_phase_with_unrecorded_gates_names_them(repo):
     assert pipeline, "the default phase pipeline is not empty"
     assert BARE not in detail, detail
     assert "would refuse" in detail and "`ddflow gate status P`" in detail, detail
+    # A phase has no branch, so its merge gate does not apply and is not named.
     for g in pipeline:
-        assert g in detail, (g, detail)
+        assert (g in detail) == (g != "merge"), (g, detail)
 
 
 def test_a_finished_phase_whose_gates_all_ran_is_told_to_complete(repo):
@@ -122,8 +123,8 @@ def test_every_blocker_is_quoted_whole(repo):
     named after it. The verdict's text is quoted as written, not parsed."""
     detail = _finished_phase(
         repo,
-        config='[gates]\nphase_pipeline = ["research", "review. final", "merge"]\n'
+        config='[gates]\nphase_pipeline = ["research", "review. final", "docs"]\n'
         'required = ["review. final"]\n',
     )
     assert "review. final" in detail, detail
-    assert "merge" in detail.split("would refuse", 1)[1], detail
+    assert "docs" in detail.split("would refuse", 1)[1], detail
