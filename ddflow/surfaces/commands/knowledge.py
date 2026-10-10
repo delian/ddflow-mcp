@@ -547,9 +547,7 @@ def _history_line(ev) -> str:
     detail = " ".join(str(detail).split())[:88]
     if d.get(OLDER_MARK):  # after the cut: the mark is the part that must never be lost
         detail = f"{detail} [older ddflow {d[OLDER_MARK]}]"
-    return (
-        f"  {clock.fmt_minute(ev.ts)}  {ev.agent:<14.14s} {id_cell(ev.subject)} {verb:<22s} {detail}"
-    )
+    return f"  {clock.fmt_minute(ev.ts)}  {ev.agent:<14.14s} {id_cell(ev.subject)} {verb:<22s} {detail}"
 
 
 #: a payload string longer than this is cut in `--json`, with a note saying so.
