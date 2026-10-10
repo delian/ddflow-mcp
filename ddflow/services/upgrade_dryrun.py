@@ -29,7 +29,9 @@ The rehearsal, in the order a report lists it (the numbers are the task's):
 6. the connect flow (D-upgrade-on-mcp-connect): the new MCP server over stdio on the old
    project proposes the upgrade, applies NOTHING until consent, then applies on consent;
 7. two agents claim, work and release a task with the new version;
-8. shards two agents wrote with the old version merge (`merge=union`) and fold identically.
+8. shards two agents wrote with the old version merge (`merge=union`) and fold identically;
+9. the old log folds through one registered event upcaster (the machinery has never met a real
+   bump), and an older reader skips the new payload version.
 
 Every check is a row: pass, fail, or unavailable (it could not run). The exit is 0 only when
 every row passes, 1 when any fails, 2 when none failed but one could not run.
@@ -38,14 +40,16 @@ every row passes, 1 when any fails, 2 when none failed but one could not run.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
 import shlex
 import shutil
 import sys
-from collections.abc import Callable, Iterable
-from dataclasses import asdict, dataclass, field
+from collections import Counter
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -53,8 +57,9 @@ from ..config import Config
 from ..core import clock
 from ..core import digest as D
 from ..core import outcome as O
+from ..core import upcasters as U
 from ..core import version as V
-from ..core.events import is_older
+from ..core.events import Event, is_older
 from ..core.model import State, fold
 from ..infra import fsio
 from ..infra import git as G
@@ -362,6 +367,90 @@ def events_of(repo: Path) -> list[dict[str, Any]]:
     return out
 
 
+@contextlib.contextmanager
+def registered_upcaster(kind: str, step: U.Upcaster) -> Iterator[int]:
+    """Register ``step`` as the upcaster from ``kind``'s current payload version to the next,
+    for the length of the block, and restore the registries after: the one place a real
+    bump of a payload can be rehearsed before a release has one. Yields the new version."""
+    version = U.current_version(kind)
+    before = (dict(U.PAYLOAD_VERSIONS), dict(U.UPCASTERS))
+    U.PAYLOAD_VERSIONS[kind] = version + 1
+    U.UPCASTERS[(kind, version)] = step
+    try:
+        yield version + 1
+    finally:
+        U.PAYLOAD_VERSIONS.clear()
+        U.PAYLOAD_VERSIONS.update(before[0])
+        U.UPCASTERS.clear()
+        U.UPCASTERS.update(before[1])
+
+
+def _records(st: State) -> dict[str, list[str]]:
+    """The ids of the records a state holds, by kind of record: what an upcaster must keep."""
+    return {
+        name: sorted(getattr(st, name))
+        for name in ("items", "bugs", "lessons", "research", "decisions", "memories", "sessions")
+    }
+
+
+def _stripped(data: Mapping[str, Any]) -> dict[str, Any]:
+    """A payload without the keys an upcast adds (the version and the step's own)."""
+    return {k: v for k, v in data.items() if k not in (U.VERSION_KEY, "origin")}
+
+
+def _of(events: list[Event], kind: str) -> list[Event]:
+    return [e for e in events if e.kind == kind]
+
+
+def upcast_problems(repo: Path) -> tuple[str, list[str]]:
+    """Fold a project's old log with ONE registered upcaster: `(the kind, what went wrong)`.
+
+    The event-evolution machinery has never met a real bump (`core.upcasters` ships empty), so
+    the first real upcaster would be its first production run. This is that run, on the log
+    being rehearsed: the most common kind is bumped by a step that only adds a key, so the
+    handlers (which ignore it) must fold the same records (ids per collection: a handler that
+    keeps a whole payload keeps the added key too, which is not a defect), every event of the kind must go
+    through the step with its id kept, and an older reader (no bump) must skip a payload
+    stamped with the new version instead of guessing at it."""
+    log = EventLog(repo, "dry-digest", log_cfg=Config.load(repo).log)
+    events = log.read_all()
+    if not events:
+        return "", ["the log holds no events"]
+    kinds = Counter(e.kind for e in events)
+    kind, wanted = kinds.most_common(1)[0]
+    ids = {e.id for e in events if e.kind == kind}
+    seen: list[str] = []
+
+    def step(k: str, data: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+        seen.append(k)
+        return k, {**data, "origin": "upcast by the dry run"}
+
+    problems: list[str] = []
+    before = _records(fold(events, strict=False))
+    with registered_upcaster(kind, step) as version:
+        try:
+            state = fold(events, strict=True)
+        except (ValueError, KeyError, TypeError) as exc:
+            return kind, [f"the fold with an upcaster for {kind} failed: {exc}"]
+        if len(seen) != wanted:
+            problems.append(f"{len(seen)} of {wanted} {kind} events went through the upcaster")
+        if _records(state) != before:
+            problems.append("the records the log folds into changed with the upcaster")
+        moved = [U.upcast(e) for e in events if e.kind == kind]
+        if {e.id for e in moved} != ids:
+            problems.append("an upcast event lost its id")
+        if any(
+            _stripped(m.data) != _stripped(e.data)
+            for m, e in zip(moved, _of(events, kind), strict=True)
+        ):
+            problems.append("the upcaster changed more than the key it adds")
+        newer = replace(next(e for e in events if e.kind == kind), data={U.VERSION_KEY: version})
+    skipped = fold([newer], strict=False).skipped_kinds.get(f"{kind} (payload v{version})")
+    if skipped != 1:
+        problems.append(f"an older reader did not skip a {kind} payload of version {version}")
+    return kind, problems
+
+
 # -- the rehearsal --------------------------------------------------------------------------
 
 
@@ -493,8 +582,9 @@ class Rehearsal:
             )
             self.guard(7, "two agents, one task", self.step_agents)
             self.guard(8, "shards from the old version merge", self.step_shards)
+            self.guard(9, "an event upcaster over the old log", self.step_upcaster)
         after = self.guard(
-            9, "read the live project afterwards", lambda: snapshot_live(self.opt.source)
+            10, "read the live project afterwards", lambda: snapshot_live(self.opt.source)
         )
         if before is not None and after is not None:
             moved = live_problems(before, after)
@@ -504,7 +594,7 @@ class Rehearsal:
                 if same
                 else ("no shard, tag or backup of the rehearsal; its log only grew")
             )
-            self.add(9, "live project untouched", not moved, "; ".join(moved) or fine)
+            self.add(10, "live project untouched", not moved, "; ".join(moved) or fine)
         return self.report
 
     def step_clone(self) -> bool:
@@ -978,6 +1068,17 @@ class Rehearsal:
             for shard in sorted((Path(repo) / ".ddflow" / "events").glob("*.jsonl")):
                 shutil.copyfile(shard, events / f"{tag}--{shard.name}")
         return union
+
+    def step_upcaster(self) -> bool:
+        kind, problems = upcast_problems(self.pristine)
+        return self.add(
+            9,
+            "an event upcaster over the old log",
+            not problems,
+            "; ".join(problems)
+            or f"every {kind} event upcast with its id kept, the same records folded, "
+            "an older reader skips the new version",
+        )
 
     def step_shards(self) -> bool | None:
         if self.opt.old is None:
