@@ -8,9 +8,8 @@ code. Nothing said so. `doctor` now names each such glob with its correction.
 
 from __future__ import annotations
 
-import subprocess
-
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 TRACKED = ["pkg/mod/__init__.py", "pkg/mod/a.py", "pkg/other.py", "tests/test_x.py"]
 
@@ -32,10 +31,6 @@ def test_a_glob_that_matches_or_is_merely_new_is_not_reported():
         stale_package_globs(["pkg/mod/", "pkg/*.py", "pkg/new.py", "tests/test_y.py"], TRACKED)
         == []
     )
-
-
-def _git(repo, *args):
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def test_doctor_names_an_open_tasks_stale_package_glob(repo):

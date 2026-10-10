@@ -9,18 +9,13 @@ index/working tree and the stash list before and after a reviewer runs.
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
+
+from helpers import git_raw as _git
 
 from ddflow.services import gates as G
 from ddflow.services import review as R
 from ddflow.services.gates.reviewers import git_state, run_watching_git
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def _repo_with_stash(tmp_path: Path) -> Path:

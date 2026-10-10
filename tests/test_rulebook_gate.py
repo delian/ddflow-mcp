@@ -21,22 +21,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_proc as _git
+from helpers import write_text_at as _write
 
 from ddflow.config import Config
 from ddflow.infra.log import EventLog
 from ddflow.services import enforce as E
-
-
-def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=180
-    )
-
-
-def _write(root: Path, rel: str, text: str) -> None:
-    p = root / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
 
 
 def _land(root: Path, rel: str, text: str, msg: str = "change") -> None:

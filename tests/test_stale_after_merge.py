@@ -10,22 +10,16 @@ everyone to ignore the one that is real.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 from conftest import pass_pipeline, run_cli
+from helpers import git as _git
 
 OK = 0
 NOTE = "passed on a different tree"
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _claimed(repo: Path) -> Path:

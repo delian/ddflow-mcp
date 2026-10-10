@@ -20,22 +20,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
+from helpers import git as _git
+from helpers import item_of as _item
 
-from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.surfaces.mcp import Server
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-def _item(repo: Path, iid: str = "T1"):
-    return fold(EventLog(repo).read_all(), strict=False).items[iid]
 
 
 def _wrongly_bound(repo: Path) -> tuple[Path, Path]:

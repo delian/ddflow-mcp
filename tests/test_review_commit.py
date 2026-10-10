@@ -15,17 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING = 0, 1, 2
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _commit(repo: Path, name: str, text: str, msg: str) -> str:
