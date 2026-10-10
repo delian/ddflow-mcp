@@ -3,7 +3,7 @@
 #
 # Lower the baseline in the same change that removes sites; the failure message
 # prints the exact value. Never raise it.
-baseline = 5
+baseline = 0
 
 # Unreferenced on purpose: the work that wires each in is planned (B-uni-dead-code).
 # An entry leaves this table in the change that gives it a caller -- a test holds
@@ -34,3 +34,7 @@ baseline = 5
 # The record surface (B-uni-record-surface.2-surface): a family moves onto it by calling this
 # with its RecordKind; B-rules-cli is the first to.
 "ddflow/surfaces/records.py:add_record_commands" = "B-rules-cli"
+# The upstream bug-report plumbing (B-upstream-surfaces): the surfaces that file and deliver
+# a report are its callers; the two modules stay whole until they exist.
+"ddflow/services/upstream_dedupe.py:report_text" = "B-upstream-surfaces"
+"ddflow/services/upstream_delivery.py:send_gh" = "B-upstream-surfaces"

@@ -25,6 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..config import Config
 from ..core.digest import content_digest
 from ..core.events import canonical
 from ..infra import tomlcfg as TC
@@ -36,6 +37,7 @@ from . import approval as AP
 from . import identity as ID
 from .approval import os_user as _user
 from .identity import HARNESS_MARKERS, agent_marker  # noqa: F401
+from .review import load_reviewers
 
 #: The fields that decide WHO is reviewing and what it is called. A change to any of
 #: them is a different reviewer; a change to a tuning knob (max_tokens, hedge, gates)
@@ -57,7 +59,6 @@ def digest(rev: Any) -> str:
 
 def snapshot(repo: Path) -> dict[str, tuple[str, str]] | None:
     """name -> (digest, kind) for every reviewer configured now; None if they do not load."""
-    from .review import load_reviewers
 
     try:
         return {r.name: (digest(r), r.kind) for r in load_reviewers(Path(repo))}
@@ -75,7 +76,6 @@ def _files(repo: Path) -> tuple[Path, ...]:
 
 
 def _log(repo: Path, agent: str):
-    from ..config import Config
 
     return ID.open_log(repo, Config.load(repo), agent)[0]
 
@@ -170,7 +170,6 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
     Refused under any agent identity, as `ddflow approve` is a person's act: an agent
     that could approve the reviewer it wrote would make the whole record decorative.
     """
-    from .review import load_reviewers
 
     if why := agent_marker(requested_agent):  # before anything is read: not an agent's to see
         raise ReviewerRefused(AP.refusal(why))
