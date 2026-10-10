@@ -115,16 +115,9 @@ def _clip(value: Any, cut: list[int]) -> Any:
     return value
 
 
-def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
-    """`ddflow_show`: the item without its empty fields; each gate record without the
-    tree-identity boilerplate (`GATE_BOILERPLATE`); the gate and triage records' long
-    strings cut (see `_clip`). The outcome, who, when, the reason and the evidence's
-    own words stay, and `truncated` names what was left out."""
-    if not isinstance(body, dict) or ("state" not in body and "gates" not in body):
-        return body, None
-    lean = _lean(body)
-    out = {k: v for k, v in lean.items() if k not in ITEM_PLUMBING}
-    stripped = len(out) != len(lean)
+def _slim_gates(out: dict[str, Any]) -> bool:
+    """Rewrite `out["gates"]` without the boilerplate; whether anything was left out."""
+    stripped = False
     gates = out.get("gates")
     if isinstance(gates, dict):
         slim: dict[str, Any] = {}
@@ -144,6 +137,13 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
                 one["evidence"] = _lean(kept)
             slim[name] = _lean(one)
         out["gates"] = slim
+    return stripped
+
+
+def _drop_repeated_locations(out: dict[str, Any]) -> bool:
+    """Copy `out["triage"]` (the caller's body is not edited) and drop a location equal to
+    its title; whether anything was left out."""
+    stripped = False
     if "triage" in out:
         out["triage"] = copy.deepcopy(out["triage"])  # the caller's body is not edited
     for recs in (out.get("triage") or {}).values():
@@ -155,6 +155,21 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             ):
                 rec.pop("location", None)  # before the cut, so it compares whole strings
                 stripped = True
+    return stripped
+
+
+def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
+    """`ddflow_show`: the item without its empty fields; each gate record without the
+    tree-identity boilerplate (`GATE_BOILERPLATE`); the gate and triage records' long
+    strings cut (see `_clip`). The outcome, who, when, the reason and the evidence's
+    own words stay, and `truncated` names what was left out."""
+    if not isinstance(body, dict) or ("state" not in body and "gates" not in body):
+        return body, None
+    lean = _lean(body)
+    out = {k: v for k, v in lean.items() if k not in ITEM_PLUMBING}
+    stripped = len(out) != len(lean)
+    stripped = _slim_gates(out) or stripped
+    stripped = _drop_repeated_locations(out) or stripped
     cut = [0]
     for key in ("gates", "triage"):
         if key in out:
