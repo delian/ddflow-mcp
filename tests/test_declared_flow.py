@@ -54,17 +54,19 @@ def test_the_lint_has_no_tool_and_says_why():
     assert (ns.waive, ns.reason) == ("knob:x", "why")
 
 
-def test_the_groups_keep_their_dispatch_words_and_handlers():
+def test_the_groups_keep_their_dispatch_words_and_run_on_the_executor():
     cases = {
-        ("pr", "sync"): ("pr_cmd", "cmd_pr"),
-        ("pr", "threads", "X"): ("pr_cmd", "cmd_pr"),
-        ("promote", "status"): ("promote_cmd", "cmd_promote"),
-        ("flow", "choose", "k", "v"): ("flow_cmd", "cmd_flow"),
+        ("pr", "sync"): "pr_cmd",
+        ("pr", "threads", "X"): "pr_cmd",
+        ("promote", "status"): "promote_cmd",
+        ("flow", "choose", "k", "v"): "flow_cmd",
     }
-    for argv, (dest, fn) in cases.items():
+    for argv, dest in cases.items():
         ns = _parse(*argv)
         assert getattr(ns, dest) == argv[1]
-        assert ns.fn.__name__ == fn
+        assert ns.fn.__module__ == "ddflow.surfaces.cliexec"
+        # the executor is bound to THIS command (`cliexec.handler` closes over it)
+        assert ns.fn.__closure__[0].cell_contents.path == tuple(argv[:2])
 
 
 def test_the_required_positionals_are_required_on_the_tools_too():

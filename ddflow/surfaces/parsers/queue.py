@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import argparse
 
-from ..commands.queue import cmd_phase_add, cmd_resolve, cmd_split, cmd_task_add
+from .. import cliexec
+from ..commands.queue import cmd_phase_add, cmd_task_add
 from ..commands.setup import cmd_init
 from ..declared.queue import COMMANDS
 from ..registry import add_commands
@@ -17,8 +18,6 @@ HANDLERS = {
     ("init",): cmd_init,
     ("phase", "add"): cmd_phase_add,
     ("task", "add"): cmd_task_add,
-    ("split",): cmd_split,
-    ("resolve",): cmd_resolve,
 }
 
 
@@ -32,4 +31,5 @@ def register(s: argparse._SubParsersAction) -> None:
         COMMANDS,
         groups={"phase": "add a phase", "task": "add a task"},
         handlers={**HANDLERS, ("update",): cmd_item_update},
+        executor=cliexec.handler,
     )

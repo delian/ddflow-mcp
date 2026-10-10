@@ -1,9 +1,7 @@
-"""`phase add`, `task add`, `split`, `update`, `resolve` — the human surface for `api.items`."""
+"""`phase add` and `task add` — the human surface for `api.items`. (`split` and `resolve` run on
+the executor: `declared/queue_cli.py`.)"""
 
 from __future__ import annotations
-
-import shlex
-import sys
 
 from ...api import items as A
 from .. import dedupe_flags as D
@@ -89,71 +87,5 @@ def cmd_task_add(a, c: Ctx) -> int:
     c.out(
         f"task {a.id} added to {parent or '(no phase)'}{released}{ports}",
         out.body(TASK_ADD_PAYLOAD),
-    )
-    return OK
-
-
-def _resolved_text(d: dict) -> str:
-    """What `resolve` kept, and -- for each definition it did not -- how to get it back."""
-    lines = []
-    if d["kept_definition"]:
-        k = d["kept_definition"]
-        lines.append(f"{d['id']}: kept definition {k['event']} by {k['agent']} ({k['title']!r})")
-    if d["kept_holder"]:
-        lines.append(f"{d['id']}: {d['kept_holder']} keeps the lease")
-        lines += [f"  released {h}'s claim" for h in d["released"]]
-    refiled = d["refiled"] or [""] * len(d["lost"])
-    for lost, new in zip(d["lost"], refiled, strict=True):
-        if new:
-            lines.append(f"  re-filed {lost['agent']}'s definition {lost['title']!r} as {new}")
-            continue
-        body = f" --body {shlex.quote(lost['body'])}" if lost["body"] else ""
-        lines.append(f"  NOT kept: {lost['event']} by {lost['agent']}")
-        lines.append(f"    title {lost['title']!r}")
-        lines += [f"    | {ln}" for ln in (lost["body"] or "").splitlines()]
-        lines.append(
-            f"    re-file it under a new id (or resolve with --refile-as <new-id>):\n"
-            f"    ddflow {d['item_kind']} add <new-id> --title {shlex.quote(lost['title'])}{body}"
-        )
-    return "\n".join(lines)
-
-
-def cmd_resolve(a, c: Ctx) -> int:
-    out = A.resolve(c.repo, a.id, keep=a.keep, refile_as=a.refile_as or "", agent=c.requested_agent)
-    if out.exit != OK:
-        print(out.reason, file=sys.stderr)
-        return out.exit
-    c.out(_resolved_text(out.data), out.body(RESOLVE_PAYLOAD))
-    return OK
-
-
-#: `resolve`'s wire body, the same on `ddflow_resolve`.
-RESOLVE_PAYLOAD = ("id", "kept_definition", "kept_holder", "lost", "refiled", "released")
-
-
-def cmd_split(a, c: Ctx) -> int:
-    out = A.split(
-        c.repo,
-        a.id,
-        into=list(a.into or []),
-        globs=a.globs or "",
-        needs=a.needs or "",
-        agent=c.requested_agent,
-    )
-    if out.exit != OK:
-        print(out.reason, file=sys.stderr)
-        return out.exit
-    created = out.data["created"]
-    tail = ""
-    if out.data["inherited_globs"]:
-        tail = (
-            f"\n  Give each its own --globs with `ddflow update <id> --globs ...` if they "
-            f"write different files — they inherited {a.id}'s, so they cannot run in "
-            f"parallel until they differ."
-        )
-    c.out(
-        f"{a.id} split into {len(created)} sub-task(s): {', '.join(created)}\n"
-        f"  It keeps its id and history, and now completes when they do.{tail}",
-        out.body(("item", "created")),
     )
     return OK

@@ -501,3 +501,10 @@ def promotion_step(cfg: Config, default_branch: str, env: str) -> tuple[str, str
         raise ValueError(f"{env!r} is where the chain STARTS, not an environment to promote to")
     i = len(chain) - 1 - chain[::-1].index(env)
     return chain[i - 1], env
+
+
+def config_wins(source: str) -> bool:
+    """Does a CONFIG layer (file, local, env, ...) set this knob, so a recorded choice is
+    not applied? The one rule `overlay`, `report` and `flow choose` share: each once spelled
+    it separately, and `("file", "env")` missed the local layer (B025c8de942)."""
+    return source != "default" and not source.startswith("log:")

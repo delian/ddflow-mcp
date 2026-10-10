@@ -43,11 +43,6 @@ from .render import emit_json
 _MIN_SPLIT_PARTS = 2
 UNAVAILABLE_EXIT = NOTHING
 
-#: How many offending files a refusal lists before summarising the rest. Enough to see
-#: whether they are build artefacts or real source -- which is the judgement the
-#: operator has to make -- without burying the remedy underneath them.
-MAX_LISTED_FILES = 10
-
 #: Re-exported from `infra/worktree.py`, which is where the functions that RETURN it
 #: live. The api layer needs the same constant and may not import a surface.
 GIT_REFUSED = W.GIT_REFUSED
