@@ -1,7 +1,7 @@
 """LocalStore: the one place machine-local state is read, written, locked and trimmed
 (D-unify, B-uni-local-worker.3-store).
 
-Machine-local state (`.ddflow/local`: caches, queues, signal rings, reports) grew a store
+Machine-local state (`.ddflow/local`: caches, queues, reports) grew a store
 per feature, each with its own lock, its own half-atomic write, no format field and its
 own retention. This module is the primitive new stores start on (the docs-index update queue
 is the first planned consumer of `queue_*`). The existing stores (ticks, upgrade notice, quota,
@@ -12,7 +12,6 @@ would add more code than the move removes. It gives:
 
 * a **document** -- one JSON value in one file, replaced atomically (`fsio.atomic_write`),
   stamped with a schema number and the writer's version, read-modify-written under a lock;
-* a **ring** -- the last N records, persisted, so a signal sampler cannot grow a file;
 * a **queue** -- persisted, coalescing work: a second `put` of a key already waiting
   replaces its payload instead of queueing twice, and a key becomes due only after it has
   been quiet for `debounce_s`; a crash leaves the old queue or the new one, never a torn one;
@@ -252,26 +251,6 @@ class LocalStore:
             self.path(name), json.dumps(body, indent=1, sort_keys=True) + "\n", mode=mode
         )
 
-    # -- rings -------------------------------------------------------------------------
-
-    def ring_append(self, name: str, item: Any, *, capacity: int, schema: int = 1) -> list[Any]:
-        """Append `item` to the ring `name`, keeping only the last `capacity` records.
-        Returns the ring after the append."""
-        if capacity < 1:
-            raise ValueError("a ring holds at least one record")
-        out = self.update(
-            name,
-            lambda cur: [*_as_list(cur), item][-capacity:],
-            schema=schema,
-            default=[],
-            derived=True,  # a signal ring is re-sampled, never user data
-        )
-        return list(out)
-
-    def ring(self, name: str, *, schema: int = 1) -> list[Any]:
-        """The records of the ring `name`, oldest first."""
-        return list(_as_list(self.read(name, schema=schema, default=[], derived=True)))
-
     # -- the coalescing queue ----------------------------------------------------------
 
     def queue_put(
@@ -337,7 +316,3 @@ class LocalStore:
         stays: unlinking it would let a second holder lock a new inode beside the first."""
         with self.lock(name), contextlib.suppress(FileNotFoundError):
             os.unlink(self.path(name))
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
