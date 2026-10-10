@@ -3943,6 +3943,7 @@ MCP server to the old project (it proposes the upgrade, applies nothing until co
 runs two agents through a task and merges shards two old-version agents wrote. The old ddflow is
 `--old-cmd`, `--build-old` (installed from the clone with uv) or `--simulate-old VERSION`; without
 one those rows say `unavailable`. Exit 0 all passed, 1 a check failed, 2 it could not run;
+`--max-show N` sets how many items the read pass renders with `show` (25; 0 is every item);
 `--report FILE` and `--preview FILE` write the Markdown report and the plan. `scripts/release.sh`
 and the publish workflow run it from the previous release and refuse a release whose upgrade is red;
 they pass `--confirmations-ok`, which names the items the operator would be asked to confirm in the

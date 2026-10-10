@@ -585,7 +585,7 @@ class Rehearsal:
             if not done.ran or done.returncode not in (0, 1, 2) or "Traceback" in done.stderr:
                 bad.append(f"{' '.join(args)} -> {done.returncode} {done.stderr.strip()[-120:]}")
         st = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
-        for item in sorted(st.items)[: self.opt.max_show]:
+        for item in sorted(st.items)[: self.opt.max_show or None]:
             done = self.ddflow(self.new, repo, "show", item, agent="dry-read")
             if not done.ran or done.returncode not in (0, 1, 2) or "Traceback" in done.stderr:
                 bad.append(f"show {item} -> {done.returncode}")
@@ -850,6 +850,10 @@ class Rehearsal:
         )
         stale = [b["agent"] for b in status.get("behind", [])]
         self.report.facts["restart"] = stale
+        folded = fold(EventLog(repo, "dry-digest").read_all(), strict=False)
+        running = V.running()
+        if any(is_older(v, running) for v in folded.ddflow_versions) and not stale:
+            problems.append("the log holds older-version agents but none was told to restart")
         told = (
             f"{len(stale)} older agent(s) told to restart"
             if stale
@@ -1152,6 +1156,12 @@ def parser(doc: str = __doc__ or "") -> argparse.ArgumentParser:
         help="name the items the operator would be asked to confirm in the preview without "
         "failing (the release check: that is this project's own config, not the release's)",
     )
+    ap.add_argument(
+        "--max-show",
+        type=int,
+        default=25,
+        help="run `show` on this many items in the read pass (0: every item; slow on a big log)",
+    )
     ap.add_argument("--work", default="", help="scratch directory (default: a new temporary one)")
     ap.add_argument("--keep", action="store_true", help="keep the scratch directory")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
@@ -1206,6 +1216,7 @@ def main(argv: list[str] | None = None, *, source: Path | None = None, doc: str 
         tools_budget=tools_budget(Path(source_root())),
         build_old=args.build_old,
         asked_fails=not args.confirmations_ok,
+        max_show=args.max_show,
     )
     report = run_all(opt)
     print(json.dumps(report.as_data(), indent=2) if args.json else report.table())
