@@ -54,6 +54,29 @@ def _get(url: str, timeout: float) -> bytes:
         return resp.read(MAX_BYTES)
 
 
+def _candidates(doc: dict) -> list[str]:
+    """The versions of an index document that have files and are not yanked; when it lists no
+    releases at all (a mirror serving only the summary), the summary's own version."""
+    releases = doc.get("releases")
+    found: list[str] = []
+    if isinstance(releases, dict):
+        for version, files in releases.items():
+            if not isinstance(files, list) or not files:
+                continue  # a version nobody uploaded files for
+            if all(isinstance(f, dict) and f.get("yanked") for f in files):
+                continue
+            found.append(str(version))
+    info = doc.get("info")
+    if (
+        not found
+        and not releases
+        and isinstance(info, dict)
+        and isinstance(info.get("version"), str)
+    ):
+        found.append(info["version"])
+    return found
+
+
 def newest(
     dist: str,
     *,
@@ -71,29 +94,11 @@ def newest(
         doc = json.loads((fetch or _get)(url, timeout))
     except ReleaseIndexError:
         raise
-    except (
-        Exception
-    ) as exc:  # URLError, timeouts, TLS, ValueError, anything an injected fetch raises
+    except Exception as exc:  # URLError, timeouts, TLS, bad JSON, anything an injected fetch raises
         raise ReleaseIndexError(f"{type(exc).__name__}: {exc}") from exc
     if not isinstance(doc, dict):
         raise ReleaseIndexError("the reply is not a JSON object")
-    releases = doc.get("releases")
-    candidates: list[str] = []
-    if isinstance(releases, dict):
-        for version, files in releases.items():
-            if not isinstance(files, list) or not files:
-                continue  # a version nobody uploaded files for
-            if all(isinstance(f, dict) and f.get("yanked") for f in files):
-                continue
-            candidates.append(str(version))
-    info = doc.get("info")
-    if (
-        not candidates
-        and not releases
-        and isinstance(info, dict)
-        and isinstance(info.get("version"), str)
-    ):
-        candidates.append(info["version"])  # a mirror that lists no releases, only the summary
+    candidates = _candidates(doc)
     usable = [v for v in candidates if version_key(v) and (prereleases or not is_prerelease(v))]
     if not usable:
         raise ReleaseIndexError("the index lists no usable release")
