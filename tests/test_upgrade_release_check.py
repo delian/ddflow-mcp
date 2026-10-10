@@ -304,3 +304,21 @@ def test_a_source_checkout_is_not_proposed_an_index_release(project, monkeypatch
         UC.check(project, Config(), force=True, fetch=fake, now=NOW, running=RUNNING)["newer"]
         is True
     )
+
+
+def test_the_summary_version_is_the_fallback_when_releases_gives_none() -> None:
+    body = json.dumps({"info": {"version": "9.9.9"}, "releases": {}}).encode()
+    assert RI.newest("d", fetch=Index(body)) == "9.9.9"
+    only_yanked = json.loads(doc("0.1.9", yanked=("0.1.9",)))
+    only_yanked["info"]["version"] = "0.1.9rc1"
+    with pytest.raises(RI.ReleaseIndexError):  # a pre-release summary is still filtered
+        RI.newest("d", fetch=Index(json.dumps(only_yanked).encode()))
+
+
+def test_off_is_exit_2_even_when_the_cache_knows_a_newer_release(project, monkeypatch) -> None:
+    from ddflow import api as A
+
+    UC.check(project, Config(), fetch=Index(doc("99.0.0")), now=NOW, running=RUNNING)
+    monkeypatch.setenv(UC.ENV_OFF, "1")
+    out = A.upgrade(project, check=True)
+    assert out.exit == 2 and out.data["status"] == "off"

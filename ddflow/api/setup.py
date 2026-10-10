@@ -1227,7 +1227,7 @@ def _upgrade_check(repo: Path, agent: str) -> O.Outcome:
     data = UC.report(
         repo, cfg, project_version=UP.project_version(st, has_history, running), running=running
     )
-    if data["status"] in ("off", "offline") and not data["newer"]:
+    if data["status"] in ("off", "offline"):  # no answer from the index: never "an upgrade exists"
         return O.Outcome(
             kind="upgrade", data=data, exit=O.NOTHING, reason="no release check was made"
         )
