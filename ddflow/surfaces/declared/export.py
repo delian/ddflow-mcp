@@ -9,7 +9,7 @@ purpose are `flag_exempt`, each with its reason.
 
 from __future__ import annotations
 
-from ..context import NOTHING
+from ...core.outcome import NOTHING
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api, _bisect
 
