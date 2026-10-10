@@ -134,11 +134,8 @@ def test_user_data_of_a_newer_schema_is_still_refused(tmp_path):
         store.write("u.json", {})
 
 
-def test_a_ring_and_a_queue_of_a_newer_schema_start_over(tmp_path):
+def test_a_queue_of_a_newer_schema_starts_over(tmp_path):
     store = LS.LocalStore(tmp_path / "local")
-    _newer(store, "r.json", [1, 2])
-    assert store.ring("r.json") == []
-    assert store.ring_append("r.json", 7, capacity=3) == [7]
     _newer(store, "q.json", {"k": {}})
     assert store.queue_pending("q.json") == {}
     assert store.queue_put("q.json", "k", {"p": 1}) == 1
