@@ -85,6 +85,29 @@ def register(s: argparse._SubParsersAction) -> None:
         "1 a newer release, 2 off or unreachable); stands alone",
     )
     up.add_argument(
+        "--status",
+        action="store_true",
+        default=False,
+        help="where the upgrade stands: running version, newest release and when it was asked, "
+        "this project's stamp, the plan with each step's state (pending, running, done, failed, "
+        "needs operator confirmation, waived), the backups, and the agents and MCP servers last "
+        "seen on an older version (exit 0 up to date, 1 steps pending or a run interrupted); "
+        "stands alone",
+    )
+    up.add_argument(
+        "--history",
+        action="store_true",
+        default=False,
+        help="list the upgrades this project's log records, oldest first; stands alone",
+    )
+    up.add_argument(
+        "--resume",
+        action="store_true",
+        default=False,
+        help="finish an --apply that was interrupted, without repeating the steps it settled "
+        "(--confirm/--reason/--backup go with it; exit 2 when none was interrupted)",
+    )
+    up.add_argument(
         "--self",
         action="store_true",
         default=False,

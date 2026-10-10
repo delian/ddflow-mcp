@@ -228,12 +228,20 @@ def cmd_upgrade(a, c: Ctx) -> int:
         restore=getattr(a, "restore", None) or "",
         check=bool(getattr(a, "check", False)),
         selfup=selfup,
+        status=bool(getattr(a, "status", False)),
+        history=bool(getattr(a, "history", False)),
+        resume=bool(getattr(a, "resume", False)),
+        on_progress=lambda line: print(line, file=sys.stderr, flush=True),
         agent=c.requested_agent,
     )
     if c.json:
         payload = (
             A.UPGRADE_SELF_PAYLOAD
             if selfup is not None
+            else A.UPGRADE_STATUS_PAYLOAD
+            if getattr(a, "status", False)
+            else A.UPGRADE_HISTORY_PAYLOAD
+            if getattr(a, "history", False)
             else A.UPGRADE_CHECK_PAYLOAD
             if getattr(a, "check", False)
             else A.UPGRADE_RESTORE_PAYLOAD

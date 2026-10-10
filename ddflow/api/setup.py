@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import threading
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -49,6 +49,7 @@ from ..services import upgrade_check as UC
 from ..services import upgrade_notice as UN
 from ..services import upgrade_plan as UP
 from ..services import upgrade_start as US
+from ..services import upgrade_status as UST
 from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, init_files, refresh_docs
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
@@ -1130,6 +1131,22 @@ UPGRADE_PAYLOAD = ("running", "project_version", "up_to_date", "total", "categor
 UPGRADE_APPLY_PAYLOAD = (*UPGRADE_PAYLOAD, "applied")
 #: ... and of a restore, which adds what it put back (`restored`).
 UPGRADE_RESTORE_PAYLOAD = (*UPGRADE_PAYLOAD, "restored")
+#: ... of `--status` and `--history` (`services.upgrade_status`).
+UPGRADE_STATUS_PAYLOAD = (
+    "running",
+    "newest",
+    "newer",
+    "checked_at",
+    "project_version",
+    "up_to_date",
+    "run",
+    "steps",
+    "backups",
+    "behind",
+    "last_upgrade",
+    "text",
+)
+UPGRADE_HISTORY_PAYLOAD = ("upgrades", "text")
 _APPLIED_FIELDS = (
     "from",
     "to",
@@ -1157,6 +1174,10 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
     restore: str = "",
     check: bool = False,
     selfup: SU.Request | None = None,
+    status: bool = False,
+    history: bool = False,
+    resume: bool = False,
+    on_progress: Callable[[str], None] | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """What upgrading this project to the running ddflow would change (the plan, written
@@ -1181,10 +1202,23 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
     fields say -- a dry run, a rollback, a target version, the operator's consent -- and
     exits 0 done, 1 the installer failed, 2 not attempted or nothing to roll back to, 3
     without consent.
+
+    ``status`` and ``history`` stand alone and only read (`services.upgrade_status`): where the
+    upgrade stands (exit 0 up to date, 1 while steps are pending or a run was interrupted), and
+    the upgrades the log records. ``resume`` finishes an interrupted apply as ``apply`` does
+    (``confirm``, ``reason`` and ``backup`` go with it), without repeating the steps it
+    settled: exit 2 when no run was interrupted. ``on_progress`` hears each step as it ends.
     """
     others = _other_modes(apply, plan, confirm, reason, backup, snapshot, selfup)
-    if check or restore or selfup is not None:
-        return _upgrade_alone(repo, check, restore, selfup, others, agent)
+    alone = (check, bool(restore), selfup is not None, status, history)
+    if resume:
+        if any((*alone, apply, plan is not None)):
+            return O.refused(
+                "upgrade", "--resume continues an interrupted apply: nothing else beside it"
+            )
+        return _upgrade_resume(repo, confirm, reason, backup, on_progress, agent)
+    if any(alone):
+        return _upgrade_alone(repo, check, restore, selfup, others, agent, status, history)
     if snapshot:
         # `snapshot` is `backup="snapshot"` for one run; naming another mode too is a contradiction.
         if why := _snapshot_conflict(backup, bool(apply or plan is False)):
@@ -1193,7 +1227,14 @@ def upgrade(  # noqa: PLR0913 -- one keyword per `ddflow upgrade` mode; the CLI 
     if apply and plan is True:
         return O.refused("upgrade", "choose the plan or --apply, not both")
     if apply or plan is False:
-        return _upgrade_apply(repo, apply or "all", confirm, reason, backup, agent)
+        return _upgrade_apply(
+            repo, apply or "all", confirm, reason, backup, agent, on_progress=on_progress
+        )
+    return _upgrade_plan(repo, agent)
+
+
+def _upgrade_plan(repo: Path, agent: str) -> O.Outcome:
+    """The plan alone: exit 0 up to date, 1 while it has anything in it."""
     log, cfg, st = _load(repo, agent)
     data = UP.build(repo, log, cfg, st)
     data["text"] = UP.render(data)
@@ -1232,14 +1273,74 @@ def _upgrade_alone(
     selfup: SU.Request | None,
     others: bool,
     agent: str,
+    status: bool = False,
+    history: bool = False,
 ) -> O.Outcome:
-    """``--check``, ``--restore`` and ``--self`` stand alone: refuse them beside anything else."""
-    modes = [n for n, on in (("check", check), ("restore", restore), ("self", selfup)) if on]
+    """``--check``, ``--restore``, ``--self``, ``--status`` and ``--history`` stand alone:
+    refuse them beside anything else."""
+    modes = [
+        n
+        for n, on in (
+            ("check", check),
+            ("restore", restore),
+            ("self", selfup),
+            ("status", status),
+            ("history", history),
+        )
+        if on
+    ]
     if others or len(modes) > 1:
         return O.refused("upgrade", f"--{modes[0]} stands alone: choose it or the plan or --apply")
     if selfup is not None:
         return _upgrade_self(repo, selfup, agent)
+    if status:
+        return _upgrade_status(repo, agent)
+    if history:
+        return _upgrade_history(repo, agent)
     return _upgrade_check(repo, agent) if check else _upgrade_restore(repo, restore, agent)
+
+
+def _upgrade_status(repo: Path, agent: str) -> O.Outcome:
+    """`ddflow upgrade --status`: where the upgrade stands (`upgrade_status.status`)."""
+    log, cfg, st = _load(repo, agent)
+    data = UST.status(repo, cfg, st, log=log)
+    pending = not data["up_to_date"] or bool(data["run"] and data["run"]["state"] != UST.DONE)
+    return O.Outcome(
+        kind="upgrade",
+        data=data,
+        exit=O.FAIL if pending else O.OK,
+        reason=f"{len(data['steps'])} upgrade step(s) pending" if pending else "",
+    )
+
+
+def _upgrade_history(repo: Path, agent: str) -> O.Outcome:
+    """`ddflow upgrade --history`: the upgrades the log records, oldest first."""
+    _log, _cfg, st = _load(repo, agent)
+    rows = UST.history(st)
+    return O.ok("upgrade", upgrades=rows, text=UST.render_history(rows))
+
+
+def _upgrade_resume(
+    repo: Path,
+    confirm: Sequence[str],
+    reason: str,
+    backup: str,
+    on_progress: Callable[[str], None] | None,
+    agent: str,
+) -> O.Outcome:
+    """`ddflow upgrade --resume`: finish the run that was interrupted, step by step."""
+    _log, _cfg, st = _load(repo, agent)
+    rid, run = UST.open_run(st)
+    if not rid:
+        return O.Outcome(
+            kind="upgrade",
+            data={"text": "no upgrade run was interrupted: nothing to resume"},
+            exit=O.NOTHING,
+            reason="nothing to resume",
+        )
+    return _upgrade_apply(
+        repo, ",".join(run["categories"]) or "all", confirm, reason, backup, agent, rid, on_progress
+    )
 
 
 #: The self-upgrade request the surfaces build (`services.selfupgrade.Request`).
@@ -1310,7 +1411,14 @@ def _upgrade_check(repo: Path, agent: str) -> O.Outcome:
 
 
 def _upgrade_apply(
-    repo: Path, categories: str, confirm: Sequence[str], reason: str, backup: str, agent: str
+    repo: Path,
+    categories: str,
+    confirm: Sequence[str],
+    reason: str,
+    backup: str,
+    agent: str,
+    resume: str = "",
+    on_progress: Callable[[str], None] | None = None,
 ) -> O.Outcome:
     keys = [c.strip() for c in confirm if c and c.strip()]
     if keys and not reason.strip():
@@ -1328,6 +1436,7 @@ def _upgrade_apply(
             confirm=dict.fromkeys(keys, reason.strip()),
             backup=backup or cfg.upgrade.backup,
             agent=agent,
+            watch=UA.Watch(resume=resume, progress=on_progress),
         )
     except ValueError as exc:
         return O.failed("upgrade", str(exc))

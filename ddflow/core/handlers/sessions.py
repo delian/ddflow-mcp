@@ -130,7 +130,47 @@ def _h_skew_overridden(st: State, ev: Event) -> None:
 
 
 def _h_upgrade_applied(st: State, ev: Event) -> None:
+    """An upgrade's record. An event without ``status`` (or ``done``) is a finished upgrade, as
+    ever; ``started``, ``step`` and ``failed`` (with a ``run`` id) are the run's progress, kept in
+    ``st.upgrade_runs`` so an interrupted run can be resumed and shown."""
     d = ev.data
+    status = d.get("status", "done")
+    run_id = d.get("run")
+    if isinstance(run_id, str) and run_id:
+        run = st.upgrade_runs.setdefault(
+            run_id,
+            {
+                "from": "",
+                "to": "",
+                "categories": [],
+                "items": [],
+                "steps": [],
+                "closed": "",
+                "started": ev.ts,
+                "agent": ev.agent,
+                "starts": 0,
+            },
+        )
+        if status == "started":
+            run["starts"] += 1
+            # `target`, not `to`: an older ddflow folds this event as a finished upgrade and
+            # must not read the version a run is only heading for as the one reached.
+            run["from"], run["to"] = d.get("source", ""), d.get("target", "")
+            run["categories"] = list(d.get("categories") or [])
+            run["items"] = [i for i in d.get("items") or [] if isinstance(i, str)]
+        elif status == "step":
+            run["steps"].append(
+                {
+                    "id": str(d.get("step", "")),
+                    "status": str(d.get("step_status", "")),
+                    "detail": str(d.get("detail", "")),
+                    "at": ev.ts,
+                }
+            )
+        else:
+            run["closed"] = "failed" if status == "failed" else "done"
+    if status not in ("done", None):
+        return
     st.upgrades.append(
         {
             "from": d.get("from", ""),
@@ -141,6 +181,7 @@ def _h_upgrade_applied(st: State, ev: Event) -> None:
             "confirmed": dict(d["confirmed"]) if isinstance(d.get("confirmed"), dict) else {},
             "config_changes": [c for c in d.get("config_changes") or [] if isinstance(c, dict)],
             "summary": str(d.get("summary", "")),
+            "run": run_id if isinstance(run_id, str) else "",
             "agent": ev.agent,
             "at": ev.ts,
         }
