@@ -354,6 +354,10 @@ def test_a_release_is_refused_when_the_dry_run_from_the_previous_one_is_red() ->
     assert "scripts/ci/upgrade-dry-run --previous-release" in release
     assert "DDFLOW_SKIP_DRYRUN" in release and "die " in release
     workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text("utf-8")
-    assert "upgrade-dry-run --previous-release" in workflow
-    # it sits in the job every publishing job needs, before PyPI
-    assert workflow.index("upgrade-dry-run --previous-release") < workflow.index("\n  pypi:")
+    at = workflow.index("upgrade-dry-run --previous-release")
+    # the job that runs it is one the publishing job NEEDS: job order in the file means nothing
+    jobs = [(m.start(), m.group(1)) for m in re.finditer(r"^  (\w+):\s*$", workflow, re.M)]
+    job = [name for start, name in jobs if start < at][-1]
+    pypi = re.search(r"^  pypi:\s*\n    needs: \[([^\]]*)\]", workflow, re.M)
+    assert pypi, "the pypi job no longer says what it needs"
+    assert job in [n.strip() for n in pypi.group(1).split(",")], (job, pypi.group(1))
