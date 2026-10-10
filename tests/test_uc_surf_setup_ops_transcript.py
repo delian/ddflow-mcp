@@ -121,6 +121,11 @@ def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
     monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "off")
     monkeypatch.setenv("COLUMNS", "100")
     monkeypatch.setenv("NO_COLOR", "1")
+    # Nothing of the machine's own user-level state reaches the transcript.
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
     got = []
     for argv in SCRIPT:
         out, err = io.StringIO(), io.StringIO()
