@@ -777,3 +777,11 @@ def board_rows(
     if loose:
         out.append(BoardSection(None, tally(loose), rows(loose, "")))
     return out
+
+
+def new_reports_line(item: str, count: int) -> str:
+    """The one line heartbeat and `gate status` carry; "" when there is nothing new."""
+    if not count:
+        return ""
+    s = "" if count == 1 else "s"
+    return f"{count} new report{s} on {item} since you claimed -- `ddflow show {item}`"

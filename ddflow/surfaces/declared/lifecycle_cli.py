@@ -13,8 +13,8 @@ from typing import Any
 
 from ...core import clock
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
+from ...core.progress import new_reports_line
 from ...core.tier import tier_of
-from ...views.markdown import new_reports_line
 
 #: How many offending files a refusal lists before summarising the rest. Enough to see
 #: whether they are build artefacts or real source -- which is the judgement the operator

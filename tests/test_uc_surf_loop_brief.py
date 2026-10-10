@@ -17,3 +17,14 @@ def test_brief_has_no_hand_written_half_left():
     assert "ddflow_brief" not in tools.HAND_WRITTEN
     assert not hasattr(commands, "cmd_brief")
     assert tools.TOOLS["ddflow_brief"] == declared.BY_TOOL["ddflow_brief"].tool_entry()
+
+
+def test_declaring_the_loop_commands_needs_no_template_engine():
+    """`scripts/bump.sh` imports the MCP engine under an interpreter without jinja2: the
+    renderers of `declared/*_cli.py` may not reach the modules that import it."""
+    import subprocess
+    import sys
+
+    code = "import sys; sys.modules['jinja2'] = None; import ddflow.surfaces.mcp"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
