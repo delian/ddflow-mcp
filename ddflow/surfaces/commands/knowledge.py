@@ -18,6 +18,7 @@ from ...core import provenance as PV
 from ...core.events import OLDER_MARK
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..declared.records import BUG_INVALID_FIELDS
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
@@ -338,17 +339,7 @@ def _bug_invalid(a, c: Ctx) -> int:
     c.out(
         f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}"
         + _fix_task_tail(out.data),
-        out.body(
-            (
-                "id",
-                "invalid_reason",
-                "evidence",
-                "unchecked",
-                "fix_task",
-                "fix_task_removed",
-                "fix_task_kept",
-            )
-        ),
+        out.body(BUG_INVALID_FIELDS),
     )
     return OK
 
