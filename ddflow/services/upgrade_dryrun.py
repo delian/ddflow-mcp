@@ -85,6 +85,9 @@ UPGRADE_OWNED = frozenset(
     }
 )
 
+#: The event kinds an apply writes: any of them new in the log means something was applied.
+APPLYING = frozenset({"upgrade.applied", "repair.applied"})
+
 #: The paths a restore does not bring back: the log only grows, the rest is machine-local.
 KEPT = (".ddflow/events/", ".ddflow/local/", ".ddflow/backups/", ".ddflow/worktrees/", ".git/")
 
@@ -736,7 +739,7 @@ class Rehearsal:
 
     def step_connect(self) -> bool:
         repo = self.clone("connect")
-        before_tree = tree_digest(repo)
+        before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
         msgs = [
             {
                 "jsonrpc": "2.0",
@@ -765,10 +768,10 @@ class Rehearsal:
         tools = (first.get(2) or {}).get("tools") or []
         size, bad = tools_problems(tools, self.opt.tools_budget)
         problems += bad
-        if (
-            any(e.get("kind") in ("upgrade.applied", "repair.applied") for e in events_of(repo))
-            or tree_digest(repo) != before_tree
-        ):
+        applied = [
+            e for e in events_of(repo) if e.get("id") not in known and e.get("kind") in APPLYING
+        ]
+        if applied or tree_digest(repo) != before_tree:
             problems.append("something was applied before the operator consented")
         keys = self.confirms
         consent = {
