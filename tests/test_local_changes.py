@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import time
 from pathlib import Path
 
 import pytest
+from helpers import git as _git
 
 from ddflow.services import changes as C
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _write(root: Path, rel: str, text: str) -> None:

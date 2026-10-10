@@ -11,6 +11,7 @@ import json
 
 import pytest
 from conftest import run_cli
+from helpers import tool_json as _body
 
 from ddflow.infra.log import EventLog
 from ddflow.surfaces import mcp_bound as B
@@ -27,10 +28,6 @@ def _call(repo, **arguments):
         }
     )["result"]
     return r
-
-
-def _body(r):
-    return json.loads(r["content"][0]["text"])
 
 
 @pytest.fixture

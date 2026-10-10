@@ -18,18 +18,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
+from helpers import state_as_reader as state
 
 from ddflow.api import knowledge as K
 from ddflow.api import lifecycle as LC
 from ddflow.config import Config
-from ddflow.core.model import fold
 from ddflow.core.schedule import plan
 from ddflow.infra.log import EventLog
 from ddflow.surfaces.mcp import Server
-
-
-def state(repo: Path):
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
 def seed(repo: Path, *, feature: bool = True):

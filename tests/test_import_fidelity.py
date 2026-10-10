@@ -20,27 +20,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import state as _state
+from helpers import write_text_at as _write
 
-from ddflow.core.model import ABANDONED, BLOCKED, OPEN, fold
-from ddflow.infra.log import EventLog
+from ddflow.core.model import ABANDONED, BLOCKED, OPEN
 from ddflow.services import importer as IM
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
-def _write(repo: Path, rel: str, text: str) -> None:
-    p = repo / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
-
-
 def _tasks(repo: Path, **kw) -> dict[str, IM.Found]:
     plan = IM.plan_import(repo, None, max_tasks=10**6, **kw)
     return {f.ident: f for f in plan.found if f.kind == "task"}
-
-
-def _state(repo: Path):
-    return fold(EventLog(repo).read_all(), strict=False)
 
 
 # -- dispositions: an open box is not always work ---------------------------------------

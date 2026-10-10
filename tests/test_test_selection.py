@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -18,15 +17,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.services import gates as G
 from ddflow.services import testselect as T
 
 OK, FAIL, NOTHING = 0, 1, 2
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 @pytest.fixture

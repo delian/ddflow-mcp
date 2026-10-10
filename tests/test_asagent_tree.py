@@ -29,6 +29,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git as _git
+from helpers import rpc_call as _call
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -38,25 +40,6 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 # Passes only where a.py exists: on the parent's branch, and nowhere else.
 PROBE = f"{sys.executable} -c \"import pathlib,sys; sys.exit(0 if pathlib.Path('a.py').exists() else 1)\""
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-def _call(srv: Server, name: str, **args) -> dict:
-    reply = srv.handle(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": args},
-        }
-    )
-    assert reply is not None
-    return reply["result"]
 
 
 def _item(repo: Path, iid: str):
@@ -90,10 +73,6 @@ def _mcp_setup(repo: Path) -> tuple[Server, Path]:
     assert out["_meta"]["exit"] == OK, out
     assert not _item(repo, "T1").worktree, "fixture: T1 must have no tree of its own"
     return srv, tree
-
-
-def _outcome(result: dict) -> dict:
-    return json.loads(result["content"][0]["text"])
 
 
 def test_a_subagents_gate_run_does_not_run_the_parents_tree(repo):

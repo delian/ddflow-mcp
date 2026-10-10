@@ -5,15 +5,12 @@ as out of scope although the item declared it."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
+from helpers import git_quiet as _git
+
 from ddflow.api.lifecycle.merge import _outside_globs
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def _repo(tmp_path: Path) -> Path:

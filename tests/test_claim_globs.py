@@ -26,19 +26,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import run_cli
+from helpers import items_of as _items
 
 from ddflow.api import items as AI
 from ddflow.api import lifecycle as A
 from ddflow.core import globspec as GS
 from ddflow.core import outcome as O
-from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 HOLDER = "agent-holder"
-
-
-def _items(repo: Path):
-    return fold(EventLog(repo, "probe").read_all(), strict=False).items
 
 
 def _lease_globs(repo: Path, item: str) -> list[str]:

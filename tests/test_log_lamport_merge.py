@@ -20,6 +20,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from helpers import git_raw as _git
 
 from ddflow.api import reporting
 from ddflow.infra import log as L
@@ -32,12 +33,6 @@ def _no_version_stamp(monkeypatch):
     """These tests are about the log's storage mechanics (event counts, byte offsets, clock
     values); the version stamp (B-upgrade.1-stamp) is tested in tests/test_upgrade_stamp.py."""
     monkeypatch.setattr(L.EventLog, "stamp", False)
-
-
-def _git(cwd: Path, *argv: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *argv], check=True, capture_output=True, text=True
-    ).stdout
 
 
 def _clone(remote: Path, dest: Path) -> Path:

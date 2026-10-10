@@ -22,15 +22,11 @@ from itertools import permutations
 from pathlib import Path
 
 import pytest
+from helpers import make_event as _ev
 
 from ddflow.core.events import Event
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def _ev(kind: str, subject: str, lamport: int, agent: str = "x", **data) -> Event:
-    e = Event(kind=kind, subject=subject, data=data, agent=agent, lamport=lamport, ts=f"t{lamport}")
-    return Event(**{**e.__dict__, "id": e.compute_id()})
 
 
 def _acq(lamport: int, holder: str, at: float, ttl: int) -> Event:

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.core import provenance as PV
 from ddflow.infra.log import EventLog
@@ -229,10 +229,6 @@ def test_the_instruction_surfaces_carry_the_data_line():
 
 
 # -- the doctor note ------------------------------------------------------------------
-
-
-def _git(repo, *a):
-    subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
 
 
 def _notes(repo) -> list[str]:

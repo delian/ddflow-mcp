@@ -3,30 +3,14 @@
 from __future__ import annotations
 
 import json
-import subprocess
 
 from conftest import run_cli
+from helpers import commit as _commit
+from helpers import item_of as _item
 
 from ddflow.api.verify import verify
 from ddflow.core import outcome as O
-from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-def _commit(repo, files, msg):
-    for name, text in files.items():
-        p = repo / name
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-qm", msg)
-    return _git(repo, "rev-parse", "HEAD")
 
 
 def _false_completion(repo):
@@ -35,10 +19,6 @@ def _false_completion(repo):
     run_cli(repo, "task", "add", "T1", "--title", "do it", "--globs", "missing/promised.py")
     sha = _commit(repo, {"other.txt": "x\n"}, "unrelated")
     run_cli(repo, "complete", "T1", "--sha", sha, "--force")
-
-
-def _item(repo, tid="T1"):
-    return fold(EventLog(repo).read_all(), strict=False).items[tid]
 
 
 def test_a_failing_completion_is_reopened_with_the_failed_claims_and_its_gates_cleared(repo):

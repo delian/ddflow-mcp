@@ -23,18 +23,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
+from helpers import git as _git
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK = 0
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _git(where: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _claimed_with_a_commit(repo: Path) -> Path:

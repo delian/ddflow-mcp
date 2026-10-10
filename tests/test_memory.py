@@ -15,29 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import rpc_call as _mcp
+from helpers import state as _state
 
-from ddflow.core.model import fold
-from ddflow.infra.log import EventLog
 from ddflow.surfaces.mcp import Server
 
 OK, FAIL, NOTHING = 0, 1, 2
-
-
-def _state(repo: Path):
-    return fold(EventLog(repo).read_all(), strict=False)
-
-
-def _mcp(srv: Server, name: str, **args) -> dict:
-    reply = srv.handle(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": args},
-        }
-    )
-    assert reply is not None
-    return reply["result"]
 
 
 def test_a_memory_is_recorded_listed_and_forgotten_with_a_reason(repo):

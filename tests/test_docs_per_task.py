@@ -8,7 +8,6 @@ on record. A completion check with a severity, not a pipeline gate (see completi
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
 
 from ddflow.api import completion_verdict
 from ddflow.api._base import _load
@@ -23,10 +23,6 @@ from ddflow.infra import worktree as W
 
 OK = 0
 MESSAGE = "README not updated: record the section you changed, or `ddflow gate skip"
-
-
-def _git(tree: Path, *argv: str) -> None:
-    subprocess.run(["git", "-C", str(tree), *argv], check=True, capture_output=True)
 
 
 @pytest.fixture

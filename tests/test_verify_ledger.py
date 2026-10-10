@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
 
 from conftest import run_cli
+from helpers import git as _git
 
 from ddflow.infra.log import EventLog
 from ddflow.services import ledger as LG
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 def _land(repo, tid="T1", extra=()):

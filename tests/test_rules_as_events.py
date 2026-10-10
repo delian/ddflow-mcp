@@ -11,6 +11,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from helpers import git_quiet as _git
+from helpers import state_as_reader as _state
+
 from ddflow.api import defs as ADEFS
 from ddflow.config import Config
 from ddflow.core import defs as D
@@ -377,22 +380,13 @@ def test_the_mcp_tools_show_an_unrecorded_write_as_an_error(repo: Path, monkeypa
 
 # -- the rule files as a checked generated view -------------------------------------------
 
-import subprocess  # noqa: E402
 
 from ddflow.services import enforce as E  # noqa: E402
 from ddflow.services.guidance import ruleview as RV  # noqa: E402
 
 
-def _state(repo: Path):
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
-
-
 def _drift(repo: Path):
     return RV.drift(repo, Config.load(repo), _state(repo))
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def test_files_the_log_says_have_no_drift(repo: Path) -> None:

@@ -11,18 +11,14 @@ from pathlib import Path
 
 import pytest
 from conftest import run_cli
+from helpers import git as _git
+from helpers import state as _state
 
 from ddflow.api import ci as A
 from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import ci as CI
-
-
-def _git(repo, *args):
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
-    ).stdout.strip()
 
 
 @pytest.fixture
@@ -50,10 +46,6 @@ def _project(repo, *, bad=False):
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "adopt")
     return _git(repo, "rev-parse", "HEAD")
-
-
-def _state(repo):
-    return fold(EventLog(repo).read_all(), strict=False)
 
 
 def test_a_failing_base_is_recorded_and_files_one_bug_and_fix_task_per_check(repo, fake_precommit):

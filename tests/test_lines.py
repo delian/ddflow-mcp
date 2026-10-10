@@ -7,36 +7,21 @@ and the only honest check of that is `git show <branch>:<file>`.
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
 from conftest import pass_pipeline, run_cli
+from helpers import flow_config as _cfg
+from helpers import git as _git
+from helpers import state_as_reader as _state
 
 from ddflow.config import Config
 from ddflow.core import flow as F
-from ddflow.core.model import Item, State, fold
+from ddflow.core.model import Item, State
 from ddflow.infra.log import EventLog
 from ddflow.services import choices as CH
 
 AUTHOR = "claude-opus-5"
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
-
-
-def _state(repo: Path) -> State:
-    return fold(EventLog(repo, "reader").read_all(), strict=False)
-
-
-def _cfg(**flow) -> Config:
-    c = Config()
-    for k, v in flow.items():
-        setattr(c.flow, k, v)
-    return c
 
 
 LINES = {"1": "maint/1.x", "2": "maint/2.x"}

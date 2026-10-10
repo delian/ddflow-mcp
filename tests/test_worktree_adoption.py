@@ -28,15 +28,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import git_quiet as _git
+from helpers import item_of as _item
 
-from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
-
-
-def _git(where, *args) -> None:
-    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
 
 
 def _agent_worktree(repo: Path, name: str = "agent-tree", branch: str = "agent-work") -> Path:
@@ -44,10 +41,6 @@ def _agent_worktree(repo: Path, name: str = "agent-tree", branch: str = "agent-w
     path = repo.parent / name
     _git(repo, "worktree", "add", "-q", str(path), "-b", branch)
     return path
-
-
-def _item(repo: Path, iid: str = "T1"):
-    return fold(EventLog(repo).read_all(), strict=False).items[iid]
 
 
 def _worktrees(repo: Path) -> list[str]:
