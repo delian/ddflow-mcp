@@ -1059,11 +1059,15 @@ def _branches_of(events, agent: str) -> dict[str, str]:
     return out
 
 
-def _ours(e, claimed: dict[str, Any], clone: str) -> bool:
-    """Is the claim this release ends one THIS clone made? A claim without a clone is."""
-    acq = claimed.get(e.data.get("event", ""))
-    theirs = acq.data.get("clone", "") if acq is not None else ""
+def _same_clone(theirs: str, clone: str) -> bool:
+    """Is a claim recorded from clone ``theirs`` this clone's? A claim without a clone is."""
     return not (theirs and clone and theirs != clone)
+
+
+def _ours(e, claimed: dict[str, Any], clone: str) -> bool:
+    """Is the claim this release ends one THIS clone made?"""
+    acq = claimed.get(e.data.get("event", ""))
+    return _same_clone(acq.data.get("clone", "") if acq is not None else "", clone)
 
 
 def lost_contests(log: EventLog, agent: str) -> dict[str, dict[str, Any]]:
@@ -1089,7 +1093,13 @@ def lost_contests(log: EventLog, agent: str) -> dict[str, dict[str, Any]]:
                 "lamport": e.lamport,
             }
     for e in events:
-        again = e.kind == "lease.acquired" and e.data.get("holder") == agent
+        # THIS clone's re-claim only: another clone running under the same name claiming
+        # the item is the very case the clone id tells apart.
+        again = (
+            e.kind == "lease.acquired"
+            and e.data.get("holder") == agent
+            and _same_clone(e.data.get("clone", ""), clone)
+        )
         if again and e.subject in out and e.lamport > out[e.subject]["lamport"]:
             del out[e.subject]
     return out
