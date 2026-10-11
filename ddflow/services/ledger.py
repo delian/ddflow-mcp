@@ -163,9 +163,11 @@ def summary(ledger: dict[str, Any], files_shown: int = 8) -> dict[str, Any]:
         "files": d["files"][:files_shown],
         "tests": len(d["tests"]),
         "skipped_gates": ledger["skipped"],
-        "not_applicable": ledger["not_applicable"],
         "forced": ledger["forced"],
         "amendments": len(ledger["amendments"]),
         "requirement_changed_after": ledger["requirement_changed_after"],
         "reconstructed": ledger["reconstructed"],
+        # Only when something was excused: a completion with nothing excused shows exactly
+        # what it always did.
+        **({"not_applicable": ledger["not_applicable"]} if ledger["not_applicable"] else {}),
     }
