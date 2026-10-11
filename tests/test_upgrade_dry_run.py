@@ -798,6 +798,8 @@ def test_the_rehearsal_demands_a_note_from_a_start_check_that_ran_out_of_time(
         "known yet. Run `ddflow upgrade --plan`. Ask the operator whether to upgrade now"
     )
     assert rehearsal._noted({1: {"instructions": note}}) == []
+    proposal = "ddflow 0.2.1 is newer than this project: 72 item(s). Ask the operator whether"
+    assert rehearsal._noted({1: {"instructions": proposal}}) == [], "a plan that fit is fine"
     assert rehearsal._noted({1: {"instructions": "did not finish within 10s"}})
     assert rehearsal._noted({1: {"instructions": ""}})
     assert rehearsal._default_path({1: {"instructions": note}}) == []
