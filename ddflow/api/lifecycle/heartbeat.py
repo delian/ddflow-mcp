@@ -13,6 +13,7 @@ from ...core.model import fold
 from ...services import eventcommit as EC
 from ...services import leases as L
 from ...services import waits as WT
+from ...services.cleanup import stranded_text
 from ...services.leaseclock import localize
 from .._base import _load
 from .claim import _in_leased_tree, _new_report_count, _tree_of
@@ -30,6 +31,23 @@ def heartbeat(
     holder, never taking the lease over, and standing in some OTHER tree renews nothing.
     """
     log, cfg, st = _load(repo, agent)
+    gone = st.items.get(item)
+    if (
+        gone is not None
+        and gone.removed
+        and gone.lease
+        and gone.lease.live(time.time(), cfg.lease.grace_s)
+    ):
+        # Renewing would keep a lease on an item nobody can finish (B71dedb76d2).
+        ls = gone.lease
+        return O.refused(
+            "lease.renewed",
+            stranded_text(item, ls.holder, ls.branch or gone.branch, ls.worktree),
+            id=item,
+            renewed=False,
+            waiters=[],
+            globs_withheld="",
+        )
     renewed = L.renew(log, item)
     hint = ""
     if not renewed:

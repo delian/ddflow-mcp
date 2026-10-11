@@ -301,7 +301,7 @@ def wait(
         return O.failed("wait", bad, **empty)
     log, cfg, st = _load(repo, agent)
     if item:
-        found = _require(st, item, "wait")
+        found = _require(st, item, "wait", cfg.lease.grace_s)
         if isinstance(found, O.Outcome):
             return O.Outcome("wait", {**empty, **found.data}, found.exit, found.reason)
     me = cfg.agent.id or log.agent_id
