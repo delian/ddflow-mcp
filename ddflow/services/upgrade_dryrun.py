@@ -140,6 +140,12 @@ MAX_COMMANDS = 1000
 #: The name of the result when the live project changed in a way the rehearsal cannot tell from
 #: its own doing: it is `unavailable`, never a pass and never a fail.
 LIVE_CHANGED = "live repo changed during rehearsal"
+#: Seconds the rehearsal's MCP sessions are given for the server's start check
+#: (`[upgrade].start_timeout_s`, 10 by default): past it the handshake proposes nothing, and the
+#: plan of a big log takes 7-11 s under load. The rehearsal tests the flow, not that speed.
+START_TIMEOUT_S = 120
+#: What the handshake says when the start check ran out of its time bound.
+START_TIMED_OUT = "did not finish within"
 #: The pause before the one retry of a clone that failed (a gc or a ref update in the live repo).
 CLONE_RETRY_S = 0.5
 
@@ -1150,6 +1156,15 @@ class Rehearsal:
         repo = self.clone("connect")
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
         first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
+        if START_TIMED_OUT in (first.get(1) or {}).get("instructions", ""):
+            self.unrunnable("MCP connect: propose, wait for consent, apply")
+            return self.add(
+                6,
+                "MCP connect: propose, wait for consent, apply",
+                None,
+                f"the server's start check ran out of its time bound even with {START_TIMEOUT_S}s "
+                "(a very loaded machine, or a log too big for it): it could not propose",
+            )
         size, problems = self._proposed(first)
         applied = [
             e for e in events_of(repo) if e.get("id") not in known and e.get("kind") in APPLYING
@@ -1222,7 +1237,7 @@ class Rehearsal:
             argv,
             timeout=TIMEOUT_S,
             cwd=repo,
-            env=self.env(self.new),
+            env={**self.env(self.new), "DDFLOW_UPGRADE_START_TIMEOUT_S": str(START_TIMEOUT_S)},
             input="\n".join(json.dumps(m) for m in msgs) + "\n",
         )
         if not done.ran:
@@ -1235,6 +1250,11 @@ class Rehearsal:
                 continue
             if isinstance(msg, dict) and isinstance(msg.get("id"), int):
                 replies[msg["id"]] = msg.get("result") or {"error": msg.get("error")}
+        # what the steps judge is in the replies, and a reply that is big is cut in the middle
+        # of the command's output: keep each one's head
+        self.commands[-1]["replies"] = {
+            str(k): bounded(json.dumps(v, default=str), 2500) for k, v in replies.items()
+        }
         return replies
 
     def step_agents(self) -> bool:

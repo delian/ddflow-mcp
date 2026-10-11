@@ -725,3 +725,42 @@ def test_a_pip_install_that_fails_leaves_the_transcript_and_so_does_an_unwritabl
         assert data["facts"]["could_not_run"] == ["build the old ddflow from the clone"]
     finally:
         shutil.rmtree(Path(report.diagnostics).parent, ignore_errors=True)
+
+
+def test_the_mcp_sessions_get_time_to_check_and_their_replies_are_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B-dryrun-flake, found by the diagnostics: the server's start check is bounded by
+    [upgrade].start_timeout_s (10 s), the plan of a big log takes 7-11 s under load, and past
+    the bound the handshake does not propose anything. The rehearsal tests the flow, not the
+    speed of the check, so its sessions are given time, and the replies are in the transcript."""
+    root = project(tmp_path, confirm_free=True)
+    seen: dict[str, str] = {}
+    reply = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"instructions": "I-ASK-YOU"}})
+
+    def fake(argv, **kw):
+        seen.update(kw["env"])
+        return DR.P.Captured(0, reply + "\n", "")
+
+    monkeypatch.setattr(DR.P, "capture", fake)
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    assert rehearsal._serve(root, [])[1] == {"instructions": "I-ASK-YOU"}
+    assert float(seen["DDFLOW_UPGRADE_START_TIMEOUT_S"]) >= 60  # the knob's default is 10
+    assert "I-ASK-YOU" in rehearsal.commands[-1]["replies"]["1"]
+
+
+def test_a_start_check_that_ran_out_of_time_is_unavailable_never_a_pass_or_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = project(tmp_path, confirm_free=True)
+    rehearsal = DR.Rehearsal(options(tmp_path, root))
+    rehearsal.step_clone()
+    timed_out = {
+        "instructions": "ddflow 0.2.1 is newer than this project; the upgrade check did not "
+        "finish within 10s, so the server started anyway and the upgrade stays pending"
+    }
+    monkeypatch.setattr(DR.Rehearsal, "_serve", lambda self, repo, msgs: {1: timed_out})
+    rehearsal.step_connect()
+    last = rows(rehearsal.report)[6]
+    assert last.status == DR.UNAVAILABLE and "time bound" in last.detail
+    assert rehearsal.report.facts["could_not_run"]
