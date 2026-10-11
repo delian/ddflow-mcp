@@ -332,22 +332,36 @@ def _has_conflict_markers(path: Path) -> bool:
         return False
 
 
-def conflicted_views(repo: Path) -> list[str]:
+def conflicted_views(repo: Path, expected: dict[str, str] | None = None) -> list[str]:
     """PROBLEMs for each generated view holding merge-conflict markers (B6b8d1f7a0f).
 
     A view is derived from the log, so a conflict in it is regenerated, never hand-merged:
     two clones that each render and commit conflict on every one at every pull.
+
+    Markers in the text are not enough (B-viewmarkers): a lesson quoting a whole conflict
+    block renders verbatim into a view, and no `git checkout --theirs` clears that. A view
+    with markers is conflicted when git lists it unmerged, or (markers `git add`ed and
+    committed) when it differs from `expected`, the text the log renders to. Where neither
+    can be known (git cannot list, no `expected`) the markers alone decide.
     """
-    # Markers in the text are not enough: a lesson quoting a whole conflict block renders
-    # verbatim into a view, and no `git checkout --theirs` can clear that. When git can list
-    # the unmerged paths a view must be one of them (B-viewmarkers).
     unmerged = G.unmerged(repo)
-    hit = [
-        f"{_VIEW_DIR}/{name}"
-        for name in VIEW_NAMES
-        if (unmerged is None or f"{_VIEW_DIR}/{name}" in unmerged)
-        and _has_conflict_markers(Path(repo) / _VIEW_DIR / name)
-    ]
+
+    def conflicted(name: str) -> bool:
+        path = Path(repo) / _VIEW_DIR / name
+        if not _has_conflict_markers(path):
+            return False
+        if unmerged is None and expected is None:
+            return True
+        if unmerged is not None and f"{_VIEW_DIR}/{name}" in unmerged:
+            return True
+        if expected is None or name not in expected:
+            return False
+        try:
+            return path.read_text("utf-8", errors="replace") != expected[name]
+        except OSError:
+            return False
+
+    hit = [f"{_VIEW_DIR}/{name}" for name in VIEW_NAMES if conflicted(name)]
     if not hit:
         return []
     return [
@@ -371,17 +385,20 @@ def conflicted_layers(repo: Path) -> list[str]:
     return out
 
 
-def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
+def findings(
+    repo: Path, cfg: Config, views: dict[str, str] | None = None
+) -> tuple[list[str], list[str]]:
     """(problems, notes) for doctor.
 
     A PROBLEM: an append-only glob whose `merge=union` line is missing -- two items'
     lines will conflict at merge, the exact thing the setting promises not to happen --
     or whose union line sits after a narrower driver the project set, overriding it.
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
-    parallel merge of it will conflict until someone regenerates it.
+    parallel merge of it will conflict until someone regenerates it. ``views`` is what
+    `views.markdown.render_views` gives for the log (this module sits below it).
     """
 
-    problems: list[str] = [*conflicted_layers(repo), *conflicted_views(repo)]
+    problems: list[str] = [*conflicted_layers(repo), *conflicted_views(repo, views)]
     notes: list[str] = []
     for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
         try:
