@@ -27,11 +27,12 @@ _CHOOSE = re.compile(r"\(choose from ('[^'\n]*'(?:, '[^'\n]*')*)\)")
 
 
 def argparse_stable(text: str) -> str:
-    """``text`` with argparse's version-dependent formatting made uniform."""
+    """``text`` with argparse's version-dependent formatting made uniform.
+
+    The newer choice layout (``choose from a, b``) cannot tell choices ``['a', 'b']`` from
+    ``['a, b']``, so a pin compared through this cannot either; the old one could."""
     text = _USAGE.sub(lambda m: " ".join(m.group(0).split()), text)
     return _CHOOSE.sub(lambda m: "(choose from " + m.group(1).replace("'", "") + ")", text)
-    # NB the newer layout (`choose from a, b`) cannot tell choices ['a', 'b'] from ['a, b'],
-    # so neither can a pin compared through this; the old one could, and that is the cost.
 
 
 def stable(value: Any) -> Any:
