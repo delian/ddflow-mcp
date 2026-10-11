@@ -132,13 +132,28 @@ def test_a_patch_skew_needs_no_override_and_records_none(repo: Path):
     assert not [e for e in log.read_all() if e.kind == "skew.overridden"]
 
 
-def test_the_explicit_refuse_policy_is_the_default_and_keeps_the_strict_cases(
+def test_an_explicit_refuse_policy_has_no_stricter_patch_setting(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """`refuse` is the default spelling: a patch skew warns under it, a minor skew refuses.
+    There is no separate strict-patch value (decision D-mu-bugfix-answers)."""
     monkeypatch.setenv("DDFLOW_UPGRADE_SKEW", "refuse")
+    _stamp(repo, "0.5.7")
+    log = EventLog(repo, "me")
+    log.append("phase.added", "P1", {"title": "p"})
+    assert _phases(log)[0].data.get(OLDER_MARK) == RUNNING
     _stamp(repo, "0.6.0")
     with pytest.raises(SkewRefused):
-        EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+        log.append("phase.added", "P2", {"title": "p"})
+
+
+@pytest.mark.parametrize("policy", ["warn", "off"])
+def test_the_other_policies_still_write_through_any_skew(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, policy: str
+):
+    monkeypatch.setenv("DDFLOW_UPGRADE_SKEW", policy)
+    _stamp(repo, "0.6.0")
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
 
 
 @pytest.mark.parametrize(
@@ -169,9 +184,12 @@ def test_an_older_adopt_is_refused_by_a_log_a_newer_minor_wrote(repo: Path):
     assert not (repo / "AGENTS.md").exists()
 
 
-def test_an_older_adopt_proceeds_under_a_patch_skew(repo: Path):
+def test_an_older_adopt_is_refused_even_by_a_patch_skew(repo: Path):
+    """The managed text differs between patch releases (0.2.0 -> 0.2.1 reworded the driver
+    doc), so the relaxation that lets log writes through does not cover re-rendering it."""
     from ddflow.api.setup import Adoption, setup
 
     _stamp(repo, "0.5.7")
     out = setup(repo, Adoption(agents="claude"))
-    assert out.exit == 0, out
+    assert out.exit == 3, out
+    assert not (repo / "AGENTS.md").exists()

@@ -1181,14 +1181,23 @@ class EventLog:
                     {"capability": cap.name, "kinds": sorted(cap.kinds), "version": cap.since},
                 )
 
-    def _judge_skew(self, facts: StampFacts, version: str, fmt: int) -> dict[str, Any]:
+    def _judge_skew(
+        self, facts: StampFacts, version: str, fmt: int, *, strict: bool = False
+    ) -> dict[str, Any]:
         """Apply the skew policy to ``facts``: raise `SkewRefused`, warn, or let the write
-        through. Returns the extra `data` for an event written under an older-ddflow mark."""
+        through. Returns the extra `data` for an event written under an older-ddflow mark.
+        ``strict`` withholds the patch-skew relaxation (a write of tracked files re-renders
+        text whose wording can differ between patch releases)."""
         extra: dict[str, Any] = {}
         if not facts.skewed:
             return extra
         policy = self._skew_policy()
-        if policy == "refuse" and facts.override is None and self._patch_skew(facts, version, fmt):
+        if (
+            policy == "refuse"
+            and facts.override is None
+            and not strict
+            and self._patch_skew(facts, version, fmt)
+        ):
             _warn_patch_skew_once(version, facts.highest)
             extra[OLDER_MARK] = version
         elif policy == "refuse":
@@ -1211,13 +1220,13 @@ class EventLog:
         return extra
 
     def check_skew(self) -> None:
-        """Raise `SkewRefused` when a write by this ddflow would be refused for version skew
-        (a patch skew warns once and passes); writes nothing, not even the stamp. For a
-        caller that changes tracked files without appending an event (`adopt`)."""
+        """Raise `SkewRefused` when this ddflow is older than the log's highest stamp, a PATCH
+        behind included; writes nothing, not even the stamp. For a caller that changes tracked
+        files without appending an event (`adopt`): the managed text it renders is worded
+        per release, so an older ddflow must not overwrite a newer one's."""
         version, fmt = running_version(), V.format_level()
-        self._judge_skew(
-            stamp_facts(self._all_events(), self.agent_id, version, fmt or None), version, fmt
-        )
+        facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
+        self._judge_skew(facts, version, fmt, strict=True)
 
     @staticmethod
     def _patch_skew(facts: StampFacts, version: str, fmt: int) -> bool:
