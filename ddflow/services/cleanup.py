@@ -116,6 +116,58 @@ class _Protected:
         return "", ""
 
 
+def stranded_text(item: str, holder: str, branch: str, worktree: str = "") -> str:
+    """THE sentence for a removed item whose lease is still held (B71dedb76d2): who holds
+    it, which branch their work is on, and the exact way out. A lease is evidence of
+    intent and is never stolen; removal does not destroy the holder's branch."""
+    on = f" on branch {branch}" if branch else ""
+    tree = f" (worktree {worktree})" if worktree else ""
+    fix = f"`ddflow release {item}`"
+    if branch:
+        fix += (
+            f", then keep the branch with `git branch -m {branch} keep/{item}` "
+            f"or delete it with `git branch -D {branch}`"
+        )
+    return (
+        f"item {item} removed from the queue, lease still held by "
+        f"{holder or 'unknown'}{on}{tree}: release it with {fix}"
+    )
+
+
+@dataclass(frozen=True)
+class Stranded:
+    item: str
+    holder: str
+    branch: str
+    worktree: str
+
+    def render(self) -> str:
+        return stranded_text(self.item, self.holder, self.branch, self.worktree)
+
+
+def stranded_leases(
+    root: Path, cfg: Config, state: State, now: float | None = None
+) -> list[Stranded]:
+    """Removed items whose LIVE lease still points at a branch or tree that exists in THIS
+    clone: the holder's work, unreachable by merge/complete (B71dedb76d2). A removed item
+    with no live lease, or whose branch and tree are not here (the clone that removed it),
+    strands nothing."""
+    now = time.time() if now is None else now
+    out: list[Stranded] = []
+    for iid, lease in sorted(state.active_leases(now, cfg.lease.grace_s).items()):
+        it = state.items.get(iid)
+        if it is None or not it.removed:
+            continue
+        branch = lease.branch or it.branch
+        tree = lease.worktree or it.worktree
+        here = bool(branch and W.branch_exists(root, branch)) or bool(
+            tree and W.load_path(root, tree).exists()
+        )
+        if here:
+            out.append(Stranded(iid, lease.holder, branch, tree))
+    return out
+
+
 def _own_released_branches(lost: dict[str, dict]) -> dict[str, str]:
     """branch -> the sentence for it, for each claim this agent lost to a contest.
 
@@ -387,6 +439,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     plan = Plan()
     guard = _protected(root, cfg, state)
     own = _own_released(repo, cfg)
+    stranded = {x.branch: x for x in stranded_leases(root, cfg, state) if x.branch}
     by_branch, by_path = _claimed_by(root, state)
     seen_branches: set[str] = set()
 
@@ -402,7 +455,9 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         protected, reason = guard.why(path, branch)
         if protected == "held" and branch in own:
             reason = own[branch]
-        if protected == "held" or (protected and not t.dirty_files and not unknown):
+        elif protected == "held" and branch in stranded:
+            protected, reason = "stranded", stranded[branch].render()
+        if protected in ("held", "stranded") or (protected and not t.dirty_files and not unknown):
             # A held tree's edits are its holder's work in progress, not a question for
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
