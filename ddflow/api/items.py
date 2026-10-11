@@ -656,6 +656,7 @@ def _apply_resolution(
             holder=h["holder"],
             event=h["event"],
             note=f"lost the contest for {item}: {claims[0]['holder']} keeps it",
+            lost_to=claims[0]["holder"],
         )
     log.append("item.resolved", item, data)
     for nid, d in zip(new_ids, lost if new_ids else [], strict=True):

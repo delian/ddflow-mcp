@@ -13,6 +13,7 @@ from ...core import outcome as O
 from ...core import progress as PR
 from ...core import provenance as PV
 from ...core.budget import Budget, approx_tokens
+from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import choices as CHO
 from ...services import gates as G
@@ -50,6 +51,37 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
         "Claim when you are ready to edit; do not hold file globs while only gates, "
         "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
     )
+
+
+def _contest_block(repo: Path, cfg, log, st) -> str:
+    """The contested claims, and the claim THIS agent lost, "" when neither (B2809f4213b).
+
+    Leads the brief: a contested item is not work anyone may merge or complete until
+    `resolve` settles it, and an agent whose claim was released must hear it before it
+    builds on a branch that is no longer its item's."""
+    lines = []
+    for it in L.contested_items(st):
+        row = L.contest_row(st, cfg, it)
+        lines.append(f"- {it.id} is CONTESTED: {row['summary']}. `{row['resolve']}` settles it.")
+    base = cfg.worktree.base_ref or W.default_branch(W.repo_root(repo))
+    for iid, lost in sorted(L.lost_contests(log, log.agent_id).items()):
+        it = st.items.get(iid)
+        if it is None or it.removed or it.terminal:
+            continue
+        where = f"; branch {lost['branch']}" if lost["branch"] else ""
+        if lost["branch"] and W.branch_exists(repo, lost["branch"]):
+            r = W.git(repo, "rev-list", "--count", f"{base}..{lost['branch']}")
+            n = r.out.strip() if r.ok and r.out.strip().isdigit() else "some"
+            where = (
+                f"; branch {lost['branch']} has {n} commit(s) not on {base}: "
+                "keep it with git or port it"
+            )
+        lines.append(
+            f"- your claim on {iid} was released: lost the contest to {lost['winner']}{where}."
+        )
+    if not lines:
+        return ""
+    return "## Contested claims\n\n" + "\n".join(lines) + "\n\n"
 
 
 def _rules_block(governing) -> str:
@@ -147,6 +179,7 @@ def brief(
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")
     p = plan_for(repo, log, cfg, st, purpose="view", phase=phase)
+    L.surface_contests(p, st, cfg)
     # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
     # ready item was headed "Current" for an agent that had just claimed another one --
     # it is the queue's pick, not the agent's work. Most recent claim first.
@@ -205,7 +238,8 @@ def brief(
     # Prepended like the reports block, so budgeted like it (B1472311a63): uncounted, it
     # took the room the lessons were meant to have.
     undecided = CHO.brief_block(cfg)
-    prepended = reports_block + (undecided + "\n" if undecided else "")
+    contest_text = _contest_block(repo, cfg, log, st)
+    prepended = reports_block + (undecided + "\n" if undecided else "") + contest_text
 
     text = render_md.brief(
         st,
@@ -232,7 +266,7 @@ def brief(
     )
     if undecided:
         text = undecided + "\n" + text
-    text = reports_block + text
+    text = reports_block + contest_text + text
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)

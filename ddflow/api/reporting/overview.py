@@ -117,6 +117,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     # The offer `next` makes (reservation hold and parallelism limit alike), so "ready" here is
     # never an item `next` withholds for a waiter in line.
     p = plan_for(repo, log, cfg, st, purpose="view", agent=log.agent_id, events=events)
+    L.surface_contests(p, st, cfg)  # B2809f4213b: contested is not 'in flight'
     rec = L.scan(log, cfg, repo)
 
     phases, tasks = st.phases(), st.tasks()
@@ -193,6 +194,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         and t.state not in ("done", "abandoned", "review")
         and (by := t.lease_taken_over_by())
     }
+    contested = [L.contest_row(st, cfg, i) for i in L.contested_items(st)]
+    if contested:
+        data["contested"] = contested
     if taken:
         data["taken_over"] = [
             {"id": i, "holder": holder, "taken_over_by": by}
@@ -231,6 +235,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "parallel": p.parallel_line,
         "blocked": blocked,
         "taken_over": {i: by for i, (_holder, by) in taken.items()},
+        "contested": contested,
         "recoverable": rec,
         "findings": findings,
         "hours": hours,

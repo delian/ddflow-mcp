@@ -15,6 +15,7 @@ from ...core.plain import plain
 from ...core.schedule import critical_path
 from ...core.tier import tier_of
 from ...services import flow as FS
+from ...services import leases as LS
 from ...services import promotions as PM
 from .._base import _load
 from .planning import plan_for
@@ -72,6 +73,7 @@ def next_(
             log, cfg, st = _load(repo, agent)
     me = cfg.agent.id or log.agent_id
     p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me)
+    LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
@@ -85,6 +87,8 @@ def next_(
         "finished_phases": p.finished,
         "_render": {"plan": p},
     }
+    if contested := [LS.contest_row(st, cfg, i) for i in LS.contested_items(st)]:
+        data["contested"] = contested
     if p.ready:
         return O.ok("next", **data)
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
