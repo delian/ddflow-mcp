@@ -699,3 +699,29 @@ def test_a_build_of_the_old_ddflow_that_fails_leaves_the_uv_stderr(
     report = DR.run_all(options(tmp_path, root, old=None, build_old=True, diag_dir=tmp_path / "d"))
     assert report.exit_code == 2 and report.diagnostics
     assert "UV-STDERR" in Path(report.diagnostics).read_text("utf-8")
+
+
+def test_a_pip_install_that_fails_leaves_the_transcript_and_so_does_an_unwritable_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = project(tmp_path, confirm_free=True)
+    for name in STEPS:
+        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+
+    def venv_then_pip_fails(argv, **_kw):
+        if argv[:2] == ["uv", "venv"]:
+            return DR.P.Captured(0, "", "")
+        return DR.P.Captured(1, "", "error: could not install (PIP-STDERR)")
+
+    monkeypatch.setattr(DR.P, "capture", venv_then_pip_fails)
+    blocked = tmp_path / "a-file"
+    blocked.write_text("not a directory", "utf-8")
+    report = DR.run_all(options(tmp_path, root, old=None, build_old=True, diag_dir=blocked / "d"))
+    try:
+        assert report.exit_code == 2 and report.diagnostics
+        assert not report.diagnostics.startswith(str(blocked))  # fell back to the temp directory
+        data = json.loads(Path(report.diagnostics).read_text("utf-8"))
+        assert "PIP-STDERR" in json.dumps(data["commands"])
+        assert data["facts"]["could_not_run"] == ["build the old ddflow from the clone"]
+    finally:
+        shutil.rmtree(Path(report.diagnostics).parent, ignore_errors=True)

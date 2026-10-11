@@ -17,7 +17,8 @@ under its `.ddflow/local/`), the ddflow installed on the machine or an MCP serve
 - a run that fails, one that could not run (a clone or a build that failed; not an old ddflow
   that was never offered) or one whose live project moved writes its step table and every
   command's bounded stdout and stderr to `.ddflow/local/dryrun/<stamp>-<run id>.json` (git-ignored;
-  `--diag-dir` or `DDFLOW_DRYRUN_DIAG_DIR` choose another) and names the file under the table;
+  `--diag-dir` or `DDFLOW_DRYRUN_DIAG_DIR` choose another; a directory that cannot be written
+  falls back to a new one in the system temp directory) and names the file under the table;
   a run that passes writes nothing;
 - every command runs in a scratch directory with a private HOME, no `DDFLOW_*` variables and no
   network (`DDFLOW_NO_UPDATE_CHECK`), against a clone;
