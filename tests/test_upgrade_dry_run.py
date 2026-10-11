@@ -761,7 +761,7 @@ def test_a_start_check_that_ran_out_of_time_is_unavailable_never_a_pass_or_a_fai
         "instructions": "ddflow 0.2.1 is newer than this project; the upgrade check did not "
         "finish within 10s, so the server started anyway and the upgrade stays pending"
     }
-    monkeypatch.setattr(DR.Rehearsal, "_serve", lambda self, repo, msgs: {1: timed_out})
+    monkeypatch.setattr(DR.Rehearsal, "_serve", lambda self, repo, msgs, **kw: {1: timed_out})
     rehearsal.step_connect()
     last = rows(rehearsal.report)[6]
     assert last.status == DR.UNAVAILABLE and "time bound" in last.detail
@@ -785,3 +785,22 @@ def test_the_timeout_text_the_rehearsal_looks_for_is_what_the_server_really_says
         agent="t", surf="mcp", policy="check", running="9.9.9",
     )  # fmt: skip
     assert said["status"] == US.TIMEOUT and DR.START_TIMED_OUT in said["text"]
+
+
+def test_the_rehearsal_demands_a_note_from_a_start_check_that_ran_out_of_time(
+    tmp_path: Path,
+) -> None:
+    """B-start-timeout-drops-proposal: the handshake of a server given no time is a NOTE that
+    the upgrade is pending and the operator is asked; silence or a bare timeout line fails."""
+    rehearsal = DR.Rehearsal(options(tmp_path, project(tmp_path, confirm_free=True)))
+    note = (
+        "ddflow 0.2.1 is newer than this project: an upgrade is PENDING but its plan is not "
+        "known yet. Run `ddflow upgrade --plan`. Ask the operator whether to upgrade now"
+    )
+    assert rehearsal._noted({1: {"instructions": note}}) == []
+    proposal = "ddflow 0.2.1 is newer than this project: 72 item(s). Ask the operator whether"
+    assert rehearsal._noted({1: {"instructions": proposal}}) == [], "a plan that fit is fine"
+    assert rehearsal._noted({1: {"instructions": "did not finish within 10s"}})
+    assert rehearsal._noted({1: {"instructions": ""}})
+    assert rehearsal._default_path({1: {"instructions": note}}) == []
+    assert rehearsal._default_path({1: {"instructions": ""}})
