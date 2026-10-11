@@ -21,13 +21,17 @@ from typing import Any
 
 #: A ``usage:`` block: the line and the indented lines argparse wraps it onto.
 _USAGE = re.compile(r"^usage: [^\n]*(?:\n[ \t]+\S[^\n]*)*", re.MULTILINE)
-_CHOOSE = re.compile(r"\(choose from ([^)\n]*)\)")
+#: ``(choose from 'a', 'b')``: only a list of single-quoted items is argparse's old repr
+#: layout; anything else inside the parentheses is left exactly as it is.
+_CHOOSE = re.compile(r"\(choose from ('[^'\n]*'(?:, '[^'\n]*')*)\)")
 
 
 def argparse_stable(text: str) -> str:
     """``text`` with argparse's version-dependent formatting made uniform."""
     text = _USAGE.sub(lambda m: " ".join(m.group(0).split()), text)
     return _CHOOSE.sub(lambda m: "(choose from " + m.group(1).replace("'", "") + ")", text)
+    # NB the newer layout (`choose from a, b`) cannot tell choices ['a', 'b'] from ['a, b'],
+    # so neither can a pin compared through this; the old one could, and that is the cost.
 
 
 def stable(value: Any) -> Any:
