@@ -12,8 +12,10 @@ hashes and durations."""
 from __future__ import annotations
 
 import contextlib
+import getpass
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,6 +24,7 @@ from pathlib import Path
 import pytest
 
 import ddflow
+from ddflow.infra import hostinfo
 from ddflow.surfaces.cli import main
 from tests.pin_norm import stable
 
@@ -107,6 +110,31 @@ def _normalise(text: str, repo: Path) -> str:
     return re.sub(rf"(?<![\d.]){re.escape(ddflow.__version__)}(?!\.?\d)", "<VERSION>", text)
 
 
+#: The identity the pin was recorded under, standing in for whoever runs the test and
+#: wherever (B-pin-identity-leak): the OS user that `reviewers approve` stamps and the
+#: short host name that prefixes an event shard are the machine's, not ddflow's output.
+PIN_USER, PIN_HOST = "pinuser", "pinhost"
+
+
+def _pin_the_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Everything the transcript reads off the machine, made the same on every machine:
+    the user, the host name, and which programs are on PATH.
+
+    `precommit` reports whether `pre-commit` is installed and whether `ddflow` is found
+    from here; a developer's box has both, a CI runner neither, and the pin recorded the
+    first. Stubs make that explicit instead of accidental."""
+    monkeypatch.setattr(getpass, "getuser", lambda: PIN_USER)
+    # A full name on purpose: the shard prefix is `short_host()`, its first label.
+    monkeypatch.setattr(hostinfo, "hostname", lambda: f"{PIN_HOST}.example.org")
+    bin_dir = tmp_path / "pinbin"
+    bin_dir.mkdir()
+    for name in ("pre-commit", "ddflow"):
+        stub = bin_dir / name
+        stub.write_text("#!/bin/sh\nexit 0\n")  # presence only: no version line to pin
+        stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+
 def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
     repo = tmp_path / "proj"
     repo.mkdir()
@@ -127,6 +155,7 @@ def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+    _pin_the_machine(tmp_path, monkeypatch)
     got = []
     for argv in SCRIPT:
         out, err = io.StringIO(), io.StringIO()
