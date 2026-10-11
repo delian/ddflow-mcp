@@ -111,3 +111,25 @@ def test_untracked_configs_are_not_reported(adopted):
     _git(adopted, "rm", "-q", "--cached", ".mcp.json", ".claude/settings.json")
     _git(adopted, "commit", "-qm", "untrack", "--no-verify")
     assert _local_lines(_doctor(adopted)[1]) == []
+
+
+def test_another_machines_paths_are_the_dangling_finding_not_a_machine_note(adopted):
+    """A path absent here is some other machine's: `launchers.findings` already says so."""
+    (adopted / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "ddflow": {
+                        "command": "/nonexistent-alice/venv/bin/python",
+                        "args": ["-m", "ddflow.mcp"],
+                        "env": {"PYTHONPATH": "/nonexistent-alice/src"},
+                    }
+                }
+            }
+        )
+    )
+    (adopted / ".claude" / "settings.json").write_text("{}\n")
+    _commit_all(adopted, "alice")
+    code, text = _doctor(adopted)
+    assert _local_lines(text) == [], text
+    assert "no longer exists" in text and code == 1, text
