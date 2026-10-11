@@ -134,8 +134,103 @@ def test_the_loser_is_told_after_resolve_and_the_winner_is_not(clones):
     assert "keep it with git or port it" in text, text
 
     code, text, err = run_cli(a, "brief", agent="U1")
+    assert code == 0, err
     assert "was released" not in text and "lost the contest" not in text, text
 
     code, text, err = run_cli(b, "cleanup", agent="U2")
     assert "held by U1" not in text, text
     assert "your own" in text and "released" in text, text
+    assert "holds T1 now" not in text, text  # the winner may let go of it later
+
+
+# -- the loser's record is the loser CLONE's (review findings) ------------------------------
+
+
+class _Log:
+    """Just what `lost_contests` reads of a log."""
+
+    def __init__(self, events, clone: str) -> None:
+        self._events, self._clone = events, clone
+
+    def read_all(self):
+        return self._events
+
+    def clone_id(self, *, create: bool = True) -> str:
+        return self._clone
+
+
+def _same_name_events():
+    """Two clones both named `alice` claim X; c2's claim is kept, c1's is released; c2 then
+    claims X again (a re-claim by the OTHER clone)."""
+    from helpers import make_event as ev
+
+    t = ev("task.added", "X", 1, "seed", title="x")
+    c1 = ev("lease.acquired", "X", 2, "alice", holder="alice", clone="c1", at=1.0, ttl_s=900)
+    c2 = ev("lease.acquired", "X", 3, "alice", holder="alice", clone="c2", at=2.0, ttl_s=900)
+    gone = ev(
+        "lease.released",
+        "X",
+        4,
+        "alice",
+        holder="alice",
+        event=c1.id,
+        lost_contest=True,
+        winner="alice",
+    )
+    again = ev("lease.acquired", "X", 5, "alice", holder="alice", clone="c2", at=3.0, ttl_s=900)
+    return [t, c1, c2, gone, again]
+
+
+def test_another_clone_of_the_same_name_claiming_again_does_not_clear_the_loser():
+    from ddflow.services import leases as LS
+
+    lost = LS.lost_contests(_Log(_same_name_events(), "c1"), "alice")
+    assert list(lost) == ["X"], lost
+    assert LS.lost_contests(_Log(_same_name_events(), "c2"), "alice") == {}
+
+
+def test_the_loser_clone_reclaiming_clears_its_notice():
+    from helpers import make_event as ev
+
+    from ddflow.services import leases as LS
+
+    events = [
+        *_same_name_events(),
+        ev("lease.acquired", "X", 6, "alice", holder="alice", clone="c1", at=4.0, ttl_s=900),
+    ]
+    assert LS.lost_contests(_Log(events, "c1"), "alice") == {}
+
+
+def test_cleanup_names_the_losing_claims_branch_not_the_items():
+    """After resolve the item's branch is the winner's: only the branch the LOSING claim
+    bound is the loser's own."""
+    from helpers import make_event as ev
+
+    from ddflow.services import cleanup as CL
+    from ddflow.services import leases as LS
+
+    events = [
+        *_same_name_events(),
+        ev("lease.renewed", "X", 6, "alice", holder="alice", branch="ddflow/mine", at=5.0),
+    ]
+    lost = LS.lost_contests(_Log(events, "c1"), "alice")
+    assert lost["X"]["branch"] == "ddflow/mine", lost
+    own = CL._own_released_branches(lost)
+    assert (
+        list(own) == ["ddflow/mine"]
+        and "who holds it now" in own["ddflow/mine"]
+        and "holds X now" not in own["ddflow/mine"]
+    ), own
+    assert CL._own_released_branches({"X": {"branch": "", "winner": "bob"}}) == {}
+
+
+def test_the_resolve_command_is_worded_as_the_scheduler_words_it():
+
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.core.schedule import plan_blocker
+    from ddflow.services import leases as LS
+
+    st = fold(_same_name_events()[:3], strict=False)
+    blocked = plan_blocker(st, Config(), st.items["X"])
+    assert blocked is not None and LS.resolve_command("X") in blocked.detail

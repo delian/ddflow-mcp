@@ -179,7 +179,6 @@ def brief(
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")
     p = plan_for(repo, log, cfg, st, purpose="view", phase=phase)
-    L.surface_contests(p, st, cfg)
     # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
     # ready item was headed "Current" for an agent that had just claimed another one --
     # it is the queue's pick, not the agent's work. Most recent claim first.
