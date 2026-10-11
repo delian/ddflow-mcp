@@ -264,7 +264,8 @@ def block_marker(line: str) -> str:
 def block_spans(text: str) -> list[tuple[int, int]]:
     """Where each managed block sits in ``text``, in file order: `(start, stop)` offsets from
     the begin line through the end line (newline included), whichever marker grammar it is
-    written in. A marker is a whole line, so one quoted in prose is not one. Raises
+    written in. A marker is a whole line starting in column 0, so one quoted in prose or
+    shown indented as an example is not one. Raises
     RegionError for markers that do not pair up (a begin inside a block, an end outside)."""
     region = BLOCK._region()
     begin, end = re.compile(region.begin or ""), re.compile(region.end or "")
@@ -273,11 +274,11 @@ def block_spans(text: str) -> list[tuple[int, int]]:
     at = 0
     for line in text.splitlines(keepends=True):
         bare = line.rstrip("\n").removesuffix("\r")
-        if begin.fullmatch(bare) or bare.strip() == LEGACY_BEGIN:
+        if begin.fullmatch(bare) or bare == LEGACY_BEGIN:
             if open_at is not None:
                 raise RegionError("a managed block begins inside another")
             open_at = at
-        elif end.fullmatch(bare) or bare.strip() == LEGACY_END:
+        elif end.fullmatch(bare) or bare == LEGACY_END:
             if open_at is None:
                 raise RegionError("a managed block ends without a beginning")
             spans.append((open_at, at + len(line)))
@@ -1321,7 +1322,7 @@ def _begin_lines(text: str) -> int:
     return sum(
         1
         for line in text.splitlines()
-        if begin.fullmatch(line.removesuffix("\r")) or line.strip() == LEGACY_BEGIN
+        if begin.fullmatch(line.removesuffix("\r")) or line.removesuffix("\r") == LEGACY_BEGIN
     )
 
 
@@ -1348,9 +1349,14 @@ def _collapse_blocks(path: Path, existing: str, section: str, name: str) -> str:
     for lo, hi in reversed(spans[1:]):
         text = text[:lo] + text[hi:]
     first_lo, first_hi = spans[0]
-    text = (
-        text[:first_lo] + (section if section.endswith("\n") else section + "\n") + text[first_hi:]
-    )
+    # the rendered block keeps the attributes a newer writer added at this format level (what
+    # the single-block refresh does), taken from the first stamped block
+    block = section if section.endswith("\n") else section + "\n"
+    for lo, hi in spans:
+        if _stamped(existing[lo:hi]):
+            block = BLOCK.splice(existing[lo:hi], want)
+            break
+    text = text[:first_lo] + block + text[first_hi:]
     note = f" (collapsed {len(spans)} blocks into one)"
     if edited:
         aside = local_edits_path(path)

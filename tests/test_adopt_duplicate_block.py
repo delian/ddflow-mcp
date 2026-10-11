@@ -17,7 +17,7 @@ import pytest
 from conftest import run_cli
 
 from ddflow.core.events import Event
-from ddflow.services.adopt import BLOCK, LEGACY_BEGIN, LEGACY_END
+from ddflow.services.adopt import BLOCK, LEGACY_BEGIN, LEGACY_END, block_spans
 
 FILES = ("AGENTS.md", "CLAUDE.md")
 LEGACY = f"{LEGACY_BEGIN}\nOLD RULES an older ddflow wrote\n{LEGACY_END}\n"
@@ -77,24 +77,53 @@ def test_doctor_notes_an_instruction_file_older_than_the_logs_highest_stamp(repo
     assert re.search(r"AGENTS\.md.*stamp.*older.*99\.0\.0", out, re.I), out
 
 
+def _outside(text: str) -> str:
+    """``text`` with every managed block (both grammars) cut out, the rest byte for byte."""
+    for lo, hi in reversed(block_spans(text)):
+        text = text[:lo] + text[hi:]
+    return text
+
+
 def test_refresh_collapses_to_one_block_and_keeps_the_outside_bytes(repo: Path):
     _adopted(repo)
     before = _two_blocks(repo)
+    outside = {name: _outside(text) for name, text in before.items()}
     code, out, err = run_cli(repo, "adopt", "--refresh-docs")
     assert code == 0, (out, err)
     for name in FILES:
         after = (repo / name).read_text()
         assert _begin_lines(after) == 1, after
         assert BLOCK.owns(after) and LEGACY_BEGIN not in after
-        for outside in (
-            "# Project notes\n\nkeep this above\n\n",
-            "keep this below\n\n",
-            "tail text\n",
-        ):
-            assert outside in after
         assert "OLD RULES" not in after
-        del before[name]
-    assert not before
+        # every byte outside the blocks is exactly what it was
+        assert _outside(after) == outside[name]
+
+
+def test_the_collapse_keeps_an_attribute_a_newer_writer_added_to_its_block(repo: Path):
+    _adopted(repo)
+    path = repo / "AGENTS.md"
+    text = path.read_text()
+    path.write_text(
+        re.sub(
+            r"(<!-- ddflow:begin rules/work-queue [^\n]*?) -->", r"\1 owner=x -->", text, count=1
+        )
+        + "\n"
+        + LEGACY
+    )
+    assert run_cli(repo, "adopt", "--refresh-docs")[0] == 0
+    after = path.read_text()
+    assert _begin_lines(after) == 1 and "owner=x" in after
+
+
+def test_a_marker_shown_indented_or_quoted_is_not_a_second_block(repo: Path):
+    _adopted(repo)
+    path = repo / "AGENTS.md"
+    example = f"\nAn old file looked like this:\n\n    {LEGACY_BEGIN}\n    old\n    {LEGACY_END}\n"
+    path.write_text(path.read_text() + example)
+    _code, out = _doctor(repo)
+    assert "managed blocks" not in out, out
+    assert run_cli(repo, "adopt", "--refresh-docs")[0] == 0
+    assert example in path.read_text()
 
 
 def test_refresh_is_idempotent_after_collapsing(repo: Path):
