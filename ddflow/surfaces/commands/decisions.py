@@ -97,7 +97,9 @@ def _decision_list(a, c: Ctx, st) -> int:
         return out.exit
     for d in out.data["rows"]:
         flag = ""
-        if not d["live"]:
+        if d.get("contested"):
+            flag = f"  [CONTESTED -- `ddflow resolve {d['id']} --keep <event-id|agent>`]"
+        elif not d["live"]:
             flag = f"  [{d['status']}"
             flag += f" -> {d['superseded_by']}]" if d.get("superseded_by") else "]"
         print(f"  {d['id']:<14} {d['title']}{flag}")

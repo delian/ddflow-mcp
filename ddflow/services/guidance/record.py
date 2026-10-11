@@ -118,5 +118,10 @@ class GuidanceRecord:
 
     @property
     def live(self) -> bool:
-        """Handed to agents: accepted, and not replaced (a decision names what replaced it)."""
-        return self.status == ACCEPTED and not self.ext.get("superseded_by")
+        """Handed to agents: accepted, not replaced (a decision names what replaced it) and
+        not in an unresolved contest between two agents' definitions (B230e852e10)."""
+        return (
+            self.status == ACCEPTED
+            and not self.ext.get("superseded_by")
+            and not self.ext.get("contested")
+        )

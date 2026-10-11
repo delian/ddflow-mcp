@@ -22,20 +22,43 @@ LINK_FLAG_EXEMPT = dict.fromkeys(
 )
 
 
+_DECISION_FIELDS = (
+    ("Context", "context"),
+    ("Decision", "decision"),
+    ("Consequences", "consequences"),
+    ("Alternatives rejected", "alternatives"),
+)
+
+
+def _contested_decision_text(d) -> str:
+    """Every rival definition whole, each from its own event: never one merged record."""
+    lines = [
+        f"{d['id']} — CONTESTED: {len(d['contested'])} definitions from different agents; "
+        f"none is in force. `ddflow resolve {d['id']} --keep <event-id|agent>` settles it"
+    ]
+    for r in d["contested"]:
+        x = r["data"]
+        lines.append(f"\n  definition {r['event']} by {r['agent']} (lamport {r['lamport']})")
+        lines.append(f"    title {x.get('title', '')!r}")
+        for label, key in _DECISION_FIELDS:
+            if x.get(key):
+                lines.append(f"    {label}: {x[key]}")
+        if x.get("globs"):
+            lines.append(f"    Governs: {', '.join(x['globs'])}")
+    return "\n".join(lines)
+
+
 def _decision_text(out, a) -> str:
     d = out.data["decision"]
+    if d.get("contested"):
+        return _contested_decision_text(d)
     head = f"{d['id']} — {d['title']}\n  status {d['status']}"
     if d.get("superseded_by"):
         head += f" (superseded by {d['superseded_by']})"
     if d.get("decided_by"):
         head += f" · decided by {d['decided_by']}"
     lines = [head]
-    for label, key in (
-        ("Context", "context"),
-        ("Decision", "decision"),
-        ("Consequences", "consequences"),
-        ("Alternatives rejected", "alternatives"),
-    ):
+    for label, key in _DECISION_FIELDS:
         if d.get(key):
             lines.append(f"\n{label}:\n  {d[key]}")
     if d.get("globs"):
