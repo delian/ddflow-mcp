@@ -6,6 +6,7 @@ package that imports the family module. One file, one import edge, no cycle.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from ..config import Config
@@ -13,6 +14,7 @@ from ..core.model import State, fold
 from ..infra.log import EventLog
 from ..services import identity as ID
 from ..services.choices import overlay
+from ..services.leaseclock import localize
 
 
 def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
@@ -37,6 +39,9 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
     # Workflow choices recorded in the log fill in wherever the config file is silent --
     # HERE, once, so every operation reads `cfg.flow.*` and sees the same answer.
 
+    # A lease of ANOTHER clone is timed from when this clone first saw it renewed, not by the
+    # claimant's wall clock (B5a6651cd8e). Here, once, like the overlay: every command's `st`.
+    localize(st, log, time.time())
     overlay(cfg, st)
     _run_ticks(repo, log, cfg, st)
     return log, cfg, st

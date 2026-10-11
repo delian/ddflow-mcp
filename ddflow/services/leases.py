@@ -36,6 +36,7 @@ from ..core.schedule import plan as _plan
 from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id
+from .leaseclock import foreign, localize
 
 
 class LeaseError(RuntimeError):
@@ -153,7 +154,7 @@ def _renew_in_place(
 def _fold(log: EventLog) -> State:
     """The state of the log as read now: the `decide` that `EventLog.decide_then_append`
     runs outside the append lock, and again under it if the log changed in between."""
-    return fold(log.read_all(), strict=False)
+    return localize(fold(log.read_all(), strict=False), log, time.time())
 
 
 def glob_clash(
@@ -579,7 +580,7 @@ def plan_retarget(
     back by an edit. An unclaimed item's globs are not checked, as before.
     """
     now = time.time()
-    state = fold(log.read_all(), strict=False)
+    state = _fold(log)
     it = state.items.get(item_id)
     lz = it.lease if it else None
     if it is None or lz is None or not lz.live(now, cfg.lease.grace_s):
@@ -778,7 +779,7 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
     it from the item's status is exactly how real work gets deleted.
     """
     now = time.time() if now is None else now
-    state = fold(log.read_all(), strict=False)
+    state = _fold(log)
     # The same live-lease view the scheduler computes, so `schedule.interrupted` is
     # answering about the same moment `next` would.
     live = state.active_leases(now, cfg.lease.grace_s)
@@ -802,7 +803,16 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
                 branch=lease.branch or it.branch,
                 age_s=now - lease.renewed_at,
             )
-            _measure(rec, repo, cfg)
+            if foreign(lease, log.clone_id(create=False)):
+                # Its tree lives in the OTHER clone, so "gone" here proves nothing, and
+                # `release` would take a live claim from its owner (B5a6651cd8e).
+                rec.salvageable = None  # not measurable from here: never swept
+                rec.advice = (
+                    f"worktree is in another clone (held by {lease.holder}, clone "
+                    f"{lease.clone}); ask its owner"
+                )
+            else:
+                _measure(rec, repo, cfg)
             out.append(rec)
         elif not lease and it.worktree and it.state != REVIEW:
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
