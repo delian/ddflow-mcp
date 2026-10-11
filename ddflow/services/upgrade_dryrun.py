@@ -80,6 +80,7 @@ from ..infra import fsio
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra.log import EventLog
+from . import upgrade_start as US
 from .backups import SIDECAR_SUFFIX, SNAPSHOT_PREFIX
 
 PASS = "pass"
@@ -1158,7 +1159,9 @@ class Rehearsal:
         repo = self.clone("connect")
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
         forced = self._serve(repo, _HELLO, start_timeout=FORCED_TIMEOUT_S)
+        self._forget_start(repo)  # each session runs the start check itself, not a kept answer
         default = self._serve(repo, _HELLO, start_timeout=None)  # as shipped
+        self._forget_start(repo)
         first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
         if START_TIMED_OUT in (first.get(1) or {}).get("instructions", ""):
             self.unrunnable("MCP connect: propose, wait for consent, apply")
@@ -1192,6 +1195,11 @@ class Rehearsal:
             or f"proposed on connect, nothing applied until consent, then applied; "
             f"tools/list {size} bytes; {told}",
         )
+
+    @staticmethod
+    def _forget_start(repo: Path) -> None:
+        """Drop the start report a session kept in the (git-ignored) project marker."""
+        (repo / US.MARKER).unlink(missing_ok=True)
 
     def _noted(self, forced: dict[int, dict[str, Any]]) -> list[str]:
         """A start check given next to no time is a NOTE in the handshake: the upgrade is

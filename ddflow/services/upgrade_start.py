@@ -505,9 +505,18 @@ def take_for_brief(repo: Path, st: State | None = None) -> str:
             return ""
     except Exception:
         return ""
+    _mark_briefed(repo, text)
+    return text
+
+
+def _mark_briefed(repo: Path, text: str) -> None:
+    """Note that the brief said ``text``, unless the marker moved on in the meantime (under the
+    lock the marker's other writers take: a late answer must not be undone)."""
     try:
-        data["briefed"] = True
-        fsio.atomic_write(Path(repo) / MARKER, json.dumps(data) + "\n")
+        with _SAVE_LOCK:
+            data = _read(repo)
+            if data.get("text") == text:
+                data["briefed"] = True
+                fsio.atomic_write(Path(repo) / MARKER, json.dumps(data) + "\n")
     except Exception:
         pass
-    return text
