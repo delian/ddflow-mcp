@@ -328,6 +328,7 @@
     "imported": ["bool"],
     "kind": ["str"],
     "ledger": ["dict"],
+    "not_applicable": ["dict"],
     "overridden": ["list"],
     "sha": ["str"]
    },
