@@ -250,7 +250,7 @@ def _by_force(st) -> tuple[list, list, list]:
 def decision_list(
     repo: Path, *, all: bool = False, since: str = "", limit: int | None = None
 ) -> O.Outcome:
-    """Decisions in force; `all` includes the superseded ones.
+    """Decisions in force, and any contested ones (flagged); `all` includes the superseded ones.
 
     `since` keeps those recorded at or after a date/timestamp; `limit` keeps the NEWEST
     N, so the display order (oldest first, the order a decision was made in) never turns

@@ -74,7 +74,7 @@ def _lessons(q: Query, f: registry.Filters) -> tuple[list[dict[str, Any]], int, 
     --tag is given), so a heavily tagged corpus does not multiply. --limit keeps the
     NEWEST N of the live, matching lessons.
     """
-    live = [lz for lz in q.lessons() if not lz.superseded_by and (not f.tag or f.tag in lz.tags)]
+    live = [lz for lz in q.lessons() if lz.live and (not f.tag or f.tag in lz.tags)]
     live.sort(key=lambda lz: (_when(lz.at), lz.id), reverse=True)
     omitted = 0
     if f.limit and len(live) > f.limit:
