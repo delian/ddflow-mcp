@@ -1251,7 +1251,7 @@ class Rehearsal:
             if isinstance(msg, dict) and isinstance(msg.get("id"), int):
                 replies[msg["id"]] = msg.get("result") or {"error": msg.get("error")}
         # what the steps judge is in the replies, and a reply that is big is cut in the middle
-        # of the command's output: keep each one's head
+        # of the command's output: keep each one's head and tail
         self.commands[-1]["replies"] = {
             str(k): bounded(json.dumps(v, default=str), 2500) for k, v in replies.items()
         }

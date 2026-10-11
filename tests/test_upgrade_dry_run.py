@@ -764,3 +764,22 @@ def test_a_start_check_that_ran_out_of_time_is_unavailable_never_a_pass_or_a_fai
     last = rows(rehearsal.report)[6]
     assert last.status == DR.UNAVAILABLE and "time bound" in last.detail
     assert rehearsal.report.facts["could_not_run"]
+
+
+def test_the_timeout_text_the_rehearsal_looks_for_is_what_the_server_really_says(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import upgrade_start as US
+
+    root = project(tmp_path, confirm_free=True)
+    monkeypatch.setenv("DDFLOW_UPGRADE_START_TIMEOUT_S", "0.000001")
+    cfg = Config.load(root)
+    log = EventLog(root, "t", log_cfg=cfg.log)
+    said = US._behind_report(
+        root, log, cfg, fold(log.read_all(), strict=False),
+        agent="t", surf="mcp", policy="check", running="9.9.9",
+    )  # fmt: skip
+    assert said["status"] == US.TIMEOUT and DR.START_TIMED_OUT in said["text"]
