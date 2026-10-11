@@ -138,7 +138,7 @@ def _record_docs(st: State, cfg: Config, kinds: set[str]) -> list[Doc]:
         text = _join(d.title, d.context, d.decision, d.consequences, d.alternatives)
         out.append(Doc("decision", d.id, d.status, d.at, d.by, "", text))
     for ls in st.lessons.values() if "lesson" in kinds else ():
-        state = "superseded" if ls.superseded_by else "active"
+        state = "superseded" if ls.superseded_by else "contested" if ls.contested else "active"
         text = _join(ls.title, ls.rule, ls.why, ls.how, ls.summary)
         out.append(Doc("lesson", ls.id, state, ls.at, ls.by, "", text))
     return out

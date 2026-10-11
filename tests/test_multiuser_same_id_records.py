@@ -192,3 +192,12 @@ def test_rivals_that_converge_are_no_longer_a_contest(repo):
     assert not shown.get("contested")
     assert shown["title"] == "use sqlite"
     assert run_cli(repo, "doctor")[0] == 0
+
+
+def test_a_contested_decision_is_not_exported_as_a_rule(repo):
+    _decisions(repo)
+    _code, out, _ = run_cli(repo, "export", "rules", "--path", str(repo / "RULES.md"))
+    assert "0 decision(s)" in out
+    assert run_cli(repo, "resolve", "D-x", "--keep", "bob")[0] == 0
+    _code, out, _ = run_cli(repo, "export", "rules", "--path", str(repo / "RULES.md"))
+    assert "1 decision(s)" in out

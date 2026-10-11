@@ -49,7 +49,7 @@ def _decisions(q: Query) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     by_glob: dict[str, list[dict[str, Any]]] = {}
     loose: list[dict[str, Any]] = []
     for d in q.decisions():  # id order
-        if d.status not in IN_FORCE or d.superseded_by:
+        if d.status not in IN_FORCE or d.superseded_by or d.contested:
             continue
         row = {
             "id": d.id,
