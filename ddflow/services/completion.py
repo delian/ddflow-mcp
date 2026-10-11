@@ -63,6 +63,10 @@ class Verdict:
     coverage_gaps: list[str] = field(default_factory=list)
     independence: str = ""
     kind: str = "task"
+    #: "gate: why" for each gate the ACTUAL diff excused (`applies_when`), with the paths
+    #: and patterns it was judged on. Recorded on the completion event, so a gate that did
+    #: not run is accounted for rather than silently absent (B-na-required-gate).
+    na_evidence: list[str] = field(default_factory=list)
 
     @property
     def may_complete(self) -> bool:
@@ -140,8 +144,14 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         return Verdict(item=item_id, blockers=[f"no such item {item_id!r}"])
 
     gdefs = G.load_gates(repo, cfg)
-    s = G.status(state, cfg, item_id, gdefs)
-    v = Verdict(item=item_id, coverage_gaps=list(s.unavailable), kind=it.kind)
+    # The actual diff, not the declared globs, decides whether a gate is out of scope.
+    s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it))
+    v = Verdict(
+        item=item_id,
+        coverage_gaps=list(s.unavailable),
+        kind=it.kind,
+        na_evidence=[f"{g}: {why}" for g, why in s.not_applicable.items()],
+    )
     required = G.required_gates(cfg)
 
     missing = [
@@ -200,6 +210,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # blocks the completion nor is closed by it -- it is named as left open.
     v.blockers += _open_bug_blockers(state, item_id, cfg)
     v.warnings += _reported_bug_warnings(state, cfg, item_id)
+    v.warnings += [f"gate not applicable on the actual change -- {n}" for n in v.na_evidence]
 
     if it.kind == "phase":
         v.blockers += _unmerged_branches(state, cfg, it, repo)
