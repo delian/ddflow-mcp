@@ -16,8 +16,10 @@ both depend on it.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import difflib
+import io
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -182,6 +184,25 @@ def _hide_from_abbreviation(parser: argparse.ArgumentParser) -> None:
     parser._get_option_tuples = visible  # type: ignore[method-assign]
 
 
+def _stdlib_drops_subcommand_dashdash() -> bool:
+    """Does this Python's argparse accept ``prog a -- x`` for a subcommand ``x`` of ``a``?
+    (3.13 does; 3.12.3 reports ``invalid choice: '--'``.) Asked of argparse itself, once,
+    so a release that backports the fix is not stripped twice."""
+    top = argparse.ArgumentParser(exit_on_error=False)
+    a = top.add_subparsers(dest="a").add_parser("a")
+    a.add_subparsers(dest="x").add_parser("x")
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            top.parse_args(["a", "--", "x"])
+    except (argparse.ArgumentError, SystemExit):
+        return False
+    return True
+
+
+#: See `_stdlib_drops_subcommand_dashdash`; `SuggestingParser._get_values` reads it.
+_STDLIB_DROPS_SUBCOMMAND_DASHDASH = _stdlib_drops_subcommand_dashdash()
+
+
 class SuggestingParser(argparse.ArgumentParser):
     """The root parser: an unknown command gets a 'did you mean'. Its subparsers inherit it,
     and every level records the command word taken (`_WordsRecorder`)."""
@@ -189,6 +210,22 @@ class SuggestingParser(argparse.ArgumentParser):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.register("action", "parsers", _WordsRecorder)
+
+    def _get_values(self, action: argparse.Action, arg_strings: list[str]) -> Any:
+        # Before Python 3.13 argparse strips a `--` only for ordinary positionals: the
+        # values of a subparsers action keep it at their head, and the command word check
+        # then refuses `--` itself -- `ddflow task -- list` died with "invalid choice: '--'"
+        # on 3.12.3 (B-dashdash-312). The marker means "what follows is positional", which is
+        # all a command word is, so drop the one that opens a subcommand's values -- but only
+        # where argparse has not already (a second strip would eat a literal `--`).
+        if (
+            not _STDLIB_DROPS_SUBCOMMAND_DASHDASH
+            and action.nargs == argparse.PARSER
+            and arg_strings[:1] == ["--"]
+            and len(arg_strings) > 1
+        ):
+            arg_strings = arg_strings[1:]
+        return super()._get_values(action, arg_strings)
 
     def error(self, message: str) -> Any:
         for a in self._actions:
