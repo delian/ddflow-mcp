@@ -22,6 +22,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -363,10 +364,16 @@ def _shell_group(
     thread (a long gate renews its lease that way; see `run_command_gate`).
     Output is captured unless ``capture_output=False`` or ``stdout``/``stderr`` say
     otherwise; the other keywords go to `popen` (stdin stays /dev/null unless ``input`` is
-    given: that text is handed to the first wait, which writes it across as many ticks as the child
-    takes to read it, and then closes the pipe).
+    given: a writer thread feeds that text across as many ticks as the child takes to read
+    it, and then closes the pipe: see `_feed_stdin`).
     On timeout the TimeoutExpired carries everything the command wrote, as
     `subprocess.run`'s does (a resumed `communicate` returns all it accumulated).
+
+    ``input`` is NOT handed to `communicate`: on Python 3.12.3 a resumed `communicate`
+    (``input=None``) never re-registers stdin for writing, so a request larger than the
+    pipe stopped after its first 64 KiB and a late reader hung until the timeout
+    (B-proc-stdin-resume). A daemon thread writes it to the pipe instead, and the group's
+    kill (EPIPE) ends the writer if the child never reads.
     """
     if on_tick is not None and tick_s <= 0:
         raise ValueError("run_shell: on_tick needs tick_s > 0, or it would never be called")
@@ -380,17 +387,18 @@ def _shell_group(
     p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
     deadline = None if timeout is None else time.monotonic() + timeout
     try:
+        if input is not None:
+            _feed_stdin(p, input)
         while True:
             wait = None if deadline is None else max(0.0, deadline - time.monotonic())
             if on_tick is not None:
                 wait = tick_s if wait is None else min(tick_s, wait)
             try:
-                out, err = p.communicate(input=input, timeout=wait)
+                out, err = p.communicate(timeout=wait)
                 return subprocess.CompletedProcess(command, p.returncode, out, err)
             except subprocess.TimeoutExpired:
                 if deadline is not None and time.monotonic() >= deadline:
                     raise
-                input = None  # already handed to communicate(); a resumed wait takes none
                 if on_tick is not None:
                     on_tick()
     except subprocess.TimeoutExpired:
@@ -401,6 +409,39 @@ def _shell_group(
         kill_group(p)
         _drain(p)
         raise
+
+
+def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
+    """Write ``text`` to ``p``'s stdin on a daemon thread, then close it (end of file).
+
+    The pipe is taken off ``p`` so `communicate` leaves it alone (it would close it before
+    the first write, or, resumed, fail to keep writing: B-proc-stdin-resume). The text is
+    encoded HERE, on the caller's thread, so a character the pipe's codec refuses raises to
+    the caller as `communicate(input=)` did, never inside the writer where nobody sees it.
+    Only a broken pipe ends the writer quietly: the child exited, or was killed, before it
+    read everything.
+    """
+    pipe = p.stdin
+    p.stdin = None
+    if pipe is None:
+        return
+    raw = getattr(pipe, "buffer", pipe)
+    data = text
+    if isinstance(text, str):
+        if raw is pipe:  # a binary pipe: what `communicate(input=str)` refused, loudly
+            raise TypeError("run_shell: a str on stdin needs text mode (text=True)")
+        data = text.encode(pipe.encoding, pipe.errors)
+
+    def write() -> None:
+        with contextlib.suppress(OSError):
+            try:
+                raw.write(data)
+                raw.flush()
+            finally:
+                with contextlib.suppress(OSError):
+                    pipe.close()
+
+    threading.Thread(target=write, name="run_shell-stdin", daemon=True).start()
 
 
 def _drain(p: subprocess.Popen) -> tuple[Any, Any]:
