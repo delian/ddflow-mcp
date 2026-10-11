@@ -157,7 +157,7 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     on this machine (D-upgrade-auto-check, D-self-upgrade 2): FIRST, so the hook, `ddflow brief`
     and `ddflow_brief` all lead with it whichever is asked first. This ddflow was upgraded
     (or the start report), then a newer release is out (proposed, never installed)."""
-    notice = US.take_for_brief(repo) or UN.line(repo, log, cfg, st, agent=agent)
+    notice = US.take_for_brief(repo, st) or UN.line(repo, log, cfg, st, agent=agent)
     release = UC.proposal(repo, cfg, consume=True)
     return "\n\n".join(x for x in (notice, release) if x)
 
