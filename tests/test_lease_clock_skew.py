@@ -203,6 +203,7 @@ def test_a_hand_edited_ledger_row_is_read_as_fresh_not_a_crash(seen: World):
     assert w.cli("bob", "bob", 0, "status")[0] == 0
     ledger = w.root / "bob" / ".ddflow" / "local" / "lease-seen"
     doc = json.loads(ledger.read_text())
+    assert doc["data"], doc
     doc["data"] = {k: {"renewed_at": "x", "seen": 1} for k in doc["data"]}
     ledger.write_text(json.dumps(doc))
     code, out = w.cli("bob", "bob", 0, "show", "T1")
