@@ -43,3 +43,12 @@ def test_wait_becomes_ready_after_the_holder_releases(repo):
     run_cli(repo, "release", "X", "--agent", HOLDER)
     out = A.wait(repo, item="Y", globs="f.py", timeout_s=0, agent=WAITER)
     assert out.exit == O.OK and out.data["woke"] is True
+
+
+def test_own_item_widening_wait_flips_to_ready_after_the_holder_releases(repo):
+    _setup(repo)
+    assert A.claim(repo, "Y", no_worktree=True, agent=WAITER).ok
+    assert A.wait(repo, item="Y", globs="f.py", timeout_s=0, agent=WAITER).data["woke"] is False
+    run_cli(repo, "release", "X", "--agent", HOLDER)
+    out = A.wait(repo, item="Y", globs="f.py", timeout_s=0, agent=WAITER)
+    assert out.exit == O.OK and out.data["woke"] is True
