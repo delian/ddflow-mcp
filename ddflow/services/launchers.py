@@ -22,9 +22,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..infra import git as G
 from ..infra.fsio import Unreadable, read_json
 from . import enforce as E
-from .adopt import AGENT_TARGETS, get_server
+from .adopt import AGENT_TARGETS, get_server, has_been_adopted
 from .claudehooks import HOOKS, _ours
 
 #: Written by `command_line`: the probe that decides whether the recorded launcher runs.
@@ -42,8 +43,11 @@ class Dangling:
     fallback: bool  #: True when `ddflow` on PATH still runs it
     fix: str  #: the command that refreshes it
     path: str = ""  #: the file that holds the record (absolute, or relative to the project)
+    text: str = ""  #: the whole line, for a finding that is not a dead launcher
 
     def render(self) -> str:
+        if self.text:
+            return self.text
         gone = ", ".join(self.missing)
         if self.fallback:
             tail = "it falls back to `ddflow` on PATH for now"
@@ -196,3 +200,116 @@ def findings(repo: Path) -> list[Dangling]:
     out += check_settings(repo)
     out += check_mcp(repo)
     return out
+
+
+#: The git hooks a clone does not get: hooks are not tracked, so every fresh clone starts
+#: without them and `hooks status` is the only thing that says so (Bec9a971c5d).
+_CLONE_HOOKS = ("pre-commit", "commit-msg")
+
+
+def missing_git_hooks(repo: Path, policy: str = "warn") -> list[Dangling]:
+    """The managed git hooks an ADOPTED project lacks on this clone, or nothing.
+
+    A NOTE by default -- CI clones are always fresh, and a doctor that failed every
+    checkout would be switched off -- but a PROBLEM when `[enforce].commit_without_lease`
+    is "block" and the pre-commit hook is the one missing: a block policy with no hook
+    enforces nothing. `fallback=True` is what files a finding as a note.
+    """
+
+    if not has_been_adopted(repo):
+        return []
+    try:
+        E.hooks_dir(repo)
+    except RuntimeError:
+        return []
+    absent = tuple(n for n in _CLONE_HOOKS if not E.installed(repo, n))
+    if not absent:
+        return []
+    names = " and ".join(absent)
+    blocking = policy == "block" and "pre-commit" in absent
+    why = (
+        'the policy is [enforce].commit_without_lease = "block", so NOTHING enforces it here'
+        if blocking
+        else "git does not track hooks, so a fresh clone starts without them"
+    )
+    return [
+        Dangling(
+            "the git hooks",
+            absent,
+            not blocking,
+            "ddflow hooks install",
+            text=f"the managed git hook(s) {names} are not installed in this clone ({why})"
+            " -- run `ddflow hooks install`",
+        )
+    ]
+
+
+def _tracked(repo: Path, rel: str) -> bool:
+    return G.run(repo, "ls-files", "--error-unmatch", "--", rel).ok
+
+
+def _abs_launch(entry: Any) -> bool:
+    cmd, env = _entry_parts(entry)
+    root = env.get("PYTHONPATH")
+    return os.path.isabs(cmd) or (
+        isinstance(root, str) and any(os.path.isabs(d) for d in root.split(os.pathsep) if d)
+    )
+
+
+def machine_local_configs(repo: Path) -> list[Dangling]:
+    """Tracked agent configs that record an absolute launcher of THIS machine's environment.
+
+    `.mcp.json` and `.claude/settings.json` are committed, but the interpreter and the
+    PYTHONPATH `adopt` wrote into them are not shared: on another machine they dangle, and
+    whoever adopts or upgrades there rewrites them, so the files flip-flop in git. Only
+    reported, never rewritten -- what to write instead is the project's decision.
+    """
+
+    held: list[str] = []
+    seen: set[str] = set()
+    for target in AGENT_TARGETS.values():
+        rel = target.config
+        if not rel or rel in seen:
+            continue
+        seen.add(rel)
+        data = read_json(Path(repo) / rel)
+        if isinstance(data, Unreadable):
+            continue
+        try:
+            entry = get_server(data, target.shape, "ddflow")
+        except (ValueError, AttributeError):
+            continue
+        if _abs_launch(entry) and _tracked(repo, rel):
+            held.append(rel)
+    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
+    for rel in dict.fromkeys(h.file for h in HOOKS):
+        data = read_json(Path(repo) / rel)
+        if isinstance(data, Unreadable) or rel in held:
+            continue
+        for cmd in _commands(data):
+            if any(_ours({"command": cmd}, m) for m in ours) and any(
+                os.path.isabs(p) for p, _x in _needs(cmd)
+            ):
+                if _tracked(repo, rel):
+                    held.append(rel)
+                break
+    if not held:
+        return []
+    files = ", ".join(held)
+    return [
+        Dangling(
+            "tracked agent configs",
+            tuple(held),
+            True,
+            "ddflow adopt --launch uvx",
+            text=f"{files} (tracked) record an absolute interpreter or PYTHONPATH of this "
+            "machine; on any other machine they dangle, and it will report a dangling "
+            "launcher. Use a machine-independent launch (`ddflow adopt --launch uvx`, or "
+            "`ddflow` on PATH) or git-ignore them",
+        )
+    ]
+
+
+def fresh_clone(repo: Path, policy: str = "warn") -> list[Dangling]:
+    """What a fresh clone of an adopted project lacks or inherits from another machine."""
+    return missing_git_hooks(repo, policy) + machine_local_configs(repo)
