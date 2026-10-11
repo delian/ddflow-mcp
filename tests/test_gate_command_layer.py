@@ -139,3 +139,24 @@ def test_provenance_reads_the_layer_of_the_file_not_its_position(tmp_path):
     (d / "local").mkdir()
     (d / "local" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "c"\n')
     assert command_provenance(tmp_path, "unit_tests") == ("local", "b")
+
+
+def test_brief_names_a_local_command_pass(repo):
+    _setup(repo)
+    _local(repo, "python -c 'print(1)'")
+    _run_gate(repo)
+    code, out, err = run_cli(repo, "brief", "--item", "T1", agent=AGENT)
+    assert code == 0 and LABEL in out, out + err
+
+
+def test_a_local_file_repeating_a_built_in_default_command_is_not_labelled(repo):
+    from ddflow.services.gates.defs import DEFAULT_GATES
+    from ddflow.services.gates.runner import command_layer_evidence
+
+    run_cli(repo, "init")
+    default = DEFAULT_GATES["ci"].command
+    assert default
+    code, out, err = run_cli(repo, "config", "--local", "--set", "gate.ci.command", default)
+    assert code == 0, out + err
+    ev = command_layer_evidence(DEFAULT_GATES["ci"], repo)
+    assert ev["command_layer"] == "local" and ev["committed_command_digest"] == ev["command_digest"]

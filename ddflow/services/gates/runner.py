@@ -14,7 +14,7 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from ..flakes import failure_evidence
-from .defs import GateDef, command_provenance
+from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .evidence import diff_stat, digest, tree_identity
 from .testcmd import suggested_test_command, summary_lines
 
@@ -114,6 +114,8 @@ def command_layer_evidence(gdef: GateDef, cwd: Path) -> dict[str, Any]:
     except (W.GitError, OSError):
         return ev
     ev["command_layer"] = layer
+    # No committed file sets it: the built-in default is the project's command.
+    committed = committed or (DEFAULT_GATES[gdef.id].command if gdef.id in DEFAULT_GATES else "")
     if layer == "local" and committed:
         # Recorded even when equal, so a local file that merely repeats the committed
         # command reads as the project's command, not as a local-only one.
