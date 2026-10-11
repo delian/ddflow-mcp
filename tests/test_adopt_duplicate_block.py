@@ -115,7 +115,21 @@ def test_the_collapse_keeps_an_attribute_a_newer_writer_added_to_its_block(repo:
     assert _begin_lines(after) == 1 and "owner=x" in after
 
 
-def test_a_marker_shown_indented_or_quoted_is_not_a_second_block(repo: Path):
+def test_a_column_0_pair_even_in_a_fence_counts_as_a_block_and_is_backed_up(repo: Path):
+    """Pins the documented trigger: a marker pair on its own lines at column 0 is a block by
+    the same rule `Region.find` always used, fenced or not; the refresh backs the file up."""
+    _adopted(repo)
+    path = repo / "AGENTS.md"
+    path.write_text(path.read_text() + f"\n```\n{LEGACY}```\n")
+    _code, out = _doctor(repo)
+    assert "AGENTS.md holds 2 managed blocks" in out, out
+    assert run_cli(repo, "adopt", "--refresh-docs")[0] == 0
+    assert _begin_lines(path.read_text()) == 1
+    backups = list((repo / ".ddflow" / "backups").rglob("AGENTS.md"))
+    assert backups and "OLD RULES" in backups[0].read_text()
+
+
+def test_a_marker_shown_indented_is_not_a_second_block(repo: Path):
     _adopted(repo)
     path = repo / "AGENTS.md"
     example = f"\nAn old file looked like this:\n\n    {LEGACY_BEGIN}\n    old\n    {LEGACY_END}\n"

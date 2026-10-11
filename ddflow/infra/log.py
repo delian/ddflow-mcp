@@ -1220,8 +1220,10 @@ class EventLog:
         return extra
 
     def check_skew(self) -> None:
-        """Raise `SkewRefused` when this ddflow is older than the log's highest stamp, a PATCH
-        behind included; writes nothing, not even the stamp. For a caller that changes tracked
+        """Under the default `refuse` policy and with no session override, raise `SkewRefused`
+        when this ddflow is older than the log's highest stamp, a PATCH behind included
+        (`warn` and `off` are the operator's own knob and let it through); writes nothing,
+        not even the stamp. For a caller that changes tracked
         files without appending an event (`adopt`): the managed text it renders is worded
         per release, so an older ddflow must not overwrite a newer one's."""
         version, fmt = running_version(), V.format_level()
