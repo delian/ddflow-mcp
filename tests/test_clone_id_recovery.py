@@ -142,3 +142,14 @@ def test_the_checkouts_own_root_is_no_evidence(claimed):
     old = _suffix(claimed)
     shutil.rmtree(claimed / ".ddflow" / "local")
     assert L._clone_suffix(claimed) == old  # T1's linked tree wins; "." is ignored
+
+
+def test_a_worktree_root_beside_the_checkout_still_recovers(tmp_path):
+    repo = _repo(tmp_path / "proj")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text((cfg.read_text() if cfg.exists() else "") + '\n[worktree]\nroot = "../wt"\n')
+    assert run_cli(repo, "claim", "T1")[0] == 0
+    assert (tmp_path / "wt").is_dir()
+    old = _suffix(repo)
+    shutil.rmtree(repo / ".ddflow" / "local")
+    assert L._clone_suffix(repo) == old
