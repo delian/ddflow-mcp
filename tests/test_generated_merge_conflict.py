@@ -198,3 +198,13 @@ def test_a_committed_conflict_in_a_view_is_still_named(clones):
     _commit(a, "oops")
     code, out, err = run_cli(a, "doctor", agent="U1")
     assert code == 1 and "docs/ddflow/QUEUE.md" in out + err, out + err
+
+
+def test_an_unrenderable_log_leaves_the_markers_to_decide(clones):
+    """If the expected views cannot be rendered, a committed conflict is still named."""
+    from ddflow.services.shared_files import conflicted_views
+
+    a, _ = clones
+    (a / "docs/ddflow/QUEUE.md").write_text("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> o\n")
+    _commit(a, "oops")
+    assert conflicted_views(a, lambda: None)
