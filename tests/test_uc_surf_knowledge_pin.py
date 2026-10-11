@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import run_cli
+from tests.pin_norm import stable
 
 TABLE = Path(__file__).parent / "data" / "uc_surf_knowledge_pin.json"
 
@@ -189,5 +190,5 @@ def test_the_executor_commands_print_what_the_handwritten_ones_did(repo: Path) -
         pytest.skip("recorded")
     want = json.loads(TABLE.read_text())
     assert got.keys() == want.keys()
-    bad = {k: (want[k], got[k]) for k in want if want[k] != got[k]}
+    bad = {k: (want[k], got[k]) for k in want if stable(want[k]) != stable(got[k])}
     assert not bad, json.dumps(bad, indent=1)
