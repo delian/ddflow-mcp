@@ -54,7 +54,7 @@ class GateStatus:
     not_applicable: dict[str, str] = field(default_factory=dict)
     #: gate -> "passed with a local-only command (not the committed one)" for a PASS whose
     #: evidence says the command came from the git-ignored local layer (B924bdc92d7).
-    local_command: dict[str, str] = field(default_factory=dict)
+    local_command: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
