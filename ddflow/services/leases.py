@@ -1074,8 +1074,10 @@ def lost_contests(log: EventLog, agent: str) -> dict[str, dict[str, Any]]:
     """The claims THIS clone's agent lost to a contest, newest per item: item -> {winner,
     branch, event}. Read off the `lease.released` that `resolve` marks ``lost_contest``,
     for the clone that made the claim (a claim records its clone: a release of another
-    clone's claim under the same name is not ours). Dropped once the agent claimed the item
-    again."""
+    clone's claim under the same name is not ours). Dropped once THIS clone claimed the item
+    again. The branch is the holder name's latest bound one, which equals this clone's own
+    unless two clones of one name bind different branch names for an item (they derive it
+    from the committed config and the item id, so they do not)."""
     events = log.read_all()
     clone = log.clone_id(create=False)
     claimed = {e.id: e for e in events if e.kind == "lease.acquired"}
