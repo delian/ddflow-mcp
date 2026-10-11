@@ -116,3 +116,26 @@ def test_evidence_recorded_before_the_keys_existed_is_not_labelled(repo):
     )
     assert LABEL not in G.status(st, cfg, "T").render()
     assert G.status(st, cfg, "T").local_command == {}
+
+
+def test_a_local_file_repeating_the_committed_command_is_not_labelled(repo):
+    """The local layer wins but changes nothing: the command that ran IS the project's."""
+    _setup(repo, committed="python -c 'print(2)'")
+    _local(repo, "python -c 'print(2)'")
+    ev = _run_gate(repo)
+    assert ev["command_layer"] == "local" and ev["committed_command_digest"] == ev["command_digest"]
+    assert "local-only" not in _status(repo)
+
+
+def test_provenance_reads_the_layer_of_the_file_not_its_position(tmp_path):
+    from ddflow.services.gates.defs import command_provenance
+
+    d = tmp_path / ".ddflow"
+    d.mkdir()
+    (d / "config.toml").write_text('[gate.unit_tests]\ncommand = "a"\n')
+    assert command_provenance(tmp_path, "unit_tests") == ("committed", "a")
+    assert command_provenance(tmp_path, "nothing_here") == ("committed", "")
+    (d / "gates.toml").write_text('[gate.unit_tests]\ncommand = "b"\n')
+    (d / "local").mkdir()
+    (d / "local" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "c"\n')
+    assert command_provenance(tmp_path, "unit_tests") == ("local", "b")

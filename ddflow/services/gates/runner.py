@@ -105,8 +105,8 @@ def command_layer_evidence(gdef: GateDef, cwd: Path) -> dict[str, Any]:
     this machine has is not read as the project's pass (B924bdc92d7).
 
     `command_layer` is "committed" or "local"; `command_digest` is a short digest of the
-    command that ran; `committed_command_digest` is present only when the local layer
-    overrides a DIFFERENT committed command. Additive keys: evidence recorded without them
+    command that ran; `committed_command_digest` is present when the local layer sets
+    a command and the committed layers define one too (equal or not). Additive keys: evidence recorded without them
     reads as before. A project that cannot be located yields just the digest."""
     ev: dict[str, Any] = {"command_digest": digest(gdef.command)}
     try:
@@ -114,7 +114,9 @@ def command_layer_evidence(gdef: GateDef, cwd: Path) -> dict[str, Any]:
     except (W.GitError, OSError):
         return ev
     ev["command_layer"] = layer
-    if layer == "local" and committed and committed != gdef.command:
+    if layer == "local" and committed:
+        # Recorded even when equal, so a local file that merely repeats the committed
+        # command reads as the project's command, not as a local-only one.
         ev["committed_command_digest"] = digest(committed)
     return ev
 
