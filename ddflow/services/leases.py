@@ -35,7 +35,7 @@ from ..core.schedule import capacities, plan_blocker, resource_shortfall
 from ..core.schedule import plan as _plan
 from ..infra import claimref as CR
 from ..infra import worktree as W
-from ..infra.log import EventLog
+from ..infra.log import EventLog, bare_agent_id
 
 
 class LeaseError(RuntimeError):
@@ -73,6 +73,15 @@ class Recovery:
     #: directory, which ddflow bound to the item and did not create. Never advised for
     #: removal -- `merge` refuses to delete one for the same reason (B930f5c6b7c).
     adopted: bool = False
+
+
+def _clone_field(log: EventLog, holder: str) -> dict[str, str]:
+    """The clone a claim is made from, for the event payload; nothing when it has none
+    (an older reader ignores the field: D-compat additive). A claim under the bare
+    derived id (from before the clone suffix) only READS the clone id, never creates it:
+    the suffix's creation time is what marks that id's claims as pre-suffix."""
+    clone = log.clone_id(create=holder != bare_agent_id(log.root))
+    return {"clone": clone} if clone else {}
 
 
 def _record_claimed_globs(
@@ -381,6 +390,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 "note": note,
                 "kind": it.kind,
                 "resources": wants,
+                **_clone_field(log, holder),
             },
         )
         return Lease(
@@ -697,6 +707,7 @@ def transfer(
             "note": f"{lease.note} [{note}]" if lease.note else note,
             "kind": kind,
             "resources": list(lease.resources),
+            **_clone_field(log, to),
         },
     )
 
