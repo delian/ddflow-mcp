@@ -433,6 +433,32 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     return gates
 
 
+def command_provenance(root: Path, gate_id: str) -> tuple[str, str]:
+    """`(layer, committed_command)` for ``[gate.<gate_id>].command``: which layer last set it
+    ("committed" for `.ddflow/config.toml` / `gates.toml`, "local" for the git-ignored
+    `.ddflow/local/` pair, "committed" too when nothing sets it), and the command the
+    COMMITTED layers define ("" when they define none). A pass made with a command only
+    this machine has is not the project's pass (B924bdc92d7). Mirrors the overlay order of
+    `load_gates`; a file that does not parse counts as setting nothing."""
+    paths = tomlcfg.config_paths(root, "gates.toml")
+    layer, committed = "committed", ""
+    for n, path in enumerate(paths):
+        if not Path(path).is_file():
+            continue
+        try:
+            block = ((tomlcfg.read_toml(Path(path)).get("gate") or {}).get(gate_id)) or {}
+        except (OSError, ValueError):
+            continue
+        cmd = block.get("command") if isinstance(block, dict) else None
+        if not isinstance(cmd, str):
+            continue
+        is_local = n >= len(paths) // 2
+        layer = "local" if is_local else "committed"
+        if not is_local:
+            committed = cmd
+    return layer, committed
+
+
 def required_gates(cfg: Config, gates: Mapping[str, GateDef] | None = None) -> tuple[str, ...]:
     """The gates whose recorded outcome must be a pass, in `[gates].required` order: the
     knob that decides, plus any definition in `gates` flagged required (`load_gates`

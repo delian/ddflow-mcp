@@ -211,6 +211,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     v.blockers += _open_bug_blockers(state, item_id, cfg)
     v.warnings += _reported_bug_warnings(state, cfg, item_id)
     v.warnings += [f"gate not applicable on the actual change -- {n}" for n in v.na_evidence]
+    v.warnings += [f"gate {g} {note}" for g, note in s.local_command.items()]
 
     if it.kind == "phase":
         v.blockers += _unmerged_branches(state, cfg, it, repo)
