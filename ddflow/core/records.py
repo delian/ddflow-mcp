@@ -151,6 +151,11 @@ class Lease:
     #: An `item.started` folded under this lease: the claim went through and the holder
     #: took the item on (a refused claim is undone before `item.started` is written).
     started: bool = False
+    #: The clone that made the claim (`.ddflow/local/clone-id`); "" for a claim written
+    #: before clones were recorded, or on a project that is not adopted. Two clones
+    #: claiming under ONE name are rivals only when both say which clone they are
+    #: (B36aa4c8ee5).
+    clone: str = ""
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         """Past its TTL plus grace, by the clock alone. Ask `live` to decide anything: a
@@ -1095,13 +1100,23 @@ def _overlaps(a: dict[str, Any], b: dict[str, Any]) -> bool:
     return a0 <= b1 and b0 <= a1
 
 
+def _other_hand(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Two claims were made by different parties: different holders, or the SAME name
+    from two clones that each recorded which clone they are (B36aa4c8ee5). A claim
+    without a clone never counts as another clone of its own name."""
+    if a["holder"] != b["holder"]:
+        return True
+    ca, cb = a["lease"].get("clone", ""), b["lease"].get("clone", "")
+    return bool(ca and cb and ca != cb)
+
+
 def _clashing(claims: list[dict[str, Any]], claim: dict[str, Any]) -> list[dict[str, Any]]:
-    """The claims among ``claims`` that overlapped ``claim``: another holder's, by both
-    claims' own windows."""
+    """The claims among ``claims`` that overlapped ``claim``: another party's (see
+    `_other_hand`), by both claims' own windows."""
     return [
         h
         for h in claims
-        if h["holder"] != claim["holder"]
+        if _other_hand(h, claim)
         and h["event"] != claim["event"]
         and _overlaps(h["lease"], claim["lease"])
     ]
