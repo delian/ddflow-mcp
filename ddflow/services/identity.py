@@ -45,7 +45,13 @@ from typing import NamedTuple
 from ..config import Config
 from ..core.model import Lease, State, fold
 from ..infra import worktree as W
-from ..infra.log import EventLog, bare_agent_id, clone_suffix_since, default_agent_id
+from ..infra.log import (
+    EventLog,
+    bare_agent_id,
+    clone_suffix_since,
+    default_agent_id,
+    tree_is_here,
+)
 from . import leases as L
 
 
@@ -177,10 +183,13 @@ def stale_suffix_notes(log: EventLog, cfg: Config, st: State) -> list[str]:
     me = log.agent_id
     bare = bare_agent_id(log.root)
     out = []
+    registered = {
+        Path(e["worktree"]).resolve() for e in W.list_worktrees(log.root) if "worktree" in e
+    }
     for item, lease in sorted(st.active_leases(time.time(), cfg.lease.grace_s).items()):
         if lease.holder == me or not lease.holder.startswith(bare + "-") or not lease.worktree:
             continue
-        if W.load_path(log.root, lease.worktree).is_dir():
+        if tree_is_here(log.root, lease.worktree, registered):
             out.append(
                 f"{item} is held by {lease.holder}, an earlier id of this clone (its "
                 f".ddflow/local/clone-id was replaced; this agent is now {me})"
