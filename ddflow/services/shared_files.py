@@ -344,7 +344,8 @@ def conflicted_views(
     Markers in the text are not enough (B-viewmarkers): a lesson quoting a whole conflict
     block renders verbatim into a view, and no `git checkout --theirs` clears that. A view
     with markers is conflicted when git lists it unmerged, or (markers `git add`ed and
-    committed) when it differs from `expected`, the text the log renders to. Where neither
+    committed) when it holds more marker lines than `expected`, the text the log renders
+    to: a quoted block is in the render too, a real conflict adds its own. Where neither
     can be known (git cannot list, no `expected`) the markers alone decide.
     """
     unmerged = G.unmerged(repo)
@@ -367,9 +368,13 @@ def conflicted_views(
         if name not in exp:
             return False
         try:
-            return path.read_text("utf-8", errors="replace") != exp[name]
+            have = path.read_text("utf-8", errors="replace")
         except OSError:
             return False
+        return any(
+            len(re.findall(rf"(?m)^{m}", have)) > len(re.findall(rf"(?m)^{m}", exp[name]))
+            for m in ("<<<<<<<", ">>>>>>>")
+        )
 
     hit = [f"{_VIEW_DIR}/{name}" for name in VIEW_NAMES if conflicted(name)]
     if not hit:
