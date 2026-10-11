@@ -229,3 +229,21 @@ def test_the_events_of_the_last_command_are_in_the_mark(clone):
     _git(clone, "reset", "-q", "--hard", "HEAD~1")  # drops T2, the last command's events
     code, text = _doctor(clone)
     assert code == 1 and _problem_lines(text), text
+
+
+def test_a_mark_that_cannot_be_written_never_fails_the_append(clone, monkeypatch):
+    """The mark is bookkeeping: an unwritable `.ddflow/local` (read-only mount, full disk)
+    must not fail a command whose event is already durable (reviewer finding, refuted)."""
+    from ddflow.services import shardmarks
+
+    def boom(*_a, **_k):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(shardmarks, "appended", boom)
+    from ddflow.config import Config
+    from ddflow.services import identity
+
+    log, _who = identity.open_log(clone, Config.load(clone), AGENT)
+    before = _lines(clone)
+    log.append("task.added", "T9", {"title": "x", "globs": []})
+    assert _lines(clone) == before + 1
