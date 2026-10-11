@@ -20,11 +20,14 @@ from typing import Any
 
 def plain(obj: Any) -> Any:
     if is_dataclass(obj) and not isinstance(obj, type):
-        # Fields marked `metadata={"internal": True}` are folded state, not wire data.
+        # Fields marked `metadata={"internal": True}` are folded state, not wire data;
+        # `{"omit_empty": True}` ones are on the wire only when set, so a field added for
+        # a rare state (a contest) does not change every record's shape.
         return {
             f.name: plain(getattr(obj, f.name))
             for f in fields(obj)
             if not f.metadata.get("internal")
+            and not (f.metadata.get("omit_empty") and not getattr(obj, f.name))
         }
     if isinstance(obj, dict):
         return {k: plain(v) for k, v in obj.items()}

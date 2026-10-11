@@ -158,7 +158,7 @@ def checkable(lessons: dict[str, Lesson]) -> dict[str, Lesson]:
     One definition of "checkable", so the count a caller reports and the set it checks
     cannot disagree.
     """
-    return {k: v for k, v in lessons.items() if v.pattern and not v.superseded_by}
+    return {k: v for k, v in lessons.items() if v.pattern and v.live}
 
 
 def regressions(repo: Path, lessons: dict[str, Lesson]) -> list[SiteDiff]:

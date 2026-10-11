@@ -416,7 +416,8 @@ class Store:
                         "insert into items_fts values(?,?,?,?)",
                         (it.id, it.title, it.body, " ".join(it.tags)),
                     )
-            for ls in state.lessons.values():
+            # A contested lesson (B230e852e10) is not advice until `resolve` settles it.
+            for ls in (x for x in state.lessons.values() if not x.contested):
                 con.execute(
                     "insert or replace into lessons values(?,?,?,?,?,?,?,?,?)",
                     (
@@ -908,6 +909,7 @@ def similar_records(state: State) -> list[dict[str, str]]:
             "item": "",
         }
         for ls in state.lessons.values()
+        if not getattr(ls, "contested", None)
     ]
     out += [
         {
@@ -918,6 +920,7 @@ def similar_records(state: State) -> list[dict[str, str]]:
             "item": d.item,
         }
         for d in state.decisions.values()
+        if not getattr(d, "contested", None)
     ]
     out += [
         {
