@@ -655,7 +655,7 @@ def _recovered_suffix(root: Path) -> str:
                 except (ValueError, KeyError, TypeError, AttributeError):
                     continue
             for item, (rank, suffix) in claim.items():
-                if rank > best and any(_is_tree_under(top, t) for t in trees.get(item, ())):
+                if rank > best and any(tree_is_here(top, t) for t in trees.get(item, ())):
                     best, found = rank, suffix
     return found
 
@@ -663,11 +663,24 @@ def _recovered_suffix(root: Path) -> str:
 _TREE_KINDS = frozenset({"lease.acquired", "lease.renewed", "worktree.created", "worktree.adopted"})
 
 
-def _is_tree_under(top: Path, stored: str) -> bool:
-    """Is the recorded worktree a directory under the checkout `top` on THIS machine?"""
-    tree = Path(stored) if Path(stored).is_absolute() else top / stored
+def tree_is_here(root: Path, stored: str, registered: set[Path] | None = None) -> bool:
+    """Is the recorded worktree a directory under THIS checkout that THIS clone's git
+    lists as one of its worktrees?
+
+    A stored path is relative, so another clone records the very same one; only this
+    clone's own `git worktree list` can say the tree is here (a copied directory still
+    lists the original's path). ``registered`` is that list, resolved, for a caller that
+    asks about many trees."""
+    from . import worktree as W  # lazy: worktree imports the config, and so on
+
+    top = Path(root).resolve()
+    if registered is None:
+        registered = {
+            Path(e["worktree"]).resolve() for e in W.list_worktrees(top) if "worktree" in e
+        }
     try:
-        return tree.is_dir() and tree.resolve().is_relative_to(top)
+        tree = W.load_path(top, stored).resolve()
+        return tree.is_dir() and tree.is_relative_to(top) and tree in registered
     except OSError:
         return False
 

@@ -128,3 +128,12 @@ def test_the_doctor_note_names_the_old_id_when_the_file_holds_another_suffix(cla
     log, cfg, st = _load(claimed, "")
     notes = IDN.stale_suffix_notes(log, cfg, st)
     assert len(notes) == 1 and f"-{old}" in notes[0] and "-abcdef" in notes[0], notes
+
+
+def test_a_copied_checkout_does_not_adopt_it_either(claimed, tmp_path):
+    """A copy has the worktree directory but git there does not list it as its own."""
+    other = tmp_path / "other" / "proj"
+    other.parent.mkdir()
+    shutil.copytree(claimed, other, symlinks=True)
+    shutil.rmtree(other / ".ddflow" / "local")
+    assert L._clone_suffix(other) not in ("", _suffix(claimed))
