@@ -216,7 +216,7 @@ the same implementation, so neither drifts from the other.
 | **find which earlier test file makes a test fail only in full-suite order** | `ddflow bisect VICTIM --cmd 'pytest -q {tests}' [--candidates a,b] [--glob G] [--timeout S] [--repeat N] [--max-runs N]` -- delta-debugs the files before the victim, running your command many times (exit 0 = found, 2 = nothing to report); see [Finding a test polluter](#finding-a-test-polluter) | `ddflow_bisect` (`glob`, `repeat` and `max_runs` are CLI-only) |
 | **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
-| **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
+| **check the project's integrity** | `ddflow doctor` · `ddflow doctor --accept-lost-events` (the operator's word that events a history rewrite took out of a shard are known, see [Events that vanished from a shard](#events-that-vanished-from-a-shard)) | `ddflow_doctor` (`--accept-lost-events` is CLI-only) |
 | **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, migrations (registered breaking-change migrations and the files each would rewrite), contested records (a decision, lesson or research id two agents defined differently: each is listed with its rivals and the `ddflow resolve` command; an apply prints it and resolves nothing, the MCP connect proposal and the upgrade notice mention it), config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--snapshot] [--confirm KEY ... --reason WHY]`; **undo it:** `ddflow upgrade --restore [NAME]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`, `snapshot`, `restore`) |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
@@ -3829,6 +3829,45 @@ and re-read until the writer completes it, never marked consumed. Every guarante
 mutation-verified in `tests/test_log_read_cache.py` — including that the digest covers the
 whole prefix rather than a trailing window of it, which a smaller fixture cannot tell
 apart.
+
+### Events that vanished from a shard
+
+Events live in git history only, so a `git push -f` of an older main, a revert of the events
+commit, a `git reset --hard` or a deleted shard file takes events out of the tree, and a torn-line
+check cannot see an event that is simply gone. ddflow therefore keeps a **shard high-water mark**:
+`.ddflow/local/shard-marks`, a machine-local file that is never committed, with one row per
+(branch, shard) holding how many events this clone last saw in that shard on that branch, the id
+of the last one, and the file's size then. Every command raises the marks to what the shards hold
+and none lowers them, so ddflow's own operations (which only append) never shrink a shard. A mark
+is compared only on the branch it was taken on: checking out a branch that never had the events
+is not a loss. A detached HEAD takes and compares no mark.
+
+When a shard now holds fewer events than its mark, `ddflow doctor` reports a **PROBLEM** (exit 1)
+and the brief opens with a "Lost events" section saying the same:
+
+    <shard> lost 4 event(s) since this clone last saw it (was 120, now 116); the last event it saw
+    was <event id>. They may still be in git: `git reflog`, `git log --all -- .ddflow/events/<shard>`,
+    `git show <sha>:.ddflow/events/<shard>`. Nothing was rewritten; `ddflow doctor
+    --accept-lost-events` records the new count once you have decided
+
+A shard that grew back past its mark but no longer holds the last event this clone saw reads
+`<shard> no longer holds the event this clone last saw in it (it held 120, now 125)` instead. The
+hints are the way back: the lost events are usually still in the reflog or in another branch's
+history, and restoring them is an ordinary git operation. Nothing is rewritten or repaired by
+ddflow.
+
+`ddflow doctor --accept-lost-events` is the operator's explicit acknowledgement that the loss is
+known and intended (the force-push was deliberate, or the events were restored elsewhere). It
+sets the marks of the shards that lost events to their present counts, so the PROBLEM clears, and
+adds a note per shard (`<shard>: accepted the new count (116, was 120)`); the log is not touched.
+It is a **CLI-only** action: there is no MCP parameter for it, because an agent that met this
+PROBLEM must put it to the operator rather than silence it.
+
+**Known limit.** The mark is a count and the last event's id, not the set of ids. A rewrite that
+removes an interior event and then brings in enough new ones to reach the old count, with the old
+last event still present, all before any ddflow command looks at the shard, cannot be told from
+growth. Closing that needs a per-event record and belongs to the P-multiuser sync-check, not to
+this mark.
 
 ### Managed definitions: the `def.*` event kinds
 
