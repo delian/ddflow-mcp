@@ -127,12 +127,15 @@ def run_command_gate(
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 0,
     keep_output: Callable[[str], str] | None = None,
+    log_host: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Execute a command gate. Returns (outcome, evidence).
 
     ``keep_output`` stores the WHOLE output and returns where (`gate run` passes
     `run_log_writer`): without it the evidence holds only the tail, and its digest
-    names bytes nobody kept.
+    names bytes nobody kept. ``log_host`` (the running agent's id) is recorded as
+    `output_log_host`: `.ddflow/runs` is git-ignored, so the log is on that agent's
+    machine and a teammate's checkout has a dangling path.
 
     The distinction this function exists to preserve: a command that *ran and failed*
     is ``failed``; a command that *could not run* — binary missing, cwd gone, timed out —
@@ -221,6 +224,8 @@ def run_command_gate(
         # cannot be written is said so in the evidence; it does not change the outcome.
         try:
             ev["output_log"] = keep_output(out)
+            if log_host:
+                ev["output_log_host"] = log_host
         except (OSError, ValueError) as exc:  # ValueError: an encoding the log refused
             ev["output_log_error"] = str(exc)[:200]
     outcome, why = classify_exit(gdef, p.code, out)
