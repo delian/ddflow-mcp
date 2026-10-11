@@ -5,17 +5,20 @@ commit, a `reset --hard` or a deleted shard takes events out of the tree, and no
 `show` said open, `doctor` Healthy, and the only trace was the reflog. Torn lines, conflict
 markers and hand edits are detected; the MISSING-event class was blind.
 
-`.ddflow/local/shard-marks` (a LocalStore document: machine-local, never committed) maps a shard
-file name to `{count, last_event_id, size, ref}`: how many events (raw non-blank lines) this clone
-last saw in it, the id of the last one, the file size at that look and the branch it was on. `observe` raises
-marks and never lowers them; `lost` reports the shards now holding fewer events than the mark.
-Nothing is rewritten or repaired: the operator is told where the events may still be, and
-`accept` (``ddflow doctor --accept-lost-events``) records the new counts once they have decided.
+`.ddflow/local/shard-marks` (a LocalStore document: machine-local, never committed) holds one row
+per (branch, shard): `{shard, ref, count, last_event_id, size}` -- how many events (raw non-blank
+lines) this clone last saw in that shard ON that branch, the id of the last one, and the file
+size at that look. A mark is compared only on the branch it was taken on, so checking out a
+branch that never had the events is not a loss, and coming back to the original branch still
+compares against what was seen there. `observe` raises marks and never lowers them; `lost`
+reports the shards now holding fewer events than the mark. Nothing is rewritten or repaired: the
+operator is told where the events may still be, and `accept` (``ddflow doctor
+--accept-lost-events``) records the new counts once they have decided.
 
 Everything here fails SAFE: a missing mark file has nothing to compare, an unreadable one is
-started afresh, a newer-schema one is left alone; none of them raises into the caller. ddflow
-itself only appends to a shard, so its own operations never shrink one. No event, fold or
-payload changes (D-compat).
+replaced, a newer-schema one is left alone; none of them raises into the caller. ddflow itself
+only appends to a shard, so its own operations never shrink one. No event, fold or payload
+changes (D-compat).
 """
 
 from __future__ import annotations
@@ -94,8 +97,18 @@ def _head_ref(root: Any) -> str:
         return ""
 
 
-def _mk(scanned: tuple[int, str, int], ref: str) -> dict[str, Any]:
-    return {"count": scanned[0], "last_event_id": scanned[1], "size": scanned[2], "ref": ref}
+def _key(ref: str, shard: str) -> str:
+    return f"{ref}\t{shard}"
+
+
+def _mk(shard: str, scanned: tuple[int, str, int], ref: str) -> dict[str, Any]:
+    return {
+        "shard": shard,
+        "ref": ref,
+        "count": scanned[0],
+        "last_event_id": scanned[1],
+        "size": scanned[2],
+    }
 
 
 def _update(store: LocalStore, fn: Any) -> None:
@@ -106,6 +119,13 @@ def _update(store: LocalStore, fn: Any) -> None:
     except StoreUnreadable:
         store.remove(NAME)
         store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
+
+
+def _raised(out: dict[str, Any], shard: str, scanned: tuple[int, str, int], ref: str) -> None:
+    """Record ``scanned`` as this branch's mark of ``shard`` unless that would lower it."""
+    old = _row(out, _key(ref, shard))
+    if old is None or scanned[0] >= old["count"]:
+        out[_key(ref, shard)] = _mk(shard, scanned, ref)
 
 
 def _read(store: LocalStore) -> dict[str, Any] | None:
@@ -128,9 +148,8 @@ def _row(marks: dict[str, Any], shard: str) -> dict[str, Any] | None:
 
 
 def observe(repo: Any, log: Any) -> None:
-    """Raise the marks to what the shards hold now. Cheap: only a shard whose size or branch
-    differs from the last record is read. Never raises; never lowers a mark on the branch it
-    was taken on (on another branch the mark is retaken: that is a checkout, not a loss)."""
+    """Raise this branch's marks to what the shards hold now. Cheap: only a shard whose size
+    differs from the last record is read. Never raises, never lowers a mark."""
     try:
         store = _store(log)
         marks = _read(store)
@@ -143,13 +162,10 @@ def observe(repo: Any, log: Any) -> None:
                 size = p.stat().st_size
             except OSError:
                 continue
-            row = _row(marks, p.name)
-            if row is not None and row.get("size") == size and row.get("ref", ref) == ref:
+            row = _row(marks, _key(ref, p.name))
+            if row is not None and row.get("size") == size:
                 continue
-            scanned = _scan(p)
-            if scanned is None:
-                continue
-            if row is None or scanned[0] >= row["count"] or row.get("ref", ref) != ref:
+            if (scanned := _scan(p)) is not None:
                 found[p.name] = scanned
         if not found:
             return
@@ -157,9 +173,7 @@ def observe(repo: Any, log: Any) -> None:
         def raise_marks(cur: Any) -> dict[str, Any]:
             out = dict(cur) if isinstance(cur, dict) else {}
             for name, scanned in found.items():
-                old = _row(out, name)
-                if old is None or scanned[0] >= old["count"] or old.get("ref", ref) != ref:
-                    out[name] = _mk(scanned, ref)
+                _raised(out, name, scanned, ref)
             return out
 
         _update(store, raise_marks)
@@ -177,15 +191,11 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
 
     def bump(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
-        row = _row(out, name)
-        if row is not None and row.get("size") == before and row.get("ref", ref) == ref:
-            out[name] = _mk((row["count"] + 1, event.id, after), ref)
-            return out
-        scanned = _scan(log.shard)
-        if scanned is not None and (
-            row is None or scanned[0] >= row["count"] or row.get("ref", ref) != ref
-        ):
-            out[name] = _mk(scanned, ref)
+        row = _row(out, _key(ref, name))
+        if row is not None and row.get("size") == before:
+            out[_key(ref, name)] = _mk(name, (row["count"] + 1, event.id, after), ref)
+        elif (scanned := _scan(log.shard)) is not None:
+            _raised(out, name, scanned, ref)
         return out
 
     store = _store(log)
@@ -194,23 +204,26 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
     _update(store, bump)
 
 
+def _rows_here(marks: dict[str, Any], ref: str) -> list[dict[str, Any]]:
+    """The rows taken on branch ``ref``, by shard name."""
+    rows = [r for k in marks if (r := _row(marks, k)) is not None and r.get("ref") == ref]
+    return sorted(rows, key=lambda r: str(r.get("shard", "")))
+
+
 def lost(repo: Any, log: Any) -> list[Lost]:
-    """The shards holding fewer events than this clone last saw in them (a deleted shard
-    holds none). Empty when there is no mark to compare against."""
+    """The shards holding fewer events than this clone last saw in them on this branch (a
+    deleted shard holds none). Empty when there is no mark to compare against."""
     try:
         marks = _read(_store(log))
         if not marks:
             return []
         present = {p.name: p for p in log.shards()}
-        ref = _head_ref(log.root)
         out: list[Lost] = []
-        for name in sorted(marks):
-            row = _row(marks, name)
-            if row is None or row.get("ref", ref) != ref:
-                continue  # taken on another branch: a checkout, the next look retakes it
+        for row in _rows_here(marks, _head_ref(log.root)):
+            name = str(row.get("shard", ""))
             scanned = _scan(present[name]) if name in present else (0, "", 0)
             if scanned is None:
-                continue
+                continue  # unreadable: the integrity pass names it
             if scanned[0] < row["count"]:
                 out.append(Lost(name, row["count"], scanned[0], str(row.get("last_event_id", ""))))
         return out
@@ -219,28 +232,27 @@ def lost(repo: Any, log: Any) -> list[Lost]:
 
 
 def accept(repo: Any, log: Any) -> list[Lost]:
-    """Record the shards' present counts as the marks (the operator has seen the loss).
-    Returns what was accepted."""
+    """Record the shards' present counts as this branch's marks (the operator has seen the
+    loss). Returns what was recorded."""
     gone = lost(repo, log)
     if not gone:
         return []
-    names = {g.shard for g in gone}
     present = {p.name: p for p in log.shards()}
-    done: set[str] = set()
     ref = _head_ref(log.root)
+    done: set[str] = set()
 
     def lower(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
-        for name in names:
-            p = present.get(name)
+        for g in gone:
+            p = present.get(g.shard)
             scanned = _scan(p) if p is not None else (0, "", 0)
             if scanned is None:
                 continue
-            done.add(name)
-            if scanned[0] == 0 and p is None:
-                out.pop(name, None)
+            done.add(g.shard)
+            if p is None:
+                out.pop(_key(ref, g.shard), None)
             else:
-                out[name] = _mk(scanned, ref)
+                out[_key(ref, g.shard)] = _mk(g.shard, scanned, ref)
         return out
 
     _update(_store(log), lower)

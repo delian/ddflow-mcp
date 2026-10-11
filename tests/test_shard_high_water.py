@@ -282,3 +282,14 @@ def test_a_torn_mark_file_is_replaced_not_left_dark(clone):
     _commit(clone, "T8")
     _git(clone, "reset", "-q", "--hard", "HEAD~1")
     assert _problem_lines(_doctor(clone)[1])
+
+
+def test_coming_back_to_a_branch_still_compares_against_what_was_seen_there(clone):
+    """roborev: a visit to another branch must not retake the original branch's mark."""
+    _git(clone, "branch", "older", "HEAD~2")
+    _dd(clone, "status")
+    _git(clone, "checkout", "-q", "older")
+    _dd(clone, "status")  # a look on `older`: its own mark
+    _git(clone, "checkout", "-q", "main")
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")  # the loss on main, unseen while away
+    assert _problem_lines(_doctor(clone)[1])
