@@ -34,7 +34,13 @@ from ..infra.fsio import FORMAT_LEVEL, NewerContent, parse_level, replace_text
 from ..infra.worktree import load_path
 from ..services import jobs as J
 from ..services.completion import changed_paths, readme_report
-from ..services.gates import load_gates, not_applicable, pipeline_for, required_gates
+from ..services.gates import (
+    load_gates,
+    local_command_notes,
+    not_applicable,
+    pipeline_for,
+    required_gates,
+)
 from ..services.redact_report import redactor
 
 #: What every view's first line starts with, stamped or not.
@@ -684,6 +690,10 @@ def _brief_current(
         else {}
     )
     todo = [g for g in pipe if g not in off and not it.gate_satisfied(g, g in required)]
+    # Before `gates remaining`: a squeezed brief trims from the bottom, and this is the
+    # line that must not be the first to go.
+    for g, note in local_command_notes(it, [(g, it.gate_outcome(g)) for g in pipe]).items():
+        out.append(f"- {g} {note}")
     out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
     if repo is not None and not suggested:
         readme = readme_report(state, cfg, item, repo=repo)
