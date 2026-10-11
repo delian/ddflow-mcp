@@ -798,6 +798,13 @@ class Decision:
     #: The agent id on the event that first recorded it (`core/provenance.py`); distinct
     #: from `decided_by`, which is what the recorder CLAIMED about who decided.
     by: str = ""
+    #: What the author SAW when recording it (B0dcccd8594): the ids of the live decisions
+    #: whose globs overlapped this one's at write time. ``None`` when the event has no
+    #: `saw` key (every log written before), which never forms an unreconciled pair; ``[]``
+    #: means the author saw no overlapping decision. Two live decisions on overlapping
+    #: globs where neither names the other were written concurrently: the fold is pure and
+    #: cannot tell that from the lamports alone, so the author's knowledge is recorded.
+    saw: list[str] | None = field(default=None, metadata={"omit_empty": True})
 
     @property
     def live(self) -> bool:

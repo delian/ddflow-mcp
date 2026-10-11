@@ -5,6 +5,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from ...core import clock
@@ -23,6 +24,7 @@ from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
 from ...services.export import select as export_select
 from ...services.guidance import inject as GI
+from ...services.guidance.kinds import unreconciled_with
 from ...views import markdown as render_md
 from .._base import _load
 from ..reporting import new_reports
@@ -65,6 +67,19 @@ def _rules_block(governing) -> str:
     )
 
 
+def _flag_unreconciled(d, rivals: dict[str, list[str]]):
+    """B0dcccd8594: a decision written without seeing another on the same files is not yet a
+    settled rule, and the brief says so where it says 'binding'. A copy, so the state is not
+    touched; the flag rides in the title, which the view already prints."""
+    if d.id not in rivals:
+        return d
+    flag = (
+        f"[UNRECONCILED with {', '.join(rivals[d.id])}: written without seeing each other; "
+        "ask which holds, then `ddflow decision supersede <old> --by <new>`] "
+    )
+    return replace(d, title=flag + d.title)
+
+
 def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
     """The decisions that govern the item, ranked by the one injection path (pinned first,
     then enforcement, scope specificity and priority), and the rules text with the project's
@@ -78,7 +93,8 @@ def _governing(cfg, st, item: str, rules: str) -> tuple[list, str]:
         return [], rules
     found = GI.for_item(cfg, st, item)
     block = _rules_block(found)
-    decisions = [st.decisions[r.id] for r in found.records("decision")]
+    rivals = unreconciled_with(st)
+    decisions = [_flag_unreconciled(st.decisions[r.id], rivals) for r in found.records("decision")]
     return decisions, (block + "\n\n" + rules).strip() if block else rules
 
 
