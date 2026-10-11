@@ -25,7 +25,7 @@ from ..core.plain import plain as _plain
 from ..infra.store import Store
 from ..services import searchcore as SC
 from ..services.export.query import ExportError, _cutoff
-from ..services.guidance.kinds import governing
+from ..services.guidance.kinds import governing, overlapping_live, unreconciled_with
 from ._base import _load
 
 
@@ -122,6 +122,8 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
         "decided_by": draft.by,
         "item": draft.item,
         "supersedes": csv_list(draft.supersedes),
+        # What this author could see (B0dcccd8594): see `Decision.saw`.
+        "saw": [d.id for d in overlapping_live(st, csv_list(draft.globs), exclude=did)],
     }
     with log.transaction():
         minted = IDS.confirm(
@@ -195,10 +197,11 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
             project_wide=[],
         )
     hits, wide = governing(st, it.globs)
+    rivals = unreconciled_with(st)
     data: dict[str, Any] = {
         "id": item,
         "globs": list(it.globs),
-        "applicable": [_plain(d) for d in hits],
+        "applicable": [_plain(d) | {"unreconciled": rivals.get(d.id, [])} for d in hits],
         "project_wide": [_plain(d) for d in wide],
     }
     if not hits and not wide:
