@@ -21,7 +21,8 @@ Three promises hold in every mode:
   past ``[upgrade].start_timeout_s`` is left running and reported as pending -- a NOTE that
   says the upgrade is pending and asks the operator, never silence and never "current". The
   answer the step reaches later is kept (the marker, keyed by version, policy and surface) so
-  the next connect proposes at once, and the brief and ``doctor`` repeat the note until the
+  the next connect proposes at once, and the brief repeats the note (``doctor_notes`` is for
+  ``ddflow doctor``, wired by B-start-timeout-doctor) until the
   project is upgraded or a check finishes;
 * a project it cannot write (a read-only mount, a volume owned by another uid) gets the plan
   and a line saying nothing was written;
@@ -73,7 +74,7 @@ OFF, CURRENT, OLDER, PROPOSED, APPLIED, READONLY, TIMEOUT, FAILED = (
     "failed",
 )
 
-#: The statuses of a check that did not reach an answer: their note repeats (brief, doctor)
+#: The statuses of a check that did not reach an answer: their note repeats (the brief; doctor once it is wired)
 #: until the project is upgraded or a later check finishes.
 UNFINISHED = (TIMEOUT, FAILED)
 #: The statuses worth keeping as the answer of a start (see `_cacheable`).
@@ -131,11 +132,13 @@ def _save_locked(repo: Path, report: dict[str, Any]) -> None:
     previous = _read(repo)
     if (
         report.get("status") in UNFINISHED
-        and report.get("key")
-        and previous.get("key") == report.get("key")
         and previous.get("complete")
+        and previous.get("version") == report.get("version")
+        and report.get("key", previous.get("key")) == previous.get("key")
     ):
-        return  # a finished answer for this very start outranks the note that it ran late
+        # a finished answer for this very start outranks the note that it ran late, and the
+        # report of a failure (it knows no key)
+        return
     keep = previous.get("text") == report.get("text") and previous.get("version") == report.get(
         "version"
     )
@@ -286,17 +289,20 @@ def _refold(log: Any, st: State) -> State:
         return st
 
 
-def _key(running: str, project: str, policy: str, surf: str) -> str:
+def _key(running: str, project: str, policy: str, surf: str, writable: bool = True) -> str:
     """What an answer of the start check is good for: the same ddflow over a project at the
-    same version, under the same policy and surface. The plan's item count may drift as the
+    same version, under the same policy and surface, as writable (a read-only answer is not
+    replayed once the project can be written). The plan's item count may drift as the
     log grows; `ddflow upgrade --plan` is always the authority. The agent is not part of it:
     only a container's applying start uses the agent (it is never kept), and the text of a
     proposal does not name one."""
-    return "|".join((running, project, policy, surf))
+    return "|".join((running, project, policy, surf, "rw" if writable else "ro"))
 
 
 def _cacheable(report: dict[str, Any], surf: str) -> bool:
-    """A container's safe start APPLIES things, so it is re-run; any other answer is kept."""
+    """A container's safe start APPLIES things, so it is re-run; any other answer is kept. An
+    MCP start's "rebuilt the index" is kept too: the index rebuilds itself when a read finds it
+    stale, so replaying the line costs nothing the next read does not pay."""
     status = report.get("status")
     return (
         bool(report.get("text"))
@@ -342,7 +348,7 @@ def _behind_report(
 ) -> dict[str, Any]:
     """The report for a project that is not known to be current, within the time bound."""
     seconds = float(cfg.upgrade.start_timeout_s)
-    key = _key(running, project, policy, surf)
+    key = _key(running, project, policy, surf, _writable(repo))
     if (kept := _cached(repo, key)) is not None:
         return kept
 
@@ -458,7 +464,7 @@ def _unfinished(repo: Path, st: State | None) -> str:
 
 
 def doctor_notes(repo: Path, st: State) -> list[str]:
-    """For ``ddflow doctor``: the note of a start check that ran out of time or failed, until
+    """For ``ddflow doctor`` (wired by B-start-timeout-doctor, which holds health.py): the note of a start check that ran out of time or failed, until
     the project is upgraded or a later check finishes. Never raises."""
     try:
         text = _unfinished(repo, st)
