@@ -176,6 +176,11 @@ def test_a_view_quoting_a_conflict_block_on_a_clean_tree_is_not_a_conflict(clone
     assert run_cli(a, "lesson", "add", "--id", "LQ", "--title", "q", "--rule", block, agent="U1")[0] == 0
     assert run_cli(a, "render", agent="U1")[0] == 0
     assert "<<<<<<< HEAD" in (a / "docs/ddflow/LESSONS.md").read_text()
+    _commit(a, "quote")
+    code, out, err = run_cli(a, "doctor", agent="U1")
+    assert "merge-conflict markers" not in out + err, out + err
+    # the log moves on and the view is stale: the quoted block is still not a conflict
+    assert run_cli(a, "lesson", "add", "--id", "LR", "--title", "r", "--rule", "plain", agent="U1")[0] == 0
     code, out, err = run_cli(a, "doctor", agent="U1")
     assert "merge-conflict markers" not in out + err, out + err
 
