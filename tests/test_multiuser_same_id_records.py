@@ -157,3 +157,14 @@ def test_rival_lessons_and_research_are_contested(repo):
     assert run_cli(repo, "doctor")[0] == 0
     code, out, _ = run_cli(repo, "lesson", "search", "lock")
     assert "always take the lock" in out and "never take the lock" not in out
+
+
+def test_revision_by_the_kept_author_after_a_settlement_is_not_a_contest(repo):
+    _decisions(repo)
+    assert run_cli(repo, "resolve", "D-x", "--keep", "bob")[0] == 0
+    _add_decision(repo, "bob", "use postgres", "Use postgres 16")
+    _code, out, _ = run_cli(repo, "--json", "decision", "show", "D-x")
+    shown = json.loads(out)
+    assert not shown.get("contested")
+    assert shown["decision"] == "Use postgres 16"
+    assert run_cli(repo, "doctor")[0] == 0
