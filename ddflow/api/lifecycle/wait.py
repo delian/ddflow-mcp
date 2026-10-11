@@ -14,8 +14,9 @@ from ...core.clock import WAIT_MAX_S
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
-from ...core.schedule import plan
+from ...core.schedule import Blocked, plan
 from ...infra.log import EventLog
+from ...services import leases as L
 from ...services import waits as WT
 from .._base import _load
 from ._common import _require
@@ -73,7 +74,22 @@ def _judge_wait(
         }
     mine = live.get(item)
     if mine is not None and mine.holder == me:
-        return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
+        # Holding the item is not holding the globs a widening names: `update --globs`
+        # refuses what another live lease covers, so READY would be followed by a refusal
+        # (B-wait-globs-held).
+        clash = L.glob_clash(st, cfg, it, me, list(globs), now) if globs else None
+        if clash is None:
+            return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
+        other_id, lz, pair = clash
+        detail = f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})"
+        blocked = Blocked(item, "conflict", detail, [other_id])
+        return {
+            **out,
+            "status": "blocked",
+            "why": f"{item}: {detail}",
+            "waiting_on": [other_id],
+            "blocked": [plain(blocked)],
+        }
     b = _claim_blocker(st, cfg, it, me, live, now, globs=globs, repo=repo)
     if b is None:
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
