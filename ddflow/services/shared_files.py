@@ -27,7 +27,7 @@ import tomllib
 from pathlib import Path
 
 from ..config import Config
-from ..config_sections._layers import layer_path
+from ..config_sections._layers import ConfigConflict, has_conflict_markers, layer_path
 from ..core.admission import is_shared
 from ..core.globs import regex
 from ..infra import git as G
@@ -317,6 +317,55 @@ def sync_attributes(repo: Path) -> list[str]:
     return added
 
 
+#: Where the generated views live, and the one command that clears a conflict in them.
+_VIEW_DIR = "docs/ddflow"
+VIEW_CONFLICT_FIX = f"git checkout --theirs {_VIEW_DIR} && ddflow render && git add {_VIEW_DIR}"
+#: The view filenames of `views.markdown.VIEWS`, which this module sits below and cannot
+#: import; tests/test_generated_merge_conflict.py holds the two equal.
+VIEW_NAMES = ("QUEUE.md", "LESSONS.md", "LESSONS-SUMMARY.md", "RESEARCH.md")
+
+
+def _has_conflict_markers(path: Path) -> bool:
+    try:
+        return has_conflict_markers(path.read_text("utf-8", errors="replace"))
+    except OSError:
+        return False
+
+
+def conflicted_views(repo: Path) -> list[str]:
+    """PROBLEMs for each generated view holding merge-conflict markers (B6b8d1f7a0f).
+
+    A view is derived from the log, so a conflict in it is regenerated, never hand-merged:
+    two clones that each render and commit conflict on every one at every pull.
+    """
+    hit = [
+        f"{_VIEW_DIR}/{name}"
+        for name in VIEW_NAMES
+        if _has_conflict_markers(Path(repo) / _VIEW_DIR / name)
+    ]
+    if not hit:
+        return []
+    return [
+        f"{', '.join(hit)} {'has' if len(hit) == 1 else 'have'} merge-conflict markers: "
+        f"generated views are regenerated from the log, never hand-merged. "
+        f"Run `{VIEW_CONFLICT_FIX}`."
+    ]
+
+
+def conflicted_layers(repo: Path) -> list[str]:
+    """PROBLEMs for each committed or local config file holding merge-conflict markers."""
+    out = []
+    for own, layer in (("config.toml", "file"), ("gates.toml", "file"), ("config.toml", "local")):
+        path = layer_path(repo, layer, own)
+        if path.is_file() and _has_conflict_markers(path):
+            out.append(
+                f"{path.relative_to(repo)} has merge-conflict markers: every command except "
+                f"`doctor` and `help` refuses until it is resolved. "
+                f"{ConfigConflict(path)}, then `git add` it."
+            )
+    return out
+
+
 def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     """(problems, notes) for doctor.
 
@@ -327,7 +376,7 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     parallel merge of it will conflict until someone regenerates it.
     """
 
-    problems: list[str] = []
+    problems: list[str] = [*conflicted_layers(repo), *conflicted_views(repo)]
     notes: list[str] = []
     for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
         try:
