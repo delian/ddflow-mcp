@@ -24,18 +24,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The floor and the current release. A version-specific break in either is a
-        # break for somebody, and `requires-python = ">=3.11"` is a promise.
-        python: ["3.11", "3.13"]
+        # The floor, the middle and the current release (3.12 is what a contributor hit).
+        # A version-specific break in any is a break for somebody, and `requires-python = ">=3.11"` is a promise.
+        python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Lint
         run: |
-          uv run ruff check .
-          uv run ruff format --check .
+          uv run --python ${{ matrix.python }} ruff check .
+          uv run --python ${{ matrix.python }} ruff format --check .
       - name: Unit and integration tests
-        run: uv run pytest tests/ -q --timeout=420 -n auto
+        run: uv run --python ${{ matrix.python }} pytest tests/ -q --timeout=420 -n auto
 
   quality:
     # Fast gates, separate from `tests` so a lint failure and a behaviour failure are
