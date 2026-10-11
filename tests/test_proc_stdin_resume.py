@@ -74,3 +74,24 @@ def test_a_str_on_a_binary_pipe_is_refused_loudly_not_delivered_as_nothing(monke
     with pytest.raises(TypeError):
         P._shell_group("cat", timeout=5, input="hello")
     assert made and all(p.poll() is not None for p in made)
+
+
+def test_run_shell_never_hands_the_request_to_communicate(monkeypatch):
+    """The cause, held on every Python: a resumed `communicate` lost the input on 3.12.3,
+    so the request must not travel through it at all (the behaviour test above can only
+    fail on an interpreter that has the stdlib bug)."""
+    import subprocess
+
+    real = subprocess.Popen.communicate
+    seen: list[object] = []
+
+    def spy(self, input=None, timeout=None):
+        seen.append(input)
+        return real(self, input=input, timeout=timeout)
+
+    monkeypatch.setattr(subprocess.Popen, "communicate", spy)
+    got = P.run_shell(
+        "wc -c", timeout_s=20, stdin_text="x" * 100_000, on_tick=lambda: None, tick_s=0.2
+    )
+    assert got.code == 0 and got.out.strip() == "100000"
+    assert seen and all(i is None for i in seen), seen
