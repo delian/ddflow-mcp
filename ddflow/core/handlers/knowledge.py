@@ -40,7 +40,12 @@ def _contest(st: State, ev: Event, kind: str, current: Any) -> str:
     mine = _definition(ev)
     d = ev.data
     if d.get("resolves"):
-        st.record_definitions[key] = mine
+        # The kept rival's own definition stands, not the resolver's envelope: a later
+        # revision by its author must read as a revision, not as a rival of the resolver.
+        kept = next(
+            (r for r in (current.contested if current else []) if r["event"] == d.get("kept")), None
+        )
+        st.record_definitions[key] = kept or mine
         return "resolved"
     prior = st.record_definitions.get(key)
     if current is not None and current.contested:
