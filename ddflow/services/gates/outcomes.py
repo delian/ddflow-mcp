@@ -24,7 +24,7 @@ from .evidence import (
     tree_fingerprint,
     worktree_entries,
 )
-from .kinds import evidence_problems, not_applicable
+from .kinds import DiffPaths, evidence_problems, not_applicable
 
 
 @dataclass
@@ -185,20 +185,29 @@ def _triage_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
 
 
 def status(
-    state: State, cfg: Config, item_id: str, defs: Mapping[str, GateDef] | None = None
+    state: State,
+    cfg: Config,
+    item_id: str,
+    defs: Mapping[str, GateDef] | None = None,
+    *,
+    diff: DiffPaths | None = None,
 ) -> GateStatus:
     """Where is this item in its pipeline, and what is the next thing to do?
 
     ``defs`` are the gate definitions (`load_gates`): with them a gate whose
     `applies_when` does not cover the item's declared work is reported in
-    ``not_applicable`` and waited on by nothing. Without them every gate applies."""
+    ``not_applicable`` and waited on by nothing. Without them every gate applies.
+
+    ``diff`` reads the ACTUAL changed paths. A `[gates].required` gate is never excused
+    by the declared globs alone, only by a readable diff that misses its `applies_when`
+    (B-na-required-gate); without ``diff`` such a gate stays owed."""
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
     gates = pipeline_for(it, cfg)
-    na = not_applicable(it, gates, defs)
-    rows = [(g, it.gate_outcome(g)) for g in gates]
     required = required_gates(cfg)
+    na = not_applicable(it, gates, defs, required=required, diff=diff)
+    rows = [(g, it.gate_outcome(g)) for g in gates]
     settled = {g: g in na or it.gate_satisfied(g, g in required) for g in gates}
     done = [g for g in gates if settled[g] and g not in na]
     blocked = _with_outcome(rows, "failed")
