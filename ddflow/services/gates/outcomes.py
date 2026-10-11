@@ -192,17 +192,19 @@ LOCAL_COMMAND_LABEL = "passed with a local-only command (not the committed one)"
 
 
 def _local_command_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
-    """gate -> the label for a recorded PASS whose command came from the local layer; and,
-    when the evidence shows the committed layer defined a different one, says so."""
+    """gate -> the label for a recorded PASS whose command came from the local layer; when
+    the committed layers define a different command it says so, and when they define the
+    very same one there is nothing to label."""
     out: dict[str, str] = {}
     for g, o in rows:
         rec = it.gates.get(g)
         ev = (rec.evidence or {}) if rec is not None else {}
         if o != "passed" or ev.get("command_layer") != "local":
             continue
-        out[g] = LOCAL_COMMAND_LABEL + (
-            "; the committed command differs" if ev.get("committed_command_digest") else ""
-        )
+        committed = ev.get("committed_command_digest")
+        if committed and committed == ev.get("command_digest"):
+            continue
+        out[g] = LOCAL_COMMAND_LABEL + ("; the committed command differs" if committed else "")
     return out
 
 

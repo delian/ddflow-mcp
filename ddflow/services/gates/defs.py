@@ -440,22 +440,22 @@ def command_provenance(root: Path, gate_id: str) -> tuple[str, str]:
     COMMITTED layers define ("" when they define none). A pass made with a command only
     this machine has is not the project's pass (B924bdc92d7). Mirrors the overlay order of
     `load_gates`; a file that does not parse counts as setting nothing."""
-    paths = tomlcfg.config_paths(root, "gates.toml")
     layer, committed = "committed", ""
-    for n, path in enumerate(paths):
-        if not Path(path).is_file():
-            continue
-        try:
-            block = ((tomlcfg.read_toml(Path(path)).get("gate") or {}).get(gate_id)) or {}
-        except (OSError, ValueError):
-            continue
-        cmd = block.get("command") if isinstance(block, dict) else None
-        if not isinstance(cmd, str):
-            continue
-        is_local = n >= len(paths) // 2
-        layer = "local" if is_local else "committed"
-        if not is_local:
-            committed = cmd
+    for which in tomlcfg.LAYERS:
+        for name in ("config.toml", "gates.toml"):
+            path = tomlcfg.layer_path(root, which, name)
+            if not path.is_file():
+                continue
+            try:
+                block = (tomlcfg.read_toml(path).get("gate") or {}).get(gate_id) or {}
+            except (OSError, ValueError):
+                continue
+            cmd = block.get("command") if isinstance(block, dict) else None
+            if not isinstance(cmd, str):
+                continue
+            layer = "local" if which == "local" else "committed"
+            if which != "local":
+                committed = cmd
     return layer, committed
 
 
