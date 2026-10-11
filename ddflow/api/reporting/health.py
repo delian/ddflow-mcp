@@ -295,11 +295,11 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     store = Store(repo, cfg)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
     problems, notes = RP.integrity(repair_ctx)
-    # A NOTE, not a problem: the log is append-only, so a shard that once had two
-    # writers says so forever, and a doctor that can never pass again is one nobody
-    # reads. The clock already reads past it (B190); the shared identity is the fix.
+    # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
+    # agent id, and a lease claimed under it is "mine" in both clones. Claims record
+    # their clone, so a double claim is also a CONTESTED item below.
     for shard, (n, before, after) in log.clock_regressions().items():
-        notes.append(
+        problems.append(
             f"{shard}: Lamport clock decreases at event {n} ({before} -> {after}) — two "
             "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
             "`[agent].id`, or drop both to derive a per-clone id)"
