@@ -256,7 +256,11 @@ def contested_items(st: State) -> list[dict[str, Any]]:
                         for d in r.contested
                     ],
                     "summary": f"{kind} {r.id} is CONTESTED: {contested_summary(r.contested)}; "
-                    "none of them is in force until the operator keeps one",
+                    + (
+                        "the operator keeps one"
+                        if kind == "research"  # a note has no in-force notion
+                        else "none of them is in force until the operator keeps one"
+                    ),
                     "action": NOTE,
                     "fix": f"ddflow resolve {r.id} --keep <event-id|agent>  "
                     f"(rivals: {', '.join(agents)})",
