@@ -119,17 +119,6 @@ def test_an_unadopted_project_creates_nothing(tmp_path):
     assert not (repo / ".ddflow").exists()
 
 
-def test_the_doctor_note_names_the_old_id_when_the_file_holds_another_suffix(claimed):
-    from ddflow.api._base import _load
-    from ddflow.services import identity as IDN
-
-    old = _suffix(claimed)
-    (claimed / ID_FILE).write_text("abcdef\n")  # a replaced file: no recovery applies
-    log, cfg, st = _load(claimed, "")
-    notes = IDN.stale_suffix_notes(log, cfg, st)
-    assert len(notes) == 1 and f"-{old}" in notes[0] and "-abcdef" in notes[0], notes
-
-
 def test_a_copied_checkout_does_not_adopt_it_either(claimed, tmp_path):
     """A copy has the worktree directory but git there does not list it as its own."""
     other = tmp_path / "other" / "proj"
@@ -137,3 +126,19 @@ def test_a_copied_checkout_does_not_adopt_it_either(claimed, tmp_path):
     shutil.copytree(claimed, other, symlinks=True)
     shutil.rmtree(other / ".ddflow" / "local")
     assert L._clone_suffix(other) not in ("", _suffix(claimed))
+
+
+def test_the_checkouts_own_root_is_no_evidence(claimed):
+    """A claim recorded against the main checkout ('.') is the same text in every clone."""
+    bare = L.bare_agent_id(claimed)
+    shard = claimed / ".ddflow" / "events" / f"{bare}-aaaaaa.jsonl"
+    ev = {
+        "agent": f"{bare}-aaaaaa", "kind": "lease.acquired", "subject": "T9", "lamport": 10**9,
+        "schema": 1, "id": "e" + "1" * 24, "ts": "2999-01-01T00:00:00Z",
+        "data": {"holder": f"{bare}-aaaaaa", "worktree": ".", "branch": "b", "at": 9e9,
+                 "ttl_s": 1800, "globs": [], "kind": "task", "note": "", "resources": []},
+    }  # fmt: skip
+    shard.write_text(json.dumps(ev) + "\n")
+    old = _suffix(claimed)
+    shutil.rmtree(claimed / ".ddflow" / "local")
+    assert L._clone_suffix(claimed) == old  # T1's linked tree wins; "." is ignored

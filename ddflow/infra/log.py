@@ -68,6 +68,7 @@ from . import fsio
 from . import git as G
 from . import hostinfo as H
 from . import paths as P
+from . import worktree as W
 
 __all__ = [
     "PROVENANCE_KINDS",
@@ -611,6 +612,43 @@ CLONE_ID_FILE = Path(".ddflow") / "local" / "clone-id"
 
 
 _SUFFIX = re.compile(r"[0-9a-f]{6}")
+_TREE_KINDS = frozenset({"lease.acquired", "lease.renewed", "worktree.created", "worktree.adopted"})
+_NO_RANK: tuple[float, int] = (-1.0, -1)
+
+
+def _shard_evidence(
+    shard: Path, bare: str
+) -> tuple[dict[str, tuple[tuple[float, int], str]], dict[str, set[str]]]:
+    """From one `{bare}-*.jsonl` shard: item -> (newest claim rank, suffix) of the claims
+    held by `{bare}-{suffix}`, and item -> the worktree paths the shard records for it."""
+    claim: dict[str, tuple[tuple[float, int], str]] = {}
+    trees: dict[str, set[str]] = {}
+    try:
+        lines = shard.read_text("utf-8").splitlines()
+    except OSError:
+        return claim, trees
+    for ln in lines:
+        if '"lease.' not in ln and '"worktree.' not in ln:
+            continue
+        try:
+            ev = json.loads(ln)
+            kind, item, data = ev["kind"], ev["subject"], ev["data"]
+            holder = str(data.get("holder") or "")
+            suffix = holder[len(bare) + 1 :]
+            if (
+                kind == "lease.acquired"
+                and holder.startswith(bare + "-")
+                and _SUFFIX.fullmatch(suffix)
+            ):
+                rank = (float(data.get("at") or 0.0), int(ev.get("lamport") or 0))
+                if rank > claim.get(item, (_NO_RANK, ""))[0]:
+                    claim[item] = (rank, suffix)
+            stored = str(data.get("worktree") or data.get("path") or "")
+            if stored and kind in _TREE_KINDS:
+                trees.setdefault(item, set()).add(stored)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return claim, trees
 
 
 def _recovered_suffix(root: Path) -> str:
@@ -619,68 +657,36 @@ def _recovered_suffix(root: Path) -> str:
     `rm -r .ddflow/local` (git clean -xfd, a re-image) used to make the user a NEW agent,
     locked out of their own claims (B839f599cb5). The log still holds the evidence: a
     `lease.acquired` whose holder is `{bare id}-{suffix}` and whose recorded worktree is a
-    directory under THIS checkout. Several suffixes: the newest claim wins. A fresh clone
-    of the project, or a teammate's shard, has no such worktree here, so it mints as before.
-    Read only; the shards are never renamed or written.
+    linked worktree of THIS clone, on disk and in its `git worktree list`. Several
+    suffixes: the newest claim wins. A fresh clone of the project, or a teammate's shard,
+    has no such worktree here, so it mints as before. Read only; shards are never renamed.
     """
-    events = root / ".ddflow" / "events"
     top = root.resolve()
     bares = {bare_agent_id(root), f"{H.short_host()}-{root.name}"}
-    best: tuple[float, int] = (-1.0, -1)
-    found = ""
+    best, found = _NO_RANK, ""
     for bare in bares:
-        for shard in events.glob(f"{glob.escape(bare)}-*.jsonl"):
-            try:
-                lines = shard.read_text("utf-8").splitlines()
-            except OSError:
-                continue
-            claim: dict[str, tuple[tuple[float, int], str]] = {}  # item -> (rank, suffix)
-            trees: dict[str, set[str]] = {}  # item -> worktree paths the shard records
-            for ln in lines:
-                if not any(k in ln for k in ('"lease.', '"worktree.')):
-                    continue
-                try:
-                    ev = json.loads(ln)
-                    kind, item, data = ev["kind"], ev["subject"], ev["data"]
-                    if kind == "lease.acquired":
-                        holder = str(data["holder"])
-                        suffix = holder[len(bare) + 1 :]
-                        if holder.startswith(bare + "-") and _SUFFIX.fullmatch(suffix):
-                            rank = (float(data.get("at") or 0.0), int(ev.get("lamport") or 0))
-                            if rank > claim.get(item, ((-1.0, -1), ""))[0]:
-                                claim[item] = (rank, suffix)
-                    stored = str(data.get("worktree") or data.get("path") or "")
-                    if stored and kind in _TREE_KINDS:
-                        trees.setdefault(item, set()).add(stored)
-                except (ValueError, KeyError, TypeError, AttributeError):
-                    continue
+        for shard in (root / ".ddflow" / "events").glob(f"{glob.escape(bare)}-*.jsonl"):
+            claim, trees = _shard_evidence(shard, bare)
             for item, (rank, suffix) in claim.items():
-                if rank > best and any(tree_is_here(top, t) for t in trees.get(item, ())):
+                if rank > best and any(_linked_tree_here(top, t) for t in trees.get(item, ())):
                     best, found = rank, suffix
     return found
 
 
-_TREE_KINDS = frozenset({"lease.acquired", "lease.renewed", "worktree.created", "worktree.adopted"})
+def _linked_tree_here(top: Path, stored: str) -> bool:
+    """Is `stored` a LINKED worktree of the clone at `top`: a directory under it, other than
+    the checkout itself, that this clone's own `git worktree list` names?
 
-
-def tree_is_here(root: Path, stored: str, registered: set[Path] | None = None) -> bool:
-    """Is the recorded worktree a directory under THIS checkout that THIS clone's git
-    lists as one of its worktrees?
-
-    A stored path is relative, so another clone records the very same one; only this
-    clone's own `git worktree list` can say the tree is here (a copied directory still
-    lists the original's path). ``registered`` is that list, resolved, for a caller that
-    asks about many trees."""
-    from . import worktree as W  # lazy: worktree imports the config, and so on
-
-    top = Path(root).resolve()
-    if registered is None:
-        registered = {
-            Path(e["worktree"]).resolve() for e in W.list_worktrees(top) if "worktree" in e
-        }
+    A stored path is relative, so another clone records the very same one. The checkout's
+    own root is no evidence (every clone has one at the same relative path), and a copied
+    directory still lists the original's path; only a linked tree here is."""
     try:
         tree = W.load_path(top, stored).resolve()
-        return tree.is_dir() and tree.is_relative_to(top) and tree in registered
+        if tree == top or not tree.is_dir() or not tree.is_relative_to(top):
+            return False
+        return any(
+            Path(e["worktree"]).resolve() == tree for e in W.list_worktrees(top) if "worktree" in e
+        )
     except OSError:
         return False
 
