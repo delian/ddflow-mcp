@@ -39,6 +39,17 @@ def _taken(r, iid: str) -> str:
     return f" (previously taken over, first by {by})" if by else ""
 
 
+def _contested_lines(r) -> list[str]:
+    """B2809f4213b: the contested items, each with the command that settles it."""
+    if not r.get("contested"):
+        return []
+    out = ["", "Contested (settle before anyone merges or completes):"]
+    for c in r["contested"]:
+        who = " vs ".join(x["holder"] for x in c["claims"]) or "definitions"
+        out += [f"  [!] {c['id']:<12} {c['title']}  — {who}", f"      `{c['resolve']}`"]
+    return out
+
+
 def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
@@ -53,6 +64,7 @@ def _queue_lines(r) -> list[str]:
         for t in r["running"]:
             held = f"  — {t.lease.holder}{_taken(r, t.id)}" if t.lease else ""
             out.append(f"  [~] {t.id:<12} {t.title}{held}")
+    out += _contested_lines(r)
     if r["ready"]:
         out.append("")
         out.append("Ready to start:")

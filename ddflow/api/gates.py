@@ -39,7 +39,7 @@ from ..services import leases as L
 from ..services import prompts as P
 from ..services import roborev as RR
 from ..services import testselect as TS
-from ..services.completion import readme_report
+from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
 from ..services.gates import measured as R
 from ..services.gates.reviewers import run_watching_git
@@ -85,7 +85,7 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     _log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
     try:
-        s = G.status(st, cfg, item, gates)
+        s = G.status(st, cfg, item, gates, diff=lambda: changed_paths(repo, st.items[item]))
     except KeyError:
         return O.failed("gate.status", f"no such item {item!r}", id=item, text="")
 

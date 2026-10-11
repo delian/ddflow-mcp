@@ -13,6 +13,7 @@ from ...core.records import contested_summary, record_pools
 from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
+from ...services.completion import changed_paths
 from .._base import _load
 
 #: How much of one record's text a rendering carries. The record is whole in the log and
@@ -141,6 +142,9 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             )
         return O.failed("show", f"no such item or bug {item!r}", id=item, item=None)
 
+    def diff():
+        return changed_paths(repo, it)
+
     led = LG.build(_log.read_all(), item) if it.state == "done" else None
     return O.ok(
         "show",
@@ -150,10 +154,10 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             **addenda(st, item),
             **({"ledger": LG.summary(led)} if led else {}),
         },
-        gates=plain(G.status(st, cfg, item, defs)),
+        gates=plain(G.status(st, cfg, item, defs, diff=diff)),
         _render={
             "item": it,
-            "gate_status": G.status(st, cfg, item, defs),
+            "gate_status": G.status(st, cfg, item, defs, diff=diff),
             "addenda": addenda(st, item),
         },
     )
