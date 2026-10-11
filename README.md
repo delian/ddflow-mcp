@@ -953,7 +953,13 @@ ddflow **recommends** services; it never ships one person's configuration. Two l
 | machine-local, git-ignored | `.ddflow/local/config.toml`, `.ddflow/local/gates.toml`, `.ddflow/local/reviewers.toml` | *your* services: reviewer endpoints, model names of a private deployment, API-key variable names, LAN hosts, a worker count sized to this machine |
 
 The local files are read **last**, so they win; `ddflow config --explain` reports such a
-value's source as `local`. Every writer of an operator-specific value targets the local
+value's source as `local`. A command gate that ran with a `command` set in the local layer
+records `command_layer: "local"` (else `"committed"`), a `command_digest`, and, when the
+committed layers define a different command, `committed_command_digest`; `gate status`, `show`
+and `complete` then label that pass "passed with a local-only command (not the committed one)",
+since it is not the project's pass. The evidence also names `output_log_host` (the agent whose
+machine holds the git-ignored `.ddflow/runs` log, which a teammate's checkout does not have).
+Evidence recorded before these keys is not labelled. Every writer of an operator-specific value targets the local
 layer by default:
 
 ```sh

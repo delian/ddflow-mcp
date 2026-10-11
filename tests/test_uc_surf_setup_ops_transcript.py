@@ -23,6 +23,7 @@ import pytest
 
 import ddflow
 from ddflow.surfaces.cli import main
+from tests.pin_norm import stable
 
 SCRIPT: tuple[tuple[str, ...], ...] = (
 # setup of the sandbox
@@ -148,6 +149,6 @@ def test_the_setup_and_operations_cli_transcript_is_unchanged(tmp_path, monkeypa
     bad = [
         f"{' '.join(g[0])}:\n got {g[1:]!r}\nwant {w[1:]!r}"
         for g, w in zip(got, want, strict=True)
-        if g != w
+        if stable(g) != stable(w)
     ]
     assert not bad, "\n\n".join(bad[:5]) + f"\n({len(bad)} of {len(want)} differ)"
