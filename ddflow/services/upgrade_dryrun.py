@@ -1550,6 +1550,10 @@ def diag_directory(opt: Options) -> Path:
     return Path(opt.source) / ".ddflow" / "local" / "dryrun"
 
 
+def checks(report: Report) -> list[dict[str, Any]]:
+    return [asdict(c) for c in report.checks]
+
+
 def write_diagnostics(opt: Options, report: Report, runs: list[Rehearsal]) -> str:
     """Write the step table of a failed run and each command's bounded output to a file; the
     path ("" when it could not be written: the report must still come out). A rehearsal that was
@@ -1561,16 +1565,10 @@ def write_diagnostics(opt: Options, report: Report, runs: list[Rehearsal]) -> st
         "from_commit": report.from_commit,
         "exit": report.exit_code,
         "table": report.table(),
-        "checks": [asdict(c) for c in report.checks],
+        "checks": checks(report),
         "facts": report.facts,
         "runs": [
-            {
-                "run": r.run_id,
-                "table": r.report.table(),
-                "checks": [asdict(c) for c in r.report.checks],
-                "facts": r.report.facts,
-            }
-            for r in runs
+            {"run": r.run_id, "table": r.report.table(), "checks": checks(r.report)} for r in runs
         ],
         "commands": [c for r in runs for c in r.commands],
     }

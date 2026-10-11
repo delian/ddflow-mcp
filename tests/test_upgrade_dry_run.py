@@ -426,11 +426,16 @@ STEPS = (
 )
 
 
+def no_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every step after the clone does nothing."""
+    for name in STEPS:
+        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+
+
 def only_clone(monkeypatch: pytest.MonkeyPatch, during) -> list[int]:
     """Run nothing but a stand-in for step 1 that calls ``during(rehearsal)``: a concurrent
     writer in the live project, active while the rehearsal runs. Returns the call counter."""
-    for name in STEPS:
-        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+    no_steps(monkeypatch)
     calls: list[int] = []
 
     def clone(self) -> bool:
@@ -453,8 +458,7 @@ def failing_step(monkeypatch: pytest.MonkeyPatch, noise: int = 0) -> None:
         done = self.ddflow(DR.Cmd([sys.executable, "-c", code]), self.opt.work, "arg")
         return self.add(2, "read with the new code", False, f"exit {done.returncode}")
 
-    for name in STEPS:
-        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+    no_steps(monkeypatch)
     monkeypatch.setattr(DR.Rehearsal, "step_read", read)
 
 
@@ -689,8 +693,7 @@ def test_a_build_of_the_old_ddflow_that_fails_leaves_the_uv_stderr(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = project(tmp_path, confirm_free=True)
-    for name in STEPS:
-        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+    no_steps(monkeypatch)
 
     def no_index(argv, **_kw):
         return DR.P.Captured(1, "", "error: no package index (UV-STDERR)")
@@ -705,8 +708,7 @@ def test_a_pip_install_that_fails_leaves_the_transcript_and_so_does_an_unwritabl
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = project(tmp_path, confirm_free=True)
-    for name in STEPS:
-        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+    no_steps(monkeypatch)
 
     def venv_then_pip_fails(argv, **_kw):
         if argv[:2] == ["uv", "venv"]:
