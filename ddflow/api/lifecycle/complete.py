@@ -67,8 +67,12 @@ def complete(
             return O.failed("item.completed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
     it = _require(st, item, "item.completed")
-    if isinstance(it, O.Outcome):
-        return it
+    # B2809f4213b: a contested claim is settled by `resolve`, not by finishing
+    refusal = (
+        it if isinstance(it, O.Outcome) else L.contest_refusal(it, "item.completed", "completed")
+    )
+    if refusal is not None:
+        return refusal
     umbrella = _umbrella_children(st, it)
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
