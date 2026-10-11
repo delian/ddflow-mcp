@@ -293,3 +293,14 @@ def test_coming_back_to_a_branch_still_compares_against_what_was_seen_there(clon
     _git(clone, "checkout", "-q", "main")
     _git(clone, "reset", "-q", "--hard", "HEAD~2")  # the loss on main, unseen while away
     assert _problem_lines(_doctor(clone)[1])
+
+
+def test_conflict_markers_that_come_and_go_are_not_events_lost(clone):
+    """reviewer: lines that are not events must not raise the mark, or removing them later
+    reads as a loss."""
+    shard = _shard(clone)
+    good = shard.read_text()
+    shard.write_text("<<<<<<< HEAD\n" + good + "=======\n>>>>>>> theirs\n" + '{"torn')
+    _dd(clone, "status")  # a look while the shard is in conflict
+    shard.write_text(good)  # resolved: byte-identical to before
+    assert not _problem_lines(_doctor(clone)[1])

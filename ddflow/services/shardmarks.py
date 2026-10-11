@@ -6,8 +6,8 @@ commit, a `reset --hard` or a deleted shard takes events out of the tree, and no
 markers and hand edits are detected; the MISSING-event class was blind.
 
 `.ddflow/local/shard-marks` (a LocalStore document: machine-local, never committed) holds one row
-per (branch, shard): `{shard, ref, count, last_event_id, size}` -- how many events (raw non-blank
-lines) this clone last saw in that shard ON that branch, the id of the last one, and the file
+per (branch, shard): `{shard, ref, count, last_event_id, size}` -- how many events (whole
+JSON-object lines) this clone last saw in that shard ON that branch, the id of the last one, and the file
 size at that look. A mark is compared only on the branch it was taken on, so checking out a
 branch that never had the events is not a loss, and coming back to the original branch still
 compares against what was seen there. `observe` raises marks and never lowers them; `lost`
@@ -59,14 +59,17 @@ def _store(log: Any) -> LocalStore:
 
 
 def _scan(path: Path) -> tuple[int, str, int] | None:
-    """(non-blank lines, id of the last whole one, size) of one shard; None when unreadable."""
+    """(event lines, id of the last one, size) of one shard; None when unreadable."""
     try:
         data = path.read_bytes()
     except OSError:
         return None
     count, last = 0, ""
-    for raw in data.splitlines():
-        if not raw.strip():
+    for whole in data.splitlines():
+        raw = whole.strip()
+        # an event line is a whole JSON object; a conflict marker or a torn fragment is not
+        # one, and counting it would turn its later removal into a "loss"
+        if not (raw.startswith(b"{") and raw.endswith(b"}")):
             continue
         count += 1
         last = raw.decode("utf-8", "replace")
