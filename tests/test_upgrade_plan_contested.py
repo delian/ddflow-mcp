@@ -109,3 +109,22 @@ def test_the_dry_run_tolerates_exactly_the_planned_contests(repo):
     assert not DR.contested_only(out, set()), "an unplanned contest is still a failure"
     other = out.replace("1 problem(s)", "2 problem(s)") + "\nsomething else is wrong\n"
     assert not DR.contested_only(other, {"decision D-x"}), "a second, unplanned problem fails"
+
+
+def test_a_research_note_has_no_in_force_wording():
+    """A decision or lesson is withheld from what is in force while contested; a research
+    note has no such notion, so its plan row must not claim one."""
+    from types import SimpleNamespace as NS
+
+    rivals = [
+        {"event": "e1" * 8, "agent": "alice", "title": "a"},
+        {"event": "e2" * 8, "agent": "bob", "title": "b"},
+    ]
+    pool = {"X": NS(id="X", contested=rivals)}
+    st = NS(decisions=pool, lessons={}, research=pool)
+
+    by_kind = {i["kind"]: i for i in UP.contested_items(st)}
+
+    assert "in force" in by_kind["decision"]["summary"]
+    assert "in force" not in by_kind["research"]["summary"]
+    assert by_kind["research"]["fix"].startswith("ddflow resolve X --keep")
