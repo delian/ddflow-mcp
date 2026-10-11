@@ -98,10 +98,14 @@ class _Protected:
     held_paths: dict[str, str] = field(default_factory=dict)
     held_branches: dict[str, str] = field(default_factory=dict)
     adopted_paths: dict[str, str] = field(default_factory=dict)
+    #: branch -> the sentence, for a removed item whose holder's work is on it (B71dedb76d2).
+    stranded: dict[str, str] = field(default_factory=dict)
 
     def why(self, path: str, branch: str) -> tuple[str, str]:
         """(kind, reason) when the tree at ``path`` on ``branch`` must be left alone."""
         who = self.held_paths.get(_key(path)) or (branch and self.held_branches.get(branch))
+        if who and branch in self.stranded:
+            return "stranded", self.stranded[branch]
         if who:
             return "held", (
                 f"LEAVE ALONE — item {who} holds a live lease on it: an agent is working "
@@ -449,9 +453,9 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     plan = Plan()
     guard = _protected(root, cfg, state)
     own = _own_released(repo, cfg)
-    stranded = {
-        x.branch: x for x in stranded_leases(root, cfg, state, _clone_of(repo, cfg)) if x.branch
-    }
+    for x in stranded_leases(root, cfg, state, _clone_of(repo, cfg)):
+        if x.branch:
+            guard.stranded[x.branch] = x.render()
     by_branch, by_path = _claimed_by(root, state)
     seen_branches: set[str] = set()
 
@@ -467,8 +471,6 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         protected, reason = guard.why(path, branch)
         if protected == "held" and branch in own:
             reason = own[branch]
-        elif protected == "held" and branch in stranded:
-            protected, reason = "stranded", stranded[branch].render()
         if protected in ("held", "stranded") or (protected and not t.dirty_files and not unknown):
             # A held tree's edits are its holder's work in progress, not a question for
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
@@ -490,15 +492,14 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         if item:
             t.item, t.item_state = item.id, item.state
         who = guard.held_branches.get(branch)
-        if branch in stranded:
-            # The removed item's holder still has the work on this branch (B71dedb76d2).
-            t.kind, t.done = "stranded", stranded[branch].render()
-        elif who:
+        if who:
             # `claim` takes the lease before the tree exists, and `--no-worktree` never
             # makes one: a leased branch with no tree is its holder's, not a leftover.
-            t.kind = "held"
+            t.kind = "stranded" if branch in guard.stranded else "held"
             t.done = (
-                own.get(branch) or f"LEAVE ALONE — item {who} holds a live lease on this branch."
+                guard.stranded.get(branch)
+                or own.get(branch)
+                or f"LEAVE ALONE — item {who} holds a live lease on this branch."
             )
         elif merged:
             t.action = "delete_branch"
