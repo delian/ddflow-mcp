@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Config
@@ -332,7 +333,9 @@ def _has_conflict_markers(path: Path) -> bool:
         return False
 
 
-def conflicted_views(repo: Path, expected: dict[str, str] | None = None) -> list[str]:
+def conflicted_views(
+    repo: Path, expected: dict[str, str] | Callable[[], dict[str, str] | None] | None = None
+) -> list[str]:
     """PROBLEMs for each generated view holding merge-conflict markers (B6b8d1f7a0f).
 
     A view is derived from the log, so a conflict in it is regenerated, never hand-merged:
@@ -345,19 +348,26 @@ def conflicted_views(repo: Path, expected: dict[str, str] | None = None) -> list
     can be known (git cannot list, no `expected`) the markers alone decide.
     """
     unmerged = G.unmerged(repo)
+    want: list[dict[str, str] | None] = []  # rendered once, only if a view needs it
+
+    def rendered() -> dict[str, str] | None:
+        if not want:
+            want.append(expected() if callable(expected) else expected)
+        return want[0]
 
     def conflicted(name: str) -> bool:
         path = Path(repo) / _VIEW_DIR / name
         if not _has_conflict_markers(path):
             return False
-        if unmerged is None and expected is None:
-            return True
         if unmerged is not None and f"{_VIEW_DIR}/{name}" in unmerged:
             return True
-        if expected is None or name not in expected:
+        exp = rendered()
+        if exp is None:
+            return unmerged is None  # nothing to compare with: git or the markers decide
+        if name not in exp:
             return False
         try:
-            return path.read_text("utf-8", errors="replace") != expected[name]
+            return path.read_text("utf-8", errors="replace") != exp[name]
         except OSError:
             return False
 
@@ -369,6 +379,20 @@ def conflicted_views(repo: Path, expected: dict[str, str] | None = None) -> list
         f"generated views are regenerated from the log, never hand-merged. "
         f"Run `{VIEW_CONFLICT_FIX}`."
     ]
+
+
+def _rendered_views(repo: Path, cfg: Config) -> dict[str, str] | None:
+    """The text the log renders the views to, or None when it cannot be folded.
+
+    Imported here: ``views`` sits above this module and imports it back."""
+    try:
+        from ..core.model import fold
+        from ..infra.log import EventLog
+        from ..views.markdown import render_views
+
+        return render_views(fold(EventLog(repo, log_cfg=cfg.log).read_all(), strict=False), cfg)
+    except Exception:  # a doctor check must not take doctor down
+        return None
 
 
 def conflicted_layers(repo: Path) -> list[str]:
@@ -385,20 +409,17 @@ def conflicted_layers(repo: Path) -> list[str]:
     return out
 
 
-def findings(
-    repo: Path, cfg: Config, views: dict[str, str] | None = None
-) -> tuple[list[str], list[str]]:
+def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     """(problems, notes) for doctor.
 
     A PROBLEM: an append-only glob whose `merge=union` line is missing -- two items'
     lines will conflict at merge, the exact thing the setting promises not to happen --
     or whose union line sits after a narrower driver the project set, overriding it.
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
-    parallel merge of it will conflict until someone regenerates it. ``views`` is what
-    `views.markdown.render_views` gives for the log (this module sits below it).
+    parallel merge of it will conflict until someone regenerates it.
     """
 
-    problems: list[str] = [*conflicted_layers(repo), *conflicted_views(repo, views)]
+    problems: list[str] = [*conflicted_layers(repo), *conflicted_views(repo, lambda: _rendered_views(repo, cfg))]
     notes: list[str] = []
     for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
         try:
