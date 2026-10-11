@@ -467,6 +467,9 @@ class Rehearsal:
         self.pristine = opt.work / "pristine"
         #: The keys the plan said the operator would be asked to confirm (set by `step_plan`).
         self.confirms: list[str] = []
+        #: `"decision D-x"`-style names of the records the plan said are CONTESTED (set by
+        #: `step_plan`): the operator's to resolve, so doctor failing on them alone is expected.
+        self.contested: set[str] = set()
 
     # recording
 
@@ -552,6 +555,10 @@ class Rehearsal:
         planned = self.ddflow(self.new, repo, "upgrade", "--plan", "--json", agent=agent)
         keys = [_key(i) for i in _asked(planned)]
         return self.ddflow(self.new, repo, *self.apply_args(backup, keys), agent=agent)
+
+    def doctor_ok(self, doctor: P.Captured) -> bool:
+        """Did doctor pass, allowing for the contested records the plan already announced?"""
+        return doctor.returncode == 0 or contested_only(doctor.stdout, self.contested)
 
     def commit_all(self, repo: Path, message: str) -> None:
         self.git(repo, "add", "-A")
@@ -729,8 +736,21 @@ class Rehearsal:
         if odd:
             detail += "; unknown action on: " + ", ".join(i["id"] for i in odd)
         self.confirms = [_key(i) for i in asked]
+        detail += self._contested_detail(items)
         self.add(3, "upgrade --plan", not ((asked and self.opt.asked_fails) or odd), detail)
         return plan
+
+    def _contested_detail(self, items: list[dict[str, Any]]) -> str:
+        """Remember the records the plan holds CONTESTED and say they are an expected step."""
+        held = [i for i in items if i["category"] == "records"]
+        self.contested = {f"{i['kind']} {i['record']}" for i in held}
+        if not held:
+            return ""
+        return (
+            f"; {len(held)} contested record(s) are an expected plan step (the operator "
+            "resolves them, the apply does not): "
+            + ", ".join(f"{i['kind']} {i['record']} -> {i['fix'].split('  ')[0]}" for i in held)
+        )
 
     def step_apply(self) -> bool:
         repo = self.clone("apply")
@@ -789,7 +809,7 @@ class Rehearsal:
         if moved:
             out.append(f"the apply changed {', '.join(moved)}")
         doctor = self.ddflow(self.new, repo, "doctor", agent="dry-apply")
-        if doctor.returncode != 0:
+        if not self.doctor_ok(doctor):
             out.append(
                 f"doctor after the apply exited {doctor.returncode}: {doctor.stdout.strip()[-160:]}"
             )
@@ -934,7 +954,7 @@ class Rehearsal:
         if (body.get("applied") or {}).get("failed", 1):
             out.append(f"the confirmed apply over MCP did not finish: {json.dumps(body)[:160]}")
         doctor = self.ddflow(self.new, repo, "doctor", agent="dry-connect")
-        if doctor.returncode != 0:
+        if not self.doctor_ok(doctor):
             out.append(f"doctor after the consent exited {doctor.returncode}")
         return out
 
@@ -1044,7 +1064,7 @@ class Rehearsal:
                 f"after the honest release {b} could not take the task ({left.returncode}, {took.returncode})"
             )
         doctor = self.ddflow(self.new, repo, "doctor", agent=a)
-        if doctor.returncode != 0:
+        if not self.doctor_ok(doctor):
             problems.append(f"doctor exited {doctor.returncode}")
         how = (
             "completed"
@@ -1170,6 +1190,21 @@ def _items(plan: P.Captured) -> list[dict[str, Any]]:
     except (ValueError, KeyError, TypeError):
         return []
     return [i for v in cats.values() for i in v]
+
+
+def contested_only(text: str, planned: set[str]) -> bool:
+    """Is every problem in ``doctor``'s output one of the CONTESTED records in ``planned``
+    (`"decision D-x"`)? Then the failure is the plan's announced step, not a surprise: the
+    count of problems must equal the contested lines, each naming a planned record."""
+    counted = re.search(r"(\d+) problem\(s\)", text)
+    lines = [ln for ln in text.splitlines() if " is CONTESTED" in ln]
+    if not counted or not lines or int(counted.group(1)) != len(lines):
+        return False
+    for ln in lines:
+        named = re.search(r"\b(decision|lesson|research) (\S+) is CONTESTED", ln)
+        if not named or f"{named.group(1)} {named.group(2)}" not in planned:
+            return False
+    return True
 
 
 def _asked(plan: P.Captured) -> list[dict[str, Any]]:

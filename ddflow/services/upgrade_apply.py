@@ -574,7 +574,11 @@ def _select(
     for cat in chosen:
         for item in plan["categories"].get(cat) or []:
             if item["action"] == UP.NOTE and cat not in _VERSIONED:
-                results.append(_rec(item, SKIPPED, item["summary"]))
+                # a contested record is the operator's: the exact command is printed, not run
+                said = (
+                    f"{item['summary']} -> {item['fix']}" if cat == "records" else item["summary"]
+                )
+                results.append(_rec(item, SKIPPED, said))
             elif _needs_confirmation(item, config_changes) and not _confirmed(item, confirm):
                 results.append(_rec(item, REFUSED, _refusal(item, config_changes)))
             else:
