@@ -106,7 +106,8 @@ def command_layer_evidence(gdef: GateDef, cwd: Path) -> dict[str, Any]:
 
     `command_layer` is "committed" or "local"; `command_digest` is a short digest of the
     command that ran; `committed_command_digest` is present when the local layer sets
-    a command and the committed layers define one too (equal or not). Additive keys: evidence recorded without them
+    a command and the committed side has one: the committed layers' command, or the
+    gate's built-in default when they define none (equal or not). Additive keys: evidence recorded without them
     reads as before. A project that cannot be located yields just the digest."""
     ev: dict[str, Any] = {"command_digest": digest(gdef.command)}
     try:
