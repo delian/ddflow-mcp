@@ -258,3 +258,27 @@ def test_a_log_built_directly_follows_its_appends_too(clone):
     _commit(clone, "T9")
     _git(clone, "reset", "-q", "--hard", "HEAD~1")
     assert shardmarks.lost(clone, log), "the directly built log's event was not in the mark"
+
+
+def test_switching_to_a_branch_without_the_events_is_not_a_loss(clone):
+    """The mark was taken on `main`; a checkout of an older branch is not a rewrite."""
+    _git(clone, "branch", "older", "HEAD~2")
+    _dd(clone, "status")
+    _git(clone, "checkout", "-q", "older")
+    assert not _problem_lines(_doctor(clone)[1])
+    _git(clone, "checkout", "-q", "main")
+    assert not _problem_lines(_doctor(clone)[1])
+    # a reset ON the branch still is
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    assert _problem_lines(_doctor(clone)[1])
+
+
+def test_a_torn_mark_file_is_replaced_not_left_dark(clone):
+    marks = clone / ".ddflow" / "local" / "shard-marks"
+    _dd(clone, "status")
+    marks.write_text("{ torn")
+    assert _dd(clone, "task", "add", "T8", "--title", "q", "--globs", "src/q.py")[0] == 0
+    json.loads(marks.read_text())  # whole again
+    _commit(clone, "T8")
+    _git(clone, "reset", "-q", "--hard", "HEAD~1")
+    assert _problem_lines(_doctor(clone)[1])

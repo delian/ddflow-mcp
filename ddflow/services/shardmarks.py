@@ -6,8 +6,8 @@ commit, a `reset --hard` or a deleted shard takes events out of the tree, and no
 markers and hand edits are detected; the MISSING-event class was blind.
 
 `.ddflow/local/shard-marks` (a LocalStore document: machine-local, never committed) maps a shard
-file name to `{count, last_event_id, size}`: how many events (raw non-blank lines) this clone
-last saw in it, the id of the last one, and the file size at that look. `observe` raises
+file name to `{count, last_event_id, size, ref}`: how many events (raw non-blank lines) this clone
+last saw in it, the id of the last one, the file size at that look and the branch it was on. `observe` raises
 marks and never lowers them; `lost` reports the shards now holding fewer events than the mark.
 Nothing is rewritten or repaired: the operator is told where the events may still be, and
 `accept` (``ddflow doctor --accept-lost-events``) records the new counts once they have decided.
@@ -76,6 +76,38 @@ def _scan(path: Path) -> tuple[int, str, int] | None:
     return count, last_id, len(data)
 
 
+def _head_ref(root: Any) -> str:
+    """The branch this tree is on (`refs/heads/x`), "" when detached or unknown. Read from
+    git's HEAD file, no subprocess: a mark is only compared on the branch it was taken on, so
+    switching to a branch that never had those events is not a loss (a reset, a revert and a
+    force-push all happen ON a branch)."""
+    try:
+        git = Path(root) / ".git"
+        if git.is_file():
+            first = git.read_text("utf-8").strip()
+            git = Path(first.removeprefix("gitdir:").strip())
+            if not git.is_absolute():
+                git = Path(root) / git
+        head = (git / "HEAD").read_text("utf-8").strip()
+        return head.removeprefix("ref:").strip() if head.startswith("ref:") else ""
+    except (OSError, ValueError):
+        return ""
+
+
+def _mk(scanned: tuple[int, str, int], ref: str) -> dict[str, Any]:
+    return {"count": scanned[0], "last_event_id": scanned[1], "size": scanned[2], "ref": ref}
+
+
+def _update(store: LocalStore, fn: Any) -> None:
+    """`store.update`, but a torn mark file is replaced by a fresh one instead of leaving the
+    feature dark for good (the file holds only counts that the next look rebuilds)."""
+    try:
+        store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
+    except StoreUnreadable:
+        store.remove(NAME)
+        store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
+
+
 def _read(store: LocalStore) -> dict[str, Any] | None:
     """The marks; {} when there are none or the file is torn (started afresh); None when a
     NEWER ddflow wrote it (left alone: neither compared against nor overwritten)."""
@@ -96,13 +128,15 @@ def _row(marks: dict[str, Any], shard: str) -> dict[str, Any] | None:
 
 
 def observe(repo: Any, log: Any) -> None:
-    """Raise the marks to what the shards hold now. Cheap: only a shard whose size differs
-    from the one last recorded is read. Never raises, never lowers a mark."""
+    """Raise the marks to what the shards hold now. Cheap: only a shard whose size or branch
+    differs from the last record is read. Never raises; never lowers a mark on the branch it
+    was taken on (on another branch the mark is retaken: that is a checkout, not a loss)."""
     try:
         store = _store(log)
         marks = _read(store)
         if marks is None:
             return
+        ref = _head_ref(log.root)
         found: dict[str, tuple[int, str, int]] = {}
         for p in log.shards():
             try:
@@ -110,25 +144,25 @@ def observe(repo: Any, log: Any) -> None:
             except OSError:
                 continue
             row = _row(marks, p.name)
-            if row is not None and row.get("size") == size:
+            if row is not None and row.get("size") == size and row.get("ref", ref) == ref:
                 continue
             scanned = _scan(p)
             if scanned is None:
                 continue
-            if row is None or scanned[0] >= row["count"]:
+            if row is None or scanned[0] >= row["count"] or row.get("ref", ref) != ref:
                 found[p.name] = scanned
         if not found:
             return
 
         def raise_marks(cur: Any) -> dict[str, Any]:
             out = dict(cur) if isinstance(cur, dict) else {}
-            for name, (count, last_id, size) in found.items():
+            for name, scanned in found.items():
                 old = _row(out, name)
-                if old is None or count >= old["count"]:
-                    out[name] = {"count": count, "last_event_id": last_id, "size": size}
+                if old is None or scanned[0] >= old["count"] or old.get("ref", ref) != ref:
+                    out[name] = _mk(scanned, ref)
             return out
 
-        store.update(NAME, raise_marks, schema=MARKS_SCHEMA, default={})
+        _update(store, raise_marks)
     except Exception:
         return
 
@@ -139,23 +173,25 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
     Without this the events of a clone's LAST command were never in a mark, and losing
     them was the case the mark exists for."""
     name = log.shard.name
+    ref = _head_ref(log.root)
 
     def bump(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
         row = _row(out, name)
-        if row is not None and row.get("size") == before:
-            out[name] = {"count": row["count"] + 1, "last_event_id": event.id, "size": after}
+        if row is not None and row.get("size") == before and row.get("ref", ref) == ref:
+            out[name] = _mk((row["count"] + 1, event.id, after), ref)
             return out
         scanned = _scan(log.shard)
-        if scanned is not None and (row is None or scanned[0] >= row["count"]):
-            out[name] = {"count": scanned[0], "last_event_id": scanned[1], "size": scanned[2]}
+        if scanned is not None and (
+            row is None or scanned[0] >= row["count"] or row.get("ref", ref) != ref
+        ):
+            out[name] = _mk(scanned, ref)
         return out
 
     store = _store(log)
-    marks = _read(store)
-    if marks is None:
+    if _read(store) is None:
         return  # a newer ddflow's file: left alone
-    store.update(NAME, bump, schema=MARKS_SCHEMA, default={})
+    _update(store, bump)
 
 
 def lost(repo: Any, log: Any) -> list[Lost]:
@@ -166,11 +202,12 @@ def lost(repo: Any, log: Any) -> list[Lost]:
         if not marks:
             return []
         present = {p.name: p for p in log.shards()}
+        ref = _head_ref(log.root)
         out: list[Lost] = []
         for name in sorted(marks):
             row = _row(marks, name)
-            if row is None:
-                continue
+            if row is None or row.get("ref", ref) != ref:
+                continue  # taken on another branch: a checkout, the next look retakes it
             scanned = _scan(present[name]) if name in present else (0, "", 0)
             if scanned is None:
                 continue
@@ -190,6 +227,7 @@ def accept(repo: Any, log: Any) -> list[Lost]:
     names = {g.shard for g in gone}
     present = {p.name: p for p in log.shards()}
     done: set[str] = set()
+    ref = _head_ref(log.root)
 
     def lower(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
@@ -202,10 +240,10 @@ def accept(repo: Any, log: Any) -> list[Lost]:
             if scanned[0] == 0 and p is None:
                 out.pop(name, None)
             else:
-                out[name] = {"count": scanned[0], "last_event_id": scanned[1], "size": scanned[2]}
+                out[name] = _mk(scanned, ref)
         return out
 
-    _store(log).update(NAME, lower, schema=MARKS_SCHEMA, default={})
+    _update(_store(log), lower)
     return [g for g in gone if g.shard in done]  # only what was recorded as accepted
 
 
