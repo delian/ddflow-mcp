@@ -201,7 +201,10 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
     data: dict[str, Any] = {
         "id": item,
         "globs": list(it.globs),
-        "applicable": [_plain(d) | {"unreconciled": rivals.get(d.id, [])} for d in hits],
+        # Only when set, so a project with no such pair prints the JSON it always did.
+        "applicable": [
+            _plain(d) | ({"unreconciled": rivals[d.id]} if d.id in rivals else {}) for d in hits
+        ],
         "project_wide": [_plain(d) for d in wide],
     }
     if not hits and not wide:

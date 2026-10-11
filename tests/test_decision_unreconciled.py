@@ -176,7 +176,7 @@ def test_applicable_and_brief_mark_both_unreconciled(concurrent):
     assert code == 0, err
     assert "unreconciled" in text.lower(), text
     out = DEC.decision_applicable(concurrent, "T1")
-    got = {d["id"]: d["unreconciled"] for d in out.data["applicable"]}
+    got = {d["id"]: d.get("unreconciled") for d in out.data["applicable"]}
     assert got == {"D-sql": ["D-pg"], "D-pg": ["D-sql"]}, out.data
 
 
