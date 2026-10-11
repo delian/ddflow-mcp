@@ -68,6 +68,11 @@ def _two_clones(tmp_path: Path, *, alice_claims: bool) -> tuple[Path, Path]:
     if alice_claims:
         _commit_log(a, "alice log")
     _pull(a)
+    if alice_claims:
+        # Bob now sees alice's live lease on the item he removed, though the branch is
+        # alice's alone: nothing is stranded in HIS clone.
+        _git(a, "push", "-q", "origin", "main")
+        _pull(b)
     return a, b
 
 
@@ -121,7 +126,10 @@ def test_a_removed_item_without_a_live_lease_is_no_problem(tmp_path):
 
 
 def test_the_clone_that_removed_it_has_no_problem(tmp_path):
-    """Bob never held a lease nor holds a branch for T2: nothing is stranded for him."""
+    """Bob sees alice's live lease on T2 but has no branch or tree for it: nothing is
+    stranded in his clone (the pull brought her claim in, asserted first)."""
     _a, b = _two_clones(tmp_path, alice_claims=True)
+    shard = (b / ".ddflow" / "events" / "alice.jsonl").read_text()
+    assert "lease.acquired" in shard, shard
     _, out, err = run_cli(b, "doctor", agent="bob")
     assert "ddflow release T2" not in out + err, out + err
