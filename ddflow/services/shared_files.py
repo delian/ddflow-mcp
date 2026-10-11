@@ -424,7 +424,10 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     parallel merge of it will conflict until someone regenerates it.
     """
 
-    problems: list[str] = [*conflicted_layers(repo), *conflicted_views(repo, lambda: _rendered_views(repo, cfg))]
+    problems: list[str] = [
+        *conflicted_layers(repo),
+        *conflicted_views(repo, lambda: _rendered_views(repo, cfg)),
+    ]
     notes: list[str] = []
     for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
         try:
