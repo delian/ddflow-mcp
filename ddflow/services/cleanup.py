@@ -98,10 +98,14 @@ class _Protected:
     held_paths: dict[str, str] = field(default_factory=dict)
     held_branches: dict[str, str] = field(default_factory=dict)
     adopted_paths: dict[str, str] = field(default_factory=dict)
+    #: branch -> the sentence, for a removed item whose holder's work is on it (B71dedb76d2).
+    stranded: dict[str, str] = field(default_factory=dict)
 
     def why(self, path: str, branch: str) -> tuple[str, str]:
         """(kind, reason) when the tree at ``path`` on ``branch`` must be left alone."""
         who = self.held_paths.get(_key(path)) or (branch and self.held_branches.get(branch))
+        if who and branch in self.stranded:
+            return "stranded", self.stranded[branch]
         if who:
             return "held", (
                 f"LEAVE ALONE — item {who} holds a live lease on it: an agent is working "
@@ -114,6 +118,60 @@ class _Protected:
                 f"tree, not ddflow's. The harness removes it, not cleanup."
             )
         return "", ""
+
+
+def stranded_text(item: str, holder: str, branch: str, worktree: str = "") -> str:
+    """THE sentence for a removed item whose lease is still held (B71dedb76d2): who holds
+    it, which branch their work is on, and the exact way out. A lease is evidence of
+    intent and is never stolen; removal does not destroy the holder's branch."""
+    on = f" on branch {branch}" if branch else ""
+    tree = f" (worktree {worktree})" if worktree else ""
+    fix = f"`ddflow release {item}`"
+    if branch:
+        fix += (
+            f", then keep the branch with `git branch -m {branch} keep/{item}` "
+            f"or delete it with `git branch -D {branch}`"
+        )
+    return (
+        f"item {item} removed from the queue, lease still held by "
+        f"{holder or 'unknown'}{on}{tree}: release it with {fix}"
+    )
+
+
+@dataclass(frozen=True)
+class Stranded:
+    item: str
+    holder: str
+    branch: str
+    worktree: str
+
+    def render(self) -> str:
+        return stranded_text(self.item, self.holder, self.branch, self.worktree)
+
+
+def stranded_leases(
+    root: Path, cfg: Config, state: State, mine: str = "", now: float | None = None
+) -> list[Stranded]:
+    """Removed items whose LIVE lease still points at a branch or tree that exists in THIS
+    clone: the holder's work, unreachable by merge/complete (B71dedb76d2). A removed item
+    with no live lease, or whose branch and tree are not here (the clone that removed it),
+    strands nothing."""
+    now = time.time() if now is None else now
+    out: list[Stranded] = []
+    for iid, lease in sorted(state.active_leases(now, cfg.lease.grace_s).items()):
+        it = state.items.get(iid)
+        if it is None or not it.removed or L.foreign(lease, mine):
+            # Another clone's lease strands THAT clone's branch, not any branch of the same
+            # name here (a loser's stale one, say): the holder's clone reports it.
+            continue
+        branch = lease.branch or it.branch
+        tree = lease.worktree or it.worktree
+        here = bool(branch and W.branch_exists(root, branch)) or bool(
+            tree and W.load_path(root, tree).exists()
+        )
+        if here:
+            out.append(Stranded(iid, lease.holder, branch, tree))
+    return out
 
 
 def _own_released_branches(lost: dict[str, dict]) -> dict[str, str]:
@@ -130,6 +188,14 @@ def _own_released_branches(lost: dict[str, dict]) -> dict[str, str]:
         for iid, info in lost.items()
         if info["branch"]
     }
+
+
+def _clone_of(repo: Path, cfg: Config) -> str:
+    """This clone's id, "" when unadopted or unreadable (creates nothing)."""
+    try:
+        return EventLog(repo, log_cfg=cfg.log).clone_id(create=False)
+    except OSError:
+        return ""
 
 
 def _own_released(repo: Path, cfg: Config) -> dict[str, str]:
@@ -379,6 +445,36 @@ def unclaimed_trees(repo: Path, cfg: Config, state: State) -> list[str]:
     ]
 
 
+def _stale_branch(
+    root: Path, branch: str, base: str, guard: _Protected, own: dict[str, str], by_branch: dict
+) -> TreeState:
+    """Classify a branch of ours that no worktree is on."""
+    merged = W.is_merged(root, branch, base)
+    t = TreeState(name=branch, branch=branch, kind="stale_branch")
+    item = by_branch.get(branch)
+    if item:
+        t.item, t.item_state = item.id, item.state
+    who = guard.held_branches.get(branch)
+    if who:
+        # `claim` takes the lease before the tree exists, and `--no-worktree` never
+        # makes one: a leased branch with no tree is its holder's, not a leftover.
+        t.kind = "stranded" if branch in guard.stranded else "held"
+        t.done = (
+            guard.stranded.get(branch)
+            or own.get(branch)
+            or f"LEAVE ALONE — item {who} holds a live lease on this branch."
+        )
+    elif merged:
+        t.action = "delete_branch"
+        t.done = f"branch with no worktree, fully merged into {base} — safe to delete"
+    else:
+        t.done = (
+            f"branch with no worktree and commits not on {base}. Its worktree "
+            f"was removed without merging; inspect `git log {base}..{branch}`."
+        )
+    return t
+
+
 def survey(repo: Path, cfg: Config, state: State) -> Plan:
     """Classify every ddflow worktree and branch. Reads only; changes nothing."""
     root = W.repo_root(repo)
@@ -387,6 +483,9 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     plan = Plan()
     guard = _protected(root, cfg, state)
     own = _own_released(repo, cfg)
+    for x in stranded_leases(root, cfg, state, _clone_of(repo, cfg)):
+        if x.branch:
+            guard.stranded[x.branch] = x.render()
     by_branch, by_path = _claimed_by(root, state)
     seen_branches: set[str] = set()
 
@@ -402,7 +501,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         protected, reason = guard.why(path, branch)
         if protected == "held" and branch in own:
             reason = own[branch]
-        if protected == "held" or (protected and not t.dirty_files and not unknown):
+        if protected in ("held", "stranded") or (protected and not t.dirty_files and not unknown):
             # A held tree's edits are its holder's work in progress, not a question for
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
@@ -417,28 +516,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         # deletion and survived only because the primary had it checked out.
         if branch in seen_branches or branch == base:
             continue
-        merged = W.is_merged(root, branch, base)
-        t = TreeState(name=branch, branch=branch, kind="stale_branch")
-        item = by_branch.get(branch)
-        if item:
-            t.item, t.item_state = item.id, item.state
-        who = guard.held_branches.get(branch)
-        if who:
-            # `claim` takes the lease before the tree exists, and `--no-worktree` never
-            # makes one: a leased branch with no tree is its holder's, not a leftover.
-            t.kind = "held"
-            t.done = (
-                own.get(branch) or f"LEAVE ALONE — item {who} holds a live lease on this branch."
-            )
-        elif merged:
-            t.action = "delete_branch"
-            t.done = f"branch with no worktree, fully merged into {base} — safe to delete"
-        else:
-            t.done = (
-                f"branch with no worktree and commits not on {base}. Its worktree "
-                f"was removed without merging; inspect `git log {base}..{branch}`."
-            )
-        plan.stale_branches.append(t)
+        plan.stale_branches.append(_stale_branch(root, branch, base, guard, own, by_branch))
     return plan
 
 
