@@ -356,7 +356,13 @@ def cmd_doctor(a, c: Ctx) -> int:
     if getattr(a, "upgrade", False):
         return cmd_upgrade(a, c)
     parser, tools = sources()
-    out = A.doctor(c.repo, agent=c.requested_agent, parser=parser, tools=tools)
+    out = A.doctor(
+        c.repo,
+        agent=c.requested_agent,
+        parser=parser,
+        tools=tools,
+        accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
+    )
     if c.json:
         emit_json(out.body(("problems", "notes", "events", "items")))
         return out.exit

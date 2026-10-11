@@ -47,6 +47,7 @@ from ..core.model import Lease, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id, clone_suffix_since, default_agent_id
 from . import leases as L
+from . import shardmarks  # noqa: F401  (registers the shard-mark append hook, Ba24a8d32ee)
 
 
 class AgentId(NamedTuple):
