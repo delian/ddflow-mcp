@@ -418,3 +418,34 @@ def test_restoring_exactly_what_was_seen_clears_a_flagged_loss(clone):
     assert _problem_lines(_doctor(clone)[1])
     _shard(clone).write_text(orig)  # the events come back, byte for byte
     assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_a_stale_unlocked_look_never_reads_as_a_shrink(clone, monkeypatch):
+    """roborev: observe looks at the shard before it takes the marks lock; an append by another
+    process in between has raised the mark, and the stale count must not flag a loss."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    _dd(clone, "status")
+    log = EventLog(clone, AGENT)
+    real = shardmarks._scan
+    calls = {"n": 0}
+
+    def stale_first(path):
+        calls["n"] += 1
+        if calls["n"] == 1:  # the unlocked look: before the other process's append lands
+            out = real(path)
+            log.append("task.added", "T9", {"title": "x", "globs": []})  # the other process
+            return out
+        return real(path)
+
+    _shard(clone).write_text(_shard(clone).read_text())  # same content, size unchanged
+    row_key = next(iter(json.loads((clone / ".ddflow/local/shard-marks").read_text())["data"]))
+    marks = clone / ".ddflow" / "local" / "shard-marks"
+    doc = json.loads(marks.read_text())
+    doc["data"][row_key]["size"] = 0  # force observe to look at the shard
+    marks.write_text(json.dumps(doc))
+    monkeypatch.setattr(shardmarks, "_scan", stale_first)
+    shardmarks.observe(clone, log)
+    monkeypatch.setattr(shardmarks, "_scan", real)
+    assert not shardmarks.lost(clone, log)

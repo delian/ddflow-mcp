@@ -158,10 +158,11 @@ def _tail_lines(path: Path, n: int = 2) -> bytes:
 
 
 def _holds(path: Path | None, event_id: str, *, tail: bool = False) -> bool:
-    """Does the shard still contain the event ``event_id`` as an event's own id (not as a
-    value some payload quotes)? ``tail`` asks only of the last two lines (the append path runs
-    after the new event is written, so the one it asks about is the one before it). True when there is nothing to ask (no id
-    recorded) or the file cannot be read (could not tell is not a loss)."""
+    """Does the shard still contain the event ``event_id``, as an `"id"` field (the shape of
+    an event line; no payload quotes an event id under an `id` key)? ``tail`` asks only of
+    the last two lines: the append path runs after the new event is written, so the one it
+    asks about is the one before it. True when there is nothing to ask (no id recorded) or
+    the file cannot be read (could not tell is not a loss)."""
     if not event_id:
         return True
     if path is None:
@@ -243,8 +244,13 @@ def observe(repo: Any, log: Any) -> None:
 
         def raise_marks(cur: Any) -> dict[str, Any]:
             out = dict(cur) if isinstance(cur, dict) else {}
-            for name, scanned in found.items():
-                _raised(out, name, scanned, ref, paths.get(name))
+            for name in found:
+                # looked at again HERE, under the marks lock: an append by another process
+                # between the unlocked look above and this write has already raised the mark,
+                # and a stale count must not read as a shrink
+                fresh = _scan(paths[name]) if name in paths else None
+                if fresh is not None:
+                    _raised(out, name, fresh, ref, paths[name])
             return out
 
         _update(store, raise_marks)
