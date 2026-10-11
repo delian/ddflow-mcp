@@ -371,3 +371,25 @@ def test_a_json_line_that_is_not_an_event_does_not_raise_the_mark(clone):
     _dd(clone, "status")
     shard.write_text(good)
     assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_an_append_takes_the_cheap_path_and_never_rescans_the_shard(clone, monkeypatch):
+    """roborev: the fast path must actually be reachable -- the hook runs AFTER the new event
+    is written, so the event it checks for is the one before the last line."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    _dd(clone, "status")
+
+    def no_scan(*_a, **_k):
+        raise AssertionError("the append fell back to a full scan of the shard")
+
+    log = EventLog(clone, AGENT)
+    marks = clone / ".ddflow" / "local" / "shard-marks"
+    before = json.loads(marks.read_text())["data"]
+    monkeypatch.setattr(shardmarks, "_scan", no_scan)
+    ev = log.append("task.added", "T9", {"title": "x", "globs": []})
+    after = json.loads(marks.read_text())["data"]
+    (key,) = [k for k in after if k.endswith(f"\t{AGENT}.jsonl")]
+    assert after[key]["count"] == before[key]["count"] + 1
+    assert after[key]["last_event_id"] == ev.id

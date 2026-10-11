@@ -141,8 +141,8 @@ def _update(store: LocalStore, fn: Any) -> None:
         store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
 
 
-def _last_line(path: Path) -> bytes:
-    """The shard's last non-blank line, read from the end (a few KiB, not the file)."""
+def _tail_lines(path: Path, n: int = 2) -> bytes:
+    """The shard's last ``n`` non-blank lines, read from the end (a few KiB, not the file)."""
     with path.open("rb") as f:
         end = f.seek(0, 2)
         pos, buf = end, b""
@@ -152,22 +152,22 @@ def _last_line(path: Path) -> bytes:
             f.seek(pos)
             buf = f.read(step) + buf
             lines = [ln for ln in buf.split(b"\n") if ln.strip()]
-            if len(lines) > 1 or pos == 0:
-                return lines[-1] if lines else b""
+            if len(lines) > n or pos == 0:
+                return b"\n".join(lines[-n:])
         return b""
 
 
 def _holds(path: Path | None, event_id: str, *, tail: bool = False) -> bool:
     """Does the shard still contain the event ``event_id`` as an event's own id (not as a
-    value some payload quotes)? ``tail`` asks only of the LAST line -- all the append path,
-    which runs under the append lock, can afford. True when there is nothing to ask (no id
+    value some payload quotes)? ``tail`` asks only of the last two lines (the append path runs
+    after the new event is written, so the one it asks about is the one before it). True when there is nothing to ask (no id
     recorded) or the file cannot be read (could not tell is not a loss)."""
     if not event_id:
         return True
     if path is None:
         return False
     try:
-        data = _last_line(path) if tail else path.read_bytes()
+        data = _tail_lines(path) if tail else path.read_bytes()
     except OSError:
         return True
     return re.search(rb'"id"\s*:\s*"' + re.escape(event_id.encode()) + rb'"', data) is not None
