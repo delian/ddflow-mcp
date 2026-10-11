@@ -257,6 +257,8 @@ def _ledger_lines(led: dict) -> str:
     ]
     if led["skipped_gates"]:
         lines.append(f"  gates skipped: {', '.join(led['skipped_gates'])}")
+    for gate, why in (led.get("not_applicable") or {}).items():
+        lines.append(f"  not applicable on the change: {gate} -- {why}")
     if led["amendments"]:
         lines.append(
             f"  amended {led['amendments']} time(s) after completion"
