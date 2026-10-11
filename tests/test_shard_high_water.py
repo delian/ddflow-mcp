@@ -351,3 +351,23 @@ def test_the_append_fast_path_does_not_erase_a_loss_at_an_equal_size(clone):
     shard.write_text(text.replace(last_id, "f" * len(last_id)))  # same size, event gone
     EventLog(clone, AGENT).append("task.added", "T9", {"title": "x", "globs": []})
     assert shardmarks.lost(clone, EventLog(clone, AGENT))
+
+
+def test_visiting_commits_on_a_detached_head_is_not_a_loss(clone):
+    """reviewer: every detached state would share one mark slot; browsing history is not a loss."""
+    _dd(clone, "status")
+    _git(clone, "checkout", "-q", "--detach", "HEAD~2")
+    _dd(clone, "status")
+    _git(clone, "checkout", "-q", "main")
+    _git(clone, "checkout", "-q", "--detach", "HEAD~2")
+    assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_a_json_line_that_is_not_an_event_does_not_raise_the_mark(clone):
+    """reviewer: a pasted `{"note": ...}` line must not turn its later removal into a loss."""
+    shard = _shard(clone)
+    good = shard.read_text()
+    shard.write_text(good + '{"note": "tidy"}\n')
+    _dd(clone, "status")
+    shard.write_text(good)
+    assert not _problem_lines(_doctor(clone)[1])

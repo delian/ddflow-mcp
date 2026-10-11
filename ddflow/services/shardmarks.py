@@ -78,9 +78,11 @@ def _scan(path: Path) -> tuple[int, str, int] | None:
     count, last = 0, ""
     for whole in data.splitlines():
         raw = whole.strip()
-        # an event line is a whole JSON object; a conflict marker or a torn fragment is not
+        # an event line is a whole JSON object with an id and a kind; a conflict marker or a torn fragment is not
         # one, and counting it would turn its later removal into a "loss"
-        if not (raw.startswith(b"{") and raw.endswith(b"}")):
+        if not (
+            raw.startswith(b"{") and raw.endswith(b"}") and b'"id"' in raw and b'"kind"' in raw
+        ):
             continue
         count += 1
         last = raw.decode("utf-8", "replace")
@@ -95,7 +97,8 @@ def _scan(path: Path) -> tuple[int, str, int] | None:
 
 def _head_ref(root: Any) -> str:
     """The branch this tree is on (git's HEAD ref, `refs/heads/x`), "" when detached or
-    unknown. Read from git's HEAD file, no subprocess: a mark is only compared on the branch it was taken on, so
+    unknown -- and then no mark is taken or compared, since every detached state would share
+    one slot. Read from git's HEAD file, no subprocess: a mark is only compared on the branch it was taken on, so
     switching to a branch that never had those events is not a loss (a reset, a revert and a
     force-push all happen ON a branch)."""
     try:
@@ -211,6 +214,8 @@ def observe(repo: Any, log: Any) -> None:
         if marks is None:
             return
         ref = _head_ref(log.root)
+        if not ref:
+            return  # detached: no branch to compare on (see `_head_ref`)
         found: dict[str, tuple[int, str, int]] = {}
         paths = {p.name: p for p in log.shards()}
         for p in log.shards():
@@ -244,6 +249,8 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
     them was the case the mark exists for."""
     name = log.shard.name
     ref = _head_ref(log.root)
+    if not ref:
+        return  # detached: no branch to compare on
 
     def bump(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
@@ -279,7 +286,10 @@ def lost(repo: Any, log: Any) -> list[Lost]:
             return []
         present = {p.name: p for p in log.shards()}
         out: list[Lost] = []
-        for row in _rows_here(marks, _head_ref(log.root)):
+        ref = _head_ref(log.root)
+        if not ref:
+            return []  # detached HEAD (a bisect, a rebase, a look at a sha): nothing to compare
+        for row in _rows_here(marks, ref):
             name = str(row.get("shard", ""))
             scanned = _scan(present[name]) if name in present else (0, "", 0)
             if scanned is None:
