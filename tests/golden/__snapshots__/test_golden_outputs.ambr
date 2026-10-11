@@ -1399,9 +1399,11 @@
           written by an older version. A skew of PATCH releases only (the same minor,
           the same data format level, no recorded capability this ddflow lacks) is not
           refused: the write goes through with a one-time warning and the event is
-          marked as written by an older version. `warn`: write anyway and say so on
-          stderr. `off`: no check. The older version still stamps itself, so the log
-          records that it wrote. Only a ddflow that ships this guard can refuse:
+          marked as written by an older version. The commands that rewrite tracked
+          files without appending an event (`adopt`, `adopt --refresh-docs`) are still
+          refused by any older stamp, a patch included. `warn`: write anyway and say
+          so on stderr. `off`: no check. The older version still stamps itself, so the
+          log records that it wrote. Only a ddflow that ships this guard can refuse:
           releases before it cannot. An unrecognised value in a config file is warned
           about, reported by `doctor` and falls back to 'refuse', the strictest (an
           older ddflow's write is refused); `config --set`, `ddflow_configure` and the
