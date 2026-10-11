@@ -14,8 +14,9 @@ under its `.ddflow/local/`), the ddflow installed on the machine or an MCP serve
   only if made while it ran for the versions it upgraded; a shard rewritten under the run is
   the result "live repo changed during rehearsal" (the run is repeated once, and if the
   project moved again the check is `unavailable`, never a pass);
-- a run that fails (or whose live project moved) writes its step table and every command's
-  bounded stdout and stderr to `.ddflow/local/dryrun/<stamp>-<run id>.json` (git-ignored;
+- a run that fails, one that could not run (a clone or a build that failed; not an old ddflow
+  that was never offered) or one whose live project moved writes its step table and every
+  command's bounded stdout and stderr to `.ddflow/local/dryrun/<stamp>-<run id>.json` (git-ignored;
   `--diag-dir` or `DDFLOW_DRYRUN_DIAG_DIR` choose another) and names the file under the table;
   a run that passes writes nothing;
 - every command runs in a scratch directory with a private HOME, no `DDFLOW_*` variables and no
@@ -59,7 +60,6 @@ import secrets
 import shlex
 import shutil
 import sys
-import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -409,11 +409,6 @@ def live_moved(before: Live, after: Live, mine: Footprint | None = None) -> list
     return out
 
 
-def live_problems(before: Live, after: Live, mine: Footprint | None = None) -> list[str]:
-    """Everything `live_leaks` and `live_moved` name."""
-    return [*live_leaks(before, after, mine), *live_moved(before, after, mine)]
-
-
 def folded_state(repo: Path) -> State:
     """What a project's log folds into with the running code, read as the project configures
     its log (`[log]`); non-strict, so an event this code does not know is counted, not fatal."""
@@ -682,7 +677,7 @@ class Rehearsal:
         began = time.monotonic()
         done = P.capture(argv, **kw)
         self.note(
-            argv,
+            shlex.join(str(a) for a in argv),
             kw.get("cwd"),
             done.returncode,
             done.stdout,
@@ -694,7 +689,7 @@ class Rehearsal:
 
     def note(
         self,
-        argv: list[str],
+        command: str,
         cwd: Any,
         code: int | None,
         out: str,
@@ -707,7 +702,7 @@ class Rehearsal:
         self.commands.append(
             {
                 "run": self.run_id,
-                "argv": shlex.join(str(a) for a in argv),
+                "argv": command,
                 "cwd": str(cwd or ""),
                 "returncode": code,
                 "error": error,
@@ -721,8 +716,8 @@ class Rehearsal:
     def git(self, repo: Path, *args: str) -> G.GitResult:
         began = time.monotonic()
         done = G.run(repo, *args, timeout=TIMEOUT_S, env=self.env(self.new))
-        self.note(["git", "-C", str(repo), *args], repo, done.code, done.out, done.err,
-                  time.monotonic() - began)  # fmt: skip
+        shown = f"git -C {shlex.quote(str(repo))} {shlex.join(args)}"
+        self.note(shown, repo, done.code, done.out, done.err, time.monotonic() - began)
         return done
 
     def clone(self, name: str, src: Path | None = None) -> Path:
@@ -1559,8 +1554,9 @@ def write_diagnostics(opt: Options, report: Report, runs: list[Rehearsal]) -> st
         "commands": [c for r in runs for c in r.commands],
     }
     name = f"{clock.compact_at()}-{runs[-1].run_id}.json"
-    for where in (diag_directory(opt), Path(tempfile.gettempdir()) / "ddflow-dryrun"):
+    for choice in (diag_directory(opt), None):
         try:
+            where = choice or fsio.unused_dir("ddflow-dryrun-diag-")  # the system temp directory
             where.mkdir(parents=True, exist_ok=True)
             fsio.replace_text(where / name, json.dumps(data, indent=1, default=str) + "\n")
             return str(where / name)
