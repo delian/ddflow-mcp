@@ -84,6 +84,7 @@ def test_a_late_answer_does_not_replace_a_newer_timeout_marker_with_less(old, mo
 def test_the_brief_repeats_an_unfinished_check_until_it_is_resolved(old, monkeypatch) -> None:
     _timed_out(old, monkeypatch, delay=0.5)
     _wait_for(lambda: US._read(old).get("status") == US.PROPOSED)  # the thread is done
+    (old / LOCAL).unlink()  # start again from a marker that holds only the note
     _log, _cfg, st = _load(old, "starter")
     US._save(old, {"version": US.running_version(), "status": US.TIMEOUT, "text": "pending note"})
     assert US.take_for_brief(old, st) == "pending note"
@@ -184,4 +185,21 @@ def test_a_container_start_that_applied_something_is_never_kept(old) -> None:
     rep = US.start(old, log, cfg, st, agent="starter", surf="container", environ={})
     assert rep["status"] == US.APPLIED
     assert US._read(old).get("complete") is False
-    assert US._cached(old, US._key(US.running_version(), "", "safe", "container")) is None
+    assert US._cached(old, US._key(US.running_version(), "", "safe", "container", True)) is None
+
+
+def test_a_failure_report_does_not_replace_a_kept_answer(old, monkeypatch) -> None:
+    _timed_out(old, monkeypatch)
+    _wait_for(lambda: US._read(old).get("status") == US.PROPOSED)
+    US._remember(old, {"version": US.running_version(), "status": US.FAILED, "text": "it failed"})
+    assert US._read(old)["status"] == US.PROPOSED
+
+
+def test_a_read_only_answer_is_not_replayed_once_the_project_is_writable(old, monkeypatch) -> None:
+    monkeypatch.setattr(US, "_writable", lambda repo: False)
+    log, cfg, st = _load(old, "starter")
+    assert US.start(old, log, cfg, st, surf="mcp", environ={})["status"] == US.READONLY
+    monkeypatch.undo()  # the project can be written now
+    log, cfg, st = _load(old, "starter")
+    rep = US.start(old, log, cfg, st, surf="mcp", environ={})
+    assert rep["status"] != US.READONLY and "not writable" not in rep["text"]
