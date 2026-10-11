@@ -393,3 +393,28 @@ def test_an_append_takes_the_cheap_path_and_never_rescans_the_shard(clone, monke
     (key,) = [k for k in after if k.endswith(f"\t{AGENT}.jsonl")]
     assert after[key]["count"] == before[key]["count"] + 1
     assert after[key]["last_event_id"] == ev.id
+
+
+def test_an_interior_loss_is_not_masked_by_regrowth_to_the_same_count(clone):
+    """reviewer: events removed from the MIDDLE while the last one survives, then ordinary
+    appends bring the count back -- still a loss until accepted or restored."""
+    _dd(clone, "status")
+    was = _lines(clone)
+    rows = _shard(clone).read_text().splitlines(keepends=True)
+    _shard(clone).write_text("".join(rows[:2] + rows[4:]))  # two events out of the middle
+    assert _lines(clone) < was
+    assert _dd(clone, "task", "add", "G0", "--title", "g", "--globs", "src/g0.py")[0] == 0
+    for i in range(1, 6):
+        assert _dd(clone, "task", "add", f"G{i}", "--title", "g", "--globs", f"src/g{i}.py")[0] == 0
+    assert _lines(clone) >= was
+    assert _problem_lines(_doctor(clone)[1])
+
+
+def test_restoring_exactly_what_was_seen_clears_a_flagged_loss(clone):
+    _dd(clone, "status")
+    orig = _shard(clone).read_text()
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    _dd(clone, "status")  # flags it
+    assert _problem_lines(_doctor(clone)[1])
+    _shard(clone).write_text(orig)  # the events come back, byte for byte
+    assert not _problem_lines(_doctor(clone)[1])

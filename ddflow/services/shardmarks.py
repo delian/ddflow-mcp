@@ -177,13 +177,23 @@ def _raised(
     out: dict[str, Any], shard: str, scanned: tuple[int, str, int], ref: str, path: Path | None
 ) -> None:
     """Record ``scanned`` as this branch's mark of ``shard``, unless that would lower it or
-    would forget a loss: a shard that regrew past its mark but no longer holds the event the
-    mark saw is still a loss, and stays one until `accept`ed."""
-    old = _row(out, _key(ref, shard))
-    if old is None or (
-        scanned[0] >= old["count"] and _holds(path, str(old.get("last_event_id", "")))
-    ):
-        out[_key(ref, shard)] = _mk(shard, scanned, ref)
+    would forget a loss. A shard that holds fewer events than the mark, or no longer holds the
+    event the mark saw, is flagged ``shrunk`` and the mark is kept as it was: growth by new
+    appends cannot clear it (an interior event may be gone while the tail and the count are
+    back). It clears when the shard is exactly what the mark saw (the events were restored) or
+    is `accept`ed."""
+    key = _key(ref, shard)
+    old = _row(out, key)
+    seen = str(old.get("last_event_id", "")) if old else ""
+    if old is None:
+        out[key] = _mk(shard, scanned, ref)
+    elif old.get("shrunk"):
+        if scanned[2] == old.get("size") and scanned[0] >= old["count"] and _holds(path, seen):
+            out[key] = _mk(shard, scanned, ref)  # restored to exactly what was seen
+    elif scanned[0] < old["count"] or not _holds(path, seen):
+        out[key] = {**old, "shrunk": True}
+    else:
+        out[key] = _mk(shard, scanned, ref)
 
 
 def _read(store: LocalStore) -> dict[str, Any] | None:
@@ -224,7 +234,7 @@ def observe(repo: Any, log: Any) -> None:
             except OSError:
                 continue
             row = _row(marks, _key(ref, p.name))
-            if row is not None and row.get("size") == size:
+            if row is not None and row.get("size") == size and not row.get("shrunk"):
                 continue
             if (scanned := _scan(p)) is not None:
                 found[p.name] = scanned
@@ -257,6 +267,7 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
         row = _row(out, _key(ref, name))
         if (
             row is not None
+            and not row.get("shrunk")
             and row.get("size") == before
             and _holds(log.shard, str(row.get("last_event_id", "")), tail=True)
         ):
@@ -295,7 +306,11 @@ def lost(repo: Any, log: Any) -> list[Lost]:
             if scanned is None:
                 continue  # unreadable: the integrity pass names it
             seen = str(row.get("last_event_id", ""))
-            if scanned[0] < row["count"] or not _holds(present.get(name), seen):
+            if (
+                row.get("shrunk")
+                or scanned[0] < row["count"]
+                or not _holds(present.get(name), seen)
+            ):
                 out.append(Lost(name, row["count"], scanned[0], seen))
         return out
     except Exception:
