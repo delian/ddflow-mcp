@@ -323,7 +323,7 @@ def doctor(
     # A PROBLEM (Ba24a8d32ee): a shard holding fewer events than this clone last saw lost them
     # to a force-push, revert, reset or deletion. Never repaired here.
     problems += [g.render() for g in SM.lost(repo, log)]
-    notes += [f"{g.shard}: accepted the loss of {g.was - g.now} event(s)" for g in accepted]
+    notes += [f"{g.shard}: accepted the new count ({g.now}, was {g.was})" for g in accepted]
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
 

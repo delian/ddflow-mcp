@@ -228,7 +228,11 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
     def bump(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
         row = _row(out, _key(ref, name))
-        if row is not None and row.get("size") == before:
+        if (
+            row is not None
+            and row.get("size") == before
+            and _holds(log.shard, str(row.get("last_event_id", "")))
+        ):
             out[_key(ref, name)] = _mk(name, (row["count"] + 1, event.id, after), ref)
         elif (scanned := _scan(log.shard)) is not None:
             _raised(out, name, scanned, ref, log.shard)
