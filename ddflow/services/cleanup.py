@@ -490,7 +490,10 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         if item:
             t.item, t.item_state = item.id, item.state
         who = guard.held_branches.get(branch)
-        if who:
+        if branch in stranded:
+            # The removed item's holder still has the work on this branch (B71dedb76d2).
+            t.kind, t.done = "stranded", stranded[branch].render()
+        elif who:
             # `claim` takes the lease before the tree exists, and `--no-worktree` never
             # makes one: a leased branch with no tree is its holder's, not a leftover.
             t.kind = "held"

@@ -66,7 +66,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     """
 
     log, cfg, st = _load(repo, agent)
-    it = _require(st, item, "worktree.merged")
+    it = _require(st, item, "worktree.merged", cfg.lease.grace_s)
     if isinstance(it, O.Outcome):
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
