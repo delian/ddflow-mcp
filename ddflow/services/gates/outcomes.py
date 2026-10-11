@@ -191,7 +191,7 @@ def _triage_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
 LOCAL_COMMAND_LABEL = "passed with a local-only command (not the committed one)"
 
 
-def _local_command_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
+def local_command_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     """gate -> the label for a recorded PASS whose command came from the local layer; when
     the committed layers define a different command it says so, and when they define the
     very same one there is nothing to label."""
@@ -253,7 +253,7 @@ def status(
         triage=_triage_notes(it, rows),
         rounds=_round_notes(it, rows),
         not_applicable=na,
-        local_command=_local_command_notes(it, rows),
+        local_command=local_command_notes(it, rows),
     )
 
 
