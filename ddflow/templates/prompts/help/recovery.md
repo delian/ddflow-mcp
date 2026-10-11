@@ -43,7 +43,7 @@ recreates is every input that produced it, which no other artefact holds.
 A `git push -f` of an older main, a revert of the events commit, a `git reset --hard` or a
 deleted shard removes events from the tree, and nothing in the files says so. ddflow keeps a
 machine-local high-water mark per branch and shard (`.ddflow/local/shard-marks`: how many
-events this clone last saw, and the id of the last), raised by every command and never lowered.
+events this clone last saw, and the id of the last), raised by every command and lowered by nothing but the explicit acceptance below.
 A shard that now holds fewer is a PROBLEM in `ddflow doctor` and a "Lost events" section at the
 top of the brief, with where they may still be: `git reflog`, `git log --all --
 .ddflow/events/<shard>`, `git show <sha>:.ddflow/events/<shard>`. Nothing is rewritten.
