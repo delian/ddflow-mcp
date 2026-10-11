@@ -622,8 +622,8 @@ def test_the_magnitude_works_before_the_first_commit(repo, tmp_path):
 
 
 #: What git writes into the object store when an OBJECT is stored: a loose object
-#: (`ab/cdef...`, 38 hex after the two-digit directory) or a pack and its index.
-_OBJECT_FILE = re.compile(r"(?:[0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]+\.(?:pack|idx|rev))")
+#: (`ab/cdef...`: the rest of the id after a two-digit directory, whatever its hash length) or a pack and its index.
+_OBJECT_FILE = re.compile(r"(?:[0-9a-f]{2}/[0-9a-f]+|pack/pack-[0-9a-f]+\.(?:pack|idx|rev))")
 
 
 def _object_writes(repo: Path) -> set[str]:
@@ -685,3 +685,18 @@ def test_ddflows_own_untracked_files_do_not_count_against_the_cap(repo, monkeypa
     for i in range(4):
         (repo / f"w{i}.py").write_text(f"{i}\n")
     assert G.worktree_entries(repo) is None, "the cap still applies to the work's own files"
+
+
+def test_a_sha256_repository_loose_object_is_seen_too(tmp_path):
+    made = subprocess.run(
+        ["git", "init", "-q", "--object-format=sha256", str(tmp_path / "r")], capture_output=True
+    )
+    if made.returncode != 0:
+        pytest.skip("this git cannot make a sha256 repository")
+    (tmp_path / "r" / "a.txt").write_text("a\n")
+    subprocess.run(
+        ["git", "-C", str(tmp_path / "r"), "hash-object", "-w", "a.txt"],
+        check=True,
+        capture_output=True,
+    )
+    assert len(_object_writes(tmp_path / "r")) == 1
