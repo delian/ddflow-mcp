@@ -115,8 +115,18 @@ def _read(repo: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+#: One writer of the marker at a time in this process: the start's own thread saves its report
+#: while the thread it left running may be saving the answer it reached late.
+_SAVE_LOCK = threading.Lock()
+
+
 def _save(repo: Path, report: dict[str, Any]) -> None:
     """Best effort: a marker that cannot be written costs only a repeat of the line."""
+    with _SAVE_LOCK:
+        _save_locked(repo, report)
+
+
+def _save_locked(repo: Path, report: dict[str, Any]) -> None:
     path = Path(repo) / MARKER
     previous = _read(repo)
     if (
@@ -279,7 +289,9 @@ def _refold(log: Any, st: State) -> State:
 def _key(running: str, project: str, policy: str, surf: str) -> str:
     """What an answer of the start check is good for: the same ddflow over a project at the
     same version, under the same policy and surface. The plan's item count may drift as the
-    log grows; `ddflow upgrade --plan` is always the authority."""
+    log grows; `ddflow upgrade --plan` is always the authority. The agent is not part of it:
+    only a container's applying start uses the agent (it is never kept), and the text of a
+    proposal does not name one."""
     return "|".join((running, project, policy, surf))
 
 
@@ -479,7 +491,10 @@ def take_for_brief(repo: Path, st: State | None = None) -> str:
             return ""
         if data.get("status") in UNFINISHED:
             st = st if st is not None else _state_of(repo)
-            return _unfinished(repo, st) if st is not None else ""
+            if st is not None:
+                return _unfinished(repo, st)
+            # the state cannot be read to tell whether the project caught up: say it once,
+            # like any other report, rather than not at all
         if data.get("briefed"):
             return ""
     except Exception:
