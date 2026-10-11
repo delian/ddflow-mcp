@@ -52,6 +52,9 @@ class GateStatus:
     #: stays in ``pipeline`` and ``rows`` and is shown, but nothing waits on it: it is not
     #: ``current``, not ``silent`` and does not hold ``complete`` back.
     not_applicable: dict[str, str] = field(default_factory=dict)
+    #: gate -> "passed with a local-only command (not the committed one)" for a PASS whose
+    #: evidence says the command came from the git-ignored local layer (B924bdc92d7).
+    local_command: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -62,6 +65,7 @@ class GateStatus:
             )
             + (f"  -- {self.triage[g]}" if g in self.triage else "")
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
+            + (f"  -- {self.local_command[g]}" if g in self.local_command else "")
             for g, o in self.rows
         )
 
@@ -184,6 +188,26 @@ def _triage_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     return {g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))}
 
 
+LOCAL_COMMAND_LABEL = "passed with a local-only command (not the committed one)"
+
+
+def local_command_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
+    """gate -> the label for a recorded PASS whose command came from the local layer; when
+    the committed layers define a different command it says so, and when they define the
+    very same one there is nothing to label."""
+    out: dict[str, str] = {}
+    for g, o in rows:
+        rec = it.gates.get(g)
+        ev = (rec.evidence or {}) if rec is not None else {}
+        if o != "passed" or ev.get("command_layer") != "local":
+            continue
+        committed = ev.get("committed_command_digest")
+        if committed and committed == ev.get("command_digest"):
+            continue
+        out[g] = LOCAL_COMMAND_LABEL + ("; the committed command differs" if committed else "")
+    return out
+
+
 def status(
     state: State,
     cfg: Config,
@@ -229,6 +253,7 @@ def status(
         triage=_triage_notes(it, rows),
         rounds=_round_notes(it, rows),
         not_applicable=na,
+        local_command=local_command_notes(it, rows),
     )
 
 

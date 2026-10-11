@@ -504,6 +504,7 @@ def run(
             on_tick=keeper,
             tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
             keep_output=G.run_log_writer(repo, item, gate),
+            log_host=log.agent_id,
         ),
     )
     if scope is not None:
