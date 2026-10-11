@@ -11,7 +11,9 @@ sides of a comparison:
 Nothing else is touched: the usage words themselves, every other line, the indentation of
 help text and the quoting of the offending VALUE (``invalid choice: 'x'``) still have to
 match exactly, so a changed message still fails a pin. ``tests/test_pin_norm.py`` holds
-the proof of both halves.
+the proof of both halves. The golden help snapshots solve the same version problem for
+`-h` output with `unwrap_usage` in tests/golden/test_golden_cli_help.py: keep the two in
+step if argparse's layout changes again.
 """
 
 from __future__ import annotations
