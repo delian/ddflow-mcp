@@ -674,15 +674,16 @@ def _recovered_suffix(root: Path) -> str:
 
 
 def _linked_tree_here(top: Path, stored: str) -> bool:
-    """Is `stored` a LINKED worktree of the clone at `top`: a directory under it, other than
-    the checkout itself, that this clone's own `git worktree list` names?
+    """Is `stored` a LINKED worktree of the clone at `top`: a directory other than the
+    checkout itself (a `[worktree] root` may lie beside it) that this clone's own
+    `git worktree list` names?
 
     A stored path is relative, so another clone records the very same one. The checkout's
     own root is no evidence (every clone has one at the same relative path), and a copied
     directory still lists the original's path; only a linked tree here is."""
     try:
         tree = W.load_path(top, stored).resolve()
-        if tree == top or not tree.is_dir() or not tree.is_relative_to(top):
+        if tree == top or not tree.is_dir():
             return False
         return any(
             Path(e["worktree"]).resolve() == tree for e in W.list_worktrees(top) if "worktree" in e
