@@ -43,47 +43,55 @@ def localize(st: State, log: Any, now: float) -> State:
     Mutates and returns ``st``. Never raises: a ledger that cannot be read or written leaves
     the lease timed from ``now`` (live for one more TTL), the safe direction.
     """
-    leases = [
+    mine = log.clone_id(create=False)
+    others = [
         it.lease
         for it in st.items.values()
-        if it.lease is not None and it.lease.event and getattr(it.lease, "clone", "")
+        if it.lease is not None
+        and it.lease.event
+        and foreign(it.lease, mine)
+        and not getattr(it.lease, "_localized", False)
     ]
-    if not leases:
-        return st
-    mine = log.clone_id(create=False)
-    others = [lz for lz in leases if foreign(lz, mine) and not getattr(lz, "_localized", False)]
     if not others:
         return st
     store = LocalStore(log.root / ".ddflow" / "local", clock=lambda: now)
+    ledger = _read(store)
+    changed = False
+    for lz in others:
+        row, fresh = _row(ledger.get(lz.event), lz.renewed_at, now)
+        ledger[lz.event] = row
+        changed = changed or fresh
+        lz.renewed_at = min(float(row["seen"]), now)
+        lz._localized = True  # type: ignore[attr-defined]  # a second call must not re-time it
+    live_ids = {lz.event for lz in others}
+    kept = {k: v for k, v in ledger.items() if k in live_ids}
+    if changed or len(kept) != len(ledger):
+        with contextlib.suppress(Exception):
+            store.update(
+                LEDGER, lambda cur: _merge(cur, kept), schema=SCHEMA, default={}, derived=True
+            )
+    return st
+
+
+def _read(store: LocalStore) -> dict[str, Any]:
     try:
         ledger = store.read(LEDGER, schema=SCHEMA, default={}, derived=True)
     except Exception:
-        ledger = {}
-    if not isinstance(ledger, dict):
-        ledger = {}
-    changed = False
-    live_ids = {lz.event for lz in others}
-    for lz in others:
-        row = ledger.get(lz.event)
-        recorded = lz.renewed_at
-        if not (isinstance(row, dict) and isinstance(row.get("seen"), (int, float))):
-            row = None
-        if row is None or recorded > float(row.get("renewed_at", 0.0)):
-            row = {"renewed_at": recorded, "seen": now}
-            ledger[lz.event] = row
-            changed = True
-        # never later than now: a ledger written under a clock since set back
-        lz.renewed_at = min(float(row["seen"]), now)
-        lz._localized = True  # type: ignore[attr-defined]  # a second call must not re-time it
-    if set(ledger) - live_ids:
-        ledger = {k: v for k, v in ledger.items() if k in live_ids}
-        changed = True
-    if changed:
-        with contextlib.suppress(Exception):
-            store.update(
-                LEDGER, lambda cur: _merge(cur, ledger), schema=SCHEMA, default={}, derived=True
-            )
-    return st
+        return {}
+    return dict(ledger) if isinstance(ledger, dict) else {}
+
+
+def _row(row: Any, recorded: float, now: float) -> tuple[dict[str, Any], bool]:
+    """The ledger row for a lease renewed (as recorded) at ``recorded``, and whether it is new:
+    the first sight, or a later renewal than the one the row remembers."""
+    known = (
+        isinstance(row, dict)
+        and isinstance(row.get("seen"), (int, float))
+        and recorded <= float(row.get("renewed_at", 0.0))
+    )
+    if known:
+        return row, False
+    return {"renewed_at": recorded, "seen": now}, True
 
 
 def _merge(current: Any, ours: dict[str, Any]) -> dict[str, Any]:
