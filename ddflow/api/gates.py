@@ -504,13 +504,11 @@ def run(
             on_tick=keeper,
             tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
             keep_output=G.run_log_writer(repo, item, gate),
+            log_host=log.agent_id,
         ),
     )
     if scope is not None:
         ev.update(scope.evidence())
-    if ev.get("output_log"):
-        # `.ddflow/runs` is git-ignored: the log is on THIS machine, not on a teammate's.
-        ev["output_log_host"] = log.agent_id
 
     def rerun(g):
         return G.run_command_gate(
