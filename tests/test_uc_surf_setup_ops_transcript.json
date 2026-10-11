@@ -706,7 +706,7 @@
    "approve"
   ],
   0,
-  "{\n  \"schema\": \"reviewers_approve@1\",\n  \"pending\": [\n    {\n      \"name\": \"reviewer\",\n      \"digest\": \"b69c08a37ef6c7a3\",\n      \"kind\": \"openai\",\n      \"agent\": \"tx\",\n      \"person\": false,\n      \"user\": \"delian\",\n      \"at\": \"<time>\"\n    }\n  ]\n}\n",
+  "{\n  \"schema\": \"reviewers_approve@1\",\n  \"pending\": [\n    {\n      \"name\": \"reviewer\",\n      \"digest\": \"b69c08a37ef6c7a3\",\n      \"kind\": \"openai\",\n      \"agent\": \"tx\",\n      \"person\": false,\n      \"user\": \"pinuser\",\n      \"at\": \"<time>\"\n    }\n  ]\n}\n",
   ""
  ],
  [
@@ -1130,7 +1130,7 @@
    "tests"
   ],
   2,
-  "{\n  \"schema\": \"tests@1\",\n  \"tree\": \"<repo>\",\n  \"base\": \"main\",\n  \"changed\": [\n    \".ddflow/.gitignore\",\n    \".ddflow/config.toml\",\n    \".ddflow/events/Monster3-proj-<h6>.jsonl\",\n    \".ddflow/events/tx.jsonl\",\n    \".ddflow/templates/export/changelog.md.j2\",\n    \".gitattributes\",\n    \".gitignore\",\n    \"CL.md\"\n  ],\n  \"tests\": [],\n  \"command\": \"\",\n  \"full_suite\": \"\",\n  \"advice\": \"\",\n  \"unparsed\": [],\n  \"unit_tests_gate\": {}\n}\n",
+  "{\n  \"schema\": \"tests@1\",\n  \"tree\": \"<repo>\",\n  \"base\": \"main\",\n  \"changed\": [\n    \".ddflow/.gitignore\",\n    \".ddflow/config.toml\",\n    \".ddflow/events/pinhost-proj-<h6>.jsonl\",\n    \".ddflow/events/tx.jsonl\",\n    \".ddflow/templates/export/changelog.md.j2\",\n    \".gitattributes\",\n    \".gitignore\",\n    \"CL.md\"\n  ],\n  \"tests\": [],\n  \"command\": \"\",\n  \"full_suite\": \"\",\n  \"advice\": \"\",\n  \"unparsed\": [],\n  \"unit_tests_gate\": {}\n}\n",
   ""
  ],
  [
@@ -1305,7 +1305,7 @@
    "upgrade"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      Monster3-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/Monster3-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
   ""
  ],
  [
@@ -1314,7 +1314,7 @@
    "upgrade"
   ],
   1,
-  "{\n  \"schema\": \"upgrade@1\",\n  \"running\": \"<VERSION>\",\n  \"project_version\": \"<VERSION>\",\n  \"up_to_date\": false,\n  \"total\": 1,\n  \"categories\": {\n    \"repairs\": [\n      {\n        \"category\": \"repairs\",\n        \"id\": \"repair:unknown-author-shards\",\n        \"repair\": \"unknown-author-shards\",\n        \"summary\": \"event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\",\n        \"findings\": [\n          {\n            \"key\": \"Monster3-proj-<h6>.jsonl\",\n            \"detail\": \"Monster3-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/Monster3-proj-<h6>.jsonl`) before trusting it\"\n          }\n        ],\n        \"finding_count\": 1,\n        \"unavailable\": \"\",\n        \"action\": \"needs operator confirmation\",\n        \"fix\": \"ddflow upgrade --apply\"\n      }\n    ],\n    \"migrations\": [],\n    \"records\": [],\n    \"config\": [],\n    \"instructions\": [],\n    \"hooks\": [],\n    \"mcp\": [],\n    \"features\": []\n  }\n}\n",
+  "{\n  \"schema\": \"upgrade@1\",\n  \"running\": \"<VERSION>\",\n  \"project_version\": \"<VERSION>\",\n  \"up_to_date\": false,\n  \"total\": 1,\n  \"categories\": {\n    \"repairs\": [\n      {\n        \"category\": \"repairs\",\n        \"id\": \"repair:unknown-author-shards\",\n        \"repair\": \"unknown-author-shards\",\n        \"summary\": \"event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\",\n        \"findings\": [\n          {\n            \"key\": \"pinhost-proj-<h6>.jsonl\",\n            \"detail\": \"pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\"\n          }\n        ],\n        \"finding_count\": 1,\n        \"unavailable\": \"\",\n        \"action\": \"needs operator confirmation\",\n        \"fix\": \"ddflow upgrade --apply\"\n      }\n    ],\n    \"migrations\": [],\n    \"records\": [],\n    \"config\": [],\n    \"instructions\": [],\n    \"hooks\": [],\n    \"mcp\": [],\n    \"features\": []\n  }\n}\n",
   ""
  ],
  [
@@ -1323,7 +1323,7 @@
    "--plan"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      Monster3-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/Monster3-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
   ""
  ],
  [
@@ -1362,7 +1362,7 @@
    "k"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      Monster3-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/Monster3-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
   ""
  ],
  [
@@ -1374,7 +1374,7 @@
    "r"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      Monster3-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/Monster3-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
   ""
  ],
  [
@@ -1413,7 +1413,7 @@
    "bogus"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      Monster3-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/Monster3-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
+  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
   ""
  ],
  [
