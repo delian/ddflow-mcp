@@ -338,10 +338,15 @@ def conflicted_views(repo: Path) -> list[str]:
     A view is derived from the log, so a conflict in it is regenerated, never hand-merged:
     two clones that each render and commit conflict on every one at every pull.
     """
+    # Markers in the text are not enough: a lesson quoting a whole conflict block renders
+    # verbatim into a view, and no `git checkout --theirs` can clear that. When git can list
+    # the unmerged paths a view must be one of them (B-viewmarkers).
+    unmerged = G.unmerged(repo)
     hit = [
         f"{_VIEW_DIR}/{name}"
         for name in VIEW_NAMES
-        if _has_conflict_markers(Path(repo) / _VIEW_DIR / name)
+        if (unmerged is None or f"{_VIEW_DIR}/{name}" in unmerged)
+        and _has_conflict_markers(Path(repo) / _VIEW_DIR / name)
     ]
     if not hit:
         return []
