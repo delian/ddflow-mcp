@@ -93,6 +93,14 @@ lose; B-arch-local-state adds a format key to them. Nothing in this table is sto
 project's committed files except the event log (`schema`, `v`) and the `ddflow.seen` stamps
 (`version`, `format_level`).
 
+Additive payload keys change none of the numbers above. `decision.recorded` gained `data["saw"]`
+(B0dcccd8594): the ids of the live decisions whose globs overlapped the new one when its author
+wrote it. An older reader ignores the key and keeps it when it rewrites the file; no event kind
+and no required key is new, and `infra.store.SCHEMA` stays 10 because the index does not store
+it. A decision without the key (every log written before) never forms an unreconciled pair, so
+an old log folds exactly as before. The fold marks two live decisions on overlapping globs that
+do not name each other as unreconciled; `doctor`, `brief` and `decision applicable` show it.
+
 ## An older ddflow meeting newer data
 
 Several clones of a project run different ddflow versions. An older ddflow that meets data

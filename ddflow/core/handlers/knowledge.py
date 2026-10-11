@@ -235,6 +235,7 @@ def _h_decision(st: State, ev: Event) -> None:
         at=prev.at if prev and prev.at else ev.ts,
         item=d.get("item", "") or (prev.item if prev else ""),
         by=prev.by if prev and prev.by else ev.agent,
+        saw=list(d["saw"]) if d.get("saw") is not None else (prev.saw if prev else None),
     )
     # `superseded_by` and `status` are one fact, so derive the second from the first
     # instead of storing it twice and hoping they agree. A shard merge can deliver
