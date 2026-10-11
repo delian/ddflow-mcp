@@ -163,6 +163,10 @@ def complete(
             # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
             # folds this event exactly as before.
             **({"changelog": entry} if entry else {}),
+            # Optional, additive (no new event kind): the gates the ACTUAL diff excused,
+            # {gate: why}, so a required gate that did not run is accounted for on the
+            # durable record (B-na-required-gate). Absent = none excused.
+            **({"not_applicable": _na_map(v.na_evidence)} if v.na_evidence else {}),
         },
     )
     L.release(log, item, note="completed")
@@ -193,6 +197,11 @@ def complete(
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _na_map(evidence: list[str]) -> dict[str, str]:
+    """`Verdict.na_evidence` ("gate: why" lines) as {gate: why}; a gate id holds no ': '."""
+    return dict(line.split(": ", 1) if ": " in line else (line, "") for line in evidence)
 
 
 def _refuted_extra(st: State, item: str) -> dict[str, Any]:
