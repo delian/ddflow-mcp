@@ -13,6 +13,7 @@ A claim without a clone (every claim written before this) is never a rival of it
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -92,10 +93,7 @@ def merged(tmp_path: Path) -> Path:
     _commit_log(a, "T1")
     _git(a, "push", "-q", "origin", "main")
     b = _clone(remote, tmp_path / "b")
-    # Each clone is adopted on first use; give them distinct clone ids the way init does.
-    for repo, cid in ((a, "aaaaaa"), (b, "bbbbbb")):
-        (repo / ".ddflow" / "local").mkdir(parents=True, exist_ok=True)
-        (repo / ".ddflow" / "local" / "clone-id").write_text(cid + "\n")
+    # No clone id is written by hand: each clone gets its own from the production path.
     assert run_cli(b, "claim", "T1", agent="U1")[0] == 0
     _commit_log(b, "b claim")
     _git(b, "push", "-q", "origin", "main")
@@ -120,3 +118,16 @@ def test_doctor_calls_a_shard_with_two_writers_a_problem(merged):
     assert not any("decrease" in n for n in out.data["notes"])
     code = run_cli(merged, "doctor", agent="U1")[0]
     assert code == 1
+
+
+def _claim_clones(repo: Path) -> list[str]:
+    shard = repo / ".ddflow" / "events" / "U1.jsonl"
+    evs = [json.loads(ln) for ln in shard.read_text().splitlines() if ln.strip()]
+    return [e["data"].get("clone", "") for e in evs if e["kind"] == "lease.acquired"]
+
+
+def test_each_clone_records_its_own_id_in_its_claim(merged):
+    """The ids come from the code under test, one per clone, and differ."""
+    clones = _claim_clones(merged)
+    assert len(clones) == 2 and all(clones), clones
+    assert clones[0] != clones[1], clones
