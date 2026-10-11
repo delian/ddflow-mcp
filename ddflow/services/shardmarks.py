@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -137,17 +138,36 @@ def _update(store: LocalStore, fn: Any) -> None:
         store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
 
 
-def _holds(path: Path | None, event_id: str) -> bool:
-    """Does the shard still contain the event ``event_id``? True when there is nothing to ask
-    (no id recorded) or the file cannot be read (could not tell is not a loss)."""
+def _last_line(path: Path) -> bytes:
+    """The shard's last non-blank line, read from the end (a few KiB, not the file)."""
+    with path.open("rb") as f:
+        end = f.seek(0, 2)
+        pos, buf = end, b""
+        while pos > 0:
+            step = min(8192, pos)
+            pos -= step
+            f.seek(pos)
+            buf = f.read(step) + buf
+            lines = [ln for ln in buf.split(b"\n") if ln.strip()]
+            if len(lines) > 1 or pos == 0:
+                return lines[-1] if lines else b""
+        return b""
+
+
+def _holds(path: Path | None, event_id: str, *, tail: bool = False) -> bool:
+    """Does the shard still contain the event ``event_id`` as an event's own id (not as a
+    value some payload quotes)? ``tail`` asks only of the LAST line -- all the append path,
+    which runs under the append lock, can afford. True when there is nothing to ask (no id
+    recorded) or the file cannot be read (could not tell is not a loss)."""
     if not event_id:
         return True
     if path is None:
         return False
     try:
-        return event_id.encode() in path.read_bytes()
+        data = _last_line(path) if tail else path.read_bytes()
     except OSError:
         return True
+    return re.search(rb'"id"\s*:\s*"' + re.escape(event_id.encode()) + rb'"', data) is not None
 
 
 def _raised(
@@ -231,7 +251,7 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
         if (
             row is not None
             and row.get("size") == before
-            and _holds(log.shard, str(row.get("last_event_id", "")))
+            and _holds(log.shard, str(row.get("last_event_id", "")), tail=True)
         ):
             out[_key(ref, name)] = _mk(name, (row["count"] + 1, event.id, after), ref)
         elif (scanned := _scan(log.shard)) is not None:
