@@ -1,3 +1,5 @@
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -619,8 +621,40 @@ def test_the_magnitude_works_before_the_first_commit(repo, tmp_path):
     assert stat["insertions"] == 3, stat
 
 
-def _objects(repo: Path) -> set[Path]:
-    return {p for p in (repo / ".git" / "objects").rglob("*") if p.is_file()}
+#: What git writes into the object store when an OBJECT is stored: a loose object
+#: (`ab/cdef...`, 38 hex after the two-digit directory) or a pack and its index.
+_OBJECT_FILE = re.compile(r"(?:[0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]+\.(?:pack|idx|rev))")
+
+
+def _object_writes(repo: Path) -> set[str]:
+    """The objects (loose and packed) in the store -- NOT git's own housekeeping.
+
+    A newer git runs `maintenance --auto` after commands that look at the repository and
+    leaves `objects/maintenance.lock`, `objects/info/...` and pack temp files behind
+    (B-gitmaint-lock): none of that is an object, and a test asking "did this write one?"
+    must not read it as one."""
+    root = repo / ".git" / "objects"
+    return {
+        rel
+        for p in root.rglob("*")
+        if p.is_file() and _OBJECT_FILE.fullmatch(rel := p.relative_to(root).as_posix())
+    }
+
+
+def test_git_housekeeping_files_are_not_object_writes(repo):
+    (repo / "a.txt").write_text("a\n")
+    before = _object_writes(repo)
+    objects = repo / ".git" / "objects"
+    (objects / "maintenance.lock").write_text("")
+    (objects / "info").mkdir(exist_ok=True)
+    (objects / "info" / "commit-graph").write_text("x")
+    (objects / "pack").mkdir(exist_ok=True)
+    (objects / "pack" / "tmp_pack_Abc123").write_text("x")
+    assert _object_writes(repo) == before
+    subprocess.run(
+        ["git", "-C", str(repo), "hash-object", "-w", "a.txt"], check=True, capture_output=True
+    )
+    assert _object_writes(repo) != before, "a stored object must still be seen"
 
 
 def test_an_untracked_file_named_like_an_option_is_hashed_not_obeyed(repo):
@@ -629,9 +663,9 @@ def test_an_untracked_file_named_like_an_option_is_hashed_not_obeyed(repo):
     and that file's content was never fingerprinted."""
     (repo / "a.txt").write_text("a\n")
     (repo / "-w").write_text("one\n")
-    before = _objects(repo)
+    before = _object_writes(repo)
     first = G.evidence._untracked_digest(repo)
-    assert _objects(repo) == before, "the fingerprint wrote to the object store"
+    assert _object_writes(repo) == before, "the fingerprint wrote to the object store"
     (repo / "-w").write_text("two\n")
     assert G.evidence._untracked_digest(repo) != first, "the -w file's content is not covered"
 
