@@ -190,6 +190,16 @@ class SuggestingParser(argparse.ArgumentParser):
         super().__init__(*args, **kwargs)
         self.register("action", "parsers", _WordsRecorder)
 
+    def _get_values(self, action: argparse.Action, arg_strings: list[str]) -> Any:
+        # Before Python 3.13 argparse strips a `--` only for ordinary positionals: the
+        # values of a subparsers action keep it at their head, and the command word check
+        # then refuses `--` itself -- `ddflow task -- list` died with "invalid choice: '--'"
+        # on 3.12.3 (B-dashdash-312). The marker means "what follows is positional", which is
+        # all a command word is, so drop the one that opens a subcommand's values.
+        if action.nargs == argparse.PARSER and arg_strings[:1] == ["--"] and len(arg_strings) > 1:
+            arg_strings = arg_strings[1:]
+        return super()._get_values(action, arg_strings)
+
     def error(self, message: str) -> Any:
         for a in self._actions:
             # only the command word: another option's bad value is not a command name
