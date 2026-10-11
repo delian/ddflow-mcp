@@ -426,11 +426,11 @@ def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
     if pipe is None:
         return
     raw = getattr(pipe, "buffer", pipe)
-    data = (
-        text.encode(pipe.encoding, pipe.errors)
-        if isinstance(text, str) and raw is not pipe
-        else text
-    )
+    data = text
+    if isinstance(text, str):
+        if raw is pipe:  # a binary pipe: what `communicate(input=str)` refused, loudly
+            raise TypeError("run_shell: a str on stdin needs text mode (text=True)")
+        data = text.encode(pipe.encoding, pipe.errors)
 
     def write() -> None:
         with contextlib.suppress(OSError):

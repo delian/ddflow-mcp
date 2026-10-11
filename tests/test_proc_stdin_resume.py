@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from ddflow.infra import proc as P
 
 
@@ -43,12 +45,32 @@ def test_multibyte_text_arrives_encoded_whole():
     assert got.code == 0 and got.out.strip() == str(len(text.encode("utf-8")))
 
 
-def test_text_the_pipe_cannot_encode_raises_to_the_caller_and_leaves_no_child():
-    """Review finding: the writer thread must not swallow an encoding error -- the
-    caller used to get UnicodeEncodeError from `communicate(input=)`."""
-    import pytest
+def _spawned(monkeypatch):
+    made: list = []
+    real = P.popen
 
+    def spy(*a, **k):
+        made.append(real(*a, **k))
+        return made[-1]
+
+    monkeypatch.setattr(P, "popen", spy)
+    return made
+
+
+def test_text_the_pipe_cannot_encode_raises_to_the_caller_and_leaves_no_child(monkeypatch):
+    """Review finding: the writer thread must not swallow an encoding error -- the
+    caller used to get UnicodeEncodeError from `communicate(input=)` -- and the child
+    that was already started must not be left running."""
+    made = _spawned(monkeypatch)
     with pytest.raises(UnicodeEncodeError):
         P._shell_group(
             "cat", timeout=5, input="x\ud800y", text=True, encoding="utf-8", errors="strict"
         )
+    assert made and all(p.poll() is not None for p in made), "the started child was left alive"
+
+
+def test_a_str_on_a_binary_pipe_is_refused_loudly_not_delivered_as_nothing(monkeypatch):
+    made = _spawned(monkeypatch)
+    with pytest.raises(TypeError):
+        P._shell_group("cat", timeout=5, input="hello")
+    assert made and all(p.poll() is not None for p in made)
