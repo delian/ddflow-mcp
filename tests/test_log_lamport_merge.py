@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -230,6 +231,9 @@ def test_reading_another_repositorys_log_writes_nothing_there(repo: Path, monkey
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     (repo / ".ddflow" / "events").mkdir(parents=True)
     L.EventLog(repo, "someone").append("task.added", "X1", {"title": "t"})
+    # the append above may have left the shard's high-water mark (Ba24a8d32ee); the claim is
+    # about READING, so start the read from a tree with no local state
+    shutil.rmtree(repo / ".ddflow" / "local", ignore_errors=True)
     L._AGENT_ID_CACHE.clear()
     L.EventLog(repo).read_all()
     assert not (repo / ".ddflow" / "local").exists()

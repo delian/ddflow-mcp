@@ -13,6 +13,7 @@ from ..config import Config
 from ..core.model import State, fold
 from ..infra.log import EventLog
 from ..services import identity as ID
+from ..services import shardmarks as SM
 from ..services.choices import overlay
 from ..services.leaseclock import localize
 
@@ -32,6 +33,9 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
     # env var actually set (`identity.bind`: the layer that actually WON).
     log, who = ID.open_log(repo, cfg, agent, bind_cfg=True)
     st = fold(log.read_all(), strict=False)
+    # The high-water mark of every shard rises with what this clone sees (Ba24a8d32ee): a later
+    # shard with FEWER events is a loss `doctor` and `brief` name. Cheap, never raises.
+    SM.observe(repo, log)
     # Leases this clone claimed under its pre-B190 bare id become its suffixed id's, HERE,
     # once -- so no holder comparison anywhere needs to know the old name (B205).
     if ID.rehome_pre_upgrade_leases(log, cfg, st, who.source):

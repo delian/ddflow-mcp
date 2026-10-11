@@ -32,6 +32,7 @@ from ...services import leases as L
 from ...services import rates as RT
 from ...services import repairs as RP
 from ...services import sessions as SS
+from ...services import shardmarks as SM
 from ...services import shared_files as SF
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
@@ -51,6 +52,7 @@ from ..knowledge import pairs_from
 from ..knowledge.pairs import _sweep_records
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
+from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 
 
@@ -277,7 +279,14 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
-def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None) -> O.Outcome:
+def doctor(
+    repo: Path,
+    *,
+    agent: str = "",
+    parser: Any = None,
+    tools: Any = None,
+    accept_lost_events: bool = False,
+) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
     Gathers from six sources — the log's own integrity, the dependency graph, the
@@ -291,6 +300,9 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     """
 
     log, cfg, st = _load(repo, agent)
+    # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
+    # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
+    accepted = SM.accept(repo, log) if accept_lost_events else []
     # One read of the whole log serves the data repairs and every pass below (the warm
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
@@ -308,6 +320,10 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
             "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
             "`[agent].id`, or drop both to derive a per-clone id)"
         )
+    # A PROBLEM (Ba24a8d32ee): a shard holding fewer events than this clone last saw lost them
+    # to a force-push, revert, reset or deletion. Never repaired here.
+    problems += [g.render() for g in SM.lost(repo, log)]
+    notes += [f"{g.shard}: accepted the new count ({g.now}, was {g.was})" for g in accepted]
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
 
@@ -570,30 +586,3 @@ def _dupe_note(st, cfg) -> list[str]:
         f"{n} unsettled near-duplicate pair(s) at the ask threshold — `ddflow dupes` "
         f"lists them; `ddflow link A --duplicate-of B` settles one (or `--distinct`)"
     ]
-
-
-#: How many fold problems doctor names one by one; the rest are counted.
-FOLD_PROBLEMS_SHOWN = 5
-
-
-def fold_problem_notes(st) -> list[str]:
-    """Doctor's lines for events the fold could not apply (`State.fold_problems`,
-    B-uni-compat-events). A NOTE, like a skipped kind: the numbers doctor reports are
-    computed without (the rest of) these events, and the log is append-only, so the remedy is a
-    corrective event or a ddflow fix -- not something a re-run clears."""
-    probs = list(getattr(st, "fold_problems", ()) or ())
-    if not probs:
-        return []
-    lines = [
-        f"{len(probs)} event(s) could not be folded: what each would have changed is "
-        "missing from the counts below, and what its handler changed before it raised "
-        "stays in (the log keeps them; a ddflow bug or a hand-edited shard -- file it with "
-        "`ddflow bug found`):"
-    ]
-    lines += [
-        f"  {p.event or '(no id)'} {p.kind} at lamport {p.lamport} by {p.agent or '?'}: {p.error}"
-        for p in probs[:FOLD_PROBLEMS_SHOWN]
-    ]
-    if len(probs) > FOLD_PROBLEMS_SHOWN:
-        lines.append(f"  ... and {len(probs) - FOLD_PROBLEMS_SHOWN} more")
-    return ["\n".join(lines)]
