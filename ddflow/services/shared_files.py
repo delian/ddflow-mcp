@@ -364,7 +364,7 @@ def conflicted_views(
             return True
         exp = rendered()
         if exp is None:
-            return unmerged is None  # nothing to compare with: git or the markers decide
+            return True  # cannot tell a quoted block from a conflict: the markers decide
         if name not in exp:
             return False
         try:
