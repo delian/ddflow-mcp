@@ -93,8 +93,8 @@ def _scan(path: Path) -> tuple[int, str, int] | None:
 
 
 def _head_ref(root: Any) -> str:
-    """The branch this tree is on (`refs/heads/x`), "" when detached or unknown. Read from
-    git's HEAD file, no subprocess: a mark is only compared on the branch it was taken on, so
+    """The branch this tree is on (git's HEAD ref, `refs/heads/x`), "" when detached or
+    unknown. Read from git's HEAD file, no subprocess: a mark is only compared on the branch it was taken on, so
     switching to a branch that never had those events is not a loss (a reset, a revert and a
     force-push all happen ON a branch)."""
     try:
@@ -292,7 +292,10 @@ def accept(repo: Any, log: Any) -> list[Lost]:
                 out[_key(ref, g.shard)] = _mk(g.shard, scanned, ref)
         return out
 
-    _update(_store(log), lower)
+    try:
+        _update(_store(log), lower)
+    except Exception:
+        return []  # nothing recorded: the PROBLEM stands, and doctor must still report
     return [g for g in gone if g.shard in done]  # only what was recorded as accepted
 
 
