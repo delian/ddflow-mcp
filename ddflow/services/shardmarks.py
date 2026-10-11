@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..infra import fsio
 from ..infra.localstore import LocalStore, StoreUnreadable
 from ..infra.log import APPEND_HOOKS
 
@@ -117,6 +118,9 @@ def _mk(shard: str, scanned: tuple[int, str, int], ref: str) -> dict[str, Any]:
 def _update(store: LocalStore, fn: Any) -> None:
     """`store.update`, but a torn mark file is replaced by a fresh one instead of leaving the
     feature dark for good (the file holds only counts that the next look rebuilds)."""
+    # The plain ignore file the other writers of this directory leave (seen.json's pins "*"):
+    # whoever creates `.ddflow/local` first must not change what the others find there.
+    fsio.ensure_ignored_dir(store.root)
     try:
         store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
     except StoreUnreadable:
