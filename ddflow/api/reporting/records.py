@@ -13,6 +13,7 @@ from ...core.records import contested_summary, record_pools
 from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
+from ...services.guidance.kinds import unreconciled
 from .._base import _load
 
 #: How much of one record's text a rendering carries. The record is whole in the log and
@@ -191,6 +192,20 @@ def _show_bug(st, bug) -> O.Outcome:
         **addenda(st, bug.id),
     }
     return O.ok("show", id=bug.id, item=record, _render={"bug": record})
+
+
+def unreconciled_notes(st) -> list[str]:
+    """B0dcccd8594: pairs of live decisions on overlapping globs that two authors wrote
+    without seeing each other. A NOTE, not a problem: nothing is corrupt, and `doctor`
+    failing would block unrelated work, but both are presented as binding until someone says
+    which holds."""
+    return [
+        f"unreconciled decisions {a.id} (by {a.by or '?'}) and {b.id} (by {b.by or '?'}) govern "
+        f"overlapping files and were recorded without seeing each other, so they may "
+        f"contradict: record a decision that supersedes or narrows one of them "
+        f"(`ddflow decision supersede {a.id} --by {b.id}`, or the reverse)"
+        for a, b in unreconciled(st)
+    ]
 
 
 def _contest_problems(st) -> list[str]:

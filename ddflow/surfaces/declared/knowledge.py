@@ -66,8 +66,19 @@ def _decision_text(out, a) -> str:
     return "\n".join(lines)
 
 
+def _unreconciled_tag(d) -> str:
+    """B0dcccd8594: recorded without seeing a decision on the same files, so not yet binding
+    until someone reconciles them."""
+    if not d.get("unreconciled"):
+        return ""
+    return f"  (UNRECONCILED with {', '.join(d['unreconciled'])}: `ddflow decision supersede`)"
+
+
 def _applicable_text(out, a) -> str:
-    lines = [f"  [{d['id']}] {d['title']}\n      {d['decision']}" for d in out.data["applicable"]]
+    lines = [
+        f"  [{d['id']}] {d['title']}{_unreconciled_tag(d)}\n      {d['decision']}"
+        for d in out.data["applicable"]
+    ]
     lines += [
         f"  [{d['id']}] {d['title']}  (project-wide)\n      {d['decision']}"
         for d in out.data["project_wide"]

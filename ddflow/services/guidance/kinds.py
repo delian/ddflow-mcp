@@ -11,6 +11,7 @@ import re
 from ...config import Config
 from ...core.model import State
 from ...core.records import Decision
+from ...core.schedule import conflicts
 from .record import ACCEPTED, GuidanceRecord, KindSpec, Limits, Scope
 from .resolve import ALWAYS, GLOBS, resolve
 
@@ -101,3 +102,41 @@ def governing(state: State, globs: list[str]) -> tuple[list[Decision], list[Deci
         [by_id[a.record.id] for a in applied if a.reason == GLOBS],
         [by_id[a.record.id] for a in applied if a.reason == ALWAYS],
     )
+
+
+def overlapping_live(state: State, globs: list[str], *, exclude: str = "") -> list[Decision]:
+    """The live decisions with their own globs that overlap ``globs`` -- the matcher
+    `governing` uses -- in log order. What `decision add` records as `saw`."""
+    return [
+        d
+        for d in state.decisions.values()
+        if d.live and d.id != exclude and d.globs and conflicts(globs, d.globs)
+    ]
+
+
+def unreconciled(state: State) -> list[tuple[Decision, Decision]]:
+    """Pairs of live decisions on overlapping globs that were recorded without seeing each
+    other (B0dcccd8594), each pair once, ordered by id.
+
+    A decision that names the other in its `saw`, or that supersedes it (then the other is
+    not live), is reconciled. A decision with no `saw` key (written before it existed) never
+    forms a pair, so an old log folds as it did."""
+    live = sorted(
+        (d for d in state.decisions.values() if d.live and d.globs and d.saw is not None),
+        key=lambda d: d.id,
+    )
+    return [
+        (a, b)
+        for i, a in enumerate(live)
+        for b in live[i + 1 :]
+        if a.id not in (b.saw or ()) and b.id not in (a.saw or ()) and conflicts(a.globs, b.globs)
+    ]
+
+
+def unreconciled_with(state: State) -> dict[str, list[str]]:
+    """`unreconciled`, as {decision id: the ids it is unreconciled with}."""
+    out: dict[str, list[str]] = {}
+    for a, b in unreconciled(state):
+        out.setdefault(a.id, []).append(b.id)
+        out.setdefault(b.id, []).append(a.id)
+    return {k: sorted(v) for k, v in out.items()}
