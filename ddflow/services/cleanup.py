@@ -38,16 +38,14 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ..config import Config
 from ..core.flow import GITFLOW
 from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
+from ..infra.log import EventLog
+from . import leases as L
 from .leaseclock import localize
-
-if TYPE_CHECKING:
-    from ..infra.log import EventLog
 
 
 @dataclass
@@ -116,6 +114,33 @@ class _Protected:
                 f"tree, not ddflow's. The harness removes it, not cleanup."
             )
         return "", ""
+
+
+def _own_released_branches(lost: dict[str, dict]) -> dict[str, str]:
+    """branch -> the sentence for it, for each claim this agent lost to a contest.
+
+    The branch the LOSING claim bound, never the item's: that is the winner's now."""
+    return {
+        info["branch"]: (
+            f"LEAVE ALONE — this is your own, released branch: your claim on {iid} lost "
+            f"the contest to {info['winner'] or 'another holder'} (`ddflow show {iid}` says "
+            f"who holds it now). Its commits are not on the base: keep them with git or "
+            f"port them."
+        )
+        for iid, info in lost.items()
+        if info["branch"]
+    }
+
+
+def _own_released(repo: Path, cfg: Config) -> dict[str, str]:
+    """branch -> why it is NOT another's, for the branches of claims THIS agent lost to a
+    contest (B2809f4213b): the lease that now holds the item is the winner's, and calling
+    the loser's own branch 'held by' the winner told him nothing about what to do with it."""
+    try:
+        log = EventLog(repo, log_cfg=cfg.log)
+        return _own_released_branches(L.lost_contests(log, cfg.agent.id or log.agent_id))
+    except OSError:
+        return {}
 
 
 def _key(path: str) -> str:
@@ -361,6 +386,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     prefixes = our_prefixes(cfg)
     plan = Plan()
     guard = _protected(root, cfg, state)
+    own = _own_released(repo, cfg)
     by_branch, by_path = _claimed_by(root, state)
     seen_branches: set[str] = set()
 
@@ -374,6 +400,8 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         unknown = _measure(t, wt)
 
         protected, reason = guard.why(path, branch)
+        if protected == "held" and branch in own:
+            reason = own[branch]
         if protected == "held" or (protected and not t.dirty_files and not unknown):
             # A held tree's edits are its holder's work in progress, not a question for
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
@@ -399,7 +427,9 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             # `claim` takes the lease before the tree exists, and `--no-worktree` never
             # makes one: a leased branch with no tree is its holder's, not a leftover.
             t.kind = "held"
-            t.done = f"LEAVE ALONE — item {who} holds a live lease on this branch."
+            t.done = (
+                own.get(branch) or f"LEAVE ALONE — item {who} holds a live lease on this branch."
+            )
         elif merged:
             t.action = "delete_branch"
             t.done = f"branch with no worktree, fully merged into {base} — safe to delete"
