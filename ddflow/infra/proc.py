@@ -385,10 +385,10 @@ def _shell_group(
     if input is not None:
         kwargs["stdin"] = PIPE
     p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
-    if input is not None:
-        _feed_stdin(p, input)
     deadline = None if timeout is None else time.monotonic() + timeout
     try:
+        if input is not None:
+            _feed_stdin(p, input)
         while True:
             wait = None if deadline is None else max(0.0, deadline - time.monotonic())
             if on_tick is not None:
@@ -411,25 +411,34 @@ def _shell_group(
         raise
 
 
-def _feed_stdin(p: subprocess.Popen, text: str) -> None:
+def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
     """Write ``text`` to ``p``'s stdin on a daemon thread, then close it (end of file).
 
     The pipe is taken off ``p`` so `communicate` leaves it alone (it would close it before
-    the first write, or, resumed, fail to keep writing: B-proc-stdin-resume). A child that
-    exits or is killed before reading it all breaks the pipe; that ends the writer quietly.
+    the first write, or, resumed, fail to keep writing: B-proc-stdin-resume). The text is
+    encoded HERE, on the caller's thread, so a character the pipe's codec refuses raises to
+    the caller as `communicate(input=)` did, never inside the writer where nobody sees it.
+    Only a broken pipe ends the writer quietly: the child exited, or was killed, before it
+    read everything.
     """
     pipe = p.stdin
     p.stdin = None
     if pipe is None:
         return
+    raw = getattr(pipe, "buffer", pipe)
+    data = (
+        text.encode(pipe.encoding, pipe.errors)
+        if isinstance(text, str) and raw is not pipe
+        else text
+    )
 
     def write() -> None:
-        with contextlib.suppress(OSError, ValueError):
+        with contextlib.suppress(OSError):
             try:
-                pipe.write(text)
-                pipe.flush()
+                raw.write(data)
+                raw.flush()
             finally:
-                with contextlib.suppress(OSError, ValueError):
+                with contextlib.suppress(OSError):
                     pipe.close()
 
     threading.Thread(target=write, name="run_shell-stdin", daemon=True).start()
