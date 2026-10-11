@@ -5156,3 +5156,9 @@
 {"agent":"U1","data":{"ahead":["rubber_duck"],"gate":"critic","policy":"warn"},"id":"ea73c01323b647f4706f3a039","kind":"gate.out_of_order","lamport":55201,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T09:56:06.258696Z"}
 {"agent":"U1","data":{"gate":"critic"},"id":"e1f72ad78385c9cca9694dd58","kind":"gate.started","lamport":55202,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T09:56:06.566656Z"}
 {"agent":"U1","data":{"at":1791712584.412365,"holder":"U1"},"id":"e928882384d325a09832013b3","kind":"lease.renewed","lamport":55205,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T09:56:24.542984Z"}
+{"agent":"U1","data":{"at":1791712709.656669,"holder":"U1"},"id":"eacba8001b4babab22e9d26f3","kind":"lease.renewed","lamport":55212,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T09:58:29.803764Z"}
+{"agent":"U1","data":{"at":1791712747.4238987,"holder":"U1"},"id":"e0bf5e3deb44279b6de788994","kind":"lease.renewed","lamport":55214,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T09:59:07.555288Z"}
+{"agent":"U1","data":{"at":1791712835.627692,"holder":"U1"},"id":"e350ef4de67a1d656bb57e476","kind":"lease.renewed","lamport":55217,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T10:00:35.763024Z"}
+{"agent":"U1","data":{"at":1791712960.334241,"holder":"U1"},"id":"e648a32cd67d50dbe679be856","kind":"lease.renewed","lamport":55222,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T10:02:40.442782Z"}
+{"agent":"U1","data":{"at":1791712987.5196187,"holder":"U1"},"id":"e27b3163f7579649ac3f49f67","kind":"lease.renewed","lamport":55226,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T10:03:07.636844Z"}
+{"agent":"U1","data":{"at":1791713090.627538,"holder":"U1"},"id":"ebc5fb450d8937ff07dcf0492","kind":"lease.renewed","lamport":55242,"schema":1,"subject":"fix-B0dcccd8594","ts":"2026-10-11T10:04:50.752838Z"}
