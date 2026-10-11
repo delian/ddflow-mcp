@@ -26,7 +26,7 @@ from ...core.model import State
 from ..overlay import OverlayError
 from . import deffields as DF
 from . import fileformat
-from .kinds import RULE
+from .kinds import RULE, unreconciled_notes
 from .record import GuidanceRecord
 from .store import GuidanceFiles
 
@@ -155,7 +155,12 @@ def restore(repo: Path, st: State, ids: list[str] | None = None) -> list[str]:
 
 
 def notes(repo: Path, cfg: Config, st: State) -> list[str]:
-    """``ddflow doctor`` notes for the drift: a note, not a problem -- one command settles it."""
+    """``ddflow doctor`` notes for the guidance: the rule-file drift (a note, not a problem --
+    one command settles it) and decisions recorded without seeing each other (B0dcccd8594)."""
+    return _drift_notes(repo, cfg, st) + unreconciled_notes(st)
+
+
+def _drift_notes(repo: Path, cfg: Config, st: State) -> list[str]:
     rows = drift(repo, cfg, st)
     if not rows:
         return []
