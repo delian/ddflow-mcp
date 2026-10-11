@@ -14,6 +14,7 @@ from ...infra import worktree as W
 from ...services import changes as CH
 from ...services import flow as FS
 from ...services import gates as G
+from ...services import leases as LS
 from ...services.cleanup import dispose_tree, record_item_removed  # noqa: F401  (re-exported)
 from ...services.enforce import SELF_MANAGED
 from ...services.export import refresh as RF
@@ -68,6 +69,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     it = _require(st, item, "worktree.merged")
     if isinstance(it, O.Outcome):
         return it
+    if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
+        return contested  # B2809f4213b: before any git action
     target = FS.target(repo, cfg, it, st)
     borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on
     source = _what_to_land(repo, cfg, st, it, target, branch, called_from)
