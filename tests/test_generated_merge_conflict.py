@@ -200,8 +200,8 @@ def test_a_committed_conflict_in_a_view_is_still_named(clones):
     assert code == 1 and "docs/ddflow/QUEUE.md" in out + err, out + err
 
 
-def test_an_unrenderable_log_leaves_the_markers_to_decide(clones):
-    """If the expected views cannot be rendered, a committed conflict is still named."""
+def test_no_expected_views_leaves_the_markers_to_decide(clones):
+    """With no expected views supplied, markers in a committed view still count as a conflict."""
     from ddflow.services.shared_files import conflicted_views
 
     a, _ = clones
