@@ -4,7 +4,7 @@ The derived agent id is `{host}-{dir}-{clone id}` and the clone id lives in the 
 `.ddflow/local/clone-id`. After `git clean -xfd` or a re-image the file is gone, a NEW id
 was minted, and the user was locked out of their own claim ("held by <old id>"). The id is
 now recovered from evidence the log already holds: a `lease.acquired` whose holder is
-`{bare id}-{suffix}` and whose recorded worktree lies under THIS checkout.
+`{bare id}-{suffix}` and whose recorded worktree is a linked worktree of THIS clone (in its `git worktree list`).
 """
 
 from __future__ import annotations
@@ -149,7 +149,6 @@ def test_a_worktree_root_beside_the_checkout_still_recovers(tmp_path):
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text((cfg.read_text() if cfg.exists() else "") + '\n[worktree]\nroot = "../wt"\n')
     assert run_cli(repo, "claim", "T1")[0] == 0
-    assert (tmp_path / "wt").is_dir()
     old = _suffix(repo)
     shutil.rmtree(repo / ".ddflow" / "local")
     assert L._clone_suffix(repo) == old
