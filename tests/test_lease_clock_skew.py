@@ -196,3 +196,14 @@ def test_deleting_the_ledger_restarts_the_ttl_and_never_expires_a_live_lease(see
     _code, out = w.cli("bob", "bob", 600, "show", "T1")
     assert abs(_left(out) - TTL) < 150, out  # restarted from this read, not shortened
     assert "INTERRUPTED" not in w.cli("bob", "bob", 600, "status")[1]
+
+
+def test_a_hand_edited_ledger_row_is_read_as_fresh_not_a_crash(seen: World):
+    w = seen
+    assert w.cli("bob", "bob", 0, "status")[0] == 0
+    ledger = w.root / "bob" / ".ddflow" / "local" / "lease-seen"
+    doc = json.loads(ledger.read_text())
+    doc["data"] = {k: {"renewed_at": "x", "seen": 1} for k in doc["data"]}
+    ledger.write_text(json.dumps(doc))
+    code, out = w.cli("bob", "bob", 0, "show", "T1")
+    assert code == 0 and abs(_left(out) - TTL) < 150, out
