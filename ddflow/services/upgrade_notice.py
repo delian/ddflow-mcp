@@ -146,6 +146,9 @@ def line(repo: Path, log: Any, cfg: Config, st: State, *, agent: str = "") -> st
         if said:
             text += f"; {said}"
         text += ": run `ddflow upgrade --plan`"
+        if plan["categories"].get("records"):
+            n = len(plan["categories"]["records"])
+            text += f" ({n} contested record(s) need `ddflow resolve` first)"
         _mark(repo, running, text)
         return text
     except Exception:
