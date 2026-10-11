@@ -639,7 +639,7 @@ def retarget(
 
 
 def _released(
-    holder: str, event: str, by: str, note: str = "", transfer: bool = False
+    holder: str, event: str, by: str, note: str = "", transfer: bool = False, forced: bool = False
 ) -> dict[str, Any]:
     """The one shape of a `lease.released` payload. ``event`` names WHICH claim ends: one
     holder can have held the item twice, and a fold that merges clones must not end the
@@ -647,6 +647,8 @@ def _released(
     data: dict[str, Any] = {"holder": holder, "event": event, "by": by, "note": note}
     if transfer:
         data["transfer"] = True
+    if forced:
+        data["forced"] = True  # additive (D-compat): an older reader ignores the key
     return data
 
 
@@ -713,7 +715,9 @@ def transfer(
     )
 
 
-def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bool:
+def release(
+    log: EventLog, item_id: str, holder: str = "", note: str = "", forced: bool = False
+) -> bool:
     """Give up a lease. Records WHOSE it was and WHO released it, which can differ —
     an operator releasing a crashed agent's lease is the normal case."""
     by = holder or log.agent_id
@@ -725,12 +729,56 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
         mine=False,
         holder=by,
         payload=lambda lease: (
-            owner.update(holder=lease.holder) or _released(lease.holder, lease.event, by, note)
+            owner.update(holder=lease.holder)
+            or _released(lease.holder, lease.event, by, note, forced=forced)
         ),
     )
     if done:
         _remote_drop(log, item_id, owner["holder"])
     return done
+
+
+def foreign_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "") -> Lease | None:
+    """The LIVE lease on ``item_id`` when it was claimed from ANOTHER clone than this one
+    (B90b43dd2d8), else None.
+
+    A lease is evidence of intent, not a lock, so acting on another clone's live one is
+    possible but must be asked for (`foreign_guard`). The scope is the CLONE, not the agent
+    name (operator decision D-mu-bugfix-answers): the holder itself, any other agent of the
+    same clone, an expired lease (judged on THIS clone's clock, B5a6651cd8e) and a lease with
+    no recorded clone (claimed before the field existed) are never foreign. ``caller`` is the
+    acting agent, kept for the message: the test is the clone's."""
+    now = time.time()
+    it = _fold(log).items.get(item_id)
+    lease = it.lease if it else None
+    if lease is None or not foreign(lease, log.clone_id(create=False)):
+        return None
+    return lease if lease.live(now, cfg.lease.grace_s) else None
+
+
+def foreign_guard(
+    log: EventLog, cfg: Config, item_id: str, *, force: bool, reason: str, what: str
+) -> tuple[str, str]:
+    """(refusal, forced-by) for an act on ``item_id``: ("", "") when nothing stands in the way,
+    (text, "") to refuse (exit 3), ("", note) when ``--force`` + a reason overrides another
+    clone's live lease -- ``note`` is the line to record with the act."""
+    held = foreign_live_lease(log, cfg, item_id)
+    if held is None:
+        return "", ""
+    who = f"{held.holder} (clone {held.clone})"
+    base = (
+        f"{item_id} is leased by {who} in another clone and the lease is live; "
+        f"{what} would overwrite their work. "
+    )
+    if not force:
+        return (
+            base + "Ask them, wait for the lease to lapse, or override on the record: "
+            "pass --force --reason '<why>'.",
+            "",
+        )
+    if not reason.strip():
+        return base + "--force on another clone's lease needs --reason '<why>' (recorded).", ""
+    return "", f"forced over {who}: {reason.strip()}"
 
 
 def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
