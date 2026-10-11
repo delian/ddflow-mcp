@@ -477,7 +477,7 @@ def _unfinished(repo: Path, st: State | None) -> str:
 
 
 def doctor_notes(repo: Path, st: State) -> list[str]:
-    """For ``ddflow doctor`` (wired by B-start-timeout-doctor, which holds health.py): the note of a start check that ran out of time or failed, until
+    """For ``ddflow doctor``: the note of a start check that ran out of time or failed, until
     the project is upgraded or a later check finishes. Never raises."""
     try:
         text = _unfinished(repo, st)

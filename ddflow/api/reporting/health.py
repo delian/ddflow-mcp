@@ -36,6 +36,7 @@ from ...services import shardmarks as SM
 from ...services import shared_files as SF
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
+from ...services import upgrade_start as US
 from ...services import workflow as WF
 from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
 from ...services.completion import verdict
@@ -358,6 +359,7 @@ def doctor(
         notes.append(UP.skipped_kinds_advice(st))
 
     notes.extend(UP.doctor_notes(st))
+    notes.extend(US.doctor_notes(repo, st))  # a start check that never reached an answer
     if release := UC.proposal(repo, cfg):  # a newer ddflow release (D-self-upgrade 2)
         notes.append(release)
     notes.extend(fold_problem_notes(st))
