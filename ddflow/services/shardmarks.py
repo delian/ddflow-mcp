@@ -15,6 +15,11 @@ reports the shards now holding fewer events than the mark. Nothing is rewritten 
 operator is told where the events may still be, and `accept` (``ddflow doctor
 --accept-lost-events``) records the new counts once they have decided.
 
+Known limit: the mark is a count and the last event's id, not the set of ids. A rewrite that
+removes an interior event AND brings in enough new ones to reach the old count with the old
+last event still present, all before any ddflow command looks at the shard, cannot be told
+from growth. Closing that needs a per-event record (the P-MULTIUSER sync-check, not this fix).
+
 Everything here fails SAFE: a missing mark file has nothing to compare, an unreadable one is
 replaced, a newer-schema one is left alone; none of them raises into the caller. ddflow itself
 only appends to a shard, so its own operations never shrink one. No event, fold or payload
