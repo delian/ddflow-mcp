@@ -3838,7 +3838,7 @@ check cannot see an event that is simply gone. ddflow therefore keeps a **shard 
 `.ddflow/local/shard-marks`, a machine-local file that is never committed, with one row per
 (branch, shard) holding how many events this clone last saw in that shard on that branch, the id
 of the last one, and the file's size then. Every command raises the marks to what the shards hold
-and none lowers them, so ddflow's own operations (which only append) never shrink a shard. A mark
+and none lowers them (only `--accept-lost-events`, below, does), so ddflow's own operations (which only append) never shrink a shard. A mark
 is compared only on the branch it was taken on: checking out a branch that never had the events
 is not a loss. A detached HEAD takes and compares no mark.
 
