@@ -4009,7 +4009,11 @@ brief carry the PLAN as a question (`ddflow ... newer than this project ... pend
 operator`), and only on their yes does the agent call `ddflow_upgrade` with `apply`. Config values
 anyone set and every item marked for the operator still wait for `confirm` and `reason`. The start
 never refuses to serve: errors become a line in the report, work past `[upgrade].start_timeout_s`
-(10 s) is left pending, a read-only or foreign-owned project is reported and not written, and a
+(10 s) is left running and the handshake says so in a NOTE (`... an upgrade is PENDING but its plan
+is not known yet ... Ask the operator ...`, never silence and never "current"); the plan it
+reaches later is kept in the marker, so the next connect proposes at once, and every brief repeats
+the note until the project is upgraded (`ddflow doctor` follows: B-start-timeout-doctor). A
+read-only or foreign-owned project is reported and not written, and a
 runtime OLDER than the project writes nothing and says `restart` (the skew guard). The outcome is
 kept in the git-ignored `.ddflow/local/upgrade-start.json`; it replaces the one-line notice for
 that version. A server that was already running when ddflow was upgraded says `restart the

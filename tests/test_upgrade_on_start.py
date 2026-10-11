@@ -26,8 +26,8 @@ OLD = ROOT / "tests" / "fixtures" / "releases" / "0.1.3" / "project"
 LOCAL = Path(".ddflow") / "local"
 
 
-@pytest.fixture
-def old(tmp_path: Path) -> Path:
+def _seed_old(tmp_path: Path) -> Path:
+    """A git project a real ddflow 0.1.3 built, for a running ddflow that is newer."""
     r = tmp_path / "old"
     shutil.copytree(OLD, r)
     subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
@@ -36,6 +36,11 @@ def old(tmp_path: Path) -> Path:
     subprocess.run(["git", "-C", str(r), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(r), "commit", "-qm", "old"], check=True)
     return r
+
+
+@pytest.fixture
+def old(tmp_path: Path) -> Path:
+    return _seed_old(tmp_path)
 
 
 def _start(repo: Path, surf: str = "mcp", **env: str) -> dict:

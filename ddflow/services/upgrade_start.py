@@ -18,7 +18,11 @@ last brought up to (`upgrade_plan.project_version`) and, per ``[upgrade].on_star
 Three promises hold in every mode:
 
 * it NEVER fails the start: every error becomes a line in the report, and a step that runs
-  past ``[upgrade].start_timeout_s`` is left running and reported as pending;
+  past ``[upgrade].start_timeout_s`` is left running and reported as pending -- a NOTE that
+  says the upgrade is pending and asks the operator, never silence and never "current". The
+  answer the step reaches later is kept (the marker, keyed by version, policy and surface) so
+  the next connect proposes at once, and the brief and ``doctor`` repeat the note until the
+  project is upgraded or a check finishes;
 * a project it cannot write (a read-only mount, a volume owned by another uid) gets the plan
   and a line saying nothing was written;
 * a runtime OLDER than the project writes nothing: it says ``restart/upgrade`` (the skew guard,
@@ -41,7 +45,7 @@ from ..config import Config
 from ..core.events import is_older, version_key
 from ..core.model import State, fold
 from ..infra import fsio
-from ..infra.log import running_version
+from ..infra.log import EventLog, running_version
 from ..infra.store import Store
 from . import upgrade_notice as UN
 from . import upgrade_plan as UP
@@ -68,6 +72,12 @@ OFF, CURRENT, OLDER, PROPOSED, APPLIED, READONLY, TIMEOUT, FAILED = (
     "timeout",
     "failed",
 )
+
+#: The statuses of a check that did not reach an answer: their note repeats (brief, doctor)
+#: until the project is upgraded or a later check finishes.
+UNFINISHED = (TIMEOUT, FAILED)
+#: The statuses worth keeping as the answer of a start (see `_cacheable`).
+_ANSWERS = (PROPOSED, READONLY, APPLIED)
 
 
 def surface(environ: Mapping[str, str] | None = None) -> str:
@@ -109,6 +119,13 @@ def _save(repo: Path, report: dict[str, Any]) -> None:
     """Best effort: a marker that cannot be written costs only a repeat of the line."""
     path = Path(repo) / MARKER
     previous = _read(repo)
+    if (
+        report.get("status") in UNFINISHED
+        and report.get("key")
+        and previous.get("key") == report.get("key")
+        and previous.get("complete")
+    ):
+        return  # a finished answer for this very start outranks the note that it ran late
     keep = previous.get("text") == report.get("text") and previous.get("version") == report.get(
         "version"
     )
@@ -117,6 +134,8 @@ def _save(repo: Path, report: dict[str, Any]) -> None:
         "status": report.get("status", ""),
         "text": report.get("text", ""),
         "briefed": bool(keep and previous.get("briefed")),
+        "key": report.get("key", ""),
+        "complete": report.get("status") not in UNFINISHED and bool(report.get("key")),
     }
     try:
         fsio.ensure_ignored_dir(path.parent)
@@ -125,24 +144,41 @@ def _save(repo: Path, report: dict[str, Any]) -> None:
         pass
 
 
-def _bounded(work: Callable[[], Any], seconds: float) -> tuple[bool, Any]:
+def _bounded(
+    work: Callable[[], Any], seconds: float, late: Callable[[Any], None] | None = None
+) -> tuple[bool, Any]:
     """Run ``work`` for at most ``seconds``. ``(True, result)``, or ``(False, None)`` when it
     is still running (it is left to finish in the background: a daemon thread, never joined at
-    exit) -- a start must not wait on a slow migration. A raised error is re-raised here."""
+    exit) -- a start must not wait on a slow migration. A raised error is re-raised here.
+
+    When it finishes AFTER the wait, ``late(result)`` is called from that thread (an error
+    there is dropped): the answer a slow check reaches is kept, not thrown away."""
     box: dict[str, Any] = {}
+    lock = threading.Lock()
 
     def run() -> None:
         try:
-            box["value"] = work()
+            value, error = work(), None
         except BaseException as exc:  # reported by the caller, never lost in a thread
-            box["error"] = exc
+            value, error = None, exc
+        with lock:
+            abandoned = bool(box.get("abandoned"))
+            if not abandoned:
+                box.update(finished=True, value=value, error=error)
+        if abandoned and error is None and late is not None:
+            try:
+                late(value)
+            except Exception:
+                pass
 
     thread = threading.Thread(target=run, name="ddflow-upgrade-start", daemon=True)
     thread.start()
     thread.join(seconds)
-    if thread.is_alive():
-        return False, None
-    if "error" in box:
+    with lock:
+        if not box.get("finished"):
+            box["abandoned"] = True
+            return False, None
+    if box.get("error") is not None:
         raise box["error"]
     return True, box.get("value")
 
@@ -240,6 +276,46 @@ def _refold(log: Any, st: State) -> State:
         return st
 
 
+def _key(running: str, project: str, policy: str, surf: str) -> str:
+    """What an answer of the start check is good for: the same ddflow over a project at the
+    same version, under the same policy and surface. The plan's item count may drift as the
+    log grows; `ddflow upgrade --plan` is always the authority."""
+    return "|".join((running, project, policy, surf))
+
+
+def _cacheable(report: dict[str, Any], surf: str) -> bool:
+    """A container's safe start APPLIES things, so it is re-run; any other answer is kept."""
+    status = report.get("status")
+    return (
+        bool(report.get("text"))
+        and status in _ANSWERS
+        and not (status == APPLIED and surf == "container")
+    )
+
+
+def _cached(repo: Path, key: str) -> dict[str, Any] | None:
+    """The kept answer for ``key``: a start that ran late finished it for the next connect."""
+    data = _read(repo)
+    if data.get("complete") and data.get("key") == key and data.get("status") in _ANSWERS:
+        return {"status": data["status"], "text": str(data.get("text", "")), "key": key}
+    return None
+
+
+def _timeout_note(running: str, project: str, seconds: float) -> str:
+    since = f"was last brought up under {project}" if project else "predates version stamps"
+    why = (
+        "the check is switched off ([upgrade].start_timeout_s = 0)"
+        if seconds <= 0
+        else f"the upgrade check did not finish within {seconds:g}s"
+    )
+    return (
+        f"ddflow {running} is newer than this project, which {since}: an upgrade is PENDING "
+        f"but its plan is not known yet -- {why}, so the server started anyway; the upgrade stays pending and nothing "
+        "has been applied. Run `ddflow upgrade --plan` to see it (a later connect or brief "
+        "shows it as soon as a check has finished)." + _ASK
+    )
+
+
 def _behind_report(
     repo: Path,
     log: Any,
@@ -250,24 +326,39 @@ def _behind_report(
     surf: str,
     policy: str,
     running: str,
+    project: str = "",
 ) -> dict[str, Any]:
     """The report for a project that is not known to be current, within the time bound."""
     seconds = float(cfg.upgrade.start_timeout_s)
+    key = _key(running, project, policy, surf)
+    if (kept := _cached(repo, key)) is not None:
+        return kept
 
     def work() -> dict[str, Any]:
-        return _work(repo, log, cfg, st, agent=agent, surf=surf, policy=policy, running=running)
+        out = _work(repo, log, cfg, st, agent=agent, surf=surf, policy=policy, running=running)
+        out["key"] = key if _cacheable(out, surf) else ""
+        return out
 
-    done, out = (False, None) if seconds <= 0 else _bounded(work, seconds)
+    def late(out: Any) -> None:
+        if isinstance(out, dict) and _cacheable(out, surf):
+            _remember(repo, {**out, "version": running})
+
+    done, out = (False, None) if seconds <= 0 else _bounded(work, seconds, late)
     if done:
         return out
-    return {
-        "status": TIMEOUT,
-        "text": (
-            f"ddflow {running} is newer than this project; the upgrade check did not finish "
-            f"within {seconds:g}s, so the server started anyway and the upgrade stays "
-            "pending: run `ddflow upgrade --plan`."
-        ),
-    }
+    return {"status": TIMEOUT, "text": _timeout_note(running, project, seconds), "key": key}
+
+
+def _project(st: State, running: str) -> str:
+    """The release this project was last brought up to (`upgrade_plan.project_version`)."""
+    has_history = bool(st.ddflow_versions or st.upgrades or st.items or st.sessions)
+    return UP.project_version(st, has_history, running)
+
+
+def _behind(st: State, running: str) -> bool:
+    """Is the project older than this ddflow (or unstamped)? The cheap test: no plan."""
+    project = _project(st, running)
+    return not (project and not is_older(project, running))
 
 
 def _decide(
@@ -283,8 +374,7 @@ def _decide(
     highest = str(getattr(st, "highest_version", "") or "")
     if highest and is_older(running, highest):
         return {"status": OLDER, "text": _older(running, highest)}
-    has_history = bool(st.ddflow_versions or st.upgrades or st.items or st.sessions)
-    project = UP.project_version(st, has_history, running)
+    project = _project(st, running)
     if project and not is_older(project, running):
         return {"status": CURRENT, "text": ""}
     return _behind_report(
@@ -296,6 +386,7 @@ def _decide(
         surf=surf or surface(environ),
         policy=policy,
         running=running,
+        project=project,
     )
 
 
@@ -341,15 +432,55 @@ def start(
     return report
 
 
-def take_for_brief(repo: Path) -> str:
+def _unfinished(repo: Path, st: State | None) -> str:
+    """The note of a start check that reached no answer, while it still applies: the marker
+    is of this ddflow and (when the state is known) the project is still behind it."""
+    data = _read(repo)
+    text = str(data.get("text", ""))
+    if data.get("status") not in UNFINISHED or not text:
+        return ""
+    running = running_version()
+    if data.get("version") != running or (st is not None and not _behind(st, running)):
+        return ""
+    return text
+
+
+def doctor_notes(repo: Path, st: State) -> list[str]:
+    """For ``ddflow doctor``: the note of a start check that ran out of time or failed, until
+    the project is upgraded or a later check finishes. Never raises."""
+    try:
+        text = _unfinished(repo, st)
+    except Exception:
+        return []
+    return [text] if text else []
+
+
+def _state_of(repo: Path) -> State | None:
+    """The folded state of ``repo`` (the caller had none to hand); None when unreadable."""
+    try:
+        cfg = Config.load(repo)
+        return fold(EventLog(repo, "upgrade-start", log_cfg=cfg.log).read_all(), strict=False)
+    except Exception:
+        return None
+
+
+def take_for_brief(repo: Path, st: State | None = None) -> str:
     """The recorded start report, once, for the first brief; "" when none or already given.
 
-    A marker that cannot be rewritten (a read-only store) still delivers the text: the cost
-    is that the next brief repeats it, not that the operator is never told."""
+    A check that reached NO answer (a timeout, a failure) is repeated by every brief while the
+    project is still behind this ddflow (the folded state ``st``, read here when not given):
+    a note that cannot be dropped by one reader seeing it. A marker that cannot be rewritten
+    (a read-only store) still delivers the text: the cost is that the next brief repeats it,
+    not that the operator is never told."""
     try:
         data = _read(repo)
         text = str(data.get("text", ""))
-        if not text or data.get("briefed"):
+        if not text:
+            return ""
+        if data.get("status") in UNFINISHED:
+            st = st if st is not None else _state_of(repo)
+            return _unfinished(repo, st) if st is not None else ""
+        if data.get("briefed"):
             return ""
     except Exception:
         return ""
