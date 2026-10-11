@@ -94,6 +94,12 @@ def _done_rows(stored: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _na_of(raw: Any) -> dict[str, str]:
+    """The `not_applicable` {gate: why} an `item.completed` carries; {} for none or a shape
+    this reader does not know (an additive key must never break an older or newer log)."""
+    return {str(g): str(w) for g, w in raw.items()} if isinstance(raw, dict) else {}
+
+
 def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
     """The ledger of one completed item, or None when it was never completed."""
     # Only this item's own events: its state at completion depends on nothing else, another
@@ -138,6 +144,7 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
         "gates": gates,
         "skipped": sorted(g for g, v in gates.items() if v["outcome"] == "skipped"),
         "changelog": done.data.get("changelog") or {},
+        "not_applicable": _na_of(done.data.get("not_applicable")),
         "amendments": amendments,
         "requirement_changed_after": drifted,
         "reconstructed": not stored,
@@ -160,4 +167,7 @@ def summary(ledger: dict[str, Any], files_shown: int = 8) -> dict[str, Any]:
         "amendments": len(ledger["amendments"]),
         "requirement_changed_after": ledger["requirement_changed_after"],
         "reconstructed": ledger["reconstructed"],
+        # Only when something was excused: a completion with nothing excused shows exactly
+        # what it always did.
+        **({"not_applicable": ledger["not_applicable"]} if ledger["not_applicable"] else {}),
     }
