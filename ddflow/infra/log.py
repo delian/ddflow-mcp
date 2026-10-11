@@ -54,7 +54,9 @@ from ..core.events import (
     Event,
     RecordedCapability,
     SkewRefused,
+    StampFacts,
     canonical,
+    capabilities_ahead,
     capabilities_used,
     capability_gap,
     capability_unrecorded,
@@ -220,6 +222,21 @@ def _warn_skew_once(version: str, highest: str, log_format: int = 0, format_leve
     print(
         f"ddflow: this log has been worked on by ddflow {highest}{ahead}; this ddflow is "
         f"{version}. Writing anyway ([upgrade].skew = warn).",
+        file=sys.stderr,
+    )
+
+
+def _warn_patch_skew_once(version: str, highest: str) -> None:
+    """Say once per (version, log version) that a PATCH skew -- same data format, same minor,
+    no capability gap -- was let through the guard. The event carries the older-ddflow mark."""
+    key = (version, highest, -1)
+    if key in _SKEW_WARNED:
+        return
+    _SKEW_WARNED.add(key)
+    print(
+        f"ddflow: this log has been worked on by ddflow {highest}, a newer patch release; this "
+        f"ddflow is {version}. Same data format, so writing anyway (patch skew); its events "
+        f"are marked as written by an older ddflow. Upgrade to >= {highest} when convenient.",
         file=sys.stderr,
     )
 
@@ -1121,26 +1138,7 @@ class EventLog:
         version, fmt = running_version(), V.format_level()
         # a level of 0 is "this code declares no format": never compared
         facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
-        extra: dict[str, Any] = {}
-        if facts.skewed:
-            policy = self._skew_policy()
-            if policy == "refuse":
-                if facts.override is None:
-                    raise SkewRefused(
-                        skew_message(
-                            version,
-                            facts.highest,
-                            facts.highest_by,
-                            log_format=facts.highest_format,
-                            format_level=fmt,
-                            format_only=facts.format_skewed,
-                            format_version=facts.format_version,
-                            format_by=facts.format_by,
-                        )
-                    )
-                extra[OLDER_MARK] = version
-            elif policy == "warn":
-                _warn_skew_once(version, facts.highest, facts.highest_format, fmt)
+        extra = self._judge_skew(facts, version, fmt)
         gap = capability_gap(facts.capabilities, kind) if kind else None
         if gap is not None and self._skew_policy() == "refuse" and facts.override is None:
             name, rec = gap
@@ -1183,6 +1181,55 @@ class EventLog:
                     {"capability": cap.name, "kinds": sorted(cap.kinds), "version": cap.since},
                 )
 
+    def _judge_skew(self, facts: StampFacts, version: str, fmt: int) -> dict[str, Any]:
+        """Apply the skew policy to ``facts``: raise `SkewRefused`, warn, or let the write
+        through. Returns the extra `data` for an event written under an older-ddflow mark."""
+        extra: dict[str, Any] = {}
+        if not facts.skewed:
+            return extra
+        policy = self._skew_policy()
+        if policy == "refuse" and facts.override is None and self._patch_skew(facts, version, fmt):
+            _warn_patch_skew_once(version, facts.highest)
+            extra[OLDER_MARK] = version
+        elif policy == "refuse":
+            if facts.override is None:
+                raise SkewRefused(
+                    skew_message(
+                        version,
+                        facts.highest,
+                        facts.highest_by,
+                        log_format=facts.highest_format,
+                        format_level=fmt,
+                        format_only=facts.format_skewed,
+                        format_version=facts.format_version,
+                        format_by=facts.format_by,
+                    )
+                )
+            extra[OLDER_MARK] = version
+        elif policy == "warn":
+            _warn_skew_once(version, facts.highest, facts.highest_format, fmt)
+        return extra
+
+    def check_skew(self) -> None:
+        """Raise `SkewRefused` when a write by this ddflow would be refused for version skew
+        (a patch skew warns once and passes); writes nothing, not even the stamp. For a
+        caller that changes tracked files without appending an event (`adopt`)."""
+        version, fmt = running_version(), V.format_level()
+        self._judge_skew(
+            stamp_facts(self._all_events(), self.agent_id, version, fmt or None), version, fmt
+        )
+
+    @staticmethod
+    def _patch_skew(facts: StampFacts, version: str, fmt: int) -> bool:
+        """The log is ahead by PATCH releases only: the same data format, the same minor, and
+        no recorded capability this ddflow lacks. Such a skew warns instead of refusing
+        (decision D-mu-bugfix-answers); everything else still refuses."""
+        return (
+            V.patch_only_skew(version, facts.highest)
+            and not (fmt and facts.highest_format > fmt)
+            and not capabilities_ahead(facts.capabilities)
+        )
+
     def _skew_policy(self) -> str:
         """`[upgrade].skew`: refuse (default) | warn | off. Read only when a skew is actually
         found, so the common append never loads the config for it."""
@@ -1208,6 +1255,8 @@ class EventLog:
                 return facts.override
             if self._skew_policy() != "refuse":
                 return None  # warn/off never refuse, so there is nothing to override
+            if self._patch_skew(facts, version, fmt):
+                return None  # a patch skew warns and never refuses
             if not reason:
                 raise SkewRefused(
                     f"--allow-older-version needs --reason: say why this session may write "
