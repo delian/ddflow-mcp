@@ -9,7 +9,8 @@ machine and dangle on every other one.
 `doctor` now prints a NOTE for each -- a PROBLEM for the missing hooks only when
 `[enforce].commit_without_lease = "block"`, because every CI checkout is a fresh clone.
 Paths recorded by another machine that do not exist here are the dangling-launcher
-PROBLEM instead, never this NOTE.
+PROBLEM instead, never this NOTE (an entry with no `command` launches nothing and is
+reported by neither).
 """
 
 from __future__ import annotations
