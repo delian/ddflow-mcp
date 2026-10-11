@@ -124,12 +124,13 @@ def _pin_the_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from here; a developer's box has both, a CI runner neither, and the pin recorded the
     first. Stubs make that explicit instead of accidental."""
     monkeypatch.setattr(getpass, "getuser", lambda: PIN_USER)
+    # A full name on purpose: the shard prefix is `short_host()`, its first label.
     monkeypatch.setattr(hostinfo, "hostname", lambda: f"{PIN_HOST}.example.org")
     bin_dir = tmp_path / "pinbin"
     bin_dir.mkdir()
     for name in ("pre-commit", "ddflow"):
         stub = bin_dir / name
-        stub.write_text(f"#!/bin/sh\necho '{name} 0.0.0 (stub)'\n")
+        stub.write_text("#!/bin/sh\nexit 0\n")  # presence only: no version line to pin
         stub.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
