@@ -80,6 +80,7 @@ from ..infra import fsio
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra.log import EventLog
+from . import upgrade_start as US
 from .backups import SIDECAR_SUFFIX, SNAPSHOT_PREFIX
 
 PASS = "pass"
@@ -146,6 +147,8 @@ LIVE_CHANGED = "live repo changed during rehearsal"
 START_TIMEOUT_S = 120
 #: What the handshake says when the start check ran out of its time bound.
 START_TIMED_OUT = "did not finish within"
+#: Seconds for the session that must take the timeout path: too little for any plan.
+FORCED_TIMEOUT_S = 0.05
 #: The pause before the one retry of a clone that failed (a gc or a ref update in the live repo).
 CLONE_RETRY_S = 0.5
 
@@ -1155,6 +1158,10 @@ class Rehearsal:
     def step_connect(self) -> bool:
         repo = self.clone("connect")
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
+        forced = self._serve(repo, _HELLO, start_timeout=FORCED_TIMEOUT_S)
+        self._forget_start(repo)  # each session runs the start check itself, not a kept answer
+        default = self._serve(repo, _HELLO, start_timeout=None)  # as shipped
+        self._forget_start(repo)
         first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
         if START_TIMED_OUT in (first.get(1) or {}).get("instructions", ""):
             self.unrunnable("MCP connect: propose, wait for consent, apply")
@@ -1166,6 +1173,7 @@ class Rehearsal:
                 "(a very loaded machine, or a log too big for it): it could not propose",
             )
         size, problems = self._proposed(first)
+        problems += self._noted(forced) + self._default_path(default)
         applied = [
             e for e in events_of(repo) if e.get("id") not in known and e.get("kind") in APPLYING
         ]
@@ -1187,6 +1195,33 @@ class Rehearsal:
             or f"proposed on connect, nothing applied until consent, then applied; "
             f"tools/list {size} bytes; {told}",
         )
+
+    @staticmethod
+    def _forget_start(repo: Path) -> None:
+        """Drop the start report a session kept in the (git-ignored) project marker."""
+        (repo / US.MARKER).unlink(missing_ok=True)
+
+    def _noted(self, forced: dict[int, dict[str, Any]]) -> list[str]:
+        """A start check given next to no time is a NOTE in the handshake: the upgrade is
+        pending, the operator is asked and told where the plan is (B-start-timeout-drops-
+        proposal). A log so small that the plan fit in the time gets the proposal instead,
+        which is as good: what fails is silence."""
+        text = (forced.get(1) or {}).get("instructions", "")
+        note = all(w in text for w in ("PENDING", "Ask the operator", "ddflow upgrade --plan"))
+        if note or ("newer than this project" in text and "Ask the operator" in text):
+            return []
+        return ["a start check that ran out of time left no note that the upgrade is pending"]
+
+    def _default_path(self, shipped: dict[int, dict[str, Any]]) -> list[str]:
+        """The server with the shipped time bound (a smoke test of the real default, which on an
+        idle machine proposes and on a loaded one notes; the forced timeout above is the
+        deterministic half): its handshake is never silent about the upgrade."""
+        text = (shipped.get(1) or {}).get("instructions", "")
+        if "newer than this project" in text and "Ask the operator" in text:
+            return []
+        return [
+            "the handshake with the shipped start_timeout_s neither proposed nor noted the upgrade"
+        ]
 
     def _proposed(self, first: dict[int, dict[str, Any]]) -> tuple[int, list[str]]:
         """What the first session shows: the handshake asks the operator, the tools fit."""
@@ -1229,15 +1264,22 @@ class Rehearsal:
             return stale, ["the log holds older-version agents but none was told to restart"]
         return stale, []
 
-    def _serve(self, repo: Path, msgs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    def _serve(
+        self, repo: Path, msgs: list[dict[str, Any]], start_timeout: float | None = START_TIMEOUT_S
+    ) -> dict[int, dict[str, Any]]:
         """Talk to the new MCP server over stdio for these messages; replies by request id.
-        Raises `CouldNotRun` when the server did not run to its end."""
+        The start check gets ``start_timeout`` seconds (the rehearsal tests the flow, not the
+        speed), or the shipped bound when None. Raises `CouldNotRun` when the server did not
+        run to its end."""
         argv = [sys.executable, "-m", "ddflow.surfaces.mcp", "--repo", str(repo)]
+        extra = (
+            {} if start_timeout is None else {"DDFLOW_UPGRADE_START_TIMEOUT_S": str(start_timeout)}
+        )
         done = self.capture(
             argv,
             timeout=TIMEOUT_S,
             cwd=repo,
-            env={**self.env(self.new), "DDFLOW_UPGRADE_START_TIMEOUT_S": str(START_TIMEOUT_S)},
+            env={**self.env(self.new), **extra},
             input="\n".join(json.dumps(m) for m in msgs) + "\n",
         )
         if not done.ran:
