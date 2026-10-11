@@ -1168,14 +1168,29 @@ class EventLog:
                 high = max(high, e.lamport)
         return high
 
+    def clone_id(self, *, create: bool = True) -> str:
+        """This clone's id (`.ddflow/local/clone-id`), "" when the project is not adopted.
+        A claim records it so two clones writing under one agent name are told apart
+        (B36aa4c8ee5). ``create=False`` only reads: the file's creation time is what
+        separates the claims made under the bare derived id from the suffixed ones
+        (:func:`clone_suffix_since`), so it must not be created as a side effect of a
+        claim made under that id."""
+        if create:
+            return _clone_suffix(self.root)
+        try:
+            return (self.root / CLONE_ID_FILE).read_text("utf-8").strip()
+        except OSError:
+            return ""
+
     def clock_regressions(self) -> dict[str, tuple[int, int, int]]:
         """Shards whose clock goes BACKWARDS in file order: name -> (event number, the
         value before, the value after), for the first decrease in each.
 
         One writer only ever increases its clock, so a decrease means two writers shared
         the shard -- two clones resolving to one agent id, merged with `merge=union`.
-        The clock copes with it now; the shared identity is still worth fixing, since a
-        lease held under it is "mine" in both clones.
+        The clock copes with it now; `doctor` still reports it as a PROBLEM, since a
+        lease held under it is "mine" in both clones (claims record their clone, so the
+        fold sees such a double claim as a contest).
         """
         out: dict[str, tuple[int, int, int]] = {}
         for p in self.shards():
