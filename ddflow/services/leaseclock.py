@@ -87,7 +87,8 @@ def _row(row: Any, recorded: float, now: float) -> tuple[dict[str, Any], bool]:
     known = (
         isinstance(row, dict)
         and isinstance(row.get("seen"), (int, float))
-        and recorded <= float(row.get("renewed_at", 0.0))
+        and isinstance(row.get("renewed_at"), (int, float))
+        and recorded <= float(row["renewed_at"])
     )
     if known:
         return row, False
