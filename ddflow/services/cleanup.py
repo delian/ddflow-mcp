@@ -445,6 +445,36 @@ def unclaimed_trees(repo: Path, cfg: Config, state: State) -> list[str]:
     ]
 
 
+def _stale_branch(
+    root: Path, branch: str, base: str, guard: _Protected, own: dict[str, str], by_branch: dict
+) -> TreeState:
+    """Classify a branch of ours that no worktree is on."""
+    merged = W.is_merged(root, branch, base)
+    t = TreeState(name=branch, branch=branch, kind="stale_branch")
+    item = by_branch.get(branch)
+    if item:
+        t.item, t.item_state = item.id, item.state
+    who = guard.held_branches.get(branch)
+    if who:
+        # `claim` takes the lease before the tree exists, and `--no-worktree` never
+        # makes one: a leased branch with no tree is its holder's, not a leftover.
+        t.kind = "stranded" if branch in guard.stranded else "held"
+        t.done = (
+            guard.stranded.get(branch)
+            or own.get(branch)
+            or f"LEAVE ALONE — item {who} holds a live lease on this branch."
+        )
+    elif merged:
+        t.action = "delete_branch"
+        t.done = f"branch with no worktree, fully merged into {base} — safe to delete"
+    else:
+        t.done = (
+            f"branch with no worktree and commits not on {base}. Its worktree "
+            f"was removed without merging; inspect `git log {base}..{branch}`."
+        )
+    return t
+
+
 def survey(repo: Path, cfg: Config, state: State) -> Plan:
     """Classify every ddflow worktree and branch. Reads only; changes nothing."""
     root = W.repo_root(repo)
@@ -486,30 +516,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         # deletion and survived only because the primary had it checked out.
         if branch in seen_branches or branch == base:
             continue
-        merged = W.is_merged(root, branch, base)
-        t = TreeState(name=branch, branch=branch, kind="stale_branch")
-        item = by_branch.get(branch)
-        if item:
-            t.item, t.item_state = item.id, item.state
-        who = guard.held_branches.get(branch)
-        if who:
-            # `claim` takes the lease before the tree exists, and `--no-worktree` never
-            # makes one: a leased branch with no tree is its holder's, not a leftover.
-            t.kind = "stranded" if branch in guard.stranded else "held"
-            t.done = (
-                guard.stranded.get(branch)
-                or own.get(branch)
-                or f"LEAVE ALONE — item {who} holds a live lease on this branch."
-            )
-        elif merged:
-            t.action = "delete_branch"
-            t.done = f"branch with no worktree, fully merged into {base} — safe to delete"
-        else:
-            t.done = (
-                f"branch with no worktree and commits not on {base}. Its worktree "
-                f"was removed without merging; inspect `git log {base}..{branch}`."
-            )
-        plan.stale_branches.append(t)
+        plan.stale_branches.append(_stale_branch(root, branch, base, guard, own, by_branch))
     return plan
 
 
