@@ -258,6 +258,40 @@ def _abs_launch(entry: Any) -> bool:
     return any(os.path.isabs(p) and os.path.exists(p) for p in [cmd, *dirs])
 
 
+def _mcp_local(repo: Path) -> list[str]:
+    """The agent configs whose `ddflow` MCP entry records a path that exists here."""
+    out: list[str] = []
+    for rel in dict.fromkeys(t.config for t in AGENT_TARGETS.values() if t.config):
+        target = next(t for t in AGENT_TARGETS.values() if t.config == rel)
+        data = read_json(Path(repo) / rel)
+        if isinstance(data, Unreadable):
+            continue
+        try:
+            entry = get_server(data, target.shape, "ddflow")
+        except (ValueError, AttributeError):
+            continue
+        if _abs_launch(entry):
+            out.append(rel)
+    return out
+
+
+def _hooks_local(repo: Path) -> list[str]:
+    """The harness settings files with a ddflow hook command recording a path here."""
+    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
+    out: list[str] = []
+    for rel in dict.fromkeys(h.file for h in HOOKS):
+        data = read_json(Path(repo) / rel)
+        if isinstance(data, Unreadable):
+            continue
+        if any(
+            any(_ours({"command": cmd}, m) for m in ours)
+            and any(os.path.isabs(p) and os.path.exists(p) for p, _x in _needs(cmd))
+            for cmd in _commands(data)
+        ):
+            out.append(rel)
+    return out
+
+
 def machine_local_configs(repo: Path) -> list[Dangling]:
     """Tracked agent configs that record an absolute launcher that exists on THIS machine.
 
@@ -267,34 +301,8 @@ def machine_local_configs(repo: Path) -> list[Dangling]:
     reported, never rewritten -- what to write instead is the project's decision.
     """
 
-    held: list[str] = []
-    seen: set[str] = set()
-    for target in AGENT_TARGETS.values():
-        rel = target.config
-        if not rel or rel in seen:
-            continue
-        seen.add(rel)
-        data = read_json(Path(repo) / rel)
-        if isinstance(data, Unreadable):
-            continue
-        try:
-            entry = get_server(data, target.shape, "ddflow")
-        except (ValueError, AttributeError):
-            continue
-        if _abs_launch(entry) and _tracked(repo, rel):
-            held.append(rel)
-    ours = tuple(dict.fromkeys(h.marker for h in HOOKS))
-    for rel in dict.fromkeys(h.file for h in HOOKS):
-        data = read_json(Path(repo) / rel)
-        if isinstance(data, Unreadable) or rel in held:
-            continue
-        for cmd in _commands(data):
-            if any(_ours({"command": cmd}, m) for m in ours) and any(
-                os.path.isabs(p) and os.path.exists(p) for p, _x in _needs(cmd)
-            ):
-                if _tracked(repo, rel):
-                    held.append(rel)
-                break
+    local = dict.fromkeys([*_mcp_local(repo), *_hooks_local(repo)])
+    held = [rel for rel in local if _tracked(repo, rel)]
     if not held:
         return []
     files = ", ".join(held)
