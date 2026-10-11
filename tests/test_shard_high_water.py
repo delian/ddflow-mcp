@@ -1,0 +1,231 @@
+"""Events lost to a history rewrite are made VISIBLE, never silent (Ba24a8d32ee).
+
+Events live in git history only. After a force-push of an older main, a revert of the
+events commit, a `reset --hard`, or a deleted shard, a clone's claim simply vanished from
+its tree and `doctor` said Healthy. The clone now keeps a local high-water mark per shard
+(`.ddflow/local/shard-marks`); a shard with fewer events than the mark is a doctor PROBLEM
+that says where the events may still be. Nothing is rewritten and nothing is auto-repaired.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+from helpers import git_raw as _git
+
+from ddflow.infra import fsio
+from ddflow.infra.localstore import LocalStore
+from tests.conftest import run_cli
+
+AGENT = "U1"
+
+
+def _dd(repo: Path, *argv: str, agent: str = AGENT) -> tuple[int, str, str]:
+    return run_cli(repo, *argv, agent=agent)
+
+
+def _commit(repo: Path, msg: str) -> None:
+    _git(repo, "add", ".ddflow/events")
+    _git(repo, "commit", "-qm", msg, "--no-verify")
+
+
+def _shard(repo: Path, name: str = f"{AGENT}.jsonl") -> Path:
+    return repo / ".ddflow" / "events" / name
+
+
+def _lines(repo: Path, name: str = f"{AGENT}.jsonl") -> int:
+    return len([ln for ln in _shard(repo, name).read_text().splitlines() if ln.strip()])
+
+
+@pytest.fixture
+def clone(tmp_path: Path) -> Path:
+    """A clone with normal use behind it: a task, a claim, a heartbeat, a second task, each
+    commit adding events, so older commits hold fewer of them."""
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
+    subprocess.run(["git", "clone", "-q", str(remote), str(tmp_path / "a")], check=True)
+    a = tmp_path / "a"
+    for k, v in (("user.email", "t@example.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        _git(a, "config", k, v)
+    (a / ".gitattributes").write_text(".ddflow/events/*.jsonl merge=union\n")
+    _git(a, "add", ".gitattributes")
+    _git(a, "commit", "-qm", "attrs", "--no-verify")
+    assert _dd(a, "task", "add", "T1", "--title", "t", "--globs", "src/t.py")[0] == 0
+    _commit(a, "T1")
+    assert _dd(a, "claim", "T1")[0] == 0
+    assert _dd(a, "heartbeat", "T1")[0] == 0
+    _commit(a, "claim T1")
+    assert _dd(a, "task", "add", "T2", "--title", "u", "--globs", "src/u.py")[0] == 0
+    _commit(a, "T2")
+    _git(a, "push", "-q", "origin", "main")
+    return a
+
+
+def _doctor(repo: Path) -> tuple[int, str]:
+    code, out, err = _dd(repo, "doctor")
+    return code, out + err
+
+
+def _problem_lines(text: str) -> list[str]:
+    return [ln for ln in text.splitlines() if "PROBLEM" in ln and "lost" in ln]
+
+
+def test_healthy_after_normal_use(clone):
+    _, text = _doctor(clone)
+    assert not _problem_lines(text), text
+
+
+def test_a_reset_to_an_older_commit_is_a_problem_and_nothing_is_rewritten(clone):
+    assert _doctor(clone)[0] in (0, 1)  # a look, so the mark is set
+    was = _lines(clone)
+    last_id = json.loads(_shard(clone).read_text().splitlines()[-1])["id"]
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")  # drops the claim and T2
+    now = _lines(clone)
+    assert now < was
+    after_reset = _shard(clone).read_text()
+
+    code, text = _doctor(clone)
+    assert code == 1, text
+    (line,) = _problem_lines(text)
+    assert f"{AGENT}.jsonl" in line and f"lost {was - now} event(s)" in line, line
+    assert f"was {was}, now {now}" in line, line
+    assert last_id in line, line  # names the last event it saw
+    for hint in ("git reflog", "git log --all -- .ddflow/events/U1.jsonl", "git show <sha>:"):
+        assert hint in line, line
+    assert _shard(clone).read_text() == after_reset  # nothing rewritten
+    # It does not go away by looking again, and `brief` carries the same line.
+    assert _doctor(clone)[0] == 1
+    code, brief, err = _dd(clone, "brief")
+    assert f"lost {was - now} event(s)" in brief + err, brief + err
+
+
+def test_a_deleted_shard_is_a_problem(clone):
+    was = _lines(clone)
+    _dd(clone, "status")
+    _shard(clone).unlink()
+    code, text = _doctor(clone)
+    assert code == 1, text
+    (line,) = _problem_lines(text)
+    assert f"was {was}, now 0" in line, line
+
+
+def test_a_revert_of_the_events_commit_is_a_problem(clone):
+    _dd(clone, "status")
+    _git(clone, "revert", "--no-edit", "HEAD")  # takes T2 back out of the shard
+    code, text = _doctor(clone)
+    assert code == 1 and _problem_lines(text), text
+
+
+def test_growth_a_new_shard_a_pull_and_a_rebase_never_alarm(clone, tmp_path):
+    _dd(clone, "status")
+    # growth
+    assert _dd(clone, "task", "add", "T3", "--title", "v", "--globs", "src/v.py")[0] == 0
+    # a new shard (another agent)
+    assert (
+        _dd(clone, "task", "add", "T4", "--title", "w", "--globs", "src/w.py", agent="U2")[0] == 0
+    )
+    _commit(clone, "growth")
+    assert not _problem_lines(_doctor(clone)[1])
+    # a pull that adds events: another clone appends to U2's shard and pushes
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "remote.git"), str(other)], check=True)
+    for k, v in (("user.email", "t@example.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        _git(other, "config", k, v)
+    assert (
+        _dd(other, "task", "add", "T5", "--title", "x", "--globs", "src/x.py", agent="U3")[0] == 0
+    )
+    _commit(other, "other")
+    _git(other, "push", "-q", "origin", "main")
+    _git(clone, "pull", "-q", "--no-rebase", "--no-edit", "origin", "main")
+    assert not _problem_lines(_doctor(clone)[1])
+    # a rebase that keeps every event
+    _git(clone, "checkout", "-qb", "feat")
+    assert _dd(clone, "task", "add", "T6", "--title", "y", "--globs", "src/y.py")[0] == 0
+    _commit(clone, "feat")
+    _git(clone, "checkout", "-q", "main")
+    (clone / "other.txt").write_text("x\n")
+    _git(clone, "add", "other.txt")
+    _git(clone, "commit", "-qm", "unrelated", "--no-verify")
+    _git(clone, "checkout", "-q", "feat")
+    _git(clone, "rebase", "-q", "main")
+    assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_ddflows_own_commands_do_not_alarm(clone):
+    _dd(clone, "status")
+    for argv in (("rebuild",), ("recover",), ("render",), ("cleanup",), ("brief",), ("next",)):
+        _dd(clone, *argv)
+    assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_accept_lost_events_records_the_new_count_and_clears_the_problem(clone):
+    _dd(clone, "status")
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    assert _doctor(clone)[0] == 1
+    code, out, err = _dd(clone, "doctor", "--accept-lost-events")
+    assert not _problem_lines(out + err), out + err
+    code, text = _doctor(clone)
+    assert code == 0 and not _problem_lines(text), text
+    # and a later loss is caught against the NEW count
+    assert _dd(clone, "task", "add", "T7", "--title", "z", "--globs", "src/z.py")[0] == 0
+    _commit(clone, "T7")
+    _git(clone, "reset", "-q", "--hard", "HEAD~1")
+    assert _problem_lines(_doctor(clone)[1])
+
+
+def test_a_missing_or_unreadable_mark_file_is_not_an_alarm(clone):
+    marks = clone / ".ddflow" / "local" / "shard-marks"
+    _dd(clone, "status")
+    assert marks.is_file()
+    marks.unlink()
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    assert not _problem_lines(_doctor(clone)[1])  # nothing to compare against
+    marks.write_text("{ torn")
+    _, text = _doctor(clone)
+    assert not _problem_lines(text) and "Traceback" not in text, text
+
+
+def test_a_newer_schema_mark_file_is_refused_cleanly(clone):
+    marks = clone / ".ddflow" / "local" / "shard-marks"
+    _dd(clone, "status")
+    marks.write_text(
+        json.dumps(
+            {"schema": 99, "ddflow": "9.9.9", "fmt": 99, "data": {"U1.jsonl": {"count": 999}}}
+        )
+    )
+    before = marks.read_text()
+    with pytest.raises(fsio.NewerContent):
+        LocalStore(marks.parent).read("shard-marks", schema=1)
+    _, text = _doctor(clone)
+    assert "Traceback" not in text, text
+    assert not _problem_lines(text), text
+    assert marks.read_text() == before  # never overwritten
+    assert _dd(clone, "status")[0] == 0
+
+
+def test_no_ddflow_code_but_the_log_writes_a_shard():
+    """The mark is only a safe alarm if ddflow itself never shrinks a shard: every writer
+    outside infra/log.py that names an events shard must only read it."""
+    root = Path(__file__).resolve().parents[1] / "ddflow"
+    writers = ("write_text", "write_bytes", "unlink", "truncate", "atomic_write", "os.replace")
+    skip = {"infra/log.py", "services/shardmarks.py"}
+    offenders = []
+    for p in root.rglob("*.py"):
+        rel = p.relative_to(root).as_posix()
+        if rel in skip:
+            continue
+        for n, line in enumerate(p.read_text().splitlines(), 1):
+            if (".jsonl" in line or "events_dir" in line) and any(w in line for w in writers):
+                offenders.append(f"{rel}:{n}: {line.strip()}")
+    assert not offenders, offenders
+
+
+def test_the_events_of_the_last_command_are_in_the_mark(clone):
+    """No command looked after the last write (the repro: a claim, then the history is
+    rewritten under it): the append itself moved the mark."""
+    _git(clone, "reset", "-q", "--hard", "HEAD~1")  # drops T2, the last command's events
+    code, text = _doctor(clone)
+    assert code == 1 and _problem_lines(text), text

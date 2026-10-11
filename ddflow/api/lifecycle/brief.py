@@ -19,6 +19,7 @@ from ...services import choices as CHO
 from ...services import gates as G
 from ...services import leases as L
 from ...services import searchcore as SC
+from ...services import shardmarks as SM
 from ...services import skills as SK
 from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
@@ -79,9 +80,11 @@ def _contest_block(repo: Path, cfg, log, st) -> str:
         lines.append(
             f"- your claim on {iid} was released: lost the contest to {lost['winner']}{where}."
         )
-    if not lines:
-        return ""
-    return "## Contested claims\n\n" + "\n".join(lines) + "\n\n"
+    out = "## Contested claims\n\n" + "\n".join(lines) + "\n\n" if lines else ""
+    gone = SM.lost(repo, log)  # Ba24a8d32ee: events a history rewrite took out of a shard
+    if gone:
+        out += "## Lost events\n\n" + "\n".join(f"- {g.render()}." for g in gone) + "\n\n"
+    return out
 
 
 def _rules_block(governing) -> str:
