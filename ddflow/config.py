@@ -18,7 +18,6 @@ import dataclasses
 import json
 import os
 import sys
-import tomllib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -27,7 +26,7 @@ from typing import Any
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
 from .config_sections._compat import is_source_tree, upgrade_advice
 from .config_sections._docs import DECLARED, KNOB_DOCS, RENAMED, declared_tables
-from .config_sections._layers import layer_path
+from .config_sections._layers import ConfigConflict, layer_path, read_toml  # noqa: F401
 from .config_sections.agent import (  # noqa: F401
     FAMILY_HINTS,
     AgentConfig,
@@ -280,7 +279,7 @@ class Config:
         if root is not None:
             path = layer_path(root, "file")
             if path.is_file():
-                data = tomllib.loads(path.read_text("utf-8"))
+                data = read_toml(path)
                 # Lenient only when the code is ANOTHER tree's: there the file may be
                 # newer than the code. In the tree the code came from, the two are one
                 # commit, so an unknown key can only be a typo -- and skipping it (with
@@ -291,7 +290,7 @@ class Config:
             # sizing -- overrides the committed, generic config without ever reaching git.
             local = layer_path(root, "local")
             if local.is_file():
-                cfg._apply(tomllib.loads(local.read_text("utf-8")), "local")
+                cfg._apply(read_toml(local), "local")
 
         envdata: dict[str, dict[str, Any]] = {}
         for old in RENAMED:  # an old key's variable still works (D-compat); the new one wins

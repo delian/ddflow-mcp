@@ -27,6 +27,7 @@ from ..api import loops as _loops
 from ..api import progress as _progress
 from ..api import surf_setup as SS
 from ..api.refs import provide_upgrade_vocabulary
+from ..config_sections._layers import tolerating_conflicts
 from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
@@ -331,6 +332,11 @@ provide(parser=build_parser, tools=TOOLS)
 provide_upgrade_vocabulary(build_parser, TOOLS)  # what `upgrade` rewrites names against
 
 
+#: The commands that still run over a conflicted config layer: the one that reports it and
+#: the one that explains what to do (B6b8d1f7a0f). The rest refuse with `ConfigConflict`.
+CONFLICT_SAFE = {("doctor",), ("help",)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -343,7 +349,8 @@ def main(argv: list[str] | None = None) -> int:
     # The schema every object body of this run is tagged with (D-compat-json-views).
     tagged = set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
     try:
-        ctx = Ctx(args)
+        with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
+            ctx = Ctx(args)
         if getattr(args, "allow_older", False):
             reason = getattr(args, "skew_reason", "") or str(getattr(args, "reason", "") or "")
             if ctx.log.override_skew(reason) is None:
@@ -351,7 +358,8 @@ def main(argv: list[str] | None = None) -> int:
                     "ddflow: nothing to override (no skew); --allow-older-version ignored",
                     file=sys.stderr,
                 )
-        return int(args.fn(args, ctx))
+        with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
+            return int(args.fn(args, ctx))
     except BaseException as exc:
         # One table with MCP (`exit_for`, B5f3a650c40): a refusal says only its message
         # (the remedy), an error names its kind, and anything else is a bug -- re-raised.
