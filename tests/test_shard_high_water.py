@@ -165,7 +165,7 @@ def test_accept_lost_events_records_the_new_count_and_clears_the_problem(clone):
     _dd(clone, "status")
     _git(clone, "reset", "-q", "--hard", "HEAD~2")
     assert _doctor(clone)[0] == 1
-    code, out, err = _dd(clone, "doctor", "--accept-lost-events")
+    _, out, err = _dd(clone, "doctor", "--accept-lost-events")
     assert not _problem_lines(out + err), out + err
     code, text = _doctor(clone)
     assert code == 0 and not _problem_lines(text), text
@@ -600,6 +600,6 @@ def test_accept_clears_a_loss_recorded_under_the_legacy_shape(clone):
         },
     )
     assert _problem_lines(_doctor(clone)[1])
-    code, out, err = _dd(clone, "doctor", "--accept-lost-events")
+    _, out, err = _dd(clone, "doctor", "--accept-lost-events")
     assert not _problem_lines(_doctor(clone)[1]), out + err
     assert _doctor(clone)[0] == 0
