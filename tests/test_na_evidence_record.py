@@ -52,3 +52,16 @@ def test_a_completion_with_nothing_excused_has_no_key(repo):
     assert code == 0, out + err
     assert "not_applicable" not in _completed(repo).data
     assert "not applicable on the change" not in run_cli(repo, "show", "T1")[1]
+
+
+def test_the_reasons_are_redacted_leaf_by_leaf_in_the_committed_log():
+    from ddflow.core import redact as R
+
+    red = R.Redactor("log", secret_patterns=[r"sk-[A-Za-z0-9]{16,}"], home="/home/zedd")
+    out = R.redact_event_data(
+        "item.completed",
+        {"not_applicable": {"unit_tests": "diff docs/sk-abcdefghijklmnop0123 misses src/**"}},
+        red,
+    )
+    assert "sk-abcdefghijklmnop0123" not in str(out), out
+    assert set(out["not_applicable"]) == {"unit_tests"}
