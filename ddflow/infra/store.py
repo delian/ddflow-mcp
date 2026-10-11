@@ -920,6 +920,7 @@ def similar_records(state: State) -> list[dict[str, str]]:
             "item": d.item,
         }
         for d in state.decisions.values()
+        if not getattr(d, "contested", None)
     ]
     out += [
         {

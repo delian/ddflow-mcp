@@ -201,3 +201,9 @@ def test_a_contested_decision_is_not_exported_as_a_rule(repo):
     assert run_cli(repo, "resolve", "D-x", "--keep", "bob")[0] == 0
     _code, out, _ = run_cli(repo, "export", "rules", "--path", str(repo / "RULES.md"))
     assert "1 decision(s)" in out
+
+
+def test_search_marks_a_contested_decision_contested(repo):
+    _decisions(repo)
+    _code, out, _ = run_cli(repo, "search", "sqlite", "--kind", "decision")
+    assert "contested" in out and "accepted" not in out
