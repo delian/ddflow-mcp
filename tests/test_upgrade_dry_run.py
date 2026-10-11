@@ -71,6 +71,10 @@ def clean(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, DR.Report, DR
     return root, report, before
 
 
+def problems(before: DR.Live, after: DR.Live, mine: DR.Footprint | None = None) -> list[str]:
+    return [*DR.live_leaks(before, after, mine), *DR.live_moved(before, after, mine)]
+
+
 def rows(report: DR.Report) -> dict[int, DR.Check]:
     return {c.step: c for c in report.checks}
 
@@ -84,7 +88,7 @@ def test_a_smooth_upgrade_passes_every_check(clean) -> None:
 
 def test_the_live_project_is_left_alone(clean) -> None:
     root, report, before = clean
-    assert DR.live_problems(before, DR.snapshot_live(root)) == []
+    assert problems(before, DR.snapshot_live(root)) == []
     assert rows(report)[10].status == DR.PASS
     # the scratch directory is gone; nothing of the rehearsal is left in the project
     assert not (root / ".ddflow" / "backups").exists()
@@ -303,16 +307,16 @@ def test_the_live_check_tells_our_trace_from_other_agents_work(tmp_path: Path) -
     # another agent appending to the live log is not the rehearsal's doing
     shard.write_text(shard.read_text("utf-8") + "\n", "utf-8")
     (root / ".ddflow" / "events" / "someone-else.jsonl").write_text("{}\n", "utf-8")
-    assert DR.live_problems(before, DR.snapshot_live(root)) == []
+    assert problems(before, DR.snapshot_live(root)) == []
     # ...nor is a snapshot tag or a backup it did not sign or make
     (root / ".ddflow" / "backups" / "x").mkdir(parents=True)
     git(root, "tag", "ddflow-upgrade-snapshot/x")
     mine = DR.Footprint("abc", "0", "9", frozenset({"1-to-2"}))
-    assert DR.live_problems(before, DR.snapshot_live(root), mine) == []
+    assert problems(before, DR.snapshot_live(root), mine) == []
     # ...but a shard of ours is, and a changed byte is named (as the project moving)
     (root / ".ddflow" / "events" / "dry-apply.jsonl").write_text("{}\n", "utf-8")
     shard.write_text("rewritten", "utf-8")
-    text = "; ".join(DR.live_problems(before, DR.snapshot_live(root), mine))
+    text = "; ".join(problems(before, DR.snapshot_live(root), mine))
     assert "changed under the run" in text and "dry-apply.jsonl" in text
     assert DR.live_moved(before, DR.snapshot_live(root))
     assert DR.live_leaks(before, DR.snapshot_live(root), mine) == [
@@ -679,3 +683,19 @@ def test_a_rehearsal_that_could_not_run_explains_itself_too_but_a_missing_old_dd
     assert report.diagnostics in report.markdown()
     data = json.loads(Path(report.diagnostics).read_text("utf-8"))
     assert data["facts"]["could_not_run"] and "git clone failed twice" in data["table"]
+
+
+def test_a_build_of_the_old_ddflow_that_fails_leaves_the_uv_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = project(tmp_path, confirm_free=True)
+    for name in STEPS:
+        monkeypatch.setattr(DR.Rehearsal, name, lambda self: None)
+
+    def no_index(argv, **_kw):
+        return DR.P.Captured(1, "", "error: no package index (UV-STDERR)")
+
+    monkeypatch.setattr(DR.P, "capture", no_index)
+    report = DR.run_all(options(tmp_path, root, old=None, build_old=True, diag_dir=tmp_path / "d"))
+    assert report.exit_code == 2 and report.diagnostics
+    assert "UV-STDERR" in Path(report.diagnostics).read_text("utf-8")
