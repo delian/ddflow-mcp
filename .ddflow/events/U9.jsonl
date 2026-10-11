@@ -84,3 +84,10 @@
 {"agent":"U9","data":{"gate":"unit_tests"},"id":"e4c2b597bb3d5d8d8efb334f5","kind":"gate.started","lamport":56347,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:17:07.518061Z"}
 {"agent":"U9","data":{"at":1791728528.7920842,"holder":"U9"},"id":"ed198d563aa56fcb574ee8c58","kind":"lease.renewed","lamport":56361,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:22:08.942779Z"}
 {"agent":"U9","data":{"at":1791728831.8294334,"holder":"U9"},"id":"e22e40fe588ac0ebc3902c5a7","kind":"lease.renewed","lamport":56378,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:27:12.003015Z"}
+{"agent":"U9","data":{"at":1791729133.5323687,"holder":"U9"},"id":"e5bfc2aecf19961b1bd8d5cfa","kind":"lease.renewed","lamport":56399,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:32:13.670560Z"}
+{"agent":"U9","data":{"at":1791729434.5216928,"holder":"U9"},"id":"e0625e3be570d3ffa38dc9494","kind":"lease.renewed","lamport":56416,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:37:14.641142Z"}
+{"agent":"U9","data":{"at":1791729749.4492066,"holder":"U9"},"id":"e3c4d322e5f4a89a74de2e79c","kind":"lease.renewed","lamport":56440,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:42:29.615429Z"}
+{"agent":"U9","data":{"gate":"unit_tests"},"id":"e493dc0c004852a546f4e44d3","kind":"gate.started","lamport":56459,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:47:14.765046Z"}
+{"agent":"U9","data":{"at":1791730336.4974627,"holder":"U9"},"id":"e676e8576e13434440eace68a","kind":"lease.renewed","lamport":56480,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:52:16.770885Z"}
+{"agent":"U9","data":{"at":1791730641.4725468,"holder":"U9"},"id":"e1fe5178501b592462440d815","kind":"lease.renewed","lamport":56492,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T14:57:21.685545Z"}
+{"agent":"U9","data":{"at":1791730942.7069585,"holder":"U9"},"id":"e152345ddf38f5eee97362eb8","kind":"lease.renewed","lamport":56510,"schema":1,"subject":"fix-B-dryrun-flake","ts":"2026-10-11T15:02:22.823594Z"}
