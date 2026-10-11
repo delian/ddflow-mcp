@@ -207,4 +207,4 @@ def test_an_unrenderable_log_leaves_the_markers_to_decide(clones):
     a, _ = clones
     (a / "docs/ddflow/QUEUE.md").write_text("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> o\n")
     _commit(a, "oops")
-    assert conflicted_views(a, lambda: None)
+    assert conflicted_views(a, None)
