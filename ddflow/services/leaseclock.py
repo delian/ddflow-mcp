@@ -28,7 +28,7 @@ from ..infra.localstore import LocalStore
 #: The document under `.ddflow/local`; its `data` maps a lease's granting event id to
 #: `{"renewed_at": <as recorded>, "seen": <our clock when first seen>}`.
 LEDGER = "lease-seen"
-SCHEMA = 1
+LEDGER_SCHEMA = 1
 
 
 def foreign(lease: Any, mine: str) -> bool:
@@ -68,14 +68,18 @@ def localize(st: State, log: Any, now: float) -> State:
     if changed or len(kept) != len(ledger):
         with contextlib.suppress(Exception):
             store.update(
-                LEDGER, lambda cur: _merge(cur, kept), schema=SCHEMA, default={}, derived=True
+                LEDGER,
+                lambda cur: _merge(cur, kept),
+                schema=LEDGER_SCHEMA,
+                default={},
+                derived=True,
             )
     return st
 
 
 def _read(store: LocalStore) -> dict[str, Any]:
     try:
-        ledger = store.read(LEDGER, schema=SCHEMA, default={}, derived=True)
+        ledger = store.read(LEDGER, schema=LEDGER_SCHEMA, default={}, derived=True)
     except Exception:
         return {}
     return dict(ledger) if isinstance(ledger, dict) else {}
