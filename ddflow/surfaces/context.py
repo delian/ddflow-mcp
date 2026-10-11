@@ -18,15 +18,14 @@ import argparse
 import os
 import sys
 import textwrap
-import time
 from pathlib import Path
 from typing import Any
 
 from ..api import identity as ID
 from ..api import surf_context as surf
+from ..api._base import folded
 from ..config import Config, csv_list
 from ..core.ids import auto_id
-from ..core.model import fold
 from ..core.outcome import (  # noqa: F401  (the commands import these from here)
     FAIL,
     NOTHING,
@@ -38,7 +37,6 @@ from ..infra import harness_identity
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
-from ..services.leaseclock import localize
 from .render import emit_json
 
 #: Splitting into one piece is a rename, not a split.
@@ -128,7 +126,7 @@ class Ctx:
         return self._where
 
     def state(self):
-        return localize(fold(self.log.read_all(), strict=False), self.log, time.time())
+        return folded(self.log)
 
     def out(self, human: str, data: Any = None) -> None:
         if self.json:

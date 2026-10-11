@@ -65,3 +65,9 @@ def _run_ticks(repo: Path, log: EventLog, cfg: Config, st: State) -> None:
         TK.run_due(TK.TickCtx(Path(repo), cfg, st, log.read_all))
     except Exception:
         return
+
+
+def folded(log: EventLog) -> State:
+    """The state of ``log`` as read now, with another clone's leases timed by when this clone
+    saw them renewed (B5a6651cd8e) -- for a surface, which may not import the service."""
+    return localize(fold(log.read_all(), strict=False), log, time.time())
