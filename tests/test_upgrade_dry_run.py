@@ -58,7 +58,7 @@ def project(tmp_path: Path, *, confirm_free: bool) -> Path:
 def options(tmp_path: Path, root: Path, **kw) -> DR.Options:
     kw.setdefault("old", DR.simulated_old("0.1.3"))
     kw.setdefault("tools_budget", BUDGET)
-    return DR.Options(source=root, work=tmp_path / "scratch", **kw)
+    return DR.Options(source=root, work=kw.pop("work", tmp_path / "scratch"), **kw)
 
 
 @pytest.fixture(scope="module")
@@ -652,3 +652,30 @@ def test_a_clone_that_fails_once_is_tried_again(
 
     monkeypatch.setattr(DR.Rehearsal, "git", flaky)
     assert rehearsal.step_clone() is True and failed
+
+
+def test_a_rehearsal_that_could_not_run_explains_itself_too_but_a_missing_old_ddflow_does_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = project(tmp_path, confirm_free=True)
+    diag = tmp_path / "diag"
+    # no old ddflow: steps 5 and 8 are unavailable by design, which needs no transcript
+    quiet = DR.run_all(options(tmp_path, root, old=None, diag_dir=diag))
+    assert quiet.exit_code == 2 and not diag.exists() and quiet.diagnostics == ""
+    # a clone that fails both times (the candidate cause) leaves the git stderr behind
+    monkeypatch.setattr(DR, "CLONE_RETRY_S", 0)
+    real = DR.Rehearsal.git
+
+    def broken(self, repo, *args):
+        if "clone" in args:
+            return DR.G.run(
+                tmp_path, "clone", "--quiet", str(tmp_path / "nowhere"), str(tmp_path / "x")
+            )
+        return real(self, repo, *args)
+
+    monkeypatch.setattr(DR.Rehearsal, "git", broken)
+    report = DR.run_all(options(tmp_path, root, work=tmp_path / "scratch2", diag_dir=diag))
+    assert report.exit_code == 2 and report.diagnostics
+    assert report.diagnostics in report.markdown()
+    data = json.loads(Path(report.diagnostics).read_text("utf-8"))
+    assert data["facts"]["could_not_run"] and "git clone failed twice" in data["table"]
