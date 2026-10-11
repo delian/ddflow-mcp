@@ -47,9 +47,18 @@ class Lost:
     def render(self) -> str:
         seen = f"; the last event it saw was {self.last_event_id}" if self.last_event_id else ""
         path = f".ddflow/events/{self.shard}"
+        if self.now >= self.was:  # grown past the mark since, but the event it saw is gone
+            head = (
+                f"{self.shard} no longer holds the event this clone last saw in it "
+                f"(it held {self.was}, now {self.now}){seen}"
+            )
+        else:
+            head = (
+                f"{self.shard} lost {self.was - self.now} event(s) since this clone last saw it "
+                f"(was {self.was}, now {self.now}){seen}"
+            )
         return (
-            f"{self.shard} lost {self.was - self.now} event(s) since this clone last saw it "
-            f"(was {self.was}, now {self.now}){seen}. They may still be in git: `git reflog`, "
+            f"{head}. They may still be in git: `git reflog`, "
             f"`git log --all -- {path}`, `git show <sha>:{path}`. Nothing was rewritten; "
             "`ddflow doctor --accept-lost-events` records the new count once you have decided"
         )
@@ -128,10 +137,29 @@ def _update(store: LocalStore, fn: Any) -> None:
         store.update(NAME, fn, schema=MARKS_SCHEMA, default={})
 
 
-def _raised(out: dict[str, Any], shard: str, scanned: tuple[int, str, int], ref: str) -> None:
-    """Record ``scanned`` as this branch's mark of ``shard`` unless that would lower it."""
+def _holds(path: Path | None, event_id: str) -> bool:
+    """Does the shard still contain the event ``event_id``? True when there is nothing to ask
+    (no id recorded) or the file cannot be read (could not tell is not a loss)."""
+    if not event_id:
+        return True
+    if path is None:
+        return False
+    try:
+        return event_id.encode() in path.read_bytes()
+    except OSError:
+        return True
+
+
+def _raised(
+    out: dict[str, Any], shard: str, scanned: tuple[int, str, int], ref: str, path: Path | None
+) -> None:
+    """Record ``scanned`` as this branch's mark of ``shard``, unless that would lower it or
+    would forget a loss: a shard that regrew past its mark but no longer holds the event the
+    mark saw is still a loss, and stays one until `accept`ed."""
     old = _row(out, _key(ref, shard))
-    if old is None or scanned[0] >= old["count"]:
+    if old is None or (
+        scanned[0] >= old["count"] and _holds(path, str(old.get("last_event_id", "")))
+    ):
         out[_key(ref, shard)] = _mk(shard, scanned, ref)
 
 
@@ -164,6 +192,7 @@ def observe(repo: Any, log: Any) -> None:
             return
         ref = _head_ref(log.root)
         found: dict[str, tuple[int, str, int]] = {}
+        paths = {p.name: p for p in log.shards()}
         for p in log.shards():
             try:
                 size = p.stat().st_size
@@ -180,7 +209,7 @@ def observe(repo: Any, log: Any) -> None:
         def raise_marks(cur: Any) -> dict[str, Any]:
             out = dict(cur) if isinstance(cur, dict) else {}
             for name, scanned in found.items():
-                _raised(out, name, scanned, ref)
+                _raised(out, name, scanned, ref, paths.get(name))
             return out
 
         _update(store, raise_marks)
@@ -202,7 +231,7 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
         if row is not None and row.get("size") == before:
             out[_key(ref, name)] = _mk(name, (row["count"] + 1, event.id, after), ref)
         elif (scanned := _scan(log.shard)) is not None:
-            _raised(out, name, scanned, ref)
+            _raised(out, name, scanned, ref, log.shard)
         return out
 
     store = _store(log)
@@ -231,8 +260,9 @@ def lost(repo: Any, log: Any) -> list[Lost]:
             scanned = _scan(present[name]) if name in present else (0, "", 0)
             if scanned is None:
                 continue  # unreadable: the integrity pass names it
-            if scanned[0] < row["count"]:
-                out.append(Lost(name, row["count"], scanned[0], str(row.get("last_event_id", ""))))
+            seen = str(row.get("last_event_id", ""))
+            if scanned[0] < row["count"] or not _holds(present.get(name), seen):
+                out.append(Lost(name, row["count"], scanned[0], seen))
         return out
     except Exception:
         return []

@@ -304,3 +304,23 @@ def test_conflict_markers_that_come_and_go_are_not_events_lost(clone):
     _dd(clone, "status")  # a look while the shard is in conflict
     shard.write_text(good)  # resolved: byte-identical to before
     assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_a_loss_is_not_forgotten_when_the_shard_regrows_past_the_mark(clone):
+    """roborev/reviewer: ordinary work after a reset must not erase an unaccepted loss before
+    anyone ran doctor -- the event the mark saw is still gone."""
+    _dd(clone, "status")
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")  # drops the claim and T2
+    for i in range(8):  # more events than the shard held
+        assert _dd(clone, "task", "add", f"G{i}", "--title", "g", "--globs", f"src/g{i}.py")[0] == 0
+    _, text = _doctor(clone)
+    assert _problem_lines(text), text
+    assert "no longer holds the event" in text, text
+
+
+def test_recovering_the_events_clears_the_loss(clone):
+    _dd(clone, "status")
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    assert _problem_lines(_doctor(clone)[1])
+    _git(clone, "reset", "-q", "--hard", "ORIG_HEAD")  # the events are back
+    assert not _problem_lines(_doctor(clone)[1])
