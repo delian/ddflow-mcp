@@ -479,11 +479,14 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade]
+  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events]
   
   options:
-    -h, --help  show this help message and exit
-    --upgrade   the upgrade plan instead (the same as `ddflow upgrade`)
+    -h, --help            show this help message and exit
+    --upgrade             the upgrade plan instead (the same as `ddflow upgrade`)
+    --accept-lost-events  record the present event counts of the shards that lost events (to a
+                          force-push, revert, reset or deletion) as known, clearing that PROBLEM;
+                          the log is not touched
   
   '''
 # ---

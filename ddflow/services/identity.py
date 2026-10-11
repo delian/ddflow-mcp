@@ -47,6 +47,7 @@ from ..core.model import Lease, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id, clone_suffix_since, default_agent_id
 from . import leases as L
+from . import shardmarks
 
 
 class AgentId(NamedTuple):
@@ -152,9 +153,7 @@ def open_log(
         lock_timeout_s=cfg.lease.acquire_timeout_s if lock_timeout_s is None else lock_timeout_s,
         log_cfg=cfg.log,
     )
-    from . import shardmarks  # the high-water mark follows every append (Ba24a8d32ee)
-
-    log.on_append = shardmarks.appended
+    log.on_append = shardmarks.appended  # the shard mark follows every append (Ba24a8d32ee)
     return log, who
 
 

@@ -29,7 +29,7 @@ from typing import Any
 from ..infra.localstore import LocalStore, StoreUnreadable
 
 NAME = "shard-marks"
-SCHEMA = 1
+MARKS_SCHEMA = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +79,7 @@ def _read(store: LocalStore) -> dict[str, Any] | None:
     """The marks; {} when there are none or the file is torn (started afresh); None when a
     NEWER ddflow wrote it (left alone: neither compared against nor overwritten)."""
     try:
-        data = store.read(NAME, schema=SCHEMA, default={})
+        data = store.read(NAME, schema=MARKS_SCHEMA, default={})
     except StoreUnreadable:
         return {}
     except Exception:
@@ -127,7 +127,7 @@ def observe(repo: Any, log: Any) -> None:
                     out[name] = {"count": count, "last_event_id": last_id, "size": size}
             return out
 
-        store.update(NAME, raise_marks, schema=SCHEMA, default={})
+        store.update(NAME, raise_marks, schema=MARKS_SCHEMA, default={})
     except Exception:
         return
 
@@ -154,7 +154,7 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
     marks = _read(store)
     if marks is None:
         return  # a newer ddflow's file: left alone
-    store.update(NAME, bump, schema=SCHEMA, default={})
+    store.update(NAME, bump, schema=MARKS_SCHEMA, default={})
 
 
 def lost(repo: Any, log: Any) -> list[Lost]:
@@ -202,5 +202,5 @@ def accept(repo: Any, log: Any) -> list[Lost]:
                 out[name] = {"count": scanned[0], "last_event_id": scanned[1], "size": scanned[2]}
         return out
 
-    _store(log).update(NAME, lower, schema=SCHEMA, default={})
+    _store(log).update(NAME, lower, schema=MARKS_SCHEMA, default={})
     return gone
