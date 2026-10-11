@@ -108,10 +108,18 @@ def test_a_non_required_gate_declared_out_of_scope_is_rejudged_on_the_diff(repo)
 
 
 def test_brief_keeps_the_required_gate_in_gates_remaining(repo):
-    """The brief passes `diff` as a callable like every other caller: a declared-globs miss
-    does not drop a required gate from 'gates remaining' (it would raise or drop it if the
-    callable convention were inconsistent)."""
+    """A declared-globs miss does not drop a required gate from 'gates remaining'."""
     _setup(repo)
     out = run_cli(repo, "brief", "--item", "T1")[1]
     remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
     assert "unit_tests" in remaining, remaining
+
+
+def test_brief_drops_the_required_gate_only_when_the_actual_diff_misses_it(repo):
+    """The brief's `diff` wiring: with a docs-only change the gate is excused, with a
+    change under src/ it stays owed, whatever the item declares."""
+    _setup(repo)
+    _worktree_with_change(repo, "docs/x.md")
+    out = run_cli(repo, "brief", "--item", "T1", agent="a1")[1]
+    remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
+    assert "unit_tests" not in remaining, remaining
