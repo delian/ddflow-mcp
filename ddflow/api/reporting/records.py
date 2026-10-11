@@ -9,7 +9,7 @@ from typing import Any
 from ...core import clock
 from ...core import outcome as O
 from ...core.plain import plain
-from ...core.records import contested_summary
+from ...core.records import contested_summary, record_pools
 from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
@@ -203,11 +203,7 @@ def _contest_problems(st) -> list[str]:
         for it in sorted(st.items.values(), key=lambda i: i.id)
         if not it.removed and it.contest_summary()
     ]
-    for kind, pool in (
-        ("decision", st.decisions),
-        ("lesson", st.lessons),
-        ("research", st.research),
-    ):
+    for kind, pool in record_pools(st):
         out += [
             f"{kind} {r.id} is CONTESTED: {contested_summary(r.contested)} — "
             f"`ddflow resolve {r.id} --keep <event-id|agent>` settles it"

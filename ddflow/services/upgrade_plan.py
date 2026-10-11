@@ -41,7 +41,7 @@ from typing import Any
 from ..config import Config
 from ..core.events import is_older, version_key
 from ..core.model import State
-from ..core.records import contested_summary
+from ..core.records import contested_summary, record_pools
 from ..infra.log import running_version
 from . import adopt as AD
 from . import claudehooks as CH
@@ -236,11 +236,7 @@ def contested_items(st: State) -> list[dict[str, Any]]:
     running ddflow sees (an old log that two clones wrote the same id into is contested the
     moment THIS ddflow folds it) and empty once `ddflow resolve` has settled each."""
     out: list[dict[str, Any]] = []
-    for kind, pool in (
-        ("decision", st.decisions),
-        ("lesson", st.lessons),
-        ("research", st.research),
-    ):
+    for kind, pool in record_pools(st):
         for r in sorted(pool.values(), key=lambda x: x.id):
             if not r.contested:
                 continue
