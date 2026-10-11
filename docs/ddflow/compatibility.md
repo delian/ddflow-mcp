@@ -128,9 +128,13 @@ one-time warning on stderr, and each event it writes carries the `older_ddflow` 
 under a patch skew. The relaxation covers LOG writes only: commands that rewrite tracked files
 without appending an event (`adopt`, `adopt --refresh-docs`) ask the guard first and are refused
 by ANY older stamp, a patch behind included (the managed text is worded per release), so an
-older ddflow does not re-render what a newer one wrote. `doctor` reports a file holding more than one managed block (both marker
+older ddflow does not re-render what a newer one wrote (under the default `refuse` policy; `warn`
+and `off`, and a session override, are the operator's). `doctor` reports a file holding more than one managed block (both marker
 grammars) as a PROBLEM, and `adopt --refresh-docs` collapses them to one, keeping every byte
-outside the markers; a block stamped at a newer format level is never rewritten.
+outside the markers; a block stamped at a newer format level is never rewritten. A marker is a
+whole line starting in column 0: a pair shown that way (even inside a fenced example) counts as
+a block, while one indented or quoted inside a sentence does not; the refresh backs the original
+up first (`.ddflow/backups/`).
 
 ## Enforcement
 

@@ -454,9 +454,11 @@ def block_newer(text: str) -> bool:
 
 def block_version(path: Path) -> str | None:
     """The version stamped on the managed block in the file at ``path``; None when the file
-    is unreadable, holds no stamped block, or holds several (which one wrote it is moot)."""
+    is unreadable, holds no stamped block, or holds several stamped ones (which one wrote it
+    is moot); a legacy block beside the one stamped block does not matter."""
     try:
-        return BLOCK.version(Path(path).read_text("utf-8", errors="replace"))
+        text = Path(path).read_text("utf-8", errors="replace")
+        return BLOCK.version(text)
     except (OSError, RegionError):
         return None
 
