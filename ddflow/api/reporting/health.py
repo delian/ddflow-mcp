@@ -416,7 +416,10 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
         (problems if tree_at_risk else notes).append(f"{r.kind}: {r.item} — {r.advice}")
 
     # B71dedb76d2: a removed item whose holder's branch is here and whose lease is live.
-    problems += [x.render() for x in CL.stranded_leases(W.repo_root(repo), cfg, st)]
+    problems += [
+        x.render()
+        for x in CL.stranded_leases(W.repo_root(repo), cfg, st, log.clone_id(create=False))
+    ]
     for path in CL.unclaimed_trees(repo, cfg, st):
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
