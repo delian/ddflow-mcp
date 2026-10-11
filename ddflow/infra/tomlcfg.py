@@ -43,7 +43,9 @@ from typing import Any
 from ..config_sections._layers import (  # noqa: F401 -- the layer paths, re-exported here
     LAYERS,
     LOCAL_DIR,
+    ConfigConflict,
     layer_path,
+    read_toml,
 )
 
 # The file layer lives in fsio; `atomic_write` stays importable from here for its callers.
@@ -95,7 +97,7 @@ def overlay_table(
     for path in paths:
         if not Path(path).is_file():
             continue
-        data = tomllib.loads(Path(path).read_text("utf-8"))
+        data = read_toml(Path(path))
         for key, raw in (data.get(table) or {}).items():
             if not isinstance(raw, dict):
                 continue
@@ -120,7 +122,7 @@ def overlay_array(
     for path in paths:
         if not Path(path).is_file():
             continue
-        data = tomllib.loads(Path(path).read_text("utf-8"))
+        data = read_toml(Path(path))
         for n, raw in enumerate(data.get(table) or [], 1):
             if not isinstance(raw, dict):
                 continue
@@ -151,7 +153,7 @@ def skipped_fields(
     for path in paths:
         if not Path(path).is_file():
             continue
-        data = tomllib.loads(Path(path).read_text("utf-8"))
+        data = read_toml(Path(path))
         found = data.get(table)
         # The wrong container (`[[gate]]` for `[gate.x]`) is not this report's to explain:
         # the loaders say so; skip it rather than fail the report.
