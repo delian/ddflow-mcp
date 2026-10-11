@@ -249,15 +249,16 @@ def _tracked(repo: Path, rel: str) -> bool:
 
 
 def _abs_launch(entry: Any) -> bool:
+    """Whether an MCP entry records an absolute path that exists on THIS machine. One that
+    does not is another machine's, and already a dangling-launcher finding."""
     cmd, env = _entry_parts(entry)
     root = env.get("PYTHONPATH")
-    return os.path.isabs(cmd) or (
-        isinstance(root, str) and any(os.path.isabs(d) for d in root.split(os.pathsep) if d)
-    )
+    dirs = [d for d in root.split(os.pathsep) if d] if isinstance(root, str) else []
+    return any(os.path.isabs(p) and os.path.exists(p) for p in [cmd, *dirs])
 
 
 def machine_local_configs(repo: Path) -> list[Dangling]:
-    """Tracked agent configs that record an absolute launcher of the machine that wrote them.
+    """Tracked agent configs that record an absolute launcher that exists on THIS machine.
 
     `.mcp.json` and `.claude/settings.json` are committed, but the interpreter and the
     PYTHONPATH `adopt` wrote into them are not shared: on another machine they dangle, and
@@ -288,7 +289,7 @@ def machine_local_configs(repo: Path) -> list[Dangling]:
             continue
         for cmd in _commands(data):
             if any(_ours({"command": cmd}, m) for m in ours) and any(
-                os.path.isabs(p) for p, _x in _needs(cmd)
+                os.path.isabs(p) and os.path.exists(p) for p, _x in _needs(cmd)
             ):
                 if _tracked(repo, rel):
                     held.append(rel)
