@@ -99,6 +99,26 @@ def test_render_regenerates_a_conflicted_view(clones):
     assert "<<<<<<<" not in q.read_text()
     _commit(b, "merge")
     assert run_cli(b, "doctor", agent="U2")[0] == 0
+    # the result equals the other clone's render of the same log
+    _git(b, "push", "-q", "origin", "main")
+    _git(a, "pull", "-q", "--no-rebase", "--no-edit", "origin", "main")
+    assert run_cli(a, "render", agent="U1")[0] == 0
+    assert _git(a, "status", "--porcelain", "docs/ddflow").strip() == ""
+
+
+def test_one_marker_like_line_alone_is_not_a_conflict(clones):
+    a, _ = clones
+    (a / ".ddflow/config.toml").write_text(
+        '[agent]\nid = "x"\n# <<<<<<< is a marker only with its partners\n'
+    )
+    assert run_cli(a, "status", agent="U1")[0] == 0
+
+
+def test_markers_inside_a_toml_string_are_still_a_conflict(clones):
+    a, _ = clones
+    (a / ".ddflow/config.toml").write_text('[x]\nprompt = """\n' + MARKED + '"""\n')
+    code, out, err = run_cli(a, "status", agent="U1")
+    assert code == 3 and "resolve the merge conflict in .ddflow/config.toml" in out + err
 
 
 MARKED = "<<<<<<< HEAD\n[lease]\nttl_s = 600\n=======\n[lease]\nttl_s = 900\n>>>>>>> origin/main\n"
