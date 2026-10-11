@@ -5853,6 +5853,12 @@ part that matters.
   hook command and `ddflow` MCP entry (`.mcp.json` and the other agents' JSON configs) whose
   recorded path is gone, naming the refresh: `ddflow hooks install` (git hooks),
   `ddflow hooks install --claude` / `--gemini` (harness hooks), `ddflow adopt` (MCP entries).
+  On a **fresh clone** of an adopted project `doctor` also prints a note that the managed
+  git hooks are not installed (git does not track hooks; run `ddflow hooks install`), a
+  problem only under `[enforce].commit_without_lease = "block"`, and a note when a tracked
+  agent config (`.mcp.json`, `.claude/settings.json`, ...) records an absolute interpreter
+  or `PYTHONPATH` of one machine: on any other it dangles. Use `ddflow adopt --launch uvx`
+  or `ddflow` on `PATH`, or git-ignore them (bug Bec9a971c5d).
 * **A per-task README check** (decision D-readme-current). A task whose diff changed
   code under `[enforce] readme_code_globs` (default `ddflow/**`) but none of
   `readme_files` (default `README.md`), with no `docs` outcome recorded for it, is

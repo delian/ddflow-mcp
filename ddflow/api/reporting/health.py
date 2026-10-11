@@ -245,12 +245,14 @@ def _orphan_notes(events: list) -> list[str]:
     ]
 
 
-def _launcher_findings(repo: Path, problems: list[str], notes: list[str]) -> None:
+def _launcher_findings(
+    repo: Path, problems: list[str], notes: list[str], policy: str = "warn"
+) -> None:
     """A launcher recorded in a hook or MCP entry whose target is gone. The git hooks fail
     open now, so the check silently stops: a PROBLEM, unless `ddflow` on PATH still runs
     it (B-dangling-precommit-hook)."""
 
-    for d in LA.findings(repo):
+    for d in [*LA.findings(repo), *LA.fresh_clone(repo, policy)]:
         (notes if d.fallback else problems).append(d.render())
 
 
@@ -410,7 +412,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
         severe = state.state in (MISSING, NOT_BINDING)
         (problems if severe else notes).append(line)
 
-    _launcher_findings(repo, problems, notes)
+    _launcher_findings(repo, problems, notes, cfg.enforce.commit_without_lease)
     found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
