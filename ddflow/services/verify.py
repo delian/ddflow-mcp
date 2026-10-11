@@ -32,7 +32,7 @@ from ..infra.worktree import default_branch, git, git_paths
 from . import backfill as BF
 from . import gates as G
 from . import ledger as LG
-from .completion import fixes_of
+from .completion import changed_paths, fixes_of
 
 OK, WARN, FAIL, UNKNOWN = "ok", "warn", "fail", "unknown"
 _WILD = re.compile(r"[*?\[]")
@@ -365,7 +365,14 @@ def check(
     pipeline = G.pipeline_for(st.items[item_id], cfg) if item_id in st.items else []
     if pipeline:
         # A gate that did not apply to the item's declared work was never owed an outcome.
-        off = G.not_applicable(st.items[item_id], pipeline, G.load_gates(repo, cfg))
+        item = st.items[item_id]
+        off = G.not_applicable(
+            item,
+            pipeline,
+            G.load_gates(repo, cfg),
+            required=G.required_gates(cfg),
+            diff=lambda: changed_paths(repo, item),
+        )
         pipeline = [g for g in pipeline if g not in off]
     claims = [
         _landed(repo, cfg, led),
