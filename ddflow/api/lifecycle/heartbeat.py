@@ -32,7 +32,12 @@ def heartbeat(
     """
     log, cfg, st = _load(repo, agent)
     gone = st.items.get(item)
-    if gone is not None and gone.removed and gone.lease:
+    if (
+        gone is not None
+        and gone.removed
+        and gone.lease
+        and gone.lease.live(time.time(), cfg.lease.grace_s)
+    ):
         # Renewing would keep a lease on an item nobody can finish (B71dedb76d2).
         ls = gone.lease
         return O.refused(

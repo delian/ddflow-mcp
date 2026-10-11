@@ -146,7 +146,7 @@ class Stranded:
 
 
 def stranded_leases(
-    root: Path, cfg: Config, state: State, now: float | None = None
+    root: Path, cfg: Config, state: State, mine: str = "", now: float | None = None
 ) -> list[Stranded]:
     """Removed items whose LIVE lease still points at a branch or tree that exists in THIS
     clone: the holder's work, unreachable by merge/complete (B71dedb76d2). A removed item
@@ -156,7 +156,9 @@ def stranded_leases(
     out: list[Stranded] = []
     for iid, lease in sorted(state.active_leases(now, cfg.lease.grace_s).items()):
         it = state.items.get(iid)
-        if it is None or not it.removed:
+        if it is None or not it.removed or L.foreign(lease, mine):
+            # Another clone's lease strands THAT clone's branch, not any branch of the same
+            # name here (a loser's stale one, say): the holder's clone reports it.
             continue
         branch = lease.branch or it.branch
         tree = lease.worktree or it.worktree
@@ -182,6 +184,14 @@ def _own_released_branches(lost: dict[str, dict]) -> dict[str, str]:
         for iid, info in lost.items()
         if info["branch"]
     }
+
+
+def _clone_of(repo: Path, cfg: Config) -> str:
+    """This clone's id, "" when unadopted or unreadable (creates nothing)."""
+    try:
+        return EventLog(repo, log_cfg=cfg.log).clone_id(create=False)
+    except OSError:
+        return ""
 
 
 def _own_released(repo: Path, cfg: Config) -> dict[str, str]:
@@ -439,7 +449,9 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     plan = Plan()
     guard = _protected(root, cfg, state)
     own = _own_released(repo, cfg)
-    stranded = {x.branch: x for x in stranded_leases(root, cfg, state) if x.branch}
+    stranded = {
+        x.branch: x for x in stranded_leases(root, cfg, state, _clone_of(repo, cfg)) if x.branch
+    }
     by_branch, by_path = _claimed_by(root, state)
     seen_branches: set[str] = set()
 

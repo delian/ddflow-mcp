@@ -15,7 +15,9 @@ from pathlib import Path
 
 import pytest
 from helpers import git_raw as _git
+from helpers import make_event as _ev
 
+from ddflow.core.model import fold
 from ddflow.infra import log as L
 from tests.conftest import run_cli
 
@@ -131,5 +133,36 @@ def test_the_clone_that_removed_it_has_no_problem(tmp_path):
     _a, b = _two_clones(tmp_path, alice_claims=True)
     shard = (b / ".ddflow" / "events" / "alice.jsonl").read_text()
     assert "lease.acquired" in shard, shard
+    # Even with a branch of the same name here (a claim bob lost, say): it is not alice's.
+    _git(b, "branch", "ddflow/T2")
     _, out, err = run_cli(b, "doctor", agent="bob")
     assert "ddflow release T2" not in out + err, out + err
+
+
+def _removed(*, lease_at: float):
+    evs = [
+        _ev("task.added", "T", 1, title="t"),
+        _ev(
+            "lease.acquired",
+            "T",
+            2,
+            "alice",
+            holder="alice",
+            at=lease_at,
+            ttl_s=100,
+            branch="ddflow/T",
+        ),
+        _ev("task.removed", "T", 3, "bob", reason="obsolete"),
+    ]
+    return fold(evs)
+
+
+def test_require_names_the_holder_only_while_the_lease_is_live():
+    import time
+
+    from ddflow.api.lifecycle._common import _require
+
+    live = _require(_removed(lease_at=time.time()), "T", "worktree.merged")
+    assert live.exit == 3 and "alice" in live.reason and "ddflow/T" in live.reason
+    lapsed = _require(_removed(lease_at=1000.0), "T", "worktree.merged")
+    assert "no such item" in lapsed.reason and "alice" not in lapsed.reason
