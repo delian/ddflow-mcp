@@ -603,3 +603,27 @@ def test_accept_clears_a_loss_recorded_under_the_legacy_shape(clone):
     _, out, err = _dd(clone, "doctor", "--accept-lost-events")
     assert not _problem_lines(_doctor(clone)[1]), out + err
     assert _doctor(clone)[0] == 0
+
+
+def test_folding_a_legacy_row_never_clears_a_flagged_loss(clone):
+    """bug_hunt: a scoped row already flagged `shrunk` stays flagged when a legacy row with a
+    higher count is folded into it (the interior events are still gone)."""
+    _dd(clone, "status")
+    n = _lines(clone)
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    _dd(clone, "status")  # flags the loss
+    assert _problem_lines(_doctor(clone)[1])
+    for i in range(n):  # regrow the shard past the old count
+        assert _dd(clone, "task", "add", f"R{i}", "--title", "r", "--globs", f"src/r{i}.py")[0] == 0
+    assert _lines(clone) > n
+    _put_legacy(
+        clone,
+        f"{AGENT}.jsonl",
+        {
+            "count": n + 1,
+            "last_event_id": _event_ids(clone)[-1],
+            "ref": "refs/heads/main",
+            "size": 1,
+        },
+    )
+    assert _problem_lines(_doctor(clone)[1])

@@ -213,8 +213,8 @@ def _migrate(marks: Any) -> dict[str, Any]:
     for them). An older build keyed a row by the plain shard name with a ``ref`` field and no
     ``shard`` field; read as a row of its branch it named no shard and reported a total loss
     (B21968d4ea4). Such a row is folded into its scoped key, keeping the higher count (a mark is
-    never lowered; the scoped one wins a tie). A plain row with no ``ref`` names no branch to
-    compare on and a row that is not a mark at all says nothing: both are left as they were."""
+    never lowered; the scoped one wins a tie, and a scoped row already flagged ``shrunk`` stays
+    as it is). A plain row with no ``ref`` names no branch to compare on and a row that is not a mark at all says nothing: both are left as they were."""
     if not isinstance(marks, dict):
         return {}
     out: dict[str, Any] = {}
@@ -235,7 +235,7 @@ def _migrate(marks: Any) -> dict[str, Any]:
     for shard, row in plain:
         scoped = _key(row["ref"], shard)
         old = _row(out, scoped)
-        if old is None or row["count"] > old["count"]:
+        if old is None or (row["count"] > old["count"] and not old.get("shrunk")):
             out[scoped] = {**row, "shard": shard}
     return out
 
