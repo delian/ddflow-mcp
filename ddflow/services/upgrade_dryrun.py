@@ -1155,6 +1155,9 @@ class Rehearsal:
     def step_connect(self) -> bool:
         repo = self.clone("connect")
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
+        default = self._serve(
+            repo, _HELLO, start_timeout=None
+        )  # [upgrade].start_timeout_s as shipped
         first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
         if START_TIMED_OUT in (first.get(1) or {}).get("instructions", ""):
             self.unrunnable("MCP connect: propose, wait for consent, apply")
@@ -1166,6 +1169,7 @@ class Rehearsal:
                 "(a very loaded machine, or a log too big for it): it could not propose",
             )
         size, problems = self._proposed(first)
+        problems += self._default_path(default)
         applied = [
             e for e in events_of(repo) if e.get("id") not in known and e.get("kind") in APPLYING
         ]
@@ -1187,6 +1191,16 @@ class Rehearsal:
             or f"proposed on connect, nothing applied until consent, then applied; "
             f"tools/list {size} bytes; {told}",
         )
+
+    def _default_path(self, shipped: dict[int, dict[str, Any]]) -> list[str]:
+        """The server with the shipped time bound: its handshake either proposes the upgrade or
+        says in a note that the check is still running -- it is never silent about it."""
+        text = (shipped.get(1) or {}).get("instructions", "")
+        if "newer than this project" in text and "Ask the operator" in text:
+            return []
+        return [
+            "the handshake with the shipped start_timeout_s neither proposed nor noted the upgrade"
+        ]
 
     def _proposed(self, first: dict[int, dict[str, Any]]) -> tuple[int, list[str]]:
         """What the first session shows: the handshake asks the operator, the tools fit."""
@@ -1229,15 +1243,22 @@ class Rehearsal:
             return stale, ["the log holds older-version agents but none was told to restart"]
         return stale, []
 
-    def _serve(self, repo: Path, msgs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    def _serve(
+        self, repo: Path, msgs: list[dict[str, Any]], start_timeout: int | None = START_TIMEOUT_S
+    ) -> dict[int, dict[str, Any]]:
         """Talk to the new MCP server over stdio for these messages; replies by request id.
-        Raises `CouldNotRun` when the server did not run to its end."""
+        The start check gets ``start_timeout`` seconds (the rehearsal tests the flow, not the
+        speed), or the shipped bound when None. Raises `CouldNotRun` when the server did not
+        run to its end."""
         argv = [sys.executable, "-m", "ddflow.surfaces.mcp", "--repo", str(repo)]
+        extra = (
+            {} if start_timeout is None else {"DDFLOW_UPGRADE_START_TIMEOUT_S": str(start_timeout)}
+        )
         done = self.capture(
             argv,
             timeout=TIMEOUT_S,
             cwd=repo,
-            env={**self.env(self.new), "DDFLOW_UPGRADE_START_TIMEOUT_S": str(START_TIMEOUT_S)},
+            env={**self.env(self.new), **extra},
             input="\n".join(json.dumps(m) for m in msgs) + "\n",
         )
         if not done.ran:

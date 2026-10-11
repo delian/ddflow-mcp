@@ -761,7 +761,7 @@ def test_a_start_check_that_ran_out_of_time_is_unavailable_never_a_pass_or_a_fai
         "instructions": "ddflow 0.2.1 is newer than this project; the upgrade check did not "
         "finish within 10s, so the server started anyway and the upgrade stays pending"
     }
-    monkeypatch.setattr(DR.Rehearsal, "_serve", lambda self, repo, msgs: {1: timed_out})
+    monkeypatch.setattr(DR.Rehearsal, "_serve", lambda self, repo, msgs, **kw: {1: timed_out})
     rehearsal.step_connect()
     last = rows(rehearsal.report)[6]
     assert last.status == DR.UNAVAILABLE and "time bound" in last.detail
