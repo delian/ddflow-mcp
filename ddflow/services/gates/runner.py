@@ -14,7 +14,7 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from ..flakes import failure_evidence
-from .defs import GateDef
+from .defs import GateDef, command_provenance
 from .evidence import diff_stat, digest, tree_identity
 from .testcmd import suggested_test_command, summary_lines
 
@@ -100,6 +100,25 @@ def output_evidence(text: str) -> dict[str, Any]:
     }
 
 
+def command_layer_evidence(gdef: GateDef, cwd: Path) -> dict[str, Any]:
+    """Which config layer the gate's command came from, so a pass made with a command only
+    this machine has is not read as the project's pass (B924bdc92d7).
+
+    `command_layer` is "committed" or "local"; `command_digest` is a short digest of the
+    command that ran; `committed_command_digest` is present only when the local layer
+    overrides a DIFFERENT committed command. Additive keys: evidence recorded without them
+    reads as before. A project that cannot be located yields just the digest."""
+    ev: dict[str, Any] = {"command_digest": digest(gdef.command)}
+    try:
+        layer, committed = command_provenance(W.repo_root(cwd), gdef.id)
+    except (W.GitError, OSError):
+        return ev
+    ev["command_layer"] = layer
+    if layer == "local" and committed and committed != gdef.command:
+        ev["committed_command_digest"] = digest(committed)
+    return ev
+
+
 def run_command_gate(
     gdef: GateDef,
     cwd: Path,
@@ -179,6 +198,7 @@ def run_command_gate(
     out = p.output
     ev = {
         "command": gdef.command,
+        **command_layer_evidence(gdef, cwd),
         "exit": p.code,
         "elapsed_s": round(p.elapsed_s, 1),
         **output_evidence(out),

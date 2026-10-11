@@ -508,6 +508,9 @@ def run(
     )
     if scope is not None:
         ev.update(scope.evidence())
+    if ev.get("output_log"):
+        # `.ddflow/runs` is git-ignored: the log is on THIS machine, not on a teammate's.
+        ev["output_log_host"] = log.agent_id
 
     def rerun(g):
         return G.run_command_gate(
