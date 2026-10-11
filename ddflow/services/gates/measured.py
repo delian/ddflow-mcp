@@ -171,6 +171,7 @@ def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` tak
     reason: str = "",
     evidence: dict[str, Any] | None = None,
     owner_of: Callable[[str], str | None] | None = None,
+    forced: bool = False,
 ) -> None:
     """Record ``outcome`` for ``it``'s ``gate``, with ddflow's own measurement of ``tree``
     (the item's work; None when it cannot be told or the caller's evidence already carries
@@ -195,6 +196,7 @@ def record_measured(  # noqa: PLR0913 -- the same keywords `outcomes.record` tak
         gates=gates,
         measured=taken,
         owner_of=owner_of,
+        forced=forced,
     )
 
 
