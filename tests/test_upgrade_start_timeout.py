@@ -83,8 +83,8 @@ def test_a_late_answer_does_not_replace_a_newer_timeout_marker_with_less(old, mo
 
 def test_the_brief_repeats_an_unfinished_check_until_it_is_resolved(old, monkeypatch) -> None:
     _timed_out(old, monkeypatch, delay=0.5)
+    _wait_for(lambda: US._read(old).get("status") == US.PROPOSED)  # the thread is done
     _log, _cfg, st = _load(old, "starter")
-    # (the late answer would replace the marker: keep the timeout marker for this test)
     US._save(old, {"version": US.running_version(), "status": US.TIMEOUT, "text": "pending note"})
     assert US.take_for_brief(old, st) == "pending note"
     assert US.take_for_brief(old, st) == "pending note", "said until the upgrade is resolved"
@@ -120,3 +120,41 @@ def test_a_slow_plan_never_reads_as_current(old, monkeypatch) -> None:
         assert "Ask the operator" in rep["text"]
         (old / LOCAL).unlink(missing_ok=True)
         time.sleep(0.8)
+
+
+def test_the_state_that_cannot_be_read_still_delivers_the_note_once(old, monkeypatch) -> None:
+    US._save(old, {"version": US.running_version(), "status": US.TIMEOUT, "text": "pending note"})
+    monkeypatch.setattr(US, "_state_of", lambda repo: None)
+    assert US.take_for_brief(old) == "pending note"
+    assert US.take_for_brief(old) == "", "said once when it cannot tell whether it still holds"
+
+
+def test_a_late_answer_and_the_timeout_note_cannot_undo_each_other(old, monkeypatch) -> None:
+    """The timeout report is saved while the left-running thread saves the answer it reached:
+    whichever order the reads and writes interleave in, the finished answer is what is kept."""
+    import threading
+
+    key = "k"
+    answer = {"status": US.PROPOSED, "text": "the plan", "version": "9", "key": key}
+    note = {"status": US.TIMEOUT, "text": "the note", "version": "9", "key": key}
+    reading, release = threading.Event(), threading.Event()
+    real_read = US._read
+
+    def slow_read(repo):  # the note's writer has read the marker and is slow to write
+        got = real_read(repo)
+        if threading.current_thread().name == "note-writer":
+            reading.set()
+            release.wait(2)
+        return got
+
+    monkeypatch.setattr(US, "_read", slow_read)
+    writer = threading.Thread(target=US._save, args=(old, note), name="note-writer")
+    writer.start()
+    assert reading.wait(5)
+    late = threading.Thread(target=US._save, args=(old, answer))
+    late.start()  # the late answer arrives while the note is between its read and its write
+    time.sleep(0.2)
+    release.set()
+    writer.join(5)
+    late.join(5)
+    assert real_read(old)["status"] == US.PROPOSED
