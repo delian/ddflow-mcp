@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra.localstore import LocalStore, StoreUnreadable
+from ..infra.log import APPEND_HOOKS
 
 NAME = "shard-marks"
 MARKS_SCHEMA = 1
@@ -188,6 +189,7 @@ def accept(repo: Any, log: Any) -> list[Lost]:
         return []
     names = {g.shard for g in gone}
     present = {p.name: p for p in log.shards()}
+    done: set[str] = set()
 
     def lower(cur: Any) -> dict[str, Any]:
         out = dict(cur) if isinstance(cur, dict) else {}
@@ -196,6 +198,7 @@ def accept(repo: Any, log: Any) -> list[Lost]:
             scanned = _scan(p) if p is not None else (0, "", 0)
             if scanned is None:
                 continue
+            done.add(name)
             if scanned[0] == 0 and p is None:
                 out.pop(name, None)
             else:
@@ -203,4 +206,8 @@ def accept(repo: Any, log: Any) -> list[Lost]:
         return out
 
     _store(log).update(NAME, lower, schema=MARKS_SCHEMA, default={})
-    return gone
+    return [g for g in gone if g.shard in done]  # only what was recorded as accepted
+
+
+if appended not in APPEND_HOOKS:
+    APPEND_HOOKS.append(appended)
