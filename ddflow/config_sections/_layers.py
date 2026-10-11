@@ -64,18 +64,24 @@ def tolerating_conflicts(on: bool = True) -> Iterator[None]:
         _tolerate.reset(token)
 
 
-_MARKER = re.compile(r"^(<<<<<<< |>>>>>>> )", re.MULTILINE)
+_OURS = re.compile(r"^<<<<<<< ", re.MULTILINE)
+_SEP = re.compile(r"^=======$", re.MULTILINE)
+_THEIRS = re.compile(r"^>>>>>>> ", re.MULTILINE)
+
+
+def has_conflict_markers(text: str) -> bool:
+    """Whether ``text`` holds a git conflict: the opening, separator and closing lines all
+    present (one marker-like line alone, e.g. quoted in prose, is not a conflict)."""
+    return bool(_OURS.search(text) and _SEP.search(text) and _THEIRS.search(text))
 
 
 def read_toml(path: Path) -> dict[str, Any]:
     """The TOML table in ``path``. Raises `ConfigConflict` when it holds merge-conflict
-    markers, else whatever `tomllib` raises for a file that is merely malformed."""
+    markers (even where they sit inside a string and the text still parses), else whatever
+    `tomllib` raises for a file that is merely malformed."""
     text = Path(path).read_text("utf-8")
-    try:
-        return tomllib.loads(text)
-    except tomllib.TOMLDecodeError:
-        if _MARKER.search(text):
-            if _tolerate.get():
-                return {}
-            raise ConfigConflict(path) from None
-        raise
+    if has_conflict_markers(text):
+        if _tolerate.get():
+            return {}
+        raise ConfigConflict(path)
+    return tomllib.loads(text)

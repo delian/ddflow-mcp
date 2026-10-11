@@ -27,7 +27,7 @@ import tomllib
 from pathlib import Path
 
 from ..config import Config
-from ..config_sections._layers import ConfigConflict, layer_path
+from ..config_sections._layers import ConfigConflict, has_conflict_markers, layer_path
 from ..core.admission import is_shared
 from ..core.globs import regex
 from ..infra import git as G
@@ -323,12 +323,11 @@ VIEW_CONFLICT_FIX = f"git checkout --theirs {_VIEW_DIR} && ddflow render && git 
 #: The view filenames of `views.markdown.VIEWS`, which this module sits below and cannot
 #: import; tests/test_generated_merge_conflict.py holds the two equal.
 VIEW_NAMES = ("QUEUE.md", "LESSONS.md", "LESSONS-SUMMARY.md", "RESEARCH.md")
-_CONFLICT_MARK = re.compile(r"^<<<<<<< ", re.MULTILINE)
 
 
 def _has_conflict_markers(path: Path) -> bool:
     try:
-        return bool(_CONFLICT_MARK.search(path.read_text("utf-8", errors="replace")))
+        return has_conflict_markers(path.read_text("utf-8", errors="replace"))
     except OSError:
         return False
 
