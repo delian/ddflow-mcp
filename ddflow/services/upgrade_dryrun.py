@@ -5,8 +5,18 @@ B-upgrade.12-dry-run. Before an operator upgrades a project, this proves on a CO
 from the ddflow they run now to the one on the tree is smooth. Nothing here touches the
 project it rehearses, the ddflow installed on the machine or an MCP server that is running:
 
-- the project is only READ, by `git clone --local` (and its log, snapshot tags and backups compared before and after, so
-  the report can say the rehearsal left no trace);
+- the project is only READ, by `git clone --local` of what is COMMITTED at one pinned commit
+  (tried once more if it fails), and its log, snapshot tags and backups are compared before and
+  after, so the report can say the rehearsal left no trace. Other agents work in the live
+  project meanwhile (B-dryrun-flake): each shard is read once, into memory, checked by its
+  size and mtime; a snapshot tag is the rehearsal's only if signed with its run id, a backup
+  only if made while it ran for the versions it upgraded; a shard rewritten under the run is
+  the result "live repo changed during rehearsal" (the run is repeated once, and if the
+  project moved again the check is `unavailable`, never a pass);
+- a run that fails (or whose live project moved) writes its step table and every command's
+  bounded stdout and stderr to `.ddflow/local/dryrun/<stamp>-<run id>.json` (git-ignored;
+  `--diag-dir` or `DDFLOW_DRYRUN_DIAG_DIR` choose another) and names the file under the table;
+  a run that passes writes nothing;
 - every command runs in a scratch directory with a private HOME, no `DDFLOW_*` variables and no
   network (`DDFLOW_NO_UPDATE_CHECK`), against a clone;
 - the NEW ddflow is this source tree, run as a subprocess with PYTHONPATH; the OLD one is a
@@ -44,9 +54,12 @@ import contextlib
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import sys
+import tempfile
+import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, replace
@@ -65,6 +78,7 @@ from ..infra import fsio
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra.log import EventLog
+from .backups import SIDECAR_SUFFIX, SNAPSHOT_PREFIX
 
 PASS = "pass"
 FAIL = "fail"
@@ -113,6 +127,20 @@ READS: tuple[tuple[str, ...], ...] = (
 #: Seconds one ddflow command, git call or server session may take.
 TIMEOUT_S = 300.0
 
+#: Where a failed run's step table and command transcript go: this variable, else `--diag-dir`,
+#: else `.ddflow/local/dryrun/` in the project (git-ignored, machine-local).
+DIAG_ENV = "DDFLOW_DRYRUN_DIAG_DIR"
+#: The characters kept of a command's stdout or stderr (half from each end); a command that
+#: succeeded keeps a tenth of that.
+STREAM_BOUND = 6000
+#: The most commands a transcript keeps (the last ones).
+MAX_COMMANDS = 300
+#: The name of the result when the live project changed in a way the rehearsal cannot tell from
+#: its own doing: it is `unavailable`, never a pass and never a fail.
+LIVE_CHANGED = "live repo changed during rehearsal"
+#: The pause before the one retry of a clone that failed (a gc or a ref update in the live repo).
+CLONE_RETRY_S = 0.5
+
 #: Run as `python -c`: the current code declaring an OLDER release, for tests and for a
 #: machine with no old release to hand. It is a simulation, and the report says so.
 _SIMULATED_OLD = (
@@ -159,6 +187,9 @@ class Options:
     #: it is the surprise the rehearsal exists to find) or is only named in the preview.
     asked_fails: bool = True
     reason: str = "dry run: the operator would accept this"
+    #: Where a failed run writes its transcript; None: `DDFLOW_DRYRUN_DIAG_DIR`, else
+    #: `<source>/.ddflow/local/dryrun`.
+    diag_dir: Path | None = None
 
 
 @dataclass
@@ -171,6 +202,8 @@ class Report:
     checks: list[Check] = field(default_factory=list)
     preview: str = ""
     facts: dict[str, Any] = field(default_factory=dict)
+    #: The file a failed run's step table and command transcript were written to; "" when none.
+    diagnostics: str = ""
 
     @property
     def exit_code(self) -> int:
@@ -187,6 +220,8 @@ class Report:
             rows.append(f"{c.step:>4}  {c.name:<{width}}  {c.status.upper():<11}  {c.detail}")
         verdict = {0: "PASS", 1: "FAIL", 2: "COULD NOT RUN"}[self.exit_code]
         rows.append(f"dry run {verdict}: {len(self.checks)} check(s), from {self.from_commit[:10]}")
+        if self.diagnostics:
+            rows.append(f"diagnostics (every step's stdout and stderr): {self.diagnostics}")
         return "\n".join(rows)
 
     def markdown(self) -> str:
@@ -215,6 +250,7 @@ class Report:
             "old": self.old_label,
             "checks": [asdict(c) for c in self.checks],
             "facts": self.facts,
+            "diagnostics": self.diagnostics,
         }
 
 
@@ -272,41 +308,102 @@ class Live:
     shards: dict[str, bytes]
     tags: list[str]
     backups: list[str]
+    #: Who tagged each snapshot tag ("" for a lightweight one): the rehearsal signs its own.
+    tag_owners: dict[str, str] = field(default_factory=dict)
+    #: Shards that kept changing while they were read (a writer was at them).
+    unstable: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Footprint:
+    """What identifies the rehearsal's own traces in the live project: the run id its git
+    commits and tags are signed with, the window it ran in, and the `<from>-to-<to>` of the
+    backups its clones made."""
+
+    run_id: str
+    started: str
+    ended: str
+    versions: frozenset[str] = frozenset()
+
+    @property
+    def tagger(self) -> str:
+        return f"dry-run-{self.run_id}"
 
 
 def snapshot_live(source: Path) -> Live:
     """What to compare after the run. Other agents may be working in the live project, so its
     log may GROW meanwhile; what must not happen is that it changes under us, or that anything
-    of the rehearsal (an agent named `dry-*`, a snapshot tag, a backup) shows up in it."""
-    tags = G.run(source, "tag", "--list", "ddflow-upgrade-snapshot/*")
+    of the rehearsal (an agent named `dry-*`, a snapshot tag signed with its run id, a backup
+    of its versions made while it ran) shows up in it. Each shard is read once, into memory."""
+    shards, unstable = shard_bytes_checked(source)
+    listed = G.run(
+        source,
+        "tag",
+        "--list",
+        "--format=%(refname:short)\t%(taggername)",
+        "ddflow-upgrade-snapshot/*",
+    )
+    owners: dict[str, str] = {}
+    for line in listed.out.splitlines() if listed.ok else []:
+        name, _, tagger = line.partition("\t")
+        owners[name] = tagger.strip()
     backups = Path(source) / ".ddflow" / "backups"
     return Live(
-        shard_bytes(source),
-        tags.out.splitlines() if tags.ok else [],
+        shards,
+        sorted(owners),
         sorted(p.name for p in backups.iterdir()) if backups.is_dir() else [],
+        owners,
+        unstable,
     )
 
 
-def live_problems(before: Live, after: Live) -> list[str]:
-    """How the live project differs from before in a way a rehearsal must not cause."""
+def backup_versions(name: str) -> str:
+    """`<from>-to-<to>` of a backup or snapshot name `<stamp>-<from>-to-<to>`."""
+    return name.partition("-")[2].removesuffix(SIDECAR_SUFFIX)
+
+
+def live_leaks(before: Live, after: Live, mine: Footprint | None = None) -> list[str]:
+    """What of the REHEARSAL is in the live project: a shard of an agent it ran as, a snapshot
+    tag signed with its run id, a backup made while it ran for the versions it upgraded. Another
+    agent's tag or backup is not that (``mine`` None: nothing can be told to be the rehearsal's)."""
+    out = [
+        f"the live log has a shard of the rehearsal: {n}"
+        for n in after.shards
+        if n.startswith("dry-")
+    ]
+    if mine is not None:
+        out += [
+            f"a snapshot tag of the rehearsal appeared in the live project: {t}"
+            for t in sorted(set(after.tags) - set(before.tags))
+            if after.tag_owners.get(t) == mine.tagger
+        ]
+        out += [
+            f"a backup of the rehearsal appeared in the live project: {b}"
+            for b in sorted(set(after.backups) - set(before.backups))
+            if mine.started <= b.partition("-")[0] <= mine.ended
+            and backup_versions(b) in mine.versions
+        ]
+    return out
+
+
+def live_moved(before: Live, after: Live) -> list[str]:
+    """How the live log changed other than by growing: a shard rewritten or removed, or one
+    that was still being written while it was read. Another agent does that (a compaction, a
+    rebase) as readily as a rehearsal that leaked would; it is told apart by `live_leaks`."""
     out = [
         f"the live shard {n} changed under the run"
         for n in prefixes_kept(before.shards, after.shards)
     ]
     out += [
-        f"the live log has a shard of the rehearsal: {n}"
-        for n in after.shards
-        if n.startswith("dry-")
-    ]
-    out += [
-        f"a snapshot tag appeared in the live project: {t}"
-        for t in sorted(set(after.tags) - set(before.tags))
-    ]
-    out += [
-        f"a backup appeared in the live project: {b}"
-        for b in sorted(set(after.backups) - set(before.backups))
+        f"the live shard {n} was still being written when read"
+        for n in sorted({*before.unstable, *after.unstable})
     ]
     return out
+
+
+def live_problems(before: Live, after: Live, mine: Footprint | None = None) -> list[str]:
+    """Everything `live_leaks` and `live_moved` name."""
+    return [*live_leaks(before, after, mine), *live_moved(before, after)]
 
 
 def folded_state(repo: Path) -> State:
@@ -346,9 +443,41 @@ def tree_digest(repo: Path, kept: Iterable[str] = KEPT) -> str:
     return D.of_obj(rows)
 
 
-def shard_bytes(repo: Path) -> dict[str, bytes]:
+def read_stable(path: Path, attempts: int = 3) -> tuple[bytes | None, bool]:
+    """``path`` read once into memory, checked by its size and mtime before and after (a writer
+    at it makes them differ, and it is read again): (bytes, stable). None when it is gone."""
+    data = b""
+    for _ in range(attempts):
+        try:
+            first = path.stat()
+            data = path.read_bytes()
+            last = path.stat()
+        except FileNotFoundError:
+            return None, True
+        if (first.st_size, first.st_mtime_ns) == (last.st_size, last.st_mtime_ns) and len(
+            data
+        ) == last.st_size:
+            return data, True
+    return data, False
+
+
+def shard_bytes_checked(repo: Path) -> tuple[dict[str, bytes], list[str]]:
+    """Every event shard of ``repo`` as bytes, and the names of those that never held still."""
     root = Path(repo) / ".ddflow" / "events"
-    return {p.name: p.read_bytes() for p in sorted(root.glob("*.jsonl"))} if root.is_dir() else {}
+    out: dict[str, bytes] = {}
+    unstable: list[str] = []
+    for p in sorted(root.glob("*.jsonl")) if root.is_dir() else []:
+        data, stable = read_stable(p)
+        if data is None:  # removed since the listing: another agent's doing, not a failure
+            continue
+        out[p.name] = data
+        if not stable:
+            unstable.append(p.name)
+    return out, unstable
+
+
+def shard_bytes(repo: Path) -> dict[str, bytes]:
+    return shard_bytes_checked(repo)[0]
 
 
 def prefixes_kept(before: dict[str, bytes], after: dict[str, bytes]) -> list[str]:
@@ -467,6 +596,13 @@ class Rehearsal:
         self.pristine = opt.work / "pristine"
         #: The keys the plan said the operator would be asked to confirm (set by `step_plan`).
         self.confirms: list[str] = []
+        #: Signs this rehearsal's git commits and tags, so its traces in the live project can
+        #: be told from other agents' (a snapshot tag carries it as its tagger).
+        self.run_id = secrets.token_hex(4)
+        self.started_stamp = clock.compact_at()
+        #: Every command the rehearsal ran, with its bounded output: the transcript a failure
+        #: is explained from.
+        self.commands: list[dict[str, Any]] = []
         #: `"decision D-x"`-style names of the records the plan said are CONTESTED (set by
         #: `step_plan`): the operator's to resolve, so doctor failing on them alone is expected.
         self.contested: set[str] = set()
@@ -508,7 +644,7 @@ class Rehearsal:
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_AUTHOR_NAME": "dry-run",
             "GIT_AUTHOR_EMAIL": "dry-run@example.invalid",
-            "GIT_COMMITTER_NAME": "dry-run",
+            "GIT_COMMITTER_NAME": f"dry-run-{self.run_id}",
             "GIT_COMMITTER_EMAIL": "dry-run@example.invalid",
         }
         if cmd.pythonpath:
@@ -519,7 +655,7 @@ class Rehearsal:
         self, cmd: Cmd, repo: Path, *args: str, agent: str = "", stdin: str | None = None
     ) -> P.Captured:
         flags = ["--repo", str(repo), *(["--agent", agent] if agent else [])]
-        return P.capture(
+        return self.capture(
             [*cmd.argv, *flags, *args],
             timeout=TIMEOUT_S,
             cwd=repo,
@@ -527,8 +663,53 @@ class Rehearsal:
             input=stdin,
         )
 
+    def capture(self, argv: list[str], **kw: Any) -> P.Captured:
+        """`proc.capture`, with the command and its (bounded) output kept in the transcript."""
+        began = time.monotonic()
+        done = P.capture(argv, **kw)
+        self.note(
+            argv,
+            kw.get("cwd"),
+            done.returncode,
+            done.stdout,
+            done.stderr,
+            time.monotonic() - began,
+            str(done.error) if done.error else "",
+        )
+        return done
+
+    def note(
+        self,
+        argv: list[str],
+        cwd: Any,
+        code: int | None,
+        out: str,
+        err: str,
+        seconds: float,
+        error: str = "",
+    ) -> None:
+        # a command that worked keeps little; one that did not keeps what explains it
+        limit = STREAM_BOUND if code != 0 else STREAM_BOUND // 10
+        self.commands.append(
+            {
+                "run": self.run_id,
+                "argv": shlex.join(str(a) for a in argv),
+                "cwd": str(cwd or ""),
+                "returncode": code,
+                "error": error,
+                "seconds": round(seconds, 2),
+                "stdout": bounded(out, limit),
+                "stderr": bounded(err, limit),
+            }
+        )
+        del self.commands[:-MAX_COMMANDS]
+
     def git(self, repo: Path, *args: str) -> G.GitResult:
-        return G.run(repo, *args, timeout=TIMEOUT_S, env=self.env(self.new))
+        began = time.monotonic()
+        done = G.run(repo, *args, timeout=TIMEOUT_S, env=self.env(self.new))
+        self.note(["git", "-C", str(repo), *args], repo, done.code, done.out, done.err,
+                  time.monotonic() - began)  # fmt: skip
+        return done
 
     def clone(self, name: str, src: Path | None = None) -> Path:
         """A new clone of the pristine copy (or of ``src``) on its own branch."""
@@ -594,15 +775,57 @@ class Rehearsal:
             10, "read the live project afterwards", lambda: snapshot_live(self.opt.source)
         )
         if before is not None and after is not None:
-            moved = live_problems(before, after)
-            same = after.shards == before.shards
-            fine = (
-                "nothing of the live project changed"
-                if same
-                else ("no shard, tag or backup of the rehearsal; its log only grew")
-            )
-            self.add(10, "live project untouched", not moved, "; ".join(moved) or fine)
+            self.judge_live(before, after)
         return self.report
+
+    def footprint(self) -> Footprint:
+        """What the rehearsal's own backups and snapshot tags (in the clones) are called."""
+        versions: set[str] = set()
+        for clone in sorted(self.opt.work.iterdir()) if self.opt.work.is_dir() else []:
+            kept = clone / ".ddflow" / "backups"
+            if kept.is_dir():
+                versions |= {backup_versions(b.name) for b in kept.iterdir()}
+            if (clone / ".git").exists():
+                tags = G.run(clone, "tag", "--list", f"{SNAPSHOT_PREFIX}*")
+                versions |= {
+                    backup_versions(t.removeprefix(SNAPSHOT_PREFIX)) for t in tags.out.splitlines()
+                }
+        versions.discard("")
+        return Footprint(self.run_id, self.started_stamp, clock.compact_at(), frozenset(versions))
+
+    def judge_live(self, before: Live, after: Live) -> None:
+        """Step 10. What of the rehearsal is in the live project fails; what only other agents
+        did (their snapshot tags and backups, a shard rewritten or still being written) is
+        `LIVE_CHANGED`: not a pass, and not the rehearsal's fault either, so `unavailable`."""
+        name = "live project untouched"
+        mine = self.footprint()
+        leaks = live_leaks(before, after, mine)
+        moved = live_moved(before, after)
+        if leaks:
+            self.add(10, name, False, "; ".join([*leaks, *moved]))
+            return
+        if moved:
+            self.report.facts["live_changed"] = moved
+            self.add(
+                10,
+                LIVE_CHANGED,
+                None,
+                "; ".join(moved) + ": nothing of the rehearsal is in it, but the project moved "
+                "under the run, so it cannot be said to be untouched",
+            )
+            return
+        others = [f"snapshot tag {t}" for t in sorted(set(after.tags) - set(before.tags))] + [
+            f"backup {b}" for b in sorted(set(after.backups) - set(before.backups))
+        ]
+        note = "; ".join(
+            [
+                "nothing of the live project changed"
+                if after.shards == before.shards
+                else "no shard of the rehearsal; its log only grew",
+                *([f"made by others meanwhile and ignored: {', '.join(others)}"] if others else []),
+            ]
+        )
+        self.add(10, name, True, note)
 
     def step_clone(self) -> bool:
         src, work = Path(self.opt.source).resolve(), Path(self.opt.work).resolve()
@@ -618,12 +841,19 @@ class Rehearsal:
             raise CouldNotRun(f"the scratch directory {work} is not empty: name a new one")
         work.mkdir(parents=True, exist_ok=True)
         self.home.mkdir(parents=True, exist_ok=True)
-        done = self.git(
-            work, "clone", "--quiet", "--local", "--no-hardlinks", str(src), str(self.pristine)
-        )
+        # only what is COMMITTED is read, at the commit just resolved (not a moving HEAD); a
+        # gc or ref update in the live repo can fail one clone, so it is tried once more
+        args = ("clone", "--quiet", "--local", "--no-hardlinks", "--no-checkout", str(src))
+        done = self.git(work, *args, str(self.pristine))
         if not done.ok:
-            raise CouldNotRun(f"git clone failed: {done.text()}")
-        self.git(self.pristine, "checkout", "--quiet", "--detach", commit.out)
+            shutil.rmtree(self.pristine, ignore_errors=True)
+            time.sleep(CLONE_RETRY_S)
+            done = self.git(work, *args, str(self.pristine))
+        if not done.ok:
+            raise CouldNotRun(f"git clone failed twice: {done.text()}")
+        checked = self.git(self.pristine, "checkout", "--quiet", "--detach", commit.out)
+        if not checked.ok:
+            raise CouldNotRun(f"git could not check out {commit.out[:10]}: {checked.text()}")
         self.git(self.pristine, "checkout", "--quiet", "-b", "dryrun")
         shards = shard_bytes(self.pristine)
         if not shards:
@@ -656,7 +886,7 @@ class Rehearsal:
             **self.env(Cmd([])),
             "UV_CACHE_DIR": os.environ.get("UV_CACHE_DIR", str(Path.home() / ".cache" / "uv")),
         }
-        made = P.capture(["uv", "venv", "--quiet", str(venv)], timeout=TIMEOUT_S, env=env)
+        made = self.capture(["uv", "venv", "--quiet", str(venv)], timeout=TIMEOUT_S, env=env)
         if not made.ran or made.returncode != 0:
             return self.add(
                 1,
@@ -665,7 +895,7 @@ class Rehearsal:
                 f"uv venv failed: {(made.stderr or str(made.error)).strip()[-160:]}",
             )
         python = venv / "bin" / "python"
-        built = P.capture(
+        built = self.capture(
             ["uv", "pip", "install", "--quiet", "--python", str(python), str(self.pristine)],
             timeout=TIMEOUT_S * 3,
             env=env,
@@ -976,7 +1206,7 @@ class Rehearsal:
         """Talk to the new MCP server over stdio for these messages; replies by request id.
         Raises `CouldNotRun` when the server did not run to its end."""
         argv = [sys.executable, "-m", "ddflow.surfaces.mcp", "--repo", str(repo)]
-        done = P.capture(
+        done = self.capture(
             argv,
             timeout=TIMEOUT_S,
             cwd=repo,
@@ -1257,16 +1487,78 @@ def state_part_digest(repo: Path) -> str:
     return D.of_obj(users_part(state_digests(repo)))
 
 
-def run_all(opt: Options) -> Report:
-    """Run the whole rehearsal and clean up (unless ``opt.keep``). A scratch directory that
-    already held something is never cleaned: the rehearsal refuses it, and it is not ours."""
+def bounded(text: str, limit: int = STREAM_BOUND) -> str:
+    """``text`` cut to about ``limit`` characters, the head and the tail kept."""
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    return f"{text[:half]}\n... [{len(text) - 2 * half} characters cut] ...\n{text[-half:]}"
+
+
+def _rehearse(opt: Options) -> tuple[Report, Rehearsal]:
+    """One rehearsal in ``opt.work``, which is removed afterwards unless it is not ours (a
+    scratch directory that already held something is refused, and never cleaned) or ``keep``."""
     work = Path(opt.work)
     ours = not work.exists() or (work.is_dir() and not any(work.iterdir()))
+    rehearsal = Rehearsal(opt)
     try:
-        return Rehearsal(opt).run()
+        return rehearsal.run(), rehearsal
     finally:
         if ours and not opt.keep:
             shutil.rmtree(work, ignore_errors=True)
+
+
+def diag_directory(opt: Options) -> Path:
+    if opt.diag_dir:
+        return Path(opt.diag_dir)
+    if os.environ.get(DIAG_ENV):
+        return Path(os.environ[DIAG_ENV])
+    return Path(opt.source) / ".ddflow" / "local" / "dryrun"
+
+
+def write_diagnostics(opt: Options, report: Report, runs: list[Rehearsal]) -> str:
+    """Write the step table of a failed run and each command's bounded output to a file; the
+    path ("" when it could not be written: the report must still come out)."""
+    data = {
+        "run": runs[-1].run_id,
+        "started": report.started,
+        "source": report.source,
+        "from_commit": report.from_commit,
+        "exit": report.exit_code,
+        "table": report.table(),
+        "checks": [asdict(c) for c in report.checks],
+        "facts": report.facts,
+        "commands": [c for r in runs for c in r.commands],
+    }
+    name = f"{clock.compact_at()}-{runs[-1].run_id}.json"
+    for where in (diag_directory(opt), Path(tempfile.gettempdir()) / "ddflow-dryrun"):
+        try:
+            where.mkdir(parents=True, exist_ok=True)
+            fsio.replace_text(where / name, json.dumps(data, indent=1, default=str) + "\n")
+            return str(where / name)
+        except OSError:
+            continue
+    return ""
+
+
+def run_all(opt: Options) -> Report:
+    """Run the whole rehearsal and clean up (unless ``opt.keep``). If the live project changed
+    under it in a way it cannot tell from its own doing (`LIVE_CHANGED`), it is run once more
+    in a scratch directory of its own; the second run decides, and a project that moved again
+    leaves that check `unavailable`. A failed run (or a project that moved) leaves its step
+    table and every command's output in a file, named in the report."""
+    original = opt.old  # building the old ddflow replaces it, in a scratch directory that goes
+    report, rehearsal = _rehearse(opt)
+    runs = [rehearsal]
+    if report.facts.get("live_changed"):
+        first = report.facts["live_changed"]
+        again = replace(opt, work=Path(f"{opt.work}-retry"), old=original)
+        report, rehearsal = _rehearse(again)
+        runs.append(rehearsal)
+        report.facts["first_run"] = f"{LIVE_CHANGED}: {'; '.join(first)}"
+    if any(c.status == FAIL for c in report.checks) or report.facts.get("live_changed"):
+        report.diagnostics = write_diagnostics(opt, report, runs)
+    return report
 
 
 # -- the command line (scripts/ci/upgrade-dry-run is this, started from a checkout) -----------
@@ -1322,6 +1614,12 @@ def parser(doc: str = __doc__ or "") -> argparse.ArgumentParser:
     )
     ap.add_argument("--work", default="", help="scratch directory (default: a new temporary one)")
     ap.add_argument("--keep", action="store_true", help="keep the scratch directory")
+    ap.add_argument(
+        "--diag-dir",
+        default="",
+        help=f"where a failed run writes its step table and each command's output (default: "
+        f"${DIAG_ENV}, else .ddflow/local/dryrun/ in the project)",
+    )
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     ap.add_argument("--report", default="", help="also write the report as Markdown to this file")
     ap.add_argument("--preview", default="", help="also write the upgrade preview to this file")
@@ -1375,6 +1673,7 @@ def main(argv: list[str] | None = None, *, source: Path | None = None, doc: str 
         build_old=args.build_old,
         asked_fails=not args.confirmations_ok,
         max_show=args.max_show,
+        diag_dir=Path(args.diag_dir) if args.diag_dir else None,
     )
     report = run_all(opt)
     print(json.dumps(report.as_data(), indent=2) if args.json else report.table())
