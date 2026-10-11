@@ -29,6 +29,15 @@ def kind_pipelines(cfg: Config) -> dict[str, list[str]]:
     return {name: kind_pipeline(cfg, name) for name in KINDS}
 
 
+def _no_branch(gdef: Any, item: Item) -> bool:
+    """A gate that `needs_branch` on a PHASE that has none: a structural fact, not paths."""
+    return bool(
+        getattr(gdef, "needs_branch", False)
+        and item.kind == "phase"
+        and not (item.branch or item.worktree)
+    )
+
+
 def gate_applies(gdef: Any, item: Item) -> str:
     """Why ``gdef`` does NOT apply to ``item``, or ``""`` when it does.
 
@@ -45,11 +54,7 @@ def gate_applies(gdef: Any, item: Item) -> str:
     task that has merely not been claimed yet still owes the gate."""
     if gdef is None:
         return ""
-    if (
-        getattr(gdef, "needs_branch", False)
-        and item.kind == "phase"
-        and not (item.branch or item.worktree)
-    ):
+    if _no_branch(gdef, item):
         return f"no branch: the phase {item.id} has no branch of its own, so nothing to merge"
     if not gdef.applies_when or not item.globs:
         return ""
@@ -61,21 +66,85 @@ def gate_applies(gdef: Any, item: Item) -> str:
     )
 
 
+#: What the actual change touches: a reader of the item's diff, called at most once per
+#: judgement and only when a gate with `applies_when` needs it. None means git could not say.
+DiffPaths = Callable[[], "list[str] | None"]
+
+
+#: How many changed paths the recorded reason names before it counts the rest.
+_SHOWN = 6
+
+
+def _diff_judgement(gdef: Any, item: Item, paths: list[str] | None) -> tuple[bool, str]:
+    """(covered, why-not) for ``gdef`` against the ACTUAL changed ``paths``.
+
+    ``covered`` is True when some changed path can be covered by an `applies_when`
+    pattern. A diff that cannot be read (None) or is empty says nothing -- "nobody looked"
+    is not "no" -- so it is neither covered nor a reason: the caller keeps the gate in play.
+    The reason names the changed paths and the patterns, which is the recorded evidence."""
+    if not paths:
+        return False, ""
+    if any(overlap(pat, p) for p in paths for pat in gdef.applies_when):
+        return True, ""
+    shown = ", ".join(paths[:_SHOWN]) + (
+        f" (+{len(paths) - _SHOWN} more)" if len(paths) > _SHOWN else ""
+    )
+    return False, (
+        f"applies only to work touching {', '.join(gdef.applies_when)}; "
+        f"the change of {item.id} touches only {shown}"
+    )
+
+
 def not_applicable(
-    item: Item, pipeline: Iterable[str], gates: Mapping[str, Any] | None
+    item: Item,
+    pipeline: Iterable[str],
+    gates: Mapping[str, Any] | None,
+    *,
+    required: Iterable[str] = (),
+    diff: DiffPaths | None = None,
 ) -> dict[str, str]:
     """Gate -> why it does not apply, for the ``pipeline`` gates ``item`` does not run.
 
-    A gate with a recorded outcome always applies: work already done is never hidden."""
+    A gate with a recorded outcome always applies: work already done is never hidden.
+
+    A gate in ``required`` is never excused by the DECLARED globs alone: those are
+    agent-editable (`ddflow update --globs`, no approval), so a required gate could be
+    dropped by declaring the work elsewhere (B-na-required-gate). It is excused only when
+    ``diff`` reads the ACTUAL changed paths and none of them can match `applies_when`; the
+    reason names those paths and the patterns. No ``diff``, an unreadable one or an empty
+    one keeps it owed. Any other gate is judged on the declared globs, and re-judged on
+    ``diff`` when there is one: a change that touches its paths brings it back. A gate
+    that cannot apply for a structural reason (a phase has no branch to merge) is not a
+    matter of paths and is excused as before."""
     if not gates:
         return {}
+    req = set(required)
     out: dict[str, str] = {}
+    cache: list[list[str] | None] = []
+
+    def actual() -> list[str] | None:
+        if not cache:
+            cache.append(diff() if diff is not None else None)
+        return cache[0]
+
     for gid in pipeline:
         if item.gate_outcome(gid):
             continue
-        why = gate_applies(gates.get(gid), item)
-        if why:
-            out[gid] = why
+        gdef = gates.get(gid)
+        why = gate_applies(gdef, item)
+        if not why:
+            continue
+        if gdef is not None and gdef.applies_when and not _no_branch(gdef, item):
+            by_diff = ""
+            if diff is not None:
+                covered, by_diff = _diff_judgement(gdef, item, actual())
+                if covered:
+                    continue
+            if gid in req:
+                if not by_diff:
+                    continue
+                why = by_diff
+        out[gid] = why
     return out
 
 

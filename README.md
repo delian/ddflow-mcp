@@ -2748,6 +2748,13 @@ already has a recorded outcome always applies, and so does every gate of an item
 declares no globs: a gate is never left out for want of information. It is a gate field,
 not a knob -- empty by default, so a project that never sets it sees no change.
 
+A gate listed in `[gates].required` is the exception: the declared globs are agent-editable
+(`ddflow update --globs`, no approval), so they never excuse it. It reads `[-] not
+applicable` only when the ACTUAL change (the item's diff against its base) touches none of
+the patterns, and the reason names the changed paths. With no diff yet, an unreadable one or
+an empty one it stays owed. Every other gate is re-judged on the diff at `complete`: a change
+that touches its paths brings it back, and `complete` lists each gate the diff excused.
+
 A gate that concerns a branch (`needs_branch`, set on `merge`) has the same shape: it
 does not apply to a phase with no branch and no worktree -- a phase has no branch of its
 own -- so it shows `[-] merge  -- not applicable: no branch ...` and completes
