@@ -690,9 +690,11 @@ def _brief_current(
         else {}
     )
     todo = [g for g in pipe if g not in off and not it.gate_satisfied(g, g in required)]
-    out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
+    # Before `gates remaining`: a squeezed brief trims from the bottom, and this is the
+    # line that must not be the first to go.
     for g, note in local_command_notes(it, [(g, it.gate_outcome(g)) for g in pipe]).items():
         out.append(f"- {g} {note}")
+    out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
     if repo is not None and not suggested:
         readme = readme_report(state, cfg, item, repo=repo)
         if readme:
