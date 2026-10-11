@@ -131,3 +131,8 @@ def test_each_clone_records_its_own_id_in_its_claim(merged):
     clones = _claim_clones(merged)
     assert len(clones) == 2 and all(clones), clones
     assert clones[0] != clones[1], clones
+    persisted = {
+        (r / ".ddflow" / "local" / "clone-id").read_text().strip()
+        for r in (merged, merged.parent / "b")
+    }
+    assert set(clones) == persisted, (clones, persisted)
