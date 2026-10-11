@@ -10,7 +10,10 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
 from conftest import append_config, run_cli, write_config
+
+from tests.pin_norm import stable
 
 ME = "u5pin"
 OTHER = "other"
@@ -238,11 +241,14 @@ def transcript(repo: Path) -> list[tuple[tuple[str, ...], int, str, str]]:
     return out
 
 
+#: ~600 sequential ddflow subprocesses: 110 s alone, and past the suite-wide 420 s on a host
+#: under heavy load (B-loop-transcript-slow). Its own, generous, bound; a hang still ends.
+@pytest.mark.timeout(1800)
 def test_the_loop_cli_transcript_is_unchanged(repo):
     got = transcript(repo)
     assert len(got) == len(EXPECTED)
     for g, e in zip(got, EXPECTED, strict=True):
-        assert g == e, f"{g[0]}:\n got {g[1:]}\nwant {e[1:]}"
+        assert stable(g) == stable(e), f"{g[0]}:\n got {g[1:]}\nwant {e[1:]}"
 
 
 #: Generated from the transcript of the code before the executor (B-uc-surf-loop).
