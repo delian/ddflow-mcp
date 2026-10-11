@@ -609,7 +609,7 @@
 # ---
 # name: test_help[ddflow gate record]
   '''
-  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] id gate
+  usage: ddflow gate record [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--reviewer-model REVIEWER_MODEL] [--reviewed-sha REVIEWED_SHA] [--output-file OUTPUT_FILE] [--force] id gate
   
   positional arguments:
     id
@@ -633,27 +633,33 @@
                           the commit the review tool ran on (roborev review <sha>); refused when it
                           is not the item's branch head or a commit of its branch
     --output-file OUTPUT_FILE
+    --force               override ANOTHER CLONE's live lease on the item (needs --reason; recorded
+                          on the event)
   
   '''
 # ---
 # name: test_help[ddflow gate run]
   '''
-  usage: ddflow gate run [-h] [--rerun-failed] id gate
+  usage: ddflow gate run [-h] [--reason REASON] [--force] [--rerun-failed] id gate
   
   positional arguments:
     id
     gate
   
   options:
-    -h, --help      show this help message and exit
-    --rerun-failed  when the gate fails, run ONLY the failed tests once more and record both
-                    outcomes (the gate stays failed; a test that passes alone goes to the flake log)
+    -h, --help       show this help message and exit
+    --reason REASON  why --force is needed (recorded)
+    --force          override ANOTHER CLONE's live lease on the item (needs --reason; recorded on
+                     the event)
+    --rerun-failed   when the gate fails, run ONLY the failed tests once more and record both
+                     outcomes (the gate stays failed; a test that passes alone goes to the flake
+                     log)
   
   '''
 # ---
 # name: test_help[ddflow gate skip]
   '''
-  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] id gate
+  usage: ddflow gate skip [-h] [--outcome {passed,failed,unavailable,partial,skipped}] [--reason REASON] [--evidence EVIDENCE] [--command COMMAND] [--exit-code EXIT_CODE] [--model MODEL] [--output-file OUTPUT_FILE] [--force] id gate
   
   positional arguments:
     id
@@ -671,6 +677,8 @@
     --model MODEL         the REVIEWER's model, for family independence (the author's is `complete
                           --model`); an author-family name on a reviewer gate is refused
     --output-file OUTPUT_FILE
+    --force               override ANOTHER CLONE's live lease on the item (needs --reason; recorded
+                          on the event)
   
   '''
 # ---
@@ -1502,14 +1510,17 @@
 # ---
 # name: test_help[ddflow release]
   '''
-  usage: ddflow release [-h] [--note NOTE] id
+  usage: ddflow release [-h] [--note NOTE] [--reason REASON] [--force] id
   
   positional arguments:
     id
   
   options:
-    -h, --help   show this help message and exit
+    -h, --help       show this help message and exit
     --note NOTE
+    --reason REASON  why --force is needed (recorded)
+    --force          override ANOTHER CLONE's live lease on the item (needs --reason; recorded on
+                     the event)
   
   '''
 # ---

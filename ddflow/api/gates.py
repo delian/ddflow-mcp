@@ -419,6 +419,8 @@ def run(
     agent: str = "",
     called_from: Path | None = None,
     rerun_failed: bool = False,
+    force: bool = False,
+    reason: str = "",
 ) -> O.Outcome:
     """Execute a command gate and record what it said.
 
@@ -462,6 +464,15 @@ def run(
             outcome="",
         )
 
+    # Before anything is written, `gate.started` and the `unavailable` below included: bob,
+    # who has no tree for alice's item, wrote `unavailable` over her recorded pass (B90b43dd2d8).
+    refusal, forced_by = L.foreign_guard(
+        log, cfg, item, force=force, reason=reason, what=f"running {gate}"
+    )
+    if refusal:
+        return O.refused("gate.run", refusal, id=item, gate=gate, outcome="")
+    forced = bool(forced_by)
+
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
     if cwd is None:
         reason = (
@@ -472,7 +483,9 @@ def run(
             f"is not its: run the gate from the worktree it is worked in, or set "
             f"[worktree].enabled = false if the primary is where you work."
         ) + " Recording UNAVAILABLE."
-        R.record_measured(log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates)
+        R.record_measured(
+            log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
+        )
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
     if repeated is not None:
@@ -480,7 +493,7 @@ def run(
     scope = TS.unit_tests_scope(cfg, st, it, gdef.command, cwd) if gate == "unit_tests" else None
     if scope is not None and scope.command:
         gdef = replace(gdef, command=scope.command)
-    log.append("gate.started", item, {"gate": gate})
+    log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = run_watching_git(
         gdef,
@@ -504,7 +517,9 @@ def run(
     _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)
     reason = _failure_reason(gdef, result, ev)
     # Unmeasured here: `run_command_gate` measured the tree the command ran on.
-    R.record_measured(log, cfg, repo, it, gate, result, reason=reason, evidence=ev, gates=gates)
+    R.record_measured(
+        log, cfg, repo, it, gate, result, reason=reason, evidence=ev, gates=gates, forced=forced
+    )
     data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
     if failing := FK.failure_text(ev):
         data["failure_text"] = failing  # for the terminal; the evidence carries the same facts
@@ -742,6 +757,7 @@ def record(
     evidence: Evidence | None = None,
     agent: str = "",
     called_from: Path | None = None,
+    force: bool = False,
 ) -> O.Outcome:
     """Record an outcome an agent produced, or skip the gate on the record.
 
@@ -757,6 +773,14 @@ def record(
     if isinstance(resolved, O.Outcome):
         return resolved
     log, cfg, st, it, gdef, gates = resolved
+
+    # Recording over another clone's live lease replaces what its holder recorded (last
+    # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).
+    refusal, forced_by = L.foreign_guard(
+        log, cfg, item, force=force, reason=reason, what=f"recording {gate}"
+    )
+    if refusal:
+        return O.refused("gate.record", refusal, id=item, gate=gate, outcome="")
 
     ordered = _order_gate(log, cfg, st, item, gate, recording=True, defs=gates)
     if isinstance(ordered, O.Outcome):
@@ -824,6 +848,7 @@ def record(
             by=by,
             tree=wt,
             owner_of=G.record_owner(st),
+            forced=bool(forced_by),
         )
     except ValueError as exc:
         if gdef is not None and gdef.is_human_gate:

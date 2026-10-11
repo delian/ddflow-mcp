@@ -365,6 +365,7 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
     human: bool = False,
     measured: dict[str, Any] | None = None,
     owner_of: Callable[[str], str | None] | None = None,
+    forced: bool = False,
 ) -> None:
     """Write a gate outcome to the log, enforcing the evidence contract.
 
@@ -424,6 +425,8 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
             "by": by or log.agent_id,
             "reason": reason,
             "evidence": {**(measured or {}), **(evidence or {})},
+            # Written over another clone's live lease with --force (B90b43dd2d8); additive.
+            **({"forced": True} if forced else {}),
         },
     )
 
