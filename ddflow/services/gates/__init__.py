@@ -71,6 +71,7 @@ from .kinds import (  # noqa: F401
     EVIDENCE_FORMS,
     KINDS,
     REPORT_KEYS,
+    DiffPaths,
     evidence_forms,
     evidence_problems,
     gate_applies,
