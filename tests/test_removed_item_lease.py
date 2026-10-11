@@ -166,3 +166,13 @@ def test_require_names_the_holder_only_while_the_lease_is_live():
     assert live.exit == 3 and "alice" in live.reason and "ddflow/T" in live.reason
     lapsed = _require(_removed(lease_at=1000.0), "T", "worktree.merged")
     assert "no such item" in lapsed.reason and "alice" not in lapsed.reason
+
+
+def test_cleanup_lists_a_stranded_branch_whose_worktree_is_gone(stranded):
+    tree = stranded / ".ddflow" / "worktrees" / "T2"
+    _git(stranded, "worktree", "remove", "--force", str(tree))
+    _, out, err = run_cli(stranded, "cleanup", agent="alice")
+    text = out + err
+    assert "lease still held by alice" in text and "git branch -D ddflow/T2" in text, text
+    assert "LEAVE ALONE" not in text, text
+    assert run_cli(stranded, "doctor", agent="alice")[0] == 1
