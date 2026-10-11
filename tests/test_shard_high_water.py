@@ -234,16 +234,27 @@ def test_the_events_of_the_last_command_are_in_the_mark(clone):
 def test_a_mark_that_cannot_be_written_never_fails_the_append(clone, monkeypatch):
     """The mark is bookkeeping: an unwritable `.ddflow/local` (read-only mount, full disk)
     must not fail a command whose event is already durable (reviewer finding, refuted)."""
-    from ddflow.services import shardmarks
+    from ddflow.infra import log as logmod
 
     def boom(*_a, **_k):
         raise OSError("read-only file system")
 
-    monkeypatch.setattr(shardmarks, "appended", boom)
-    from ddflow.config import Config
-    from ddflow.services import identity
-
-    log, _who = identity.open_log(clone, Config.load(clone), AGENT)
+    monkeypatch.setattr(logmod, "APPEND_HOOKS", [boom])
+    log = logmod.EventLog(clone, AGENT)
     before = _lines(clone)
     log.append("task.added", "T9", {"title": "x", "globs": []})
     assert _lines(clone) == before + 1
+
+
+def test_a_log_built_directly_follows_its_appends_too(clone):
+    """The CLI's `Ctx.log` and the MCP server's are built with `EventLog(...)`, not `open_log`
+    (`ddflow approve`, skew override): their events are in the mark as well (roborev finding)."""
+    import ddflow.api  # noqa: F401  (registers the hook, as every command does)
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    log = EventLog(clone, AGENT)
+    log.append("task.added", "T9", {"title": "x", "globs": []})
+    _commit(clone, "T9")
+    _git(clone, "reset", "-q", "--hard", "HEAD~1")
+    assert shardmarks.lost(clone, log), "the directly built log's event was not in the mark"

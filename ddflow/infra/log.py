@@ -844,6 +844,14 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
         yield
 
 
+#: Called after each event is on disk, under the append lock: `(log, event, size_before,
+#: size_after)` of the written shard. A module registers itself here (`services.shardmarks`
+#: keeps the shard high-water mark current, Ba24a8d32ee) so every EventLog -- the CLI's
+#: `Ctx.log`, the MCP server's, `open_log`'s -- follows, with no layering inversion. An error
+#: in a hook never fails the append.
+APPEND_HOOKS: list[Callable[[EventLog, Event, int, int], None]] = []
+
+
 class EventLog:
     """Sharded append-only log rooted at ``<root>/.ddflow/events``.
 
@@ -886,10 +894,6 @@ class EventLog:
         self._redactor: Any = None
         self._caps_active: set[str] | None = None
         self.skipped_lines = 0
-        #: Called after each event is on disk, still under the lock: `(log, event, size_before,
-        #: size_after)` of this agent's shard. Set by `services.identity.open_log` to keep the
-        #: shard high-water mark current (Ba24a8d32ee); an error in it never fails the append.
-        self.on_append: Callable[[EventLog, Event, int, int], None] | None = None
 
     @property
     def agent_id(self) -> str:
@@ -1090,9 +1094,9 @@ class EventLog:
             os.fsync(fd)
         finally:
             os.close(fd)
-        if self.on_append is not None:
+        for hook in APPEND_HOOKS:  # every log, however built (Ba24a8d32ee)
             with contextlib.suppress(Exception):
-                self.on_append(self, ev, size, size + len(line))
+                hook(self, ev, size, size + len(line))
         return ev
 
     def _redact_data(self, kind: str, data: dict[str, Any]) -> dict[str, Any]:
