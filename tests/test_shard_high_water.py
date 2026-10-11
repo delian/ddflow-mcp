@@ -336,3 +336,18 @@ def test_a_visit_to_a_longer_branch_does_not_disarm_the_original(clone):
     assert not _problem_lines(_doctor(clone)[1])
     _git(clone, "reset", "-q", "--hard", "HEAD~2")
     assert _problem_lines(_doctor(clone)[1])
+
+
+def test_the_append_fast_path_does_not_erase_a_loss_at_an_equal_size(clone):
+    """roborev: a shard rewritten to exactly the recorded size (the last seen event gone) must
+    stay a loss when the next append takes the cheap path."""
+    from ddflow.infra.log import EventLog
+    from ddflow.services import shardmarks
+
+    _dd(clone, "status")
+    shard = _shard(clone)
+    text = shard.read_text()
+    last_id = json.loads(text.splitlines()[-1])["id"]
+    shard.write_text(text.replace(last_id, "f" * len(last_id)))  # same size, event gone
+    EventLog(clone, AGENT).append("task.added", "T9", {"title": "x", "globs": []})
+    assert shardmarks.lost(clone, EventLog(clone, AGENT))
