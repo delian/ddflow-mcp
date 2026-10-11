@@ -41,11 +41,9 @@ class ConfigConflict(Exception):
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
-        rel = (
-            ".ddflow" + str(self.path).partition("/.ddflow")[2]
-            if "/.ddflow" in str(path)
-            else str(path)
-        )
+        parts = self.path.parts
+        ddflow = len(parts) - 1 - parts[::-1].index(".ddflow") if ".ddflow" in parts else -1
+        rel = "/".join(parts[ddflow:]) if ddflow >= 0 else str(path)
         super().__init__(f"resolve the merge conflict in {rel} (git status)")
 
 
@@ -65,7 +63,7 @@ def tolerating_conflicts(on: bool = True) -> Iterator[None]:
 
 
 _OURS = re.compile(r"^<<<<<<< ", re.MULTILINE)
-_SEP = re.compile(r"^=======$", re.MULTILINE)
+_SEP = re.compile(r"^=======\r?$", re.MULTILINE)
 _THEIRS = re.compile(r"^>>>>>>> ", re.MULTILINE)
 
 

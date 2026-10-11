@@ -156,3 +156,13 @@ def test_a_merely_malformed_config_keeps_todays_behaviour(clones):
     code, out, err = run_cli(a, "status", agent="U1")
     assert "resolve the merge conflict" not in out + err
     assert code != 0
+
+
+def test_a_crlf_conflict_and_a_dotted_parent_directory(tmp_path):
+    from ddflow.config_sections._layers import ConfigConflict, has_conflict_markers
+
+    assert has_conflict_markers(MARKED.replace("\n", "\r\n"))
+    p = tmp_path / ".ddflow-src" / "repo" / ".ddflow" / "config.toml"
+    assert (
+        str(ConfigConflict(p)) == "resolve the merge conflict in .ddflow/config.toml (git status)"
+    )
