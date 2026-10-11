@@ -1396,12 +1396,15 @@
           the user and, only if the user insists, reruns with `--allow-older-version
           --reason "..."` (CLI) or the `allow_older_version` argument (MCP), which
           records a `skew.overridden` event for THAT session and marks its events as
-          written by an older version. `warn`: write anyway and say so on stderr.
-          `off`: no check. The older version still stamps itself, so the log records
-          that it wrote. Only a ddflow that ships this guard can refuse: releases
-          before it cannot. An unrecognised value in a config file is warned about,
-          reported by `doctor` and falls back to 'refuse', the strictest (an older
-          ddflow's write is refused); `config --set`, `ddflow_configure` and the
+          written by an older version. A skew of PATCH releases only (the same minor,
+          the same data format level, no recorded capability this ddflow lacks) is not
+          refused: the write goes through with a one-time warning and the event is
+          marked as written by an older version. `warn`: write anyway and say so on
+          stderr. `off`: no check. The older version still stamps itself, so the log
+          records that it wrote. Only a ddflow that ships this guard can refuse:
+          releases before it cannot. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'refuse', the strictest (an
+          older ddflow's write is refused); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
       upgrade.backup = 'local'   [default]
