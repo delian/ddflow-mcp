@@ -17,6 +17,7 @@ from ..records import (
     State,
     _claim,
     _clashing,
+    _other_hand,
     _overlaps,
 )
 from ._common import _item
@@ -98,6 +99,7 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         globs=list(d.get("globs", [])),
         note=d.get("note", ""),
         resources=list(d.get("resources", [])),
+        clone=str(d.get("clone", "")),
         event=ev.id or ev.compute_id(),
         prior_state=it.state,
         prior_holder=it.lease.holder if it.lease else "",
@@ -111,7 +113,7 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         _hold(it, new)
         return
     held = _claim(cur)
-    if cur.holder == new.holder or cur.expired_at:
+    if (cur.holder == new.holder and not _other_hand(held, mine)) or cur.expired_at:
         # Not a rival's live claim: the holder's own earlier claim, re-claimed after it
         # lapsed, or one whose expiry is recorded. The new claim is displayed, as it
         # always was -- but the old one stays on the record: a claim from another clone
