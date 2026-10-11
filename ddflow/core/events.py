@@ -250,6 +250,17 @@ def capability_gap(
     return None
 
 
+def capabilities_ahead(recorded: dict[str, RecordedCapability]) -> bool:
+    """Does the log record ANY capability this ddflow lacks (a name it does not know, or a
+    kind it does not cover under a name it does)? That is a gap in what this writer can do
+    safely, whatever kind it is about to write: a patch skew never relaxes the guard then."""
+    for name, rec in recorded.items():
+        mine = CAPABILITIES.get(name)
+        if mine is None or not rec.kinds <= mine.kinds:
+            return True
+    return False
+
+
 def capability_unrecorded(recorded: dict[str, RecordedCapability], name: str) -> Capability | None:
     """``name`` as this ddflow has it when the log does not yet record all it governs."""
     mine = CAPABILITIES.get(name)

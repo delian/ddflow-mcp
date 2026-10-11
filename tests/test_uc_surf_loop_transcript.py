@@ -1073,7 +1073,7 @@ EXPECTED = [
         "                          [--command COMMAND] [--exit-code EXIT_CODE]\n"
         "                          [--model MODEL] [--reviewer-model REVIEWER_MODEL]\n"
         "                          [--reviewed-sha REVIEWED_SHA]\n"
-        "                          [--output-file OUTPUT_FILE]\n"
+        "                          [--output-file OUTPUT_FILE] [--force]\n"
         "                          id gate\n"
         "ddflow gate record: error: argument --outcome: invalid choice: 'maybe' (choose from passed, "
         "failed, unavailable, partial, skipped)\n",

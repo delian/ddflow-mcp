@@ -366,6 +366,11 @@ flowchart TD
 With `[flow].integration = "pr"`, `merge` opens a pull request and parks the item in
 review instead; `next` completes it when the request merges.
 
+A lease is evidence of intent, not a lock, but a LIVE lease held from another clone is not
+overwritten by accident: `release` and `gate run|record|skip` on it exit 3 naming the holder,
+unless you pass `--force --reason "<why>"` (CLI only; recorded as `forced` on the event).
+Agents of the same clone, an expired lease and a lease with no recorded clone are unaffected.
+
 **The task pipeline.** Ten gates, in order. Heavy borders are the gates
 `gates.required` names by default (`implement`, `unit_tests`, `merge`); the rest still
 need *some* outcome — passed, failed, unavailable, partial, or an explicit skip with a
