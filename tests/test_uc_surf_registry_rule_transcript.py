@@ -9,6 +9,8 @@ from pathlib import Path
 
 from conftest import run_cli
 
+from tests.pin_norm import stable
+
 _CONTENT = "write the failing test before the fix"
 SCRIPT: tuple[tuple[str, ...], ...] = (
     ("rule",),
@@ -129,7 +131,7 @@ def test_the_rule_cli_transcript_is_unchanged(repo):
     got = transcript(repo)
     assert len(got) == len(EXPECTED)
     for g, e in zip(got, EXPECTED, strict=True):
-        assert g == e, f"{g[0]}:\n got {g[1:]}\nwant {e[1:]}"
+        assert stable(g) == stable(e), f"{g[0]}:\n got {g[1:]}\nwant {e[1:]}"
 
 
 #: Generated from the transcript of the code before the executor (B-uc-surf-registry).

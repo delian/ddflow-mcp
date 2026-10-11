@@ -38,6 +38,7 @@ from __future__ import annotations
 from .defs import (  # noqa: F401
     DEFAULT_GATES,
     GateDef,
+    command_provenance,
     inert_requirements,
     load_gates,
     pipeline_for,
@@ -102,6 +103,7 @@ from .outcomes import (  # noqa: F401
     GateStatus,
     StaleNote,
     approve,
+    local_command_notes,
     on_refutation,
     record,
     refuted_line,
@@ -131,6 +133,7 @@ from .runner import (  # noqa: F401
     RUNS_DIR,
     Classified,
     classify_exit,
+    command_layer_evidence,
     gate_config_drift,
     output_evidence,
     run_command_gate,
