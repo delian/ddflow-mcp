@@ -17,6 +17,9 @@ e.g. a release's venv), `--build-old` (installed from the clone with uv; needs t
 index or uv's cache), `--simulate-old VERSION` (this code declaring an older version: a
 stand-in, labelled so). With none of them those steps say `unavailable`, never a pass.
 
+A failed run (or one whose live project moved under it) writes the step table and every command's
+stdout/stderr to .ddflow/local/dryrun/ and prints the path; --diag-dir or DDFLOW_DRYRUN_DIAG_DIR move it.
+
 Exit 0 every check passed, 1 a check failed, 2 the rehearsal could not run (no git or uv, no
 such commit, no old ddflow, a scratch directory that is not empty). Idempotent: every run is
 in a new scratch directory, which is removed unless `--keep`.
