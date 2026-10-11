@@ -127,14 +127,14 @@ READS: tuple[tuple[str, ...], ...] = (
 #: Seconds one ddflow command, git call or server session may take.
 TIMEOUT_S = 300.0
 
-#: Where a failed run's step table and command transcript go: this variable, else `--diag-dir`,
-#: else `.ddflow/local/dryrun/` in the project (git-ignored, machine-local).
+#: Where a failed run's step table and command transcript go: `--diag-dir` (`Options.diag_dir`),
+#: else this variable, else `.ddflow/local/dryrun/` in the project (git-ignored, machine-local).
 DIAG_ENV = "DDFLOW_DRYRUN_DIAG_DIR"
 #: The characters kept of a command's stdout or stderr (half from each end); a command that
 #: succeeded keeps a tenth of that.
 STREAM_BOUND = 6000
-#: The most commands a transcript keeps (the last ones).
-MAX_COMMANDS = 300
+#: The most commands a transcript keeps (the last ones; a full rehearsal runs a few hundred).
+MAX_COMMANDS = 1000
 #: The name of the result when the live project changed in a way the rehearsal cannot tell from
 #: its own doing: it is `unavailable`, never a pass and never a fail.
 LIVE_CHANGED = "live repo changed during rehearsal"
@@ -187,8 +187,8 @@ class Options:
     #: it is the surprise the rehearsal exists to find) or is only named in the preview.
     asked_fails: bool = True
     reason: str = "dry run: the operator would accept this"
-    #: Where a failed run writes its transcript; None: `DDFLOW_DRYRUN_DIAG_DIR`, else
-    #: `<source>/.ddflow/local/dryrun`.
+    #: Where a failed run writes its transcript; wins over `DDFLOW_DRYRUN_DIAG_DIR`, which wins over
+    #: the default `<source>/.ddflow/local/dryrun`.
     diag_dir: Path | None = None
 
 
@@ -377,19 +377,16 @@ def live_leaks(before: Live, after: Live, mine: Footprint | None = None) -> list
             for t in sorted(set(after.tags) - set(before.tags))
             if after.tag_owners.get(t) == mine.tagger
         ]
-        out += [
-            f"a backup of the rehearsal appeared in the live project: {b}"
-            for b in sorted(set(after.backups) - set(before.backups))
-            if mine.started <= b.partition("-")[0] <= mine.ended
-            and backup_versions(b) in mine.versions
-        ]
     return out
 
 
-def live_moved(before: Live, after: Live) -> list[str]:
-    """How the live log changed other than by growing: a shard rewritten or removed, or one
-    that was still being written while it was read. Another agent does that (a compaction, a
-    rebase) as readily as a rehearsal that leaked would; it is told apart by `live_leaks`."""
+def live_moved(before: Live, after: Live, mine: Footprint | None = None) -> list[str]:
+    """How the live project changed in a way that is not proof of a leak: a shard rewritten or
+    removed, one still being written while it was read (before or after: a torn read of either
+    could pass for a change), or a backup made while the rehearsal ran for the versions it
+    upgraded. A backup carries no run id, so unlike a tag it cannot be told from another agent's
+    upgrade of the same versions: it is "the project moved", never a pass and never a certain
+    leak. `live_leaks` has what is certain."""
     out = [
         f"the live shard {n} changed under the run"
         for n in prefixes_kept(before.shards, after.shards)
@@ -398,12 +395,20 @@ def live_moved(before: Live, after: Live) -> list[str]:
         f"the live shard {n} was still being written when read"
         for n in sorted({*before.unstable, *after.unstable})
     ]
+    if mine is not None:
+        out += [
+            f"a backup appeared in the live project while the rehearsal ran, for its versions "
+            f"(another agent's upgrade, or a leak): {b}"
+            for b in sorted(set(after.backups) - set(before.backups))
+            if mine.started <= b.partition("-")[0] <= mine.ended
+            and backup_versions(b) in mine.versions
+        ]
     return out
 
 
 def live_problems(before: Live, after: Live, mine: Footprint | None = None) -> list[str]:
     """Everything `live_leaks` and `live_moved` name."""
-    return [*live_leaks(before, after, mine), *live_moved(before, after)]
+    return [*live_leaks(before, after, mine), *live_moved(before, after, mine)]
 
 
 def folded_state(repo: Path) -> State:
@@ -689,7 +694,7 @@ class Rehearsal:
         error: str = "",
     ) -> None:
         # a command that worked keeps little; one that did not keeps what explains it
-        limit = STREAM_BOUND if code != 0 else STREAM_BOUND // 10
+        limit = STREAM_BOUND if code != 0 else STREAM_BOUND // 10  # 600
         self.commands.append(
             {
                 "run": self.run_id,
@@ -800,7 +805,7 @@ class Rehearsal:
         name = "live project untouched"
         mine = self.footprint()
         leaks = live_leaks(before, after, mine)
-        moved = live_moved(before, after)
+        moved = live_moved(before, after, mine)
         if leaks:
             self.add(10, name, False, "; ".join([*leaks, *moved]))
             return
@@ -1492,6 +1497,8 @@ def bounded(text: str, limit: int = STREAM_BOUND) -> str:
     if len(text) <= limit:
         return text
     half = limit // 2
+    if not half:  # too small to keep two ends
+        return text[: max(limit, 0)]
     return f"{text[:half]}\n... [{len(text) - 2 * half} characters cut] ...\n{text[-half:]}"
 
 
@@ -1518,7 +1525,8 @@ def diag_directory(opt: Options) -> Path:
 
 def write_diagnostics(opt: Options, report: Report, runs: list[Rehearsal]) -> str:
     """Write the step table of a failed run and each command's bounded output to a file; the
-    path ("" when it could not be written: the report must still come out)."""
+    path ("" when it could not be written: the report must still come out). A rehearsal that was
+    repeated keeps every run: its table, its checks and its commands (each tagged with its run)."""
     data = {
         "run": runs[-1].run_id,
         "started": report.started,
@@ -1528,6 +1536,15 @@ def write_diagnostics(opt: Options, report: Report, runs: list[Rehearsal]) -> st
         "table": report.table(),
         "checks": [asdict(c) for c in report.checks],
         "facts": report.facts,
+        "runs": [
+            {
+                "run": r.run_id,
+                "table": r.report.table(),
+                "checks": [asdict(c) for c in r.report.checks],
+                "facts": r.report.facts,
+            }
+            for r in runs
+        ],
         "commands": [c for r in runs for c in r.commands],
     }
     name = f"{clock.compact_at()}-{runs[-1].run_id}.json"
@@ -1545,8 +1562,8 @@ def run_all(opt: Options) -> Report:
     """Run the whole rehearsal and clean up (unless ``opt.keep``). If the live project changed
     under it in a way it cannot tell from its own doing (`LIVE_CHANGED`), it is run once more
     in a scratch directory of its own; the second run decides, and a project that moved again
-    leaves that check `unavailable`. A failed run (or a project that moved) leaves its step
-    table and every command's output in a file, named in the report."""
+    leaves that check `unavailable`. A failed run, or one that was repeated because the project
+    moved, leaves its step table and every command's output in a file, named in the report."""
     original = opt.old  # building the old ddflow replaces it, in a scratch directory that goes
     report, rehearsal = _rehearse(opt)
     runs = [rehearsal]
@@ -1556,7 +1573,8 @@ def run_all(opt: Options) -> Report:
         report, rehearsal = _rehearse(again)
         runs.append(rehearsal)
         report.facts["first_run"] = f"{LIVE_CHANGED}: {'; '.join(first)}"
-    if any(c.status == FAIL for c in report.checks) or report.facts.get("live_changed"):
+    moved = report.facts.get("live_changed") or report.facts.get("first_run")
+    if any(c.status == FAIL for c in report.checks) or moved:
         report.diagnostics = write_diagnostics(opt, report, runs)
     return report
 

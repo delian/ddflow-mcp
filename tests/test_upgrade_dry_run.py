@@ -516,7 +516,8 @@ def test_a_live_log_that_changed_once_is_rehearsed_again_and_the_second_run_deci
     root = project(tmp_path, confirm_free=True)
     shard = next((root / ".ddflow" / "events").glob("*.jsonl"))
 
-    def rewrite_once(_self, n: int) -> None:
+    def rewrite_once(self, n: int) -> None:
+        self.git(root, "rev-parse", "HEAD")  # a command, so the transcript has one per run
         if n == 1:
             shard.write_text("rewritten\n", "utf-8")
 
@@ -525,6 +526,10 @@ def test_a_live_log_that_changed_once_is_rehearsed_again_and_the_second_run_deci
     assert len(calls) == 2
     assert rows(report)[10].status == DR.PASS, report.table()
     assert DR.LIVE_CHANGED in json.dumps(report.facts)  # the first run is not forgotten
+    # ...and neither is its evidence: both runs' tables and commands are in the file
+    data = json.loads(Path(report.diagnostics).read_text("utf-8"))
+    assert len(data["runs"]) == 2 and len({c["run"] for c in data["commands"]}) == 2
+    assert data["runs"][0]["checks"][-1]["status"] == DR.UNAVAILABLE
 
 
 def test_another_agents_snapshot_tag_and_backup_are_not_the_rehearsals(
@@ -568,21 +573,28 @@ def test_the_rehearsals_own_snapshot_tag_in_the_live_project_is_a_failure(
     assert "snapshot tag" in rows(report)[10].detail
 
 
-def test_a_backup_made_in_the_live_project_with_the_rehearsals_versions_is_a_failure(
+def test_a_backup_for_the_rehearsals_versions_made_meanwhile_is_never_a_pass(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = project(tmp_path, confirm_free=True)
 
-    def leaked(self, _n: int) -> None:
+    def maybe_leaked(self, _n: int) -> None:
         stamp = DR.clock.compact_at()
-        # the rehearsal's own copy, in a clone, and the same upgrade's copy in the live project
+        # the rehearsal's own copy, in a clone, and a copy for the same versions in the live
+        # project: a leak, or another agent upgrading the same versions meanwhile
         (self.pristine / ".ddflow" / "backups" / f"{stamp}-0.2.1-to-0.9").mkdir(parents=True)
         (root / ".ddflow" / "backups" / f"{stamp}-0.2.1-to-0.9").mkdir(parents=True)
 
-    only_clone(monkeypatch, leaked)
+    calls = only_clone(monkeypatch, maybe_leaked)
     report = DR.run_all(options(tmp_path, root))
-    assert rows(report)[10].status == DR.FAIL
-    assert "backup" in rows(report)[10].detail
+    assert rows(report)[10].status == DR.UNAVAILABLE and len(calls) == 2
+    assert "backup" in rows(report)[10].detail and report.exit_code == 2
+
+
+def test_bounded_keeps_the_ends_and_never_more_than_it_was_given() -> None:
+    assert DR.bounded("abc", 10) == "abc"
+    assert len(DR.bounded("x" * 1000, 100)) < 200
+    assert DR.bounded("abcdef", 1) == "a" and DR.bounded("abcdef", 0) == ""
 
 
 def test_a_shard_read_while_a_writer_appends_is_read_again(
