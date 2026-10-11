@@ -85,6 +85,7 @@ def decision_record(d: Decision) -> GuidanceRecord:
             "item": d.item,
             "supersedes": list(d.supersedes),
             "superseded_by": d.superseded_by,
+            "contested": bool(d.contested),
         },
     )
 

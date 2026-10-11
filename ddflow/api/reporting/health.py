@@ -50,6 +50,7 @@ from ..knowledge import pairs_from
 from ..knowledge.pairs import _sweep_records
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
+from .records import _contest_problems
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
@@ -344,14 +345,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
 
     p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
-    # B191: a merge brought in a rival definition or a rival claim. Every state, not only
-    # open ones -- a finished item whose other definition was dropped is still lost work.
-    problems += [
-        f"{it.id} is CONTESTED: {it.contest_summary()} — "
-        f"`ddflow show {it.id}`, then `ddflow resolve {it.id} --keep <event-id|agent>`"
-        for it in sorted(st.items.values(), key=lambda i: i.id)
-        if not it.removed and it.contest_summary()
-    ]
+    problems += _contest_problems(st)
 
     # B19: work that EXISTS and that `next` can never offer. Every other check here
     # measures the items that are present; this one asks whether any of them can be picked

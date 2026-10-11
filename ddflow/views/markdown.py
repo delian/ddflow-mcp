@@ -220,7 +220,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
 
 def lessons_md(state: State, cfg: Config | None = None) -> str:
     out = [GENERATED, "", "# Lessons", ""]
-    live = [x for x in state.lessons.values() if not x.superseded_by]
+    live = [x for x in state.lessons.values() if x.live]
     if not live:
         out.append("_None recorded._")
         return "\n".join(out)
@@ -371,7 +371,7 @@ def lessons_summary_md(state: State, cfg: Config | None = None) -> str:
         "`ddflow lesson add --id <id> --summary ...` gives it one.",
         "",
     ]
-    live = [x for x in state.lessons.values() if not x.superseded_by]
+    live = [x for x in state.lessons.values() if x.live]
     if not live:
         out.append("_None recorded._")
         return "\n".join(out)

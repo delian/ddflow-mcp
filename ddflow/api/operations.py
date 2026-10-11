@@ -97,7 +97,7 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
 
     if ran:
         if ran == "lessons_compression":
-            live = [x for x in st.lessons.values() if not x.superseded_by]
+            live = [x for x in st.lessons.values() if x.live]
             result = json.dumps(
                 {"bytes": sum(len(x.text().encode("utf-8")) for x in live), "entries": len(live)}
             )
