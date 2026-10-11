@@ -824,7 +824,8 @@ class ResearchNote:
     #: Rival definitions of this id from different agents (B230e852e10), each {"event",
     #: "agent", "lamport", "ts", "title", "data"}; empty unless contested. While it is
     #: not empty the displayed fields are the FIRST definition's, never mixed with a
-    #: rival's, and the record is not in force until `ddflow resolve` settles it.
+    #: rival's. `doctor` and `show` surface the contest; a note has no in-force notion.
+    #: `ddflow resolve` settles it.
     contested: list[dict[str, Any]] = field(default_factory=list, metadata={"omit_empty": True})
     budget: str = ""
     at: str = ""

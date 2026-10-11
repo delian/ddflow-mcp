@@ -261,8 +261,11 @@ def _h_decision_superseded(st: State, ev: Event) -> None:
 def _h_research(st: State, ev: Event) -> None:
     d = ev.data
     # Replace-on-record already (no merge), so only the contest needs deciding here.
-    if _contest(st, ev, "research", st.research.get(ev.subject)) == "contested":
+    prev = st.research.get(ev.subject)
+    mode = _contest(st, ev, "research", prev)
+    if mode == "contested":
         return
+    at = _kept_at_by(prev, ev)[0] if mode == "resolved" and prev is not None else ev.ts
     st.research[ev.subject] = ResearchNote(
         id=ev.subject,
         question=d.get("question", ""),
@@ -275,7 +278,7 @@ def _h_research(st: State, ev: Event) -> None:
         sources=list(d.get("sources", [])),
         tags=list(d.get("tags", [])),
         budget=d.get("budget", ""),
-        at=ev.ts,
+        at=at,
         item=d.get("item", ""),
     )
 
