@@ -203,3 +203,16 @@ def test_a_read_only_answer_is_not_replayed_once_the_project_is_writable(old, mo
     log, cfg, st = _load(old, "starter")
     rep = US.start(old, log, cfg, st, surf="mcp", environ={})
     assert rep["status"] != US.READONLY and "not writable" not in rep["text"]
+
+
+def test_a_check_the_operator_switched_off_is_told_once_not_on_every_brief(old) -> None:
+    log, cfg, st = _load(old, "starter")
+    cfg.upgrade.start_timeout_s = 0
+    US.start(old, log, cfg, st, surf="mcp", environ=CHECK)
+    assert "switched off" in US.take_for_brief(old, st)
+    assert US.take_for_brief(old, st) == ""
+
+
+def test_the_timeout_note_does_not_claim_a_container_applied_nothing_forever(old) -> None:
+    note = US._timeout_note("9.9.9", "0.1.0", 10)
+    assert "nothing had been applied when it started" in note and "still be running" in note

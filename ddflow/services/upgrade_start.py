@@ -149,6 +149,7 @@ def _save_locked(repo: Path, report: dict[str, Any]) -> None:
         "briefed": bool(keep and previous.get("briefed")),
         "key": report.get("key", ""),
         "complete": report.get("status") not in UNFINISHED and bool(report.get("key")),
+        "repeat": bool(report.get("repeat", True)),
     }
     try:
         fsio.ensure_ignored_dir(path.parent)
@@ -328,8 +329,9 @@ def _timeout_note(running: str, project: str, seconds: float) -> str:
     )
     return (
         f"ddflow {running} is newer than this project, which {since}: an upgrade is PENDING "
-        f"but its plan is not known yet -- {why}, so the server started anyway; the upgrade stays pending and nothing "
-        "has been applied. Run `ddflow upgrade --plan` to see it (a later connect or brief "
+        f"but its plan is not known yet -- {why}, so the server started anyway and the upgrade "
+        "stays pending (nothing had been applied when it started; a container's safe work may "
+        "still be running). Run `ddflow upgrade --plan` to see it (a later connect or brief "
         "shows it as soon as a check has finished)." + _ASK
     )
 
@@ -364,7 +366,12 @@ def _behind_report(
     done, out = (False, None) if seconds <= 0 else _bounded(work, seconds, late)
     if done:
         return out
-    return {"status": TIMEOUT, "text": _timeout_note(running, project, seconds), "key": key}
+    return {
+        "status": TIMEOUT,
+        "text": _timeout_note(running, project, seconds),
+        "key": key,
+        "repeat": seconds > 0,  # a check the operator switched off is told once, not nagged
+    }
 
 
 def _project(st: State, running: str) -> str:
@@ -450,12 +457,18 @@ def start(
     return report
 
 
+def _repeats(data: dict[str, Any]) -> bool:
+    """Does the marker hold a note the brief repeats? A check that reached no answer, unless the
+    operator switched it off (`start_timeout_s` = 0): that is said once, not on every brief."""
+    return data.get("status") in UNFINISHED and bool(data.get("repeat", True))
+
+
 def _unfinished(repo: Path, st: State | None) -> str:
     """The note of a start check that reached no answer, while it still applies: the marker
     is of this ddflow and (when the state is known) the project is still behind it."""
     data = _read(repo)
     text = str(data.get("text", ""))
-    if data.get("status") not in UNFINISHED or not text:
+    if not _repeats(data) or not text:
         return ""
     running = running_version()
     if data.get("version") != running or (st is not None and not _behind(st, running)):
@@ -495,7 +508,7 @@ def take_for_brief(repo: Path, st: State | None = None) -> str:
         text = str(data.get("text", ""))
         if not text:
             return ""
-        if data.get("status") in UNFINISHED:
+        if _repeats(data):
             st = st if st is not None else _state_of(repo)
             if st is not None:
                 return _unfinished(repo, st)
