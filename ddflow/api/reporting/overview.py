@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from ...infra.log import EventLog
 from ...services import gates as G
 from ...services import leases as L
 from ...services import upgrade_check as UC
+from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..lifecycle.planning import plan_for
@@ -109,7 +111,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
 
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
-    st = fold(events, strict=False)
+    st = localize(fold(events, strict=False), log, time.time())
     tracked = PR.work(events, st)
     findings = PR.detect(events, st, cfg)
     # The offer `next` makes (reservation hold and parallelism limit alike), so "ready" here is
