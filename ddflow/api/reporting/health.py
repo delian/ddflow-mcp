@@ -9,6 +9,7 @@ from typing import Any
 from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
+from ...core.events import is_older
 from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
 from ...core.schedule import is_external, stale_package_globs, unpickable
@@ -35,7 +36,7 @@ from ...services import shared_files as SF
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import workflow as WF
-from ...services.adopt import MISSING, NOT_BINDING, rules_status
+from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
 from ...services.completion import verdict
 from ...services.export import ops as X
 from ...services.export import select as export_select
@@ -395,22 +396,7 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # it must claim before editing, and every coordination guarantee here rests on that. A
     # drifted or stripped block is a note — the agent has rules, they are just not current.
 
-    for state in rules_status(repo):
-        if not state.needs_attention:
-            continue
-        # A block a newer ddflow wrote is not rewritten by a refresh: its own line says so.
-        line = (
-            state.render()
-            if state.newer
-            else (
-                f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
-                "(plain `ddflow adopt` also rewrites MCP launches)"
-            )
-        )
-        # NOT_BINDING sits with MISSING: a rule the agent may never load is not a
-        # milder version of a drifted one, it is the mechanism switched off.
-        severe = state.state in (MISSING, NOT_BINDING)
-        (problems if severe else notes).append(line)
+    _rules_findings(repo, st.highest_version, problems, notes)
 
     _launcher_findings(repo, problems, notes, cfg.enforce.commit_without_lease)
     found, extra = stale_references(repo, parser, tools)
@@ -450,6 +436,35 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     )
     out.data["text"] = human.render(out)
     return out
+
+
+def _rules_findings(repo: Path, highest: str, problems: list[str], notes: list[str]) -> None:
+    """The rules surface: MISSING, NOT_BINDING and DUPLICATE are PROBLEMs, a drifted or stripped
+    block is a note (the agent has rules, they are just not current)."""
+    for state in rules_status(repo):
+        if not state.needs_attention:
+            continue
+        # A block a newer ddflow wrote is not rewritten by a refresh: its own line says so.
+        line = (
+            state.render()
+            if state.newer
+            else (
+                f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
+                "(plain `ddflow adopt` also rewrites MCP launches)"
+            )
+        )
+        # NOT_BINDING sits with MISSING: a rule the agent may never load is not a
+        # milder version of a drifted one, it is the mechanism switched off.
+        severe = state.state in (MISSING, NOT_BINDING, DUPLICATE)
+        (problems if severe else notes).append(line)
+        # A section that needs a refresh AND was written by a ddflow older than the one that
+        # last worked on this log: say which, so the refresh is not mistaken for noise.
+        wrote = block_version(repo / state.path) if state.state in (DUPLICATE, STALE) else None
+        if wrote and is_older(wrote, highest):
+            notes.append(
+                f"{state.path}'s ddflow section is stamped {wrote}, older than {highest}, "
+                f"the highest ddflow stamp in this log"
+            )
 
 
 def _only_ids(title: str) -> bool:

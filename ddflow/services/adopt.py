@@ -261,12 +261,52 @@ def block_marker(line: str) -> str:
     return ""
 
 
+def block_spans(text: str) -> list[tuple[int, int]]:
+    """Where each managed block sits in ``text``, in file order: `(start, stop)` offsets from
+    the begin line through the end line (newline included), whichever marker grammar it is
+    written in. A marker is a whole line starting in column 0, so one quoted in prose or
+    shown indented as an example is not one. Raises
+    RegionError for markers that do not pair up (a begin inside a block, an end outside)."""
+    region = BLOCK._region()
+    begin, end = re.compile(region.begin or ""), re.compile(region.end or "")
+    spans: list[tuple[int, int]] = []
+    open_at: int | None = None
+    at = 0
+    for line in text.splitlines(keepends=True):
+        bare = line.rstrip("\n").removesuffix("\r")
+        if begin.fullmatch(bare) or bare == LEGACY_BEGIN:
+            if open_at is not None:
+                raise RegionError("a managed block begins inside another")
+            open_at = at
+        elif end.fullmatch(bare) or bare == LEGACY_END:
+            if open_at is None:
+                raise RegionError("a managed block ends without a beginning")
+            spans.append((open_at, at + len(line)))
+            open_at = None
+        at += len(line)
+    if open_at is not None:
+        raise RegionError("a managed block begins and never ends")
+    return spans
+
+
+def block_count(text: str) -> int:
+    """How many managed blocks ``text`` holds (both marker grammars); 0 for a file whose
+    markers do not pair up (`_block_state` reports that as a removed section)."""
+    try:
+        return len(block_spans(text))
+    except RegionError:
+        return 0
+
+
 #: The rules surfaces whose state `rules_status` reports. `AGENTS.md` is the one more than
 #: thirty agents read; `CLAUDE.md` only counts once it exists, because writing it into a
 #: project that does not use Claude Code would be noise.
 RULES_FILES = ("AGENTS.md", "CLAUDE.md")
 
 MISSING, NO_BLOCK, STALE, CURRENT = "missing", "no_block", "stale", "current"
+#: More than one managed block in one file (an older ddflow appended its own beside a newer
+#: one's): which to trust is ambiguous, so it is a problem, not drift. A refresh collapses them.
+DUPLICATE = "duplicate"
 #: A native rule that EXISTS and does not bind. `alwaysApply: false` makes Cursor load the
 #: file only when it feels like it, which for claim-before-you-edit is the same as not
 #: having it — and strictly worse than stale TEXT, because the text is fine and inert.
@@ -288,6 +328,8 @@ class RulesState:
     stamped: bool = False
     #: The stamped block was written at a higher format level than this ddflow understands.
     newer: bool = False
+    #: How many managed blocks the file holds (`block_count`); more than one is `DUPLICATE`.
+    blocks: int = 0
 
     @property
     def needs_attention(self) -> bool:
@@ -306,6 +348,10 @@ class RulesState:
             MISSING: f"{self.path} does not exist — the agent has no project rules at all",
             NO_BLOCK: f"{self.path} exists but its ddflow section was removed",
             STALE: self._stale_line(),
+            DUPLICATE: (
+                f"{self.path} holds {self.blocks} managed blocks, where one is meant "
+                "(an older ddflow's adopt appended its own beside the newer one's)"
+            ),
             CURRENT: f"{self.path} is current",
         }[self.state]
 
@@ -406,6 +452,17 @@ def block_newer(text: str) -> bool:
         return False
 
 
+def block_version(path: Path) -> str | None:
+    """The version stamped on the managed block in the file at ``path``; None when the file
+    is unreadable, holds no stamped block, or holds several stamped ones (which one wrote it
+    is moot); a legacy block beside the one stamped block does not matter."""
+    try:
+        text = Path(path).read_text("utf-8", errors="replace")
+        return BLOCK.version(text)
+    except (OSError, RegionError):
+        return None
+
+
 def block_edited(text: str) -> bool:
     """Was the stamped managed block in ``text`` changed by hand since it was written?"""
     try:
@@ -417,7 +474,10 @@ def block_edited(text: str) -> bool:
 def _block_state(text: str, want: str) -> str:
     """CURRENT when the file's managed block says what this ddflow would write, NO_BLOCK when
     it holds none (or its markers are broken), else STALE. A block under the legacy markers
-    is STALE even when its words match: the next write migrates it to the stamped grammar."""
+    is STALE even when its words match: the next write migrates it to the stamped grammar.
+    More than one block, in either grammar, is DUPLICATE."""
+    if block_count(text) > 1:
+        return DUPLICATE
     try:
         body = block_body(text)
     except RegionError:
@@ -464,6 +524,7 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
                 block_edited(text),
                 _stamped(text),
                 block_newer(text),
+                block_count(text),
             )
         )
 
@@ -500,6 +561,7 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
                     block_edited(got),
                     _stamped(got),
                     block_newer(got),
+                    block_count(got),
                 )
             )
             continue
@@ -1256,6 +1318,56 @@ def _section_body(section: str) -> str:
     return section if body is None else body
 
 
+def _begin_lines(text: str) -> int:
+    """How many lines open a managed block, in either grammar (paired or not)."""
+    begin = re.compile(BLOCK._region().begin or "")
+    return sum(
+        1
+        for line in text.splitlines()
+        if begin.fullmatch(line.removesuffix("\r")) or line.removesuffix("\r") == LEGACY_BEGIN
+    )
+
+
+def _collapse_blocks(path: Path, existing: str, section: str, name: str) -> str:
+    """Leave exactly ONE managed block, current, where the first one stood; the others go and
+    every byte outside the blocks is kept. A block written at a newer format level is never
+    rewritten (REFUSED, nothing changes); a hand-edited stamped one is kept aside first."""
+    try:
+        spans = block_spans(existing)
+    except RegionError as exc:
+        return Refused(f"SKIPPED {name}: {exc}; fix the markers and re-run adopt")
+    want = _section_body(section)
+    edited = False
+    for lo, hi in spans:
+        chunk = existing[lo:hi]
+        try:
+            BLOCK.splice(chunk, want)
+        except NewerContent as exc:
+            return Refused(f"REFUSED {name}: {exc}")
+        except RegionError:
+            pass  # a legacy block: no stamp to be newer
+        edited = edited or (block_edited(chunk) and block_body(chunk) != want)
+    text = existing
+    for lo, hi in reversed(spans[1:]):
+        text = text[:lo] + text[hi:]
+    first_lo, first_hi = spans[0]
+    # the rendered block keeps the attributes a newer writer added at this format level (what
+    # the single-block refresh does), taken from the first stamped block
+    block = section if section.endswith("\n") else section + "\n"
+    for lo, hi in spans:
+        if _stamped(existing[lo:hi]):
+            block = BLOCK.splice(existing[lo:hi], want)
+            break
+    text = text[:first_lo] + block + text[first_hi:]
+    note = f" (collapsed {len(spans)} blocks into one)"
+    if edited:
+        aside = local_edits_path(path)
+        atomic_write(aside, path.read_bytes())
+        note += f" (your edits are kept in {aside.name})"
+    replace_text(path, text)
+    return f"updated the managed block in {name}{note}"
+
+
 def _upsert_block(path: Path, section: str, label: str = "") -> str:
     """Insert or replace the managed block, leaving the rest of the file untouched. Messages
     name the file ``label`` (its project path), else its bare name."""
@@ -1267,6 +1379,8 @@ def _upsert_block(path: Path, section: str, label: str = "") -> str:
             f"SKIPPED {name}: it is not UTF-8 text, so ddflow cannot place its block "
             f"in it safely; convert it to UTF-8 and re-run adopt"
         )
+    if _begin_lines(existing) > 1:
+        return _collapse_blocks(path, existing, section, name)
     try:
         owned = BLOCK.owns(existing)
     except RegionError as exc:
