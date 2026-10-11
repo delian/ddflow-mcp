@@ -18,6 +18,7 @@ import argparse
 import os
 import sys
 import textwrap
+import time
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ from ..infra import harness_identity
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
+from ..services.leaseclock import localize
 from .render import emit_json
 
 #: Splitting into one piece is a rename, not a split.
@@ -126,7 +128,7 @@ class Ctx:
         return self._where
 
     def state(self):
-        return fold(self.log.read_all(), strict=False)
+        return localize(fold(self.log.read_all(), strict=False), self.log, time.time())
 
     def out(self, human: str, data: Any = None) -> None:
         if self.json:

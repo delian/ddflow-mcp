@@ -13,6 +13,7 @@ from ...core.model import fold
 from ...services import eventcommit as EC
 from ...services import leases as L
 from ...services import waits as WT
+from ...services.leaseclock import localize
 from .._base import _load
 from .claim import _in_leased_tree, _new_report_count, _tree_of
 
@@ -79,7 +80,7 @@ def _catch_up_globs(log, cfg, item: str) -> str:
     why: list[str] = []
     for field in ("globs", "resources"):
         with log.transaction():
-            it = fold(log.read_all(), strict=False).items.get(item)
+            it = localize(fold(log.read_all(), strict=False), log, time.time()).items.get(item)
             lease = it.lease if it else None
             # Cleared to none is caught up too: a revived lease left on the old values
             # would keep holding them against every other agent.

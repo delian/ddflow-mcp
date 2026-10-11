@@ -22,6 +22,7 @@ interpreter that has none.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ from ..services import leases as L
 from ..services import obligations as OB
 from ..services import prompts as P
 from ..services import review as RV
+from ..services.leaseclock import localize
 from ..services.macros import MacroError  # noqa: F401  (re-exported for the engine)
 from . import identity
 from .lifecycle import plan_for
@@ -214,7 +216,7 @@ def fill_queue(v: dict[str, Any], repo: Path, cfg: Config, agent: str) -> None:
     # someone else's, at the one moment the agent is told what to do next.
     log = EventLog(repo, identity.resolve(repo, cfg, agent).id, log_cfg=cfg.log)
     events = log.read_all()
-    st: State = fold(events, strict=False)
+    st: State = localize(fold(events, strict=False), log, time.time())
     # The ready set as `next` offers it (the waiters' reservation hold and the
     # parallelism limit), not the bare scheduler's: the handshake is where an agent is
     # told what to do next, so it must not promise an item `next` withholds.

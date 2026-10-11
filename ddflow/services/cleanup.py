@@ -44,6 +44,7 @@ from ..config import Config
 from ..core.flow import GITFLOW
 from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
+from .leaseclock import localize
 
 if TYPE_CHECKING:
     from ..infra.log import EventLog
@@ -218,7 +219,10 @@ def dispose_tree(
     with log.transaction() if log else contextlib.nullcontext():
         if log is not None:
             guard = _protected(
-                root, cfg, fold(log.read_all(), strict=False), ignore=item.id if item else ""
+                root,
+                cfg,
+                localize(fold(log.read_all(), strict=False), log, time.time()),
+                ignore=item.id if item else "",
             )
             kind, reason = guard.why(str(wt.path), wt.branch)
             if kind:
@@ -431,7 +435,9 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
     @contextlib.contextmanager
     def unless_claimed() -> Iterator[_Protected]:
         with log.transaction():
-            yield _protected(root, cfg, fold(log.read_all(), strict=False))
+            yield _protected(
+                root, cfg, localize(fold(log.read_all(), strict=False), log, time.time())
+            )
 
     def kept(t: TreeState, guard: _Protected) -> bool:
         kind, reason = guard.why(t.path, t.branch)

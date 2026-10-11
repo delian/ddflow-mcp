@@ -70,6 +70,7 @@ from .export import write as XW
 from .export.query import ExportError
 from .guidance import ruleview as RV
 from .install_info import running_from_source
+from .leaseclock import localize
 from .shared_files import doc_exclude
 
 #: The line every ddflow git hook has carried since the first. Kept INSIDE the stamped
@@ -1449,7 +1450,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
         return Verdict(OK, "")
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
-    state = fold(log.read_all(), strict=False)
+    state = localize(fold(log.read_all(), strict=False), log, time.time())
     now = time.time()
     me = log.agent_id
     here = _committing_tree(repo)

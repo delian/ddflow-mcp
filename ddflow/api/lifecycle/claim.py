@@ -21,6 +21,7 @@ from ...services import leases as L
 from ...services import ports as PT
 from ...services import waits as WT
 from ...services.guidance import inject as GI
+from ...services.leaseclock import localize
 from .._base import _load
 from ..reporting import new_reports
 from .planning import alternatives_offer
@@ -209,7 +210,7 @@ def claim(
 
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
-    st = fold(events, strict=False)
+    st = localize(fold(events, strict=False), log, time.time())
     parked = st.items.get(item)
     no_worktree = no_worktree or (
         parked is not None and not needs_tree(parked)
