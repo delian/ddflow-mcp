@@ -169,6 +169,25 @@ def _pre_upgrade(cfg: Config, st: State, bare: str, since: float) -> list[str]:
     )
 
 
+def stale_suffix_notes(log: EventLog, cfg: Config, st: State) -> list[str]:
+    """Doctor NOTEs: a live lease whose holder is this clone's bare id plus ANOTHER suffix,
+    on a worktree that is here. The clone-id file was replaced after a deletion that left no
+    evidence the log could recover from (B839f599cb5), so the agent now derives a new id and
+    is a stranger to its own claim. Names the old id; adopting it is B-mu-identity."""
+    me = log.agent_id
+    bare = bare_agent_id(log.root)
+    out = []
+    for item, lease in sorted(st.active_leases(time.time(), cfg.lease.grace_s).items()):
+        if lease.holder == me or not lease.holder.startswith(bare + "-") or not lease.worktree:
+            continue
+        if W.load_path(log.root, lease.worktree).is_dir():
+            out.append(
+                f"{item} is held by {lease.holder}, an earlier id of this clone (its "
+                f".ddflow/local/clone-id was replaced; this agent is now {me})"
+            )
+    return out
+
+
 def _tree_is_here(root: Path, lease: Lease, trees: list[dict[str, str]]) -> bool:
     path = W.load_path(root, lease.worktree).resolve()
     return any(

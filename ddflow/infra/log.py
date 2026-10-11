@@ -19,6 +19,7 @@ import bisect
 import contextlib
 import functools
 import getpass
+import glob
 import itertools
 import json
 import marshal
@@ -609,6 +610,68 @@ def clone_suffix_since(root: Path | str) -> float:
 CLONE_ID_FILE = Path(".ddflow") / "local" / "clone-id"
 
 
+_SUFFIX = re.compile(r"[0-9a-f]{6}")
+
+
+def _recovered_suffix(root: Path) -> str:
+    """The suffix this clone had before its git-ignored `clone-id` was deleted, or "".
+
+    `rm -r .ddflow/local` (git clean -xfd, a re-image) used to make the user a NEW agent,
+    locked out of their own claims (B839f599cb5). The log still holds the evidence: a
+    `lease.acquired` whose holder is `{bare id}-{suffix}` and whose recorded worktree is a
+    directory under THIS checkout. Several suffixes: the newest claim wins. A fresh clone
+    of the project, or a teammate's shard, has no such worktree here, so it mints as before.
+    Read only; the shards are never renamed or written.
+    """
+    events = root / ".ddflow" / "events"
+    top = root.resolve()
+    bares = {bare_agent_id(root), f"{H.short_host()}-{root.name}"}
+    best: tuple[float, int] = (-1.0, -1)
+    found = ""
+    for bare in bares:
+        for shard in events.glob(f"{glob.escape(bare)}-*.jsonl"):
+            try:
+                lines = shard.read_text("utf-8").splitlines()
+            except OSError:
+                continue
+            claim: dict[str, tuple[tuple[float, int], str]] = {}  # item -> (rank, suffix)
+            trees: dict[str, set[str]] = {}  # item -> worktree paths the shard records
+            for ln in lines:
+                if not any(k in ln for k in ('"lease.', '"worktree.')):
+                    continue
+                try:
+                    ev = json.loads(ln)
+                    kind, item, data = ev["kind"], ev["subject"], ev["data"]
+                    if kind == "lease.acquired":
+                        holder = str(data["holder"])
+                        suffix = holder[len(bare) + 1 :]
+                        if holder.startswith(bare + "-") and _SUFFIX.fullmatch(suffix):
+                            rank = (float(data.get("at") or 0.0), int(ev.get("lamport") or 0))
+                            if rank > claim.get(item, ((-1.0, -1), ""))[0]:
+                                claim[item] = (rank, suffix)
+                    stored = str(data.get("worktree") or data.get("path") or "")
+                    if stored and kind in _TREE_KINDS:
+                        trees.setdefault(item, set()).add(stored)
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    continue
+            for item, (rank, suffix) in claim.items():
+                if rank > best and any(_is_tree_under(top, t) for t in trees.get(item, ())):
+                    best, found = rank, suffix
+    return found
+
+
+_TREE_KINDS = frozenset({"lease.acquired", "lease.renewed", "worktree.created", "worktree.adopted"})
+
+
+def _is_tree_under(top: Path, stored: str) -> bool:
+    """Is the recorded worktree a directory under the checkout `top` on THIS machine?"""
+    tree = Path(stored) if Path(stored).is_absolute() else top / stored
+    try:
+        return tree.is_dir() and tree.resolve().is_relative_to(top)
+    except OSError:
+        return False
+
+
 def _clone_suffix(root: Path) -> str:
     """This clone's random identity suffix, created on first use and never changed.
 
@@ -633,7 +696,9 @@ def _clone_suffix(root: Path) -> str:
         # hard links (some FUSE and SMB mounts) a reader racing it may see it empty for an
         # instant, and an empty read is not cached, so that caller simply asks again.
         with contextlib.suppress(FileExistsError):
-            fsio.atomic_write(path, secrets.token_hex(3) + "\n", exclusive=True)
+            fsio.atomic_write(
+                path, (_recovered_suffix(root) or secrets.token_hex(3)) + "\n", exclusive=True
+            )
         return path.read_text("utf-8").strip()
     except OSError:
         return ""
