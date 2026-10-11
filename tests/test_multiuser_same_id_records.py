@@ -168,3 +168,27 @@ def test_revision_by_the_kept_author_after_a_settlement_is_not_a_contest(repo):
     assert not shown.get("contested")
     assert shown["decision"] == "Use postgres 16"
     assert run_cli(repo, "doctor")[0] == 0
+
+
+def test_revision_by_either_author_of_an_agreed_definition_is_not_a_contest(repo):
+    def add(clone, agent):
+        _add_decision(clone, agent, "use sqlite", "Use sqlite")
+
+    _rivals(repo, add)
+    _add_decision(repo, "bob", "use sqlite", "Use sqlite 3")
+    _code, out, _ = run_cli(repo, "--json", "decision", "show", "D-x")
+    shown = json.loads(out)
+    assert not shown.get("contested")
+    assert shown["decision"] == "Use sqlite 3"
+    assert run_cli(repo, "doctor")[0] == 0
+
+
+def test_rivals_that_converge_are_no_longer_a_contest(repo):
+    _decisions(repo)
+    assert run_cli(repo, "doctor")[0] == 1
+    _add_decision(repo, "bob", "use sqlite", "Use sqlite", context="ALICE-CONTEXT")
+    _code, out, _ = run_cli(repo, "--json", "decision", "show", "D-x")
+    shown = json.loads(out)
+    assert not shown.get("contested")
+    assert shown["title"] == "use sqlite"
+    assert run_cli(repo, "doctor")[0] == 0

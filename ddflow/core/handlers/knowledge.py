@@ -23,6 +23,10 @@ def _definition(ev: Event) -> dict[str, Any]:
     }
 
 
+def _authors(definition: dict[str, Any]) -> list[str]:
+    return definition.get("authors") or [definition["agent"]]
+
+
 def _contest(st: State, ev: Event, kind: str, current: Any) -> str:
     """Whether ``ev`` defines ``kind:id`` plainly (``""``), contests it (``"contested"``),
     or settles a contest (``"resolved"``).
@@ -57,10 +61,18 @@ def _contest(st: State, ev: Event, kind: str, current: Any) -> str:
         else:
             if all(r["data"] != d for r in rivals):
                 rivals.append(mine)
+        if all(r["data"] == d for r in rivals):
+            # The rivals converged on one definition: nothing is disputed any more.
+            current.contested = []
+            st.record_definitions[key] = {**mine, "authors": sorted({r["agent"] for r in rivals})}
+            return ""
         return "contested"
-    if current is not None and prior is not None and prior["agent"] != ev.agent:
+    if current is not None and prior is not None and ev.agent not in _authors(prior):
         if prior["data"] == d:
-            return ""  # the same definition again: nothing would be lost
+            # The same definition again: nothing is lost, but it now has two authors, so a
+            # later revision by either is a revision, not a rival.
+            prior["authors"] = sorted({*_authors(prior), ev.agent})
+            return ""
         current.contested = [prior, mine]
         return "contested"
     st.record_definitions[key] = mine
