@@ -3,7 +3,8 @@
 Decisions D-dry-run-from-running-version and D-upgrade-on-mcp-connect, task
 B-upgrade.12-dry-run. Before an operator upgrades a project, this proves on a COPY that going
 from the ddflow they run now to the one on the tree is smooth. Nothing here touches the
-project it rehearses, the ddflow installed on the machine or an MCP server that is running:
+committed state of the project it rehearses (a failed run may leave a git-ignored transcript
+under its `.ddflow/local/`), the ddflow installed on the machine or an MCP server that is running:
 
 - the project is only READ, by `git clone --local` of what is COMMITTED at one pinned commit
   (tried once more if it fails), and its log, snapshot tags and backups are compared before and
@@ -235,6 +236,8 @@ class Report:
             "| step | check | result | detail |",
             "|---|---|---|---|",
         ]
+        if self.diagnostics:
+            lines[2:2] = [f"Every command's output: `{self.diagnostics}`.", ""]
         for c in self.checks:
             lines.append(f"| {c.step} | {c.name} | {c.status} | {c.detail.replace('|', '/')} |")
         if self.preview:
@@ -363,9 +366,9 @@ def backup_versions(name: str) -> str:
 
 
 def live_leaks(before: Live, after: Live, mine: Footprint | None = None) -> list[str]:
-    """What of the REHEARSAL is in the live project: a shard of an agent it ran as, a snapshot
-    tag signed with its run id, a backup made while it ran for the versions it upgraded. Another
-    agent's tag or backup is not that (``mine`` None: nothing can be told to be the rehearsal's)."""
+    """What of the REHEARSAL is certainly in the live project: a shard of an agent it ran as, a
+    snapshot tag signed with its run id. Another agent's tag is not that (``mine`` None: no tag
+    can be told to be the rehearsal's). A backup carries no run id: see `live_moved`."""
     out = [
         f"the live log has a shard of the rehearsal: {n}"
         for n in after.shards
@@ -619,11 +622,17 @@ class Rehearsal:
         self.report.checks.append(Check(step, name, status, detail))
         return bool(ok)
 
+    def unrunnable(self, name: str) -> None:
+        """Note that a step could not run (as opposed to an old ddflow that was not offered):
+        a run with one leaves its transcript."""
+        self.report.facts.setdefault("could_not_run", []).append(name)
+
     def guard(self, step: int, name: str, fn: Callable[[], Any]) -> Any:
         """Run one step; whatever it raises becomes a failed row, never a crash."""
         try:
             return fn()
         except CouldNotRun as exc:
+            self.unrunnable(name)
             self.add(step, name, None, str(exc))
         except Exception as exc:  # the report must come out whole
             self.add(step, name, False, f"{type(exc).__name__}: {exc}")
@@ -893,6 +902,7 @@ class Rehearsal:
         }
         made = self.capture(["uv", "venv", "--quiet", str(venv)], timeout=TIMEOUT_S, env=env)
         if not made.ran or made.returncode != 0:
+            self.unrunnable("build the old ddflow from the clone")
             return self.add(
                 1,
                 "build the old ddflow from the clone",
@@ -906,6 +916,7 @@ class Rehearsal:
             env=env,
         )
         if not built.ran or built.returncode != 0:
+            self.unrunnable("build the old ddflow from the clone")
             return self.add(
                 1,
                 "build the old ddflow from the clone",
@@ -1562,8 +1573,9 @@ def run_all(opt: Options) -> Report:
     """Run the whole rehearsal and clean up (unless ``opt.keep``). If the live project changed
     under it in a way it cannot tell from its own doing (`LIVE_CHANGED`), it is run once more
     in a scratch directory of its own; the second run decides, and a project that moved again
-    leaves that check `unavailable`. A failed run, or one that was repeated because the project
-    moved, leaves its step table and every command's output in a file, named in the report."""
+    leaves that check `unavailable`. A failed run, one that could not run (a clone or a build that
+    failed; not an old ddflow that was never offered) or one repeated because the project moved
+    leaves its step table and every command's output in a file, named in the report."""
     original = opt.old  # building the old ddflow replaces it, in a scratch directory that goes
     report, rehearsal = _rehearse(opt)
     runs = [rehearsal]
@@ -1573,8 +1585,12 @@ def run_all(opt: Options) -> Report:
         report, rehearsal = _rehearse(again)
         runs.append(rehearsal)
         report.facts["first_run"] = f"{LIVE_CHANGED}: {'; '.join(first)}"
-    moved = report.facts.get("live_changed") or report.facts.get("first_run")
-    if any(c.status == FAIL for c in report.checks) or moved:
+    unexplained = (
+        report.facts.get("live_changed")
+        or report.facts.get("first_run")
+        or report.facts.get("could_not_run")
+    )
+    if any(c.status == FAIL for c in report.checks) or unexplained:
         report.diagnostics = write_diagnostics(opt, report, runs)
     return report
 
