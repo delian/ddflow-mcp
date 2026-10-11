@@ -45,7 +45,7 @@ from ...services.gates import load_gates
 from ...services.guidance import ruleview as RULEVIEW
 from ...services.review import load_reviewers
 from ...views import human
-from ...views.markdown import may_hold_work
+from ...views.markdown import may_hold_work, render_views
 from .._base import _load
 from ..knowledge import pairs_from
 from ..knowledge.pairs import _sweep_records
@@ -371,7 +371,8 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
 
-    shared_problems, shared_notes = SF.findings(repo, cfg)
+    # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
+    shared_problems, shared_notes = SF.findings(repo, cfg, render_views(st, cfg))
     problems += shared_problems
     notes += shared_notes
 

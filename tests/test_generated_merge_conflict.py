@@ -166,3 +166,45 @@ def test_a_crlf_conflict_and_a_dotted_parent_directory(tmp_path):
     assert (
         str(ConfigConflict(p)) == "resolve the merge conflict in .ddflow/config.toml (git status)"
     )
+
+
+def test_a_view_quoting_a_conflict_block_on_a_clean_tree_is_not_a_conflict(clones):
+    """B-viewmarkers: a lesson quoting a whole conflict block is rendered verbatim at column 0;
+    with no merge in progress doctor must not call the view conflicted (its remedy cannot work)."""
+    a, _ = clones
+    block = "```\n<<<<<<< HEAD\nold\n=======\nnew\n>>>>>>> b\n```"
+    assert (
+        run_cli(a, "lesson", "add", "--id", "LQ", "--title", "q", "--rule", block, agent="U1")[0]
+        == 0
+    )
+    assert run_cli(a, "render", agent="U1")[0] == 0
+    assert "<<<<<<< HEAD" in (a / "docs/ddflow/LESSONS.md").read_text()
+    _commit(a, "quote")
+    _code, out, err = run_cli(a, "doctor", agent="U1")
+    assert "merge-conflict markers" not in out + err, out + err
+    # the log moves on and the view is stale: the quoted block is still not a conflict
+    assert (
+        run_cli(a, "lesson", "add", "--id", "LR", "--title", "r", "--rule", "plain", agent="U1")[0]
+        == 0
+    )
+    _code, out, err = run_cli(a, "doctor", agent="U1")
+    assert "merge-conflict markers" not in out + err, out + err
+
+
+def test_a_committed_conflict_in_a_view_is_still_named(clones):
+    """The reviewer's case: markers `git add`ed and committed (no unmerged entry left)."""
+    a, _ = clones
+    (a / "docs/ddflow/QUEUE.md").write_text("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> o\n")
+    _commit(a, "oops")
+    code, out, err = run_cli(a, "doctor", agent="U1")
+    assert code == 1 and "docs/ddflow/QUEUE.md" in out + err, out + err
+
+
+def test_no_expected_views_leaves_the_markers_to_decide(clones):
+    """With no expected views supplied, markers in a committed view still count as a conflict."""
+    from ddflow.services.shared_files import conflicted_views
+
+    a, _ = clones
+    (a / "docs/ddflow/QUEUE.md").write_text("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> o\n")
+    _commit(a, "oops")
+    assert conflicted_views(a, None)
