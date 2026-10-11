@@ -71,8 +71,8 @@ def test_a_project_that_is_not_behind_gets_no_such_note(old, monkeypatch) -> Non
 
 
 def test_the_brief_does_not_fold_the_log_again_while_the_note_repeats(old, monkeypatch) -> None:
-    _timed_out(old, monkeypatch)
-    assert US.doctor_notes(old, _load(old, 'starter')[2]), 'the note repeats'
+    text = _timed_out(old, monkeypatch)
+    assert US.doctor_notes(old, _load(old, "starter")[2]), "the note repeats"
     folds: list[Path] = []
     real = US._state_of
 
@@ -82,5 +82,6 @@ def test_the_brief_does_not_fold_the_log_again_while_the_note_repeats(old, monke
 
     monkeypatch.setattr(US, "_state_of", counted)
     for _ in range(2):
-        lifecycle.brief(old, agent="a1")
+        out = lifecycle.brief(old, agent="a1")
+        assert text in out.data["text"], "the note keeps repeating in the brief"
     assert folds == [], "the brief already holds the state: it must hand it over"
