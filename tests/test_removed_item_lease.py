@@ -162,9 +162,9 @@ def test_require_names_the_holder_only_while_the_lease_is_live():
 
     from ddflow.api.lifecycle._common import _require
 
-    live = _require(_removed(lease_at=time.time()), "T", "worktree.merged")
+    live = _require(_removed(lease_at=time.time()), "T", "worktree.merged", 0)
     assert live.exit == 3 and "alice" in live.reason and "ddflow/T" in live.reason
-    lapsed = _require(_removed(lease_at=1000.0), "T", "worktree.merged")
+    lapsed = _require(_removed(lease_at=1000.0), "T", "worktree.merged", 0)
     assert "no such item" in lapsed.reason and "alice" not in lapsed.reason
 
 
@@ -176,3 +176,14 @@ def test_cleanup_lists_a_stranded_branch_whose_worktree_is_gone(stranded):
     assert "lease still held by alice" in text and "git branch -D ddflow/T2" in text, text
     assert "LEAVE ALONE" not in text, text
     assert run_cli(stranded, "doctor", agent="alice")[0] == 1
+
+
+def test_require_judges_liveness_by_the_configured_grace():
+    """A lease past its TTL but inside the repo's `[lease].grace_s` is still held."""
+    import time
+
+    from ddflow.api.lifecycle._common import _require
+
+    st = _removed(lease_at=time.time() - 150)  # ttl 100: lapsed by 50s
+    assert "no such item" in _require(st, "T", "worktree.merged", 0).reason
+    assert "alice" in _require(st, "T", "worktree.merged", 500).reason

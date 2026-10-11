@@ -66,7 +66,7 @@ def complete(
         except ValueError as e:
             return O.failed("item.completed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
-    it = _require(st, item, "item.completed")
+    it = _require(st, item, "item.completed", cfg.lease.grace_s)
     # B2809f4213b: a contested claim is settled by `resolve`, not by finishing
     refusal = (
         it if isinstance(it, O.Outcome) else L.contest_refusal(it, "item.completed", "completed")
@@ -263,8 +263,8 @@ def abandon(
     as settled, so an item you decided against stops holding its phase open — which it
     otherwise does forever, since nothing else can ever finish it.
     """
-    log, _cfg, st = _load(repo, agent)
-    it = _require(st, item, "item.abandoned")
+    log, cfg, st = _load(repo, agent)
+    it = _require(st, item, "item.abandoned", cfg.lease.grace_s)
     if isinstance(it, O.Outcome):
         return it
     if it.state == REVIEW and it.pr and it.pr.state == "open" and not force:
@@ -299,8 +299,8 @@ def remove(
     replay`, which is what keeps the record honest about work that was planned and then
     dropped.
     """
-    log, _cfg, st = _load(repo, agent)
-    it = _require(st, item, "item.removed")
+    log, cfg, st = _load(repo, agent)
+    it = _require(st, item, "item.removed", cfg.lease.grace_s)
     if isinstance(it, O.Outcome):
         return it
     # Any item with work beneath it, not just a phase. The `kind == "phase"` guard
@@ -348,8 +348,8 @@ def block(
     out of done, which a mistyped id would do silently (B-block-done). `reopen` is the
     deliberate form -- the B12/B14 data fix was one.
     """
-    log, _cfg, st = _load(repo, agent)
-    it = _require(st, item, "item.blocked")
+    log, cfg, st = _load(repo, agent)
+    it = _require(st, item, "item.blocked", cfg.lease.grace_s)
     if isinstance(it, O.Outcome):
         return it
     if it.state in (DONE, ABANDONED) and not reopen:
@@ -384,8 +384,8 @@ def unblock(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outc
     caller should see, not a success that wrote no event.
     """
 
-    log, _cfg, st = _load(repo, agent)
-    it = _require(st, item, "item.unblocked")
+    log, cfg, st = _load(repo, agent)
+    it = _require(st, item, "item.unblocked", cfg.lease.grace_s)
     if isinstance(it, O.Outcome):
         return it
     targets = [item] if it.state == BLOCKED else []
