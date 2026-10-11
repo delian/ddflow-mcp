@@ -582,8 +582,10 @@ def test_a_backup_for_the_rehearsals_versions_made_meanwhile_is_never_a_pass(
         stamp = DR.clock.compact_at()
         # the rehearsal's own copy, in a clone, and a copy for the same versions in the live
         # project: a leak, or another agent upgrading the same versions meanwhile
-        (self.pristine / ".ddflow" / "backups" / f"{stamp}-0.2.1-to-0.9").mkdir(parents=True)
-        (root / ".ddflow" / "backups" / f"{stamp}-0.2.1-to-0.9").mkdir(parents=True)
+        (self.pristine / ".ddflow" / "backups" / f"{stamp}-0.2.1-to-0.9").mkdir(
+            parents=True, exist_ok=True
+        )
+        (root / ".ddflow" / "backups" / f"{stamp}-0.2.1-to-0.9").mkdir(parents=True, exist_ok=True)
 
     calls = only_clone(monkeypatch, maybe_leaked)
     report = DR.run_all(options(tmp_path, root))
@@ -594,6 +596,8 @@ def test_a_backup_for_the_rehearsals_versions_made_meanwhile_is_never_a_pass(
 def test_bounded_keeps_the_ends_and_never_more_than_it_was_given() -> None:
     assert DR.bounded("abc", 10) == "abc"
     assert len(DR.bounded("x" * 1000, 100)) < 200
+    cut = DR.bounded("abcdefghij" * 20, 10)
+    assert cut.startswith("abcde") and cut.endswith("fghij") and "characters cut" in cut
     assert DR.bounded("abcdef", 1) == "a" and DR.bounded("abcdef", 0) == ""
 
 
