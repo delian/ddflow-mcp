@@ -540,6 +540,13 @@ def contested_summary(contested: list[dict[str, Any]]) -> str:
     )
 
 
+def record_pools(st: State) -> tuple[tuple[str, dict[str, Any]], ...]:
+    """`(kind, pool)` for the records two agents can define under one id and so contest:
+    decisions, lessons and research notes. The one list `doctor`, `resolve` and the upgrade
+    plan walk, so a fourth kind is added here and nowhere else."""
+    return (("decision", st.decisions), ("lesson", st.lessons), ("research", st.research))
+
+
 @dataclass
 class Lesson:
     id: str

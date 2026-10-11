@@ -16,7 +16,7 @@ from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.defaults import DEFAULT_PRIORITY
 from ..core.flow import line_order
-from ..core.records import ADD_RELATIONS
+from ..core.records import ADD_RELATIONS, record_pools
 from ..infra import worktree as W
 from ..services import choices as CH
 from ..services import items as IT
@@ -675,11 +675,7 @@ def _resolve_record(log, st, item: str, keep: str, refile_as: str) -> O.Outcome 
     re-record, so no new event kind is needed."""
     if item in st.items:
         return None
-    for kind, pool in (
-        ("decision", st.decisions),
-        ("lesson", st.lessons),
-        ("research", st.research),
-    ):
+    for kind, pool in record_pools(st):
         rec = pool.get(item)
         if rec is None:
             continue

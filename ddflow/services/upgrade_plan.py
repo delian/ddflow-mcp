@@ -9,6 +9,10 @@ one list, grouped by CATEGORY:
 - `migrations`: breaking changes of a release to something the project holds (a file format, a
   marker grammar, a reference), each a registered migration (`services.migrations`) that
   detects, plans (the files it would rewrite) and, on apply, backs those up first;
+- `records`: decisions, lessons and research notes two agents defined differently under one id.
+  The fold keeps them CONTESTED (B230e852e10), `doctor` fails on them, and only the operator
+  can pick the survivor (`ddflow resolve`), so each is a `note` that names the rivals and the
+  command -- an apply lists it, never settles it (B-upgrade-plan-contested);
 - `config`: knobs added, knobs whose default changed and knobs removed since the version this
   project last worked under (the manifest, `services.upgrade_manifest`), judged against THIS
   project's config -- a knob it never set takes the new default; one anyone set (a config
@@ -37,6 +41,7 @@ from typing import Any
 from ..config import Config
 from ..core.events import is_older, version_key
 from ..core.model import State
+from ..core.records import contested_summary, record_pools
 from ..infra.log import running_version
 from . import adopt as AD
 from . import claudehooks as CH
@@ -47,7 +52,16 @@ from . import upgrade_manifest as UM
 from .compat_refs import DEPRECATED, UNCHECKED, scan
 from .migrations import refs as MR
 
-CATEGORIES = ("repairs", "migrations", "config", "instructions", "hooks", "mcp", "features")
+CATEGORIES = (
+    "repairs",
+    "migrations",
+    "records",
+    "config",
+    "instructions",
+    "hooks",
+    "mcp",
+    "features",
+)
 
 AGENT = "agent"
 OPERATOR = "needs operator confirmation"
@@ -214,6 +228,59 @@ def repair_items(repo: Path, log: Any, cfg: Config) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def contested_items(st: State) -> list[dict[str, Any]]:
+    """One note per decision, lesson or research id the fold holds CONTESTED: the rival
+    authors and the command that settles it. Read from the folded state, so it is what the
+    running ddflow sees (an old log that two clones wrote the same id into is contested the
+    moment THIS ddflow folds it) and empty once `ddflow resolve` has settled each."""
+    out: list[dict[str, Any]] = []
+    for kind, pool in record_pools(st):
+        for r in sorted(pool.values(), key=lambda x: x.id):
+            if not r.contested:
+                continue
+            agents = sorted({d["agent"] for d in r.contested})
+            out.append(
+                {
+                    "category": "records",
+                    "id": f"records:contested:{kind}:{r.id}",
+                    "kind": kind,
+                    "record": r.id,
+                    "rivals": [
+                        {"event": d["event"], "agent": d["agent"], "title": d["title"]}
+                        for d in r.contested
+                    ],
+                    "summary": f"{kind} {r.id} is CONTESTED: {contested_summary(r.contested)}; "
+                    + (
+                        "the operator keeps one"
+                        if kind == "research"  # a note has no in-force notion
+                        else "none of them is in force until the operator keeps one"
+                    ),
+                    "action": NOTE,
+                    "fix": f"ddflow resolve {r.id} --keep <event-id|agent>  "
+                    f"(rivals: {', '.join(agents)})",
+                }
+            )
+    return out
+
+
+def contested_clause(plan: dict[str, Any]) -> str:
+    """The sentence the MCP proposal and the upgrade notice add when the plan holds contested
+    records, "" when it holds none."""
+    found = (plan.get("categories") or {}).get("records") or []
+    if not found:
+        return ""
+    shown = "; ".join(
+        f"{i['kind']} {i['record']} ({' vs '.join(sorted({r['agent'] for r in i['rivals']}))}): "
+        f"{i['fix'].split('  ')[0]}"
+        for i in found[:_SHOWN]
+    )
+    more = f" ... and {len(found) - _SHOWN} more" if len(found) > _SHOWN else ""
+    return (
+        f"{len(found)} record(s) are CONTESTED (two agents defined one id differently; doctor "
+        f"fails on them) and only the operator can settle them: {shown}{more}."
+    )
 
 
 def migration_items(repo: Path, log: Any, cfg: Config, running: str = "") -> list[dict[str, Any]]:
@@ -481,6 +548,7 @@ def build(
     cats: dict[str, list[dict[str, Any]]] = {
         "repairs": repair_items(repo, log, cfg),
         "migrations": migration_items(repo, log, cfg, running),
+        "records": contested_items(st),
         "config": config_items(changes, cfg),
         "instructions": instruction_items(repo, not baseline or is_older(baseline, running))
         + reference_items(repo),
@@ -501,6 +569,7 @@ def build(
 _TITLES = {
     "repairs": "data repairs",
     "migrations": "migrations",
+    "records": "contested records",
     "config": "config",
     "instructions": "instructions",
     "hooks": "hooks",

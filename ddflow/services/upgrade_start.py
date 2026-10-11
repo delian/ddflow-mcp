@@ -159,13 +159,18 @@ _ASK = (
 )
 
 
+def _contested(plan: dict[str, Any]) -> str:
+    said = UP.contested_clause(plan)
+    return f" {said}" if said else ""
+
+
 def _proposal(plan: dict[str, Any], running: str, project: str) -> str:
     """The read-only plan as the operator's question (D-upgrade-on-mcp-connect)."""
     since = f"was last brought up under {project}" if project else "predates version stamps"
     return (
         f"ddflow {running} is newer than this project, which {since}: "
         f"{plan['total']} upgrade item(s) are pending ({_categories(plan)}). Nothing has "
-        "been applied." + _ASK
+        "been applied." + _contested(plan) + _ASK
     )
 
 
@@ -222,7 +227,8 @@ def _work(
     )
     text = f"{head}: {'; '.join(did)}."
     if not plan["up_to_date"]:
-        text += f" {plan['total']} item(s) still pending ({_categories(plan)})." + _ASK
+        text += f" {plan['total']} item(s) still pending ({_categories(plan)})."
+        text += _contested(plan) + _ASK
     return {"status": APPLIED, "text": text}
 
 

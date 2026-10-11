@@ -42,8 +42,8 @@ def register(s: argparse._SubParsersAction) -> None:
         default=None,
         metavar="CATEGORIES",
         help="do what the plan lists, after saving what it will rewrite to .ddflow/backups/: "
-        "all (the default), or a comma list of repairs, migrations, config, instructions, hooks, mcp, "
-        "features. Exit 0 done, 1 a step failed, 2 a step could not run, 3 an item needs "
+        "all (the default), or a comma list of repairs, migrations, records, config, instructions, "
+        "hooks, mcp, features. Exit 0 done, 1 a step failed, 2 a step could not run, 3 an item needs "
         "--confirm",
     )
     up.add_argument(
