@@ -140,3 +140,17 @@ def unreconciled_with(state: State) -> dict[str, list[str]]:
         out.setdefault(a.id, []).append(b.id)
         out.setdefault(b.id, []).append(a.id)
     return {k: sorted(v) for k, v in out.items()}
+
+
+def unreconciled_notes(state: State) -> list[str]:
+    """B0dcccd8594: pairs of live decisions on overlapping globs that two authors wrote
+    without seeing each other. A NOTE, not a problem: nothing is corrupt, and `doctor`
+    failing would block unrelated work, but both are presented as binding until someone says
+    which holds."""
+    return [
+        f"unreconciled decisions {a.id} (by {a.by or '?'}) and {b.id} (by {b.by or '?'}) govern "
+        f"overlapping files and were recorded without seeing each other, so they may "
+        f"contradict: record a decision that supersedes or narrows one of them "
+        f"(`ddflow decision supersede {a.id} --by {b.id}`, or the reverse)"
+        for a, b in unreconciled(state)
+    ]
