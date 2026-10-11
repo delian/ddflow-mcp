@@ -41,3 +41,14 @@ def test_multibyte_text_arrives_encoded_whole():
     text = "héllo ✓\n" * 20000
     got = P.run_shell("wc -c", timeout_s=20, stdin_text=text, on_tick=lambda: None, tick_s=0.2)
     assert got.code == 0 and got.out.strip() == str(len(text.encode("utf-8")))
+
+
+def test_text_the_pipe_cannot_encode_raises_to_the_caller_and_leaves_no_child():
+    """Review finding: the writer thread must not swallow an encoding error -- the
+    caller used to get UnicodeEncodeError from `communicate(input=)`."""
+    import pytest
+
+    with pytest.raises(UnicodeEncodeError):
+        P._shell_group(
+            "cat", timeout=5, input="x\ud800y", text=True, encoding="utf-8", errors="strict"
+        )
