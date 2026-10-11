@@ -32,6 +32,7 @@ from ...services import leases as L
 from ...services import rates as RT
 from ...services import repairs as RP
 from ...services import sessions as SS
+from ...services import shardmarks as SM
 from ...services import shared_files as SF
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
@@ -277,7 +278,14 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
-def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None) -> O.Outcome:
+def doctor(
+    repo: Path,
+    *,
+    agent: str = "",
+    parser: Any = None,
+    tools: Any = None,
+    accept_lost_events: bool = False,
+) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
     Gathers from six sources — the log's own integrity, the dependency graph, the
@@ -291,6 +299,9 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
     """
 
     log, cfg, st = _load(repo, agent)
+    # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
+    # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
+    accepted = SM.accept(repo, log) if accept_lost_events else []
     # One read of the whole log serves the data repairs and every pass below (the warm
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
@@ -308,6 +319,10 @@ def doctor(repo: Path, *, agent: str = "", parser: Any = None, tools: Any = None
             "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
             "`[agent].id`, or drop both to derive a per-clone id)"
         )
+    # A PROBLEM (Ba24a8d32ee): a shard holding fewer events than this clone last saw lost them
+    # to a force-push, revert, reset or deletion. Never repaired here.
+    problems += [g.render() for g in SM.lost(repo, log)]
+    notes += [f"{g.shard}: accepted the loss of {g.was - g.now} event(s)" for g in accepted]
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
 

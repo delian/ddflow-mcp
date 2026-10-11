@@ -297,14 +297,21 @@ COMMANDS: tuple[Command, ...] = (
         path=("doctor",),
         summary="integrity + health check",
         tool="ddflow_doctor",
-        flag_exempt={"--upgrade": "the same as `ddflow upgrade`, which is `ddflow_upgrade`"},
+        flag_exempt={
+            "--upgrade": "the same as `ddflow upgrade`, which is `ddflow_upgrade`",
+            "--accept-lost-events": "an explicit, operator-run acknowledgement: not an agent tool",
+        },
         prose_reason="a health report written to be read, with remedies in prose",
         description="Integrity and health check: log corruption, dependency cycles, "
         "unknown dependencies, orphaned worktrees, stale index.",
         kind="doctor",
         prose=True,
         call=lambda repo, a, agent: _api().doctor(
-            repo, agent=agent, parser=sources()[0], tools=sources()[1]
+            repo,
+            agent=agent,
+            parser=sources()[0],
+            tools=sources()[1],
+            accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
         ),
         # PROSE, as it has always been: a list of problems with advice attached is
         # what an operator and an agent both want, and `views/human.py` renders it once
@@ -315,6 +322,12 @@ COMMANDS: tuple[Command, ...] = (
                 "upgrade",
                 type="boolean",
                 help="the upgrade plan instead (the same as `ddflow upgrade`)",
+                cli_only=True,
+            ),
+            Param(
+                "accept_lost_events",
+                type="boolean",
+                help="record the present event counts of the shards that lost events (to a force-push, revert, reset or deletion) as known, clearing that PROBLEM; the log is not touched",
                 cli_only=True,
             ),
         ),

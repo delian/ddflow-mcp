@@ -152,6 +152,9 @@ def open_log(
         lock_timeout_s=cfg.lease.acquire_timeout_s if lock_timeout_s is None else lock_timeout_s,
         log_cfg=cfg.log,
     )
+    from . import shardmarks  # the high-water mark follows every append (Ba24a8d32ee)
+
+    log.on_append = shardmarks.appended
     return log, who
 
 
