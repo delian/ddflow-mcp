@@ -686,7 +686,7 @@ def _rc_knowledge(A, state: State) -> None:
         A("not history: applying them is how the rebuild avoids repeating the mistakes.")
         A("")
         for ls in sorted(state.lessons.values(), key=lambda x: x.at):
-            if ls.superseded_by:
+            if not ls.live:
                 continue
             A(f"- **{ls.title}** — {ls.rule}")
     else:

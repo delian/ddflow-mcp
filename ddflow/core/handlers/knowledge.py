@@ -5,8 +5,92 @@ the small wrapper or factory call it shows. Everything in this module is pure.""
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..events import Event, changelog_of
 from ..records import Bug, Decision, Lesson, Memory, ResearchNote, State
+
+
+def _definition(ev: Event) -> dict[str, Any]:
+    d = ev.data
+    return {
+        "event": ev.id or ev.compute_id(),
+        "agent": ev.agent,
+        "lamport": ev.lamport,
+        "ts": ev.ts,
+        "title": str(d.get("title") or d.get("question") or ""),
+        "data": dict(d),
+    }
+
+
+def _same(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """The same definition: the add-time `dedupe` check ran on each clone and may differ."""
+    return {k: v for k, v in a.items() if k != "dedupe"} == {
+        k: v for k, v in b.items() if k != "dedupe"
+    }
+
+
+def _authors(definition: dict[str, Any]) -> list[str]:
+    return definition.get("authors") or [definition["agent"]]
+
+
+def _contest(st: State, ev: Event, kind: str, current: Any) -> str:
+    """Whether ``ev`` defines ``kind:id`` plainly (``""``), contests it (``"contested"``),
+    or settles a contest (``"resolved"``).
+
+    B230e852e10: a decision, lesson or research note recorded under one id by two agents
+    used to fold last-writer-wins, and the decision handler mixed the two definitions
+    field by field. The same rule as a rival `task.added` (B191) applies: a DIFFERENT
+    definition from ANOTHER agent is a contest, kept whole beside the first and never
+    merged; an identical one is not. The same agent re-recording its own is a revision
+    and merges as it always did. A record carrying ``resolves`` (written by `ddflow
+    resolve`) names the kept definition and replaces the contest. Older ddflow folds that
+    event as an ordinary re-record, so it needs no new event kind.
+    """
+    key = f"{kind}:{ev.subject}"
+    mine = _definition(ev)
+    d = ev.data
+    if d.get("resolves"):
+        # The kept rival's own definition stands, not the resolver's envelope: a later
+        # revision by its author must read as a revision, not as a rival of the resolver.
+        kept = next(
+            (r for r in (current.contested if current else []) if r["event"] == d.get("kept")), None
+        )
+        st.record_definitions[key] = kept or mine
+        return "resolved"
+    prior = st.record_definitions.get(key)
+    if current is not None and current.contested:
+        rivals = current.contested
+        for i, r in enumerate(rivals):
+            if r["agent"] == ev.agent:
+                rivals[i] = mine  # a rival revising its own definition
+                break
+        else:
+            if not any(_same(r["data"], d) for r in rivals):
+                rivals.append(mine)
+        if all(_same(r["data"], d) for r in rivals):
+            # The rivals converged on one definition: nothing is disputed any more.
+            current.contested = []
+            st.record_definitions[key] = {**mine, "authors": sorted({r["agent"] for r in rivals})}
+            return ""
+        return "contested"
+    if current is not None and prior is not None and ev.agent not in _authors(prior):
+        if _same(prior["data"], d):
+            # The same definition again: nothing is lost, but it now has two authors, so a
+            # later revision by either is a revision, not a rival.
+            prior["authors"] = sorted({*_authors(prior), ev.agent})
+            return ""
+        current.contested = [prior, mine]
+        return "contested"
+    st.record_definitions[key] = mine
+    return ""
+
+
+def _kept_at_by(prev: Any, ev: Event) -> tuple[str, str]:
+    """(at, by) of the definition a settlement keeps: the kept one's own, so the rebuilt
+    record reads as that agent wrote it, not as the agent that ran `resolve`."""
+    kept = next((c for c in prev.contested if c["event"] == ev.data.get("kept")), None)
+    return (kept["ts"], kept["agent"]) if kept else (prev.at or ev.ts, prev.by or ev.agent)
 
 
 def _h_bug_found(st: State, ev: Event) -> None:
@@ -85,6 +169,12 @@ def _h_lesson(st: State, ev: Event) -> None:
     """
     d = ev.data
     prev = st.lessons.get(ev.subject)
+    mode = _contest(st, ev, "lesson", prev)
+    if mode == "contested":
+        return
+    if mode == "resolved" and prev is not None:
+        at, by = _kept_at_by(prev, ev)
+        prev = Lesson(id=ev.subject, superseded_by=prev.superseded_by, at=at, by=by)
     st.lessons[ev.subject] = Lesson(
         id=ev.subject,
         title=d.get("title", "") or (prev.title if prev else ""),
@@ -122,6 +212,12 @@ def _h_decision(st: State, ev: Event) -> None:
     """
     d = ev.data
     prev = st.decisions.get(ev.subject)
+    mode = _contest(st, ev, "decision", prev)
+    if mode == "contested":
+        return
+    if mode == "resolved" and prev is not None:
+        at, by = _kept_at_by(prev, ev)
+        prev = Decision(id=ev.subject, superseded_by=prev.superseded_by, at=at, by=by)
     dec = Decision(
         id=ev.subject,
         title=d.get("title", "") or (prev.title if prev else ""),
@@ -164,6 +260,12 @@ def _h_decision_superseded(st: State, ev: Event) -> None:
 
 def _h_research(st: State, ev: Event) -> None:
     d = ev.data
+    # Replace-on-record already (no merge), so only the contest needs deciding here.
+    prev = st.research.get(ev.subject)
+    mode = _contest(st, ev, "research", prev)
+    if mode == "contested":
+        return
+    at = _kept_at_by(prev, ev)[0] if mode == "resolved" and prev is not None else ev.ts
     st.research[ev.subject] = ResearchNote(
         id=ev.subject,
         question=d.get("question", ""),
@@ -176,7 +278,7 @@ def _h_research(st: State, ev: Event) -> None:
         sources=list(d.get("sources", [])),
         tags=list(d.get("tags", [])),
         budget=d.get("budget", ""),
-        at=ev.ts,
+        at=at,
         item=d.get("item", ""),
     )
 

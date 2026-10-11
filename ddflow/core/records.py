@@ -529,6 +529,17 @@ class Bug:
         return not self.resolution
 
 
+def contested_summary(contested: list[dict[str, Any]]) -> str:
+    """The rivals of a contested decision, lesson or research record, one line; "" if none."""
+    if not contested:
+        return ""
+    return (
+        f"{len(contested)} definitions from different agents ("
+        + "; ".join(f"{d['event'][:12]} by {d['agent']}: {d['title']!r}" for d in contested)
+        + ")"
+    )
+
+
 @dataclass
 class Lesson:
     id: str
@@ -539,6 +550,11 @@ class Lesson:
     seen_in: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     at: str = ""
+    #: Rival definitions of this id from different agents (B230e852e10), each {"event",
+    #: "agent", "lamport", "ts", "title", "data"}; empty unless contested. While it is
+    #: not empty the displayed fields are the FIRST definition's, never mixed with a
+    #: rival's, and the record is not in force until `ddflow resolve` settles it.
+    contested: list[dict[str, Any]] = field(default_factory=list, metadata={"omit_empty": True})
     superseded_by: str = ""
     #: The lesson in one paragraph: what a lessons SUMMARY is made of. Both projects this
     #: was built against keep one beside their corpus -- one generated from each entry's
@@ -554,6 +570,11 @@ class Lesson:
     #: The agent id on the event that first recorded it: who a reader is trusting
     #: (`core/provenance.py`). Not a field an event carries -- the event's own `agent`.
     by: str = ""
+
+    @property
+    def live(self) -> bool:
+        """In force: not retired by a later lesson, and not in an unresolved contest."""
+        return not self.superseded_by and not self.contested
 
     def text(self) -> str:
         return "\n".join(x for x in (self.title, self.rule, self.why, self.how) if x)
@@ -759,6 +780,11 @@ class Decision:
     status: str = "accepted"  # proposed | accepted | superseded
     decided_by: str = ""  # operator | agent | a name
     supersedes: list[str] = field(default_factory=list)
+    #: Rival definitions of this id from different agents (B230e852e10), each {"event",
+    #: "agent", "lamport", "ts", "title", "data"}; empty unless contested. While it is
+    #: not empty the displayed fields are the FIRST definition's, never mixed with a
+    #: rival's, and the record is not in force until `ddflow resolve` settles it.
+    contested: list[dict[str, Any]] = field(default_factory=list, metadata={"omit_empty": True})
     superseded_by: str = ""
     at: str = ""
     item: str = ""
@@ -768,7 +794,7 @@ class Decision:
 
     @property
     def live(self) -> bool:
-        return self.status == "accepted" and not self.superseded_by
+        return self.status == "accepted" and not self.superseded_by and not self.contested
 
     def text(self) -> str:
         return "\n".join(
@@ -795,6 +821,12 @@ class ResearchNote:
     #: one, and telling those apart by their SHAPE is a heuristic pretending to be a
     #: fact. One marker, spelled the same way on all three.
     tags: list[str] = field(default_factory=list)
+    #: Rival definitions of this id from different agents (B230e852e10), each {"event",
+    #: "agent", "lamport", "ts", "title", "data"}; empty unless contested. While it is
+    #: not empty the displayed fields are the FIRST definition's, never mixed with a
+    #: rival's. `doctor` and `show` surface the contest; a note has no in-force notion.
+    #: `ddflow resolve` settles it.
+    contested: list[dict[str, Any]] = field(default_factory=list, metadata={"omit_empty": True})
     budget: str = ""
     at: str = ""
     item: str = ""
@@ -890,6 +922,9 @@ class State:
     #: entry. What a rival add is compared against, and what becomes the first side of
     #: the contest when one arrives.
     definitions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: `kind:id` -> the definition that currently stands for a decision, lesson or research
+    #: record, in the same shape: what a rival from another agent is compared against.
+    record_definitions: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: reviewer-entry digest -> who a TOOL wrote it as ({"name", "kind", "agent",
     #: "person", "user", "at"}), and digest -> the person who approved it. A digest in
     #: the first and not the second is a reviewer whose reviews do not count yet

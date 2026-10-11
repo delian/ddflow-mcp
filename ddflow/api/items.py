@@ -16,6 +16,7 @@ from ..core import ids as IDS
 from ..core import outcome as O
 from ..core.defaults import DEFAULT_PRIORITY
 from ..core.flow import line_order
+from ..core.records import ADD_RELATIONS
 from ..infra import worktree as W
 from ..services import choices as CH
 from ..services import items as IT
@@ -661,6 +662,68 @@ def _apply_resolution(
         log.append(f"{it.kind}.added", nid, d["data"])
 
 
+def _no_such_item(item: str, it) -> O.Outcome:
+    gone = " (it was removed from the queue)" if it is not None else ""
+    return O.failed("item.resolved", f"no such item {item!r}{gone}", id=item)
+
+
+def _resolve_record(log, st, item: str, keep: str, refile_as: str) -> O.Outcome | None:
+    """Settle a contested decision, lesson or research id (B230e852e10), or None when
+    ``item`` is none of those. The kept definition is re-recorded WHOLE, carrying
+    ``resolves`` (the rivals' events) and ``kept``: the fold then replaces the contest
+    with it, merging nothing from the others. An older ddflow folds that as an ordinary
+    re-record, so no new event kind is needed."""
+    if item in st.items:
+        return None
+    for kind, pool in (
+        ("decision", st.decisions),
+        ("lesson", st.lessons),
+        ("research", st.research),
+    ):
+        rec = pool.get(item)
+        if rec is None:
+            continue
+        if not rec.contested:
+            return O.refused(
+                "item.resolved",
+                f"{kind} {item} is not contested: there is nothing to resolve.",
+                id=item,
+            )
+        if refile_as:
+            return O.refused(
+                "item.resolved",
+                f"--refile-as is for items; the losing definition of {kind} {item} stays in "
+                f"the log and `show` lists it. Re-add it under a new id by hand.",
+                id=item,
+            )
+        opts = "; ".join(f"{d['event']} ({d['agent']}: {d['title']!r})" for d in rec.contested)
+        kept = _contestants(rec.contested, keep, "agent")
+        if len(kept) != 1:
+            why = "names none of" if not kept else "names more than one of"
+            return O.failed(
+                "item.resolved",
+                f"--keep {keep!r} {why} {item}'s definitions; give an event id: {opts}",
+                id=item,
+            )
+        won = kept[0]
+        carry = {k: v for k, v in won["data"].items() if k not in (*ADD_RELATIONS, "dedupe")}
+        carry["resolves"] = [d["event"] for d in rec.contested]
+        carry["kept"] = won["event"]
+        log.append(f"{kind}.recorded", item, carry)
+        lost = [d for d in rec.contested if d["event"] != won["event"]]
+        return O.ok(
+            "item.resolved",
+            id=item,
+            item_kind=kind,
+            kept_definition={k: v for k, v in won.items() if k != "data"},
+            kept_holder="",
+            lost=[{k: d[k] for k in ("event", "agent", "title")} | {"body": ""} for d in lost],
+            refiled=[],
+            released=[],
+        )
+    return None
+
+
 def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str = "") -> O.Outcome:
     """Settle a contested item: keep one definition and/or one claim, recorded as an event.
 
@@ -690,8 +753,8 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
         st = L._fold(log)
         it = st.items.get(item)
         if it is None or it.removed:
-            gone = " (it was removed from the queue)" if it is not None else ""
-            return O.failed("item.resolved", f"no such item {item!r}{gone}", id=item)
+            settled = _resolve_record(log, st, item, keep, refile_as)
+            return _no_such_item(item, it) if settled is None else settled
         if not it.contest_summary():
             return O.refused(
                 "item.resolved",

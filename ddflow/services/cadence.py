@@ -79,7 +79,7 @@ def lessons_cadence(st, cfg) -> list[dict[str, Any]]:
     alone would fire on a MERGE (fewer entries, same bytes => per-entry rises), i.e. on
     exactly the action the cadence exists to produce.
     """
-    live = [x for x in st.lessons.values() if not x.superseded_by]
+    live = [x for x in st.lessons.values() if x.live]
     if len(live) < cfg.lessons.cadence_min_entries:
         return []
     runs = st.cadences.get("lessons_compression", [])

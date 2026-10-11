@@ -235,10 +235,22 @@ def _none_listed(data: dict[str, Any], *, filtered: bool) -> O.Outcome:
     )
 
 
+def _by_force(st) -> tuple[list, list, list]:
+    """(in force, contested, retired). A contested decision is neither in force nor
+    retired: it is shown always, flagged, because a rival definition nobody can see is
+    the bug (B230e852e10)."""
+    every = list(st.decisions.values())
+    return (
+        [d for d in every if d.live],
+        [d for d in every if d.contested],
+        [d for d in every if not d.live and not d.contested],
+    )
+
+
 def decision_list(
     repo: Path, *, all: bool = False, since: str = "", limit: int | None = None
 ) -> O.Outcome:
-    """Decisions in force; `all` includes the superseded ones.
+    """Decisions in force, and any contested ones (flagged); `all` includes the superseded ones.
 
     `since` keeps those recorded at or after a date/timestamp; `limit` keeps the NEWEST
     N, so the display order (oldest first, the order a decision was made in) never turns
@@ -246,9 +258,8 @@ def decision_list(
     out, exactly as the viewers do.
     """
     _log, _cfg, st = _load(repo)
-    live = [d for d in st.decisions.values() if d.live]
-    dead = [d for d in st.decisions.values() if not d.live]
-    rows = live + dead if all else live
+    live, contested, dead = _by_force(st)
+    rows = live + contested + dead if all else live + contested
     # The projected keys exist on EVERY path, refusals included: the MCP tool declares
     # `payload: "rows"`, so `out.body("rows")` runs before a refusal is rendered and raises
     # KeyError -- the wire shape must hold even when the answer is "no" (roborev on fd7ab63a,

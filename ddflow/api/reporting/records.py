@@ -9,6 +9,7 @@ from typing import Any
 from ...core import clock
 from ...core import outcome as O
 from ...core.plain import plain
+from ...core.records import contested_summary
 from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
@@ -190,3 +191,27 @@ def _show_bug(st, bug) -> O.Outcome:
         **addenda(st, bug.id),
     }
     return O.ok("show", id=bug.id, item=record, _render={"bug": record})
+
+
+def _contest_problems(st) -> list[str]:
+    """B191: a merge brought in a rival definition or a rival claim. Every state, not only
+    open ones -- a finished item whose other definition was dropped is still lost work.
+    B230e852e10: the same for a decision, lesson or research id two agents defined."""
+    out = [
+        f"{it.id} is CONTESTED: {it.contest_summary()} — "
+        f"`ddflow show {it.id}`, then `ddflow resolve {it.id} --keep <event-id|agent>`"
+        for it in sorted(st.items.values(), key=lambda i: i.id)
+        if not it.removed and it.contest_summary()
+    ]
+    for kind, pool in (
+        ("decision", st.decisions),
+        ("lesson", st.lessons),
+        ("research", st.research),
+    ):
+        out += [
+            f"{kind} {r.id} is CONTESTED: {contested_summary(r.contested)} — "
+            f"`ddflow resolve {r.id} --keep <event-id|agent>` settles it"
+            for r in sorted(pool.values(), key=lambda x: x.id)
+            if r.contested
+        ]
+    return out

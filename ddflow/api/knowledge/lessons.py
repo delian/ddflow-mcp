@@ -134,7 +134,7 @@ def lessons_verify(repo: Path, *, agent: str = "") -> O.Outcome:
     """
 
     _log, _cfg, st = _load(repo, agent)
-    live = {k: v for k, v in st.lessons.items() if not v.superseded_by}
+    live = {k: v for k, v in st.lessons.items() if v.live}
     checkable = INV.checkable(st.lessons)
     if not checkable:
         nothing_checked = (

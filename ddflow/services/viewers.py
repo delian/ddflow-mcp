@@ -125,7 +125,7 @@ def _lesson_row(ls: Lesson, cfg: Config) -> dict[str, Any]:
         "id": ls.id,
         "kind": "lesson",
         # Two states in one word each: a lesson is still believed, or replaced.
-        "state": "superseded" if ls.superseded_by else "live",
+        "state": "superseded" if ls.superseded_by else "contested" if ls.contested else "live",
         "title": _one_line(ls.title or ls.rule, cfg),
         "owner": ls.by,
         "updated": ls.at,
