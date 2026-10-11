@@ -250,7 +250,8 @@ def _tracked(repo: Path, rel: str) -> bool:
 
 def _abs_launch(entry: Any) -> bool:
     """Whether an MCP entry records an absolute path that exists on THIS machine. One that
-    does not is another machine's, and already a dangling-launcher finding."""
+    does not is another machine's: `check_mcp` reports a dangling `command`/`PYTHONPATH`
+    (an entry with no `command` launches nothing, and is out of scope here)."""
     cmd, env = _entry_parts(entry)
     root = env.get("PYTHONPATH")
     dirs = [d for d in root.split(os.pathsep) if d] if isinstance(root, str) else []
