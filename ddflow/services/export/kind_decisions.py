@@ -15,6 +15,8 @@ GOVERNS_SHOWN = 3
 def _status(d: Any) -> str:
     if d.superseded_by:
         return f"superseded by {d.superseded_by}"
+    if d.contested:
+        return "contested"
     return d.status or "accepted"
 
 

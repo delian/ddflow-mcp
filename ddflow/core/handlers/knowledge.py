@@ -23,6 +23,13 @@ def _definition(ev: Event) -> dict[str, Any]:
     }
 
 
+def _same(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """The same definition: the add-time `dedupe` check ran on each clone and may differ."""
+    return {k: v for k, v in a.items() if k != "dedupe"} == {
+        k: v for k, v in b.items() if k != "dedupe"
+    }
+
+
 def _authors(definition: dict[str, Any]) -> list[str]:
     return definition.get("authors") or [definition["agent"]]
 
@@ -59,16 +66,16 @@ def _contest(st: State, ev: Event, kind: str, current: Any) -> str:
                 rivals[i] = mine  # a rival revising its own definition
                 break
         else:
-            if all(r["data"] != d for r in rivals):
+            if not any(_same(r["data"], d) for r in rivals):
                 rivals.append(mine)
-        if all(r["data"] == d for r in rivals):
+        if all(_same(r["data"], d) for r in rivals):
             # The rivals converged on one definition: nothing is disputed any more.
             current.contested = []
             st.record_definitions[key] = {**mine, "authors": sorted({r["agent"] for r in rivals})}
             return ""
         return "contested"
     if current is not None and prior is not None and ev.agent not in _authors(prior):
-        if prior["data"] == d:
+        if _same(prior["data"], d):
             # The same definition again: nothing is lost, but it now has two authors, so a
             # later revision by either is a revision, not a rival.
             prior["authors"] = sorted({*_authors(prior), ev.agent})
