@@ -14,6 +14,7 @@ from typing import Any
 
 from ..core.events import is_older
 from ..core.model import State
+from ..core.version import patch_only_skew
 from ..infra.log import running_version
 from .install_info import upgrade_advice
 
@@ -61,7 +62,14 @@ def doctor_notes(st: State, running: str = "") -> list[str]:
     the version itself is `ddflow status --json` (`ddflow_version`)."""
     rep = skew_report(st, running)
     notes: list[str] = []
-    if rep["skew"]:
+    if rep["skew"] and patch_only_skew(rep["running"], rep["highest"]):
+        notes.append(
+            f"ddflow {rep['running']} is a PATCH release behind this log's highest stamp "
+            f"({rep['highest']}): writes go through with a warning and an older-ddflow mark "
+            f"unless the log's data format or a recorded capability is ahead too. "
+            f"{_advice(rep['highest'])}"
+        )
+    elif rep["skew"]:
         notes.append(
             f"ddflow {rep['running']} is OLDER than this log's highest stamp "
             f"({rep['highest']}): writes are refused unless [upgrade].skew allows them. "

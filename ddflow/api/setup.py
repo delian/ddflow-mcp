@@ -26,6 +26,7 @@ from typing import Any
 from ..config import Config, ReviewConfig, csv_list
 from ..core import clock
 from ..core import outcome as O
+from ..core.events import SkewRefused
 from ..core.model import fold
 from ..infra import fsio
 from ..infra import git as G
@@ -1728,7 +1729,13 @@ def setup(
     """
 
     plan = plan or Adoption()
-    _log, cfg, _st = _load(repo, agent)
+    log, cfg, _st = _load(repo, agent)
+    try:
+        # An older ddflow must not rewrite what a newer one wrote (the managed blocks and
+        # driver docs are tracked files, so the log's skew guard has to cover them too).
+        log.check_skew()
+    except SkewRefused as exc:
+        return O.refused("setup", str(exc), actions=[], agents=[], text="")
     agents = csv_list(plan.agents) or list(AGENT_TARGETS)
     tree = files_tree(repo, called_from)
     if plan.refresh_docs:
