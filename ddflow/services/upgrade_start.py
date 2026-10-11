@@ -21,8 +21,8 @@ Three promises hold in every mode:
   past ``[upgrade].start_timeout_s`` is left running and reported as pending -- a NOTE that
   says the upgrade is pending and asks the operator, never silence and never "current". The
   answer the step reaches later is kept (the marker, keyed by version, policy and surface) so
-  the next connect proposes at once, and the brief repeats the note (``doctor_notes`` is for
-  ``ddflow doctor``, wired by B-start-timeout-doctor) until the
+  the next connect proposes at once, and the brief repeats the note (``doctor_notes`` gives the
+  same note to ``ddflow doctor``) until the
   project is upgraded or a check finishes;
 * a project it cannot write (a read-only mount, a volume owned by another uid) gets the plan
   and a line saying nothing was written;
@@ -74,7 +74,7 @@ OFF, CURRENT, OLDER, PROPOSED, APPLIED, READONLY, TIMEOUT, FAILED = (
     "failed",
 )
 
-#: The statuses of a check that did not reach an answer: their note repeats (the brief; doctor once it is wired)
+#: The statuses of a check that did not reach an answer: their note repeats (the brief and `ddflow doctor`)
 #: until the project is upgraded or a later check finishes.
 UNFINISHED = (TIMEOUT, FAILED)
 #: The statuses worth keeping as the answer of a start (see `_cacheable`).
