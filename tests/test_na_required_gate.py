@@ -105,3 +105,13 @@ def test_a_non_required_gate_declared_out_of_scope_is_rejudged_on_the_diff(repo)
     assert "dedupe" in G.status(st, cfg, "T1", defs).not_applicable  # declared globs, no diff yet
     s = G.status(st, cfg, "T1", defs, diff=lambda: ["src/a.py"])
     assert "dedupe" not in s.not_applicable
+
+
+def test_brief_keeps_the_required_gate_in_gates_remaining(repo):
+    """The brief passes `diff` as a callable like every other caller: a declared-globs miss
+    does not drop a required gate from 'gates remaining' (it would raise or drop it if the
+    callable convention were inconsistent)."""
+    _setup(repo)
+    out = run_cli(repo, "brief", "--item", "T1")[1]
+    remaining = next(ln for ln in out.splitlines() if "gates remaining" in ln)
+    assert "unit_tests" in remaining, remaining
