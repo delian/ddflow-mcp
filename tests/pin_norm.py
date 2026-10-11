@@ -23,7 +23,8 @@ from typing import Any
 _USAGE = re.compile(r"^usage: [^\n]*(?:\n[ \t]+\S[^\n]*)*", re.MULTILINE)
 #: ``(choose from 'a', 'b')``: only a list of single-quoted items is argparse's old repr
 #: layout; anything else inside the parentheses is left exactly as it is.
-_CHOOSE = re.compile(r"\(choose from ('[^'\n]*'(?:, '[^'\n]*')*)\)")
+#: An item with a comma in it is left alone: stripped, it would read as two choices.
+_CHOOSE = re.compile(r"\(choose from ('[^',\n]*'(?:, '[^',\n]*')*)\)")
 
 
 def argparse_stable(text: str) -> str:
