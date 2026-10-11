@@ -115,9 +115,8 @@ def test_brief_keeps_the_required_gate_in_gates_remaining(repo):
     assert "unit_tests" in remaining, remaining
 
 
-def test_brief_drops_the_required_gate_only_when_the_actual_diff_misses_it(repo):
-    """The brief's `diff` wiring: with a docs-only change the gate is excused, with a
-    change under src/ it stays owed, whatever the item declares."""
+def test_brief_drops_the_required_gate_when_the_actual_diff_misses_it(repo):
+    """The brief's `diff` wiring, excusing direction: a docs-only change excuses the gate."""
     _setup(repo)
     _worktree_with_change(repo, "docs/x.md")
     out = run_cli(repo, "brief", "--item", "T1", agent="a1")[1]
