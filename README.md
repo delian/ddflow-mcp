@@ -4118,6 +4118,15 @@ cover, to be reviewed after upgrading. The override is per session, not per comm
 session, another agent, or a newer stamp is refused again. Only versions that ship the
 guard can refuse; releases before it cannot.
 
+A skew of **patch releases only** (the same minor, the same data format level, and no
+recorded capability this ddflow lacks) is not refused, even under `[upgrade].skew = refuse`:
+the write goes through with a one-time warning and the event is marked as written by an older
+version (`older_ddflow`, as for an override). A higher minor, a higher format level or a
+capability gap is still refused. An older `ddflow adopt` is refused even for a patch, since it
+would rewrite the newer managed files, and a project instruction file that holds two managed
+blocks (an older adopt's leftover) is a PROBLEM in `ddflow doctor`;
+`ddflow adopt --refresh-docs` collapses them to one.
+
 **The format level.** A version number alone misses a branch or source tree that changes an
 on-disk format without a bump, and every patch release looks newer than the last. So each
 `ddflow.seen` stamp also carries the `FORMAT_LEVEL` its writer wrote at
