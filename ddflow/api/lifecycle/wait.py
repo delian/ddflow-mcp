@@ -37,6 +37,26 @@ def _note_cap(say, capped: bool) -> None:
         say(f"waiting at most {WAIT_MAX_S}s at a time; ask again to wait longer")
 
 
+def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
+    """`_judge_wait` for an item the caller already holds.
+
+    Holding the item is not holding the globs a widening names: `update --globs` refuses
+    what another live lease covers, so READY would be followed by a refusal
+    (B-wait-globs-held)."""
+    clash = L.glob_clash(st, cfg, it, me, list(globs), now) if globs else None
+    if clash is None:
+        return {**out, "status": "ready", "why": f"you already hold {it.id}", "ready": [it.id]}
+    other_id, lz, pair = clash
+    detail = f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})"
+    return {
+        **out,
+        "status": "blocked",
+        "why": f"{it.id}: {detail}",
+        "waiting_on": [other_id],
+        "blocked": [plain(Blocked(it.id, "conflict", detail, [other_id]))],
+    }
+
+
 def _judge_wait(
     st,
     cfg,
@@ -74,22 +94,7 @@ def _judge_wait(
         }
     mine = live.get(item)
     if mine is not None and mine.holder == me:
-        # Holding the item is not holding the globs a widening names: `update --globs`
-        # refuses what another live lease covers, so READY would be followed by a refusal
-        # (B-wait-globs-held).
-        clash = L.glob_clash(st, cfg, it, me, list(globs), now) if globs else None
-        if clash is None:
-            return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
-        other_id, lz, pair = clash
-        detail = f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})"
-        blocked = Blocked(item, "conflict", detail, [other_id])
-        return {
-            **out,
-            "status": "blocked",
-            "why": f"{item}: {detail}",
-            "waiting_on": [other_id],
-            "blocked": [plain(blocked)],
-        }
+        return _judge_held(st, cfg, it, me, now, globs, out)
     b = _claim_blocker(st, cfg, it, me, live, now, globs=globs, repo=repo)
     if b is None:
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
