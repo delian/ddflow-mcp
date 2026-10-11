@@ -146,6 +146,8 @@ LIVE_CHANGED = "live repo changed during rehearsal"
 START_TIMEOUT_S = 120
 #: What the handshake says when the start check ran out of its time bound.
 START_TIMED_OUT = "did not finish within"
+#: Seconds for the session that must take the timeout path: too little for any plan.
+FORCED_TIMEOUT_S = 0.05
 #: The pause before the one retry of a clone that failed (a gc or a ref update in the live repo).
 CLONE_RETRY_S = 0.5
 
@@ -1155,9 +1157,8 @@ class Rehearsal:
     def step_connect(self) -> bool:
         repo = self.clone("connect")
         before_tree, known = tree_digest(repo), {e.get("id") for e in events_of(repo)}
-        default = self._serve(
-            repo, _HELLO, start_timeout=None
-        )  # [upgrade].start_timeout_s as shipped
+        forced = self._serve(repo, _HELLO, start_timeout=FORCED_TIMEOUT_S)
+        default = self._serve(repo, _HELLO, start_timeout=None)  # as shipped
         first = self._serve(repo, [*_HELLO, _call(3, "ddflow_brief", {}), _TOOLS_LIST])
         if START_TIMED_OUT in (first.get(1) or {}).get("instructions", ""):
             self.unrunnable("MCP connect: propose, wait for consent, apply")
@@ -1169,7 +1170,7 @@ class Rehearsal:
                 "(a very loaded machine, or a log too big for it): it could not propose",
             )
         size, problems = self._proposed(first)
-        problems += self._default_path(default)
+        problems += self._noted(forced) + self._default_path(default)
         applied = [
             e for e in events_of(repo) if e.get("id") not in known and e.get("kind") in APPLYING
         ]
@@ -1192,9 +1193,19 @@ class Rehearsal:
             f"tools/list {size} bytes; {told}",
         )
 
+    def _noted(self, forced: dict[int, dict[str, Any]]) -> list[str]:
+        """A start check given no time at all is a NOTE in the handshake: the upgrade is pending,
+        the operator is asked and told where the plan is (B-start-timeout-drops-proposal)."""
+        text = (forced.get(1) or {}).get("instructions", "")
+        wanted = ("PENDING", "Ask the operator", "ddflow upgrade --plan")
+        if all(w in text for w in wanted):
+            return []
+        return ["a start check that ran out of time left no note that the upgrade is pending"]
+
     def _default_path(self, shipped: dict[int, dict[str, Any]]) -> list[str]:
-        """The server with the shipped time bound: its handshake either proposes the upgrade or
-        says in a note that the check is still running -- it is never silent about it."""
+        """The server with the shipped time bound (a smoke test of the real default, which on an
+        idle machine proposes and on a loaded one notes; the forced timeout above is the
+        deterministic half): its handshake is never silent about the upgrade."""
         text = (shipped.get(1) or {}).get("instructions", "")
         if "newer than this project" in text and "Ask the operator" in text:
             return []
@@ -1244,7 +1255,7 @@ class Rehearsal:
         return stale, []
 
     def _serve(
-        self, repo: Path, msgs: list[dict[str, Any]], start_timeout: int | None = START_TIMEOUT_S
+        self, repo: Path, msgs: list[dict[str, Any]], start_timeout: float | None = START_TIMEOUT_S
     ) -> dict[int, dict[str, Any]]:
         """Talk to the new MCP server over stdio for these messages; replies by request id.
         The start check gets ``start_timeout`` seconds (the rehearsal tests the flow, not the
