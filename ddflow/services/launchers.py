@@ -257,7 +257,7 @@ def _abs_launch(entry: Any) -> bool:
 
 
 def machine_local_configs(repo: Path) -> list[Dangling]:
-    """Tracked agent configs that record an absolute launcher of THIS machine's environment.
+    """Tracked agent configs that record an absolute launcher of the machine that wrote them.
 
     `.mcp.json` and `.claude/settings.json` are committed, but the interpreter and the
     PYTHONPATH `adopt` wrote into them are not shared: on another machine they dangle, and
@@ -302,8 +302,8 @@ def machine_local_configs(repo: Path) -> list[Dangling]:
             tuple(held),
             True,
             "ddflow adopt --launch uvx",
-            text=f"{files} (tracked) record an absolute interpreter or PYTHONPATH of this "
-            "machine; on any other machine they dangle, and it will report a dangling "
+            text=f"{files} (tracked) record an absolute interpreter or PYTHONPATH of the "
+            "machine that wrote them; on any other machine they dangle, and doctor there reports a dangling "
             "launcher. Use a machine-independent launch (`ddflow adopt --launch uvx`, or "
             "`ddflow` on PATH) or git-ignore them",
         )
