@@ -178,3 +178,12 @@ def test_a_view_quoting_a_conflict_block_on_a_clean_tree_is_not_a_conflict(clone
     assert "<<<<<<< HEAD" in (a / "docs/ddflow/LESSONS.md").read_text()
     code, out, err = run_cli(a, "doctor", agent="U1")
     assert "merge-conflict markers" not in out + err, out + err
+
+
+def test_a_committed_conflict_in_a_view_is_still_named(clones):
+    """The reviewer's case: markers `git add`ed and committed (no unmerged entry left)."""
+    a, _ = clones
+    (a / "docs/ddflow/QUEUE.md").write_text("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> o\n")
+    _commit(a, "oops")
+    code, out, err = run_cli(a, "doctor", agent="U1")
+    assert code == 1 and "docs/ddflow/QUEUE.md" in out + err, out + err
