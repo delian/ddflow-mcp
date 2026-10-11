@@ -78,6 +78,12 @@ def test_quotes_are_stripped_only_from_a_list_of_quoted_items():
     assert argparse_stable("(choose from 'a', 'b')") == "(choose from a, b)"
     # not argparse's repr layout: left alone, so a change in what the quoting says shows
     assert argparse_stable("(choose from 'a, b)") == "(choose from 'a, b)"
+    # an item that holds the separator would read as two choices once unquoted: untouched
+    assert argparse_stable("(choose from 'a, b')") == "(choose from 'a, b')"
+    assert argparse_stable("(choose from 'a, b', 'c')") == "(choose from 'a, b', 'c')"
+    assert argparse_stable("(choose from 'a, b', 'c')") != argparse_stable(
+        "(choose from 'a', 'b', 'c')"
+    )
     assert argparse_stable("(choose from a, 'b')") == "(choose from a, 'b')"
     assert argparse_stable("(choose from 'a' 'b')") == "(choose from 'a' 'b')"
 
