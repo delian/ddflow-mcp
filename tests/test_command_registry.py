@@ -136,7 +136,17 @@ def _generated(cmd: Command, monkeypatch) -> str:
 RELEASE = Command(
     path=("release",),
     summary="give up a lease",
-    params=(Param("id", positional=True), Param("note")),
+    params=(
+        Param("id", positional=True),
+        Param("note"),
+        Param("reason", default="", help="why --force is needed (recorded)"),
+        Param(
+            "force",
+            type="boolean",
+            help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded "
+            "on the event)",
+        ),
+    ),
 )
 WAIT = Command(
     path=("wait",),

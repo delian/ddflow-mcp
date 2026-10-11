@@ -20,6 +20,11 @@ from . import lifecycle_cli as L
 #: import the api (tests/test_uc_surf_loop_brief.py holds the two together).
 DEFAULT_CHECK_RECOVERY = True
 
+#: The override of another clone's live lease (B90b43dd2d8) is a person's call at the
+#: terminal, not a flag an agent reaches for on reflex (and each flag costs tools/list bytes).
+_OVERRIDE = "an operator's override of another clone's live lease, recorded; CLI only (B90b43dd2d8)"
+OVERRIDE_EXEMPT = {"--force": _OVERRIDE, "--reason": _OVERRIDE}
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("next",),
@@ -193,14 +198,28 @@ COMMANDS: tuple[Command, ...] = (
         "The note is recorded in the log and is often the only lasting explanation "
         "of why a claim was broken.",
         call=lambda repo, a, agent: _api().release_item(
-            repo, a["id"], note=a.get("note", "") or "", agent=agent
+            repo,
+            a["id"],
+            note=a.get("note", "") or "",
+            agent=agent,
+            force=bool(a.get("force")),
+            reason=a.get("reason", "") or "",
         ),
         payload=("released", "woke"),
+        flag_exempt=OVERRIDE_EXEMPT,
         render=L.release_text,
-        cli=CliPolicy(),
+        # A refusal (another clone's live lease) says why on stderr, not "no lease on".
+        cli=CliPolicy(shown=(OK, NOTHING)),
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("note", help="Why you are releasing it.", cli_help=""),
+            Param("reason", cli_only=True, cli_help="why --force is needed (recorded)", default=""),
+            Param(
+                "force",
+                type="boolean",
+                cli_only=True,
+                cli_help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded on the event)",
+            ),
         ),
     ),
     Command(
@@ -344,6 +363,8 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
             called_from=called_from,
             rerun_failed=bool(a.get("rerun_failed")),
+            force=bool(a.get("force")),
+            reason=a.get("reason", "") or "",
         ),
         payload=("gate", "outcome", "evidence"),
         render=L.run_text,
@@ -352,6 +373,13 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("gate", help="Gate id, e.g. unit_tests.", cli_help="", positional=True),
+            Param("reason", cli_only=True, cli_help="why --force is needed (recorded)", default=""),
+            Param(
+                "force",
+                type="boolean",
+                cli_only=True,
+                cli_help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded on the event)",
+            ),
             Param(
                 "rerun_failed",
                 type="boolean",
@@ -360,6 +388,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
         ),
         flag_exempt={
+            **OVERRIDE_EXEMPT,
             "--rerun-failed": "a terminal-side diagnosis of a flaky failure; the gate stays FAILED either way, so an agent gains nothing from it over the evidence's failed_tests (tools/list byte budget)",
         },
     ),
@@ -386,6 +415,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("gate", "record"),
         tool="ddflow_gate_record",
+        flag_exempt={"--force": _OVERRIDE},
         description="Record the outcome of a gate you performed (research, a review, a bug hunt). "
         "outcome is one of passed/failed/unavailable/partial/skipped. "
         "If a reviewer or tool could not run, record 'unavailable' with a reason, "
@@ -407,6 +437,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             agent=agent,
             called_from=called_from,
+            force=bool(a.get("force")),
         ),
         payload=("gate", "outcome", "warning"),
         render=L.record_text,
@@ -470,6 +501,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
                 default="",
             ),
+            Param(
+                "force",
+                type="boolean",
+                cli_only=True,
+                cli_help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded on the event)",
+            ),
         ),
         tool_order=(
             "id",
@@ -489,6 +526,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("gate", "skip"),
         tool="ddflow_gate_skip",
         flag_exempt={
+            "--force": _OVERRIDE,
             "--outcome": "a skip IS the outcome",
             "--evidence": "a skipped gate produced none; that is what skipped means",
             "--command": "nothing ran",
@@ -511,6 +549,7 @@ COMMANDS: tuple[Command, ...] = (
                 output_file=a.get("output_file", "") or "",
             ),
             agent=agent,
+            force=bool(a.get("force")),
         ),
         payload=("gate", "outcome"),
         render=L.record_text,
@@ -544,6 +583,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_only=True,
             ),
             Param("output_file", default="", cli_only=True),
+            Param(
+                "force",
+                type="boolean",
+                cli_only=True,
+                cli_help="override ANOTHER CLONE's live lease on the item (needs --reason; recorded on the event)",
+            ),
         ),
     ),
     Command(

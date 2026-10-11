@@ -124,12 +124,28 @@ def _commit_events(log, cfg, reason: str) -> dict[str, str]:
     return {"events_note": why} if why else {}
 
 
-def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:
+def release(
+    repo: Path,
+    item: str,
+    *,
+    note: str = "",
+    agent: str = "",
+    force: bool = False,
+    reason: str = "",
+) -> O.Outcome:
+    """Give up a lease. Another CLONE's live lease is not released without ``force`` and a
+    ``reason``, recorded on the release (B90b43dd2d8)."""
     log, cfg, _st = _load(repo, agent)
+    refusal, forced = L.foreign_guard(
+        log, cfg, item, force=force, reason=reason, what="releasing it"
+    )
+    if refusal:
+        return O.refused("lease.released", refusal, id=item, released=False, woke=[])
+    note = "; ".join(filter(None, [forced, note]))
     # Read BEFORE letting go: a waiter wakes on the release and unregisters, and one
     # quick enough to do that before a read after it would never be reported.
     waiting = _waiters(repo, item)
-    released = L.release(log, item, note=note)
+    released = L.release(log, item, note=note, forced=bool(forced))
     if released:
         committed = _commit_events(log, cfg, f"release {item}")
         return O.ok("lease.released", id=item, released=True, woke=waiting, **committed)
