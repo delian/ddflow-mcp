@@ -324,3 +324,15 @@ def test_recovering_the_events_clears_the_loss(clone):
     assert _problem_lines(_doctor(clone)[1])
     _git(clone, "reset", "-q", "--hard", "ORIG_HEAD")  # the events are back
     assert not _problem_lines(_doctor(clone)[1])
+
+
+def test_a_visit_to_a_longer_branch_does_not_disarm_the_original(clone):
+    """reviewer: raising a mark on another branch must not hide a loss back on this one."""
+    _dd(clone, "status")
+    _git(clone, "checkout", "-qb", "feat")
+    assert _dd(clone, "task", "add", "T6", "--title", "f", "--globs", "src/f.py")[0] == 0
+    _commit(clone, "feat")
+    _git(clone, "checkout", "-q", "main")
+    assert not _problem_lines(_doctor(clone)[1])
+    _git(clone, "reset", "-q", "--hard", "HEAD~2")
+    assert _problem_lines(_doctor(clone)[1])
