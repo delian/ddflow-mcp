@@ -1194,11 +1194,13 @@ class Rehearsal:
         )
 
     def _noted(self, forced: dict[int, dict[str, Any]]) -> list[str]:
-        """A start check given no time at all is a NOTE in the handshake: the upgrade is pending,
-        the operator is asked and told where the plan is (B-start-timeout-drops-proposal)."""
+        """A start check given next to no time is a NOTE in the handshake: the upgrade is
+        pending, the operator is asked and told where the plan is (B-start-timeout-drops-
+        proposal). A log so small that the plan fit in the time gets the proposal instead,
+        which is as good: what fails is silence."""
         text = (forced.get(1) or {}).get("instructions", "")
-        wanted = ("PENDING", "Ask the operator", "ddflow upgrade --plan")
-        if all(w in text for w in wanted):
+        note = all(w in text for w in ("PENDING", "Ask the operator", "ddflow upgrade --plan"))
+        if note or ("newer than this project" in text and "Ask the operator" in text):
             return []
         return ["a start check that ran out of time left no note that the upgrade is pending"]
 

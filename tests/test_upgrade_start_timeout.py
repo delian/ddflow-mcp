@@ -158,3 +158,30 @@ def test_a_late_answer_and_the_timeout_note_cannot_undo_each_other(old, monkeypa
     writer.join(5)
     late.join(5)
     assert real_read(old)["status"] == US.PROPOSED
+
+
+def test_a_kept_proposal_does_not_depend_on_who_connected(old, monkeypatch) -> None:
+    _slow_plan(monkeypatch, 0.6)
+    log, cfg, st = _load(old, "agent-a")
+    cfg.upgrade.start_timeout_s = 0.2
+    assert US.start(old, log, cfg, st, agent="agent-a", surf="mcp", environ=CHECK)["status"] == (
+        US.TIMEOUT
+    )
+    _wait_for(lambda: US._read(old).get("status") == US.PROPOSED)
+    kept = US._read(old)["text"]
+
+    def boom(*a, **k):
+        raise AssertionError("the plan was built again")
+
+    monkeypatch.setattr(UP, "build", boom)
+    log, cfg, st = _load(old, "agent-b")
+    rep = US.start(old, log, cfg, st, agent="agent-b", surf="mcp", environ=CHECK)
+    assert rep["text"] == kept and "agent-a" not in kept and "agent-b" not in kept
+
+
+def test_a_container_start_that_applied_something_is_never_kept(old) -> None:
+    log, cfg, st = _load(old, "starter")
+    rep = US.start(old, log, cfg, st, agent="starter", surf="container", environ={})
+    assert rep["status"] == US.APPLIED
+    assert US._read(old).get("complete") is False
+    assert US._cached(old, US._key(US.running_version(), "", "safe", "container")) is None
