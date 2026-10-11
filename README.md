@@ -4012,7 +4012,8 @@ never refuses to serve: errors become a line in the report, work past `[upgrade]
 (10 s) is left running and the handshake says so in a NOTE (`... an upgrade is PENDING but its plan
 is not known yet ... Ask the operator ...`, never silence and never "current"); the plan it
 reaches later is kept in the marker, so the next connect proposes at once, and every brief repeats
-the note until the project is upgraded (`ddflow doctor` follows: B-start-timeout-doctor). A
+the note until the project is upgraded (`ddflow doctor` lists it as a NOTE too, with the same remedy, and
+nothing when the project is not behind). A
 read-only or foreign-owned project is reported and not written, and a
 runtime OLDER than the project writes nothing and says `restart` (the skew guard). The outcome is
 kept in the git-ignored `.ddflow/local/upgrade-start.json`; it replaces the one-line notice for
