@@ -431,6 +431,14 @@ def _remember(repo: Path, report: dict[str, Any]) -> None:
         pass
 
 
+def keep_notice(repo: Path, text: str) -> None:
+    """Keep the one-line notice the brief just issued (`upgrade_notice.line`) as a proposal, so
+    the briefs after it repeat it while the project is behind: on a hook-only path there was
+    no start report to keep. Bookkeeping only; never raises."""
+    if text:
+        _remember(repo, {"status": PROPOSED, "text": text, "version": running_version()})
+
+
 def start(
     repo: Path,
     log: Any,
