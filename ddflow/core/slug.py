@@ -50,6 +50,17 @@ def slug(text: str, limit: int = 48, default: str = "item") -> str:
     return s[:limit].strip("-") or default
 
 
+def slug_words(text: str, limit: int = 48, default: str = "item") -> str:
+    """``slug`` cut at a WORD boundary: the longest run of whole words within ``limit``. A
+    first word longer than ``limit`` is kept whole rather than cut, so an id never ends
+    in half a word."""
+    s = slug(text, 10**9, default="")
+    if len(s) > limit:
+        cut = s.rfind("-", 0, limit + 1)
+        s = s[:cut] if cut > 0 else s.split("-")[0]
+    return s.strip("-") or default
+
+
 def ascii_slug(text: str, limit: int, *, restrip: bool = True) -> str:
     """Lower-case ASCII words joined by ``-``, cut to ``limit`` (may be empty). The cut can
     leave a trailing ``-``: ``restrip`` removes it."""
