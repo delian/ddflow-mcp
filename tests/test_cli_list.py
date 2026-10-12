@@ -56,3 +56,9 @@ def test_list_refuses_a_flag_the_kind_does_not_take(repo):
     _seed(repo)
     code, _, err = run_cli(repo, "list", "task", "--all")
     assert code == 3 and "--all" in err
+
+
+def test_list_refusal_under_json_carries_a_body(repo):
+    _seed(repo)
+    code, out, _ = run_cli(repo, "list", "task", "--all", "--json")
+    assert code == 3 and "--all" in json.loads(out)["reason"]
