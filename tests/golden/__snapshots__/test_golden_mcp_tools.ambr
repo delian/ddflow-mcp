@@ -1984,7 +1984,7 @@
          },
          "imported": {
           "type": "boolean",
-          "description": "Required: this closes work that predates ddflow (recorded as evidence)."
+          "description": "Required: closes an IMPORTED phase; its imported source is the evidence recorded."
          },
          "as_agent": {
           "type": "string",

@@ -1276,8 +1276,7 @@
   
   options:
     -h, --help  show this help message and exit
-    --imported  required: this closes an IMPORTED phase, whose work predates ddflow (the fact
-                becomes the phase's evidence)
+    --imported  required: closes an IMPORTED phase (its imported source is the evidence recorded)
   
   '''
 # ---
