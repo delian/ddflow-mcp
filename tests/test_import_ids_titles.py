@@ -166,7 +166,7 @@ def test_the_slug_lengths_are_knobs_and_keep_whole_words(tmp_path):
     )
 
 
-def test_slug_length_knobs_refuse_values_that_would_cut_inside_a_word():
+def test_slug_length_knobs_refuse_values_below_the_minimum():
     import ddflow.config as C
 
     assert C.Config().importer.phase_slug_chars == 32
@@ -175,3 +175,5 @@ def test_slug_length_knobs_refuse_values_that_would_cut_inside_a_word():
         check = C._KNOB_CHECKS[f"importer.{key}"]
         assert "must be an integer >= 8" in check(3)
         assert check(8) == ""
+    # The minimum only keeps ids from degenerating; a word is never cut at ANY length.
+    assert slug_words("supercalifragilistic word", 8) == "supercalifragilistic"

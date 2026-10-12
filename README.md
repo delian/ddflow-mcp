@@ -1939,7 +1939,9 @@ Four guard rails, each of which exists because the alternative is silent:
   one, at `[importer] phase_slug_chars` (default 32) and `task_slug_chars` (default 40; at least
   8 each): `Phase 106C tool-rl multi-agent run` gives `PHASE-106C-TOOL-RL-MULTI-AGENT`, where
   it used to give `PHASE-106C-TOOLRL-MULTI`. A heading that declares its own id keeps it, and a
-  re-import recognises the older truncated ids (`legacy_ident`), so nothing is minted twice.
+  re-import recognises the older truncated ids (`legacy_ident`), so nothing is minted twice. Set
+  the two knobs BEFORE the first import: a re-import under different values derives different
+  ids and proposes those items again.
 - **Idempotent.** Ids derive from the source, so re-running after you edit the todo adds
   what is new and leaves the rest alone. A second run over an unchanged project exits 2.
 
