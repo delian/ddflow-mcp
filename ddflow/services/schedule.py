@@ -86,8 +86,10 @@ class Definitions:
 
 
 def done_counts(st: State) -> tuple[int, int]:
-    """(completed tasks, completed phases): the work a count pass measures."""
-    done = [i.kind for i in st.items.values() if i.state == "done"]
+    """(completed tasks, completed phases): the work a count pass measures. Items an import
+    closed (finished before ddflow existed) are not counted: they are not work done since
+    any pass, and counting them made every phase completion overdue after an import."""
+    done = [i.kind for i in st.items.values() if i.state == "done" and i.id not in st.imported_done]
     return done.count("task"), done.count("phase")
 
 

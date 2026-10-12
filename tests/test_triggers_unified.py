@@ -277,3 +277,30 @@ def test_a_new_evaluator_registers_by_name_and_is_listed_last(monkeypatch, tmp_p
         assert "already registered" in str(exc)
     else:
         raise AssertionError("a duplicate name was accepted")
+
+
+def test_imported_completions_do_not_count_towards_a_cadence_pass():
+    """Bug cadence-counts-imported-history: an import closed 480 phases and 3713 tasks, so
+    every `complete <phase>` was refused as 'overdue (480 of 2 phases)'. Work finished
+    before ddflow existed is not work since the last pass. Fails against the unfixed fold."""
+    from ddflow.core.events import Event
+    from ddflow.core.model import fold
+
+    evs = []
+    n = 0
+
+    def ev(kind, subject, data):
+        nonlocal n
+        n += 1
+        return Event(kind=kind, subject=subject, data=data, lamport=n, agent="a", ts=f"t{n}")
+
+    for i in range(5):
+        evs.append(ev("phase.added", f"P{i}", {"title": "p"}))
+        evs.append(ev("item.completed", f"P{i}", {"kind": "phase", "imported": True}))
+    evs.append(ev("phase.added", "Pnew", {"title": "p"}))
+    evs.append(ev("item.completed", "Pnew", {"kind": "phase"}))
+    st = fold(evs)
+    assert SV.done_counts(st)[1] == 1
+    cfg = Config()
+    cfg.cadence.architecture_review_every_phases = 2
+    assert "architecture_review" not in {d["cadence"] for d in CA.count_due(st, cfg)}
