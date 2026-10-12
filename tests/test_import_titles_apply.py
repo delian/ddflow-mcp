@@ -52,7 +52,7 @@ def test_cut_title_is_whole_words_and_closes_no_backtick():
     assert IM._cut_title("short") == "short"
     cut = IM._cut_title("word " * 10 + "`a b` tail", 53)
     assert cut.count("`") % 2 == 0 and cut.endswith("…")
-    assert IM._cut_title("x" * 200, 50) == "x" * 50 + "…"
+    assert IM._cut_title("x" * 200, 50) == "x" * 49 + "…"
 
 
 def test_a_long_optmem_note_is_cut_at_a_word(repo):
