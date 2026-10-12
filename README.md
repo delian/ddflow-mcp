@@ -4030,9 +4030,9 @@ for an agent.
 
 A project is brought up to a newer ddflow in three steps, and ddflow does only the first on its own.
 
-1. **Silent: it tells you, once.** After ddflow is upgraded, the brief and the MCP handshake
-   print one line, `Upgraded ddflow A -> B: run ddflow upgrade --plan`, once per version on this
-   machine for this project. With the shipped `[upgrade].auto = "check"` the only file that
+1. **Silent: it tells you.** After ddflow is upgraded, the brief and the MCP handshake
+   print one line, `Upgraded ddflow A -> B: run ddflow upgrade --plan`: the handshake once per
+   version on this machine for this project, every brief until the project is upgraded. With the shipped `[upgrade].auto = "check"` the only file that
    writes is the git-ignored `.ddflow/local/upgrade-notice.json`. `"safe"` also refreshes
    ddflow's own files (hooks, driver docs, rules blocks) after a backup; `"off"` says nothing.
 2. **Read-only: you look.** `ddflow upgrade --plan` lists what would change, by category, and
@@ -4349,8 +4349,8 @@ there, and prints the backup and `git diff` to review the change.
 **The upgrade notice** (decision D-upgrade-auto-check; `[upgrade].auto`, shipped `check`).
 When ddflow has been upgraded past the release the project was last brought up to and
 `ddflow upgrade --plan` has items, the brief (so the SessionStart hook) and the MCP handshake say so in ONE line --
-`Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan` -- once per version on this machine
-for this project (`.ddflow/local/upgrade-notice.json`, git-ignored: the only thing it writes),
+`Upgraded ddflow 0.1.9 -> 0.1.10: run ddflow upgrade --plan` -- the handshake once per version on this machine
+for this project, every brief until the project is upgraded (`.ddflow/local/upgrade-notice.json`, git-ignored: the only thing it writes),
 whichever surface speaks first. `check` changes nothing else. `safe` first applies the plan's non-destructive categories, `hooks` and `instructions`
 (ddflow's own files), after the backup `[upgrade].backup` names, and says what it did; config
 defaults, migrations, repairs and features stay the operator's. `off` says nothing. Set it with

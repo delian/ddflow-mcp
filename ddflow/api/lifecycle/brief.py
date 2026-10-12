@@ -153,11 +153,15 @@ def _refuted_line(st) -> str:
 
 
 def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
-    """The upgrade lines that lead a brief, "" when none is due. Each is said once per version
-    on this machine (D-upgrade-auto-check, D-self-upgrade 2): FIRST, so the hook, `ddflow brief`
+    """The upgrade lines that lead a brief, "" when none is due. The notice is first said
+    once per version on this machine (D-upgrade-auto-check, D-self-upgrade 2) and then
+    repeated by each brief until the project is upgraded: FIRST, so the hook, `ddflow brief`
     and `ddflow_brief` all lead with it whichever is asked first. This ddflow was upgraded
     (or the start report), then a newer release is out (proposed, never installed)."""
-    notice = US.take_for_brief(repo, st) or UN.line(repo, log, cfg, st, agent=agent)
+    notice = US.take_for_brief(repo, st)
+    if not notice:
+        notice = UN.line(repo, log, cfg, st, agent=agent)
+        US.keep_notice(repo, notice)  # a hook-only path has no start report: repeat while behind
     release = UC.proposal(repo, cfg, consume=True)
     return "\n\n".join(x for x in (notice, release) if x)
 
