@@ -59,3 +59,13 @@ def test_a_repeat_never_takes_an_anchor_already_in_use():
 def test_a_link_to_a_top_level_heading_is_not_dead():
     assert T.dead_anchors("# ddflow\n\nsee [it](#ddflow)\n\n## Table of contents\n") == []
     assert T.dead_anchors("# ddflow\n\nsee [it](#nope)\n") == ["nope"]
+
+
+def test_repeats_are_numbered_over_headings_of_every_level():
+    block = T.render("# Foo\n## Foo\n#### Foo\n### Foo\n")
+    assert "- [Foo](#foo-1)" in block and "  - [Foo](#foo-3)" in block
+
+
+def test_a_fence_line_with_an_info_string_does_not_close_a_fence():
+    text = "## Real\n```text\n```python\n## Fake\n```\n## After\n"
+    assert T.headings(text) == [(2, "Real"), (2, "After")]

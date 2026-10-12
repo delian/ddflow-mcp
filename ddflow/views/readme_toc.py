@@ -19,6 +19,7 @@ from .readme_region import Region
 REGION = "README/toc"
 #: The heading that carries the region: it is not listed in itself.
 TOC_TITLE = "Table of contents"
+LISTED_LEVELS = (2, 3)
 _HEADING = re.compile(r"^(#{2,3}) +(.+?) *#*$")
 _ANY_HEADING = re.compile(r"^(#{1,6}) +(.+?) *#*$")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
@@ -44,7 +45,7 @@ def headings(readme: str, pattern: re.Pattern[str] = _HEADING) -> list[tuple[int
             run = m.group(1)
             if not fence:
                 fence = run
-            elif run[0] == fence[0] and len(run) >= len(fence):
+            elif run[0] == fence[0] and len(run) >= len(fence) and not line.strip(run[0] + " "):
                 fence = ""
             continue
         h = None if fence else pattern.match(line)
@@ -82,9 +83,14 @@ def anchors(titles: list[str]) -> list[str]:
 
 def render(readme: str) -> str:
     """The region, markers included, for ``readme``'s headings."""
-    found = [(lv, t) for lv, t in headings(readme) if t != TOC_TITLE]
-    links = anchors([t for _lv, t in found])
-    lines = [f"{'  ' * (lv - 2)}- [{t}](#{a})" for (lv, t), a in zip(found, links, strict=True)]
+    # GitHub numbers repeats over every heading, so number over all of them, then list ours
+    every = headings(readme, _ANY_HEADING)
+    links = anchors([t for _lv, t in every])
+    lines = [
+        f"{'  ' * (lv - 2)}- [{t}](#{a})"
+        for (lv, t), a in zip(every, links, strict=True)
+        if lv in LISTED_LEVELS and t != TOC_TITLE
+    ]
     return _REGION.block("\n".join(lines))
 
 
