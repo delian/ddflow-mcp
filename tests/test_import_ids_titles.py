@@ -116,3 +116,22 @@ def test_a_lettered_heading_is_not_cut_at_its_letter():
 def test_common_abbreviations_do_not_end_a_title():
     assert IM._title_of("No. 5 do the thing. Then more") == "No. 5 do the thing."
     assert IM._title_of("Dr. Smith wrote it. Then left") == "Dr. Smith wrote it."
+
+
+def test_triage_skips_items_already_queued_under_their_old_ids(tmp_path):
+    found = _scan(
+        tmp_path,
+        "## Phase 39 follow-ups (not started)\n\n- [ ] Give base room blueprints a cloud gate\n",
+    )
+    old = {"PHASE-39-FOLLOW-UPS-NOT", "PHASE-39-FOLLOW-UPS-NOT.give-base-room-bluep"}
+    plan = IM.ImportPlan()
+    IM._triage_found(plan, found, old, set(), False)
+    assert plan.found == [], [f.ident for f in plan.found]
+    assert sorted(plan.skipped_existing) == sorted(old)
+
+
+def test_two_scanned_items_never_claim_one_old_id():
+    a = IM.Found("task", "A.new-1", "t", "f:1", extra={"legacy_ident": "A.old"})
+    b = IM.Found("task", "A.new-2", "t", "f:2", extra={"legacy_ident": "A.old"})
+    IM._keep_imported_ids([a, b], {"A.old"})
+    assert (a.ident, b.ident) == ("A.old", "A.new-2")
