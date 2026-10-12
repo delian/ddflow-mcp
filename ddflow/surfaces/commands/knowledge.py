@@ -509,8 +509,12 @@ def _upgrade_detail(d: dict) -> str:
         return f"run {d.get('run', '?')}: {d.get('step', '?')} {d.get('step_status', '?')}"
     if status == "failed":
         return f"run {d.get('run', '?')} ended, nothing settled"
+    # `stamp_text`, so a partial apply's marker is not shown as the release reached
+    # (B439c42848f). Imported here: this module is a surface and upgrade_plan a service.
+    from ...services import upgrade_plan as UP
+
     return (
-        f"{d.get('from') or 'unstamped'} -> {d.get('to', '?')}: "
+        f"{UP.stamp_text(d.get('from') or '')} -> {UP.stamp_text(d.get('to') or '')}: "
         f"{', '.join(d.get('categories') or [])}"
     )
 

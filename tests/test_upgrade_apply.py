@@ -212,6 +212,14 @@ def test_a_partial_apply_does_not_present_its_marker_as_a_version(
     assert "0.0.0" not in hist, hist
     assert "unstamped" in hist, hist
 
+    # The general history line and the replay step read the raw event fields, so they need
+    # the same guard (roborev on ed344af9).
+    _code, history_cmd, _err = run_cli(old, "history")
+    assert "0.0.0" not in history_cmd, history_cmd
+
+    _code, replay, _err = run_cli(old, "replay")
+    assert "0.0.0" not in replay, replay
+
 
 def test_a_refused_config_item_keeps_the_version_where_it_was(old: Path) -> None:
     out = go(old, "all")
