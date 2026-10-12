@@ -1025,7 +1025,7 @@ def test_confirming_a_pinned_knob_keeps_the_pin_instead_of_adopting_the_new_defa
 
 
 def test_the_adopt_command_for_a_pinned_knob_is_not_truncated(old: Path) -> None:
-    log, cfg, st = _load(old, "upgrader")
+    _, cfg, _ = _load(old, "upgrader")
     key = "worktree.max_parallel"
     item = next(i for i in plan(old)["categories"]["config"] if i["key"] == key)
     long_value = "v" * 100
