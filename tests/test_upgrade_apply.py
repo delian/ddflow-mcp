@@ -1119,6 +1119,9 @@ def test_a_plan_emptied_by_earlier_partial_applies_moves_the_stamp_on_the_next_a
     EventLog(old, "upgrader").append(
         "upgrade.applied", "upgrade", {"from": frm, "to": frm, "categories": [], "items": []}
     )
+    go(
+        old, "hooks,instructions,mcp,repairs"
+    )  # nothing else is left to apply; config holds the stamp
     before = plan(old)
     assert before["project_version"] == frm
     ids_ = [i["id"] for c in ("config", "features") for i in before["categories"][c]]
@@ -1129,12 +1132,17 @@ def test_a_plan_emptied_by_earlier_partial_applies_moves_the_stamp_on_the_next_a
     )
     mid = plan(old)
     assert not mid["categories"]["config"] and mid["project_version"] == frm
+    n = len(upgrades(old))
 
-    go(old, "all")
+    again = go(old, "all")
 
-    assert plan(old)["project_version"] == plan(old)["running"]
+    assert again["noop"] or all(r["status"] == "skipped" for r in again["results"])
+    assert len(upgrades(old)) == n + 1 and upgrades(old)[-1]["items"] == []
+    assert go(old, "all")["noop"] and len(upgrades(old)) == n + 1
+
     events = [e for e in EventLog(old, "upgrader").read_all() if e.kind == "upgrade.applied"]
     assert not [e for e in events if e.data.get("status") == "failed"]  # a success: no failure note
+    assert plan(old)["project_version"] == plan(old)["running"]
     moves = [u for u in upgrades(old) if u["to"] == plan(old)["running"]]
     assert len(moves) == 1  # one stamp-moving record, not two
 
