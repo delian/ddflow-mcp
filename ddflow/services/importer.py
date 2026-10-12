@@ -317,6 +317,46 @@ def _cut_title(text: str, limit: int = _TITLE_CHARS) -> str:
     return head.rstrip(" ,;:-\u2014\u2013(") + "\u2026"
 
 
+#: A backticked token that is a repo path: has a directory part or a source-file suffix, no
+#: spaces, not a URL. `pytest -q` and `self.x` are not.
+_BACKTICKED = re.compile(r"`([^`\s]+)`")
+_PATH_SUFFIX = (".py", ".md", ".toml", ".json", ".yaml", ".yml", ".ts", ".js", ".sh", ".cfg")
+#: A prose dependency: the clause after 'Requires', 'Depends on', 'Needs', 'Blocked by'.
+_PROSE_DEP = re.compile(r"\b(?:requires?|depends?\s+on|needs?|blocked\s+by)\b(.{0,200})", re.I)
+_ID_TOKEN = re.compile(r"[A-Za-z0-9_][\w.\-]*[\w]|\w")
+
+
+def _prose_globs(text: str) -> list[str]:
+    """Repo paths a task's prose names in backticks, in order, once each."""
+    out: list[str] = []
+    for raw in _BACKTICKED.findall(text):
+        tok = raw.rstrip(".,;:")
+        if "://" in tok or tok.startswith(("-", "$", "~")) or tok in out:
+            continue
+        if "/" in tok or tok.endswith(_PATH_SUFFIX):
+            out.append(tok)
+    return out
+
+
+def _prose_needs(text: str, known: set[str], self_id: str) -> list[str]:
+    """Ids this task's prose says it requires, kept only when the scan found such an
+    item: an id nobody wrote would read as unmet and block the task for good."""
+    out: list[str] = []
+    for m in _PROSE_DEP.finditer(text):
+        for raw in _ID_TOKEN.findall(m.group(1)):
+            tok = raw.strip(".,;")
+            if tok in known and tok != self_id and tok not in out:
+                out.append(tok)
+    return out
+
+
+def _add_prose_needs(found: list[Found], prose: list[tuple[Found, str]]) -> None:
+    """Add, after any `**Needs:**` line's ids, the ones each task's prose names."""
+    known = {f.ident for f in found}
+    for task, text in prose:
+        task.needs.extend(d for d in _prose_needs(text, known, task.ident) if d not in task.needs)
+
+
 def _continuation(lines: list[str], fenced: list[bool], n: int, indent: int) -> str:
     """The wrapped lines of the bullet that ends at line ``n`` (1-based): the indented
     lines after it, up to a blank line, a heading, a list item or an annotation."""
@@ -947,6 +987,7 @@ def scan_todos(
     found: list[Found] = []
     empty: list[str] = []
     taken: set[str] = set()
+    prose: list[tuple[Found, str]] = []
     for path in _files(repo, globs):
         rel = str(path.relative_to(repo))
         text = path.read_text("utf-8", errors="replace")
@@ -1093,6 +1134,7 @@ def scan_todos(
                 source=f"{rel}:{n}",
                 done=done,
                 body=paragraph if paragraph != title else "",
+                globs=_prose_globs(paragraph),
                 extra={
                     "old_slug": _slug(unsplit or body, _OLD_TASK_SLUG),
                     "phase": phase_ident,
@@ -1113,10 +1155,12 @@ def scan_todos(
                 },
             )
             found.append(anchor)
+            prose.append((anchor, paragraph))
         if len(found) == before:
             empty.append(rel)
     _adopt_child_prefix(found, taken)
     _set_legacy_ids(found, ids_cfg)
+    _add_prose_needs(found, prose)
     return found, empty
 
 
