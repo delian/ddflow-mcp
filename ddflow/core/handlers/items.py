@@ -113,6 +113,10 @@ def _h_state(new_state: str):
             it.blocked_reason = ev.data.get("reason", "")
         elif new_state == DONE:
             it.completed_at = ev.ts
+            if ev.data.get("imported"):
+                st.imported_done.add(ev.subject)
+            else:
+                st.imported_done.discard(ev.subject)
             # `or`, not a default: `complete` without --sha writes "sha": "", which used
             # to ERASE the sha `merge` recorded -- so no finished item was ever found on
             # any branch, and every version's item list and item-based bump were empty.
@@ -137,6 +141,7 @@ def _h_reopened(st: State, ev: Event) -> None:
         return
     it.state = OPEN
     it.completed_at = ""
+    st.imported_done.discard(ev.subject)
     it.lease = None
     it.gates = {}
     it.reopened.append(

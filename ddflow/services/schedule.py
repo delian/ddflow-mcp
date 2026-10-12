@@ -86,8 +86,12 @@ class Definitions:
 
 
 def done_counts(st: State) -> tuple[int, int]:
-    """(completed tasks, completed phases): the work a count pass measures."""
-    done = [i.kind for i in st.items.values() if i.state == "done"]
+    """(completed tasks, completed phases): the work a count pass measures. Items an import
+    closed (finished before ddflow existed) are not counted: they are not work done since
+    any pass, and counting them made every phase completion overdue after an import."""
+    done = [
+        i.kind for key, i in st.items.items() if i.state == "done" and key not in st.imported_done
+    ]
     return done.count("task"), done.count("phase")
 
 
@@ -131,15 +135,21 @@ def count_unit(name: str) -> str:
     return next((COUNT_UNITS[key] for n, _knob, key in COUNT_PASSES if n == name), "")
 
 
-def count_at_last_run(st: State, name: str) -> int:
+def count_at_last_run(st: State, name: str, current: int | None = None) -> int:
     """The completion count the LAST `cadence.ran` of `name` recorded. A malformed or
     absent `result` reads as 0 -- treating an unparseable record as "it never ran" errs
-    toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one)."""
+    toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one).
+
+    A baseline ABOVE `current` (the count now) is out of reach for the moment: most often it was
+    recorded when imported history still counted, but a reopened completion lowers the
+    count too. It reads as 0 -- the pass reports rather than staying quiet until the count
+    outgrows a number that included history (over-reporting, the stated policy above)."""
     runs = st.cadences.get(name, [])
     try:
-        return int(runs[-1].get("result", "0") or 0) if runs else 0
+        n = int(runs[-1].get("result", "0") or 0) if runs else 0
     except (TypeError, ValueError):
         return 0
+    return 0 if current is not None and n > current else n
 
 
 def period_days(value: Any) -> float | None:
