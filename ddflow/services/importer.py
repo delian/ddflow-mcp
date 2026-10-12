@@ -291,7 +291,14 @@ def _title_of(text: str, limit: int = _TITLE_CHARS) -> str:
     the longest run of whole words that does, closed with an ellipsis and never ending in
     an open backtick."""
     text = " ".join(text.split())
-    first = _SENTENCE_END.split(text, maxsplit=1)[0]
+    first = text
+    for m in _SENTENCE_END.finditer(text):
+        word = text[: m.start()].rsplit(" ", 1)[-1]
+        # `39.` / `A.` / `e.g.` open a sentence, they do not end one.
+        if re.fullmatch(r"[\d.]+|[A-Za-z]|(?:[A-Za-z]\.){2,}", word):
+            continue
+        first = text[: m.start()]
+        break
     if len(first) <= limit:
         return first
     cut = first.rfind(" ", 0, limit)
@@ -1109,6 +1116,7 @@ def _set_legacy_ids(found: list[Found], ids_cfg) -> None:
     at word boundaries, so a re-import of a queue made then finds its items instead of
     importing them all again under new names (`_triage_found`)."""
     phases = {f.ident: f for f in found if f.kind == "phase"}
+    seen: dict[str, int] = {}
     for f in found:
         old_slug = f.extra.pop("old_slug", None)
         if f.kind == "phase":
@@ -1124,6 +1132,11 @@ def _set_legacy_ids(found: list[Found], ids_cfg) -> None:
             )
         else:
             continue
+        if legacy:
+            # The old import numbered a repeat `-2`, `-3` in scan order (`_unique`).
+            seen[legacy] = seen.get(legacy, 0) + 1
+            if seen[legacy] > 1:
+                legacy = f"{legacy}-{seen[legacy]}"
         if legacy and legacy != f.ident:
             f.extra["legacy_ident"] = legacy
         else:
@@ -2407,9 +2420,13 @@ def _keep_imported_ids(scanned: list[Found], known: set[str]) -> None:
     so the same line now derives a different id. Without this a re-import reads every such
     item as new, and the children of such a phase get a parent that does not exist."""
     renamed: dict[str, str] = {}
+    claimed: set[str] = set()
     for f in scanned:
         old = f.extra.get("legacy_ident")
         if f.kind == "phase" and old and old in known and f.ident not in known:
+            if old in claimed:
+                continue
+            claimed.add(old)
             renamed[f.ident] = old
             f.ident = old
     for f in scanned:
@@ -2421,7 +2438,8 @@ def _keep_imported_ids(scanned: list[Found], known: set[str]) -> None:
             if f.ident.startswith(f"{phase}."):
                 f.ident = renamed[phase] + f.ident[len(phase) :]
         old = f.extra.get("legacy_ident")
-        if old and old in known and f.ident not in known:
+        if old and old in known and f.ident not in known and old not in claimed:
+            claimed.add(old)
             f.ident = old
 
 
