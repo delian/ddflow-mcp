@@ -546,7 +546,12 @@ def _record(
                 for i in todo
                 if i["category"] == "config" and i["id"] in ok
             ],
-            "summary": f"upgrade {frm or 'unstamped'} -> {new_to}: {', '.join(cats)}",
+            # `stamp_text`, not the raw fields: a partial apply on an unstamped project
+            # records the marker as `to`, and the recorded summary is rendered verbatim by
+            # `upgrade --status`. The marker is not a release (B439c42848f).
+            "summary": (
+                f"upgrade {UP.stamp_text(frm)} -> {UP.stamp_text(new_to)}: {', '.join(cats)}"
+            ),
         },
     )
 
