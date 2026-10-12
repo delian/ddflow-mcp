@@ -135,3 +135,43 @@ def test_two_scanned_items_never_claim_one_old_id():
     b = IM.Found("task", "A.new-2", "t", "f:2", extra={"legacy_ident": "A.old"})
     IM._keep_imported_ids([a, b], {"A.old"})
     assert (a.ident, b.ident) == ("A.old", "A.new-2")
+
+
+def _scan_with(tmp_path, text, importer_toml):
+    (tmp_path / ".ddflow").mkdir(exist_ok=True)
+    (tmp_path / ".ddflow" / "config.toml").write_text(importer_toml)
+    return _scan(tmp_path, text)
+
+
+def test_the_slug_lengths_are_knobs_and_keep_whole_words(tmp_path):
+    """imp-parent-id-from-heading: the limits an id is cut at are [importer] knobs
+    (D-everything-configurable), the defaults reproduce today's ids, and any value cuts at a
+    word boundary."""
+    text = "## Session driver: fix the dependency walker\n\n- [ ] Do the thing properly now\n"
+    default = _scan(tmp_path, text)
+    assert next(f for f in default if f.kind == "phase").ident == "SESSION-DRIVER-FIX-THE"
+    short = tmp_path / "short"
+    short.mkdir()
+    found = _scan_with(short, text, "[importer]\nphase_slug_chars = 14\ntask_slug_chars = 10\n")
+    phase = next(f for f in found if f.kind == "phase")
+    task = next(f for f in found if f.kind == "task")
+    assert phase.ident == "SESSION-DRIVER", phase.ident
+    assert task.ident == "SESSION-DRIVER.do-the", task.ident
+    wide = tmp_path / "wide"
+    wide.mkdir()
+    found = _scan_with(wide, text, "[importer]\nphase_slug_chars = 60\n")
+    assert (
+        next(f for f in found if f.kind == "phase").ident
+        == "SESSION-DRIVER-FIX-THE-DEPENDENCY-WALKER"
+    )
+
+
+def test_slug_length_knobs_refuse_values_that_would_cut_inside_a_word():
+    import ddflow.config as C
+
+    assert C.Config().importer.phase_slug_chars == 32
+    assert C.Config().importer.task_slug_chars == 40
+    for key in ("phase_slug_chars", "task_slug_chars"):
+        check = C._KNOB_CHECKS[f"importer.{key}"]
+        assert "must be an integer >= 8" in check(3)
+        assert check(8) == ""

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 #: Each source family a `*_globs` knob points `ddflow import` at, and what it reads there.
 _FAMILIES = {
@@ -45,6 +45,16 @@ class ImportConfig:
     preview_rows: int = knob(
         8,
         doc="How many items of each kind the import proposal prints before summarising the rest. The whole list is always in the --json output; this only caps the human-readable preview.",
+    )
+    phase_slug_chars: int = knob(
+        32,
+        check=int_at_least(8),
+        doc="How long the slug a PHASE id is derived from may be when `ddflow import` makes an id from a heading that declares none (default 32, at least 8). The slug is cut at a whole word, never inside one, so a long heading gives an id up to this long; a re-import keeps the ids already minted (`legacy_ident`).",
+    )
+    task_slug_chars: int = knob(
+        40,
+        check=int_at_least(8),
+        doc="The same limit for the slug of a TASK id, the part after the phase id (default 40, at least 8); cut at a whole word.",
     )
     #: Where each source family is read from. Empty = the built-in locations; set = those
     #: paths INSTEAD (see `importer.sources_from`).
