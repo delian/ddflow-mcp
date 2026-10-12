@@ -50,3 +50,9 @@ def test_list_takes_the_filters_and_kinds(repo):
     assert code == 0 and "P1" in out
     code, _, _ = run_cli(repo, "list", "nonsense")
     assert code != 0
+
+
+def test_list_refuses_a_flag_the_kind_does_not_take(repo):
+    _seed(repo)
+    code, _, err = run_cli(repo, "list", "task", "--all")
+    assert code == 3 and "--all" in err
