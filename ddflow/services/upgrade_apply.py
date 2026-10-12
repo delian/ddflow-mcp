@@ -67,10 +67,10 @@ CONFIG_POLICIES = ("agent", "ask", "operator")
 #: version moves up to the running one.
 _VERSIONED = ("config", "features")
 
-#: What a partial apply on a project with no version stamp records as the version it reached:
-#: older than every release, so the manifest's changes are all still news (an empty `to`
-#: would fall back to the stamp this very write adds, and the plan would call them done).
-UNSTAMPED = "0.0.0"
+#: What a partial apply on a project with no version stamp records as the version it reached.
+#: ONE definition: it lives with `project_version` (upgrade_plan), which must recognise the
+#: marker as NOT a version -- the reader printing it as one was B439c42848f.
+UNSTAMPED = UP.UNSTAMPED
 
 APPLIED = "applied"
 ACKNOWLEDGED = "acknowledged"
