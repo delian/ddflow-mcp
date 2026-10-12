@@ -199,10 +199,18 @@ def test_a_partial_apply_does_not_present_its_marker_as_a_version(
     assert "0.0.0" not in text, text
     assert "a version before stamps" in text, text
 
-    # The other surface, built from the same project_version: the two must not disagree.
+    # Every other surface, built from the same project_version: none may disagree, and none
+    # may print the marker as a release (roborev on 8bfc2e6a named --status and --history).
     _code, check, _err = run_cli(old, "upgrade", "--check")
     assert "0.0.0" not in check, check
     assert "predates version stamps" in check, check
+
+    _code, status, _err = run_cli(old, "upgrade", "--status")
+    assert "0.0.0" not in status, status
+
+    _code, hist, _err = run_cli(old, "upgrade", "--history")
+    assert "0.0.0" not in hist, hist
+    assert "unstamped" in hist, hist
 
 
 def test_a_refused_config_item_keeps_the_version_where_it_was(old: Path) -> None:
@@ -451,11 +459,16 @@ def test_two_backups_in_one_clock_tick_get_their_own_directories(
     assert first != second and first.is_dir() and second.is_dir()
 
 
-def test_a_partial_apply_summary_names_the_version_it_reached(old: Path) -> None:
+def test_a_partial_apply_summary_does_not_present_the_marker_as_a_version(old: Path) -> None:
+    """B439c42848f: the recorded `to` IS the marker -- the fold needs a value that sorts
+    below every release -- but the human summary must not name it as one the project
+    reached, or `upgrade --status` (which renders the summary verbatim) repeats the bug."""
     go(old, "hooks")
 
     event = [e for e in EventLog(old, "upgrader").read_all() if e.kind == "upgrade.applied"][-1]
-    assert event.data["to"] == "0.0.0" and "-> 0.0.0" in event.data["summary"]
+    assert event.data["to"] == "0.0.0"  # the marker, as recorded
+    assert "0.0.0" not in event.data["summary"], event.data["summary"]
+    assert "unstamped -> unstamped" in event.data["summary"], event.data["summary"]
 
 
 # -- B-upgrade.4-apply.2-docs: hand edits survive ----------------------------------------------

@@ -87,6 +87,15 @@ def is_stamp(version: str) -> bool:
     return bool(version_key(version)) and version != UNSTAMPED
 
 
+def stamp_text(version: str) -> str:
+    """A recorded stamp as a READER should see it: the release when it is one, else
+    ``unstamped`` -- the word an upgrade history already uses for a project that predates
+    stamps. NEVER the marker: `--plan`, `--check`, `--status`, `--history` and the recorded
+    summary all speak of the same project, and the marker is not a release (B439c42848f).
+    """
+    return version if is_stamp(version) else "unstamped"
+
+
 def project_version(st: State, has_history: bool, running: str) -> str:
     """The release this project was last brought up to: the target of the last applied
     upgrade, else the OLDEST version that ever wrote to its log, else the running one when
