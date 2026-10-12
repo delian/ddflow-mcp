@@ -73,4 +73,6 @@ def test_only_actionable_statuses_repeat() -> None:
     for status in (US.PROPOSED, US.APPLIED, US.TIMEOUT, US.FAILED):
         assert US._repeats({"status": status})
     for status in (US.READONLY, US.CURRENT, US.OLDER, US.OFF):
-        assert not US._repeats({"status": status}), "a note that never resolves is said once"
+        assert not US._repeats({"status": status}), (
+            "a read-only report is not persisted, so it is said once"
+        )
