@@ -125,20 +125,31 @@ def test_the_tool_is_full_tier_only():
     assert "ddflow_lanes" not in tier_tools("standard")
 
 
-def test_watch_redraws_when_the_log_changes_and_stops_on_interrupt():
-    marks = iter([1, 1, 2, 2, 2])
-    drawn: list[int] = []
-    slept: list[float] = []
-    ticks = iter(range(0, 1000))
-    code = watch(
-        lambda: drawn.append(1),
-        lambda: next(marks),
-        interval_s=60,
-        sleep=slept.append,
-        clock=lambda: float(next(ticks)),
-        frames=2,
-    )
-    assert code == 0 and len(drawn) == 2 and slept  # the change woke it before 60 s
+def test_watch_redraws_on_a_log_change_but_not_while_the_log_is_quiet():
+    """Quiet: one draw per interval. A change: the next draw comes at once."""
+
+    def run(changing: bool) -> tuple[int, int]:
+        now = [0.0]
+        mark = [0]
+        drawn: list[float] = []
+
+        def sleep(seconds: float) -> None:
+            now[0] += seconds
+            if changing and now[0] >= 2:
+                mark[0] += 1
+
+        watch(
+            lambda: drawn.append(now[0]),
+            lambda: mark[0],
+            interval_s=60,
+            sleep=sleep,
+            clock=lambda: now[0],
+            frames=2,
+        )
+        return len(drawn), int(drawn[1])
+
+    assert run(changing=True) == (2, 2)  # redrawn when the log changed, long before 60 s
+    assert run(changing=False) == (2, 60)  # quiet: only the interval redraws it
 
 
 def test_watch_stops_on_a_failing_frame_and_not_on_nothing_to_show():
