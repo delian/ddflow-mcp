@@ -190,7 +190,7 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
             # confirming keeps the project's value; adopting the new default is its own say
             item["fix"] += (
                 f" (keeps this project's value; to adopt the new default: "
-                f"ddflow config --set {key} {_short(new)})"
+                f"ddflow config --set {key} {json.dumps(new)})"
             )
         items.append(item)
     return items

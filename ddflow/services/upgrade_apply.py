@@ -28,6 +28,7 @@ command that pins the old behaviour.
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import tomllib
 import uuid
@@ -186,12 +187,12 @@ def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> 
         return ACKNOWLEDGED, (
             f"{key}: default changed {_short(item['old'])} -> {_short(item['new'])}; "
             f"kept this project's value {_short(UP._current(cfg, key))} ({src}); "
-            f"to adopt the new default: ddflow config --set {key} {_short(item['new'])}"
+            f"to adopt the new default: ddflow config --set {key} {json.dumps(item['new'])}"
         )
     return ACKNOWLEDGED, (
         f"{key}: the new default applies on its own"
         + (
-            f"; pin the old behaviour with `ddflow config --set {key} {_short(item['old'])}`"
+            f"; pin the old behaviour with `ddflow config --set {key} {json.dumps(item['old'])}`"
             if kind == "knob_changed"
             else ""
         )
