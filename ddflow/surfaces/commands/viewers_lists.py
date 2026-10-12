@@ -175,10 +175,10 @@ def cmd_list_any(a, c: Ctx) -> int:
         if p.name not in own and getattr(a, p.name, None) not in (None, False, "")
     ]
     if stray:
-        print(
-            f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)",
-            file=sys.stderr,
-        )
+        reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
+        if c.json:
+            emit_json({"schema": "list@1", "record_kind": a.kind, "reason": reason})
+        print(reason, file=sys.stderr)
         return REFUSED
     return cmd_list(a, c)
 
