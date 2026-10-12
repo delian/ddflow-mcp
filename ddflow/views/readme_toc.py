@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import sys
+from pathlib import Path
 
 from .readme_region import Region
 
@@ -122,8 +123,14 @@ hand_edited = _REGION.hand_edited
 
 
 def main(argv: list[str]) -> int:
-    """Rewrite the table of contents of the README named in `argv` (default README.md)."""
-    return _REGION.main(argv)
+    """Rewrite the table of contents of the README named in `argv` (default README.md), then
+    name any in-page link that points at no heading (exit 1: the rewrite cannot mend it)."""
+    code = _REGION.main(argv)
+    paths = [a for a in argv if a != "--force"]
+    dead = dead_anchors(Path(paths[0] if paths else "README.md").read_text("utf-8"))
+    for anchor in dead:
+        print(f"dead link: (#{anchor}) matches no heading", file=sys.stderr)
+    return code or (1 if dead else 0)
 
 
 if __name__ == "__main__":
