@@ -28,6 +28,7 @@ command that pins the old behaviour.
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import tomllib
 import uuid
@@ -116,8 +117,14 @@ def _config_files(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
 def _writes_config(item: dict[str, Any]) -> bool:
     """Does applying this config item change a file? Only a value somebody SET does: a knob
     at its shipped default takes the new default by itself, even when the policy makes the
-    operator confirm it, and writing it out would pin it as if they had chosen it."""
-    return item["action"] == UP.OPERATOR and bool(item.get("set_by"))
+    operator confirm it, and writing it out would pin it as if they had chosen it. Nor does a
+    CHANGED default for a knob the project pins: confirming accepts the change and the
+    operator's pin wins, so only a knob removed from the schema is rewritten (deleted)."""
+    return (
+        item["action"] == UP.OPERATOR
+        and bool(item.get("set_by"))
+        and item["change"] == "knob_removed"
+    )
 
 
 def touched(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
@@ -166,32 +173,29 @@ def _value(value: Any) -> object:
 def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
     key, kind = item["key"], item["change"]
     src = cfg.sources.get(key, "default")
-    if not _writes_config(item):
-        return ACKNOWLEDGED, (
-            f"{key}: the new default applies on its own"
-            + (
-                f"; pin the old behaviour with `ddflow config --set {key} {_short(item['old'])}`"
-                if kind == "knob_changed"
-                else ""
-            )
-        )
-    if src.startswith("env"):
+    pinned = bool(item.get("set_by"))
+    if pinned and src.startswith("env") and item["action"] == UP.OPERATOR:
         return REFUSED, f"{key} is set by the environment ({src}); change it there"
-    if kind == "knob_removed":
+    if kind == "knob_removed" and _writes_config(item):
         gone = [p for p in _config_files(repo, cfg, item) if _remove_key(p, key)]
         return APPLIED, f"removed {key} from " + (
             ", ".join(p.name for p in gone) if gone else "no file (it was not there)"
         )
-    local = src.startswith("local")
-    res = CW.apply_edit(
-        repo,
-        CW.SetPairs([(key, _value(item["new"]))]),
-        layer="local" if local else "file",
-        agent=agent,
+    if pinned and kind == "knob_changed":
+        # confirming accepts the new default; the operator's pin wins, so nothing is written
+        return ACKNOWLEDGED, (
+            f"{key}: default changed {_short(item['old'])} -> {_short(item['new'])}; "
+            f"kept this project's value {_short(UP._current(cfg, key))} ({src}); "
+            f"to adopt the new default: ddflow config --set {key} {json.dumps(item['new'])}"
+        )
+    return ACKNOWLEDGED, (
+        f"{key}: the new default applies on its own"
+        + (
+            f"; pin the old behaviour with `ddflow config --set {key} {json.dumps(item['old'])}`"
+            if kind == "knob_changed"
+            else ""
+        )
     )
-    if res.error:
-        return FAILED, f"{key}: {res.error}"
-    return APPLIED, f"set {key} = {_short(item['new'])} (was {_short(item['old'])}, {src})"
 
 
 def _short(v: Any) -> str:

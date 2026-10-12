@@ -58,7 +58,9 @@ def test_the_notice_appears_once_not_twice(old: Path) -> None:
     first = _start(old)
     assert LINE in first and "ddflow upgrade --plan" in first
     assert first.count(LINE) == 1
-    assert LINE not in _start(old), "said once per version on this machine"
+    assert LINE in _start(old), (
+        "repeated while the project is behind (B-upgrade-proposal-announced-once)"
+    )
     marker = json.loads((old / ".ddflow" / "local" / "upgrade-notice.json").read_text())
     assert marker["version"] and LINE in marker["said"]
 
@@ -92,7 +94,7 @@ def test_safe_applies_hooks_and_instructions_only_after_a_backup(old: Path) -> N
     assert after["hooks"] == 0 and after["instructions"] == 0
     assert after["config"] == before["config"], "config defaults are the operator's"
     assert any((old / ".ddflow" / "backups").iterdir()), "the originals were saved first"
-    assert LINE not in _start(old)
+    assert LINE in _start(old), "the project is still behind (config is the operator's)"
 
 
 def test_a_project_that_is_up_to_date_hears_nothing(repo: Path) -> None:
@@ -156,11 +158,11 @@ def test_a_current_server_says_nothing(running: str, installed: str, highest: st
 # --- the brief and the MCP surfaces ---------------------------------------------------------
 
 
-def test_the_brief_leads_with_the_notice_once(old: Path) -> None:
+def test_the_brief_leads_with_the_notice_until_the_project_is_upgraded(old: Path) -> None:
     code, out, _err = run_cli(old, "brief")
     assert code == 0 and out.lstrip().startswith(LINE)
-    assert LINE not in run_cli(old, "brief")[1]
-    assert LINE not in _start(old), "the hook and the brief share one marker"
+    assert run_cli(old, "brief")[1].lstrip().startswith(LINE), "B-upgrade-proposal-announced-once"
+    assert LINE in _start(old), "the hook and the brief share one marker, repeated while behind"
 
 
 def test_the_mcp_handshake_says_it_once(old: Path) -> None:

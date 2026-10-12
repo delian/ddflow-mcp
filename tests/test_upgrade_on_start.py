@@ -219,7 +219,9 @@ def test_an_older_runtime_writes_nothing_and_says_restart(
     assert _snapshot(old) == before
 
 
-def test_the_handshake_carries_the_report_and_the_first_brief_repeats_it_once(old: Path) -> None:
+def test_the_handshake_carries_the_report_and_every_brief_repeats_it_while_behind(
+    old: Path,
+) -> None:
     from ddflow.api import setup as S
     from ddflow.surfaces.mcp import _instructions
 
@@ -231,7 +233,13 @@ def test_the_handshake_carries_the_report_and_the_first_brief_repeats_it_once(ol
     assert code == 0, err
     assert out.count("newer than this project") == 1
     code, out, _ = run_cli(old, "hooks", "session-start")
-    assert "newer than this project" not in out, "the brief says it once"
+    assert "newer than this project" in out, "a pending proposal is repeated while behind"
+    code, _out, err = run_cli(
+        old, "upgrade", "--apply", "--confirm", "worktree.max_parallel", "--reason", "test"
+    )
+    assert code == 0, err
+    code, out, _ = run_cli(old, "hooks", "session-start")
+    assert "newer than this project" not in out, "caught up: the proposal is dropped"
     assert "Upgraded ddflow" not in out, "the start report supersedes the one-line notice"
 
 
