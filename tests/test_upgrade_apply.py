@@ -179,6 +179,49 @@ def test_a_partial_apply_leaves_the_rest_of_the_plan(old: Path) -> None:
     assert final["categories"]["config"] == []
 
 
+def test_a_partial_apply_does_not_present_its_marker_as_a_version(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B439c42848f: mid-upgrade the stamp read `0.0.0`, which reads like a real release.
+
+    An unstamped project that is only partly upgraded still predates stamps. `--check` said
+    so before the apply and `--plan` must keep saying the same after it, not "last worked
+    under 0.0.0" -- while the marker must still stop the plan calling its leftover items
+    done (the fallback to the stamp this very write adds is what the marker prevents).
+    """
+    monkeypatch.setenv("DDFLOW_NO_UPDATE_CHECK", "1")  # the check must not reach the index
+    assert plan(old)["project_version"] == ""
+    go(old, "hooks")  # a partial apply: the config items are still pending
+
+    after = plan(old)
+    assert after["project_version"] == "", after["project_version"]
+    assert after["categories"]["config"], "the partial apply must leave work pending"
+    text = UP.render(after)
+    assert "0.0.0" not in text, text
+    assert "a version before stamps" in text, text
+
+    # Every other surface, built from the same project_version: none may disagree, and none
+    # may print the marker as a release (roborev on 8bfc2e6a named --status and --history).
+    _code, check, _err = run_cli(old, "upgrade", "--check")
+    assert "0.0.0" not in check, check
+    assert "predates version stamps" in check, check
+
+    _code, status, _err = run_cli(old, "upgrade", "--status")
+    assert "0.0.0" not in status, status
+
+    _code, hist, _err = run_cli(old, "upgrade", "--history")
+    assert "0.0.0" not in hist, hist
+    assert "unstamped" in hist, hist
+
+    # The general history line and the replay step read the raw event fields, so they need
+    # the same guard (roborev on ed344af9).
+    _code, history_cmd, _err = run_cli(old, "history")
+    assert "0.0.0" not in history_cmd, history_cmd
+
+    _code, replay, _err = run_cli(old, "replay")
+    assert "0.0.0" not in replay, replay
+
+
 def test_a_refused_config_item_keeps_the_version_where_it_was(old: Path) -> None:
     out = go(old, "all")
 
@@ -425,11 +468,16 @@ def test_two_backups_in_one_clock_tick_get_their_own_directories(
     assert first != second and first.is_dir() and second.is_dir()
 
 
-def test_a_partial_apply_summary_names_the_version_it_reached(old: Path) -> None:
+def test_a_partial_apply_summary_does_not_present_the_marker_as_a_version(old: Path) -> None:
+    """B439c42848f: the recorded `to` IS the marker -- the fold needs a value that sorts
+    below every release -- but the human summary must not name it as one the project
+    reached, or `upgrade --status` (which renders the summary verbatim) repeats the bug."""
     go(old, "hooks")
 
     event = [e for e in EventLog(old, "upgrader").read_all() if e.kind == "upgrade.applied"][-1]
-    assert event.data["to"] == "0.0.0" and "-> 0.0.0" in event.data["summary"]
+    assert event.data["to"] == "0.0.0"  # the marker, as recorded
+    assert "0.0.0" not in event.data["summary"], event.data["summary"]
+    assert "unstamped -> unstamped" in event.data["summary"], event.data["summary"]
 
 
 # -- B-upgrade.4-apply.2-docs: hand edits survive ----------------------------------------------

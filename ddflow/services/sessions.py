@@ -40,7 +40,7 @@ from ..config import Config
 from ..core import clock
 from ..core import ids as IDS
 from ..core.digest import content_digest
-from ..core.events import OLDER_MARK
+from ..core.events import OLDER_MARK, stamp_text
 from ..core.model import ADD_RELATIONS, State, link_targets
 from ..core.slug import safe_filename
 from ..infra.fsio import replace_text
@@ -406,12 +406,15 @@ def _rs_upgrade_applied(n, ev):
     backup = f"; originals saved in {d['backup']}" if d.get("backup") else ""
     confirmed = ", ".join(sorted(d.get("confirmed") or {}))
     sure = f"; the operator confirmed {confirmed}" if confirmed else ""
+    # `stamp_text`, so a partial apply's marker is not named as a release the project
+    # reached (B439c42848f). It comes from `core.events`, which a service may import.
+    frm, to = stamp_text(d.get("from") or ""), stamp_text(d.get("to") or "")
     return ReplayStep(
         n,
         ev.ts,
         "session",
-        f"Upgraded the project from ddflow {d.get('from') or 'before version stamps'} to "
-        f"{d.get('to') or '?'}: {cats} ({len(d.get('items') or [])} item(s)){sure}{backup}",
+        f"Upgraded the project from ddflow {frm} to {to}: {cats} "
+        f"({len(d.get('items') or [])} item(s)){sure}{backup}",
     )
 
 

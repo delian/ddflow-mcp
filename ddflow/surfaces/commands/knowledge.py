@@ -15,7 +15,7 @@ from ...api import knowledge as A
 from ...api.surf_knowledge import summarise_row
 from ...core import clock
 from ...core import provenance as PV
-from ...core.events import OLDER_MARK
+from ...core.events import OLDER_MARK, stamp_text
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..declared.records import BUG_INVALID_FIELDS
@@ -509,8 +509,11 @@ def _upgrade_detail(d: dict) -> str:
         return f"run {d.get('run', '?')}: {d.get('step', '?')} {d.get('step_status', '?')}"
     if status == "failed":
         return f"run {d.get('run', '?')} ended, nothing settled"
+    # `stamp_text`, so a partial apply's marker is not shown as the release reached
+    # (B439c42848f). It lives in `core.events`, which a surface may import -- the
+    # architecture contract forbids importing the service.
     return (
-        f"{d.get('from') or 'unstamped'} -> {d.get('to', '?')}: "
+        f"{stamp_text(d.get('from') or '')} -> {stamp_text(d.get('to') or '')}: "
         f"{', '.join(d.get('categories') or [])}"
     )
 
