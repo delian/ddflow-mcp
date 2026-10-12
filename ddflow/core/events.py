@@ -159,6 +159,25 @@ def is_older(version: str, than: str) -> bool:
     return bool(a and b and a < b)
 
 
+#: The stamp a PARTIAL upgrade records when the project had no stamp to keep: older than
+#: every release (so the manifest's changes stay news) and NOT a version, however happily
+#: `version_key` parses it. A surface that trusted `version_key` alone printed "last worked
+#: under 0.0.0" for a project that merely predates stamps (B439c42848f).
+UNSTAMPED = "0.0.0"
+
+
+def is_stamp(version: str) -> bool:
+    """Is ``version`` a real recorded release? The UNSTAMPED marker is not one."""
+    return bool(version_key(version)) and version != UNSTAMPED
+
+
+def stamp_text(version: str) -> str:
+    """A recorded stamp as a READER should see it: the release when it is one, else
+    ``unstamped``. The plan and ``--check`` phrase it in their own sentences; what matters
+    is that no surface names the marker as a release (B439c42848f)."""
+    return version if is_stamp(version) else "unstamped"
+
+
 class SkewRefused(Exception):
     """An OLDER ddflow was asked to write to a log a newer one has worked on (exit 3).
     Carries the remedy in its message; not an error in the caller's arguments."""
