@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from ..core.events import is_older, version_key
+from ..core.events import UNSTAMPED, is_older, is_stamp, version_key
 from ..core.model import State
 from ..core.records import contested_summary, record_pools
 from ..infra.log import running_version
@@ -71,29 +71,9 @@ _SHOWN = 8  #: findings quoted per repair in the text
 _FILES_SHOWN = 3  #: files named in an "unchecked" note
 
 
-#: What a PARTIAL apply records as the version a project with no stamp reached: older than
-#: every release, so the manifest's changes are all still news (an empty `to` would fall back
-#: to the stamp this very write adds, and the plan would call them done).
-#:
-#: It is a MARKER, not a version. `version_key` parses it happily, so a surface trusting
-#: `version_key` alone printed "last worked under 0.0.0" for a project that merely predates
-#: stamps -- while `--check` said "(none: predates version stamps)" for the same project
-#: (B439c42848f). `is_stamp` is the ONE place that says a marker is not a version.
-UNSTAMPED = "0.0.0"
-
-
-def is_stamp(version: str) -> bool:
-    """Is ``version`` a real recorded release? The UNSTAMPED marker is not one."""
-    return bool(version_key(version)) and version != UNSTAMPED
-
-
-def stamp_text(version: str) -> str:
-    """A recorded stamp as a READER should see it: the release when it is one, else
-    ``unstamped`` -- the word an upgrade history already uses for a project that predates
-    stamps. NEVER the marker: `--plan`, `--check`, `--status`, `--history` and the recorded
-    summary all speak of the same project, and the marker is not a release (B439c42848f).
-    """
-    return version if is_stamp(version) else "unstamped"
+# The partial-apply marker, `is_stamp` and `stamp_text` live in `core.events` beside
+# `version_key`: a SURFACE (`ddflow history`) renders them too, and a surface may not import
+# this service (B439c42848f, found by the architecture guard in the ci gate).
 
 
 def project_version(st: State, has_history: bool, running: str) -> str:

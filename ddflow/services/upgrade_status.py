@@ -14,7 +14,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import clock
-from ..core.events import is_older, version_key
+from ..core.events import is_older, stamp_text, version_key
 from ..core.model import State
 from ..infra.log import running_version
 from . import backups as BK
@@ -208,7 +208,7 @@ def render(d: dict[str, Any]) -> str:
     if la:
         # `stamp_text`, so a summary recorded before this fix (or a missing one) cannot
         # reprint the UNSTAMPED marker as a version (B439c42848f).
-        lines.append(f"last upgrade: {la['summary'] or UP.stamp_text(la['to'])} ({la['at'][:16]})")
+        lines.append(f"last upgrade: {la['summary'] or stamp_text(la['to'])} ({la['at'][:16]})")
     lines.append(
         "backups: "
         + (", ".join(d["backups"]) if d["backups"] else "none")
@@ -228,7 +228,7 @@ def render_history(rows: list[dict[str, Any]]) -> str:
     for u in rows:
         what = ", ".join(u["categories"]) or "nothing"
         lines.append(
-            f"  {u['at'][:16]}  {UP.stamp_text(u['from'])} -> {UP.stamp_text(u['to'])}  [{what}]  "
+            f"  {u['at'][:16]}  {stamp_text(u['from'])} -> {stamp_text(u['to'])}  [{what}]  "
             f"{len(u['items'])} item(s) by {u['agent']}"
             + (f"  backup {u['backup']}" if u["backup"] else "")
         )
