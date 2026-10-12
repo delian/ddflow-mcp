@@ -177,7 +177,7 @@ def cmd_list_any(a, c: Ctx) -> int:
     if stray:
         reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
         if c.json:
-            emit_json({"schema": "list@1", "record_kind": a.kind, "reason": reason})
+            emit_json({"record_kind": a.kind, "reason": reason})
         print(reason, file=sys.stderr)
         return REFUSED
     return cmd_list(a, c)
