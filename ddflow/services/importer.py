@@ -326,8 +326,8 @@ _PATH_SUFFIX = (".py", ".md", ".toml", ".json", ".yaml", ".yml", ".ts", ".js", "
 #: A prose dependency: the clause after 'Requires', 'Depends on', 'Needs', 'Blocked by'.
 _PROSE_DEP = re.compile(r"\b(?:requires?|depends?\s+on|needs?|blocked\s+by)\b(?=(.{0,200}))", re.I)
 #: 'no longer requires', 'does not need' / 'Requires no ...': the prose says the opposite.
-_NEGATED = re.compile(r"\b(?:no\s+longer|not|never|n't)\s*$", re.I)
-_NEGATING = re.compile(r"\s*(?:no|not|nothing|none)\b", re.I)
+_PROSE_NEGATED = re.compile(r"(?:n['\u2019]t|\b(?:no\s+longer|not|never))\s*$", re.I)
+_PROSE_NEGATING = re.compile(r"[\s:]*(?:no|nothing|none|not(?!\s+(?:only|just)))\b", re.I)
 _ID_TOKEN = re.compile(r"[A-Za-z0-9_][\w.\-]*[\w]|\w")
 
 
@@ -338,7 +338,8 @@ def _prose_globs(text: str) -> list[str]:
         tok = _LINE_SUFFIX.sub("", raw).rstrip(".,;:")
         if "://" in tok or tok.startswith(("-", "$", "~")) or tok in out:
             continue
-        if "/" in tok or tok.endswith(_PATH_SUFFIX):
+        # A directory part alone is not enough: `and/or` and `read/write` are prose.
+        if tok.endswith(_PATH_SUFFIX) or tok.endswith("/") or "*" in tok or tok.count("/") > 1:
             out.append(tok)
     return out
 
@@ -348,7 +349,8 @@ def _prose_needs(text: str, known: set[str], self_id: str) -> list[str]:
     item: an id nobody wrote would read as unmet and block the task for good."""
     out: list[str] = []
     for m in _PROSE_DEP.finditer(text):
-        if _NEGATED.search(text[max(0, m.start() - 12) : m.start()]) or _NEGATING.match(m.group(1)):
+        before = text[max(0, m.start() - 12) : m.start()]
+        if _PROSE_NEGATED.search(before) or _PROSE_NEGATING.match(m.group(1)):
             continue
         # The keyword is matched zero-width, so the next phrase on the line is still found;
         # only the rest of THIS sentence: 'Requires no config. See 160.C.2.' requires nothing.

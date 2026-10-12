@@ -28,6 +28,8 @@ TODO = (
     "- [ ] **OPIK.17** Requires no new config, unlike OPIK.3.\n"
     "- [ ] **OPIK.18** Blocked by OPIK.10 until the schema lands.\n"
     "  **Needs:** OPIK.3\n"
+    "- [ ] **OPIK.19** The parser is not finished, needs OPIK.3 for the schema; `and/or` too.\n"
+    "- [ ] **OPIK.20** Needs not only OPIK.3 but OPIK.10; it doesn't require OPIK.9.\n"
     "- [ ] **OPIK.10** Declared wins. `src/ignored.py`\n"
     "  **Globs:** src/declared/**\n"
 )
@@ -89,3 +91,9 @@ def test_negated_prose_is_not_a_need(repo):
 
 def test_blocked_by_and_a_declared_needs_line_are_unioned(repo):
     assert _found(repo)["OPIK.18"].needs == ["OPIK.3", "OPIK.10"]
+
+
+def test_an_unrelated_negation_does_not_hide_a_need_and_prose_slashes_are_no_glob(repo):
+    t = _found(repo)
+    assert t["OPIK.19"].needs == ["OPIK.3"] and t["OPIK.19"].globs == []
+    assert t["OPIK.20"].needs == ["OPIK.3", "OPIK.10"]
