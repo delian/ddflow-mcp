@@ -111,3 +111,8 @@ def test_repeats_in_an_old_queue_keep_distinct_ids(tmp_path):
 def test_a_lettered_heading_is_not_cut_at_its_letter():
     assert IM._title_of("A. Appendix tuning") == "A. Appendix tuning"
     assert IM._title_of("Written by A. Smith") == "Written by A. Smith"
+
+
+def test_common_abbreviations_do_not_end_a_title():
+    assert IM._title_of("No. 5 do the thing. Then more") == "No. 5 do the thing."
+    assert IM._title_of("Dr. Smith wrote it. Then left") == "Dr. Smith wrote it."
