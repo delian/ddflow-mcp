@@ -20,6 +20,7 @@ REGION = "README/toc"
 #: The heading that carries the region: it is not listed in itself.
 TOC_TITLE = "Table of contents"
 _HEADING = re.compile(r"^(#{2,3}) +(.+?) *#*$")
+_ANY_HEADING = re.compile(r"^(#{1,6}) +(.+?) *#*$")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
@@ -31,9 +32,10 @@ def slug(title: str) -> str:
     return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
 
 
-def headings(readme: str) -> list[tuple[int, str]]:
-    """``(level, title)`` of each `##`/`###` heading outside a code fence, in order. Text
-    between a region's markers is generated, not written, so it is skipped."""
+def headings(readme: str, pattern: re.Pattern[str] = _HEADING) -> list[tuple[int, str]]:
+    """``(level, title)`` of each `##`/`###` heading outside a code fence, in order (any
+    level with ``pattern=_ANY_HEADING``). Text between a region's markers is generated, not
+    written, so it is skipped."""
     out: list[tuple[int, str]] = []
     fence = ""
     for line in _without_regions(readme).split("\n"):
@@ -45,7 +47,7 @@ def headings(readme: str) -> list[tuple[int, str]]:
             elif run[0] == fence[0] and len(run) >= len(fence):
                 fence = ""
             continue
-        h = None if fence else _HEADING.match(line)
+        h = None if fence else pattern.match(line)
         if h:
             out.append((len(h.group(1)), h.group(2)))
     return out
@@ -63,12 +65,18 @@ def _without_regions(readme: str) -> str:
 def anchors(titles: list[str]) -> list[str]:
     """The anchor of each title, a repeat numbered `-1`, `-2` ... as GitHub does."""
     seen: dict[str, int] = {}
+    used: set[str] = set()
     out = []
     for title in titles:
         base = slug(title)
         n = seen.get(base, 0)
+        anchor = base if n == 0 else f"{base}-{n}"
+        while anchor in used:  # `Foo`, `Foo-1`, `Foo`: the third is `foo-2`, not a second `foo-1`
+            n += 1
+            anchor = f"{base}-{n}"
         seen[base] = n + 1
-        out.append(base if n == 0 else f"{base}-{n}")
+        used.add(anchor)
+        out.append(anchor)
     return out
 
 
@@ -81,8 +89,8 @@ def render(readme: str) -> str:
 
 
 def dead_anchors(readme: str) -> list[str]:
-    """In-page links (`](#anchor)`) that match no heading."""
-    known = set(anchors([t for _lv, t in headings(readme)] + [TOC_TITLE]))
+    """In-page links (`](#anchor)`) that match no heading of any level."""
+    known = set(anchors([t for _lv, t in headings(readme, _ANY_HEADING)] + [TOC_TITLE]))
     prose = _without_regions(readme)
     prose = re.sub(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*$", "", prose, flags=re.M | re.S)
     return sorted(set(re.findall(r"\]\(#([^)\s]+)\)", prose)) - known)
