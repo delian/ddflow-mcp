@@ -1369,6 +1369,9 @@
             "updated": "2026-01-01T00:01:00Z",
             "phase": "P1",
             "tags": [],
+            "parent": "",
+            "needs": [],
+            "globs": [],
             "done": 1,
             "total": 3
           }
@@ -2261,7 +2264,12 @@
             "owner": "",
             "updated": "2026-01-01T00:10:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [],
+            "globs": [
+              "src/lex.py"
+            ]
           }
         ],
         "total": 3,
@@ -2293,7 +2301,12 @@
             "owner": "",
             "updated": "2026-01-01T00:10:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [],
+            "globs": [
+              "src/lex.py"
+            ]
           },
           {
             "id": "T3",
@@ -2303,7 +2316,14 @@
             "owner": "",
             "updated": "2026-01-01T00:04:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [
+              "T2"
+            ],
+            "globs": [
+              "src/errors.py"
+            ]
           },
           {
             "id": "T2",
@@ -2313,7 +2333,14 @@
             "owner": "",
             "updated": "2026-01-01T00:03:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [
+              "T1"
+            ],
+            "globs": [
+              "src/parse.py"
+            ]
           }
         ],
         "total": 3,
@@ -2367,7 +2394,12 @@
             "owner": "",
             "updated": "2026-01-01T00:10:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [],
+            "globs": [
+              "src/lex.py"
+            ]
           }
         ],
         "total": 1,
@@ -2421,7 +2453,12 @@
             "owner": "",
             "updated": "2026-01-01T00:10:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [],
+            "globs": [
+              "src/lex.py"
+            ]
           },
           {
             "id": "T3",
@@ -2431,7 +2468,14 @@
             "owner": "",
             "updated": "2026-01-01T00:04:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [
+              "T2"
+            ],
+            "globs": [
+              "src/errors.py"
+            ]
           },
           {
             "id": "T2",
@@ -2441,7 +2485,14 @@
             "owner": "",
             "updated": "2026-01-01T00:03:00Z",
             "phase": "P1",
-            "tags": []
+            "tags": [],
+            "parent": "P1",
+            "needs": [
+              "T1"
+            ],
+            "globs": [
+              "src/parse.py"
+            ]
           }
         ],
         "total": 3,
