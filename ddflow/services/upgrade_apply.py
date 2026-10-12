@@ -39,7 +39,7 @@ from typing import Any
 
 from ..config import Config
 from ..config_sections.upgrade import UPGRADE_BACKUPS
-from ..core.events import UPGRADE_APPLIED_KIND
+from ..core.events import UNSTAMPED, UPGRADE_APPLIED_KIND, stamp_text
 from ..core.model import State
 from ..infra import tomlcfg as TC
 from ..infra.fsio import replace_text
@@ -68,10 +68,9 @@ CONFIG_POLICIES = ("agent", "ask", "operator")
 #: version moves up to the running one.
 _VERSIONED = ("config", "features")
 
-#: What a partial apply on a project with no version stamp records as the version it reached:
-#: older than every release, so the manifest's changes are all still news (an empty `to`
-#: would fall back to the stamp this very write adds, and the plan would call them done).
-UNSTAMPED = "0.0.0"
+# UNSTAMPED (the marker a partial apply records) now lives in `core.events`, with the
+# reader-side `is_stamp`/`stamp_text` and so with `version_key` -- one definition, and a
+# surface may import it without importing this service (B439c42848f).
 
 APPLIED = "applied"
 ACKNOWLEDGED = "acknowledged"
@@ -550,7 +549,10 @@ def _record(
                 for i in todo
                 if i["category"] == "config" and i["id"] in ok
             ],
-            "summary": f"upgrade {frm or 'unstamped'} -> {new_to}: {', '.join(cats)}",
+            # `stamp_text`, not the raw fields: a partial apply on an unstamped project
+            # records the marker as `to`, and the recorded summary is rendered verbatim by
+            # `upgrade --status`. The marker is not a release (B439c42848f).
+            "summary": (f"upgrade {stamp_text(frm)} -> {stamp_text(new_to)}: {', '.join(cats)}"),
         },
     )
 
