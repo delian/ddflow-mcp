@@ -98,6 +98,35 @@ def project_version(st: State, has_history: bool, running: str) -> str:
     return "" if has_history else running
 
 
+def settled_items(st: State) -> dict[str, list[Any]]:
+    """`{item id: [the values it was settled at]}` for the versioned items an apply already
+    settled WITHOUT moving the stamp (a partial one: some other item was refused, so the
+    project stays at its version). They are done: an acknowledged item that came back in every
+    plan made the plan never empty and every re-apply append another full batch to the log.
+    Only the partial applies since the last one that moved the stamp count. A config item
+    carries the value its change led to, so a later release that changes the knob again is
+    news again; a feature has none (``[]``: settled once)."""
+    out: dict[str, list[Any]] = {}
+    for u in reversed(st.upgrades):
+        if version_key(str(u.get("to", ""))) > version_key(str(u.get("from", "")) or "0.0.0"):
+            break  # this one moved the stamp up: what came before it is history
+        news = {
+            f"{c.get('change')}:{c.get('key')}": c.get("new") for c in u.get("config_changes") or []
+        }
+        for i in u.get("items") or []:
+            if isinstance(i, str):
+                out.setdefault(i, []).extend([news[i]] if i in news else [])
+    return out
+
+
+def _unsettled(items: list[dict[str, Any]], settled: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    return [
+        i
+        for i in items
+        if i["id"] not in settled or (settled[i["id"]] and i.get("new") not in settled[i["id"]])
+    ]
+
+
 def _wanted(c: UM.Change, baseline: str, running: str) -> bool:
     """A change this ddflow brings to a project last at ``baseline``: not one of a release
     newer than the running code, and the unreleased ones only for a project older than it."""
@@ -563,16 +592,17 @@ def build(
     has_history = bool(st.ddflow_versions or st.upgrades or st.items or st.sessions)
     baseline = project_version(st, has_history, running)
     changes = _since(baseline, running, manifest)
+    settled = settled_items(st)
     cats: dict[str, list[dict[str, Any]]] = {
         "repairs": repair_items(repo, log, cfg),
         "migrations": migration_items(repo, log, cfg, running),
         "records": contested_items(st),
-        "config": config_items(changes, cfg),
+        "config": _unsettled(config_items(changes, cfg), settled),
         "instructions": instruction_items(repo, not baseline or is_older(baseline, running))
         + reference_items(repo),
         "hooks": hook_items(repo),
         "mcp": mcp_items(repo),
-        "features": feature_items(changes),
+        "features": _unsettled(feature_items(changes), settled),
     }
     total = sum(len(v) for v in cats.values())
     return {

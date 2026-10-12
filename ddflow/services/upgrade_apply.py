@@ -339,8 +339,19 @@ def apply(
     reasons = _reasons(selected, ok, confirm)
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
-    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons)
+    lags = _lags(results, plan, frm, to)
+    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons, lags)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
+
+
+def _lags(results: list[dict[str, Any]], plan: dict[str, Any], frm: str, to: str) -> bool:
+    """Is the stamp all that is left to do? This run found nothing to apply (notes are only reported) and everything
+    versioned was settled by earlier partial applies (the plan no longer lists it), yet the
+    project is still at ``frm``: without the move it stayed at its old version for good
+    (upgrade-plan-never-empties)."""
+    # a note that is only reported (SKIPPED) is nothing to apply
+    idle = all(r["status"] == SKIPPED for r in results)
+    return idle and frm != to and not _unresolved(plan, set())
 
 
 def _not_saved(
@@ -427,10 +438,12 @@ def _close(
     cats: list[str],
     backup_dir: str,
     reasons: dict[str, str],
+    stamp_only: bool = False,
 ) -> None:
-    """End the run's record: the upgrade itself when something was settled, else a failure."""
+    """End the run's record: the upgrade itself when something was settled (or only the
+    stamp was left to move), else a failure."""
     frm, new_to, to = versions
-    if ok:
+    if ok or stamp_only:
         _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run)
     elif run:
         _note(log, run, "failed", summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled")
