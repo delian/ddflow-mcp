@@ -24,6 +24,10 @@ TODO = (
     " and `docs/a.md:3-9`, which cut every title at a hundred and twenty characters in the middle of `a path`"
     " so the queue could not be read from its own titles.\n"
     "- [ ] **OPIK.15** Depends on: OPIK.10 for the schema. Needs OPIK.11.\n"
+    "- [ ] **OPIK.16** This no longer requires OPIK.3 to land.\n"
+    "- [ ] **OPIK.17** Requires no new config, unlike OPIK.3.\n"
+    "- [ ] **OPIK.18** Blocked by OPIK.10 until the schema lands.\n"
+    "  **Needs:** OPIK.3\n"
     "- [ ] **OPIK.10** Declared wins. `src/ignored.py`\n"
     "  **Globs:** src/declared/**\n"
 )
@@ -76,3 +80,12 @@ def test_a_long_bullet_keeps_a_whole_title_and_its_full_text(repo):
 
 def test_colon_form_and_two_phrases_on_one_line(repo):
     assert _found(repo)["OPIK.15"].needs == ["OPIK.10", "OPIK.11"]
+
+
+def test_negated_prose_is_not_a_need(repo):
+    t = _found(repo)
+    assert t["OPIK.16"].needs == [] and t["OPIK.17"].needs == []
+
+
+def test_blocked_by_and_a_declared_needs_line_are_unioned(repo):
+    assert _found(repo)["OPIK.18"].needs == ["OPIK.3", "OPIK.10"]
