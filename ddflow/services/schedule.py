@@ -89,7 +89,9 @@ def done_counts(st: State) -> tuple[int, int]:
     """(completed tasks, completed phases): the work a count pass measures. Items an import
     closed (finished before ddflow existed) are not counted: they are not work done since
     any pass, and counting them made every phase completion overdue after an import."""
-    done = [i.kind for i in st.items.values() if i.state == "done" and i.id not in st.imported_done]
+    done = [
+        i.kind for key, i in st.items.items() if i.state == "done" and key not in st.imported_done
+    ]
     return done.count("task"), done.count("phase")
 
 
@@ -138,7 +140,7 @@ def count_at_last_run(st: State, name: str, current: int | None = None) -> int:
     absent `result` reads as 0 -- treating an unparseable record as "it never ran" errs
     toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one).
 
-    A baseline ABOVE `current` (the count now) cannot be reached again: most often it was
+    A baseline ABOVE `current` (the count now) is out of reach for the moment: most often it was
     recorded when imported history still counted, but a reopened completion lowers the
     count too. It reads as 0 -- the pass reports rather than staying quiet until the count
     outgrows a number that included history (over-reporting, the stated policy above)."""
