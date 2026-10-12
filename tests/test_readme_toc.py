@@ -94,3 +94,11 @@ def test_a_fence_with_interior_blanks_does_not_close():
 
 def test_a_tilde_line_does_not_close_a_backtick_fence():
     assert T.headings("## A\n```\n~~~\n## Fake\n```\n## Real\n") == [(2, "A"), (2, "Real")]
+
+
+def test_the_command_names_a_dead_link(tmp_path, capsys):
+    readme = tmp_path / "README.md"
+    body = "## A\n\n[x](#gone)\n\n## Table of contents\n\n"
+    readme.write_text(body + T.render(body))
+    assert T.main([str(readme)]) == 1
+    assert "(#gone)" in capsys.readouterr().err
