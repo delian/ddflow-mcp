@@ -985,7 +985,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 209 knobs.
+cadences, and the rest of the 211 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1935,6 +1935,11 @@ Four guard rails, each of which exists because the alternative is silent:
   events into a log that is committed to git; one real repository yielded 4,799
   checkboxes. Over the cap it proposes none and says so — the phases are withheld with
   them, because a queue of empty phases is not a smaller import, it is a misleading one.
+- **Readable ids.** A phase or task id made from a heading is cut at a WHOLE WORD, never inside
+  one, at `[importer] phase_slug_chars` (default 32) and `task_slug_chars` (default 40; at least
+  8 each): `Phase 106C tool-rl multi-agent run` gives `PHASE-106C-TOOL-RL-MULTI-AGENT`, where
+  it used to give `PHASE-106C-TOOLRL-MULTI`. A heading that declares its own id keeps it, and a
+  re-import recognises the older truncated ids (`legacy_ident`), so nothing is minted twice.
 - **Idempotent.** Ids derive from the source, so re-running after you edit the todo adds
   what is new and leaves the rest alone. A second run over an unchanged project exits 2.
 
@@ -5065,7 +5070,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 209): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 211): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5565,7 +5570,7 @@ declared once and persists — see
 
 ## Configuration
 
-209 knobs across 29 sections, every one documented in place and listed, with its default
+211 knobs across 29 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5632,8 +5637,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=c04ed1ac0b73 -->
-<details><summary>All 209 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=1ef6cfff0f2f -->
+<details><summary>All 211 knobs across 29 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5732,6 +5737,8 @@ long default is left to `ddflow config --explain`.
 | `bugs.phase` | `"bugs"` |  |
 | `importer.max_tasks` | `200` |  |
 | `importer.preview_rows` | `8` |  |
+| `importer.phase_slug_chars` | `32` |  |
+| `importer.task_slug_chars` | `40` |  |
 | `importer.todo_globs` | `[]` |  |
 | `importer.lesson_globs` | `[]` |  |
 | `importer.lesson_summary_globs` | `[]` |  |
