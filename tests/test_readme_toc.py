@@ -49,3 +49,13 @@ def test_a_hand_edit_inside_the_region_is_noticed():
 def test_a_longer_fence_is_closed_only_by_an_equal_or_longer_one():
     text = "## A\n````\n```\n# x\n## inside\n```\n````\n## B\n"
     assert T.headings(text) == [(2, "A"), (2, "B")]
+
+
+def test_a_repeat_never_takes_an_anchor_already_in_use():
+    assert T.anchors(["Foo", "Foo-1", "Foo"]) == ["foo", "foo-1", "foo-2"]
+    assert T.anchors(["Step 1", "Step 1", "Step 1-1"]) == ["step-1", "step-1-1", "step-1-1-1"]
+
+
+def test_a_link_to_a_top_level_heading_is_not_dead():
+    assert T.dead_anchors("# ddflow\n\nsee [it](#ddflow)\n\n## Table of contents\n") == []
+    assert T.dead_anchors("# ddflow\n\nsee [it](#nope)\n") == ["nope"]
