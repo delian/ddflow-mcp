@@ -27,6 +27,7 @@ def test_list_is_a_command_and_matches_task_list(repo):
     code, out, err = run_cli(repo, "list", "task", "--json")
     assert code == 0, (out, err)
     code2, out2, _ = run_cli(repo, "task", "list", "--json")
+    assert code2 == 0
     assert json.loads(out) == json.loads(out2)
 
 
@@ -47,5 +48,5 @@ def test_list_takes_the_filters_and_kinds(repo):
     assert code == 0 and "T1" in out and "T2" not in out
     code, out, _ = run_cli(repo, "list", "phase")
     assert code == 0 and "P1" in out
-    code, _, err = run_cli(repo, "list", "nonsense")
+    code, _, _ = run_cli(repo, "list", "nonsense")
     assert code != 0
