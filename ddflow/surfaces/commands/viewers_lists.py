@@ -13,7 +13,7 @@ from typing import Any
 
 from ...api import phase_progress, view_list
 from ...api import surf_reporting as R
-from ..context import NOTHING, OK, Ctx
+from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
 from .viewers_search import COMMAND as SEARCH
@@ -168,6 +168,18 @@ COMMANDS = tuple(
 def cmd_list_any(a, c: Ctx) -> int:
     """`ddflow list <kind>`: the same reader as `<kind> list`, the kind given as a word."""
     a.list_kind = a.kind
+    own = {p.name for p in _filter_params(a.kind)}
+    stray = [
+        f"--{p.name}"
+        for p in _union_params()
+        if p.name not in own and getattr(a, p.name, None) not in (None, False, "")
+    ]
+    if stray:
+        print(
+            f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)",
+            file=sys.stderr,
+        )
+        return REFUSED
     return cmd_list(a, c)
 
 
