@@ -75,6 +75,19 @@ PROGRESS_KINDS: frozenset[str] = frozenset(
 )
 
 
+#: Version-stamp and upgrade bookkeeping. An upgrade run legitimately completes nothing, so
+#: these events neither count as progress nor fill the no-progress window (B629c361cc9).
+BOOKKEEPING_KINDS: frozenset[str] = frozenset(
+    {
+        "ddflow.seen",
+        "ddflow.capabilities",
+        "skew.overridden",
+        "upgrade.applied",
+        "repair.applied",
+    }
+)
+
+
 def epoch(ts: str) -> float:
     """Public name for `_epoch`: event timestamp -> epoch seconds, 0.0 when unparseable."""
     return _epoch(ts)
@@ -587,7 +600,8 @@ def _no_progress(events: list[Event], lc, sev: str) -> list[LoopFinding]:
     not stalled. The window is in EVENTS rather than minutes because an agent that is
     thinking produces no events at all, and waiting is not looping.
     """
-    window = events[-lc.no_progress_window :]
+    counted = [e for e in events if e.kind not in BOOKKEEPING_KINDS]
+    window = counted[-lc.no_progress_window :]
     if len(window) < lc.no_progress_window:
         return []
     if any(e.kind in PROGRESS_KINDS for e in window):
