@@ -196,3 +196,42 @@ Each open, unstarted task below now needs the shared-interface task instead of b
 Skipped: groups whose interface task is already done (def-records, overlay, local-worker, plan-pipeline, approval) need no edge; tasks already done (B-sched-model, B-trigger-model, B-id-config, B-af-sampler) are untouched; needs already present (B-semantic-recall, B-rw-stale, B-rw-gate-link) are not repeated.
 B-semantic-recall and B-ds-semantic are not merged into one task: both now consume the one Embedder of B-uni-context-pack (no infra/embed.py, no second backend).
 The stray open task 'nosuch' was removed.
+
+## Checkpoint record: after P-unify and P-upgrade (2026-10-12)
+
+The operator lifted the pause (all bugs fixed, then "do the last task from P-unify now").
+What was checked, on main at `996f00ee` (ddflow 0.2.1):
+
+0. **Acceptance and prerequisites.** All seven tasks this checkpoint needed are done:
+   `B-uni-acceptance`, `B-upgrade.12-dry-run`, `B-uc-acceptance`, `B-uc-gate-failure-evidence`,
+   `B-arch-upgrade-risks`, `B-phase-merge-gate`, `B-rs-companion-honest`. The acceptance
+   precondition of D-push-after-acceptance (`B-uni-acceptance`) therefore holds.
+1. **Commit state.** Every event shard and the two new rules (`r-everything-configurable`,
+   `r-small-files`, with the generated `DDFLOW.md`) are committed; nothing is ahead of main
+   on the tree. Open bugs: 0.
+2. **Full test run on main.** `uv run pytest -n 48 tests`: 11570 passed, 1 skipped, 293
+   snapshots passed, 449 s, with `DDFLOW_AGENT` unset.
+3. **Install and version.** The `ddflow` launcher runs this checkout, so the CLI and the MCP
+   server of a new session are 0.2.1. `ddflow upgrade --status`: project stamp 0.2.1, plan
+   up to date, last upgrade 0.1.10 -> 0.2.1.
+4. **Upgrade procedure on a copy of this project.** Per D-dry-run-from-running-version the
+   dry run clones the project at the commit the installed ddflow was built from, so its
+   start is the CURRENT version with this project's 58,112-event history (stamps back to
+   0.1.10), not an older release: `scripts/ci/upgrade-dry-run --installed-version 0.2.1
+   --simulate-old 0.2.1` PASS (10 checks) and `--build-old` (a real build from the clone)
+   PASS (11 checks). Both cover read, plan (72 items), apply with a snapshot, a second apply
+   (a no-op), restore, an old ddflow on the upgraded copy, MCP connect (proposed, nothing
+   applied until consent), two agents on one task, shard merge, and an event upcaster.
+   Upgrades from the OLDER RELEASES (0.1.3 onwards) are covered by the compat fixtures in
+   the full suite of item 2 (tests/fixtures/releases, tests/compat), not by the dry run.
+5. **Doctor.** Notes only, no problems. Known notes: gate flapping on older fixes, cadence
+   passes behind schedule, orphan worktree directories that are gone, a tracked
+   `.claude/settings.json` with absolute paths.
+
+**Not done, deliberately.** Nothing was pushed (D-push-after-acceptance: ask first). Other
+agents and MCP servers started before the upgrade still run older code and must be
+restarted by their owners (the dry run counts 58 older agent identities). The cadence
+backlog and the flapping gates are queued work, not checkpoint blockers.
+
+**Next, after the operator's go:** the phases filed on 2026-10-12 start in the order of
+D-phase-order-core-records-first.
