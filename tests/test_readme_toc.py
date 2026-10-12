@@ -90,3 +90,7 @@ def test_dead_anchors_ignore_a_fence_closed_with_trailing_blanks():
 
 def test_a_fence_with_interior_blanks_does_not_close():
     assert T.headings("```\n``` ```\n## Fake\n```\n## Real\n") == [(2, "Real")]
+
+
+def test_a_tilde_line_does_not_close_a_backtick_fence():
+    assert T.headings("## A\n```\n~~~\n## Fake\n```\n## Real\n") == [(2, "A"), (2, "Real")]

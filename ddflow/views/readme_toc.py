@@ -56,8 +56,10 @@ def _prose_lines(readme: str) -> list[str]:
             run = m.group(1)
             if not fence:
                 fence = run
-            elif len(run) >= len(fence) and re.fullmatch(
-                f" {{0,3}}{re.escape(run[0])}+[ \t]*", line
+            elif (
+                run[0] == fence[0]
+                and len(run) >= len(fence)
+                and re.fullmatch(f" {{0,3}}{re.escape(run[0])}+[ \t]*", line)
             ):
                 fence = ""
             continue
