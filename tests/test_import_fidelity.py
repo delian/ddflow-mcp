@@ -235,7 +235,11 @@ def test_the_archive_hold_reason_names_a_command_that_exists(repo):
     reason = _state(repo).items["159.A.1"].blocked_reason
     assert "release its phase" not in reason
     assert "ddflow unblock <phase" in reason, reason
-    assert run_cli(repo, "unblock", "159.A")[0] == OK  # the advice works as written
+    # The advice works as written: the phase id releases the held child, not just exits 0.
+    code, out, _ = run_cli(repo, "--json", "unblock", "159.A")
+    assert code == OK and json.loads(out)["released"] == ["159.A.1"]
+    after = _state(repo).items["159.A.1"]
+    assert after.state == OPEN and not after.blocked_reason
 
 
 # -- lessons at the level they actually live at ----------------------------------------------
