@@ -10,12 +10,13 @@ from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+import ddflow.services.lanes.states as S
+
 from ...config import Config
 from ...core.clock import epoch
 from ...core.events import Event
-from ...core.records import ABANDONED, DONE, Item, State
+from ...core.records import Item, State
 from ...core.schedule import Plan
-from . import states as S
 
 #: The event kinds that make an agent a lane.
 _LANE_KINDS = ("session.", "lease.")
@@ -109,11 +110,7 @@ def _scan(events: Iterable[Event]) -> dict[str, _Facts]:
 
 def _held(st: State, name: str) -> Item | None:
     """The unfinished item ``name`` holds a lease on (the freshest heartbeat wins)."""
-    mine = [
-        i
-        for i in st.items.values()
-        if i.lease and i.lease.holder == name and i.state not in (DONE, ABANDONED)
-    ]
+    mine = [i for i in st.items.values() if i.lease and i.lease.holder == name and not i.terminal]
     return max(mine, key=lambda i: (i.lease.renewed_at, i.id)) if mine else None  # type: ignore[union-attr]
 
 
@@ -132,7 +129,7 @@ def _stalls(st: State, plan: Plan, self_name: str) -> tuple[Stall, ...]:
 
 def _free(name: str, f: _Facts, st: State, plan: Plan, ended: bool, last: float) -> Lane:
     it = st.items.get(f.item)
-    finished = it is None or it.state in (DONE, ABANDONED)
+    finished = it is None or it.terminal
     since = max(epoch(f.released_ts), last) if f.released_ts else last
     base: dict[str, Any] = {
         "name": name,

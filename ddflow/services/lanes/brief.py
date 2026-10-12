@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import ddflow.services.lanes.states as S
+
 from ...config import Config
 from ...core import provenance as P
 from ...core.records import Item, State
 from ...core.textcut import clip
-from . import states as S
 from .ledger import Lane
 
 
@@ -86,7 +87,7 @@ def lane_brief(lane: Lane, st: State, cfg: Config, others: Sequence[Lane] = ()) 
         "",
         f"You are lane {lane.name}"
         + (f" on {lane.harness}" if lane.harness else "")
-        + ". Pass this name as your identity on every ddflow call (`ddflow identify`).",
+        + ". Pass this name as your identity on every ddflow call: `--agent NAME` on the command line, ddflow_identify over MCP.",
         P.DATA_RULE,
         "",
         f"State when this brief was cut: {lane.state}"

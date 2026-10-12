@@ -17,7 +17,7 @@ from helpers import rpc_call, tool_json
 
 from ddflow import api
 from ddflow.infra import proc
-from ddflow.services.lanes import watch
+from ddflow.services.lanes.redraw import watch
 from ddflow.surfaces.mcp import TOOLS, Server
 from ddflow.surfaces.tools.tiers import tier_tools
 
@@ -82,7 +82,7 @@ def test_no_lanes_in_the_window_is_exit_two(repo):
 def test_it_spawns_nothing_and_starts_no_thread(busy, monkeypatch):
     """Once the project is loaded (identity resolution asks git where the tree is, as every
     command does), the ledger, the advice and the brief start no process and no thread."""
-    api_lanes = sys.modules["ddflow.api.lanes"]  # the package re-exports the function
+    api_lanes = sys.modules["ddflow.api.lane_views"]  # the package re-exports the function
 
     real_load = api_lanes._load
 

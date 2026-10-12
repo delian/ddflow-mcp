@@ -6,8 +6,9 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
+import ddflow.services.lanes.states as S
+
 from ...core.flowcontrol import Decision
-from . import states as S
 from .ledger import Lane
 
 #: Urgency order of the kinds: lost work first, then stalls, then spare capacity.

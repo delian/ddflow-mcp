@@ -13,6 +13,7 @@ from ..core import outcome as O
 from ..core.schedule import plan
 from ..services import flowstate as FL
 from ..services import lanes as LN
+from ..services.lanes.redraw import watch as _watch
 from ._base import _load
 
 VIEWS = ("state", "brief", "advise")
@@ -63,3 +64,12 @@ def lanes(
     if not ledger:
         return O.nothing("lanes", "no lanes active in the window", **data)
     return O.ok("lanes", **data)
+
+
+def lanes_watch(draw, mark, *, interval_s: float) -> int:
+    """Redraw the ledger when the log changes or every ``interval_s``, until interrupted.
+
+    The CLI's `--watch`: a foreground loop over the cheap "did the log grow" question; it
+    starts no thread and no daemon and spawns nothing.
+    """
+    return _watch(draw, mark, interval_s=interval_s)

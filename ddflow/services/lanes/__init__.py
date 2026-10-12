@@ -13,8 +13,8 @@ from __future__ import annotations
 from .advise import Move, advise
 from .brief import lane_brief
 from .ledger import Lane, build, find
+from .redraw import watch
 from .render import render_advice, render_ledger
-from .watch import watch
 
 __all__ = [
     "Lane",
