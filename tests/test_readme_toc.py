@@ -102,3 +102,10 @@ def test_the_command_names_a_dead_link(tmp_path, capsys):
     readme.write_text(body + T.render(body))
     assert T.main([str(readme)]) == 1
     assert "(#gone)" in capsys.readouterr().err
+
+
+def test_the_command_exits_clean_on_a_clean_readme(tmp_path):
+    body = "## A\n\n[x](#a)\n\n## Table of contents\n\n"
+    readme = tmp_path / "README.md"
+    readme.write_text(body + T.render(body))
+    assert T.main([str(readme), "--force"]) == 0
