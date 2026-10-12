@@ -345,11 +345,13 @@ def apply(
 
 
 def _lags(results: list[dict[str, Any]], plan: dict[str, Any], frm: str, to: str) -> bool:
-    """Is the stamp all that is left to do? This run found nothing to apply and everything
+    """Is the stamp all that is left to do? This run found nothing to apply (notes are only reported) and everything
     versioned was settled by earlier partial applies (the plan no longer lists it), yet the
     project is still at ``frm``: without the move it stayed at its old version for good
     (upgrade-plan-never-empties)."""
-    return not results and frm != to and not _unresolved(plan, set())
+    # a note that is only reported (SKIPPED) is nothing to apply
+    idle = all(r["status"] == SKIPPED for r in results)
+    return idle and frm != to and not _unresolved(plan, set())
 
 
 def _not_saved(
