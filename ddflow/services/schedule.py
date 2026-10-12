@@ -138,9 +138,10 @@ def count_at_last_run(st: State, name: str, current: int | None = None) -> int:
     absent `result` reads as 0 -- treating an unparseable record as "it never ran" errs
     toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one).
 
-    A baseline ABOVE `current` (the count now) was recorded when imported history still
-    counted, so it can never be reached again: it reads as 0, or the pass would stay quiet
-    until the count outgrew a number that included the history."""
+    A baseline ABOVE `current` (the count now) cannot be reached again: most often it was
+    recorded when imported history still counted, but a reopened completion lowers the
+    count too. It reads as 0 -- the pass reports rather than staying quiet until the count
+    outgrows a number that included history (over-reporting, the stated policy above)."""
     runs = st.cadences.get(name, [])
     try:
         n = int(runs[-1].get("result", "0") or 0) if runs else 0
