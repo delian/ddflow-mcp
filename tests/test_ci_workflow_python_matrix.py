@@ -35,3 +35,14 @@ def test_every_uv_run_in_tests_job_selects_the_matrix_interpreter():
     assert runs, "tests job has no `uv run` step"
     for ln in runs:
         assert "--python ${{ matrix.python }}" in ln, f"uses the default interpreter: {ln.strip()}"
+
+
+def test_tests_job_pins_the_interpreter_to_uv_managed_builds():
+    """Results must not depend on the runner image's system pythons (they may lack
+    ensurepip, or be a different patch release): install the matrix version with uv and
+    forbid falling back to a system interpreter."""
+    job = _tests_job()
+    assert re.search(r"^\s+UV_PYTHON_PREFERENCE:\s*only-managed\s*$", job, re.M), (
+        "tests job does not set UV_PYTHON_PREFERENCE: only-managed"
+    )
+    assert "uv python install ${{ matrix.python }}" in job, "tests job never installs the python"
