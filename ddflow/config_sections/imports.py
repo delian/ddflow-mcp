@@ -49,12 +49,12 @@ class ImportConfig:
     phase_slug_chars: int = knob(
         32,
         check=int_at_least(8),
-        doc="How long the slug a PHASE id is derived from may be when `ddflow import` makes an id from a heading that declares none (default 32, at least 8). The slug is cut at a whole word, never inside one, so a long heading gives an id up to this long; a re-import keeps the ids already minted (`legacy_ident`).",
+        doc="How long the slug a PHASE id is derived from may be when `ddflow import` makes an id from a heading that declares none (default 32, at least 8). The slug is cut at a whole word, never inside one, so a long heading gives an id up to this long; set it BEFORE the first import: items already imported keep their ids, and a re-import under a different value derives different ids and proposes those items again.",
     )
     task_slug_chars: int = knob(
         40,
         check=int_at_least(8),
-        doc="The same limit for the slug of a TASK id, the part after the phase id (default 40, at least 8); cut at a whole word.",
+        doc="The same limit for the slug of a TASK id, the part after the phase id (default 40, at least 8); cut at a whole word. Set it before the first import (see `phase_slug_chars`).",
     )
     #: Where each source family is read from. Empty = the built-in locations; set = those
     #: paths INSTEAD (see `importer.sources_from`).
