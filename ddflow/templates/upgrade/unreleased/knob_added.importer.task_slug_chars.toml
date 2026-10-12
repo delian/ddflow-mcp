@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "importer.task_slug_chars"
+new = '40'
+why = "The same limit for the slug of a task id, the part after the phase id (default 40, at least 8)."
+impact = "additive"

@@ -275,10 +275,9 @@ def _clean_title(text: str) -> str:
     return _BOLD.sub("", text.strip()).strip()
 
 
-#: How long an imported title may be, and how long the slug an id is derived from.
+#: How long an imported title may be. The slug lengths an id is derived from are the
+#: `[importer] phase_slug_chars` / `task_slug_chars` knobs.
 _TITLE_CHARS = 120
-_PHASE_SLUG_CHARS = 32
-_TASK_SLUG_CHARS = 40
 #: The slug lengths ids were derived with before they were cut at word boundaries. An
 #: item imported then holds the old id, so a re-import must recognise it (`legacy_ident`).
 _OLD_PHASE_SLUG, _OLD_TASK_SLUG = 24, 20
@@ -1005,6 +1004,8 @@ def scan_todos(
     """
 
     ids_cfg = _ids_config(repo)
+    phase_chars = ids_cfg.importer.phase_slug_chars
+    task_chars = ids_cfg.importer.task_slug_chars
     found: list[Found] = []
     empty: list[str] = []
     taken: set[str] = set()
@@ -1108,7 +1109,7 @@ def scan_todos(
                     ids_cfg,
                     "imported_phase",
                     check=False,
-                    **{"user-text": _slug_words(heading, _PHASE_SLUG_CHARS).upper()},
+                    **{"user-text": _slug_words(heading, phase_chars).upper()},
                 )
                 old_derived = IDS.render(
                     ids_cfg,
@@ -1145,7 +1146,7 @@ def scan_todos(
                 "imported_task",
                 check=False,
                 phase=phase_ident or "T",
-                slug=_slug_words(unsplit or title, _TASK_SLUG_CHARS),
+                slug=_slug_words(unsplit or title, task_chars),
             )
             chosen = _unique(ident, derived, taken)
             anchor = Found(
