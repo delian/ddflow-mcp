@@ -36,7 +36,7 @@ class LoopsConfig:
     )
     no_progress_window: int = knob(
         60,
-        doc="How many recent events with NO completion, gate pass or merge count as a stalled queue. Measured in events, not minutes, because an agent that is thinking produces no events and waiting is not looping.",
+        doc="How many recent events (version-stamp and upgrade bookkeeping events excluded) with NO completion, gate pass or merge count as a stalled queue. Measured in events, not minutes, because an agent that is thinking produces no events and waiting is not looping.",
     )
     #: warn | block
     on_detect: str = knob(
