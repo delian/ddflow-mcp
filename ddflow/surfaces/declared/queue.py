@@ -94,6 +94,36 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("phase", "close"),
+        summary="close a phase whose work predates ddflow",
+        tool="ddflow_phase_close",
+        description="Close a phase whose work PREDATES ddflow: one `ddflow import` created "
+        "whose every task is done or abandoned. Records `item.completed` with its "
+        "evidence, as the importer does on the way in, and runs NO phase pipeline. "
+        "Refused for a phase with open work, one the importer did not create, or "
+        "without `imported`.",
+        call=lambda repo, a, agent: _api().phase_close(
+            repo, a["id"], imported=bool(a.get("imported")), agent=agent
+        ),
+        payload=("id", "evidence", "tasks", "done"),
+        # `render` is what makes the executor the CLI function: a verb declared once needs
+        # no hand-written cmd_* (surfaces/cliexec.py, registry.add_commands).
+        render=L.phase_close_text,
+        params=(
+            Param("id", help="The imported phase to close.", cli_help="", positional=True),
+            Param(
+                "imported",
+                type="boolean",
+                # Required on BOTH surfaces: the api refuses without it, so the MCP schema
+                # must not present it as optional (roborev on ab4179fb).
+                tool_required=True,
+                help="Required: closes an IMPORTED phase; its imported source is the evidence recorded.",
+                cli_help="required: closes an IMPORTED phase (its imported source is the evidence recorded)",
+            ),
+        ),
+        tool_order=("id", "imported"),
+    ),
+    Command(
         path=("task", "add"),
         tool="ddflow_task_add",
         flag_exempt=ANSWER_FLAG_EXEMPT,

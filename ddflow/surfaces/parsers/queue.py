@@ -29,7 +29,7 @@ def register(s: argparse._SubParsersAction) -> None:
     add_commands(
         s,
         COMMANDS,
-        groups={"phase": "add a phase", "task": "add a task"},
+        groups={"phase": "add, list or close a phase", "task": "add a task"},
         handlers={**HANDLERS, ("update",): cmd_item_update},
         executor=cliexec.handler,
     )
