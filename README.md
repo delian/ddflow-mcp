@@ -4566,7 +4566,12 @@ ddflow bug list --all                           # also fixed and invalid ones
 ddflow bug list --state invalid --since 2026-10-01
 ddflow research list --state refuted            # the state is the verdict, lower-cased
 ddflow task list --tag web --limit 20 --json    # {rows, total, shown, truncated, ...}
+ddflow list task --state open --json            # `ddflow list <kind>` = `<kind> list`, as MCP `ddflow_list`
 ```
+
+`ddflow list <task|phase|bug|research|lesson>` is the same reader with the kind as a word, the
+CLI twin of `ddflow_list`. A task or phase row also carries `parent`, `needs` and `globs`, so a
+queue can be audited from `--json` without opening the sqlite index.
 
 Filters are `--state`, `--phase`, `--tag`, `--owner` (the leaseholder; not `--agent`, which is
 always who *you* are), `--since` (an ISO

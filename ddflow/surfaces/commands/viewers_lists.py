@@ -13,7 +13,7 @@ from typing import Any
 
 from ...api import phase_progress, view_list
 from ...api import surf_reporting as R
-from ..context import NOTHING, OK, Ctx
+from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
 from .viewers_search import COMMAND as SEARCH
@@ -165,10 +165,51 @@ COMMANDS = tuple(
 )
 
 
+def cmd_list_any(a, c: Ctx) -> int:
+    """`ddflow list <kind>`: the same reader as `<kind> list`, the kind given as a word."""
+    a.list_kind = a.kind
+    own = {p.name for p in _filter_params(a.kind)}
+    stray = [
+        f"--{p.name}"
+        for p in _union_params()
+        if p.name not in own and getattr(a, p.name, None) not in (None, False, "")
+    ]
+    if stray:
+        reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
+        if c.json:
+            emit_json({"record_kind": a.kind, "reason": reason})
+        print(reason, file=sys.stderr)
+        return REFUSED
+    return cmd_list(a, c)
+
+
+def _union_params() -> tuple[Param, ...]:
+    """`list`'s flags: each `<kind> list` flag once (a flag the kind lacks is refused by the
+    engine, as over MCP)."""
+    seen: dict[str, Param] = {}
+    for kind in _LISTS:
+        for p in _filter_params(kind):
+            seen.setdefault(p.name, p)
+    return tuple(seen.values())
+
+
+#: `ddflow list <kind>`: the CLI half of `ddflow_list` for the record kinds.
+LIST_COMMAND = Command(
+    path=("list",),
+    summary="list tasks, phases, bugs, research notes or lessons (what `<kind> list` shows)",
+    params=(
+        Param("kind", positional=True, choices=tuple(_LISTS), help="what to list"),
+        *_union_params(),
+    ),
+    handler=cmd_list_any,
+    via=("ddflow_list", "task"),
+)
+
+
 def register(s) -> None:
     """Add `list` to the task, phase, bug, lesson and research parsers already on `s`, and
     the sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
-    add_commands(s, [SEARCH, *COMMANDS])
+    add_commands(s, [SEARCH, LIST_COMMAND, *COMMANDS])
     rs = s.choices["research"]
     verb = next(x for x in rs._actions if x.dest == "verb")
     verb.choices = ["add", "list"]
