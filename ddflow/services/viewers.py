@@ -94,6 +94,10 @@ def _item_row(st: State, it: Item, cfg: Config) -> dict[str, Any]:
         "updated": updated,
         "phase": _phase_of(st, it),
         "tags": _tags(it.tags, cfg),
+        # What a plan audit needs without the index: the edges and the declared files.
+        "parent": it.parent or "",
+        "needs": list(it.needs),
+        "globs": list(it.globs),
     }
 
 
