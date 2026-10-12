@@ -1018,5 +1018,7 @@ def test_confirming_a_pinned_knob_keeps_the_pin_instead_of_adopting_the_new_defa
 
     row = next(r for r in out["results"] if r["key"] == key)
     assert row["status"] == "acknowledged" and "kept" in row["detail"]
+    assert f"ddflow config --set {key} {item['new']}" in row["detail"]
+    assert "keeps this project's value" in item["fix"]
     assert Config.load(old).worktree.max_parallel == pinned
     assert (old / ".ddflow" / "config.toml").read_text() == text
