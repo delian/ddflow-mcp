@@ -95,16 +95,19 @@ def _scan(events: Iterable[Event]) -> dict[str, _Facts]:
             holder = str(e.data.get("holder") or who)
             h = facts.setdefault(holder, _Facts())
             h.lane = True
+            h.last_ts = max(h.last_ts, e.ts)
             if e.ts >= h.item_ts:
                 h.item, h.item_ts = e.subject, e.ts
         elif e.kind == "lease.renewed":
             h = facts.setdefault(str(e.data.get("holder") or who), _Facts())
             h.lane, h.beat_ts = True, max(h.beat_ts, e.ts)
+            h.last_ts = max(h.last_ts, e.ts)
         elif e.kind in ("lease.released", "lease.expired"):
             holder = str(e.data.get("holder") or who)
             h = facts.setdefault(holder, _Facts())
             h.lane = True
             h.released_ts = max(h.released_ts, e.ts)
+            h.last_ts = max(h.last_ts, e.ts)
     return facts
 
 

@@ -79,8 +79,8 @@ class Log:
 
 
 def multi_lane() -> Log:
-    """Six lanes: working, stale, lapsed with no session end, lapsed after a session end,
-    idle beside ready work, and a task chain nobody can start."""
+    """Five lanes: working, stale, lapsed with no session end, lapsed after a session end,
+    and idle beside ready work (plus a task, W, that waits on a dependency)."""
     g = Log()
     for tid, globs in (("X", "f.py"), ("Y", "f.py"), ("Z", "z.py"), ("V", "v.py"), ("Q", "q.py")):
         g.task(tid, globs)
