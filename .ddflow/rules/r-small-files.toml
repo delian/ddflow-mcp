@@ -1,0 +1,10 @@
+id = "r-small-files"
+title = "Keep every file under 20 KB: split into a package of smaller modules"
+tags = ["size", "context", "split"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**", "tests/**"]
+created = "2026-10-12T16:15:30.603483+00:00"
+updated = "2026-10-12T16:15:30.603493+00:00"
+
+Decision D-small-files (operator 2026-10-12). A .py file over [quality].max_file_bytes (20 KB, about 5k tokens) is split by cohesion into a package: one concern per module, a thin __init__ facade that keeps the old import path, a module docstring saying what the module holds. Applies to tests too. Do not add to a file that is over the limit: split first, or list the exemption with a reason. A ratchet test fails a new oversized file or an exempt file that grew. Goal: a 128k-context model can read the whole change.

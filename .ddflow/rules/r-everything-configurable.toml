@@ -1,0 +1,10 @@
+id = "r-everything-configurable"
+title = "No hard-coded tunables: every tunable value is a knob, settable four ways, logged"
+tags = ["config", "knobs", "principle"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**"]
+created = "2026-10-12T15:44:20.716197+00:00"
+updated = "2026-10-12T15:44:20.716208+00:00"
+
+Decision D-everything-configurable (operator 2026-10-12). When you add or change code: (1) any number, size, timeout, limit, threshold, window, default name, path or template a person could want to change is a [section] knob in ddflow/config_sections with a default, a doc string and KNOB_CHOICES for an enum, never a module constant. Structural constants (event kind names, file formats, protocol literals) may stay, with a reason in the exemption list. (2) It must be settable by file, CLI (ddflow config), MCP (ddflow_configure) and a plain prompt, through services/configwrite only. (3) A value anyone set is preserved in its layer and never overwritten by a new default. (4) Every change is logged as a config.changed event; conflicts are contested keys resolved with ddflow resolve. (5) Say the new knobs in the task and in the README; the standards gate and reviewers check it.
