@@ -40,17 +40,18 @@ def _previous_run(lane: Lane, st: State, cfg: Config) -> list[str]:
     return out
 
 
-def _assignment(it: Item) -> list[str]:
-    rows = [f"- item: {it.id} ({it.kind}, {it.state})"]
-    if it.parent:
-        rows.append(f"- phase: {it.parent}")
-    if it.tags:
-        rows.append(f"- tags: {', '.join(it.tags)}")
-    if it.needs:
-        rows.append(f"- needs: {', '.join(it.needs)}")
-    if it.globs:
-        rows.append(f"- writes only: {', '.join(it.globs)}")
-    return rows
+def _assignment(it: Item, cfg: Config) -> list[str]:
+    """The item's own fields, as data: a tag, a dependency or a glob is text somebody typed."""
+    rows = [f"item: {it.id} ({it.kind}, {it.state})"]
+    for label, value in (
+        ("phase", it.parent),
+        ("tags", ", ".join(it.tags)),
+        ("needs", ", ".join(it.needs)),
+        ("writes only", ", ".join(it.globs)),
+    ):
+        if value:
+            rows.append(f"{label}: {value}")
+    return [_text(cfg, "item-fields", it.id, "\n".join(rows), it.id)]
 
 
 def _lease(lane: Lane, it: Item | None) -> list[str]:
@@ -97,8 +98,14 @@ def lane_brief(lane: Lane, st: State, cfg: Config, others: Sequence[Lane] = ()) 
     if it is None:
         lines.append("No item is recorded for this lane.")
     else:
-        lines += [it.title, "", _text(cfg, "item", it.id, it.body, it.id), "", "## Assignment"]
-        lines += [*_assignment(it), "", "## Lease and worktree", *_lease(lane, it)]
+        lines += [
+            _text(cfg, "item-title", it.id, it.title, it.id),
+            "",
+            _text(cfg, "item", it.id, it.body, it.id),
+            "",
+            "## Assignment",
+        ]
+        lines += [*_assignment(it, cfg), "", "## Lease and worktree", *_lease(lane, it)]
     lines += ["", "## Previous run", *_previous_run(lane, st, cfg)]
     if held_by_others:
         lines += ["", "## Other lanes working now", ", ".join(sorted(held_by_others))]

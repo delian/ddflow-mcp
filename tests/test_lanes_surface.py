@@ -28,6 +28,9 @@ def busy(repo):
     run_cli(repo, "task", "add", "X", "--globs", "f.py")
     run_cli(repo, "task", "add", "Y", "--globs", "f.py")
     assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
+    run_cli(repo, "task", "add", "Z", "--globs", "z.py")
+    assert run_cli(repo, "claim", "Z", "--no-worktree", agent="waiter")[0] == 0
+    assert run_cli(repo, "abandon", "Z", "--reason", "not needed", agent="waiter")[0] == 0
     return repo
 
 
@@ -41,14 +44,22 @@ def test_cli_json_and_the_mcp_tool_are_one_declaration(busy):
     cli = json.loads(out)
     mcp = tool_json(rpc_call(Server(busy), "ddflow_lanes"))
     pick = lambda body: [(ln["name"], ln["item"], ln["state"]) for ln in body["lanes"]]  # noqa: E731
-    assert pick(cli) == pick(mcp) == [("holder", "X", "working")]
+    assert (
+        pick(cli)
+        == pick(mcp)
+        == [
+            ("holder", "X", "working"),
+            ("waiter", "Z", "waiting-on-glob"),
+        ]
+    )
     assert set(cli) == set(mcp)
 
 
 def test_advise_over_mcp_names_the_blocker(busy):
-    run_cli(busy, "claim", "Q", agent="x")  # no such item: a refusal, writes nothing
     body = tool_json(rpc_call(Server(busy), "ddflow_lanes", view="advise"))
-    assert body["view"] == "advise" and isinstance(body["moves"], list)
+    (stall,) = [m for m in body["moves"] if m["kind"] == "stall"]
+    assert "Y is blocked by lane holder" in stall["text"]
+    assert stall["lanes"] == ["waiter"] and stall["command"] == "ddflow wait --item Y"
 
 
 def test_brief_of_an_unknown_lane_fails_and_names_the_lanes(busy):
@@ -59,6 +70,8 @@ def test_brief_of_an_unknown_lane_fails_and_names_the_lanes(busy):
 def test_brief_is_the_whole_first_prompt(busy):
     code, out, _ = run_cli(busy, "lanes", "brief", "holder")
     assert code == 0 and out.startswith("# Lane brief: holder") and "## Next" in out
+    for part in ("item: X", "writes only: f.py", "## Lease and worktree"):
+        assert part in out
 
 
 def test_no_lanes_in_the_window_is_exit_two(repo):
@@ -126,6 +139,11 @@ def test_watch_redraws_when_the_log_changes_and_stops_on_interrupt():
         frames=2,
     )
     assert code == 0 and len(drawn) == 2 and slept  # the change woke it before 60 s
+
+
+def test_watch_stops_on_a_failing_frame_and_not_on_nothing_to_show():
+    assert watch(lambda: 1, lambda: 0, interval_s=5) == 1
+    assert watch(lambda: 2, lambda: 0, interval_s=5, frames=2) == 0
 
 
 def test_watch_ends_quietly_on_ctrl_c():

@@ -20,10 +20,11 @@ def cmd_lanes(ns: argparse.Namespace, ctx: Any) -> int:
         return cliexec.run(cmd, ns, ctx)
     interval = max(1, int(ctx.cfg.lanes.watch_interval_s))
 
-    def draw() -> None:
+    def draw() -> int:
         if sys.stdout.isatty():
             sys.stdout.write(CLEAR)
-        cliexec.run(cmd, ns, ctx)
+        code = cliexec.run(cmd, ns, ctx)
         sys.stdout.flush()
+        return code
 
     return watch(draw, lambda: ctx.log.mark(clock=False), interval_s=interval)

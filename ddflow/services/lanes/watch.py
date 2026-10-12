@@ -13,10 +13,12 @@ from typing import Any
 
 #: Seconds between the cheap "did the log grow" checks inside one interval.
 POLL_S = 1.0
+#: The exit code of a frame with nothing to show: a normal frame in a watch.
+NOTHING = 2
 
 
 def watch(
-    draw: Callable[[], None],
+    draw: Callable[[], int | None],
     mark: Callable[[], Any],
     *,
     interval_s: float,
@@ -27,13 +29,16 @@ def watch(
     """Call ``draw`` now, then again whenever ``mark()`` changes or ``interval_s`` passes.
 
     ``frames`` > 0 stops after that many draws (tests); 0 runs until interrupted, which is
-    a normal end (exit 0).
+    a normal end (exit 0). A draw that returns a failure (anything but 0 or 2, "nothing to
+    show") ends the watch with that code: a frame that cannot render is not retried forever.
     """
     drawn = 0
     try:
         while True:
             seen, started = mark(), clock()
-            draw()
+            code = draw() or 0
+            if code not in (0, NOTHING):
+                return code
             drawn += 1
             if frames and drawn >= frames:
                 return 0

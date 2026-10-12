@@ -168,16 +168,24 @@ def _lane(name: str, f: _Facts, st: State, cfg: Config, now: float, plan: Plan) 
     else:
         ls = held.lease
         stale_after = cfg.lanes.stale_after_s or cfg.lease.ttl_s
-        lapsed = not ls.live(now, cfg.lease.grace_s)
+        # A session that ended BEFORE the last heartbeat did not end this work.
+        ended_at = epoch(sess.ended_at) if ended and sess else 0.0
         state = S.held_state(
-            age_s=now - ls.renewed_at, stale_after_s=stale_after, lapsed=lapsed, session_ended=ended
+            age_s=now - ls.renewed_at,
+            stale_after_s=stale_after,
+            lapsed=not ls.live(now, cfg.lease.grace_s),
+            session_ended=ended and ended_at >= ls.renewed_at,
         )
-        since = {S.WORKING: ls.acquired_at, S.STALE: ls.renewed_at}.get(state)
+        began = {
+            S.WORKING: ls.acquired_at,
+            S.STALE: ls.renewed_at + stale_after,
+            S.STOPPED_ENDED: ended_at,
+        }
         lane = Lane(
             name=name,
             item=held.id,
             state=state,
-            since=ls.renewed_at + ls.ttl_s if since is None else since,
+            since=began.get(state, ls.renewed_at + ls.ttl_s),
             heartbeat=ls.renewed_at,
             last_event=last,
             worktree=ls.worktree or held.worktree,
