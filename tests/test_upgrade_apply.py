@@ -1031,3 +1031,72 @@ def test_the_adopt_command_for_a_pinned_knob_is_not_truncated(old: Path) -> None
     long_value = "v" * 100
     status, detail = UA._apply_config(old, cfg, {**item, "new": long_value}, "upgrader")
     assert status == "acknowledged" and json.dumps(long_value) in detail
+
+
+def test_an_acknowledged_item_leaves_the_plan_while_a_refused_one_stays(old: Path) -> None:
+    """upgrade-plan-never-empties: acknowledged items came back in every plan, and every
+    re-apply acknowledged them again and appended another full batch to the event log."""
+    first = go(old, "all")
+    acked = set(ids(first, "acknowledged"))
+    refused = set(ids(first, "refused"))
+    assert acked and refused
+
+    left = {i["id"] for c in plan(old)["categories"].values() for i in c}
+    assert not acked & left, sorted(acked & left)
+    assert refused <= left
+
+    n = len(upgrades(old))
+    again = go(old, "all")
+    assert not ids(again, "acknowledged"), again["text"]
+    assert len(upgrades(old)) == n  # nothing new to record: no duplicate batch
+
+
+def test_confirming_the_last_refusal_advances_the_stamp_after_earlier_acknowledgements(
+    old: Path,
+) -> None:
+    go(old, "all")
+    keys = {i["key"]: "ok" for i in plan(old)["categories"]["config"] if i["action"] == UP.OPERATOR}
+    go(old, "all", confirm=keys)
+    final = plan(old)
+    assert final["project_version"] == final["running"]
+    assert final["up_to_date"] or not final["categories"]["config"]
+
+
+def test_a_plan_emptied_by_earlier_partial_applies_moves_the_stamp_on_the_next_apply(
+    old: Path,
+) -> None:
+    """A log written before the fix holds the settled items in partial events (from == to);
+    one more apply must advance the stamp instead of finding nothing to do forever."""
+    frm = "0.1.3"
+    EventLog(old, "upgrader").append(
+        "upgrade.applied", "upgrade", {"from": frm, "to": frm, "categories": [], "items": []}
+    )
+    before = plan(old)
+    assert before["project_version"] == frm
+    ids_ = [i["id"] for c in ("config", "features") for i in before["categories"][c]]
+    EventLog(old, "upgrader").append(
+        "upgrade.applied",
+        "upgrade",
+        {"from": frm, "to": frm, "categories": ["config"], "backup": "", "items": ids_},
+    )
+    mid = plan(old)
+    assert not mid["categories"]["config"] and mid["project_version"] == frm
+
+    go(old, "all")
+
+    assert plan(old)["project_version"] == plan(old)["running"]
+    events = [e for e in EventLog(old, "upgrader").read_all() if e.kind == "upgrade.applied"]
+    assert not [e for e in events if e.data.get("status") == "failed"]  # a success: no failure note
+    moves = [u for u in upgrades(old) if u["to"] == plan(old)["running"]]
+    assert len(moves) == 1  # one stamp-moving record, not two
+
+
+def test_items_settled_by_a_partial_apply_stay_settled_when_a_newer_ddflow_is_installed(
+    old: Path,
+) -> None:
+    go(old, "all")  # acknowledges what it can, one item is refused
+    log, cfg, st = _load(old, "upgrader")
+
+    newer = UP.build(old, log, cfg, st, running="9.9.9")
+
+    assert not [i for i in newer["categories"]["config"] if i["action"] != UP.OPERATOR]
