@@ -320,6 +320,8 @@ def _cut_title(text: str, limit: int = _TITLE_CHARS) -> str:
 #: A backticked token that is a repo path: has a directory part or a source-file suffix, no
 #: spaces, not a URL. `pytest -q` and `self.x` are not.
 _BACKTICKED = re.compile(r"`([^`\s]+)`")
+#: `path.py:1219` and `path.py:12-30` cite a line; the glob is the file.
+_LINE_SUFFIX = re.compile(r":\d+(?:[,-]\d+)*$")
 _PATH_SUFFIX = (".py", ".md", ".toml", ".json", ".yaml", ".yml", ".ts", ".js", ".sh", ".cfg")
 #: A prose dependency: the clause after 'Requires', 'Depends on', 'Needs', 'Blocked by'.
 _PROSE_DEP = re.compile(r"\b(?:requires?|depends?\s+on|needs?|blocked\s+by)\b(.{0,200})", re.I)
@@ -330,7 +332,7 @@ def _prose_globs(text: str) -> list[str]:
     """Repo paths a task's prose names in backticks, in order, once each."""
     out: list[str] = []
     for raw in _BACKTICKED.findall(text):
-        tok = raw.rstrip(".,;:")
+        tok = _LINE_SUFFIX.sub("", raw).rstrip(".,;:")
         if "://" in tok or tok.startswith(("-", "$", "~")) or tok in out:
             continue
         if "/" in tok or tok.endswith(_PATH_SUFFIX):
@@ -343,7 +345,9 @@ def _prose_needs(text: str, known: set[str], self_id: str) -> list[str]:
     item: an id nobody wrote would read as unmet and block the task for good."""
     out: list[str] = []
     for m in _PROSE_DEP.finditer(text):
-        for raw in _ID_TOKEN.findall(m.group(1)):
+        # Only the rest of THIS sentence: 'Requires no config. See 160.C.2.' requires nothing.
+        clause = re.split(r"[.;:]\s", m.group(1), maxsplit=1)[0]
+        for raw in _ID_TOKEN.findall(clause):
             tok = raw.strip(".,;")
             if tok in known and tok != self_id and tok not in out:
                 out.append(tok)

@@ -17,6 +17,12 @@ TODO = (
     "- [ ] **OPIK.3** Add the retrieval-miss stratum in `src/opik/strata.py` and `tests/opik/`.\n"
     "- [ ] **OPIK.9** Wire the exporter into `ddflow/services/export.py`. Requires OPIK.3 and\n"
     "  Needs the stratum (OPIK.3); Depends on NOPE.7 which nobody wrote. Run `pytest -q`.\n"
+    "- [ ] **OPIK.11** Needs the shutdown drain (OPIK.3) first.\n"
+    "- [ ] **OPIK.12** Depends on OPIK.10 for the schema.\n"
+    "- [ ] **OPIK.13** Reworks the importer. Requires no new config. Related: see OPIK.3.\n"
+    "- [ ] **OPIK.14** Run `python ddflow/cli.py import` then read `ddflow/services/importer.py:1219,1580`"
+    " and `docs/a.md:3-9`, which cut every title at a hundred and twenty characters in the middle of `a path`"
+    " so the queue could not be read from its own titles.\n"
     "- [ ] **OPIK.10** Declared wins. `src/ignored.py`\n"
     "  **Globs:** src/declared/**\n"
 )
@@ -43,3 +49,25 @@ def test_prose_requires_becomes_a_need_only_for_a_known_id(repo):
     t = _found(repo)
     assert t["OPIK.9"].needs == ["OPIK.3"]
     assert t["OPIK.3"].needs == []
+
+
+def test_each_dependency_phrase_is_read_on_its_own(repo):
+    t = _found(repo)
+    assert t["OPIK.11"].needs == ["OPIK.3"]
+    assert t["OPIK.12"].needs == ["OPIK.10"]
+
+
+def test_an_id_in_a_later_sentence_is_not_a_need(repo):
+    assert _found(repo)["OPIK.13"].needs == []
+
+
+def test_line_cited_paths_glob_the_file_and_commands_are_skipped(repo):
+    t = _found(repo)["OPIK.14"]
+    assert t.globs == ["ddflow/services/importer.py", "docs/a.md"]
+
+
+def test_a_long_bullet_keeps_a_whole_title_and_its_full_text(repo):
+    t = _found(repo)["OPIK.14"]
+    assert t.title.endswith("\u2026") and len(t.title) <= 120
+    assert t.title.count("`") % 2 == 0
+    assert "read from its own titles." in t.body
