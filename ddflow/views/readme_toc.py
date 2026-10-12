@@ -20,8 +20,8 @@ REGION = "README/toc"
 #: The heading that carries the region: it is not listed in itself.
 TOC_TITLE = "Table of contents"
 LISTED_LEVELS = (2, 3)
-_HEADING = re.compile(r"^(#{2,3}) +(.+?) *#*$")
-_ANY_HEADING = re.compile(r"^(#{1,6}) +(.+?) *#*$")
+_HEADING = re.compile(r"^ {0,3}(#{2,3}) +(.+?) *#*$")
+_ANY_HEADING = re.compile(r"^ {0,3}(#{1,6}) +(.+?) *#*$")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
@@ -96,7 +96,7 @@ def render(readme: str) -> str:
 
 def dead_anchors(readme: str) -> list[str]:
     """In-page links (`](#anchor)`) that match no heading of any level."""
-    known = set(anchors([t for _lv, t in headings(readme, _ANY_HEADING)] + [TOC_TITLE]))
+    known = set(anchors([t for _lv, t in headings(readme, _ANY_HEADING)]))
     prose = _without_regions(readme)
     prose = re.sub(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*$", "", prose, flags=re.M | re.S)
     return sorted(set(re.findall(r"\]\(#([^)\s]+)\)", prose)) - known)
