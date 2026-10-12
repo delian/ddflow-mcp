@@ -23,6 +23,7 @@ TODO = (
     "- [ ] **OPIK.14** Run `python ddflow/cli.py import` then read `ddflow/services/importer.py:1219,1580`"
     " and `docs/a.md:3-9`, which cut every title at a hundred and twenty characters in the middle of `a path`"
     " so the queue could not be read from its own titles.\n"
+    "- [ ] **OPIK.15** Depends on: OPIK.10 for the schema. Needs OPIK.11.\n"
     "- [ ] **OPIK.10** Declared wins. `src/ignored.py`\n"
     "  **Globs:** src/declared/**\n"
 )
@@ -71,3 +72,7 @@ def test_a_long_bullet_keeps_a_whole_title_and_its_full_text(repo):
     assert t.title.endswith("\u2026") and len(t.title) <= 120
     assert t.title.count("`") % 2 == 0
     assert "read from its own titles." in t.body
+
+
+def test_colon_form_and_two_phrases_on_one_line(repo):
+    assert _found(repo)["OPIK.15"].needs == ["OPIK.10", "OPIK.11"]
