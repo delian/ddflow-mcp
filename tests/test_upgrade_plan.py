@@ -337,3 +337,21 @@ def test_a_changed_then_removed_then_added_knob_keeps_the_baseline_default() -> 
     assert (kind, old, new) == ("knob_changed", 5, 7)
     # a removal after a change reports the baseline value the project held
     assert UP._net(seq[:2])["s.k"][2] == 5
+
+
+def test_a_pinned_changed_default_says_confirm_keeps_the_value_unless_the_env_sets_it(
+    repo: Path,
+) -> None:
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text("[worktree]\nmax_parallel = 4\n")
+    cfg = Config.load(repo)
+    change = _change(
+        "knob_changed", "0.2.0", "worktree.max_parallel", old=4, new=0, has_old=True, has_new=True
+    )
+
+    (item,) = UP.config_items([change], cfg)
+    assert "keeps this project's value" in item["fix"] and "config --set" in item["fix"]
+
+    cfg.sources["worktree.max_parallel"] = "env:DDFLOW_WORKTREE_MAX_PARALLEL"
+    (item,) = UP.config_items([change], cfg)
+    assert "keeps this project's value" not in item["fix"]
