@@ -78,7 +78,16 @@ from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
-from .items import DEFAULT_PRIORITY, ItemEdit, phase_add, resolve, split, task_add, update
+from .items import (
+    DEFAULT_PRIORITY,
+    ItemEdit,
+    phase_add,
+    phase_close,
+    resolve,
+    split,
+    task_add,
+    update,
+)
 from .jobs import job_add, job_end, job_list, job_run
 from .knowledge import (
     Finding as ResearchFinding,
@@ -280,6 +289,7 @@ __all__ = [
     "next_item",
     "onboard_run",
     "phase_add",
+    "phase_close",
     "phase_progress",
     "pins",
     "pr_status",
