@@ -67,3 +67,10 @@ def test_a_hook_only_path_repeats_the_notice_and_a_read_only_store_does_not_rais
 
     monkeypatch.setattr(US, "_remember", boom)
     US.keep_notice(old, "Upgraded ddflow x -> y")  # never raises
+
+
+def test_only_actionable_statuses_repeat() -> None:
+    for status in (US.PROPOSED, US.APPLIED, US.TIMEOUT, US.FAILED):
+        assert US._repeats({"status": status})
+    for status in (US.READONLY, US.CURRENT, US.OLDER, US.OFF):
+        assert not US._repeats({"status": status}), "a note that never resolves is said once"

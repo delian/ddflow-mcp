@@ -80,8 +80,8 @@ UNFINISHED = (TIMEOUT, FAILED)
 _ANSWERS = (PROPOSED, READONLY, APPLIED)
 #: The statuses whose note repeats (the brief and `ddflow doctor`) until the project is upgraded
 #: (or a later check finishes): an unfinished check, and a proposal or partial apply that leaves
-#: the project behind -- an actionable upgrade is not dropped because one reader saw it once.
-_REPEATING = UNFINISHED + _ANSWERS
+#: the project behind (not READONLY: that never resolves, so it is said once) -- an actionable upgrade is not dropped because one reader saw it once.
+_REPEATING = UNFINISHED + (PROPOSED, APPLIED)
 
 
 def surface(environ: Mapping[str, str] | None = None) -> str:
