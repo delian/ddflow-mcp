@@ -49,7 +49,7 @@ class ImportConfig:
     phase_slug_chars: int = knob(
         32,
         check=int_at_least(8),
-        doc="How long the slug a PHASE id is derived from may be when `ddflow import` makes an id from a heading that declares none (default 32, at least 8). The slug is cut at a whole word, never inside one, so a long heading gives an id up to this long; set it BEFORE the first import: items already imported keep their ids, and a re-import under a different value derives different ids and proposes those items again.",
+        doc="How long the slug a PHASE id is derived from may be when `ddflow import` makes an id from a heading that declares none (default 32, at least 8). The slug is cut after the last whole word that fits, never inside a word (a single word longer than the limit is kept whole), so a long heading gives an id of about this length; set it BEFORE the first import: items already imported keep their ids, and a re-import under a different value derives different ids and proposes those items again.",
     )
     task_slug_chars: int = knob(
         40,
