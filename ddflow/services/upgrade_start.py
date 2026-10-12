@@ -74,11 +74,14 @@ OFF, CURRENT, OLDER, PROPOSED, APPLIED, READONLY, TIMEOUT, FAILED = (
     "failed",
 )
 
-#: The statuses of a check that did not reach an answer: their note repeats (the brief and `ddflow doctor`)
-#: until the project is upgraded or a later check finishes.
+#: The statuses of a check that did not reach an answer.
 UNFINISHED = (TIMEOUT, FAILED)
 #: The statuses worth keeping as the answer of a start (see `_cacheable`).
 _ANSWERS = (PROPOSED, READONLY, APPLIED)
+#: The statuses whose note repeats (the brief and `ddflow doctor`) until the project is upgraded
+#: (or a later check finishes): an unfinished check, and a proposal or partial apply that leaves
+#: the project behind (not READONLY: no marker is written for a read-only project, so there is nothing to replay) -- an actionable upgrade is not dropped because one reader saw it once.
+_REPEATING = (*UNFINISHED, PROPOSED, APPLIED)
 
 
 def surface(environ: Mapping[str, str] | None = None) -> str:
@@ -428,6 +431,17 @@ def _remember(repo: Path, report: dict[str, Any]) -> None:
         pass
 
 
+def keep_notice(repo: Path, text: str) -> None:
+    """Keep the one-line notice the brief just issued (`upgrade_notice.line`) as a proposal, so
+    the briefs after it repeat it while the project is behind: on a hook-only path there was
+    no start report to keep. Bookkeeping only; never raises."""
+    try:
+        if text:
+            _remember(repo, {"status": PROPOSED, "text": text, "version": running_version()})
+    except Exception:
+        pass
+
+
 def start(
     repo: Path,
     log: Any,
@@ -458,14 +472,16 @@ def start(
 
 
 def _repeats(data: dict[str, Any]) -> bool:
-    """Does the marker hold a note the brief repeats? A check that reached no answer, unless the
-    operator switched it off (`start_timeout_s` = 0): that is said once, not on every brief."""
-    return data.get("status") in UNFINISHED and bool(data.get("repeat", True))
+    """Does the marker hold a note the brief repeats? An unfinished check or a pending proposal,
+    unless the operator switched the check off (`start_timeout_s` = 0): that is said once, not
+    on every brief."""
+    return data.get("status") in _REPEATING and bool(data.get("repeat", True))
 
 
 def _unfinished(repo: Path, st: State | None) -> str:
-    """The note of a start check that reached no answer, while it still applies: the marker
-    is of this ddflow and (when the state is known) the project is still behind it."""
+    """The note of a start check that reached no answer, or of a proposal still pending, while
+    it still applies: the marker is of this ddflow and (when the state is known) the project is
+    still behind it."""
     data = _read(repo)
     text = str(data.get("text", ""))
     if not _repeats(data) or not text:
@@ -477,8 +493,9 @@ def _unfinished(repo: Path, st: State | None) -> str:
 
 
 def doctor_notes(repo: Path, st: State) -> list[str]:
-    """For ``ddflow doctor``: the note of a start check that ran out of time or failed, until
-    the project is upgraded or a later check finishes. Never raises."""
+    """For ``ddflow doctor``: the note of a start check that ran out of time or failed, or of an
+    upgrade proposed and not yet applied, until the project is upgraded or a later check
+    finishes. Never raises."""
     try:
         text = _unfinished(repo, st)
     except Exception:
@@ -496,11 +513,12 @@ def _state_of(repo: Path) -> State | None:
 
 
 def take_for_brief(repo: Path, st: State | None = None) -> str:
-    """The recorded start report, once, for the first brief; "" when none or already given.
+    """The recorded start report for the brief; "" when none or the project has caught up.
 
-    A check that reached NO answer (a timeout, a failure) is repeated by every brief while the
-    project is still behind this ddflow (the folded state ``st``, read here when not given):
-    a note that cannot be dropped by one reader seeing it. A marker that cannot be rewritten
+    A check that reached NO answer (a timeout, a failure) and a proposal or partial apply
+    (the project still behind) are repeated by every brief while the project is still behind
+    this ddflow (the folded state ``st``, read here when not given): a note that cannot be
+    dropped by one reader seeing it. Anything else is said once. A marker that cannot be rewritten
     (a read-only store) still delivers the text: the cost is that the next brief repeats it,
     not that the operator is never told."""
     try:
