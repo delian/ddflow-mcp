@@ -16,19 +16,12 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import fields
-from pathlib import Path
 
 from ..config import KNOB_CHOICES, Config
-from ..core.digest import content_digest
-from ..infra.fsio import atomic_write
 from ..infra.tomlcfg import value
+from .readme_region import Region
 
 REGION = "README/knobs"
-END = f"<!-- ddflow:end {REGION} -->"
-_BEGIN = re.compile(
-    rf"^<!-- ddflow:begin {re.escape(REGION)} sha=(?P<sha>[0-9a-f]{{12}}) -->(?=\r?$)", re.M
-)
-_END = re.compile(rf"^{re.escape(END)}(?=\r?$)", re.M)
 #: A default longer than this is not shown in a cell: `config --explain` prints it whole.
 SHOWN = 40
 
@@ -71,60 +64,19 @@ def render(cfg: Config | None = None, choices: dict[str, tuple[str, ...]] | None
             "</details>",
         ]
     )
-    return f"<!-- ddflow:begin {REGION} sha={content_digest(body, length=12)} -->\n{body}\n{END}"
+    return _REGION.block(body)
 
 
-def _region(readme: str) -> tuple[re.Match[str], re.Match[str]]:
-    """The begin and end marker matches of the `README/knobs` region, or ValueError."""
-    begin = _BEGIN.search(readme)
-    end = _END.search(readme, begin.end()) if begin else None
-    if begin is None or end is None:
-        raise ValueError(f"README has no {REGION} region (ddflow:begin ... {END})")
-    return begin, end
-
-
-def replace(readme: str, block: str) -> str:
-    """`readme` with its `README/knobs` region (markers included) replaced by `block`."""
-    begin, end = _region(readme)
-    return readme[: begin.start()] + block + readme[end.end() :]
-
-
-def hand_edited(readme: str) -> bool:
-    """Was the region's body changed since it was rendered: does it no longer hash to the
-    `sha` its begin marker recorded (D-doc-regions)?"""
-    begin, end = _region(readme)
-    body = readme[begin.end() : end.start()].replace("\r\n", "\n")
-    body = body.removeprefix("\n").removesuffix("\n")
-    return content_digest(body, length=12) != begin["sha"]
+_REGION = Region(REGION, "knob table", lambda _readme: render())
+END = _REGION.end
+replace = _REGION.replace
+hand_edited = _REGION.hand_edited
+_region = _REGION.match
 
 
 def main(argv: list[str]) -> int:
-    """Rewrite the generated region of the README named in `argv` (default README.md).
-
-    A region edited by hand is refused (exit 3) unless `--force`: rewriting it would drop
-    the edit, and the table is the declarations' to change, not the README's. This is the
-    interim policy: D-doc-regions' refresh -- a 3-way merge of the edit, stopping only on a
-    conflict, with --keep-mine -- arrives with its region engine (B-tpl-regions,
-    B-tpl-merge), which this region then moves onto."""
-    force = "--force" in argv
-    paths = [a for a in argv if a != "--force"]
-    path = Path(paths[0] if paths else "README.md")
-    text = path.read_text("utf-8")
-    new = replace(text, render())
-    if new == text:
-        print(f"{path}: knob table already current")
-        return 0
-    if hand_edited(text) and not force:
-        print(
-            f"{path}: the {REGION} region was edited by hand (its body no longer matches its "
-            "sha). Move the edit outside the region (or into the knob declarations), then "
-            "rerun; --force rewrites the region and discards the edit",
-            file=sys.stderr,
-        )
-        return 3
-    atomic_write(path, new)
-    print(f"{path}: knob table rewritten")
-    return 0
+    """Rewrite the knob table of the README named in `argv` (default README.md)."""
+    return _REGION.main(argv)
 
 
 if __name__ == "__main__":
