@@ -80,3 +80,13 @@ def test_a_link_to_a_phantom_toc_anchor_is_dead():
     assert T.dead_anchors("## Table of contents\n[x](#table-of-contents-1)\n") == [
         "table-of-contents-1"
     ]
+
+
+def test_dead_anchors_ignore_a_fence_closed_with_trailing_blanks():
+    text = "## A\n```\n[x](#in-code)\n``` \n[y](#a)\n"
+    assert T.dead_anchors(text) == []
+    assert T.dead_anchors("## A\n```\n[x](#in-code)\n```\n[y](#gone)\n") == ["gone"]
+
+
+def test_a_fence_with_interior_blanks_does_not_close():
+    assert T.headings("```\n``` ```\n## Fake\n```\n## Real\n") == [(2, "Real")]

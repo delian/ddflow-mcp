@@ -38,6 +38,17 @@ def headings(readme: str, pattern: re.Pattern[str] = _HEADING) -> list[tuple[int
     level with ``pattern=_ANY_HEADING``). Text between a region's markers is generated, not
     written, so it is skipped."""
     out: list[tuple[int, str]] = []
+    for line in _prose_lines(readme):
+        h = pattern.match(line)
+        if h:
+            out.append((len(h.group(1)), h.group(2)))
+    return out
+
+
+def _prose_lines(readme: str) -> list[str]:
+    """The README's lines outside code fences and generated regions. A fence closes on a
+    line of its own character, at least as long, followed only by blanks (CommonMark)."""
+    out: list[str] = []
     fence = ""
     for line in _without_regions(readme).split("\n"):
         m = _FENCE.match(line)
@@ -45,12 +56,13 @@ def headings(readme: str, pattern: re.Pattern[str] = _HEADING) -> list[tuple[int
             run = m.group(1)
             if not fence:
                 fence = run
-            elif run[0] == fence[0] and len(run) >= len(fence) and not line.strip(run[0] + " "):
+            elif len(run) >= len(fence) and re.fullmatch(
+                f" {{0,3}}{re.escape(run[0])}+[ \t]*", line
+            ):
                 fence = ""
             continue
-        h = None if fence else pattern.match(line)
-        if h:
-            out.append((len(h.group(1)), h.group(2)))
+        if not fence:
+            out.append(line)
     return out
 
 
@@ -97,8 +109,7 @@ def render(readme: str) -> str:
 def dead_anchors(readme: str) -> list[str]:
     """In-page links (`](#anchor)`) that match no heading of any level."""
     known = set(anchors([t for _lv, t in headings(readme, _ANY_HEADING)]))
-    prose = _without_regions(readme)
-    prose = re.sub(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*$", "", prose, flags=re.M | re.S)
+    prose = "\n".join(_prose_lines(readme))
     return sorted(set(re.findall(r"\]\(#([^)\s]+)\)", prose)) - known)
 
 
