@@ -5323,8 +5323,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=d787dfa113e7 -->
-<details><summary>All 112 MCP tools: 32 in the `core` tier, 47 more in `standard`, 33 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=d66de9662d4a -->
+<details><summary>All 113 MCP tools: 32 in the `core` tier, 47 more in `standard`, 34 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5356,6 +5356,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Shaping the work | `ddflow_import` | all | For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons… |
 | Shaping the work | `ddflow_import_verify` | all | Was this project's history imported, is that still true, and did anyone FINISH it? |
 | Shaping the work | `ddflow_phase_add` | standard | Add a phase to the queue. |
+| Shaping the work | `ddflow_phase_close` | all | Close a phase whose work PREDATES ddflow: one `ddflow import` created whose every task is done or abandoned. |
 | Shaping the work | `ddflow_remove` | standard | Take an item out of the queue. |
 | Shaping the work | `ddflow_resolve` | standard | Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a… |
 | Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
