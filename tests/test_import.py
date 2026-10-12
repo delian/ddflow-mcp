@@ -131,7 +131,7 @@ def test_it_reads_the_three_ways_projects_write_an_id(repo):
     ids = {f["id"] for f in _plan(repo)["found"]}
     assert "P2.T2" in ids, "**bold** ids"
     assert "P3.T1" in ids, "[bracketed] ids, which have no separator after them"
-    assert any(i.endswith("plain-item-with-no-i") for i in ids), (
+    assert any(i.endswith("plain-item-with-no-id") for i in ids), (
         "an item with no id still has to arrive, under a derived one"
     )
 

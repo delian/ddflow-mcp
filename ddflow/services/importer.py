@@ -47,6 +47,7 @@ from ..core.ids import free
 from ..core.model import DONE, OPEN, Item, fold
 from ..core.schedule import is_external
 from ..core.slug import slug as _slug
+from ..core.slug import slug_words as _slug_words
 from ..infra import git as G
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -272,6 +273,48 @@ _BOLD = re.compile(r"\*\*")
 
 def _clean_title(text: str) -> str:
     return _BOLD.sub("", text.strip()).strip()
+
+
+#: How long an imported title may be, and how long the slug an id is derived from.
+_TITLE_CHARS = 120
+_PHASE_SLUG_CHARS = 32
+_TASK_SLUG_CHARS = 40
+#: The slug lengths ids were derived with before they were cut at word boundaries. An
+#: item imported then holds the old id, so a re-import must recognise it (`legacy_ident`).
+_OLD_PHASE_SLUG, _OLD_TASK_SLUG = 24, 20
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9`\"'(\[])")
+_BODY_CHARS = 4000
+
+
+def _title_of(text: str, limit: int = _TITLE_CHARS) -> str:
+    """A title that is a whole phrase: the first sentence of ``text`` when it fits, else
+    the longest run of whole words that does, closed with an ellipsis and never ending in
+    an open backtick."""
+    text = " ".join(text.split())
+    first = _SENTENCE_END.split(text, maxsplit=1)[0]
+    if len(first) <= limit:
+        return first
+    cut = first.rfind(" ", 0, limit)
+    head = first[: cut if cut > 0 else limit]
+    if head.count("`") % 2:
+        head = head[: head.rfind("`")]
+    return head.rstrip(" ,;:-\u2014\u2013(") + "\u2026"
+
+
+def _continuation(lines: list[str], fenced: list[bool], n: int, indent: int) -> str:
+    """The wrapped lines of the bullet that ends at line ``n`` (1-based): the indented
+    lines after it, up to a blank line, a heading, a list item or an annotation."""
+    out: list[str] = []
+    for k in range(n, len(lines)):
+        ln = lines[k]
+        if fenced[k] or not ln.strip() or _HEADING.match(ln) or _CHECK.match(ln):
+            break
+        if len(ln) - len(ln.lstrip()) <= indent or re.match(r"\s*[-*]\s", ln):
+            break
+        if _GLOBS.search(ln) or _NEEDS.search(ln) or _RESOURCES.search(ln):
+            break
+        out.append(ln.strip())
+    return " ".join(out)
 
 
 #: `**Globs:** a/**, b/*` and `**Needs:** X, Y` — annotations this project writes and
@@ -970,6 +1013,10 @@ def scan_todos(
             unsplit = _clean_title(body) if _titled(body) else ""
             ident, body = _split_id(body)
             body = _clean_title(body)
+            # The whole bullet: a sentence that wraps over several lines is ONE item, and
+            # its text is what the queue must hold (B97ee75909a).
+            more = _continuation(lines, fenced, n, len(m.group(1)))
+            paragraph = _clean_title(f"{body} {more}") if more else body
             if heading and not phase_ident:
                 # The heading's OWN id wins when it has one: `### 142.A — the
                 # scaling-law advisor is wrong` is not a guess, it is the id the
@@ -983,7 +1030,13 @@ def scan_todos(
                     ids_cfg,
                     "imported_phase",
                     check=False,
-                    **{"user-text": _slug(heading, 24).upper()},
+                    **{"user-text": _slug_words(heading, _PHASE_SLUG_CHARS).upper()},
+                )
+                old_derived = IDS.render(
+                    ids_cfg,
+                    "imported_phase",
+                    check=False,
+                    **{"user-text": _slug(heading, _OLD_PHASE_SLUG).upper()},
                 )
                 phase_ident = _unique(declared, derived, taken)
                 phase_found = Found(
@@ -1002,24 +1055,30 @@ def scan_todos(
                         # ticked under "STATUS: PARTIAL" is not a finished phase.
                         "status": heading_status,
                         "heading_number": _heading_number(heading),
+                        # The id this phase was given before ids were cut at word
+                        # boundaries; "" when the heading declared its own.
+                        "legacy_ident": "" if declared else old_derived,
                     },
                 )
                 found.append(phase_found)
+            title = _title_of(paragraph)
             derived = IDS.render(
                 ids_cfg,
                 "imported_task",
                 check=False,
                 phase=phase_ident or "T",
-                slug=_slug(unsplit or body, 20),
+                slug=_slug_words(unsplit or title, _TASK_SLUG_CHARS),
             )
             chosen = _unique(ident, derived, taken)
             anchor = Found(
                 kind="task",
                 ident=chosen,
-                title=body[:120],
+                title=title,
                 source=f"{rel}:{n}",
                 done=done,
+                body=paragraph if paragraph != title else "",
                 extra={
+                    "old_slug": _slug(unsplit or body, _OLD_TASK_SLUG),
                     "phase": phase_ident,
                     # Whether the id was READ or DERIVED, and `_unique` decides that --
                     # a declared id that was already taken (two files carrying the same
@@ -1041,7 +1100,34 @@ def scan_todos(
         if len(found) == before:
             empty.append(rel)
     _adopt_child_prefix(found, taken)
+    _set_legacy_ids(found, ids_cfg)
     return found, empty
+
+
+def _set_legacy_ids(found: list[Found], ids_cfg) -> None:
+    """Record, on every id this scan DERIVED, the id the same text got before ids were cut
+    at word boundaries, so a re-import of a queue made then finds its items instead of
+    importing them all again under new names (`_triage_found`)."""
+    phases = {f.ident: f for f in found if f.kind == "phase"}
+    for f in found:
+        old_slug = f.extra.pop("old_slug", None)
+        if f.kind == "phase":
+            legacy = "" if f.extra.get("renamed") else f.extra.get("legacy_ident", "")
+        elif f.kind == "task" and old_slug is not None and not f.extra.get("id_from_source"):
+            phase = phases.get(f.extra.get("phase", ""))
+            # A renamed phase (`_adopt_child_prefix`) was renamed the same way then.
+            old_phase = (phase.extra.get("legacy_ident") or phase.ident) if phase else "T"
+            if phase and phase.extra.get("renamed"):
+                old_phase = phase.ident
+            legacy = IDS.render(
+                ids_cfg, "imported_task", check=False, phase=old_phase, slug=old_slug
+            )
+        else:
+            continue
+        if legacy and legacy != f.ident:
+            f.extra["legacy_ident"] = legacy
+        else:
+            f.extra.pop("legacy_ident", None)
 
 
 #: How many tasks must agree on a prefix before it outranks the heading the operator
@@ -1156,6 +1242,7 @@ def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
                 taken.discard(t.ident)
                 t.ident = _unique("", f"{best}.{t.ident[len(old_ident) + 1 :]}", taken)
         phase.ident = best
+        phase.extra["renamed"] = True
 
 
 def _common_dotted_prefix(idents: list[str]) -> str:
@@ -2313,6 +2400,31 @@ def _scan_sources(
     return scanned
 
 
+def _keep_imported_ids(scanned: list[Found], known: set[str]) -> None:
+    """An item already in the queue under the id an older import derived keeps that id.
+
+    Ids are minted from the text, and the rule changed (whole words, not 24 characters),
+    so the same line now derives a different id. Without this a re-import reads every such
+    item as new, and the children of such a phase get a parent that does not exist."""
+    renamed: dict[str, str] = {}
+    for f in scanned:
+        old = f.extra.get("legacy_ident")
+        if f.kind == "phase" and old and old in known and f.ident not in known:
+            renamed[f.ident] = old
+            f.ident = old
+    for f in scanned:
+        if f.kind != "task":
+            continue
+        phase = f.extra.get("phase", "")
+        if phase in renamed:
+            f.extra["phase"] = renamed[phase]
+            if f.ident.startswith(f"{phase}."):
+                f.ident = renamed[phase] + f.ident[len(phase) :]
+        old = f.extra.get("legacy_ident")
+        if old and old in known and f.ident not in known:
+            f.ident = old
+
+
 def _triage_found(
     plan: ImportPlan,
     scanned: list[Found],
@@ -2326,6 +2438,7 @@ def _triage_found(
     held: list[str] = []
     deferred_done: dict[str, Found] = {}
     existing_phases: dict[str, Found] = {}
+    _keep_imported_ids(scanned, known)
     for f in scanned:
         # Uniquify BEFORE the already-imported check, and against what THIS scan
         # proposed rather than against what is in the queue. Both halves matter:
@@ -3046,6 +3159,12 @@ def _imported_research(f: Found) -> dict[str, Any]:
     }
 
 
+def task_body(f: Found) -> str:
+    """An imported task's body: the item's own text, then where it came from."""
+    text = f.body.strip()[:_BODY_CHARS]
+    return (f"{text}\n\n" if text else "") + f"Imported from {f.source}."
+
+
 def _add_imported_tasks(
     log: EventLog, st: Any, cfg: Config, plan: ImportPlan, bump: Callable[[str], None]
 ) -> set[str]:
@@ -3061,7 +3180,7 @@ def _add_imported_tasks(
             needs=f.needs,
             globs=f.globs,
             resources=f.extra.get("resources", []),
-            body=f"Imported from {f.source}.",
+            body=task_body(f),
             # Both: the prose is what a human reads in `ddflow show`, the field is
             # what `import --verify` counts. Deriving one from the other by regex is
             # how a reworded sentence silently zeroes a verification.
