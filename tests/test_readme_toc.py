@@ -69,3 +69,14 @@ def test_repeats_are_numbered_over_headings_of_every_level():
 def test_a_fence_line_with_an_info_string_does_not_close_a_fence():
     text = "## Real\n```text\n```python\n## Fake\n```\n## After\n"
     assert T.headings(text) == [(2, "Real"), (2, "After")]
+
+
+def test_an_indented_heading_counts():
+    assert T.headings("  ## Install\n    ## code block\n") == [(2, "Install")]
+    assert T.dead_anchors("  ## Install\n[i](#install)\n") == []
+
+
+def test_a_link_to_a_phantom_toc_anchor_is_dead():
+    assert T.dead_anchors("## Table of contents\n[x](#table-of-contents-1)\n") == [
+        "table-of-contents-1"
+    ]
