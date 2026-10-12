@@ -305,13 +305,14 @@ def _title_of(text: str, limit: int = _TITLE_CHARS) -> str:
 
 
 def _cut_title(text: str, limit: int = _TITLE_CHARS) -> str:
-    """``text`` when it fits, else the longest run of whole words that does, closed with an
-    ellipsis and never ending in an open backtick."""
+    """``text`` when it fits, else cut at the last word boundary within ``limit`` (at
+    ``limit`` itself when one word is longer), closed with an ellipsis and never ending
+    in an open backtick."""
     if len(text) <= limit:
         return text
     cut = text.rfind(" ", 0, limit)
-    head = text[: cut if cut > 0 else limit]
-    if head.count("`") % 2:
+    head = text[: cut if cut > 0 else limit - 1]
+    if head.count("`") % 2 and head.rfind("`") > 0:
         head = head[: head.rfind("`")]
     return head.rstrip(" ,;:-\u2014\u2013(") + "\u2026"
 

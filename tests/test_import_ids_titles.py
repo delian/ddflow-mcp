@@ -70,7 +70,7 @@ def test_title_is_a_whole_sentence_and_body_carries_the_text(tmp_path):
 def test_a_long_sentence_is_cut_at_a_word_with_no_open_backtick(tmp_path):
     text = "## P\n\n- [ ] " + "word " * 18 + "`some/path.py` " + "tail " * 20 + "\n"
     (task,) = [f for f in _scan(tmp_path, text) if f.kind == "task"]
-    assert len(task.title) <= 121
+    assert len(task.title) <= 120
     assert task.title.count("`") % 2 == 0
     assert task.title.endswith("…")
     assert not task.title[:-1].endswith("wor")

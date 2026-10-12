@@ -43,7 +43,7 @@ def test_a_long_decision_title_is_cut_at_a_word(repo):
     (repo / "docs" / "adr" / "0001-x.md").write_text(f"# {long}\n\n## Decision\nDo it.\n")
     plan = IM.plan_import(repo, fold(EventLog(repo).read_all()))
     (d,) = [f for f in plan.found if f.kind == "decision"]
-    assert len(d.title) <= 141
+    assert len(d.title) <= 140
     assert d.title.endswith("…")
     assert d.title[:-1].split()[-1] in WORDS.split(), d.title
 
@@ -65,3 +65,20 @@ def test_a_long_optmem_note_is_cut_at_a_word(repo):
         n.title for n in notes
     ]
     assert not any(n.title[:-1].endswith(" ka") for n in notes)
+
+
+def test_a_title_opening_with_a_backtick_is_not_cut_to_nothing():
+    assert IM._cut_title("`" + "x" * 200, 50).startswith("`x")
+
+
+def test_a_summary_lesson_id_does_not_depend_on_the_cut_of_a_long_title():
+    """The id slug is 28 characters, so where a >120-character title is cut cannot reach it."""
+    long = "Alpha beta gamma delta epsilon " * 8
+    old = IM._slug(long[:120].rstrip(". "), 28)
+    new = IM._slug(IM._cut_title(long.rstrip(". ")), 28)
+    assert old == new
+
+
+def test_a_cut_title_never_exceeds_its_limit():
+    for text in ("x" * 300, "ab " * 100, "`" + "y " * 100):
+        assert len(IM._cut_title(text, 120)) <= 120, text
