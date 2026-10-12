@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -56,6 +55,7 @@ from ..lifecycle.planning import plan_for
 from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
+from .recovery_notes import _recovery_findings
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
@@ -428,26 +428,9 @@ def doctor(
 
     for f in PR.detect(log.read_all(), st, cfg):
         (problems if f.severity == "block" else notes).append(f.render())
-    quiet_adopted: list[tuple[str, str]] = []
-    for r in L.scan(log, cfg, repo):
-        # A clean adopted orphan is the harness's tree, left to the harness: one summary
-        # note below, not a line per tree.
-        if r.kind == "orphan_worktree" and r.adopted and not may_hold_work(r):
-            quiet_adopted.append((r.item, os.path.normpath(r.worktree or r.item)))
-            continue
-        # A tree holding work or one git could not measure; a RUNNING item nobody holds
-        # stays a note, as `next` offers it to resume (B3f8c406fea).
-        tree_at_risk = may_hold_work(r) and r.kind != "stale_running"
-        (problems if tree_at_risk else notes).append(f"{r.kind}: {r.item} — {r.advice}")
-    if quiet_adopted:
-        names = sorted({i for i, _ in quiet_adopted})
-        trees = len({t for _, t in quiet_adopted})
-        shown = ", ".join(names[:5]) + (", ..." if names[5:] else "")
-        notes.append(
-            f"orphan_worktree: {len(names)} item(s) on {trees} adopted harness worktree(s) "
-            f"holding no unsaved work, no lease held ({shown}) — the harness's own trees; "
-            "leave them to the harness"
-        )
+    found, held = _recovery_findings(L.scan(log, cfg, repo))
+    problems += found
+    notes += held
 
     # B71dedb76d2: a removed item whose holder's branch is here and whose lease is live.
     problems += [
