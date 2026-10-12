@@ -27,9 +27,16 @@ jobs:
         # The floor, the middle and the current release (3.12 is what a contributor hit).
         # A version-specific break in any is a break for somebody, and `requires-python = ">=3.11"` is a promise.
         python: ["3.11", "3.12", "3.13"]
+    env:
+      # Results must not depend on which pythons the runner image happens to ship (a
+      # system python may lack ensurepip or be another patch release): only uv's
+      # managed standalone builds, installed below, are ever used.
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v10.2.0
+      - name: Install the matrix Python (uv-managed)
+        run: uv python install ${{ matrix.python }}
       - name: Lint
         run: |
           uv run --python ${{ matrix.python }} ruff check .
