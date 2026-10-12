@@ -133,15 +133,20 @@ def count_unit(name: str) -> str:
     return next((COUNT_UNITS[key] for n, _knob, key in COUNT_PASSES if n == name), "")
 
 
-def count_at_last_run(st: State, name: str) -> int:
+def count_at_last_run(st: State, name: str, current: int | None = None) -> int:
     """The completion count the LAST `cadence.ran` of `name` recorded. A malformed or
     absent `result` reads as 0 -- treating an unparseable record as "it never ran" errs
-    toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one)."""
+    toward reporting (bug Bb3a7d65b95: `ddflow cadence` raised on one).
+
+    A baseline ABOVE `current` (the count now) was recorded when imported history still
+    counted, so it can never be reached again: it reads as 0, or the pass would stay quiet
+    until the count outgrew a number that included the history."""
     runs = st.cadences.get(name, [])
     try:
-        return int(runs[-1].get("result", "0") or 0) if runs else 0
+        n = int(runs[-1].get("result", "0") or 0) if runs else 0
     except (TypeError, ValueError):
         return 0
+    return 0 if current is not None and n > current else n
 
 
 def period_days(value: Any) -> float | None:
