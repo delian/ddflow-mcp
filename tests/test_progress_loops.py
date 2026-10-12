@@ -304,6 +304,25 @@ def test_a_queue_that_is_advancing_is_not_stalled():
     assert "no_progress" not in kinds(detect(evs, cfg))
 
 
+def test_a_pure_upgrade_run_is_not_a_stall():
+    """B629c361cc9: upgrade bookkeeping is not queue activity, so it must not trip the
+    stall detector (an upgrade completes nothing by design)."""
+    cfg = Config()
+    cfg.loops.no_progress_window = 10
+    evs = [ev(1, "session.note", "s", {})]
+    kinds_ = ["ddflow.seen", "upgrade.applied", "repair.applied", "ddflow.capabilities"]
+    evs += [ev(2 + i, kinds_[i % 4], "upgrade", {}) for i in range(20)]
+    assert "no_progress" not in kinds(detect(evs, cfg))
+
+
+def test_a_real_stall_still_fires_among_upgrade_events():
+    cfg = Config()
+    cfg.loops.no_progress_window = 10
+    evs = [ev(i, "session.note", "s", {}) for i in range(1, 12)]
+    evs.insert(5, ev(50, "upgrade.applied", "upgrade", {}))
+    assert "no_progress" in kinds(detect(evs, cfg))
+
+
 def test_a_short_log_is_never_stalled():
     """A project three events old has not stalled; it has barely started."""
     cfg = Config()
