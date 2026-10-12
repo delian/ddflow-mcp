@@ -107,7 +107,7 @@ from .knowledge import (
     session_start,
     similar,
 )
-from .lanes import lanes
+from .lane_views import lanes, lanes_watch
 from .lifecycle import (
     DEFAULT_CHECK_RECOVERY,
     DEFAULT_NEXT_KIND,
@@ -270,6 +270,7 @@ __all__ = [
     "job_list",
     "job_run",
     "lanes",
+    "lanes_watch",
     "lesson_add",
     "lesson_search",
     "lessons_verify",

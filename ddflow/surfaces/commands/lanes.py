@@ -6,9 +6,9 @@ import argparse
 import sys
 from typing import Any
 
-from ...services.lanes.watch import watch
 from .. import cliexec
 from ..declared.lanes import COMMANDS
+from ..tools._common import _api
 
 CLEAR = "\x1b[H\x1b[2J"
 
@@ -27,4 +27,4 @@ def cmd_lanes(ns: argparse.Namespace, ctx: Any) -> int:
         sys.stdout.flush()
         return code
 
-    return watch(draw, lambda: ctx.log.mark(clock=False), interval_s=interval)
+    return _api().lanes_watch(draw, lambda: ctx.log.mark(clock=False), interval_s=interval)

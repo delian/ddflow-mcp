@@ -11,10 +11,10 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from ...core.outcome import NOTHING
+
 #: Seconds between the cheap "did the log grow" checks inside one interval.
 POLL_S = 1.0
-#: The exit code of a frame with nothing to show: a normal frame in a watch.
-NOTHING = 2
 
 
 def watch(
