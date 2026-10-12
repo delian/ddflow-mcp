@@ -57,9 +57,11 @@ def test_it_closes_a_finished_imported_phase_and_the_nag_stops(repo):
 
     st = _state(repo)
     assert st.items["3"].state == DONE, st.items["3"].state
-    # The evidence is the importer's own: why no gate ran, and where the work came from.
-    assert "completed before ddflow" in st.items["3"].completion_evidence
+    # The evidence says what is KNOWN -- it came from the importer, and its tasks are
+    # settled -- not that the work predates ddflow, which this cannot check (roborev).
+    assert "closed as imported work" in st.items["3"].completion_evidence
     assert "docs/todo.md" in st.items["3"].completion_evidence
+    assert "completed before ddflow" not in st.items["3"].completion_evidence
     assert "finished but still open" not in run_cli(repo, "brief")[1], "the nag is gone"
     # The work under it is untouched: this closes the PHASE, it rewrites no task.
     assert st.items["3.B"].state == DONE
@@ -117,6 +119,20 @@ def test_it_refuses_a_phase_that_is_already_closed(repo):
     code, out, err = run_cli(repo, "phase", "close", "3", "--imported")
 
     assert code == 3 and "already done" in out + err, (out, err)
+
+
+def test_it_refuses_while_a_NESTED_sub_task_is_open(repo):
+    """Open work at ANY depth keeps the phase open: `State.tasks` walks grandchildren too."""
+    _repo(repo)
+    run_cli(repo, "import", "--apply")
+    _as_human(repo, "item.completed", "3.B", {"kind": "task", "evidence": "did it"})
+    _as_human(repo, "task.added", "3.B.1", {"parent": "3.B", "title": "a sub-task"})
+
+    code, out, err = run_cli(repo, "phase", "close", "3", "--imported")
+
+    assert code == 3, (out, err)
+    assert "3.B.1" in out + err, (out, err)
+    assert _state(repo).items["3"].state == OPEN
 
 
 def test_the_mcp_tool_closes_it_too(repo):

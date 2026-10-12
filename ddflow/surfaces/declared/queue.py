@@ -114,6 +114,9 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "imported",
                 type="boolean",
+                # Required on BOTH surfaces: the api refuses without it, so the MCP schema
+                # must not present it as optional (roborev on ab4179fb).
+                tool_required=True,
                 help="Required: this closes work that predates ddflow (recorded as evidence).",
                 cli_help="required: this closes an IMPORTED phase, whose work predates ddflow (the fact becomes the phase's evidence)",
             ),
