@@ -301,10 +301,16 @@ def _title_of(text: str, limit: int = _TITLE_CHARS) -> str:
             continue
         first = text[: m.start()]
         break
-    if len(first) <= limit:
-        return first
-    cut = first.rfind(" ", 0, limit)
-    head = first[: cut if cut > 0 else limit]
+    return _cut_title(first, limit)
+
+
+def _cut_title(text: str, limit: int = _TITLE_CHARS) -> str:
+    """``text`` when it fits, else the longest run of whole words that does, closed with an
+    ellipsis and never ending in an open backtick."""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(" ", 0, limit)
+    head = text[: cut if cut > 0 else limit]
     if head.count("`") % 2:
         head = head[: head.rfind("`")]
     return head.rstrip(" ,;:-\u2014\u2013(") + "\u2026"
@@ -1318,7 +1324,7 @@ def _scan_sections(
                 Found(
                     kind=kind,
                     ident=ident(title, rel),
-                    title=title[:120],
+                    title=_cut_title(title),
                     source=f"{rel}:{line}",
                     body=body[:body_chars],
                     # bandit B610: `extra` is this function's own parameter, not Django's
@@ -1461,7 +1467,7 @@ def scan_lessons(
                 Found(
                     kind="lesson",
                     ident=ident,
-                    title=shown[:120],
+                    title=_cut_title(shown),
                     source=f"{rel}:{line}",
                     body=body[:_LESSON_BODY_CHARS],
                     extra={
@@ -1495,7 +1501,7 @@ def _summary_bullet(lines: list[str], source: str, category: str) -> Found:
     return Found(
         kind="summary",
         ident="",
-        title=(lead.group(1) if lead else text)[:120].rstrip(". "),
+        title=_cut_title((lead.group(1) if lead else text).rstrip(". ")),
         source=source,
         body=text,
         extra={"category": category, "cites": list(dict.fromkeys(cites))},
@@ -1679,7 +1685,7 @@ def scan_decisions(
             Found(
                 kind="decision",
                 ident=f"D-{_slug(path.stem, 32)}",
-                title=title[:140],
+                title=_cut_title(title, 140),
                 source=rel,
                 body=(dm.group(1).strip() if dm else text.strip())[:2000],
                 extra={"status": "superseded" if "supersed" in status else "accepted"},
@@ -1779,7 +1785,7 @@ def scan_optmem(repo: Path, globs: tuple[str, ...] = OPTMEM_GLOBS) -> tuple[list
                     # Numbered by the store, so a re-import after new memories were
                     # added skips the ones already there instead of duplicating them.
                     ident=f"M-{int(num):04d}",
-                    title=text[:120],
+                    title=_cut_title(text),
                     source=f"{rel}:{line_no}",
                     body=text,
                     # The title is an EXCERPT of the body, not a heading above it: a
