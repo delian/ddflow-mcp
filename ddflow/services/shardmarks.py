@@ -15,6 +15,11 @@ reports the shards now holding fewer events than the mark. Nothing is rewritten 
 operator is told where the events may still be, and `accept` (``ddflow doctor
 --accept-lost-events``) records the new counts once they have decided.
 
+A row's branch and shard come from its KEY. An older build keyed a row by the plain shard name
+with a `ref` and no `shard` (B21968d4ea4); `_migrate` folds such a row into its scoped key on
+every read and write, never lowering a mark. What a shard holds is what the working tree holds
+(what the fold reads): uncommitted appends and untracked shards are not a loss.
+
 Known limit: the mark is a count and the last event's id, not the set of ids. A rewrite that
 removes an interior event AND brings in enough new ones to reach the old count with the old
 last event still present, all before any ddflow command looks at the shard, cannot be told
@@ -202,16 +207,49 @@ def _raised(
         out[key] = _mk(shard, scanned, ref)
 
 
+def _migrate(marks: Any) -> dict[str, Any]:
+    """The marks in the one current shape: a row per ``"<ref>\t<shard>"`` key, whose ``ref`` and
+    ``shard`` fields are taken FROM THE KEY (a row that lacks them, or disagrees, is not trusted
+    for them). An older build keyed a row by the plain shard name with a ``ref`` field and no
+    ``shard`` field; read as a row of its branch it named no shard and reported a total loss
+    (B21968d4ea4). Such a row is folded into its scoped key, keeping the higher count (a mark is
+    never lowered; the scoped one wins a tie, and a scoped row already flagged ``shrunk`` stays
+    as it is). A plain row with no ``ref`` names no branch to compare on and a row that is not a mark at all says nothing: both are left as they were."""
+    if not isinstance(marks, dict):
+        return {}
+    out: dict[str, Any] = {}
+    plain: list[tuple[str, dict[str, Any]]] = []
+    for key, row in marks.items():
+        if not (isinstance(key, str) and isinstance(row, dict)):
+            out[key] = row
+        elif "\t" in key:
+            ref, shard = key.split("\t", 1)
+            if ref and shard and _row(marks, key) is not None:
+                out[key] = {**row, "shard": shard, "ref": ref}
+            else:
+                out[key] = row  # not a mark: ignored on read
+        elif isinstance(row.get("ref"), str) and row["ref"] and _row(marks, key) is not None:
+            plain.append((key, row))
+        else:
+            out[key] = row
+    for shard, row in plain:
+        scoped = _key(row["ref"], shard)
+        old = _row(out, scoped)
+        if old is None or (row["count"] > old["count"] and not old.get("shrunk")):
+            out[scoped] = {**row, "shard": shard}
+    return out
+
+
 def _read(store: LocalStore) -> dict[str, Any] | None:
-    """The marks; {} when there are none or the file is torn (started afresh); None when a
-    NEWER ddflow wrote it (left alone: neither compared against nor overwritten)."""
+    """The marks (see `_migrate`); {} when there are none or the file is torn (started afresh);
+    None when a NEWER ddflow wrote it (left alone: neither compared against nor overwritten)."""
     try:
         data = store.read(NAME, schema=MARKS_SCHEMA, default={})
     except StoreUnreadable:
         return {}
     except Exception:
         return None
-    return dict(data) if isinstance(data, dict) else {}
+    return _migrate(data)
 
 
 def _row(marks: dict[str, Any], shard: str) -> dict[str, Any] | None:
@@ -248,7 +286,7 @@ def observe(repo: Any, log: Any) -> None:
             return
 
         def raise_marks(cur: Any) -> dict[str, Any]:
-            out = dict(cur) if isinstance(cur, dict) else {}
+            out = _migrate(cur)
             for name in found:
                 # looked at again HERE, under the marks lock: an append by another process
                 # between the unlocked look above and this write has already raised the mark,
@@ -274,7 +312,7 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
         return  # detached: no branch to compare on
 
     def bump(cur: Any) -> dict[str, Any]:
-        out = dict(cur) if isinstance(cur, dict) else {}
+        out = _migrate(cur)
         row = _row(out, _key(ref, name))
         if (
             row is not None
@@ -339,7 +377,7 @@ def accept(repo: Any, log: Any) -> list[Lost]:
     done: set[str] = set()
 
     def lower(cur: Any) -> dict[str, Any]:
-        out = dict(cur) if isinstance(cur, dict) else {}
+        out = _migrate(cur)
         for g in gone:
             p = present.get(g.shard)
             scanned = _scan(p) if p is not None else (0, "", 0)
