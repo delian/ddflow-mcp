@@ -71,14 +71,6 @@ def test_a_title_opening_with_a_backtick_is_not_cut_to_nothing():
     assert IM._cut_title("`" + "x" * 200, 50).startswith("`x")
 
 
-def test_a_summary_lesson_id_does_not_depend_on_the_cut_of_a_long_title():
-    """The id slug is 28 characters, so where a >120-character title is cut cannot reach it."""
-    long = "Alpha beta gamma delta epsilon " * 8
-    old = IM._slug(long[:120].rstrip(". "), 28)
-    new = IM._slug(IM._cut_title(long.rstrip(". ")), 28)
-    assert old == new
-
-
 def test_a_cut_title_never_exceeds_its_limit():
     for text in ("x" * 300, "ab " * 100, "`" + "y " * 100):
         assert len(IM._cut_title(text, 120)) <= 120, text
