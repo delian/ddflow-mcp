@@ -28,10 +28,11 @@ quarter, so 9 and 10 are deferred; (b) token and turn budgets; (c) yes, `B-rm-ch
 `B-af-headroom` and `B-sub-metrics` consume `B-gap-metrics` (re-pointed, done: each lists it
 as a dependency); (d) the do-not-build list is accepted.
 
-**Do not build:** a web UI or TUI beyond `lanes --watch`, a process-spawning supervisor
-daemon, a merge-queue service, ML test selection, bidirectional Jira or Linear sync, RBAC,
-LLM-based decomposition inside ddflow, push notifications, a template marketplace, sandboxing,
-a second search stack.
+**Do not build** (the list D-gap-defaults accepted): a web UI or TUI beyond `lanes --watch`, a
+process-spawning supervisor daemon, a merge-queue service, ML test selection, bidirectional
+Jira or Linear sync, RBAC, LLM-based decomposition inside ddflow, push notifications, a
+template marketplace, sandboxing, a second search stack. The question text of this task also
+named a hosted dashboard; it is covered by the first item (no web UI) and is not built either.
 
 ## Order in the queue
 
