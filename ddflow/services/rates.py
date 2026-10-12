@@ -181,7 +181,7 @@ def cadence_rates(state: State, cfg: Config) -> list[CadenceRate]:
             p.count,
             len(state.cadences.get(p.name, [])),
             # What `count_due` reads, so due-ness and this rate cannot disagree.
-            count_at_last_run(state, p.name),
+            count_at_last_run(state, p.name, p.count),
         )
         for p in count_passes(state, cfg)
     ]

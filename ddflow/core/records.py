@@ -879,6 +879,9 @@ class State:
     #: `ci.result`: the last CI_RESULTS_KEPT outcomes of the CI command, oldest first.
     ci_results: list[dict[str, Any]] = field(default_factory=list)
     items: dict[str, Item] = field(default_factory=dict)
+    #: ids whose LATEST completion was an import's (`item.completed` with `imported`):
+    #: finished before ddflow existed, so no count-based cadence pass measures them.
+    imported_done: set[str] = field(default_factory=set)
     bugs: dict[str, Bug] = field(default_factory=dict)
     lessons: dict[str, Lesson] = field(default_factory=dict)
     research: dict[str, ResearchNote] = field(default_factory=dict)

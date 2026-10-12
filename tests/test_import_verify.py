@@ -542,3 +542,26 @@ def test_an_empty_source_is_a_finding_once_not_a_finding_AND_a_note(repo):
     _code, data = _verify(repo)
     assert any("yielded nothing" in f for f in data["findings"])
     assert not any("yielded" in n.lower() for n in data["notes"]), data["notes"]
+
+
+def test_imported_completions_are_not_counted_by_the_cadence_passes(repo):
+    """Bug cadence-counts-imported-history, driven through the REAL importer: a task the
+    import closed is history, not work since the last pass. Fails against the unfixed count."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import schedule as SV
+
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "todo.md").write_text(
+        "## P\n\n- [x] **P.1** — done long ago\n- [ ] **P.2** — open\n  **Needs:** P.1\n"
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "h"], check=True, capture_output=True)
+    run_cli(repo, "init")
+    assert run_cli(repo, "import", "--apply")[0] == OK
+    _code, out, _ = run_cli(repo, "--json", "show", "P.1")
+    assert json.loads(out)["state"] == "done"
+    st = fold(EventLog(repo).read_all())
+    # Positive control: the import really did close a task, so (0, 0) is the exclusion at work.
+    assert any(i.state == "done" for i in st.items.values())
+    assert SV.done_counts(st) == (0, 0)
