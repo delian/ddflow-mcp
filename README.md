@@ -1937,7 +1937,7 @@ Four guard rails, each of which exists because the alternative is silent:
   them, because a queue of empty phases is not a smaller import, it is a misleading one.
 - **Readable ids.** A phase or task id made from a heading is cut at a WHOLE WORD, never inside
   one, at `[importer] phase_slug_chars` (default 32) and `task_slug_chars` (default 40; at least
-  8 each; a single word longer than the limit is kept whole): `Phase 106C tool-rl multi-agent run` gives `PHASE-106C-TOOL-RL-MULTI-AGENT`, where
+  8 each; only a first word longer than the limit is kept whole; a later word that does not fit is dropped): `Phase 106C tool-rl multi-agent run` gives `PHASE-106C-TOOL-RL-MULTI-AGENT`, where
   it used to give `PHASE-106C-TOOLRL-MULTI`. A heading that declares its own id keeps it, and a
   re-import recognises the older truncated ids (`legacy_ident`), so nothing is minted twice. Set
   the two knobs BEFORE the first import: a re-import under different values derives different
