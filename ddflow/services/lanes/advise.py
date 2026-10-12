@@ -63,10 +63,11 @@ def _stalls(lanes: Sequence[Lane]) -> list[Move]:
 
 
 def _idle(lanes: Sequence[Lane]) -> list[Move]:
-    ready = next((ln.ready for ln in lanes if ln.state == S.IDLE_READY), ())
-    names = tuple(ln.name for ln in lanes if ln.state == S.IDLE_READY)
+    idle = [ln for ln in lanes if ln.state == S.IDLE_READY]
+    names = tuple(ln.name for ln in idle)
     if not names:
         return []
+    ready = tuple(dict.fromkeys(i for ln in idle for i in ln.ready))  # union, in order
     shown = ", ".join(ready[:5])
     return [
         Move(

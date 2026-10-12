@@ -24,9 +24,12 @@ def held_state(*, age_s: float, stale_after_s: float, lapsed: bool, session_ende
     """The state of a lane that holds a lease on an unfinished item.
 
     ``age_s`` is the time since its last heartbeat, ``lapsed`` whether the lease is past
-    its TTL and grace (or its expiry is recorded). Stale means "no heartbeat for
-    ``stale_after_s`` but the lease still holds"; a lapsed lease is a stop.
+    its TTL and grace (or its expiry is recorded) and ``session_ended`` whether the lane's
+    session ended after its last heartbeat. Stale means "no heartbeat for ``stale_after_s``
+    but the lease still holds"; an ended session or a lapsed lease is a stop.
     """
+    if session_ended:
+        return STOPPED_ENDED
     if lapsed:
-        return STOPPED_ENDED if session_ended else STOPPED_UNKNOWN
-    return STALE if age_s > stale_after_s else WORKING
+        return STOPPED_UNKNOWN
+    return STALE if age_s >= stale_after_s else WORKING
