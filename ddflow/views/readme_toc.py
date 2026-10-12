@@ -15,6 +15,7 @@ import re
 import sys
 from pathlib import Path
 
+from ..core.slug import github_anchor
 from .readme_region import Region
 
 REGION = "README/toc"
@@ -27,11 +28,9 @@ _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 def slug(title: str) -> str:
-    """GitHub's anchor for a heading: lower case, markup and punctuation dropped, spaces
-    hyphenated. A repeated title gets a numeric suffix from `anchors`."""
-    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", title)  # a link keeps its text
-    text = text.replace("`", "").lower()
-    return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
+    """GitHub's anchor for a heading (core.slug.github_anchor); a repeated title gets a
+    numeric suffix from `anchors`."""
+    return github_anchor(title)
 
 
 def headings(readme: str, pattern: re.Pattern[str] = _HEADING) -> list[tuple[int, str]]:
