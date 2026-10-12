@@ -919,7 +919,7 @@ def _box_disposition(
     if inherited and inherited[0]:
         return inherited
     if archived:
-        return "hold", "in an archive file (release its phase to drive it)"
+        return "hold", "in an archive file (`ddflow unblock <phase id>` releases a whole phase)"
     return "", ""
 
 

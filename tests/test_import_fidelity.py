@@ -224,6 +224,20 @@ def test_an_archive_files_open_work_is_held_and_releasable_by_phase(repo):
     assert st.items["159.A.1"].state == OPEN and st.items["159.A.2"].state == OPEN
 
 
+def test_the_archive_hold_reason_names_a_command_that_exists(repo):
+    """Bug imp-archive-hold-advice: the reason said 'release its phase', and no command is
+    called that. `ddflow unblock <phase>` is the real one (it releases the subtree), so the
+    reason must say so -- and following it must work. Fails against the old wording."""
+    _write(repo, "docs/todo.md", "## Legacy\n\n### 159.A — old\n\n- [ ] **159.A.1** — one\n")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[importer]\narchive_globs = ["docs/todo.md"]\n')
+    assert run_cli(repo, "import", "--apply")[0] == OK
+    reason = _state(repo).items["159.A.1"].blocked_reason
+    assert "release its phase" not in reason
+    assert "ddflow unblock <phase" in reason, reason
+    assert run_cli(repo, "unblock", "159.A")[0] == OK  # the advice works as written
+
+
 # -- lessons at the level they actually live at ----------------------------------------------
 
 NESTED_LESSONS = """# Lessons
