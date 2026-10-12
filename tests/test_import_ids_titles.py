@@ -177,3 +177,5 @@ def test_slug_length_knobs_refuse_values_below_the_minimum():
         assert check(8) == ""
     # The minimum only keeps ids from degenerating; a word is never cut at ANY length.
     assert slug_words("supercalifragilistic word", 8) == "supercalifragilistic"
+    # ...but only a FIRST word is kept whole: a later word that does not fit is dropped.
+    assert slug_words("Go supercalifragilistic", 8) == "go"
