@@ -51,3 +51,19 @@ def test_a_proposal_is_in_every_brief_and_in_doctor_until_the_project_catches_up
     _log, _cfg, caught_up = _load(old, "starter")
     assert US.take_for_brief(old, caught_up) == ""
     assert US.doctor_notes(old, caught_up) == []
+
+
+def test_a_hook_only_path_repeats_the_notice_and_a_read_only_store_does_not_raise(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No MCP start report exists here: the one-line notice itself must repeat."""
+    run_cli(old, "config", "upgrade.on_start", "off")
+    first = run_cli(old, "hooks", "session-start")[1]
+    second = run_cli(old, "hooks", "session-start")[1]
+    assert "Upgraded ddflow" in first and "Upgraded ddflow" in second
+
+    def boom(*a: object, **k: object) -> None:
+        raise OSError("read-only store")
+
+    monkeypatch.setattr(US, "_remember", boom)
+    US.keep_notice(old, "Upgraded ddflow x -> y")  # never raises
