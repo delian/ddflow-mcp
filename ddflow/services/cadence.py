@@ -39,7 +39,7 @@ def count_due(st, cfg, *, replaced: set[str] = frozenset()) -> list[dict[str, An
             # The calendar entry of the same name REPLACES this pass; without the skip
             # it would also fall due by completions, reported twice under one name.
             continue
-        since = p.count - count_at_last_run(st, p.name)
+        since = p.count - count_at_last_run(st, p.name, p.count)
         if p.every > 0 and since >= p.every:
             due.append({"cadence": p.name, "since": since, "every": p.every, "unit": p.unit})
     return due

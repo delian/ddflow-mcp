@@ -562,4 +562,6 @@ def test_imported_completions_are_not_counted_by_the_cadence_passes(repo):
     _code, out, _ = run_cli(repo, "--json", "show", "P.1")
     assert json.loads(out)["state"] == "done"
     st = fold(EventLog(repo).read_all())
+    # Positive control: the import really did close a task, so (0, 0) is the exclusion at work.
+    assert any(i.state == "done" for i in st.items.values())
     assert SV.done_counts(st) == (0, 0)

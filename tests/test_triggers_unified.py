@@ -47,7 +47,7 @@ def _oracle_count_due(st, cfg, replaced=frozenset()):
             continue
         runs = st.cadences.get(name, [])
         at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
-        since = count - at_last
+        since = count - (0 if at_last > count else at_last)  # a baseline above the count is stale
         if every > 0 and since >= every:
             due.append({"cadence": name, "since": since, "every": every, "unit": unit})
     return due
@@ -304,3 +304,14 @@ def test_imported_completions_do_not_count_towards_a_cadence_pass():
     cfg = Config()
     cfg.cadence.architecture_review_every_phases = 2
     assert "architecture_review" not in {d["cadence"] for d in CA.count_due(st, cfg)}
+
+
+def test_a_baseline_above_the_count_reads_as_zero():
+    """A pass recorded `--ran` while imported history still counted (480) has a baseline the
+    count can no longer reach; it must not silence the pass until 480 MORE phases pass."""
+    st = _state(0, 3, {"architecture_review": "480"})
+    assert SV.count_at_last_run(st, "architecture_review", 3) == 0
+    assert SV.count_at_last_run(st, "architecture_review") == 480
+    cfg = Config()
+    cfg.cadence.architecture_review_every_phases = 2
+    assert "architecture_review" in {d["cadence"] for d in CA.count_due(st, cfg)}
