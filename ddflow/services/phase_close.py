@@ -77,9 +77,12 @@ def close_imported(log: Any, st: State, phase_id: str, *, agent: str = "") -> O.
             id=phase_id,
         )
     done = sum(1 for t in tasks if t.state == "done")
+    # What is KNOWN, not what is assumed: the phase came from the importer, and every task
+    # under it is settled. "completed before ddflow" would claim something this cannot
+    # check -- a task may have been finished HERE afterwards (roborev on ab4179fb).
     evidence = (
-        f"completed before ddflow (imported from {it.source}); "
-        f"every one of the {len(tasks)} task(s) under it is done or abandoned "
+        f"closed as imported work (imported from {it.source}); every one of the "
+        f"{len(tasks)} task(s) under it is done or abandoned "
         f"({done} done, {len(tasks) - done} abandoned)"
     )
     # The importer's exact event: `imported` marks the authority, `evidence` is what a

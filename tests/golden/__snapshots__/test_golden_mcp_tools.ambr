@@ -1992,7 +1992,8 @@
          }
         },
         "required": [
-         "id"
+         "id",
+         "imported"
         ],
         "additionalProperties": false
        }
