@@ -110,6 +110,24 @@ def test_the_package_declares_only_the_dependencies_we_chose(wheel):
     )
 
 
+def _clean_venv(path, wheel):
+    """A clean venv with the wheel installed, built by uv rather than `python -m venv`.
+
+    `python -m venv` needs the interpreter's ensurepip, which Debian/Ubuntu split into
+    python3X-venv: the same tests failed on such a host and passed in an image that
+    happened to ship it. uv creates the venv itself (`--seed` adds bin/pip) from
+    whichever interpreter runs the suite, so the result does not depend on that.
+    """
+    subprocess.run(
+        ["uv", "venv", "--quiet", "--seed", "--python", sys.executable, str(path)],
+        check=True,
+        timeout=300,
+    )
+    subprocess.run(
+        [str(path / "bin" / "pip"), "-q", "install", str(wheel)], check=True, timeout=600
+    )
+
+
 def test_the_declared_dependency_is_actually_installed_by_the_wheel(wheel, tmp_path):
     """The reason the dependency exists, proven rather than assumed.
 
@@ -119,10 +137,7 @@ def test_the_declared_dependency_is_actually_installed_by_the_wheel(wheel, tmp_p
     used the fallback, on the same commit, with different results.
     """
     venv = tmp_path / "depvenv"
-    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, timeout=300)
-    subprocess.run(
-        [str(venv / "bin" / "pip"), "-q", "install", str(wheel)], check=True, timeout=600
-    )
+    _clean_venv(venv, wheel)
     got = subprocess.run(
         [
             str(venv / "bin" / "python"),
@@ -141,9 +156,7 @@ def test_the_declared_dependency_is_actually_installed_by_the_wheel(wheel, tmp_p
 def test_installed_adopt_works_end_to_end(wheel, tmp_path):
     """Install the wheel into a clean venv and adopt a fresh repo — the real path."""
     venv = tmp_path / "venv"
-    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, timeout=300)
-    pip = venv / "bin" / "pip"
-    subprocess.run([str(pip), "-q", "install", str(wheel)], check=True, timeout=600)
+    _clean_venv(venv, wheel)
 
     repo = tmp_path / "proj"
     repo.mkdir()
@@ -170,10 +183,7 @@ def test_installed_adopt_works_end_to_end(wheel, tmp_path):
 
 def test_installed_mcp_server_completes_a_handshake(wheel, tmp_path):
     venv = tmp_path / "venv2"
-    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, timeout=300)
-    subprocess.run(
-        [str(venv / "bin" / "pip"), "-q", "install", str(wheel)], check=True, timeout=600
-    )
+    _clean_venv(venv, wheel)
     repo = tmp_path / "p2"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)

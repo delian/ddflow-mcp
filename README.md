@@ -1163,6 +1163,11 @@ following them: about a minute on a 192-thread machine. The scenarios take CI's
 no-model-server path (`DDFLOW_DEMO_NO_REVIEWER=1`), since a real review there costs
 minutes and is not what CI checks.
 
+CI's `tests` job runs each matrix Python (3.11, 3.12, 3.13) as a uv-managed standalone
+build (`uv python install` plus `UV_PYTHON_PREFERENCE=only-managed`), never the runner's
+system Python. To reproduce locally: `uv python install 3.12` and run
+`UV_PYTHON_PREFERENCE=only-managed uv run --python 3.12 pytest tests/`.
+
 It is a push hook, not a commit hook, because ddflow's own hooks own the commit (`ddflow
 hooks install`), and because minutes per commit teaches `--no-verify`. `SKIP=tests git
 push` skips one check by id. It does not run the 3.11/3.13 matrix, CodeQL, pip-audit or
