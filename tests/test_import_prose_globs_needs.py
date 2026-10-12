@@ -30,6 +30,8 @@ TODO = (
     "  **Needs:** OPIK.3\n"
     "- [ ] **OPIK.19** The parser is not finished, needs OPIK.3 for the schema; `and/or` too.\n"
     "- [ ] **OPIK.20** Needs not only OPIK.3 but OPIK.10; it doesn't require OPIK.9.\n"
+    "- [ ] **OPIK.21** It does not currently require OPIK.3, see `github.com/org/repo`.\n"
+    "- [ ] **OPIK.22** Requires nothing but OPIK.3.\n"
     "- [ ] **OPIK.10** Declared wins. `src/ignored.py`\n"
     "  **Globs:** src/declared/**\n"
 )
@@ -97,3 +99,9 @@ def test_an_unrelated_negation_does_not_hide_a_need_and_prose_slashes_are_no_glo
     t = _found(repo)
     assert t["OPIK.19"].needs == ["OPIK.3"] and t["OPIK.19"].globs == []
     assert t["OPIK.20"].needs == ["OPIK.3", "OPIK.10"]
+
+
+def test_negation_with_a_word_between_and_nothing_but_and_hosts(repo):
+    t = _found(repo)
+    assert t["OPIK.21"].needs == [] and t["OPIK.21"].globs == []
+    assert t["OPIK.22"].needs == ["OPIK.3"]
