@@ -178,6 +178,33 @@ def test_a_partial_apply_leaves_the_rest_of_the_plan(old: Path) -> None:
     assert final["categories"]["config"] == []
 
 
+def test_a_partial_apply_does_not_present_its_marker_as_a_version(
+    old: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B439c42848f: mid-upgrade the stamp read `0.0.0`, which reads like a real release.
+
+    An unstamped project that is only partly upgraded still predates stamps. `--check` said
+    so before the apply and `--plan` must keep saying the same after it, not "last worked
+    under 0.0.0" -- while the marker must still stop the plan calling its leftover items
+    done (the fallback to the stamp this very write adds is what the marker prevents).
+    """
+    monkeypatch.setenv("DDFLOW_NO_UPDATE_CHECK", "1")  # the check must not reach the index
+    assert plan(old)["project_version"] == ""
+    go(old, "hooks")  # a partial apply: the config items are still pending
+
+    after = plan(old)
+    assert after["project_version"] == "", after["project_version"]
+    assert after["categories"]["config"], "the partial apply must leave work pending"
+    text = UP.render(after)
+    assert "0.0.0" not in text, text
+    assert "a version before stamps" in text, text
+
+    # The other surface, built from the same project_version: the two must not disagree.
+    _code, check, _err = run_cli(old, "upgrade", "--check")
+    assert "0.0.0" not in check, check
+    assert "predates version stamps" in check, check
+
+
 def test_a_refused_config_item_keeps_the_version_where_it_was(old: Path) -> None:
     out = go(old, "all")
 

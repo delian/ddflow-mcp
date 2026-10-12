@@ -71,6 +71,22 @@ _SHOWN = 8  #: findings quoted per repair in the text
 _FILES_SHOWN = 3  #: files named in an "unchecked" note
 
 
+#: What a PARTIAL apply records as the version a project with no stamp reached: older than
+#: every release, so the manifest's changes are all still news (an empty `to` would fall back
+#: to the stamp this very write adds, and the plan would call them done).
+#:
+#: It is a MARKER, not a version. `version_key` parses it happily, so a surface trusting
+#: `version_key` alone printed "last worked under 0.0.0" for a project that merely predates
+#: stamps -- while `--check` said "(none: predates version stamps)" for the same project
+#: (B439c42848f). `is_stamp` is the ONE place that says a marker is not a version.
+UNSTAMPED = "0.0.0"
+
+
+def is_stamp(version: str) -> bool:
+    """Is ``version`` a real recorded release? The UNSTAMPED marker is not one."""
+    return bool(version_key(version)) and version != UNSTAMPED
+
+
 def project_version(st: State, has_history: bool, running: str) -> str:
     """The release this project was last brought up to: the target of the last applied
     upgrade, else the OLDEST version that ever wrote to its log, else the running one when
@@ -78,8 +94,15 @@ def project_version(st: State, has_history: bool, running: str) -> str:
     since the manifest's base is news to it)."""
     if st.upgrades:
         last = str(st.upgrades[-1].get("to", ""))
-        if version_key(last):
+        if is_stamp(last):
             return last
+        if last == UNSTAMPED:
+            # A partial apply that had no stamp to keep: the project predates stamps. NOT
+            # falling through, because the scan below would pick up the stamp THIS very
+            # write added and report the project as up to date -- the fallback the marker
+            # exists to prevent. "Predates stamps" is also what `--check` already said
+            # before the apply, which is the consistency B439c42848f is about.
+            return ""
     seen = sorted(st.ddflow_versions, key=lambda v: (version_key(v), v))
     if seen:
         return seen[0]
