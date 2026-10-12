@@ -17,6 +17,7 @@ from ..declared import export as _export
 from ..declared import flow as _flow
 from ..declared import hooks as _hooks
 from ..declared import knowledge as _knowledge
+from ..declared import lanes as _lanes
 from ..declared import lifecycle as _lifecycle
 from ..declared import memory as _memory
 from ..declared import queue as _queue
@@ -37,7 +38,7 @@ DECLARED = by_tool(
         f.COMMANDS
         for f in (
             _knowledge, _records, _queue, _lifecycle, _rules, _review, _setup, _reporting,
-            _hooks, _flow, _memory, _export, _cadence,
+            _hooks, _flow, _memory, _export, _cadence, _lanes,
         )
     )
 )  # fmt: skip

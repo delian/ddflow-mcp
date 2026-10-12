@@ -741,7 +741,7 @@
   usage: ddflow help [-h] [topic]
   
   positional arguments:
-    topic       one of: cli, config, customise, export, gates, import, mcp, memory, parallel,
+    topic       one of: cli, config, customise, export, gates, import, lanes, mcp, memory, parallel,
                 recovery, upgrade, verify, workflow. Omit for the overview.
   
   options:
@@ -989,6 +989,20 @@
   
   options:
     -h, --help          show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow lanes]
+  '''
+  usage: ddflow lanes [-h] [--watch] [{state,brief,advise}] [lane]
+  
+  positional arguments:
+    {state,brief,advise}  state (default), brief <lane> or advise
+    lane                  with brief: the lane name, or a unique part of it
+  
+  options:
+    -h, --help            show this help message and exit
+    --watch               redraw when the log changes or every [lanes] watch_interval_s
   
   '''
 # ---
@@ -2400,13 +2414,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add a phase
       task                add a task
@@ -2472,6 +2486,7 @@
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
+      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
       reviewers           find, list and test cross-family reviewers
       review              run the configured reviewer(s) over an item's diff
       adopt               install ddflow into this project for one or more agents
@@ -2576,6 +2591,7 @@
     'ddflow job end',
     'ddflow job list',
     'ddflow job run',
+    'ddflow lanes',
     'ddflow lesson',
     'ddflow lesson add',
     'ddflow lesson list',

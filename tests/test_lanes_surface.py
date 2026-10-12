@@ -1,0 +1,135 @@
+"""`ddflow lanes` as the operator and an agent meet it: one declaration, no spawn, no daemon."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from conftest import run_cli
+from helpers import rpc_call, tool_json
+
+from ddflow import api
+from ddflow.infra import proc
+from ddflow.services.lanes import watch
+from ddflow.surfaces.mcp import TOOLS, Server
+from ddflow.surfaces.tools.tiers import tier_tools
+
+
+@pytest.fixture
+def busy(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "X", "--globs", "f.py")
+    run_cli(repo, "task", "add", "Y", "--globs", "f.py")
+    assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
+    return repo
+
+
+def test_lists_the_real_lane_with_its_item_and_state(busy):
+    code, out, _ = run_cli(busy, "lanes", agent="reader")
+    assert code == 0 and "holder" in out and "working" in out and " X " in out
+
+
+def test_cli_json_and_the_mcp_tool_are_one_declaration(busy):
+    _, out, _ = run_cli(busy, "lanes", "--json")
+    cli = json.loads(out)
+    mcp = tool_json(rpc_call(Server(busy), "ddflow_lanes"))
+    pick = lambda body: [(ln["name"], ln["item"], ln["state"]) for ln in body["lanes"]]  # noqa: E731
+    assert pick(cli) == pick(mcp) == [("holder", "X", "working")]
+    assert set(cli) == set(mcp)
+
+
+def test_advise_over_mcp_names_the_blocker(busy):
+    run_cli(busy, "claim", "Q", agent="x")  # no such item: a refusal, writes nothing
+    body = tool_json(rpc_call(Server(busy), "ddflow_lanes", view="advise"))
+    assert body["view"] == "advise" and isinstance(body["moves"], list)
+
+
+def test_brief_of_an_unknown_lane_fails_and_names_the_lanes(busy):
+    code, _, err = run_cli(busy, "lanes", "brief", "nobody")
+    assert code == 1 and "holder" in err
+
+
+def test_brief_is_the_whole_first_prompt(busy):
+    code, out, _ = run_cli(busy, "lanes", "brief", "holder")
+    assert code == 0 and out.startswith("# Lane brief: holder") and "## Next" in out
+
+
+def test_no_lanes_in_the_window_is_exit_two(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, "lanes")[0] == 2
+
+
+def test_it_spawns_nothing_and_starts_no_thread(busy, monkeypatch):
+    """Once the project is loaded (identity resolution asks git where the tree is, as every
+    command does), the ledger, the advice and the brief start no process and no thread."""
+    api_lanes = sys.modules["ddflow.api.lanes"]  # the package re-exports the function
+
+    real_load = api_lanes._load
+
+    def boom(*a, **k):
+        raise AssertionError("lanes spawned a process")
+
+    targets = [(proc, n) for n in ("run", "popen", "capture", "spawn_stdio", "spawn_shell")]
+    targets += [(subprocess, n) for n in ("Popen", "run", "check_output", "call")]
+    originals = [(mod, n, getattr(mod, n)) for mod, n in targets]
+
+    def load_then_forbid(*a, **k):
+        for mod, n, fn in originals:  # the load of a later call may ask git again
+            setattr(mod, n, fn)
+        loaded = real_load(*a, **k)
+        for mod, n, _fn in originals:
+            setattr(mod, n, boom)
+        return loaded
+
+    monkeypatch.setattr(api_lanes, "_load", load_then_forbid)
+    before = threading.active_count()
+    try:
+        for view in ("state", "advise", "brief"):
+            out = api.lanes(busy, view=view, lane="holder")
+            assert out.exit in (0, 2), out.reason
+    finally:
+        for mod, n, fn in originals:
+            setattr(mod, n, fn)
+    assert threading.active_count() == before
+
+
+def test_lanes_writes_no_event(busy):
+    shards = {p: p.stat().st_size for p in (busy / ".ddflow" / "events").glob("*.jsonl")}
+    api.lanes(busy, view="advise")
+    assert shards == {p: p.stat().st_size for p in (busy / ".ddflow" / "events").glob("*.jsonl")}
+
+
+def test_the_tool_is_full_tier_only():
+    assert "ddflow_lanes" in TOOLS
+    assert "ddflow_lanes" in tier_tools("all")
+    assert "ddflow_lanes" not in tier_tools("standard")
+
+
+def test_watch_redraws_when_the_log_changes_and_stops_on_interrupt():
+    marks = iter([1, 1, 2, 2, 2])
+    drawn: list[int] = []
+    slept: list[float] = []
+    ticks = iter(range(0, 1000))
+    code = watch(
+        lambda: drawn.append(1),
+        lambda: next(marks),
+        interval_s=60,
+        sleep=slept.append,
+        clock=lambda: float(next(ticks)),
+        frames=2,
+    )
+    assert code == 0 and len(drawn) == 2 and slept  # the change woke it before 60 s
+
+
+def test_watch_ends_quietly_on_ctrl_c():
+    def interrupt():
+        raise KeyboardInterrupt
+
+    assert watch(interrupt, lambda: 0, interval_s=5) == 0
