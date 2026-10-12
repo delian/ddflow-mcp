@@ -120,4 +120,5 @@ TOOL_ORDER: tuple[str, ...] = (
     "ddflow_rule_remove",
     "ddflow_rule_sync",
     "ddflow_rule_show",
+    "ddflow_lanes",
 )

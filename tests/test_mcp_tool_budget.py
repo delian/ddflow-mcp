@@ -32,7 +32,9 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # 96_000 (raised, B-upgrade.9-self-upgrade): ddflow_upgrade gains `self` and `to` (~0.2 KB): the
 # MCP face of `ddflow upgrade --self`, with consent carried by the existing confirm/reason; the list
 # measures 95,987 with them.
-TOOLS_LIST_BUDGET = 96_000
+# 96_700 (raised, B-gap-lanes): ddflow_lanes is the MCP face of `ddflow lanes` (~0.67 KB: one
+# tool, three arguments, a short description); the list measures 96,654 with it.
+TOOLS_LIST_BUDGET = 96_700
 SHARED_DESCRIPTION_MAX = 200
 
 

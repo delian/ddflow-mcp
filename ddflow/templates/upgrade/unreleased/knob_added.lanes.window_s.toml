@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.window_s"
+new = "86400"
+why = "How far back a lane's last event may be for ddflow lanes to list it; older agents are history."
+impact = "additive"

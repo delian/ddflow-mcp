@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.brief_text_chars"
+new = "1200"
+why = "Characters kept of each text a lane brief quotes."
+impact = "additive"

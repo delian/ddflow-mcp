@@ -2336,5 +2336,43 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_lanes": {
+  "command": "lanes",
+  "schema": "lanes@1",
+  "shape": "object",
+  "payload": [
+   "view",
+   "now",
+   "lanes",
+   "lane",
+   "brief",
+   "moves",
+   "limit",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "lanes@1"
+    },
+    "view": {},
+    "now": {},
+    "lanes": {},
+    "lane": {},
+    "brief": {},
+    "moves": {},
+    "limit": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }

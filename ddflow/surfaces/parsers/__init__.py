@@ -11,6 +11,7 @@ from . import (
     flow,
     jobs,
     knowledge,
+    lanes,
     lifecycle,
     maintenance,
     queue,
@@ -32,6 +33,7 @@ REGISTER_ORDER = (
     records.register,
     reporting.register,
     maintenance.register,
+    lanes.register,
     review.register,
     workflow.register,
 )
