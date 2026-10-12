@@ -295,7 +295,7 @@ def _title_of(text: str, limit: int = _TITLE_CHARS) -> str:
     for m in _SENTENCE_END.finditer(text):
         word = text[: m.start()].rsplit(" ", 1)[-1]
         # `39.` / `A.` / `e.g.` open a sentence, they do not end one.
-        if re.fullmatch(r"[\d.]+|[A-Za-z]|(?:[A-Za-z]\.){2,}", word):
+        if re.fullmatch(r"[\d.]+|[A-Za-z]\.|(?:[A-Za-z]\.){2,}", word):
             continue
         first = text[: m.start()]
         break
