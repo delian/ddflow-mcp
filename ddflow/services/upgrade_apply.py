@@ -185,7 +185,8 @@ def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> 
         # confirming accepts the new default; the operator's pin wins, so nothing is written
         return ACKNOWLEDGED, (
             f"{key}: default changed {_short(item['old'])} -> {_short(item['new'])}; "
-            f"kept this project's value {_short(UP._current(cfg, key))} ({src})"
+            f"kept this project's value {_short(UP._current(cfg, key))} ({src}); "
+            f"to adopt the new default: ddflow config --set {key} {_short(item['new'])}"
         )
     return ACKNOWLEDGED, (
         f"{key}: the new default applies on its own"
