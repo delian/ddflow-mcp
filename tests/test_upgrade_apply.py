@@ -115,7 +115,7 @@ def test_a_second_apply_is_a_no_op_that_writes_nothing(old: Path) -> None:
     assert len(upgrades(old)) == 1
 
 
-def test_an_operator_set_knob_is_refused_without_confirm_and_applied_with_it(old: Path) -> None:
+def test_an_operator_set_knob_is_refused_without_confirm_and_kept_with_it(old: Path) -> None:
     key = "worktree.max_parallel"
     item = next(i for i in plan(old)["categories"]["config"] if i["key"] == key)
     assert item["action"] == UP.OPERATOR
@@ -135,8 +135,9 @@ def test_an_operator_set_knob_is_refused_without_confirm_and_applied_with_it(old
 
     ok = go(old, "config", confirm={key: "the new default fits"})
 
-    assert any(r["key"] == key and r["status"] == "applied" for r in ok["results"]), ok["text"]
-    assert Config.load(old).worktree.max_parallel == item["new"]
+    # confirming accepts the change; the operator's pinned value stays (Bc7a97b0e2c)
+    assert any(r["key"] == key and r["status"] == "acknowledged" for r in ok["results"]), ok["text"]
+    assert Config.load(old).worktree.max_parallel == item["old"]
     assert upgrades(old)[-1]["categories"] == ["config"]
     assert not any(i["key"] == key for i in plan(old)["categories"]["config"])
 
@@ -922,7 +923,7 @@ def test_config_changes_operator_with_a_confirm_applies_it(old: Path) -> None:
     )
 
     assert "[acknowledged] knob_changed:worktree.root" in out
-    assert "[applied] knob_changed:worktree.max_parallel" in out
+    assert "[acknowledged] knob_changed:worktree.max_parallel" in out
     assert "[refused] knob_changed:worktree.root" not in out
     assert "[refused] knob_changed:worktree.max_parallel" not in out
     assert code == 0, out
@@ -1001,3 +1002,32 @@ def test_one_policy_serves_the_plan_and_the_apply(old: Path) -> None:
     # makes it wait for --confirm, so a second policy source in apply() would fail here
     assert plan_action == UP.AGENT
     assert any(r["key"] == "worktree.root" and r["status"] == "refused" for r in out["results"])
+
+
+def test_confirming_a_pinned_knob_keeps_the_pin_instead_of_adopting_the_new_default(
+    old: Path,
+) -> None:
+    """Bc7a97b0e2c: `--confirm KEY` on a knob the project pins overwrote the pin."""
+    key = "worktree.max_parallel"
+    item = next(i for i in plan(old)["categories"]["config"] if i["key"] == key)
+    pinned = Config.load(old).worktree.max_parallel
+    assert item["set_by"] and pinned != item["new"]
+    text = (old / ".ddflow" / "config.toml").read_text()
+
+    out = go(old, "config", confirm={key: "keep my pin"})
+
+    row = next(r for r in out["results"] if r["key"] == key)
+    assert row["status"] == "acknowledged" and "kept" in row["detail"]
+    assert f"ddflow config --set {key} {item['new']}" in row["detail"]
+    assert "keeps this project's value" in item["fix"]
+    assert Config.load(old).worktree.max_parallel == pinned
+    assert (old / ".ddflow" / "config.toml").read_text() == text
+
+
+def test_the_adopt_command_for_a_pinned_knob_is_not_truncated(old: Path) -> None:
+    _, cfg, _ = _load(old, "upgrader")
+    key = "worktree.max_parallel"
+    item = next(i for i in plan(old)["categories"]["config"] if i["key"] == key)
+    long_value = "v" * 100
+    status, detail = UA._apply_config(old, cfg, {**item, "new": long_value}, "upgrader")
+    assert status == "acknowledged" and json.dumps(long_value) in detail

@@ -186,6 +186,12 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
             if operator_set
             else "ddflow upgrade --apply"
         )
+        if kind == "knob_changed" and operator_set and not source.startswith("env"):
+            # confirming keeps the project's value; adopting the new default is its own say
+            item["fix"] += (
+                f" (keeps this project's value; to adopt the new default: "
+                f"ddflow config --set {key} {json.dumps(new)})"
+            )
         items.append(item)
     return items
 
