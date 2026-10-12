@@ -106,3 +106,8 @@ def test_repeats_in_an_old_queue_keep_distinct_ids(tmp_path):
     IM._keep_imported_ids(found, old)
     ids = [f.ident for f in found if f.kind == "task"]
     assert ids == ["ONE.give-base-room-blue", "ONE.give-base-room-blue-2"]
+
+
+def test_a_lettered_heading_is_not_cut_at_its_letter():
+    assert IM._title_of("A. Appendix tuning") == "A. Appendix tuning"
+    assert IM._title_of("Written by A. Smith") == "Written by A. Smith"
