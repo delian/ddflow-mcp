@@ -25,5 +25,24 @@ class LogConfig:
     #: Commit ddflow's own event shards after complete and release (Bcd3512c891).
     commit_events: bool = knob(
         True,
-        doc="After complete and release, commit the event shards (`.ddflow/events/*.jsonl`, nothing else) in the primary checkout, so a clone or a pull always gets the whole log. Hooks run as usual; a refusal never fails the operation and `ddflow doctor` lists shards left uncommitted. Nothing is pushed. false leaves committing the log to you.",
+        doc="At the doors named by `commit_events_at` (merge, complete, release, stop), commit the event shards (`.ddflow/events/*.jsonl`, nothing else) in the primary checkout, so a clone or a pull always gets the whole log. Hooks run as usual; a refusal never fails the operation and `ddflow doctor` lists shards left uncommitted. Nothing is pushed. false leaves committing the log to you.",
+    )
+    commit_events_at: list[str] = knob(
+        factory=lambda: ["merge", "complete", "release", "stop"],
+        doc="The doors at which ddflow commits the event shards (needs commit_events): merge (after an item lands), complete, release, stop (a session ends). Drop one to leave that door's shards to the next.",
+        check=lambda v: "; ".join(
+            f"{d!r} is not a door (merge, complete, release, stop)"
+            for d in v
+            if d not in ("merge", "complete", "release", "stop")
+        ),
+    )
+    commit_events_message: str = knob(
+        "events: {reason}",
+        doc="The commit message of an event-log commit; `{reason}` is the door and item, e.g. `complete T1`. Keep it short.",
+    )
+    pre_push_events: str = knob(
+        "warn",
+        choices=("warn", "block", "off"),
+        strictest=("block", "a push never leaves event shards out"),
+        doc="What scripts/ci/pre-push does when event shards in the primary checkout are not committed, so the push leaves them out: warn (default) names them; block refuses the push; off says nothing.",
     )

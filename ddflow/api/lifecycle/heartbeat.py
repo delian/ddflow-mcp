@@ -128,18 +128,9 @@ def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
         return []  # advisory: a waiter's bad file must never stop a holder releasing
 
 
-def _commit_events(log, cfg, reason: str) -> dict[str, str]:
-    """`[log].commit_events`: commit the event shards when an item is completed or handed
-    back, so the log in git is the whole log (Bcd3512c891). Not at merge: `complete`
-    follows it, and the base's head is then still the merge commit `merge` reported.
-    Never fails the caller: a refusal is returned."""
-    if not cfg.log.commit_events:
-        return {}
-
-    sha, why = EC.commit_shards(log.root, reason)
-    if sha:
-        return {"events_committed": sha}
-    return {"events_note": why} if why else {}
+def _commit_events(log, cfg, reason: str, door: str = "complete") -> dict[str, str]:
+    """`[log].commit_events` at a door (Bcd3512c891): see `eventcommit.commit_at`."""
+    return EC.commit_at(log, cfg, door, reason)
 
 
 def release(
@@ -165,6 +156,6 @@ def release(
     waiting = _waiters(repo, item)
     released = L.release(log, item, note=note, forced=bool(forced))
     if released:
-        committed = _commit_events(log, cfg, f"release {item}")
+        committed = _commit_events(log, cfg, f"release {item}", "release")
         return O.ok("lease.released", id=item, released=True, woke=waiting, **committed)
     return O.nothing("lease.released", f"no lease on {item}", id=item, released=False, woke=[])

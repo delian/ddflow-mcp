@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.commit_events_message"
+new = '"events: {reason}"'
+why = "The commit message of an event-log commit; {reason} is the door and item."
+impact = "additive"

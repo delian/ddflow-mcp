@@ -7,6 +7,7 @@ from typing import Any
 
 from ...config import csv_list
 from ...core import outcome as O
+from ...services import eventcommit as EC
 from ...services import sessions as S
 from .._base import _load
 
@@ -70,9 +71,9 @@ def session_adopt_orphans(repo: Path, *, agent: str = "") -> O.Outcome:
 
 def session_end(repo: Path, session: str, *, summary: str = "", agent: str = "") -> O.Outcome:
 
-    log, _cfg, _st = _load(repo, agent)
+    log, cfg, _st = _load(repo, agent)
     S.end(log, session, summary=summary)
-    return O.ok("session.ended", session=session)
+    return O.ok("session.ended", session=session, **EC.commit_at(log, cfg, "stop", "stop"))
 
 
 def history(
