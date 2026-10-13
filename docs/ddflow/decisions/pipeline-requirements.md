@@ -4,7 +4,7 @@ Decision document for task `B-pipe-decide`, filed by `P-decisions-docs.write`. I
 
 ## D-pipeline-requirements: Pipeline requirements: every recommended default of B-pipe-decide accepted
 
-status **accepted** · decided by operator · decided by hy-commit-events
+status **accepted** · decided by operator · recorded by hy-commit-events
 
 **Decision.** Operator 2026-10-13 (AskUserQuestion): ALL the recommended defaults in the body of B-pipe-decide are accepted as written (body digest sha256:5d1265f88886, read from the queue on 2026-10-13); the questions and their defaults are the decision, and the task body is the record of their wording. Summary for pipeline requirements: a `pipeline` field on existing guidance records, effects require/allow_na/forbid_skip/order/kinds/define, strength MUST/SHOULD/MAY with waiver/deviation, scope read from declared globs AND the actual diff, resolved at claim with pipeline.resolved and re-resolved (gates may be added, never silently removed), agents add gates freely (max 3 per item) but weakening is a proposal only a person clears, four invariants as a floor, precedence org floor > project MUST > accepted decision > principle > preference, preview and an evaluate tier, unknown keys carried and fail closed, sprawl brake.
 

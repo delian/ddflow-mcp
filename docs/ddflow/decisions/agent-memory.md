@@ -4,7 +4,7 @@ Decision document for task `B-am-decide`, filed by `P-decisions-docs.write`. It 
 
 ## D-agent-memory-defaults: Agent memory: the recommended defaults are decided
 
-status **accepted** · decided by operator · decided by opus-lead
+status **accepted** · decided by operator · recorded by opus-lead
 
 **Context.** R-agent-memory; phase P-agent-memory.
 

@@ -4,7 +4,7 @@ Decision document for task `B-mu-decide`, filed by `P-decisions-docs.write`. It 
 
 ## D-mu-bugfix-defaults-r2: Design defaults used for the multi-user bug fixes (operator answers 2026-10-11)
 
-status **accepted** · decided by operator · decided by opus-lead · supersedes D-mu-bugfix-defaults
+status **accepted** · decided by operator · recorded by opus-lead · supersedes D-mu-bugfix-defaults
 
 **Context.** Operator 2026-10-11: fix the open bugs, then pause. The 11 open DEGRADED multi-user bugs (R-multiuser-experiments) were fixed minimally ahead of P-multiuser on the recommended defaults of B-mu-decide. The operator has since answered the open choices (relayed by the lead, recorded in the session log).
 

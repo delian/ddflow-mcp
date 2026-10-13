@@ -4,7 +4,7 @@ Decision document for task `B-ac-decide`, filed by `P-decisions-docs.write`. It 
 
 ## D-agent-compat: Agent and bot support: tiers, budget, credentials, sandbox
 
-status **accepted** · decided by operator · decided by opus-lead
+status **accepted** · decided by operator · recorded by opus-lead
 
 **Context.** R-agent-compat; phase P-agent-compat.
 
