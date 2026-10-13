@@ -203,6 +203,7 @@ the same implementation, so neither drifts from the other.
 | **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
+| **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` (read-only; see [Lanes](#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs, schedules, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--source S] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`, `source`) |
@@ -241,7 +242,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=a6d461f6f3ca -->
+<!-- ddflow:begin README/toc sha=c1e0bd0d1f9d -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -301,6 +302,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 - [The phase pipeline](#the-phase-pipeline)
 - [Human approval: a gate the agent cannot clear](#human-approval-a-gate-the-agent-cannot-clear)
 - [Parallelism and coordination](#parallelism-and-coordination)
+  - [Lanes: who is working and what to do next](#lanes-who-is-working-and-what-to-do-next)
   - [Adaptive parallelism: configuration](#adaptive-parallelism-configuration)
   - [Adaptive parallelism: the sample ring and the derived limit](#adaptive-parallelism-the-sample-ring-and-the-derived-limit)
   - [Adaptive parallelism: host signals](#adaptive-parallelism-host-signals)
@@ -985,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 211 knobs.
+cadences, and the rest of the 217 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3184,6 +3186,41 @@ refuses at once rather than sleeping to its timeout.
 
 ---
 
+### Lanes: who is working and what to do next
+
+`ddflow lanes` is the coordinator's ledger of agent lanes (an agent identity is a lane). It
+is a projection of the event log, so it needs no registration and cannot drift, and it never
+starts, stops or resumes an agent and runs no daemon (D-sched-no-daemon). Acting on a lane
+(starting or resuming it) is a separate command, still to come.
+
+```console
+$ ddflow lanes
+LANE     HARNESS      MODEL    ITEM  HEARTBEAT  STATE                 FOR
+holder   claude-code   opus     X     2m ago     working               14m
+waiter   -            -        Q     8m ago     waiting-on-glob       8m
+  waiter: blocked by holder
+$ ddflow lanes advise
+1. [stall] Y is blocked by lane holder (X: globs overlap X held by holder (f.py vs f.py)); idle: waiter. Ask holder to finish, narrow its globs, or release
+   run: ddflow wait --item Y
+```
+
+States: `working`; `stale` (it holds its lease but has not beaten for `lanes.stale_after_s`,
+default `lease.ttl_s`); `waiting-on-glob` (names the holder) and `waiting-on-dep`;
+`idle-with-ready-work`; `stopped (done)`, `stopped (session ended, item unfinished)` and
+`stopped (reason unknown)`. The last is what a lapsed lease with no `session.ended` reads:
+the log does not say whether the context ran out or the process died, and `lanes` does not
+guess. `--watch` redraws when the log changes or every `lanes.watch_interval_s`.
+
+`ddflow lanes brief <lane>` renders what a coordinator would otherwise write by hand as the
+lane's first prompt: the objective (the item's title and body), its phase, tags, needs and
+globs, the open lease and worktree, and the lane's previous run (its last session summary
+and notes). Every text an agent wrote is fenced as recorded data. `ddflow lanes advise`
+lists the moves, most urgent first (at most `lanes.advise_max`): a stopped lane with
+unfinished work, an item blocked by a named lane, lanes idle beside ready work, more working
+lanes than the adaptive parallelism limit. Over MCP it is `ddflow_lanes` (`view` = `state`,
+`brief` or `advise`; `lane`), in the full tool tier. `[lanes]` knobs: `window_s`,
+`stale_after_s`, `watch_interval_s`, `advise_max`, `brief_notes`, `brief_text_chars`.
+
 ### Adaptive parallelism: configuration
 
 How many items may be in flight adapts by default (decision D-adaptive-flow-accepted). In
@@ -5072,7 +5109,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 211): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 217): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5330,8 +5367,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=d66de9662d4a -->
-<details><summary>All 113 MCP tools: 32 in the `core` tier, 47 more in `standard`, 34 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=2a1d68092db5 -->
+<details><summary>All 114 MCP tools: 32 in the `core` tier, 47 more in `standard`, 35 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5433,6 +5470,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
+| Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
 | Looking at it | `ddflow_list` | standard | Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. |
 | Looking at it | `ddflow_progress` | standard | What work has ACTUALLY been done, aggregated from the event log: attempts per item, wall-clock held, gate… |
 | Looking at it | `ddflow_render` | standard | Regenerate the human-readable markdown views (queue, lessons, the one-paragraph lessons summary, research)… |
@@ -5572,7 +5610,7 @@ declared once and persists — see
 
 ## Configuration
 
-211 knobs across 29 sections, every one documented in place and listed, with its default
+217 knobs across 30 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5639,8 +5677,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=1ef6cfff0f2f -->
-<details><summary>All 211 knobs across 29 sections</summary>
+<!-- ddflow:begin README/knobs sha=66e9a712902a -->
+<details><summary>All 217 knobs across 30 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5793,6 +5831,12 @@ long default is left to `ddflow config --explain`.
 | `loops.max_duplicate_items` | `2` |  |
 | `loops.no_progress_window` | `60` |  |
 | `loops.on_detect` | `"warn"` | `warn` \| `block` |
+| `lanes.window_s` | `86400` |  |
+| `lanes.stale_after_s` | `0` |  |
+| `lanes.watch_interval_s` | `5` |  |
+| `lanes.advise_max` | `10` |  |
+| `lanes.brief_notes` | `3` |  |
+| `lanes.brief_text_chars` | `1200` |  |
 | `review.max_rounds` | `2` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
 | `review.delta_default` | `false` |  |

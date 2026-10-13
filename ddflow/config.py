@@ -86,6 +86,9 @@ from .config_sections.ids import (  # noqa: F401
 from .config_sections.imports import (
     ImportConfig,
 )
+from .config_sections.lanes import (
+    LanesConfig,
+)
 from .config_sections.lease import (
     LeaseConfig,
 )
@@ -224,6 +227,7 @@ class Config:
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
+    lanes: LanesConfig = field(default_factory=LanesConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)

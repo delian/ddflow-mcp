@@ -43,6 +43,7 @@ TOPICS: dict[str, str] = {
     "mcp": "driving it as an MCP server, and what to put in AGENTS.md / CLAUDE.md",
     "export": "project documents (roadmap, bugs, status, log, ...) generated from the log",
     "verify": "checking that a done task is really done, and what to do when it is not",
+    "lanes": "which agents are working, their state, their brief, and what to do next",
     "upgrade": "newer releases, upgrading it and the project, watching and resuming an upgrade",
 }
 
@@ -122,6 +123,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Looking at it",
         (
+            "lanes",
             "board",
             "show",
             "status",

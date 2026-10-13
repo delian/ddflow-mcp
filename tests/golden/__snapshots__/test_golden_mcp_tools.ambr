@@ -1469,6 +1469,30 @@
        }
       }
     ''',
+    'ddflow_lanes': '''
+      {
+       "name": "ddflow_lanes",
+       "description": "Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale, waiting-on-glob naming the holder, idle-with-ready-work, stopped). view=brief + lane: that lane's whole first prompt. view=advise: concrete moves. Never starts or stops an agent. Exit 2: nothing to show.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "view": {
+          "type": "string",
+          "description": "state (default), brief or advise."
+         },
+         "lane": {
+          "type": "string",
+          "description": "Lane name (or a unique part); with view=brief."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_lesson_add': '''
       {
        "name": "ddflow_lesson_add",
@@ -3802,6 +3826,7 @@
     'ddflow_job_end',
     'ddflow_job_list',
     'ddflow_job_run',
+    'ddflow_lanes',
     'ddflow_lesson_add',
     'ddflow_lesson_search',
     'ddflow_lesson_verify',

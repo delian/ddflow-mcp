@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.stale_after_s"
+new = "0"
+why = "Seconds without a heartbeat before a lane holding its lease reads stale instead of working; 0 uses lease.ttl_s."
+impact = "additive"
