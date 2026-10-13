@@ -1,0 +1,10 @@
+id = "r-everything-managed"
+title = "Every definition is a managed record: edit, delete, review, search, RAG, logged, restorable"
+tags = ["principle", "records"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**", "integrations/**"]
+created = "2026-10-13T15:20:11.043662+00:00"
+updated = "2026-10-13T15:20:11.043671+00:00"
+
+D-universal-principles: any workflow template, gate, lens, role, lint set, importer, pack, job, safeguard, document type or new record you add is a record kind on the RecordKind descriptor (RC1-RC12): CLI and one MCP action group from one declaration, add/edit/remove(tombstone)/merge/split/restore/history, search, recall, RAG export, change feed to sessions, logged events and replay. Shipped defaults are overridable per project; never overwrite a user value. List an exemption with a reason or do not ship.
