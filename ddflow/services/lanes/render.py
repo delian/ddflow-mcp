@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from ...core.clock import fmt_age
 from .advise import Move
 from .ledger import Lane
+from .safe import safe
 
 #: Seconds: below an hour a span reads in minutes, below two days in hours.
 HOUR_S, TWO_DAYS_S = 3600, 172800
@@ -23,7 +24,15 @@ def _span(seconds: float) -> str:
 def _row(ln: Lane, now: float) -> tuple[str, ...]:
     beat = _span(now - ln.heartbeat) + " ago" if ln.heartbeat else "-"
     held = _span(now - ln.since) if ln.since else "-"
-    return (ln.name, ln.harness or "-", ln.model or "-", ln.item or "-", beat, ln.state, held)
+    return (
+        safe(ln.name),
+        safe(ln.harness) or "-",
+        safe(ln.model) or "-",
+        safe(ln.item) or "-",
+        beat,
+        ln.state,
+        held,
+    )
 
 
 def render_ledger(lanes: Sequence[Lane], now: float) -> str:
@@ -34,7 +43,7 @@ def render_ledger(lanes: Sequence[Lane], now: float) -> str:
     lines = ["  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)).rstrip() for r in rows]
     for ln in lanes:
         if ln.detail and ln.state not in ("working",):
-            lines.append(f"  {ln.name}: {ln.detail}")
+            lines.append(f"  {safe(ln.name)}: {safe(ln.detail)}")
     return "\n".join(lines) if lanes else "no lanes active in the window"
 
 

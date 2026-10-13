@@ -9,7 +9,6 @@ defers to them.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 
 import ddflow.services.lanes.states as S
@@ -19,16 +18,7 @@ from ...core import provenance as P
 from ...core.records import Item, State
 from ...core.textcut import clip
 from .ledger import Lane
-
-_UNSAFE = re.compile(r"[\s\"'<>&`]+")
-#: Longest metadata value (a name, a path) printed outside a fence.
-_VALUE_CAP = 200
-
-
-def _safe(value: object) -> str:
-    """A name, path or id made safe to print OUTSIDE a fence: one line, no quotes, brackets
-    or backticks, so a lane that named itself with a heading or a tag cannot add structure."""
-    return _UNSAFE.sub(" ", str(value or "")).strip()[:_VALUE_CAP]
+from .safe import safe
 
 
 def _text(cfg: Config, kind: str, ident: str, text: str, by: str) -> str:
@@ -40,7 +30,10 @@ def _previous_run(lane: Lane, st: State, cfg: Config) -> list[str]:
     sess = st.sessions.get(lane.session)
     if sess is None:
         return ["No earlier session of this lane is recorded."]
-    out = [f"Session {sess.id} ({sess.model or 'model unknown'}), started {sess.started_at[:16]}."]
+    out = [
+        f"Session {safe(sess.id)} ({safe(sess.model) or 'model unknown'}), "
+        f"started {safe(sess.started_at[:16])}."
+    ]
     if sess.summary:
         out.append(_text(cfg, "session-summary", sess.id, sess.summary, lane.name))
     notes = sess.notes[-cfg.lanes.brief_notes :] if cfg.lanes.brief_notes > 0 else []
@@ -69,17 +62,17 @@ def _assignment(it: Item, cfg: Config) -> list[str]:
 def _lease(lane: Lane, it: Item | None) -> list[str]:
     if it is None or it.lease is None:
         return ["You hold no lease."]
-    rows = [f"- lease: held by {_safe(it.lease.holder)} on {_safe(it.id)}"]
+    rows = [f"- lease: held by {safe(it.lease.holder)} on {safe(it.id)}"]
     if lane.worktree:
-        rows.append(f"- worktree: {_safe(lane.worktree)} (work ONLY there)")
+        rows.append(f"- worktree: {safe(lane.worktree)} (work ONLY there)")
     if it.branch:
-        rows.append(f"- branch: {_safe(it.branch)}")
+        rows.append(f"- branch: {safe(it.branch)}")
     return rows
 
 
 def _next_steps(lane: Lane, it: Item | None) -> list[str]:
     if it is not None and lane.state in S.ACTIVE + S.UNFINISHED:
-        item = _safe(it.id)
+        item = safe(it.id)
         return [
             f"Run `ddflow brief` first, then `ddflow show {item}`.",
             f"Resume the item in its worktree; `ddflow gate status {item}` says which "
@@ -87,7 +80,7 @@ def _next_steps(lane: Lane, it: Item | None) -> list[str]:
         ]
     if lane.ready:
         return [
-            f"Run `ddflow brief`, then claim a ready item: {', '.join(_safe(i) for i in lane.ready[:5])}."
+            f"Run `ddflow brief`, then claim a ready item: {', '.join(safe(i) for i in lane.ready[:5])}."
         ]
     return ["Run `ddflow brief`; nothing is ready for you now, `ddflow wait` for work."]
 
@@ -95,17 +88,17 @@ def _next_steps(lane: Lane, it: Item | None) -> list[str]:
 def lane_brief(lane: Lane, st: State, cfg: Config, others: Sequence[Lane] = ()) -> str:
     """The brief for ``lane`` as one text, usable as its entire first prompt."""
     it = st.items.get(lane.item)
-    held_by_others = [_safe(o.name) for o in others if o.name != lane.name and o.state in S.ACTIVE]
+    held_by_others = [safe(o.name) for o in others if o.name != lane.name and o.state in S.ACTIVE]
     lines = [
-        f"# Lane brief: {_safe(lane.name)}",
+        f"# Lane brief: {safe(lane.name)}",
         "",
-        f"You are lane {_safe(lane.name)}"
-        + (f" on {_safe(lane.harness)}" if lane.harness else "")
+        f"You are lane {safe(lane.name)}"
+        + (f" on {safe(lane.harness)}" if lane.harness else "")
         + ". Pass this name as your identity on every ddflow call: `--agent NAME` on the command line, ddflow_identify over MCP.",
         P.DATA_RULE,
         "",
         f"State when this brief was cut: {lane.state}"
-        + (f" ({_safe(lane.detail)})" if lane.detail else "")
+        + (f" ({safe(lane.detail)})" if lane.detail else "")
         + ".",
         "",
         "## Objective",
