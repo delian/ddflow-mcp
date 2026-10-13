@@ -36,9 +36,14 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # `ddflow phase close <id> --imported` (~0.7 KB): one tool, one optional argument, which closes a
 # phase whose work predates ddflow without running the phase pipeline. main sat at 95,991 with 9
 # bytes free, so the tool had to be paid for; its description is already down to the essentials.
-TOOLS_LIST_BUDGET = 97_400
 # 97_400 (raised, B-gap-lanes): ddflow_lanes is the MCP face of `ddflow lanes` (~0.6 KB: one
 # tool, three arguments, a short description); the list measures 97,394 with it and phase_close.
+# 100_000 (RAISED BY THE OPERATOR, 2026-10-12, mcp-tools-budget-100k): the list sat at 97,394
+# with 6 bytes free, so every new tool cost a reasoned raise of its own -- 96_000 to 96_800 to
+# 97_400 in two days. The operator asked for headroom instead of that round per tool. This is
+# NOT a target to grow into: shortening a description is still the first move when a tool
+# pushes the list up, and the check still fails loudly past 100,000. D-tools-list-budget-100k.
+TOOLS_LIST_BUDGET = 100_000
 SHARED_DESCRIPTION_MAX = 200
 
 
