@@ -32,7 +32,7 @@ loose=$(git -C "$primary" status --porcelain -z --untracked-files=all -- .ddflow
 # [log].pre_push_events: warn (default) | block | off. Best effort: no ddflow means warn.
 mode=warn
 if command -v ddflow >/dev/null 2>&1; then
-    m=$(cd "$primary" && ddflow config --filter log.pre_push_events </dev/null 2>/dev/null | awk '/^log\.pre_push_events/ {print $3}' | head -n1 || true)
+    m=$(cd "$primary" && ddflow config --filter log.pre_push_events </dev/null 2>/dev/null | awk '/^log\.pre_push_events/ {print $3}' | tr -d "'\"" | head -n1 || true)
     case "$m" in warn|block|off) mode=$m ;; esac
 fi
 block_events=0
