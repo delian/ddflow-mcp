@@ -93,7 +93,10 @@ def commit_at(log, cfg, door: str, reason: str) -> dict[str, str]:
     if not cfg.log.commit_events or door not in cfg.log.commit_events_at:
         return {}
     try:
-        sha, note = commit_shards(log.root, reason, cfg.log.commit_events_message)
+        # The append lock held from the check to the commit: a ddflow writer cannot add a
+        # line between the "whole" check and the snapshot `git commit -- <paths>` takes.
+        with log.transaction():
+            sha, note = commit_shards(log.root, reason, cfg.log.commit_events_message)
     except Exception as e:
         return {"events_note": f"event log not committed: {e}"}
     return {**({"events_committed": sha} if sha else {}), **({"events_note": note} if note else {})}

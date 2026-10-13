@@ -95,8 +95,11 @@ def _hook(repo, tmp_path, mode):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     fake = bindir / "ddflow"
-    fake.write_text(f"#!/bin/sh\necho 'log.pre_push_events = {mode}   [default]'\n")
+    fake.write_text(f"#!/bin/sh\necho \"log.pre_push_events = '{mode}'   [default]\"\n")
     fake.chmod(0o755)
+    stub = bindir / "pre-commit"  # present, so the hook runs to its end
+    stub.write_text("#!/bin/sh\nexit 0\n")
+    stub.chmod(0o755)
     hook = Path(__file__).resolve().parents[1] / "scripts" / "ci" / "pre-push"
     env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"}
     return subprocess.run(
@@ -112,9 +115,9 @@ def test_pre_push_block_mode_refuses(repo, tmp_path):
 
 def test_pre_push_off_is_silent(repo, tmp_path):
     p = _hook(repo, tmp_path, "off")
-    assert "not committed" not in p.stderr
+    assert "not committed" not in p.stderr and p.returncode == 0
 
 
 def test_pre_push_warn_mode_does_not_refuse_for_the_shards(repo, tmp_path):
     p = _hook(repo, tmp_path, "warn")
-    assert "not committed" in p.stderr and "refused" not in p.stderr
+    assert "not committed" in p.stderr and p.returncode == 0
