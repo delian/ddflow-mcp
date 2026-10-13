@@ -1,0 +1,24 @@
+# Multi-user work: claim arbitration, same-id policy, version skew, config source
+
+Decision document for task `B-mu-decide`, filed by `P-decisions-docs.write`. It restates the decision records below; the records in the event log are the source of truth (`ddflow decision show <id>`).
+
+## D-mu-bugfix-defaults-r2: Design defaults used for the multi-user bug fixes (operator answers 2026-10-11)
+
+status **accepted** · decided by operator · recorded by opus-lead · supersedes D-mu-bugfix-defaults
+
+**Context.** Operator 2026-10-11: fix the open bugs, then pause. The 11 open DEGRADED multi-user bugs (R-multiuser-experiments) were fixed minimally ahead of P-multiuser on the recommended defaults of B-mu-decide. The operator has since answered the open choices (relayed by the lead, recorded in the session log).
+
+**Decision.** Working defaults the 11 multi-user bug-fix tasks (fix-B2809f4213b, fix-B71dedb76d2, fix-B0dcccd8594, fix-B90b43dd2d8, fix-B5a6651cd8e, fix-B839f599cb5, fix-B6b8d1f7a0f, fix-B63635ddc6a, fix-Ba24a8d32ee, fix-Bec9a971c5d, fix-B924bdc92d7) are built on, from B-mu-decide: (1) claim arbitration stays OPTIMISTIC; a contested claim is surfaced in status/next/brief and refused by merge/complete; nothing is auto-resolved (B-mu-decide 1). (2) A lease is evidence of intent, not a lock: release and gate run/record/skip on a LIVE lease of another CLONE need --force with a reason and the override is recorded; agents of the same clone, the holder, expired leases and leases without a recorded clone are unchanged (8). (3) Liveness of another clone's lease is judged from renewals as first seen by this clone (receipt time in .ddflow/local), never from the claimant's wall clock; the fold stays pure (8). (4) Decisions record which live overlapping decisions their author saw (additive `saw` on decision.recorded); two overlapping decisions neither names the other are UNRECONCILED in doctor/brief (2, 8). (5) Version skew: a patch-only difference with the same FORMAT_LEVEL and no capability gap warns instead of refusing writes; FORMAT_LEVEL, minor and capability gaps still refuse (4). (6) Committed config is team policy: a conflict-marked config is named (exit 3), a local command gate pass is LABELLED in evidence and status (command_layer, command_digest), refusing it is a later opt-in (5). (7) Generated views stay TRACKED in git and are regenerated on conflict (6). (8) Event loss by history rewrite is made visible by a local per-shard high-water mark and a doctor PROBLEM, never auto-repaired (10). (9) A fresh clone's missing git hooks and machine-absolute launch paths are doctor NOTES (PROBLEM only under [enforce] block). (10) No central server, no daemon (10); every event-payload addition is additive and every local file is a LocalStore document.
+
+Operator answers 2026-10-11 (relayed by the lead via the question tool; verbatim in the session log):
+EXPLICITLY ANSWERED, accepted as built: (a) claim arbitration optimistic, contest surfaced, merge/complete refused, nothing auto-resolved (item 1; B-mu-decide 1); (b) lease liveness by receipt-time expiry, up to one TTL late, never the claimant's wall clock (item 3; B-mu-decide 8); (c) generated views stay tracked in git and are regenerated on conflict (item 7; B-mu-decide 6); (d) local-only gate command pass: label now (command_layer/command_digest), refusal only as a later opt-in (item 6; B-mu-decide 5).
+EXPLICITLY DECIDED earlier in the same session: patch-only version skew warns instead of refusing, same FORMAT_LEVEL and no capability gap (item 5; B-mu-decide 4); the lease guard is per clone, release and gate run/record/skip on another clone's live lease need --force with a reason (item 2; B-mu-decide 8); missing git hooks and machine-absolute launch paths are doctor NOTES, PROBLEM only under [enforce] block (item 9); weak tests after pause in core wave.
+NOT EXPLICITLY ANSWERED, remain the recommended defaults and were not contradicted: item 4 (saw / UNRECONCILED), item 8 (high-water mark for event loss), item 10 (no server, no daemon). The operator did not answer these explicitly.
+
+**Consequences.** Receipt-time lease expiry delays a dead lease by up to one TTL after first sight; the lease guard is scoped to another clone, not another agent name; patch-skew relaxation loosens a guard; doctor NOTE (not PROBLEM) for missing hooks; tracked generated views can conflict and are regenerated. Items 4, 8 and 10 may still be revisited.
+
+**Alternatives rejected.** Wait for B-mu-decide before fixing; build the whole P-multiuser feature set now; untrack generated views (B-mu-decide 6 default), rejected by the operator.
+
+Governs: `ddflow/services/leases.py`, `ddflow/infra/log.py`, `ddflow/api/gates.py`, `ddflow/services/gates/runner.py`, `ddflow/api/decisions.py`
+
+Earlier record `D-mu-bugfix-defaults` (Design defaults used for the multi-user bug fixes) is superseded and not reproduced; `ddflow decision show D-mu-bugfix-defaults` has it.
