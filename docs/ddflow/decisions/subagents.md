@@ -22,7 +22,7 @@ Governs: `ddflow/services/configwrite.py`, `ddflow/api/setup.py`, `ddflow/servic
 
 ## D-skills-canonical-store: Project skills have one canonical directory that ddflow syncs into each agent's own
 
-status **accepted** · decided by Monster3-bridge-cse_015NbhRCT5XtidHYRvkjBCLK-7267fe
+status **accepted** · recorded by Monster3-bridge-cse_015NbhRCT5XtidHYRvkjBCLK-7267fe
 
 **Context.** Each agent reads its own directory; Claude Code does not read .agents/skills.
 
