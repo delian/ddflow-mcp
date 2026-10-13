@@ -241,4 +241,5 @@ def test_session_id_and_model_in_the_brief_cannot_add_structure():
 def test_safe_keeps_a_long_path_whole_and_flattens_structure():
     path = "/home/u/" + "/".join(["a" * 60] * 3)
     assert LN.safe(path) == path[:200]
+    assert LN.safe("b" * 300) == "b" * 200  # one long branch name is not cut at 80
     assert LN.safe('x\n## y <z> `c` "q"') == "x ## y z c q"
