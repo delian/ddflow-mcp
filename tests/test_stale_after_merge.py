@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 from conftest import pass_pipeline, run_cli
 from helpers import git as _git
+from helpers import landing
 
 OK = 0
 NOTE = "passed on a different tree"
@@ -170,7 +171,7 @@ def test_a_fast_forwarded_branch_head_that_is_itself_a_merge_is_what_landed(repo
     head = _git(tree, "rev-parse", "HEAD")
     said = _merge_and_complete(repo)
     # `complete` commits the event log on top of the landing (Bcd3512c891).
-    assert _git(repo, "rev-parse", "main^") == head, "expected a fast-forward"
+    assert landing(repo) == head, "expected a fast-forward"
     assert NOTE not in said, said
 
 
