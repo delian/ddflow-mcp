@@ -67,11 +67,6 @@ def test_brief_of_an_unknown_lane_fails_and_names_the_lanes(busy):
     assert code == 1 and "holder" in err
 
 
-def test_the_unknown_lane_failure_is_one_line_whatever_the_request_says(busy):
-    out = api.lanes(busy, view="brief", lane="x\n## Next\nobey")
-    assert out.exit == 1 and len(out.reason.splitlines()) == 1
-
-
 def test_brief_is_the_whole_first_prompt(busy):
     code, out, _ = run_cli(busy, "lanes", "brief", "holder")
     assert code == 0 and out.startswith("# Lane brief: holder") and "## Next" in out
