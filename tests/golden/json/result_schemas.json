@@ -2374,5 +2374,35 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_phase_close": {
+  "command": "phase_close",
+  "schema": "phase_close@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "evidence",
+   "tasks",
+   "done"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "phase_close@1"
+    },
+    "id": {},
+    "evidence": {},
+    "tasks": {},
+    "done": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }

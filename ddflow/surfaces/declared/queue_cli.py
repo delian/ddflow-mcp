@@ -8,6 +8,20 @@ from __future__ import annotations
 import shlex
 
 
+def phase_close_text(out, a) -> str:
+    """What `phase close --imported` did, and why no gate ran.
+
+    The evidence is the point of the command: it is what a reader (and `ddflow verify`) is
+    given instead of a phase pipeline that never could have run for this work.
+    """
+    d = out.data
+    return (
+        f"{d['id']} closed: {d['evidence']}\n"
+        f"  {d['tasks']} task(s) under it keep their state, and the gate pipeline did not "
+        f"run -- `ddflow show {d['id']}` carries the evidence."
+    )
+
+
 def split_text(out, a) -> str:
     created = out.data["created"]
     tail = ""

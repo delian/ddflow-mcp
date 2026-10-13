@@ -1995,6 +1995,34 @@
        }
       }
     ''',
+    'ddflow_phase_close': '''
+      {
+       "name": "ddflow_phase_close",
+       "description": "Close a phase whose work PREDATES ddflow: one `ddflow import` created whose every task is done or abandoned. Records `item.completed` with its evidence, as the importer does on the way in, and runs NO phase pipeline. Refused for a phase with open work, one the importer did not create, or without `imported`.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "description": "The imported phase to close."
+         },
+         "imported": {
+          "type": "boolean",
+          "description": "Required: closes an IMPORTED phase; its imported source is the evidence recorded."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "required": [
+         "id",
+         "imported"
+        ],
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_pins': '''
       {
        "name": "ddflow_pins",
@@ -3812,6 +3840,7 @@
     'ddflow_next',
     'ddflow_onboard',
     'ddflow_phase_add',
+    'ddflow_phase_close',
     'ddflow_pins',
     'ddflow_pr_status',
     'ddflow_pr_sync',

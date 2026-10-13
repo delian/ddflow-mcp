@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 215 knobs.
+cadences, and the rest of the 217 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1937,6 +1937,13 @@ Four guard rails, each of which exists because the alternative is silent:
   events into a log that is committed to git; one real repository yielded 4,799
   checkboxes. Over the cap it proposes none and says so — the phases are withheld with
   them, because a queue of empty phases is not a smaller import, it is a misleading one.
+- **Readable ids.** A phase or task id made from a heading is cut at a WHOLE WORD, never inside
+  one, at `[importer] phase_slug_chars` (default 32) and `task_slug_chars` (default 40; at least
+  8 each; only a first word longer than the limit is kept whole; a later word that does not fit is dropped): `Phase 106C tool-rl multi-agent run` gives `PHASE-106C-TOOL-RL-MULTI-AGENT`, where
+  it used to give `PHASE-106C-TOOLRL-MULTI`. A heading that declares its own id keeps it, and a
+  re-import recognises the older truncated ids (`legacy_ident`), so nothing is minted twice. Set
+  the two knobs BEFORE the first import: a re-import under different values derives different
+  ids and proposes those items again.
 - **Idempotent.** Ids derive from the source, so re-running after you edit the todo adds
   what is new and leaves the rest alone. A second run over an unchanged project exits 2.
 
@@ -5102,7 +5109,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 215): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 217): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5360,8 +5367,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=6aeada41a0cb -->
-<details><summary>All 113 MCP tools: 32 in the `core` tier, 47 more in `standard`, 34 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=2a1d68092db5 -->
+<details><summary>All 114 MCP tools: 32 in the `core` tier, 47 more in `standard`, 35 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5393,6 +5400,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Shaping the work | `ddflow_import` | all | For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons… |
 | Shaping the work | `ddflow_import_verify` | all | Was this project's history imported, is that still true, and did anyone FINISH it? |
 | Shaping the work | `ddflow_phase_add` | standard | Add a phase to the queue. |
+| Shaping the work | `ddflow_phase_close` | all | Close a phase whose work PREDATES ddflow: one `ddflow import` created whose every task is done or abandoned. |
 | Shaping the work | `ddflow_remove` | standard | Take an item out of the queue. |
 | Shaping the work | `ddflow_resolve` | standard | Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a… |
 | Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
@@ -5602,7 +5610,7 @@ declared once and persists — see
 
 ## Configuration
 
-215 knobs across 30 sections, every one documented in place and listed, with its default
+217 knobs across 30 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5669,8 +5677,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=f6293e9907e3 -->
-<details><summary>All 215 knobs across 30 sections</summary>
+<!-- ddflow:begin README/knobs sha=66e9a712902a -->
+<details><summary>All 217 knobs across 30 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5769,6 +5777,8 @@ long default is left to `ddflow config --explain`.
 | `bugs.phase` | `"bugs"` |  |
 | `importer.max_tasks` | `200` |  |
 | `importer.preview_rows` | `8` |  |
+| `importer.phase_slug_chars` | `32` |  |
+| `importer.task_slug_chars` | `40` |  |
 | `importer.todo_globs` | `[]` |  |
 | `importer.lesson_globs` | `[]` |  |
 | `importer.lesson_summary_globs` | `[]` |  |
