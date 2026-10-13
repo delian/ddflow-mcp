@@ -10,6 +10,15 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
   - Globs: ddflow/**
   - Priority: 90
 
+### Principle
+
+- **r-everything-managed**: Every definition is a managed record: edit, delete, review, search, RAG, logged, restorable
+  - Globs: ddflow/**, integrations/**
+  - Priority: 90
+- **r-reuse-core**: Reuse the shared core: search before writing, never implement the same behaviour twice
+  - Globs: ddflow/**, integrations/**
+  - Priority: 90
+
 ### Size
 
 - **r-small-files**: Keep every file under 20 KB: split into a package of smaller modules
