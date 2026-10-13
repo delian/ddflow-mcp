@@ -4,7 +4,7 @@ Decision document for task `B-sc-decide`, filed by `P-decisions-docs.write`. It 
 
 ## D-session-context: Session context: tree fields, on-demand transfer, native stores, native lane status ON by default
 
-status **accepted** · decided by operator · decided by opus-lead
+status **accepted** · decided by operator · recorded by opus-lead
 
 **Context.** Operator answered the B-sc-decide questions on 2026-10-11; question 6 default flipped from off to auto.
 

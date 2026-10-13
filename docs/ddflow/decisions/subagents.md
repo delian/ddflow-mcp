@@ -4,7 +4,7 @@ Decision document for task `B-sub-decide`, filed by `P-decisions-docs.write`. It
 
 ## D-subagents: Subagents: canonical .ddflow/agents/*.md copy-synced to each harness; another declared model family is enough to count as a reviewer
 
-status **accepted** · decided by operator · decided by hy-commit-events
+status **accepted** · decided by operator · recorded by hy-commit-events
 
 **Decision.** Operator 2026-10-13 (AskUserQuestion, B-sub-decide). (1) STORE: canonical definitions live in .ddflow/agents/*.md in Claude's frontmatter format (the superset) with a ddflow block (role, write scope, gate routing, envelope per D-safeguards); ddflow COPIES them into each enabled harness's agent directory and detects drift (copy-sync, as D-skills-canonical-store). (2) REVIEWER RULE: a subagent whose DECLARED model is of a different family than the author counts as an independent reviewer for a gate; no per-subagent approval step is required. The declared model must be an explicit model id: 'inherit' cannot satisfy independence (B-sub-route). NOTE (open for the operator): this relaxes D-reviewer-trust for subagents; B-sub-trust (operator approval by digest for agent-AUTHORED or tool-widening definitions) is not removed by this answer and stays in force until the operator says otherwise.
 
@@ -12,7 +12,7 @@ Governs: `.ddflow/agents/**`, `ddflow/services/agents/**`, `ddflow/services/gate
 
 ## D-reviewer-trust: Agents cannot mint an independent reviewer: command reviewers are operator-only; tool-written HTTP reviewers count only after operator approval
 
-status **accepted** · decided by operator · decided by Monster3-ddflow-7267fe
+status **accepted** · decided by operator · recorded by Monster3-ddflow-7267fe
 
 **Decision.** Operator 2026-10-01 for bug B3f9b8a4ac0, option C: every agent surface (ddflow_configure, config --set/--append-toml from an agent, reviewers detect --write) refuses to write a [[reviewer]] of kind 'command'; only a person adds one. A tool-written HTTP reviewer entry is recorded with who wrote it (reviewer.configured: agent, entry digest); ddflow review stamps the digest into its evidence, and reviewer independence does not count reviews from an unapproved tool-written entry until a person runs 'ddflow reviewers approve <name>'. Like human gates, this makes tampering visible; it does not stop a shell edit of .ddflow/local/*.toml.
 

@@ -4,7 +4,7 @@ Decision document for task `B-goal-decide`, filed by `P-decisions-docs.write`. I
 
 ## D-goals-principles: Goals, principles and proposals: every recommended default of B-goal-decide accepted
 
-status **accepted** · decided by operator · decided by hy-commit-events
+status **accepted** · decided by operator · recorded by hy-commit-events
 
 **Decision.** Operator 2026-10-13 (AskUserQuestion): ALL the recommended defaults in the body of B-goal-decide are accepted as written (body digest sha256:d4a8ca13851e). Summary: principle as a field (MUST/SHOULD/MAY, waive/deviate); precedence org floor > project rule (block) > accepted decision > principle > preference, nearest scope wins, unreconciled conflicts are a doctor note and a coherence item; goal def-record with computed progress from key results (dag, metric, check, manual), at most 2 levels; proposals outside the queue with person-only adopt, defer and reject; discovery OFF until the operator turns it on, then at most 3 new proposals per run and 7 open at once; org bundles may bring read-only goals and principles; discovery never on by default, recommended on only after B-goal-eval shows 20 to 70 percent acceptance in 3+ runs.
 
