@@ -36,7 +36,9 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # `ddflow phase close <id> --imported` (~0.7 KB): one tool, one optional argument, which closes a
 # phase whose work predates ddflow without running the phase pipeline. main sat at 95,991 with 9
 # bytes free, so the tool had to be paid for; its description is already down to the essentials.
-TOOLS_LIST_BUDGET = 96_800
+TOOLS_LIST_BUDGET = 97_400
+# 97_400 (raised, B-gap-lanes): ddflow_lanes is the MCP face of `ddflow lanes` (~0.6 KB: one
+# tool, three arguments, a short description); the list measures 97,394 with it and phase_close.
 SHARED_DESCRIPTION_MAX = 200
 
 

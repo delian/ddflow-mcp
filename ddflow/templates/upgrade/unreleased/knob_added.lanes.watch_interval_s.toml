@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.watch_interval_s"
+new = "5"
+why = "Seconds between redraws of ddflow lanes --watch when the log has not changed."
+impact = "additive"

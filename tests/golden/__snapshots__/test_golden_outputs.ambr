@@ -1327,6 +1327,28 @@
           looping); `config --set`, `ddflow_configure` and the environment refuse it,
           and so does loading ddflow's own source tree, where the file and the code
           are one commit.
+      lanes.window_s = 86400   [default]
+          How far back a lane's last event may be for `ddflow lanes` to list it (a
+          lane holding a live lease is always listed). Older agents are history, not
+          lanes.
+      lanes.stale_after_s = 0   [default]
+          Seconds without a heartbeat after which a lane that still holds its lease is
+          reported `stale` instead of `working`. 0 (the default) uses lease.ttl_s, the
+          moment the lease itself is due to lapse.
+      lanes.watch_interval_s = 5   [default]
+          Seconds between redraws of `ddflow lanes --watch` when the log has not
+          changed; a change in the log redraws at once. The watch only reads the log:
+          it starts no daemon and spawns nothing.
+      lanes.advise_max = 10   [default]
+          How many moves `ddflow lanes advise` prints, most urgent first (stopped
+          lanes with unfinished work, then glob stalls, then idle lanes beside ready
+          work).
+      lanes.brief_notes = 3   [default]
+          How many of a lane's most recent session notes `ddflow lanes brief` quotes,
+          fenced as data, under 'Previous run'. 0 quotes none.
+      lanes.brief_text_chars = 1200   [default]
+          Characters kept of each text a lane brief quotes (the objective, the last
+          session summary, a note), cut at a line boundary.
       review.max_rounds = 2   [default]
           How many cross-family review rounds one gate (rubber_duck, critic) may have
           on one item, full and delta alike (default 2; 0 = unlimited; decision
