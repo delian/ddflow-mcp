@@ -121,3 +121,23 @@ def test_pre_push_off_is_silent(repo, tmp_path):
 def test_pre_push_warn_mode_does_not_refuse_for_the_shards(repo, tmp_path):
     p = _hook(repo, tmp_path, "warn")
     assert "not committed" in p.stderr and p.returncode == 0
+
+
+def test_the_commit_runs_under_the_log_lock(repo, monkeypatch):
+    """A ddflow writer cannot append between the whole-line check and the commit."""
+    from ddflow.infra import log as L
+    from ddflow.services import eventcommit
+
+    _project(repo)
+    seen = []
+    real = eventcommit.commit_shards
+
+    def spy(root, *a, **k):
+        seen.append(L._HELD.get(L._held_key(L.EventLog(root).lock_path), 0))
+        return real(root, *a, **k)
+
+    monkeypatch.setattr(eventcommit, "commit_shards", spy)
+    from ddflow.api import knowledge as K
+
+    K.session_end(repo, "s1")
+    assert seen and seen[0] > 0
