@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 217 knobs.
+cadences, and the rest of the 220 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2291,6 +2291,13 @@ decision **accepted** — what changes is that none of it is shown anonymously:
 - The reviewer's diff sits in a backtick fence longer than any backtick run inside it, so
   a diff containing a code fence (or `STATUS: NO FINDINGS`) cannot end its own block. A
   `[prompts] review_user` override should use the new `{{ fence }}` variable the same way.
+- ddflow commits the event log itself (`[log] commit_events`, on by default): after `merge`,
+  `complete`, `release` and a session's end (`stop`; `commit_events_at` picks the doors), in
+  its own commit of `.ddflow/events/*.jsonl` alone, message `commit_events_message`. Hooks run
+  as usual, a refusal is a note and never fails the operation, nothing is pushed, and a shard
+  whose last line does not parse (another process is mid-write) is left for the next door.
+  `ddflow doctor` lists shards still uncommitted, and `scripts/ci/pre-push` warns about them
+  (`pre_push_events` = warn, block or off).
 - `ddflow doctor` notes event shards whose agent id has no committed history on the default
   branch (`.ddflow/events/<id>.jsonl` absent from its tree), naming them so a stranger's
   first records are looked at; your own shard is never listed, and when git cannot say the
@@ -5610,7 +5617,7 @@ declared once and persists — see
 
 ## Configuration
 
-217 knobs across 30 sections, every one documented in place and listed, with its default
+220 knobs across 30 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5677,8 +5684,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=66e9a712902a -->
-<details><summary>All 217 knobs across 30 sections</summary>
+<!-- ddflow:begin README/knobs sha=790f6627bafd -->
+<details><summary>All 220 knobs across 30 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5844,6 +5851,9 @@ long default is left to `ddflow config --explain`.
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `100000` |  |
 | `log.commit_events` | `true` |  |
+| `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
+| `log.commit_events_message` | `"events: {reason}"` |  |
+| `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |

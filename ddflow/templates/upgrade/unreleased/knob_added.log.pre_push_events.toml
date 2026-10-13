@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.pre_push_events"
+new = '"warn"'
+why = "What the pre-push hook does when event shards are not committed: warn, block or off."
+impact = "additive"
