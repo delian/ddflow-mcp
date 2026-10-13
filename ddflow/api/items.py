@@ -21,6 +21,7 @@ from ..infra import worktree as W
 from ..services import choices as CH
 from ..services import items as IT
 from ..services import leases as L
+from ..services import phase_close as PC
 from ._base import _load
 from .lifecycle.claim import _worktree_held_by
 
@@ -293,6 +294,19 @@ def _bad_line(cfg, line: str) -> str:
             f'`"2" = "maint/2.x"`.'
         )
     return f"unknown release line {line!r}. Lines, oldest first: {', '.join(known)}"
+
+
+def phase_close(repo: Path, item: str, *, imported: bool = False, agent: str = "") -> O.Outcome:
+    """Close an IMPORTED phase whose work predates ddflow, without a phase gate pipeline.
+
+    For a phase `ddflow import` created whose every task is done or abandoned: it records
+    `item.completed` with the evidence, exactly as the importer does for the work it closes
+    on the way in, so `brief` stops nagging "finished but still open" about work that cannot
+    run this project's pipeline. `imported` must be True: the flag is the authority being
+    used, and it is what marks this apart from running the phase's own pipeline.
+    """
+    log, _cfg, _st = _load(repo, agent)
+    return PC.close(log, item, imported=imported, agent=agent)
 
 
 def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_add

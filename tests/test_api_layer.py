@@ -443,6 +443,9 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_gate_record",
     "ddflow_gate_skip",
     "ddflow_phase_add",
+    # Writes an `item.completed`: a second call finds the phase already closed and is
+    # refused, so invoking it twice is not the same as invoking it once.
+    "ddflow_phase_close",
     "ddflow_task_add",
     "ddflow_split",
     # Settles a contest: a second call finds nothing contested and is refused (exit 3).

@@ -1281,6 +1281,19 @@
   
   '''
 # ---
+# name: test_help[ddflow phase close]
+  '''
+  usage: ddflow phase close [-h] [--imported] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+    --imported  required: closes an IMPORTED phase (its imported source is the evidence recorded)
+  
+  '''
+# ---
 # name: test_help[ddflow phase list]
   '''
   usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT]
@@ -1297,14 +1310,15 @@
 # ---
 # name: test_help[ddflow phase]
   '''
-  usage: ddflow phase [-h] {add,list} ...
+  usage: ddflow phase [-h] {add,close,list} ...
   
   positional arguments:
-    {add,list}
-      list      list phases with done/total progress
+    {add,close,list}
+      close           close a phase whose work predates ddflow
+      list            list phases with done/total progress
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help        show this help message and exit
   
   '''
 # ---
@@ -2422,7 +2436,7 @@
   positional arguments:
     {init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
-      phase               add a phase
+      phase               add, list or close a phase
       task                add a task
       split               split an item into sub-tasks in place, keeping its id and history
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
@@ -2610,6 +2624,7 @@
     'ddflow onboard',
     'ddflow phase',
     'ddflow phase add',
+    'ddflow phase close',
     'ddflow phase list',
     'ddflow pins',
     'ddflow pr',
