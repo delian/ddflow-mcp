@@ -209,8 +209,9 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
         )
 
-    committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    # Last: the after-merge check may record a result of its own.
+    committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
         "worktree.merged",
         id=item,
