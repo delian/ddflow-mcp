@@ -3,8 +3,8 @@
 The log is the source of truth and is committed, but committing it was left to each
 agent, and every claim writes a shard of its own in the primary checkout while the work
 is committed in a worktree. Nothing committed those shards, so a clone or a pull got an
-incomplete history. `commit_shards` is called after complete and release (not after
-merge, which `complete` follows).
+incomplete history. `commit_at` is called at the merge, complete, release and stop doors
+(`[log].commit_events_at`).
 
 It commits ONLY `.ddflow/events/*.jsonl`, with a pathspec so anything else staged in the
 primary stays staged and untouched, never bypasses the repository's hooks, and never

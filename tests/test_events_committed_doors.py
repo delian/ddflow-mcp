@@ -141,3 +141,29 @@ def test_the_commit_runs_under_the_log_lock(repo, monkeypatch):
 
     K.session_end(repo, "s1")
     assert seen and seen[0] > 0
+
+
+def test_merge_commits_what_the_after_merge_check_recorded(repo, tmp_path, monkeypatch):
+    """The merge-door commit comes after `check_after_merge`, so its ci.result is in it."""
+    import json
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    pc = bindir / "pre-commit"
+    pc.write_text("#!/bin/sh\necho 'ruff check.....................Passed'\n")
+    pc.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    _project(repo)
+    (repo / ".pre-commit-config.yaml").write_text("repos: []\n")
+    (repo / "a.py").write_text("x = 0\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    wt = Path(json.loads(out)["worktree"])
+    (wt / "a.py").write_text("x = 1\n")
+    _git(wt, "commit", "-qam", "work")
+    code, out, err = run_cli(repo, "merge", "T1")
+    assert code == 0, out + err
+    assert _git(repo, "log", "-1", "--format=%s") == "events: merge T1"
+    assert "ci.result" in _git(repo, "show", "HEAD")
+    assert EC.uncommitted_shards(repo) == []
