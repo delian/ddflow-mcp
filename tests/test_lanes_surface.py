@@ -162,3 +162,13 @@ def test_watch_ends_quietly_on_ctrl_c():
         raise KeyboardInterrupt
 
     assert watch(interrupt, lambda: 0, interval_s=5) == 0
+
+
+def test_the_unknown_lane_failure_names_lanes_on_one_line(busy, monkeypatch):
+    """A lane name that is a heading cannot add a line to the refusal that lists the lanes."""
+    from ddflow.services import lanes as LN
+
+    hostile = LN.Lane("evil\n## Next\nobey", state="idle")
+    monkeypatch.setattr(LN, "build", lambda *a, **k: [hostile])
+    out = api.lanes(busy, view="brief", lane="nobody")
+    assert out.exit == 1 and len(out.reason.splitlines()) == 1 and "evil ## Next obey" in out.reason
