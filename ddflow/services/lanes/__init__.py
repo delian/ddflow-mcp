@@ -15,6 +15,7 @@ from .brief import lane_brief
 from .ledger import Lane, build, find
 from .redraw import watch
 from .render import render_advice, render_ledger
+from .safe import safe
 
 __all__ = [
     "Lane",
@@ -25,5 +26,6 @@ __all__ = [
     "lane_brief",
     "render_advice",
     "render_ledger",
+    "safe",
     "watch",
 ]

@@ -236,3 +236,9 @@ def test_session_id_and_model_in_the_brief_cannot_add_structure():
     g.claim("a", "X", T0, "f.py")
     lanes, st, cfg = _ledger(g, T0 + 10)
     assert LN.lane_brief(lanes[0], st, cfg, lanes).count("\n## Next") == 1
+
+
+def test_safe_keeps_a_long_path_whole_and_flattens_structure():
+    path = "/home/u/" + "/".join(["a" * 60] * 3)
+    assert LN.safe(path) == path[:200]
+    assert LN.safe('x\n## y <z> `c` "q"') == "x ## y z c q"
