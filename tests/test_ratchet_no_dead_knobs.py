@@ -25,6 +25,9 @@ from ddflow.config import Config
 #: Knobs the NAME-BASED scan cannot see. Each needs a written reason, and the list may
 #: only SHRINK — `test_the_allowlist_only_shrinks` fails on a stale entry.
 KNOWN_UNREAD: dict[str, str] = {
+    # Read by a shell script, not by Python: scripts/ci/pre-push asks `ddflow config --filter
+    # log.pre_push_events` (tests/test_events_committed_doors.py drives all three modes).
+    "log.pre_push_events": "read by scripts/ci/pre-push through `ddflow config`",
     # Read dynamically: `cli._prompt_overrides` iterates `dataclasses.fields(cfg.prompts)`
     # and pulls every non-empty value, so no source line ever spells `.prompts.<name>`.
     # Verified live by `test_prompt_override_from_config_is_honoured`, which sets each

@@ -122,3 +122,17 @@ def commit(repo, files, msg):
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", msg)
     return git(repo, "rev-parse", "HEAD")
+
+
+def landing(repo: Path, ref: str = "main") -> str:
+    """The commit a merge landed on `ref`: ddflow's own `events:` commits that follow it
+    (the event log, committed at merge and complete) are stepped over."""
+    out = subprocess.run(
+        ["git", "-C", str(repo), "log", "--format=%H %s", "-n", "20", ref],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()  # fmt: skip
+    for line in out:
+        sha, _, subject = line.partition(" ")
+        if not subject.startswith("events:"):
+            return sha
+    return out[0].split()[0]
