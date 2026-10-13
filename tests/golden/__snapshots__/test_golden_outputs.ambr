@@ -1433,10 +1433,10 @@
           e.g. `complete T1`. Keep it short.
       log.pre_push_events = 'warn'   [default]
           What scripts/ci/pre-push does when event shards in the primary checkout are
-          not committed, so the push leaves them out: warn (default) names them; block
-          refuses the push; off says nothing. An unrecognised value in a config file
-          is warned about, reported by `doctor` and falls back to 'block', the
-          strictest (a push never leaves event shards out); `config --set`,
+          not committed, so the push leaves them out: `warn` (default) names them,
+          `block` refuses the push, `off` says nothing. An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to 'block',
+          the strictest (a push never leaves event shards out); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
       upgrade.skew = 'refuse'   [default]

@@ -44,5 +44,5 @@ class LogConfig:
         "warn",
         choices=("warn", "block", "off"),
         strictest=("block", "a push never leaves event shards out"),
-        doc="What scripts/ci/pre-push does when event shards in the primary checkout are not committed, so the push leaves them out: warn (default) names them; block refuses the push; off says nothing.",
+        doc="What scripts/ci/pre-push does when event shards in the primary checkout are not committed, so the push leaves them out: `warn` (default) names them, `block` refuses the push, `off` says nothing.",
     )
