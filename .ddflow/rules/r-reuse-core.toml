@@ -1,0 +1,10 @@
+id = "r-reuse-core"
+title = "Reuse the shared core: search before writing, never implement the same behaviour twice"
+tags = ["principle", "reuse"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**", "integrations/**"]
+created = "2026-10-13T15:20:18.468584+00:00"
+updated = "2026-10-13T15:20:18.468595+00:00"
+
+D-universal-principles: before you write a function, search for one that does it (ddflow recall, grep, the code index) and extend it; use the shared engines (record contract, registry, approvals, waivers, event registry, evaluation harness, workflow template engine, sensitivity labels) instead of a private copy. A duplicate implementation fails review (reuse lens) and the clone guard. Keep files under 20 KB.
