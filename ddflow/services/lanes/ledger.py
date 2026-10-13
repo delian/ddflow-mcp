@@ -117,7 +117,7 @@ def _held(st: State, name: str) -> Item | None:
     return max(mine, key=lambda i: (i.lease.renewed_at, i.id)) if mine else None  # type: ignore[union-attr]
 
 
-def _stalls(st: State, plan: Plan, self_name: str) -> tuple[Stall, ...]:
+def _stalls(st: State, plan: Plan) -> tuple[Stall, ...]:
     out = []
     for b in plan.blocked:
         if b.reason not in _CONFLICT:
@@ -125,8 +125,7 @@ def _stalls(st: State, plan: Plan, self_name: str) -> tuple[Stall, ...]:
         for held in b.waiting_on or [""]:
             it = st.items.get(held)
             holder = it.lease.holder if it and it.lease else ""
-            if holder != self_name:
-                out.append(Stall(b.item, holder, held, b.detail))
+            out.append(Stall(b.item, holder, held, b.detail))
     return tuple(out)
 
 
@@ -147,7 +146,7 @@ def _free(name: str, f: _Facts, st: State, plan: Plan, ended: bool, last: float)
     ready = tuple(i.id for i in plan.ready)
     if ready:
         return Lane(state=S.IDLE_READY, ready=ready, **base)
-    stalls = _stalls(st, plan, name)
+    stalls = _stalls(st, plan)
     if stalls:
         who = ", ".join(sorted({s.holder for s in stalls if s.holder}))
         return Lane(state=S.WAIT_GLOB, stalls=stalls, detail=f"blocked by {who}", **base)
