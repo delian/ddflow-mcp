@@ -48,8 +48,10 @@ def lanes(
     if view == "brief":
         found = LN.find(ledger, lane) if lane else None
         if found is None:
-            names = ", ".join(ln.name for ln in ledger) or "none active"
-            return O.failed("lanes", f"no lane {lane!r} (or not one): lanes are {names}", **data)
+            names = ", ".join(LN.safe(ln.name) for ln in ledger) or "none active"
+            return O.failed(
+                "lanes", f"no lane {LN.safe(lane)!r} (or not one): lanes are {names}", **data
+            )
         brief = LN.lane_brief(found, st, cfg, ledger)
         return O.ok("lanes", **{**data, "lane": found.name, "brief": brief})
     if view == "advise":
