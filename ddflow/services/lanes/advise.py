@@ -10,6 +10,7 @@ import ddflow.services.lanes.states as S
 
 from ...core.flowcontrol import Decision
 from .ledger import Lane
+from .safe import safe
 
 #: Urgency order of the kinds: lost work first, then stalls, then spare capacity.
 KINDS = ("resume", "stall", "idle", "over-limit")
@@ -29,15 +30,16 @@ class Move:
 
 
 def _resume(lane: Lane) -> Move:
+    name, item, tree = safe(lane.name), safe(lane.item), safe(lane.worktree)
     why = "reason unknown" if lane.state == S.STOPPED_UNKNOWN else "its session ended"
     return Move(
         "resume",
-        f"lane {lane.name} stopped ({why}) with {lane.item} unfinished"
-        + (f" in {lane.worktree}" if lane.worktree else "")
+        f"lane {name} stopped ({why}) with {item} unfinished"
+        + (f" in {tree}" if tree else "")
         + "; no harness descriptor carries a spawn line yet, so start a session yourself and "
         "give it the lane brief as its first prompt",
-        (lane.name,),
-        f"ddflow lanes brief {lane.name}",
+        (name,),
+        f"ddflow lanes brief {name}",
     )
 
 
@@ -46,10 +48,11 @@ def _stalls(lanes: Sequence[Lane]) -> list[Move]:
     seen: dict[str, tuple[str, str, str]] = {}
     for ln in lanes:
         for s in ln.stalls:
-            seen.setdefault(s.item, (s.holder, s.held_item, s.detail))
+            seen.setdefault(s.item, (safe(s.holder), safe(s.held_item), safe(s.detail)))
     out = []
-    for item, (holder, held_item, detail) in sorted(seen.items()):
-        waiting = tuple(ln.name for ln in lanes if any(s.item == item for s in ln.stalls))
+    for raw, (holder, held_item, detail) in sorted(seen.items()):
+        item = safe(raw)
+        waiting = tuple(safe(ln.name) for ln in lanes if any(s.item == raw for s in ln.stalls))
         who = f"lane {holder}" if holder else "a lease"
         out.append(
             Move(
@@ -65,10 +68,10 @@ def _stalls(lanes: Sequence[Lane]) -> list[Move]:
 
 def _idle(lanes: Sequence[Lane]) -> list[Move]:
     idle = [ln for ln in lanes if ln.state == S.IDLE_READY]
-    names = tuple(ln.name for ln in idle)
+    names = tuple(safe(ln.name) for ln in idle)
     if not names:
         return []
-    ready = tuple(dict.fromkeys(i for ln in idle for i in ln.ready))  # union, in order
+    ready = tuple(dict.fromkeys(safe(i) for ln in idle for i in ln.ready))  # union, in order
     shown = ", ".join(ready[:5])
     return [
         Move(
@@ -84,7 +87,7 @@ def _idle(lanes: Sequence[Lane]) -> list[Move]:
 def _over(lanes: Sequence[Lane], limit: Decision | None) -> list[Move]:
     if limit is None:
         return []
-    active = [ln.name for ln in lanes if ln.state in S.ACTIVE]
+    active = [safe(ln.name) for ln in lanes if ln.state in S.ACTIVE]
     if len(active) <= limit.limit:
         return []
     return [
