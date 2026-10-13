@@ -1619,7 +1619,7 @@ EXPECTED = [
         ("version", "show"),
         0,
         "on main: current (none) (no tag)\n"
-        "next: 0.1.0  (patch, 6 commit(s), 1 item(s))\n"
+        "next: 0.1.0  (patch, 9 commit(s), 1 item(s))\n"
         "\n"
         "## v0.1.0\n"
         "\n"
@@ -1639,7 +1639,7 @@ EXPECTED = [
         '  "next": "0.1.0",\n'
         '  "bump": "patch",\n'
         '  "reasons": [],\n'
-        '  "commits": 6,\n'
+        '  "commits": 9,\n'
         '  "items": [\n'
         '    "T9"\n'
         "  ],\n"

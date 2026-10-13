@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.commit_events_at"
+new = '["merge", "complete", "release", "stop"]'
+why = "The doors at which ddflow commits the event shards: merge, complete, release, stop (a session ends)."
+impact = "additive"

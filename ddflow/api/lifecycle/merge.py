@@ -12,17 +12,18 @@ from ...core import outcome as O
 from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
 from ...services.cleanup import dispose_tree, record_item_removed  # noqa: F401  (re-exported)
 from ...services.enforce import SELF_MANAGED
-from ...services.export import refresh as RF
 from ...services.gates import measured as GM
 from .._base import _load
 from ..ci import check_after_merge
 from ._common import _require
 from .claim import callers_tree
+from .merge_refresh import _refresh_documents
 
 
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
@@ -209,6 +210,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         )
 
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
+    # Last: the after-merge check may record a result of its own.
+    committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
     return O.ok(
         "worktree.merged",
         id=item,
@@ -227,54 +230,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         # The merge gate is a person's to clear here; nothing was recorded for it.
         merge_gate_human=human_gate,
         **({"export_refresh": refreshed} if refreshed else {}),
+        **committed,
     )
-
-
-def _refresh_documents(repo: Path, cfg, wt: W.Worktree) -> dict[str, Any]:
-    """`[export].refresh = merge`: regenerate the selected whole-file documents into the
-    item's branch and commit them there, so they land in the merge. Never fatal: a document
-    that cannot be refreshed is reported (``problems``) and the merge goes ahead.
-
-    Empty when nothing is selected for ``merge`` (the default: refresh is off).
-    """
-
-    r = RF.refresh_selected(repo, "merge", root=wt.path, cfg=cfg)
-    if not r.outcomes:
-        return {}
-    data = r.data()
-    paths = r.changed
-    if paths:
-        add = W.git(wt.path, "add", "--", *paths)
-        commit = (
-            W.git(
-                wt.path,
-                "commit",
-                "-q",
-                "--no-verify",
-                "-m",
-                "refresh generated documents",
-                "--",
-                *paths,
-            )
-            if add.ok
-            else add
-        )
-        if not commit.ok:
-            W.git(wt.path, "reset", "-q", "HEAD", "--", *paths)
-            created = {o.path for o in r.outcomes if o.action == "created"}
-            for rel in paths:
-                if rel in created:  # absent before the refresh: nothing to restore, remove it
-                    (wt.path / rel).unlink(missing_ok=True)
-                elif W.git(wt.path, "cat-file", "-e", f"HEAD:{rel}").ok:
-                    W.git(wt.path, "checkout", "--", rel)
-            data["changed"] = []
-            data["problems_note"] = (
-                f"could not commit the refreshed documents: {commit.err or commit.out}"
-            )
-    data["summary"] = r.summary() + (
-        f"; {data['problems_note']}" if "problems_note" in data else ""
-    )
-    return data
 
 
 def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:

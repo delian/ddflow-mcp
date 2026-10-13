@@ -29,9 +29,18 @@ common=$(git rev-parse --git-common-dir </dev/null 2>/dev/null || true)
 case "$common" in /*) ;; *) common="$PWD/$common" ;; esac  # relative before git 2.31's --path-format
 primary=$(dirname "$common")
 loose=$(git -C "$primary" status --porcelain -z --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | tr '\0' '\n' | grep -c '\.jsonl$' || true)
-if [ "${loose:-0}" -gt 0 ]; then
+# [log].pre_push_events: warn (default) | block | off. Best effort: no ddflow means warn.
+mode=warn
+if command -v ddflow >/dev/null 2>&1; then
+    m=$(cd "$primary" && ddflow config --filter log.pre_push_events </dev/null 2>/dev/null | awk '/^log\.pre_push_events/ {print $3}' | tr -d "'\"" | head -n1 || true)
+    case "$m" in warn|block|off) mode=$m ;; esac
+fi
+block_events=0
+if [ "$mode" != off ] && [ "${loose:-0}" -gt 0 ]; then
+    [ "$mode" = block ] && block_events=1
     echo "pre-push: WARNING: $loose event shard(s) in .ddflow/events are not committed, so this push leaves them out." >&2
     echo "  git -C \"$primary\" add .ddflow/events && git -C \"$primary\" commit -m 'events' -- .ddflow/events" >&2
+    [ "$block_events" = 1 ] && { echo "pre-push: refused ([log].pre_push_events = block)." >&2; exit 1; }
 fi
 if ! command -v pre-commit >/dev/null 2>&1; then
     echo "pre-push: pre-commit is not installed, so nothing was checked." >&2

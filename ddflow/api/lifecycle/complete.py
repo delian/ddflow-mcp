@@ -195,7 +195,7 @@ def complete(
     # A split task "completes when its children do" (B651a63e574): the last sub-task's
     # completion completes its umbrella, and that one's, up the chain.
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
-    extra.update(_commit_events(log, cfg, f"complete {item}"))
+    extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 

@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
 from helpers import git as _git
+from helpers import landing
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -56,7 +57,7 @@ def test_merge_reports_the_commit_it_made_on_the_base_not_the_branch_head(repo):
     head = _git(tree, "rev-parse", "HEAD")
     code, out, err = run_cli(repo, "--json", "merge", "T1")
     assert code == OK, out + err
-    main = _git(repo, "rev-parse", "main")
+    main = landing(repo)
     assert main != head, "the default strategy makes a merge commit"
     body = json.loads(out)
     assert body["sha"] == main
@@ -71,7 +72,7 @@ def test_the_human_line_names_the_merge_commit(repo):
     _claimed_with_a_commit(repo)
     code, out, err = run_cli(repo, "merge", "T1")
     assert code == OK, out + err
-    assert f"({_git(repo, 'rev-parse', 'main')[:8]})" in out
+    assert f"({landing(repo)[:8]})" in out
 
 
 def test_complete_without_sha_reports_the_merge_commit(repo):
@@ -81,7 +82,7 @@ def test_complete_without_sha_reports_the_merge_commit(repo):
     code, out, err = run_cli(repo, "--json", "complete", "T1", "--model", "claude-opus-5")
     assert code == OK, out + err
     # `complete` then commits the event log on top (Bcd3512c891): the landing is below it.
-    assert json.loads(out)["sha"] == _git(repo, "rev-parse", "main^")
+    assert json.loads(out)["sha"] == landing(repo)
     assert _git(repo, "log", "-1", "--format=%s", "main").startswith("events: complete T1")
 
 

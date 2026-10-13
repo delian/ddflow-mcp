@@ -1418,11 +1418,27 @@
           always did — graceful, not a failure. A project big enough to hit this wants
           an on-disk state snapshot rather than a bigger process.
       log.commit_events = True   [default]
-          After complete and release, commit the event shards
-          (`.ddflow/events/*.jsonl`, nothing else) in the primary checkout, so a clone
-          or a pull always gets the whole log. Hooks run as usual; a refusal never
-          fails the operation and `ddflow doctor` lists shards left uncommitted.
-          Nothing is pushed. false leaves committing the log to you.
+          At the doors named by `commit_events_at` (merge, complete, release, stop),
+          commit the event shards (`.ddflow/events/*.jsonl`, nothing else) in the
+          primary checkout, so a clone or a pull always gets the whole log. Hooks run
+          as usual; a refusal never fails the operation and `ddflow doctor` lists
+          shards left uncommitted. Nothing is pushed. false leaves committing the log
+          to you.
+      log.commit_events_at = ['merge', 'complete', 'release', 'stop']   [default]
+          The doors at which ddflow commits the event shards (needs commit_events):
+          merge (after an item lands), complete, release, stop (a session ends). Drop
+          one to leave that door's shards to the next.
+      log.commit_events_message = 'events: {reason}'   [default]
+          The commit message of an event-log commit; `{reason}` is the door and item,
+          e.g. `complete T1`. Keep it short.
+      log.pre_push_events = 'warn'   [default]
+          What scripts/ci/pre-push does when event shards in the primary checkout are
+          not committed, so the push leaves them out: `warn` (default) names them,
+          `block` refuses the push, `off` says nothing. An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to 'block',
+          the strictest (a push never leaves event shards out); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       upgrade.skew = 'refuse'   [default]
           What happens when a ddflow OLDER than the one that last worked on this
           project's log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse`
