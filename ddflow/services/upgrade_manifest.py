@@ -40,6 +40,7 @@ from .. import config as C
 from ..core.events import version_key
 from ..core.model import HANDLERS
 from ..infra.paths import templates_dir
+from . import upgrade_registry as UR
 
 #: Where the manifest ships, inside the package.
 MANIFEST = templates_dir() / "upgrade" / "changes.toml"
@@ -300,6 +301,17 @@ def event_kinds() -> set[str]:
     return set(HANDLERS)
 
 
+def running_code() -> tuple[dict[str, Any], set[str]]:
+    """What the lint compares with the manifest: this process's registry, unless the tree on
+    disk has moved on since the process started (B72b73360bc): then a fresh interpreter says."""
+    if UR.is_stale():
+        try:
+            return UR.fresh()
+        except UR.FreshError as exc:
+            raise ManifestError(str(exc)) from exc
+    return knob_defaults(), event_kinds()
+
+
 #: The operator's recorded waivers, beside the manifest; absent until the first is written.
 WAIVERS = MANIFEST.parent / "waivers.toml"
 
@@ -419,10 +431,8 @@ def lint(
     running code's) with the manifest's replay; whatever differs is a change nobody
     announced. A change a waiver names moves to ``waived``."""
     m = manifest or load()
-    have_k, have_e = (
-        knob_defaults() if knobs is None else knobs,
-        event_kinds() if kinds is None else kinds,
-    )
+    run_k, run_e = running_code() if knobs is None or kinds is None else ({}, set())
+    have_k, have_e = (run_k if knobs is None else knobs, run_e if kinds is None else kinds)
     said_k, said_e = replay(m)
     notes = C.KNOB_DOCS if docs is None else docs
     found: list[Unmanifested] = []

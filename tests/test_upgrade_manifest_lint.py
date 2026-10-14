@@ -17,6 +17,7 @@ from conftest import run_cli
 from ddflow import api
 from ddflow import config as C
 from ddflow.services import upgrade_manifest as UM
+from ddflow.services import upgrade_registry as UR
 from ddflow.surfaces import cli
 
 OK, REFUSED = 0, 3
@@ -175,3 +176,29 @@ def test_a_ddflow_installed_inside_the_project_is_not_the_projects_manifest(
     monkeypatch.setattr(UM, "MANIFEST", site / "changes.toml")
     out = api.version_lint(repo)
     assert out.exit == OK and out.data["unmanifested"] == []
+
+
+def test_a_stale_long_lived_process_does_not_report_phantom_removals(monkeypatch):
+    """B72b73360bc: an MCP server started before a knob was added keeps the OLD registry in
+    memory while the manifest on disk (read fresh) announces the knob, so the lint called the
+    knob removed and refused a release for a change that does not exist. A process whose source
+    is newer than its import reads the running code from a fresh interpreter instead."""
+    real = UM.knob_defaults()
+    stale = {k: v for k, v in real.items() if k != "importer.phase_slug_chars"}
+    assert "importer.phase_slug_chars" in real
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+    # the process "started" before every source file on disk was last written
+    monkeypatch.setattr(UR, "_STARTED", 0.0, raising=False)
+    res = UM.lint()
+    assert res.clean, UM.report(res)
+
+
+def test_a_fresh_process_keeps_using_its_own_registry(monkeypatch):
+    """The common case costs no subprocess: nothing on disk is newer than the process."""
+    monkeypatch.setattr(UR, "_STARTED", 1e12, raising=False)
+    called = []
+    monkeypatch.setattr(
+        UM, "_fresh_running_code", lambda: called.append(1) or ({}, set()), raising=False
+    )
+    assert UM.lint().clean
+    assert called == []
