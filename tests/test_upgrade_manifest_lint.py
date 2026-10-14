@@ -17,6 +17,7 @@ from conftest import run_cli
 from ddflow import api
 from ddflow import config as C
 from ddflow.services import upgrade_manifest as UM
+from ddflow.services import upgrade_registry as UR
 from ddflow.surfaces import cli
 
 OK, REFUSED = 0, 3
@@ -38,6 +39,12 @@ def drift(monkeypatch):
     real_knobs, real_kinds = UM.knob_defaults, UM.event_kinds
     monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: {**real_knobs(cfg), "x.new_knob": 3})
     monkeypatch.setattr(UM, "event_kinds", lambda: real_kinds() | {"x.thing_happened"})
+    # a fresh interpreter would read the same drifted tree
+    monkeypatch.setattr(
+        UR,
+        "fresh",
+        lambda: ({**real_knobs(), "x.new_knob": 3}, real_kinds() | {"x.thing_happened"}),
+    )
 
 
 def test_this_tree_is_clean():
@@ -175,3 +182,62 @@ def test_a_ddflow_installed_inside_the_project_is_not_the_projects_manifest(
     monkeypatch.setattr(UM, "MANIFEST", site / "changes.toml")
     out = api.version_lint(repo)
     assert out.exit == OK and out.data["unmanifested"] == []
+
+
+def test_a_stale_long_lived_process_does_not_report_phantom_removals(monkeypatch):
+    """B72b73360bc: an MCP server started before a knob was added keeps the OLD registry in
+    memory while the manifest on disk (read fresh) announces the knob, so the lint called the
+    knob removed and refused a release for a change that does not exist. A removal is
+    confirmed by a fresh interpreter, which still has the knob."""
+    real = UM.knob_defaults()
+    stale = {k: v for k, v in real.items() if k != "importer.phase_slug_chars"}
+    assert "importer.phase_slug_chars" in real
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+    res = UM.lint()
+    assert res.clean, UM.report(res)
+
+
+def test_a_removal_the_fresh_process_agrees_with_is_still_reported(monkeypatch):
+    real = UM.knob_defaults()
+    gone = "importer.phase_slug_chars"
+    stale = {k: v for k, v in real.items() if k != gone}
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+    monkeypatch.setattr(UR, "fresh", lambda: (stale, UM.event_kinds()))
+    res = UM.lint()
+    assert [u.id for u in res.unmanifested] == [f"knob_removed:{gone}"]
+
+
+def test_a_stale_process_does_not_invent_a_changed_default_or_an_added_knob(monkeypatch):
+    """The other two directions of the same staleness: the tree flipped a default or removed
+    a knob (and the manifest says so) while the old process still holds the old registry."""
+    real = UM.knob_defaults()
+    flipped = "importer.phase_slug_chars"
+    stale = {**real, flipped: 12345, "x.removed_since": 1}
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+    res = UM.lint()
+    assert res.clean, UM.report(res)
+
+
+def test_a_clean_lint_costs_no_fresh_interpreter(monkeypatch):
+    called = []
+    monkeypatch.setattr(UR, "fresh", lambda: called.append(1) or ({}, set()))
+    assert UM.lint().clean
+    assert called == []
+
+
+def test_a_fresh_interpreter_that_cannot_answer_stops_the_lint(monkeypatch):
+    real = UM.knob_defaults()
+    stale = {k: v for k, v in real.items() if k != "importer.phase_slug_chars"}
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+
+    def broken():
+        raise UR.FreshError("no interpreter")
+
+    monkeypatch.setattr(UR, "fresh", broken)
+    with pytest.raises(UM.ManifestError, match="no interpreter"):
+        UM.lint()
+
+
+def test_the_fresh_interpreter_reports_this_trees_registry():
+    knobs, kinds = UR.fresh()
+    assert knobs == UM.knob_defaults() and kinds == UM.event_kinds()
