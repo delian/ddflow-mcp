@@ -98,4 +98,32 @@ def test_the_cli_says_what_became_of_the_tree(repo):
     _seed(repo, "T7")
     code, out, err = run_cli(repo, "abandon", "T7", "--reason", "no")
     assert code == 0, err
-    assert "worktree and branch removed" in out or "standing in it" in out
+    assert "worktree and branch removed" in out, out
+
+
+def test_a_branch_whose_tree_was_removed_by_hand_is_still_deleted_when_merged(repo):
+    tree = _seed(repo, "T8")
+    _git("-C", str(repo), "worktree", "remove", "--force", str(tree))
+    assert "ddflow/T8" in _branches(repo)
+    out = LC.abandon(repo, "T8", reason="no", agent="worker")
+    assert out.exit == 0, out.reason
+    assert "ddflow/T8" not in _branches(repo)
+    assert "its worktree was already gone" in out.data["kept_reason"]
+
+
+def test_an_unmerged_branch_without_a_tree_is_kept_and_named(repo):
+    tree = _seed(repo, "T9")
+    _commit_in(tree, "work.py")
+    _git("-C", str(repo), "worktree", "remove", "--force", str(tree))
+    out = LC.abandon(repo, "T9", reason="no", agent="worker")
+    assert "ddflow/T9" in _branches(repo)
+    assert "ddflow/T9 kept" in out.data["kept_reason"]
+
+
+def test_remove_on_merge_false_keeps_trees_for_complete_abandon_and_remove_too(repo):
+    """The standing 'keep my trees for post-mortems' setting is honoured by every way an
+    item ends, not just merge."""
+    tree = _seed(repo, "T10")
+    assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == 0
+    out = LC.abandon(repo, "T10", reason="no", agent="worker")
+    assert out.data["worktree_removed"] is False and tree.exists()
