@@ -147,3 +147,36 @@ def test_the_brief_keeps_the_tree_its_caller_stands_in_even_over_mcp(repo):
     assert tree.exists()
     LC.brief(repo, agent="later")
     assert not tree.exists()
+
+
+def _commit_in(tree: Path, name: str) -> None:
+    (tree / name).write_text("work\n")
+    for args in (
+        ("add", name),
+        ("-c", "user.email=t@e.com", "-c", "user.name=T", "commit", "-qm", "wip"),
+    ):
+        subprocess.run(["git", "-C", str(tree), *args], check=True, capture_output=True)
+
+
+def test_the_sweep_keeps_a_tree_with_unmerged_commits_and_names_its_branch(repo):
+    tree = _seed(repo, "T14")
+    _commit_in(tree, "work.py")
+    _finish(repo, "T14")
+    cfg, log = Config.load(repo), EventLog(repo, "later")
+    state = fold(log.read_all(), strict=False)
+    said = CL.sweep_finished(repo, cfg, log, state, now=time.time() + 10**6, callers=())
+    assert tree.exists() and "ddflow/T14" in _branches(repo)
+    assert said and "unmerged commit" in said[0]
+
+
+def test_the_sweep_also_removes_the_tree_an_abandon_kept_because_the_caller_stood_in_it(repo):
+    """The promise in the kept message ('the next brief removes it') holds for an abandoned
+    item too, not only a done one."""
+    tree = _seed(repo, "T15")
+    out = LC.abandon(repo, "T15", reason="no", agent="worker", shell_cwd=tree)
+    assert tree.exists() and "standing in it" in out.data["kept_reason"]
+    cfg, log = Config.load(repo), EventLog(repo, "later")
+    state = fold(log.read_all(), strict=False)
+    said = CL.sweep_finished(repo, cfg, log, state, callers=())
+    assert said == ["removed the finished worktree of T15"]
+    assert not tree.exists() and "ddflow/T15" not in _branches(repo)

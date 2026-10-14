@@ -42,7 +42,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import clock as CK
 from ..core.flow import GITFLOW
-from ..core.model import DONE, Item, State, fold
+from ..core.model import ABANDONED, DONE, Item, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import leases as L
@@ -430,11 +430,16 @@ def sweep_finished(
         pass
     out: list[str] = []
     for it in state.items.values():
-        if it.removed or it.state != DONE or not it.worktree or it.adopted or it.lease:
+        finished = it.removed or it.state in (DONE, ABANDONED)
+        if not finished or not it.worktree or it.adopted or it.lease:
             continue
-        finished_for = CK.age_s(it.completed_at, now) if it.completed_at else 0.0
-        if finished_for < cfg.worktree.sweep_min_age_s:
-            continue  # too fresh (or no finish time): the tree may be an agent's cwd
+        if it.state == DONE and not it.removed:
+            finished_for = CK.age_s(it.completed_at, now) if it.completed_at else 0.0
+            if finished_for < cfg.worktree.sweep_min_age_s:
+                continue  # too fresh (or no finish time): the tree may be an agent's cwd
+        # an abandoned or removed item was disposed at that moment, so what is left was KEPT
+        # (the caller stood in it, or it holds work): the rule is the same, the caller guard
+        # protects whoever stands in it now
         removed, why = dispose_finished(repo, cfg, log, it, callers=callers)
         if removed:
             out.append(f"removed the finished worktree of {it.id}" + (f"; {why}" if why else ""))
