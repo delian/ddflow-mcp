@@ -16,6 +16,7 @@ from ...core.budget import Budget, approx_tokens
 from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import choices as CHO
+from ...services import cleanup as CL
 from ...services import gates as G
 from ...services import leases as L
 from ...services import searchcore as SC
@@ -166,6 +167,16 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     return "\n\n".join(x for x in (notice, release) if x)
 
 
+def _sweep_finished(repo: Path, cfg, log, st) -> None:
+    """Remove the leftover worktrees of DONE items finished long enough ago (B4757c428f4):
+    `merge` keeps the tree it ran from, and nothing else removed it afterwards. Best effort:
+    a session start must never fail on housekeeping."""
+    try:
+        CL.sweep_finished(repo, cfg, log, st)
+    except Exception:
+        pass
+
+
 def brief(
     repo: Path,
     *,
@@ -183,6 +194,7 @@ def brief(
     log, cfg, _ = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
+    _sweep_finished(repo, cfg, log, st)
     unknown = _unknown_phase(st, phase)
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")

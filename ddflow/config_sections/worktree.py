@@ -40,6 +40,19 @@ class WorktreeConfig:
         True,
         doc="Remove the worktree after a successful merge. Disable while debugging the pipeline so post-mortem inspection is possible.",
     )
+    dispose_finished: bool = knob(
+        True,
+        doc="Remove a finished item's own worktree and its branch when the item is finished (`complete`, `abandon`, `remove`) and, for a DONE item, at the start of a later `brief` (B79319c6ada, B4757c428f4). Only a clean tree with nothing unmerged is removed, never an adopted tree and never the directory the caller stands in; a tree that holds uncommitted files or unmerged commits is kept and the output says why and how to inspect it. Turn off to keep every tree for post-mortems, the way `remove_on_merge = false` does for a merge.",
+    )
+    sweep_min_age_s: int = knob(
+        3600,
+        doc="How long a DONE item must have been finished before the `brief` sweeps its leftover worktree (`dispose_finished`): the tree of an item finished a moment ago may be the directory an agent is still standing in, so only trees finished longer ago than this are swept at session start.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "must be an integer >= 0"
+        ),
+    )
     max_parallel: int = knob(
         0,
         doc="Ceiling on simultaneously active task worktrees. Guards disk and CPU; the scheduler queues beyond it rather than refusing. 0 (the default) means FOLLOW the schedule limit -- the adaptive or fixed number of items in flight (`schedule.parallel`) -- and is not unlimited: there is no unlimited setting, the schedule ceiling always bounds it. A nonzero value stays an independent hard cap on worktrees alone. Projects adopted before adaptive parallelism carry an explicit `max_parallel = 4`, which caps auto at 4 worktrees; `ddflow doctor` names it and the remedy `ddflow config --set worktree.max_parallel 0`.",

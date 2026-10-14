@@ -16,7 +16,11 @@ from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
-from ...services.cleanup import dispose_tree, record_item_removed  # noqa: F401  (re-exported)
+from ...services.cleanup import (  # noqa: F401  (re-exported)
+    dispose_tree,
+    record_item_removed,
+    stands_in,
+)
 from ...services.enforce import SELF_MANAGED
 from ...services.gates import measured as GM
 from .._base import _load
@@ -275,7 +279,7 @@ def _dispose_tree(
         return False, f"worktree {wt.path} kept: adopted, not created by ddflow."
     if not cfg.worktree.remove_on_merge or keep:
         return False, ""
-    if _stands_in(wt.path, *callers):
+    if stands_in(wt.path, *callers):
         return False, (
             f"worktree {wt.path} kept: you are standing in it, and removing it would leave "
             f"your shell in a deleted directory. cd {W.repo_root(repo)} -- `ddflow cleanup "
@@ -283,24 +287,6 @@ def _dispose_tree(
         )
     gone = dispose_tree(repo, cfg, log, wt, item=it)
     return (True, "") if gone.removed else (False, gone.why)
-
-
-def _stands_in(tree: Path, *wheres: Path | None) -> bool:
-    """Is any of ``wheres`` the tree or inside it?"""
-    try:
-        root = tree.resolve()
-    except OSError:
-        return False
-    for where in wheres:
-        if where is None:
-            continue
-        try:
-            here = Path(where).resolve()
-        except OSError:
-            continue
-        if here == root or root in here.parents:
-            return True
-    return False
 
 
 def _what_to_land(

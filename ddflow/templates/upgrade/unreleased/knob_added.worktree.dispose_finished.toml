@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "worktree.dispose_finished"
+new = 'true'
+why = "A finished item's own clean, fully merged worktree and branch are removed when the item is completed, abandoned or removed, and for a done item at the next brief; a tree holding work is kept and says why."
+impact = "additive"

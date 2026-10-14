@@ -48,6 +48,8 @@ def _drop_tree(repo: Path, path: Path) -> None:
 
 def test_an_abandoned_item_whose_tree_is_gone_is_not_reported(repo):
     path = _seed(repo, "T1")
+    # abandon now disposes a clean tree itself (B79319c6ada): keep it to test the scan
+    assert run_cli(repo, "config", "worktree.dispose_finished", "false")[0] == 0
     assert LC.abandon(repo, "T1", reason="not needed", agent="worker").exit == 0
     assert any(r.item == "T1" for r in _scan(repo)), "its tree still exists: still reported"
     _drop_tree(repo, path)

@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..core import clock as CK
 from ..core.flow import GITFLOW
 from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
@@ -333,6 +334,81 @@ def dispose_tree(
             left = (rb.err or rb.out).strip() or f"git exit {rb.code}"
             return Disposal("removed", branch_left=left, had_branch=True)
     return Disposal("removed", had_branch=had_branch)
+
+
+def stands_in(tree: Path, *wheres: Path | None) -> bool:
+    """Is any of ``wheres`` the tree or inside it? Deleting a shell's working directory makes
+    its next `pwd` fail (B1172da8c35), so such a tree is never removed under its caller."""
+    try:
+        root = tree.resolve()
+    except OSError:
+        return False
+    for where in wheres:
+        if where is None:
+            continue
+        try:
+            here = Path(where).resolve()
+        except OSError:
+            continue
+        if here == root or root in here.parents:
+            return True
+    return False
+
+
+def dispose_finished(
+    repo: Path, cfg: Config, log: EventLog, it: Item, *, callers: tuple[Path | None, ...] = ()
+) -> tuple[bool, str]:
+    """(removed, why kept) for the OWN tree and branch of an item that is finished with:
+    done, abandoned or removed (B79319c6ada, B4757c428f4).
+
+    The one rule `merge` already follows, for the other ways an item ends. Only what
+    `dispose_tree` allows goes: a clean tree with nothing unmerged, never an adopted one,
+    never one a live lease holds, and never the directory a caller stands in (``callers``,
+    as for `merge`). A tree holding uncommitted files or unmerged commits is KEPT and the
+    reason says how to look at it; "" means there was nothing to do.
+    """
+    if not cfg.worktree.dispose_finished or not it.worktree or it.adopted:
+        return False, ""
+    path = W.load_path(repo, it.worktree)
+    if not path.exists():
+        return False, ""
+    if stands_in(path, *callers):
+        return False, (
+            f"worktree {path} kept: you are standing in it, and removing it would leave your "
+            f"shell in a deleted directory. cd {W.repo_root(repo)} -- the next `ddflow brief` "
+            f"or `ddflow cleanup --apply` removes it."
+        )
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    wt = W.Worktree(item=it.id, path=path, branch=it.branch, base=base)
+    gone = dispose_tree(repo, cfg, log, wt, item=it)
+    if gone.removed:
+        return True, (f"branch {it.branch} left: {gone.branch_left}" if gone.branch_left else "")
+    return False, f"worktree {path} and branch {it.branch} kept: {gone.why}"
+
+
+def sweep_finished(
+    repo: Path, cfg: Config, log: EventLog, state: State, *, now: float | None = None
+) -> list[str]:
+    """What a session start removes of DONE items' leftover trees (B4757c428f4): `merge`
+    keeps the tree it was run from and nothing else removes it later. Only an item finished
+    longer ago than ``worktree.sweep_min_age_s``, so the tree an agent just finished in, and
+    may still stand in, is left alone. Returns the sentences for what was removed."""
+    if not cfg.worktree.dispose_finished:
+        return []
+    now = time.time() if now is None else now
+    out: list[str] = []
+    for it in state.items.values():
+        if it.removed or it.state != DONE or not it.worktree or it.adopted or it.lease:
+            continue
+        finished_for = CK.age_s(it.completed_at, now) if it.completed_at else 0.0
+        if finished_for < cfg.worktree.sweep_min_age_s:
+            continue  # too fresh (or no finish time): the tree may be an agent's cwd
+        removed, why = dispose_finished(repo, cfg, log, it)
+        if removed:
+            out.append(f"removed the finished worktree of {it.id}")
+        elif why:
+            out.append(f"{it.id}: {why}")
+    return out
 
 
 def our_prefixes(cfg: Config) -> list[str]:
