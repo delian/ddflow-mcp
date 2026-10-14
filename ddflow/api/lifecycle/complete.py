@@ -10,6 +10,7 @@ from typing import Any
 from ...core import outcome as O
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
+from ...services import cleanup as CL
 from ...services import completion as CM
 from ...services import gates as G
 from ...services import leases as L
@@ -44,6 +45,8 @@ def complete(
     agent: str = "",
     changelog: str = "",
     regression_test: str | list[str] = "",
+    called_from: Path | None = None,
+    shell_cwd: Path | None = None,
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
 
@@ -171,6 +174,7 @@ def complete(
     )
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
+    extra.update(_dispose(repo, cfg, log, item, (called_from, shell_cwd)))
     extra.update(_refuted_extra(st, item))
 
     # The item is complete and released by now: a report that cannot be built must
@@ -254,7 +258,14 @@ def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
 
 
 def abandon(
-    repo: Path, item: str, *, reason: str = "", force: bool = False, agent: str = ""
+    repo: Path,
+    item: str,
+    *,
+    reason: str = "",
+    force: bool = False,
+    agent: str = "",
+    called_from: Path | None = None,
+    shell_cwd: Path | None = None,
 ) -> O.Outcome:
     """Stop work without completing, with a recorded reason.
 
@@ -286,11 +297,36 @@ def abandon(
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
     if it.lease:
         L.release(log, item, note=f"abandoned: {reason}")
-    return O.Outcome(kind="item.abandoned", data={"id": item, "reason": reason})
+    return O.Outcome(
+        kind="item.abandoned",
+        data={
+            "id": item,
+            "reason": reason,
+            **_dispose(repo, cfg, log, item, (called_from, shell_cwd)),
+        },
+    )
+
+
+def _dispose(repo: Path, cfg, log, item: str, callers) -> dict[str, Any]:
+    """The item's own worktree and branch, removed when it is finished with and nothing is
+    in them (B79319c6ada, B4757c428f4): ``worktree_removed`` and ``kept_reason`` ("" when
+    there is nothing to say), the same two fields `merge` reports."""
+    it = fold(log.read_all(), strict=False).items.get(item)
+    removed, why = (
+        CL.dispose_finished(repo, cfg, log, it, callers=callers) if it is not None else (False, "")
+    )
+    return {"worktree_removed": removed, "kept_reason": why}
 
 
 def remove(
-    repo: Path, item: str, *, reason: str = "", force: bool = False, agent: str = ""
+    repo: Path,
+    item: str,
+    *,
+    reason: str = "",
+    force: bool = False,
+    agent: str = "",
+    called_from: Path | None = None,
+    shell_cwd: Path | None = None,
 ) -> O.Outcome:
     """Take an item out of the queue entirely.
 
@@ -331,7 +367,13 @@ def remove(
     if it.lease:
         L.release(log, item, note="removed from the queue")
     log.append("phase.removed" if it.kind == "phase" else "task.removed", item, {"reason": reason})
-    return O.ok("item.removed", id=item, children=[], dependents=[])
+    return O.ok(
+        "item.removed",
+        id=item,
+        children=[],
+        dependents=[],
+        **_dispose(repo, cfg, log, item, (called_from, shell_cwd)),
+    )
 
 
 def block(

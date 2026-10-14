@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "worktree.sweep_min_age_s"
+new = '3600'
+why = "How long a done item must have been finished before the brief sweeps its leftover worktree (default 3600 seconds), so the tree an agent just finished in is left alone."
+impact = "additive"

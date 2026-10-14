@@ -72,15 +72,23 @@ COMMANDS: tuple[Command, ...] = (
         kind="brief",
         prose=True,
         prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
-        call=lambda repo, a, agent: _api().brief(
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().brief(
             repo,
             item=a.get("item", "") or "",
             phase=a.get("phase", "") or "",
             check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
+            called_from=called_from,
+            shell_cwd=shell_cwd,
             agent=agent,
         ),
         payload="text",
-        cli=CliPolicy(notes=L.brief_notes, body=L.brief_body, human=L.brief_text),
+        cli=CliPolicy(
+            notes=L.brief_notes,
+            body=L.brief_body,
+            human=L.brief_text,
+            call_kwargs=L.merge_kwargs,
+        ),
+        wants_called_from=True,
         params=(
             Param(
                 "item", help="Focus on this phase or task id (optional).", cli_help="", default=""
@@ -598,7 +606,7 @@ COMMANDS: tuple[Command, ...] = (
         description="Finish an item. Refuses (exit 3) when a required gate has not passed, when a "
         "phase still has open tasks, or when no reviewer came from a different model "
         "family than the author. Pass your own model as 'model'.",
-        call=lambda repo, a, agent: _api().complete(
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().complete(
             repo,
             a["id"],
             sha=a.get("sha", "") or "",
@@ -606,6 +614,8 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
             regression_test=a.get("regression_test", "") or "",
+            called_from=called_from,
+            shell_cwd=shell_cwd,
             agent=agent,
         ),
         payload=(
@@ -620,10 +630,17 @@ COMMANDS: tuple[Command, ...] = (
             "umbrellas_completed",
             "umbrella_refused",
             "refuted_passes",
+            "worktree_removed",
+            "kept_reason",
         ),
         cli=CliPolicy(
-            shown=(OK,), notes=L.complete_notes, human=L.complete_text, body=L.complete_body
+            shown=(OK,),
+            notes=L.complete_notes,
+            human=L.complete_text,
+            body=L.complete_body,
+            call_kwargs=L.merge_kwargs,
         ),
+        wants_called_from=True,
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("sha", help="Commit sha this shipped as.", cli_help="", default=""),
@@ -664,12 +681,19 @@ COMMANDS: tuple[Command, ...] = (
         "a blocked item is waiting and will resume; an abandoned one will not, and "
         "so it stops holding its phase open — which an unfinished task otherwise "
         "does forever, since nothing can ever finish it.",
-        call=lambda repo, a, agent: _api().abandon(
-            repo, a["id"], reason=a.get("reason", "") or "", force=bool(a.get("force")), agent=agent
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().abandon(
+            repo,
+            a["id"],
+            reason=a.get("reason", "") or "",
+            force=bool(a.get("force")),
+            called_from=called_from,
+            shell_cwd=shell_cwd,
+            agent=agent,
         ),
-        payload=("id", "reason"),
+        payload=("id", "reason", "worktree_removed", "kept_reason"),
         render=L.abandon_text,
-        cli=CliPolicy(shown=(OK,)),
+        cli=CliPolicy(shown=(OK,), call_kwargs=L.merge_kwargs),
+        wants_called_from=True,
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("reason", help="Why it is being dropped.", cli_help="", required=True),
@@ -689,12 +713,19 @@ COMMANDS: tuple[Command, ...] = (
         "removal rather than erasing anything — the item stays in the history and "
         "in replay, which keeps the record honest about work that was planned and "
         "then dropped. Refuses if another item depends on it.",
-        call=lambda repo, a, agent: _api().remove_item(
-            repo, a["id"], reason=a.get("reason", "") or "", force=bool(a.get("force")), agent=agent
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().remove_item(
+            repo,
+            a["id"],
+            reason=a.get("reason", "") or "",
+            force=bool(a.get("force")),
+            called_from=called_from,
+            shell_cwd=shell_cwd,
+            agent=agent,
         ),
-        payload=("id",),
+        payload=("id", "worktree_removed", "kept_reason"),
         render=L.remove_text,
-        cli=CliPolicy(shown=(OK,)),
+        cli=CliPolicy(shown=(OK,), call_kwargs=L.merge_kwargs),
+        wants_called_from=True,
         params=(
             Param("id", help="Item id.", cli_help="", positional=True),
             Param("reason", help="Why.", cli_help="", default=""),

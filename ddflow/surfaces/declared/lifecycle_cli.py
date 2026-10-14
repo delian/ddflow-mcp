@@ -67,12 +67,20 @@ def release_text(out, a) -> str:
 # -- abandon, remove, block, unblock ---------------------------------------------------
 
 
+def _tree_line(out) -> str:
+    """What became of the item's own worktree and branch, when there is anything to say."""
+    d = out.data
+    return ("\n  worktree and branch removed" if d.get("worktree_removed") else "") + (
+        f"\n  {d['kept_reason']}" if d.get("kept_reason") else ""
+    )
+
+
 def abandon_text(out, a) -> str:
-    return f"{a['id']} abandoned: {a['reason']}"
+    return f"{a['id']} abandoned: {a['reason']}" + _tree_line(out)
 
 
 def remove_text(out, a) -> str:
-    return f"{a['id']} removed from the queue"
+    return f"{a['id']} removed from the queue" + _tree_line(out)
 
 
 def block_text(out, a) -> str:
@@ -324,6 +332,7 @@ def complete_text(out, a, ctx) -> str:
         + waiting(data.get("woke", []), "woke:")
         + "".join(f"\nPASSED ON REFUTATION: {line}" for line in data.get("refuted_passes", []))
         + (f"\n{data['progress']}" if data.get("progress") else "")
+        + _tree_line(out)
     )
 
 
