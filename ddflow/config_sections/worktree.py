@@ -42,7 +42,7 @@ class WorktreeConfig:
     )
     dispose_finished: bool = knob(
         True,
-        doc="Remove a finished item's own worktree and its branch when the item is finished (`complete`, `abandon`, `remove`) and, for a DONE item, at the start of a later `brief` (B79319c6ada, B4757c428f4). Only a clean tree with nothing unmerged is removed, never an adopted tree and never the directory the caller stands in; a tree that holds uncommitted files or unmerged commits is kept and the output says why and how to inspect it. Turn off to keep every tree for post-mortems, the way `remove_on_merge = false` does for a merge.",
+        doc="Remove a finished item's own worktree and its branch when the item is finished (`complete`, `abandon`, `remove`) and, for a DONE item, at the start of a later `brief` (B79319c6ada, B4757c428f4). Only a clean tree with nothing unmerged is removed, never an adopted tree and never the directory the caller stands in; a tree that holds uncommitted files or unmerged commits is kept and the output says why and how to inspect it. Turn off to keep every tree for post-mortems; `remove_on_merge = false` also keeps them here, since it is the standing 'keep my trees' setting.",
     )
     sweep_min_age_s: int = knob(
         3600,

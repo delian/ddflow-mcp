@@ -479,8 +479,8 @@
           nothing unmerged is removed, never an adopted tree and never the directory
           the caller stands in; a tree that holds uncommitted files or unmerged
           commits is kept and the output says why and how to inspect it. Turn off to
-          keep every tree for post-mortems, the way `remove_on_merge = false` does for
-          a merge.
+          keep every tree for post-mortems; `remove_on_merge = false` also keeps them
+          here, since it is the standing 'keep my trees' setting.
       worktree.sweep_min_age_s = 3600   [default]
           How long a DONE item must have been finished before the `brief` sweeps its
           leftover worktree (`dispose_finished`): the tree of an item finished a

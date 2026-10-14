@@ -367,11 +367,13 @@ def dispose_finished(
     as for `merge`). A tree holding uncommitted files or unmerged commits is KEPT and the
     reason says how to look at it; "" means there was nothing to do.
     """
-    if not cfg.worktree.dispose_finished or not it.worktree or it.adopted:
+    if not (cfg.worktree.dispose_finished and cfg.worktree.remove_on_merge):
+        return False, ""  # `remove_on_merge = false` is the standing "keep my trees" setting
+    if not it.worktree or it.adopted:
         return False, ""
     path = W.load_path(repo, it.worktree)
     if not path.exists():
-        return False, ""
+        return _drop_branch(repo, cfg, log, it)
     if stands_in(path, *callers):
         return False, (
             f"worktree {path} kept: you are standing in it, and removing it would leave your "
@@ -384,6 +386,24 @@ def dispose_finished(
     if gone.removed:
         return True, (f"branch {it.branch} left: {gone.branch_left}" if gone.branch_left else "")
     return False, f"worktree {path} and branch {it.branch} kept: {gone.why}"
+
+
+def _drop_branch(repo: Path, cfg: Config, log: EventLog, it: Item) -> tuple[bool, str]:
+    """The branch of an item whose tree is already gone (removed by hand): deleted when it is
+    fully merged (`git branch -d` never deletes unmerged work), never while a live lease holds
+    it, and named in the answer when it is kept."""
+    root = W.repo_root(repo)
+    if not it.branch or not W.branch_exists(root, it.branch):
+        return False, ""
+    with log.transaction():
+        held = _protected(root, cfg, localize(fold(log.read_all(), strict=False), log, time.time()))
+        kind, _why = held.why("", it.branch)
+        if kind:
+            return False, ""
+        done = W.git(root, "branch", "-d", it.branch)
+    if done.ok:
+        return False, f"branch {it.branch} removed (its worktree was already gone)"
+    return False, f"branch {it.branch} kept: {(done.err or done.out).strip() or 'not merged'}"
 
 
 def sweep_finished(
@@ -405,7 +425,7 @@ def sweep_finished(
             continue  # too fresh (or no finish time): the tree may be an agent's cwd
         removed, why = dispose_finished(repo, cfg, log, it)
         if removed:
-            out.append(f"removed the finished worktree of {it.id}")
+            out.append(f"removed the finished worktree of {it.id}" + (f"; {why}" if why else ""))
         elif why:
             out.append(f"{it.id}: {why}")
     return out

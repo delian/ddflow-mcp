@@ -112,3 +112,16 @@ def test_the_knob_turns_the_sweep_off(repo):
     assert run_cli(repo, "config", "worktree.dispose_finished", "false")[0] == 0
     assert run_cli(repo, "brief")[0] == 0
     assert tree.exists()
+
+
+def test_the_sweep_names_a_branch_it_could_not_delete(repo, monkeypatch):
+    tree = _seed(repo, "T11")
+    _finish(repo, "T11")
+    cfg, log = Config.load(repo), EventLog(repo, "later")
+    state = fold(log.read_all(), strict=False)
+    monkeypatch.setattr(
+        CL, "dispose_tree", lambda *a, **k: CL.Disposal("removed", branch_left="in use")
+    )
+    said = CL.sweep_finished(repo, cfg, log, state, now=time.time() + 10**6)
+    assert said == ["removed the finished worktree of T11; branch ddflow/T11 left: in use"]
+    assert tree.exists()  # the stub removed nothing
