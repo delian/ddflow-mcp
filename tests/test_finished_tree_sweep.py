@@ -171,12 +171,26 @@ def test_the_sweep_keeps_a_tree_with_unmerged_commits_and_names_its_branch(repo)
 
 def test_the_sweep_also_removes_the_tree_an_abandon_kept_because_the_caller_stood_in_it(repo):
     """The promise in the kept message ('the next brief removes it') holds for an abandoned
-    item too, not only a done one."""
+    item too, once it has been finished long enough for nobody to be standing in it."""
     tree = _seed(repo, "T15")
     out = LC.abandon(repo, "T15", reason="no", agent="worker", shell_cwd=tree)
     assert tree.exists() and "standing in it" in out.data["kept_reason"]
     cfg, log = Config.load(repo), EventLog(repo, "later")
     state = fold(log.read_all(), strict=False)
-    said = CL.sweep_finished(repo, cfg, log, state, callers=())
+    assert CL.sweep_finished(repo, cfg, log, state, callers=()) == [], "finished a moment ago"
+    later = time.time() + cfg.worktree.sweep_min_age_s + 60
+    said = CL.sweep_finished(repo, cfg, log, state, now=later, callers=())
     assert said == ["removed the finished worktree of T15"]
     assert not tree.exists() and "ddflow/T15" not in _branches(repo)
+
+
+def test_the_sweep_also_removes_the_tree_a_remove_kept(repo):
+    tree = _seed(repo, "T16")
+    out = LC.remove(repo, "T16", reason="dropped", agent="worker", shell_cwd=tree)
+    assert tree.exists() and "standing in it" in out.data["kept_reason"]
+    cfg, log = Config.load(repo), EventLog(repo, "later")
+    state = fold(log.read_all(), strict=False)
+    later = time.time() + cfg.worktree.sweep_min_age_s + 60
+    said = CL.sweep_finished(repo, cfg, log, state, now=later, callers=())
+    assert said == ["removed the finished worktree of T16"]
+    assert not tree.exists()

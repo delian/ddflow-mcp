@@ -168,8 +168,8 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
 
 
 def _sweep_finished(repo: Path, cfg, log, st, callers: tuple[Path | None, ...]) -> None:
-    """Remove the leftover worktrees of DONE items finished long enough ago (B4757c428f4):
-    `merge` keeps the tree it ran from, and nothing else removed it afterwards. Best effort:
+    """Remove the leftover worktrees of done, abandoned and removed items finished long enough
+    ago (B4757c428f4): `merge`, `abandon` and `remove` keep a tree their caller stood in. Best effort:
     a session start must never fail on housekeeping."""
     try:
         CL.sweep_finished(repo, cfg, log, st, callers=callers)
