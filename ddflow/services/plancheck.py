@@ -189,6 +189,21 @@ def overlaps(plan: Mapping[str, Any], *, tracked: Iterable[str] | None = None) -
     return out
 
 
+def says_acceptance(item: Mapping[str, Any]) -> bool:
+    """Does the item say how it is known to be done?
+
+    An `acceptance` FIELD, or an `ACCEPTANCE:` line in the body. Both are real: the tasks
+    filed in this queue state theirs in the body (that is where an operator writes it), so a
+    plan read back from the queue must not be told it has none.
+    """
+    if str(item.get("acceptance", "")).strip():
+        return True
+    return any(
+        line.strip().lower().startswith("acceptance")
+        for line in str(item.get("body", "")).splitlines()
+    )
+
+
 def missing_acceptance(plan: Mapping[str, Any]) -> list[Finding]:
     """A task must say what finishing MEANS, or the gate pipeline has nothing to check."""
     return [
@@ -198,8 +213,7 @@ def missing_acceptance(plan: Mapping[str, Any]) -> list[Finding]:
             f"{iid} says nothing about how it is known to be done: add acceptance to the plan",
         )
         for iid in sorted(plan)
-        if plan[iid].get("kind", "task") == "task"
-        and not str(plan[iid].get("acceptance", "")).strip()
+        if plan[iid].get("kind", "task") == "task" and not says_acceptance(plan[iid])
     ]
 
 
