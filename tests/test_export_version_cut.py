@@ -328,3 +328,37 @@ def test_gitflow_cut_commits_the_changelog_under_a_blocking_generated_views_poli
     code, out, err = _cut(repo, "--changelog")
     assert code == 0, out + err
     assert "## [1.1.0]" in _git(remote, "show", "release/1.1.0:CHANGELOG.md")
+
+
+def test_a_tag_already_gone_is_not_an_error_on_the_normal_path(proj):
+    from ddflow.services import changelog_cut as CC
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    with CC._render_tag(repo, "v9.9.7", sha):
+        _git(repo, "tag", "-d", "v9.9.7")
+    assert _git(repo, "tag", "-l", "v9.9.7") == ""
+
+
+def test_an_unavailable_git_in_the_cleanup_does_not_replace_the_callers_error(proj, monkeypatch):
+    """Exit-code vocabulary: a refused commit stays 'refused' even if git then times out."""
+    from ddflow.services import changelog_cut as CC
+    from ddflow.services.export.query import EXIT_UNAVAILABLE, ExportError
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    real = CC._git
+    state = {"inside": False}
+
+    def flaky(r, *args):
+        if state["inside"] and args[0] in ("rev-parse", "update-ref"):
+            raise ExportError("could not run git: timeout", EXIT_UNAVAILABLE)
+        return real(r, *args)
+
+    monkeypatch.setattr(CC, "_git", flaky)
+    with pytest.raises(RuntimeError, match="refused"):
+        with CC._render_tag(repo, "v9.9.6", sha):
+            state["inside"] = True
+            raise RuntimeError("refused")
+    monkeypatch.setattr(CC, "_git", real)
+    _git(repo, "tag", "-d", "v9.9.6")
