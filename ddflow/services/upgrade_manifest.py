@@ -40,6 +40,7 @@ from .. import config as C
 from ..core.events import version_key
 from ..core.model import HANDLERS
 from ..infra.paths import templates_dir
+from . import upgrade_registry as UR
 
 #: Where the manifest ships, inside the package.
 MANIFEST = templates_dir() / "upgrade" / "changes.toml"
@@ -407,24 +408,14 @@ def load_waivers(path: Path | str | None = None) -> list[Waiver]:
     return out
 
 
-def lint(
-    manifest: Manifest | None = None,
-    *,
-    waivers: list[Waiver] | None = None,
-    knobs: dict[str, Any] | None = None,
-    kinds: set[str] | None = None,
-    docs: dict[str, str] | None = None,
-) -> LintResult:
-    """Compare the code's knob defaults and event kinds (``knobs``/``kinds``, default: the
-    running code's) with the manifest's replay; whatever differs is a change nobody
-    announced. A change a waiver names moves to ``waived``."""
-    m = manifest or load()
-    have_k, have_e = (
-        knob_defaults() if knobs is None else knobs,
-        event_kinds() if kinds is None else kinds,
-    )
-    said_k, said_e = replay(m)
-    notes = C.KNOB_DOCS if docs is None else docs
+def _diff(
+    said_k: dict[str, Any],
+    said_e: set[str],
+    have_k: dict[str, Any],
+    have_e: set[str],
+    notes: dict[str, str],
+) -> list[Unmanifested]:
+    """What the code has that the manifest's replay (``said_*``) does not say, and the reverse."""
     found: list[Unmanifested] = []
     for k in sorted(have_k):
         why = _first_sentence(notes.get(k, ""))
@@ -442,6 +433,39 @@ def lint(
     ]
     found += [Unmanifested("event_kind_added", k) for k in sorted(have_e - said_e)]
     found += [Unmanifested("event_kind_removed", k) for k in sorted(said_e - have_e)]
+    return found
+
+
+def lint(
+    manifest: Manifest | None = None,
+    *,
+    waivers: list[Waiver] | None = None,
+    knobs: dict[str, Any] | None = None,
+    kinds: set[str] | None = None,
+    docs: dict[str, str] | None = None,
+) -> LintResult:
+    """Compare the code's knob defaults and event kinds (``knobs``/``kinds``, default: the
+    running code's) with the manifest's replay; whatever differs is a change nobody
+    announced. A change a waiver names moves to ``waived``.
+
+    A finding computed from THIS process's registry is confirmed by a fresh interpreter
+    (B72b73360bc): a long-lived MCP server that started before a knob was added, changed or
+    removed disagrees with the manifest on disk about a change that does not exist. When
+    there is nothing to report the common case costs nothing."""
+    m = manifest or load()
+    have_k, have_e = (
+        knob_defaults() if knobs is None else knobs,
+        event_kinds() if kinds is None else kinds,
+    )
+    said_k, said_e = replay(m)
+    notes = C.KNOB_DOCS if docs is None else docs
+    found = _diff(said_k, said_e, have_k, have_e, notes)
+    if found and knobs is None and kinds is None:
+        try:
+            fresh_k, fresh_e = UR.fresh()
+        except UR.FreshError as exc:
+            raise ManifestError(str(exc)) from exc
+        found = _diff(said_k, said_e, fresh_k, fresh_e, notes)
     by_change = {(w.change, w.new): w for w in (load_waivers() if waivers is None else waivers)}
     out = LintResult()
     for u in found:
