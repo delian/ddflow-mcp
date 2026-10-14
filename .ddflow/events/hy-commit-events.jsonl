@@ -1958,3 +1958,4 @@
 {"agent":"hy-commit-events","data":{"priority":41},"id":"ef834fed635e354c1311c81f3","kind":"task.updated","lamport":62319,"schema":1,"subject":"RH-hot-globs","ts":"2026-10-14T15:22:35.374877Z"}
 {"agent":"hy-commit-events","data":{"priority":50},"id":"e54b23207811197975a4ab1d5","kind":"task.updated","lamport":62320,"schema":1,"subject":"RH-place-unphased","ts":"2026-10-14T15:22:37.667016Z"}
 {"agent":"hy-commit-events","data":{"priority":57},"id":"e443e51dd40eef24e911ada72","kind":"task.updated","lamport":62321,"schema":1,"subject":"RH-docs-engine","ts":"2026-10-14T15:22:39.819419Z"}
+{"agent":"hy-commit-events","data":{"auto":true,"item":"","redactions":0,"text":"ask me the decisions"},"id":"e82173e4c8a70fc63b9c4841d","kind":"session.prompt","lamport":62323,"schema":1,"subject":"h-51a68c9d-2f99-5e8c-a18a-f9c8ae5cc561","ts":"2026-10-14T15:23:14.994978Z"}
