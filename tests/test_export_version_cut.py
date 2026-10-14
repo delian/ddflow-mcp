@@ -267,3 +267,119 @@ def test_a_bump_that_fails_after_the_changelog_commit_says_the_changelog_commit_
     assert landed[:10] in text and "git revert" in text and "stays" in text, text
     assert 'version = "1.0.0"' in (repo / "pyproject.toml").read_text(), "the bump rolled back"
     assert _git(repo, "tag", "-l", "v1.1.0") == ""
+
+
+def test_cut_with_changelog_commits_under_a_blocking_generated_views_policy(proj):
+    """Ba41e4bb639: the hook compares a staged generated document with what `ddflow export`
+    renders NOW. The cut renders the section with the new tag present for a moment and
+    removes it before the commit, so the committed file never matched: with
+    [enforce].generated_views = block the commit was refused as 'stale: the log moved'."""
+    repo = proj
+    assert run_cli(repo, "config", "enforce.generated_views", "block")[0] == 0
+    assert run_cli(repo, "config", "enforce.commit_without_lease", "off")[0] == 0  # not under test
+    _git(repo, "add", ".ddflow")
+    _git(repo, "commit", "-qm", "chore: block generated views")
+    hcode, hout, herr = run_cli(repo, "hooks", "install")
+    assert hcode == 0, hout + herr
+    code, out, err = _cut(repo, "--changelog")
+    assert code == 0, err + out
+    assert json.loads(out)["changelog"] == "CHANGELOG.md"
+    assert "[1.1.0]" in _git(repo, "show", "v1.1.0:CHANGELOG.md")
+    assert run_cli(repo, "export", "changelog", "--check")[0] == 0
+
+
+def test_a_real_release_tag_made_meanwhile_is_not_removed_with_the_temporary_one(proj):
+    """The temporary tag is removed by compare-and-delete: it goes only while it still names
+    the object made for the render, so a release tag that appears meanwhile survives."""
+    from ddflow.services import changelog_cut as CC
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    with CC._render_tag(repo, "v9.9.9", sha):
+        _git(repo, "tag", "-f", "-a", "v9.9.9", "-m", "the real one", sha)  # replaced meanwhile
+    assert _git(repo, "tag", "-l", "v9.9.9") == "v9.9.9"
+    _git(repo, "tag", "-d", "v9.9.9")
+
+
+def test_a_refused_commit_is_not_masked_by_the_cleanup(proj):
+    """The caller's exception (exit 3 vocabulary) wins over a failure to remove the tag."""
+    from ddflow.services import changelog_cut as CC
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    with pytest.raises(RuntimeError, match="refused") as caught:
+        with CC._render_tag(repo, "v9.9.8", sha):
+            _git(repo, "tag", "-d", "v9.9.8")  # the cleanup will find nothing to remove
+            raise RuntimeError("refused")
+    assert caught.value is not None
+
+
+def test_gitflow_cut_commits_the_changelog_under_a_blocking_generated_views_policy(gitflow_pr):
+    """The scratch-worktree path: the tag is made in the repo, the commit happens in another
+    worktree of it, and the hook there must see the tag."""
+    repo, _forge, remote = gitflow_pr
+    assert run_cli(repo, "config", "enforce.generated_views", "block")[0] == 0
+    assert run_cli(repo, "config", "enforce.commit_without_lease", "off")[0] == 0
+    _git(repo, "add", ".ddflow")
+    _git(repo, "commit", "-qm", "chore: block generated views")
+    assert run_cli(repo, "hooks", "install")[0] == 0
+    _done(repo, "T1", "Shiny new thing", _commit(repo, "a.py", "feat: shiny"))
+    _git(repo, "push", "-q", "origin", "develop")
+    code, out, err = _cut(repo, "--changelog")
+    assert code == 0, out + err
+    assert "## [1.1.0]" in _git(remote, "show", "release/1.1.0:CHANGELOG.md")
+
+
+def test_a_tag_already_gone_is_not_an_error_on_the_normal_path(proj):
+    from ddflow.services import changelog_cut as CC
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    with CC._render_tag(repo, "v9.9.7", sha):
+        _git(repo, "tag", "-d", "v9.9.7")
+    assert _git(repo, "tag", "-l", "v9.9.7") == ""
+
+
+def test_an_unavailable_git_in_the_cleanup_does_not_replace_the_callers_error(proj, monkeypatch):
+    """Exit-code vocabulary: a refused commit stays 'refused' even if git then times out."""
+    from ddflow.services import changelog_cut as CC
+    from ddflow.services.export.query import EXIT_UNAVAILABLE, ExportError
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    real = CC._git
+    state = {"inside": False}
+
+    def flaky(r, *args):
+        if state["inside"] and args[0] in ("rev-parse", "update-ref"):
+            raise ExportError("could not run git: timeout", EXIT_UNAVAILABLE)
+        return real(r, *args)
+
+    monkeypatch.setattr(CC, "_git", flaky)
+    with pytest.raises(RuntimeError, match="refused"):
+        with CC._render_tag(repo, "v9.9.6", sha):
+            state["inside"] = True
+            raise RuntimeError("refused")
+    monkeypatch.setattr(CC, "_git", real)
+    _git(repo, "tag", "-d", "v9.9.6")
+
+
+def test_a_git_failure_that_is_not_absence_is_not_taken_for_a_removed_tag(proj, monkeypatch):
+    from ddflow.infra.git import GitResult
+    from ddflow.services import changelog_cut as CC
+
+    real = CC._git
+
+    def broken(r, *args):
+        if args[0] == "rev-parse" and "refs/tags/v9.9.5" in args[-1]:
+            return GitResult(128, "", "fatal: not a git repository")
+        return real(r, *args)
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(CC, "_git", real)
+    with pytest.raises(CC.ExportError, match=r"could not tell whether v9\.9\.5"):
+        with CC._render_tag(repo, "v9.9.5", sha):
+            monkeypatch.setattr(CC, "_git", broken)
+    monkeypatch.setattr(CC, "_git", real)
+    _git(repo, "tag", "-d", "v9.9.5")
