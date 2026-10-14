@@ -774,7 +774,7 @@ EXPECTED = [
     (
         ("--json", "abandon", "T7", "--reason", "dropped"),
         0,
-        '{\n  "schema": "abandon@1",\n  "id": "T7",\n  "reason": "dropped"\n}\n',
+        '{\n  "schema": "abandon@1",\n  "id": "T7",\n  "reason": "dropped",\n  "worktree_removed": false,\n  "kept_reason": ""\n}\n',
         "",
     ),
     (("abandon", "T4", "--reason", "again"), 0, "T4 abandoned: again\n", ""),
@@ -783,7 +783,7 @@ EXPECTED = [
     (
         ("--json", "remove", "T6", "--reason", "gone"),
         0,
-        '{\n  "schema": "remove@1",\n  "id": "T6"\n}\n',
+        '{\n  "schema": "remove@1",\n  "id": "T6",\n  "worktree_removed": false,\n  "kept_reason": ""\n}\n',
         "",
     ),
     (("remove", "T8"), 1, "", "no such item 'T8' (it was removed from the queue)\n"),
@@ -1214,7 +1214,12 @@ EXPECTED = [
         "`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\n",
     ),
     (("complete", "nope"), 1, "", "no such item 'nope'\n"),
-    (("abandon", "T1", "--reason", "not now"), 0, "T1 abandoned: not now\n", ""),
+    (
+        ("abandon", "T1", "--reason", "not now"),
+        0,
+        "T1 abandoned: not now\n  worktree and branch removed\n",
+        "",
+    ),
     (
         ("claim", "T3", "--globs", "c/*"),
         0,
@@ -1334,8 +1339,6 @@ EXPECTED = [
         0,
         "# ddflow brief\n"
         "\n"
-        "_1 leftover(s) with nothing to salvage: `ddflow recover` lists them._\n"
-        "\n"
         "You hold 2 leases: `T5`, `T3`. The most recent claim is below; `ddflow brief --item <id>` for "
         "another.\n"
         "\n"
@@ -1365,8 +1368,7 @@ EXPECTED = [
         0,
         "{\n"
         '  "schema": "brief@1",\n'
-        '  "brief": "# ddflow brief\\n\\n_1 leftover(s) with nothing to salvage: `ddflow recover` lists '
-        "them._\\n\\nYou hold 2 leases: `T5`, `T3`. The most recent claim is below; `ddflow brief --item "
+        '  "brief": "# ddflow brief\\n\\nYou hold 2 leases: `T5`, `T3`. The most recent claim is below; `ddflow brief --item '
         "<id>` for another.\\n\\n## Current: T2 \\u2014 two\\n\\n- kind `task` \\u00b7 state `open`\\n- "
         "needs: `T1`\\n- writes: `b/*`\\n- gates remaining: research \\u2192 rules \\u2192 implement "
         "\\u2192 rubber_duck \\u2192 critic \\u2192 standards \\u2192 unit_tests \\u2192 bug_hunt "
@@ -1472,8 +1474,6 @@ EXPECTED = [
         0,
         "# ddflow brief\n"
         "\n"
-        "_2 leftover(s) with nothing to salvage: `ddflow recover` lists them._\n"
-        "\n"
         "## Current: T5 — five\n"
         "\n"
         "- kind `task` · state `running` · held by `u5pin`\n"
@@ -1498,8 +1498,7 @@ EXPECTED = [
         0,
         "{\n"
         '  "schema": "brief@1",\n'
-        '  "brief": "# ddflow brief\\n\\n_2 leftover(s) with nothing to salvage: `ddflow recover` lists '
-        "them._\\n\\n## Current: T5 \\u2014 five\\n\\n- kind `task` \\u00b7 state `running` \\u00b7 held "
+        '  "brief": "# ddflow brief\\n\\n## Current: T5 \\u2014 five\\n\\n- kind `task` \\u00b7 state `running` \\u00b7 held '
         "by `u5pin`\\n- writes: `e/*`\\n- worktree: `<repo>/.ddflow/worktrees/T5` on `ddflow/T5`\\n- "
         "gates remaining: research \\u2192 rules \\u2192 implement \\u2192 rubber_duck \\u2192 critic "
         "\\u2192 standards \\u2192 unit_tests \\u2192 bug_hunt \\u2192 dedupe\\n\\n## Ready "
