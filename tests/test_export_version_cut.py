@@ -362,3 +362,24 @@ def test_an_unavailable_git_in_the_cleanup_does_not_replace_the_callers_error(pr
             raise RuntimeError("refused")
     monkeypatch.setattr(CC, "_git", real)
     _git(repo, "tag", "-d", "v9.9.6")
+
+
+def test_a_git_failure_that_is_not_absence_is_not_taken_for_a_removed_tag(proj, monkeypatch):
+    from ddflow.infra.git import GitResult
+    from ddflow.services import changelog_cut as CC
+
+    real = CC._git
+
+    def broken(r, *args):
+        if args[0] == "rev-parse" and "refs/tags/v9.9.5" in args[-1]:
+            return GitResult(128, "", "fatal: not a git repository")
+        return real(r, *args)
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(CC, "_git", real)
+    with pytest.raises(CC.ExportError, match=r"could not tell whether v9\.9\.5"):
+        with CC._render_tag(repo, "v9.9.5", sha):
+            monkeypatch.setattr(CC, "_git", broken)
+    monkeypatch.setattr(CC, "_git", real)
+    _git(repo, "tag", "-d", "v9.9.5")
