@@ -181,47 +181,46 @@ def test_a_ddflow_installed_inside_the_project_is_not_the_projects_manifest(
 def test_a_stale_long_lived_process_does_not_report_phantom_removals(monkeypatch):
     """B72b73360bc: an MCP server started before a knob was added keeps the OLD registry in
     memory while the manifest on disk (read fresh) announces the knob, so the lint called the
-    knob removed and refused a release for a change that does not exist. A process whose source
-    differs from what it loaded reads the running code from a fresh interpreter instead."""
+    knob removed and refused a release for a change that does not exist. A removal is
+    confirmed by a fresh interpreter, which still has the knob."""
     real = UM.knob_defaults()
     stale = {k: v for k, v in real.items() if k != "importer.phase_slug_chars"}
     assert "importer.phase_slug_chars" in real
     monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
-    # the package on disk differs from what this process loaded (an edit or an upgrade)
-    monkeypatch.setattr(UR, "_SNAPSHOT", {}, raising=False)
     res = UM.lint()
     assert res.clean, UM.report(res)
 
 
-def test_a_fresh_process_keeps_using_its_own_registry(monkeypatch):
-    """The common case costs no subprocess: nothing on disk differs from what the process loaded."""
-    monkeypatch.setattr(UR, "_SNAPSHOT", UR._scan(), raising=False)
+def test_a_removal_the_fresh_process_agrees_with_is_still_reported(monkeypatch):
+    real = UM.knob_defaults()
+    gone = "importer.phase_slug_chars"
+    stale = {k: v for k, v in real.items() if k != gone}
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+    monkeypatch.setattr(UR, "fresh", lambda: (stale, UM.event_kinds()))
+    res = UM.lint()
+    assert [u.id for u in res.unmanifested] == [f"knob_removed:{gone}"]
+
+
+def test_a_clean_lint_costs_no_fresh_interpreter(monkeypatch):
     called = []
-    monkeypatch.setattr(
-        UM, "_fresh_running_code", lambda: called.append(1) or ({}, set()), raising=False
-    )
+    monkeypatch.setattr(UR, "fresh", lambda: called.append(1) or ({}, set()))
     assert UM.lint().clean
     assert called == []
 
 
-def test_a_tree_that_cannot_be_read_is_not_taken_for_current(monkeypatch):
-    """A file vanishing mid-scan (an in-place upgrade) must send the lint to a fresh
-    interpreter, not back to the process's own possibly stale registry."""
+def test_a_fresh_interpreter_that_cannot_answer_stops_the_lint(monkeypatch):
+    real = UM.knob_defaults()
+    stale = {k: v for k, v in real.items() if k != "importer.phase_slug_chars"}
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
 
-    def broken(self, pattern):
-        raise OSError("gone")
+    def broken():
+        raise UR.FreshError("no interpreter")
 
-    monkeypatch.setattr(UR.Path, "rglob", broken)
-    assert UR.is_stale() is True
+    monkeypatch.setattr(UR, "fresh", broken)
+    with pytest.raises(UM.ManifestError, match="no interpreter"):
+        UM.lint()
 
 
-def test_a_changed_file_is_stale_even_with_an_old_timestamp(monkeypatch):
-    """A wheel or `tar -x` keeps the build time of the file: size and exact mtime against
-    the snapshot, not 'newer than the process', catch the upgrade."""
-    snap = UR._scan()
-    key = next(iter(snap))
-    size, mtime = snap[key]
-    monkeypatch.setattr(UR, "_SNAPSHOT", {**snap, key: (size + 1, mtime - 10**12)}, raising=False)
-    assert UR.is_stale() is True
-    monkeypatch.setattr(UR, "_SNAPSHOT", snap, raising=False)
-    assert UR.is_stale() is False
+def test_the_fresh_interpreter_reports_this_trees_registry():
+    knobs, kinds = UR.fresh()
+    assert knobs == UM.knob_defaults() and kinds == UM.event_kinds()
