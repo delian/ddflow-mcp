@@ -4,8 +4,8 @@
 `merge` refuses to delete the directory its caller stands in, and said to run
 `ddflow cleanup --apply` afterwards, but nothing retried: `complete` and the next session
 start left the tree and its branch behind. `complete` from outside the tree disposes it, and
-the `brief` sweeps the trees of done, abandoned and removed items finished longer ago than `worktree.sweep_min_age_s`
-(a tree finished a moment ago may be the directory an agent still stands in).
+the `brief` sweeps the trees of done, abandoned and removed items finished longer ago than
+`worktree.sweep_min_age_s` (a tree finished a moment ago may be the directory an agent still stands in).
 """
 
 from __future__ import annotations
