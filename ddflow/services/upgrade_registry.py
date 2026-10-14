@@ -3,8 +3,10 @@
 A long-lived MCP server keeps the knob registry it imported at start. After an edit or an
 upgrade the manifest on disk (always read fresh) announces knobs the process has never heard
 of, and the release lint called them removed and refused a release for changes that do not
-exist. The lint therefore double-checks a REMOVAL, the one finding a stale process can invent,
-with a new interpreter: a knob or event kind that interpreter still has was never removed."""
+exist, whichever way it disagrees: a knob added, changed or removed since the process started.
+The lint therefore recomputes the whole comparison with a new interpreter whenever it has
+something to report, and reports what that interpreter finds (removals were only the case
+first observed)."""
 
 from __future__ import annotations
 
