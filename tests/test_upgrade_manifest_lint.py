@@ -182,20 +182,20 @@ def test_a_stale_long_lived_process_does_not_report_phantom_removals(monkeypatch
     """B72b73360bc: an MCP server started before a knob was added keeps the OLD registry in
     memory while the manifest on disk (read fresh) announces the knob, so the lint called the
     knob removed and refused a release for a change that does not exist. A process whose source
-    is newer than its import reads the running code from a fresh interpreter instead."""
+    differs from what it loaded reads the running code from a fresh interpreter instead."""
     real = UM.knob_defaults()
     stale = {k: v for k, v in real.items() if k != "importer.phase_slug_chars"}
     assert "importer.phase_slug_chars" in real
     monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
-    # the process "started" before every source file on disk was last written
-    monkeypatch.setattr(UR, "_STARTED", 0.0, raising=False)
+    # the package on disk differs from what this process loaded (an edit or an upgrade)
+    monkeypatch.setattr(UR, "_SNAPSHOT", {}, raising=False)
     res = UM.lint()
     assert res.clean, UM.report(res)
 
 
 def test_a_fresh_process_keeps_using_its_own_registry(monkeypatch):
-    """The common case costs no subprocess: nothing on disk is newer than the process."""
-    monkeypatch.setattr(UR, "_STARTED", 1e12, raising=False)
+    """The common case costs no subprocess: nothing on disk differs from what the process loaded."""
+    monkeypatch.setattr(UR, "_SNAPSHOT", UR._scan(), raising=False)
     called = []
     monkeypatch.setattr(
         UM, "_fresh_running_code", lambda: called.append(1) or ({}, set()), raising=False
@@ -213,3 +213,15 @@ def test_a_tree_that_cannot_be_read_is_not_taken_for_current(monkeypatch):
 
     monkeypatch.setattr(UR.Path, "rglob", broken)
     assert UR.is_stale() is True
+
+
+def test_a_changed_file_is_stale_even_with_an_old_timestamp(monkeypatch):
+    """A wheel or `tar -x` keeps the build time of the file: size and exact mtime against
+    the snapshot, not 'newer than the process', catch the upgrade."""
+    snap = UR._scan()
+    key = next(iter(snap))
+    size, mtime = snap[key]
+    monkeypatch.setattr(UR, "_SNAPSHOT", {**snap, key: (size + 1, mtime - 10**12)}, raising=False)
+    assert UR.is_stale() is True
+    monkeypatch.setattr(UR, "_SNAPSHOT", snap, raising=False)
+    assert UR.is_stale() is False
