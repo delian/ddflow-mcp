@@ -127,3 +127,60 @@ def test_the_report_orders_the_waves_by_wave_then_id():
     plan = {"b": _task(globs=["src/b.py"]), "a": _task(globs=["src/a.py"])}
 
     assert list(PC.check(plan).as_dict()["waves"]) == ["a", "b"]
+
+
+def test_an_acceptance_written_in_the_BODY_counts():
+    """The tasks filed in this queue state theirs as an `ACCEPTANCE:` line in the body, so a
+    plan read back from the queue must not be told it says nothing about being done."""
+    assert PC.says_acceptance({"body": "ACCEPTANCE: the 11 tasks pass"})
+    assert PC.says_acceptance({"body": "work\n\nAcceptance: it renders"})
+    assert PC.says_acceptance({"acceptance": "a field"})
+    assert not PC.says_acceptance({"body": "no word for it here"})
+    assert not PC.says_acceptance({"acceptance": "  ", "body": "still nothing"})
+
+    plan = {"a": {"kind": "task", "needs": [], "globs": ["src/a.py"], "body": "ACCEPTANCE: ok"}}
+    assert PC.check(plan).findings == []
+
+
+# -- the command that runs them (B-gap-plan-lint's surface) -----------------------------
+
+
+def _plan_file(repo, tmp_path, body: str):
+    """The command, run in a real repository (the CLI bootstraps before the command runs;
+    the plan itself lives in `tmp_path`, which is all `plan check` reads)."""
+    from conftest import run_cli
+
+    path = tmp_path / "plan.toml"
+    path.write_text(body, "utf-8")
+    return run_cli(repo, "plan", "check", str(path))
+
+
+def test_the_command_reports_a_finding_and_fails(repo, tmp_path):
+    """Findings ARE the point, so they are a failure -- and the human line names the kind."""
+    code, out, err = _plan_file(repo, tmp_path, '[a]\nglobs = ["src/*/x.py"]\nacceptance = "ok"\n')
+
+    assert code == 1, (out, err)
+    assert "wide_glob" in out and "a" in out
+
+
+def test_the_command_is_clean_and_shows_the_waves(repo, tmp_path):
+    code, out, err = _plan_file(
+        repo,
+        tmp_path,
+        '[a]\nglobs = ["src/a.py"]\nbody = "ACCEPTANCE: ok"\n'
+        '[b]\nglobs = ["src/b.py"]\nneeds = ["a"]\nbody = "acceptance: ok"\n',
+    )
+
+    assert code == 0, (out, err)
+    assert "no findings" in out and "wave 2: b" in out
+
+
+def test_a_document_that_is_not_a_plan_is_refused_not_called_clean(repo, tmp_path):
+    """ "Could not tell" is never a clean plan: unparseable and item-less are both refusals."""
+    code, out, err = _plan_file(repo, tmp_path, 'title = "a document that is not a plan"\n')
+    assert code == 3, (out, err)
+    assert "no items" in (out + err)
+
+    code, out, err = _plan_file(repo, tmp_path, "this is not TOML or JSON at all\n")
+    assert code == 3, (out, err)
+    assert "neither TOML nor JSON" in (out + err)
