@@ -100,7 +100,7 @@ def test_the_brief_runs_the_sweep(repo, monkeypatch):
     tree = _seed(repo, "T6")
     _finish(repo, "T6")
     assert run_cli(repo, "config", "worktree.sweep_min_age_s", "0")[0] == 0
-    code, out, err = run_cli(repo, "brief")
+    code, _out, err = run_cli(repo, "brief")
     assert code == 0, err
     assert not tree.exists()
 
@@ -190,6 +190,7 @@ def test_the_sweep_also_removes_the_tree_a_remove_kept(repo):
     assert tree.exists() and "standing in it" in out.data["kept_reason"]
     cfg, log = Config.load(repo), EventLog(repo, "later")
     state = fold(log.read_all(), strict=False)
+    assert CL.sweep_finished(repo, cfg, log, state, callers=()) == [], "removed a moment ago"
     later = time.time() + cfg.worktree.sweep_min_age_s + 60
     said = CL.sweep_finished(repo, cfg, log, state, now=later, callers=())
     assert said == ["removed the finished worktree of T16"]
