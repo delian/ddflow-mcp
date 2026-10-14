@@ -209,3 +209,24 @@ def test_the_like_fallback_returns_only_rows_that_share_a_term(repo, log):
     st = Store(repo, cfg)
     st.rebuild(log)
     assert [r["id"] for r in st.search("lessons", "unrelated", 20)] == ["L4"]
+
+
+def test_register_returns_its_source_so_it_can_be_a_decorator():
+    """`register` doubles as the decorator form, so it must hand its source back.
+
+    A source bound by `@register` would otherwise be `None` at module level while the
+    registry still held it -- the name and the registry disagreeing about what exists.
+    The mutation sample found this line surviving: nothing checked the return.
+    """
+    from ddflow.services.searchcore import FuncSource
+    from ddflow.services.searchcore import hit as H
+
+    saved = dict(H._REGISTRY)
+    try:
+        src = FuncSource("deco", ("x",), lambda ctx, kinds: [])
+
+        assert H.register(src) is src
+        assert H.registered()[-1] is src
+    finally:
+        H._REGISTRY.clear()
+        H._REGISTRY.update(saved)
