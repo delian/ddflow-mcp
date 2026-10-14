@@ -111,7 +111,7 @@ def _drop_tag(repo: Path, tag: str, obj: str) -> str | None:
         if not now.ok:
             if now.code == 1 and not now.out.strip():
                 return None  # absent: nothing to remove
-            return f"could not tell whether {tag} still exists: {now.err or now.out}"
+            return f"could not tell whether {tag} still exists: {now.err or now.out or f'git exited {now.code}'}"
         if obj and now.out.strip() != obj:
             return None  # someone else's tag by now: never remove it
         r = _git(repo, "update-ref", "-d", f"refs/tags/{tag}", *([obj] if obj else []))
