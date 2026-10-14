@@ -286,3 +286,45 @@ def test_cut_with_changelog_commits_under_a_blocking_generated_views_policy(proj
     assert json.loads(out)["changelog"] == "CHANGELOG.md"
     assert "[1.1.0]" in _git(repo, "show", "v1.1.0:CHANGELOG.md")
     assert run_cli(repo, "export", "changelog", "--check")[0] == 0
+
+
+def test_a_real_release_tag_made_meanwhile_is_not_removed_with_the_temporary_one(proj):
+    """The temporary tag is removed by compare-and-delete: it goes only while it still names
+    the object made for the render, so a release tag that appears meanwhile survives."""
+    from ddflow.services import changelog_cut as CC
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    with CC._render_tag(repo, "v9.9.9", sha):
+        _git(repo, "tag", "-f", "-a", "v9.9.9", "-m", "the real one", sha)  # replaced meanwhile
+    assert _git(repo, "tag", "-l", "v9.9.9") == "v9.9.9"
+    _git(repo, "tag", "-d", "v9.9.9")
+
+
+def test_a_refused_commit_is_not_masked_by_the_cleanup(proj):
+    """The caller's exception (exit 3 vocabulary) wins over a failure to remove the tag."""
+    from ddflow.services import changelog_cut as CC
+
+    repo = proj
+    sha = _git(repo, "rev-parse", "HEAD")
+    with pytest.raises(RuntimeError, match="refused") as caught:
+        with CC._render_tag(repo, "v9.9.8", sha):
+            _git(repo, "tag", "-d", "v9.9.8")  # the cleanup will find nothing to remove
+            raise RuntimeError("refused")
+    assert caught.value is not None
+
+
+def test_gitflow_cut_commits_the_changelog_under_a_blocking_generated_views_policy(gitflow_pr):
+    """The scratch-worktree path: the tag is made in the repo, the commit happens in another
+    worktree of it, and the hook there must see the tag."""
+    repo, _forge, remote = gitflow_pr
+    assert run_cli(repo, "config", "enforce.generated_views", "block")[0] == 0
+    assert run_cli(repo, "config", "enforce.commit_without_lease", "off")[0] == 0
+    _git(repo, "add", ".ddflow")
+    _git(repo, "commit", "-qm", "chore: block generated views")
+    assert run_cli(repo, "hooks", "install")[0] == 0
+    _done(repo, "T1", "Shiny new thing", _commit(repo, "a.py", "feat: shiny"))
+    _git(repo, "push", "-q", "origin", "develop")
+    code, out, err = _cut(repo, "--changelog")
+    assert code == 0, out + err
+    assert "## [1.1.0]" in _git(remote, "show", "release/1.1.0:CHANGELOG.md")
