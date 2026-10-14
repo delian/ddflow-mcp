@@ -194,3 +194,33 @@ def test_a_failing_detect_write_reports_the_reason_not_a_missing_payload(repo, m
     )
     out = AR.reviewers_detect(repo, write=True, shared=True)
     assert out.exit == 3 and "format" in out.reason and out.data["text"] == "", out.reason
+
+
+# -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
+
+
+def test_a_quoted_key_in_appended_toml_is_refused():
+    """D-plain-keys: `--append-toml` takes TOML as written, so a quoted key would reach the
+    config that `--set` refuses.
+
+    Every key -- a table header, a key/value, an inline-table key -- is judged by
+    `plain_key_problem` as its full path; the mutant walks the same text and reports
+    nothing, so the append succeeds and the key is untypable from any surface.
+    """
+    refused = CW._text_refusal('"tag_prefix" = "v"\n')
+
+    assert refused, "a quoted key must be refused"
+    assert "tag_prefix" in refused, "and named by its plain spelling"
+    # The refusal is about the SPELLING: the same key, written plain, is fine.
+    assert CW._text_refusal("tag_prefix = 'v'\n") == ""
+
+
+def test_a_gate_id_problem_names_the_id_rule():
+    """`[gate.<id>]` is judged by the same id rule everywhere, so its renderer must reach
+    that rule rather than return an empty problem (an entry with no field is a different
+    message, and the operator is shown whichever applies)."""
+    assert CW.gate_id_problem("bad id"), "the fixture id must be one the rule refuses"
+
+    assert CW._render_gate_problem("id", "bad id", "") == CW.gate_id_problem("bad id")
+    assert CW._render_gate_problem("nested", "g", "x y") == CW.gate_id_problem("g.x y")
+    assert "has no field" in CW._render_gate_problem("field", "g", "nope")

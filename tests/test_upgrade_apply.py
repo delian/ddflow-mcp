@@ -1156,3 +1156,78 @@ def test_items_settled_by_a_partial_apply_stay_settled_when_a_newer_ddflow_is_in
     newer = UP.build(old, log, cfg, st, running="9.9.9")
 
     assert not [i for i in newer["categories"]["config"] if i["action"] != UP.OPERATOR]
+
+
+# -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
+
+
+def test_a_removed_knob_is_swept_from_BOTH_config_files(tmp_path: Path) -> None:
+    """A knob that no longer exists can be set in the committed file OR the local one, so
+    removing it must reach both.
+
+    The mutant edits only the committed file, and the setting the upgrade was meant to drop
+    survives in the local one -- invisibly, because the plan says it was applied.
+    """
+    from ddflow.services.configwrite import config_file
+
+    cfg = Config()
+    removed = {"change": "knob_removed", "key": "log.reuse_parsed"}
+
+    assert UA._config_files(tmp_path, cfg, removed) == [
+        config_file(tmp_path),
+        config_file(tmp_path, local=True),
+    ]
+
+
+def test_an_ordinary_change_edits_the_file_the_value_came_from(tmp_path: Path) -> None:
+    """...and nothing else: a changed value goes to the layer that set it, never to both."""
+    from ddflow.services.configwrite import config_file
+
+    cfg = Config()
+
+    assert UA._config_files(tmp_path, cfg, {"change": "knob_changed", "key": "k"}) == [
+        config_file(tmp_path)
+    ]
+
+    cfg.sources["k"] = "local"
+    assert UA._config_files(tmp_path, cfg, {"change": "knob_changed", "key": "k"}) == [
+        config_file(tmp_path, local=True)
+    ]
+
+
+def test_the_refusal_names_the_key_and_the_exact_command_to_run() -> None:
+    """A refusal is what the operator acts on, so it must name the confirm key and the
+    command -- not just say no (the mutant drops the sentence and leaves a bare command)."""
+    item: dict[str, Any] = {
+        "id": "config:docs.severity",
+        "key": "docs.severity",
+        "category": "config",
+        "action": "",
+    }
+
+    text = UA._refusal(item, "ask")
+
+    assert "needs the operator's confirmation" in text
+    assert "--confirm docs.severity" in text and "ddflow upgrade --apply" in text
+
+    item["action"] = UP.AGENT
+    assert "[upgrade].config_changes = ask" in UA._refusal(item, "ask")
+
+
+def test_a_fix_that_installs_NOTHING_is_failed_not_applied(tmp_path: Path) -> None:
+    """The claude-hooks fix names a file no hook of this tree writes: nothing is installed.
+
+    Reporting APPLIED (the mutant) tells the operator a hook exists when it does not, and
+    the upgrade moves on without it.
+    """
+    missing = "definitely/not/a/hook-file"
+    item: dict[str, Any] = {
+        "id": "hooks:claude",
+        "fix": "ddflow hooks install --claude",
+        "paths": [missing],
+    }
+
+    status, msg = UA._apply_hook(tmp_path, item)
+
+    assert status == UA.FAILED, msg
+    assert "no ddflow hook found" in msg and missing in msg
