@@ -186,12 +186,16 @@ def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
     asking = {c.tool for c in DECLARED if c.wants_called_from}
     assert asking <= {n for n, spec in TOOLS.items() if spec.get("wants_called_from")}
     assert asking == {
+        "ddflow_abandon",
+        "ddflow_brief",
         "ddflow_claim",
+        "ddflow_complete",
         "ddflow_heartbeat",
         "ddflow_gate_run",
         "ddflow_gate_record",
         "ddflow_merge",
         "ddflow_precommit",
+        "ddflow_remove",
         "ddflow_review",
         "ddflow_setup",
         "ddflow_tests",

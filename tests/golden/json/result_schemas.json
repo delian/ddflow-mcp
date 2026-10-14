@@ -234,7 +234,9 @@
    "bugs_closed",
    "umbrellas_completed",
    "umbrella_refused",
-   "refuted_passes"
+   "refuted_passes",
+   "worktree_removed",
+   "kept_reason"
   ],
   "output_schema": {
    "type": "object",
@@ -253,6 +255,8 @@
     "umbrellas_completed": {},
     "umbrella_refused": {},
     "refuted_passes": {},
+    "worktree_removed": {},
+    "kept_reason": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -1737,7 +1741,9 @@
   "shape": "object",
   "payload": [
    "id",
-   "reason"
+   "reason",
+   "worktree_removed",
+   "kept_reason"
   ],
   "output_schema": {
    "type": "object",
@@ -1747,6 +1753,8 @@
     },
     "id": {},
     "reason": {},
+    "worktree_removed": {},
+    "kept_reason": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -1762,7 +1770,9 @@
   "schema": "remove@1",
   "shape": "object",
   "payload": [
-   "id"
+   "id",
+   "worktree_removed",
+   "kept_reason"
   ],
   "output_schema": {
    "type": "object",
@@ -1771,6 +1781,8 @@
      "const": "remove@1"
     },
     "id": {},
+    "worktree_removed": {},
+    "kept_reason": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
