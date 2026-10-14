@@ -167,12 +167,12 @@ def _upgrade_notices(repo: Path, log, cfg, st, agent: str) -> str:
     return "\n\n".join(x for x in (notice, release) if x)
 
 
-def _sweep_finished(repo: Path, cfg, log, st) -> None:
+def _sweep_finished(repo: Path, cfg, log, st, callers: tuple[Path | None, ...]) -> None:
     """Remove the leftover worktrees of DONE items finished long enough ago (B4757c428f4):
     `merge` keeps the tree it ran from, and nothing else removed it afterwards. Best effort:
     a session start must never fail on housekeeping."""
     try:
-        CL.sweep_finished(repo, cfg, log, st)
+        CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
         pass
 
@@ -184,6 +184,8 @@ def brief(
     phase: str = "",
     check_recovery: bool = DEFAULT_CHECK_RECOVERY,
     agent: str = "",
+    called_from: Path | None = None,
+    shell_cwd: Path | None = None,
 ) -> O.Outcome:
     """The budgeted reading pack: what to do next, and what governs it.
 
@@ -194,7 +196,7 @@ def brief(
     log, cfg, _ = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
-    _sweep_finished(repo, cfg, log, st)
+    _sweep_finished(repo, cfg, log, st, (called_from, shell_cwd))
     unknown = _unknown_phase(st, phase)
     if unknown:  # as `next` refuses it (Bc2acd426f4)
         return O.failed("brief", unknown, phase=phase, text="")

@@ -422,11 +422,12 @@ def sweep_finished(
     if not cfg.worktree.dispose_finished:
         return []
     now = time.time() if now is None else now
-    if callers is None:  # this process stands where its caller's shell does
-        try:
-            callers = (Path.cwd(),)
-        except OSError:
-            callers = ()
+    if callers is None:  # a direct caller: the process stands where its shell does
+        callers = ()
+    try:
+        callers = (*callers, Path.cwd())  # also this process's own directory
+    except OSError:
+        pass
     out: list[str] = []
     for it in state.items.values():
         if it.removed or it.state != DONE or not it.worktree or it.adopted or it.lease:
