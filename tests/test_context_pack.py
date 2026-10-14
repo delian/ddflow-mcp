@@ -186,3 +186,89 @@ def test_a_cut_and_a_fold_are_both_said_and_the_json_names_each(monkeypatch, cap
     assert K.cmd_recall(args, SimpleNamespace(repo=None, json=True, requested_agent="")) == 0
     body = __import__("json").loads(capsys.readouterr().out)
     assert body["truncated"] == pack["cut_note"] and body["folded"] == pack["fold_note"]
+
+
+# -- pack() itself: the lines the mutation sample found surviving ------------------
+
+
+def test_pack_with_dedupe_off_keeps_the_repeats():
+    """`dedupe=False` means the duplicate check does not run at all.
+
+    The mutant (`dedupe and (...)` -> `or`) builds a key anyway, so repeats are folded even
+    though the caller asked for them -- silently, since the fold note then also appears.
+    """
+    from ddflow.services import contextpack as CP
+
+    same = [
+        _cand("bugs", "B1", "same", "same body"),
+        _cand("bugs", "B2", "same", "same body"),
+    ]
+
+    p = CP.pack({"bugs": same}, B.Budget(4000), dedupe=False)
+
+    assert p.duplicates == 0
+    assert [c.id for c in p.kept["bugs"]] == ["B1", "B2"]
+    assert p.fold_note() == ""
+
+
+def test_pack_with_dedupe_on_folds_them_and_says_so():
+    """The clause it exists for, so the test above cannot pass by folding nothing at all."""
+    from ddflow.services import contextpack as CP
+
+    same = [
+        _cand("bugs", "B1", "loud", "same body"),
+        _cand("bugs", "B2", "loud", "same body"),
+    ]
+
+    p = CP.pack({"bugs": same}, B.Budget(4000))
+
+    assert p.duplicates == 1
+    assert [c.id for c in p.kept["bugs"]] == ["B1"]
+    assert "1 repeated hit" in p.fold_note()
+
+
+def test_a_hit_with_a_head_and_NO_body_is_still_compared():
+    """The key comes from the head OR the body. An `and` there stops comparing every hit
+    whose body is empty, which is most of them (a title-only record)."""
+    from ddflow.services import contextpack as CP
+
+    same = [
+        _cand("bugs", "B1", "only a headline"),
+        _cand("bugs", "B2", "only a headline"),
+    ]
+
+    p = CP.pack({"bugs": same}, B.Budget(4000))
+
+    assert p.duplicates == 1, p.fold_note()
+
+
+def test_the_loop_runs_to_the_LONGEST_source_not_the_shortest():
+    """The pack walks rank by rank across every source, so `depth` is the LONGEST list.
+
+    A `min` there drops the tail of the long source with no cut note to say so: the reader
+    is shown less than fit, and nothing mentions it.
+    """
+    from ddflow.services import contextpack as CP
+
+    p = CP.pack(
+        {
+            "a": [_cand("a", "A1", "a1"), _cand("a", "A2", "a2")],
+            "b": [_cand("b", "B1", "b1")],
+        },
+        B.Budget(4000),
+    )
+
+    assert p.total == 3
+    assert [c.id for c in p.kept["a"]] == ["A1", "A2"]
+    assert len(p.kept["b"]) == 1
+
+
+def test_notes_are_empty_when_nothing_was_left_out_or_folded():
+    """Two notes that say nothing must READ as nothing: a bare separator is a note whose
+    text went missing, and `truncated` must not be inferred from the notes' presence."""
+    from ddflow.services import contextpack as CP
+
+    p = CP.pack({"bugs": [_cand("bugs", "B1", "h", "b")]}, B.Budget(4000))
+
+    assert (p.cut_note(), p.fold_note(), p.note()) == ("", "", "")
+    assert not p.truncated
