@@ -103,12 +103,18 @@ def _render_tag(repo: Path, tag: str, sha: str) -> Iterator[None]:
 
 
 def _drop_tag(repo: Path, tag: str, obj: str) -> str | None:
-    """Remove ``tag`` if it still names ``obj``; None when done or when it is no longer ours
-    (a tag that now names something else is left alone), else why not."""
-    now = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}")
-    if now.ok and obj and now.out.strip() != obj:
-        return None  # someone else's tag by now: never remove it
-    r = _git(repo, "update-ref", "-d", f"refs/tags/{tag}", *([obj] if obj else []))
+    """Remove ``tag`` if it still names ``obj``; None when done, when it is already gone, or
+    when it is no longer ours (a tag that now names something else is left alone), else why
+    not. Never raises: it runs while another error may be propagating."""
+    try:
+        now = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}")
+        if not now.ok:
+            return None  # nothing to remove
+        if obj and now.out.strip() != obj:
+            return None  # someone else's tag by now: never remove it
+        r = _git(repo, "update-ref", "-d", f"refs/tags/{tag}", *([obj] if obj else []))
+    except ExportError as exc:  # git timed out or is missing
+        return str(exc)
     return None if r.ok else (r.err or r.out or "git failed")
 
 
