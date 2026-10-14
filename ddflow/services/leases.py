@@ -881,6 +881,12 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
             # changes a reviewer may request, and the request is its custodian. Reported
             # as an orphan it led every brief as "salvage this" (RESEARCH R16).
+            if it.terminal and _tree_is_gone(repo, it.worktree):
+                # Finishing an item never clears its recorded worktree, so a finished item
+                # whose tree was removed would be re-reported on every run with nothing to
+                # do (B999669a8df). An UNFINISHED item that lost its tree still is reported:
+                # it may have lost work.
+                continue
             rec = Recovery(
                 item=it.id,
                 holder="(none)",
@@ -902,6 +908,12 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
             )
             out.append(rec)
     return sorted(out, key=lambda r: (r.kind, r.item))
+
+
+def _tree_is_gone(repo: Path, recorded: str) -> bool:
+    """Does the recorded worktree path no longer exist?"""
+    wt = W.load_path(repo, recorded) if recorded else None
+    return not wt or not wt.exists()
 
 
 def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
