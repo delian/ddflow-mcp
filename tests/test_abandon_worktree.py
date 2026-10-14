@@ -127,3 +127,18 @@ def test_remove_on_merge_false_keeps_trees_for_complete_abandon_and_remove_too(r
     assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == 0
     out = LC.abandon(repo, "T10", reason="no", agent="worker")
     assert out.data["worktree_removed"] is False and tree.exists()
+
+
+def test_an_item_claimed_without_a_worktree_touches_nothing_on_abandon(repo):
+    """A borrowed branch (claim --no-worktree) is the caller's: no tree is recorded, so none
+    is removed and its branch is never deleted."""
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T11", {"parent": "P1", "title": "T11", "globs": ["src/T11/*"]})
+    _git("-C", str(repo), "branch", "keepme")
+    out = LC.claim(repo, "T11", agent="worker", no_worktree=True)
+    assert out.exit == 0, out.reason
+    done = LC.abandon(repo, "T11", reason="no", agent="worker")
+    assert done.data["worktree_removed"] is False and done.data["kept_reason"] == ""
+    assert "keepme" in _branches(repo)
