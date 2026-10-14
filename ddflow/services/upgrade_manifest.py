@@ -301,17 +301,6 @@ def event_kinds() -> set[str]:
     return set(HANDLERS)
 
 
-def running_code() -> tuple[dict[str, Any], set[str]]:
-    """What the lint compares with the manifest: this process's registry, unless the tree on
-    disk has moved on since the process started (B72b73360bc): then a fresh interpreter says."""
-    if UR.is_stale():
-        try:
-            return UR.fresh()
-        except UR.FreshError as exc:
-            raise ManifestError(str(exc)) from exc
-    return knob_defaults(), event_kinds()
-
-
 #: The operator's recorded waivers, beside the manifest; absent until the first is written.
 WAIVERS = MANIFEST.parent / "waivers.toml"
 
@@ -419,6 +408,24 @@ def load_waivers(path: Path | str | None = None) -> list[Waiver]:
     return out
 
 
+def _confirmed(found: list[Unmanifested]) -> list[Unmanifested]:
+    """Drop the removals a stale process invented (B72b73360bc): a long-lived server that
+    started before a knob or event kind was added lacks it while the manifest on disk names
+    it, so the lint calls it removed. A new interpreter reads the tree as it is now; what it
+    still has was never removed. Costs nothing unless something looks removed."""
+    gone = [u for u in found if u.kind in ("knob_removed", "event_kind_removed")]
+    if not gone:
+        return found
+    try:
+        knobs, kinds = UR.fresh()
+    except UR.FreshError as exc:
+        raise ManifestError(str(exc)) from exc
+    phantom = {
+        u.id for u in gone if (u.key in knobs if u.kind == "knob_removed" else u.key in kinds)
+    }
+    return [u for u in found if u.id not in phantom]
+
+
 def lint(
     manifest: Manifest | None = None,
     *,
@@ -431,8 +438,10 @@ def lint(
     running code's) with the manifest's replay; whatever differs is a change nobody
     announced. A change a waiver names moves to ``waived``."""
     m = manifest or load()
-    run_k, run_e = running_code() if knobs is None or kinds is None else ({}, set())
-    have_k, have_e = (run_k if knobs is None else knobs, run_e if kinds is None else kinds)
+    have_k, have_e = (
+        knob_defaults() if knobs is None else knobs,
+        event_kinds() if kinds is None else kinds,
+    )
     said_k, said_e = replay(m)
     notes = C.KNOB_DOCS if docs is None else docs
     found: list[Unmanifested] = []
@@ -452,6 +461,8 @@ def lint(
     ]
     found += [Unmanifested("event_kind_added", k) for k in sorted(have_e - said_e)]
     found += [Unmanifested("event_kind_removed", k) for k in sorted(said_e - have_e)]
+    if knobs is None and kinds is None:
+        found = _confirmed(found)
     by_change = {(w.change, w.new): w for w in (load_waivers() if waivers is None else waivers)}
     out = LintResult()
     for u in found:
