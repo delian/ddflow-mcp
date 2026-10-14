@@ -468,3 +468,144 @@ def test_only_services_identity_defines_or_reads_the_agent_marker():
             p.relative_to(root).as_posix() for p in root.rglob("*.py") if token in p.read_text()
         }
         assert homes <= allowed, (token, homes - allowed)
+
+
+# -- the pre-upgrade rehome path: the lines the mutation sample found surviving ----------
+
+
+def test_the_tree_must_match_the_path_AND_the_branch(tmp_path):
+    """`_tree_is_here` asks two things of one worktree: the path and the branch.
+
+    The mutant (`and` -> `or`) accepts a tree at the right PATH on another branch (and one
+    on the right branch elsewhere), so a lease would be re-homed onto a worktree that is
+    not the one it actually holds -- another item's, or another clone's.
+    """
+    from types import SimpleNamespace
+
+    lease = SimpleNamespace(worktree=str(tmp_path), branch="ddflow/x")
+
+    right = [{"worktree": str(tmp_path), "branch": "refs/heads/ddflow/x"}]
+    other_branch = [{"worktree": str(tmp_path), "branch": "refs/heads/ddflow/y"}]
+    other_path = [{"worktree": str(tmp_path / "elsewhere"), "branch": "refs/heads/ddflow/x"}]
+
+    assert ID._tree_is_here(tmp_path, lease, right)
+    assert not ID._tree_is_here(tmp_path, lease, other_branch)
+    assert not ID._tree_is_here(tmp_path, lease, other_path)
+
+
+class _Transferred:
+    """Stands in for `leases.transfer`: what WOULD have moved, in order."""
+
+    def __init__(self) -> None:
+        self.moved: list[str] = []
+
+    def __call__(self, log, item_id, lease, **kw) -> None:
+        self.moved.append(item_id)
+
+
+def _rehome_harness(
+    monkeypatch, *, me="clone-s1", bare="clone", since=100.0, qualifies=("T1",), folded=None
+):
+    """`rehome_pre_upgrade_leases` with every LAYER reachable, and the two states distinct.
+
+    `qualifies` is what the CALLER's state says is pre-upgrade work -- it decides the cheap
+    guard. `folded` (default: the same) is what the re-fold under the lock says, and the
+    move is made from THAT. Only the guards are under test, so the world behind them is
+    stubbed: the fold, the worktree list, the tree match, the transfer, and the post-lock
+    remote settle (which would otherwise need a real log and config).
+    """
+    from types import SimpleNamespace
+
+    transfer = _Transferred()
+    lease = SimpleNamespace(holder=bare)
+    folded_ids = list(qualifies if folded is None else folded)
+    items = {i: SimpleNamespace(lease=lease, kind="task") for i in set(qualifies) | set(folded_ids)}
+
+    class _Tx:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *rest):
+            return False
+
+    log = SimpleNamespace(agent_id=me, root=Path("/repo"), transaction=_Tx, read_all=list)
+
+    monkeypatch.setattr(ID, "bare_agent_id", lambda root: bare)
+    monkeypatch.setattr(ID, "clone_suffix_since", lambda root: since)
+    # What each state SAYS is pre-upgrade work: the caller's, then the re-fold's.
+    monkeypatch.setattr(ID, "_pre_upgrade", lambda cfg, state, b, s: list(state.qualifies))
+    monkeypatch.setattr(ID, "_tree_is_here", lambda *a: True)
+    monkeypatch.setattr(ID.W, "list_worktrees", lambda root: [])
+    monkeypatch.setattr(
+        ID, "fold", lambda *a, **k: SimpleNamespace(qualifies=folded_ids, items=items)
+    )
+    monkeypatch.setattr(ID.L, "transfer", transfer)
+    monkeypatch.setattr(ID.L, "settle_remote", lambda *a, **k: None)
+    return log, transfer, SimpleNamespace(qualifies=list(qualifies), items=items)
+
+
+def test_only_a_DERIVED_identity_rehomes(monkeypatch):
+    """An explicit, env or config id is never suffixed, so it has no bare predecessor to
+    take leases over from. Removing that first guard re-homes leases for an identity whose
+    id was never derived from anything."""
+    log, transfer, caller = _rehome_harness(monkeypatch)
+
+    for layer in ("env", "config", "explicit", ""):
+        assert ID.rehome_pre_upgrade_leases(log, None, caller, layer) == [], layer
+
+    assert transfer.moved == []
+
+
+def test_a_derived_identity_does_rehome_what_is_here(monkeypatch):
+    """The positive control: the same harness with `derived` MOVES the lease, so the empty
+    results around this test mean a guard stopped them, not that the harness is inert."""
+    log, transfer, caller = _rehome_harness(monkeypatch)
+
+    assert ID.rehome_pre_upgrade_leases(log, None, caller, "derived") == ["T1"]
+
+    assert transfer.moved == ["T1"]
+
+
+def test_the_bare_identity_itself_rehomes_nothing(monkeypatch):
+    """`me == bare`: this clone IS the bare id, so there is nothing to take over.
+
+    The mutant (`or` -> `and`) needs ALL THREE conditions to hold, so it walks past this
+    one and moves the lease to the id that already holds it.
+    """
+    log, transfer, caller = _rehome_harness(monkeypatch, me="clone", bare="clone")
+
+    assert ID.rehome_pre_upgrade_leases(log, None, caller, "derived") == []
+
+    assert transfer.moved == []
+
+
+def test_without_a_recorded_suffix_moment_nothing_is_rehomed(monkeypatch):
+    """No suffix moment: this id was never derived FROM another, so no lease of its
+    predecessor's can predate it."""
+    log, transfer, caller = _rehome_harness(monkeypatch, since=0.0)
+
+    assert ID.rehome_pre_upgrade_leases(log, None, caller, "derived") == []
+
+    assert transfer.moved == []
+
+
+def test_without_a_pre_upgrade_lease_nothing_is_rehomed(monkeypatch):
+    log, transfer, caller = _rehome_harness(monkeypatch, qualifies=())
+
+    assert ID.rehome_pre_upgrade_leases(log, None, caller, "derived") == []
+
+    assert transfer.moved == []
+
+
+def test_the_move_is_decided_AGAIN_under_the_lock(monkeypatch):
+    """The caller's state can be stale: a sibling may have moved these leases since.
+
+    Here the caller still lists T1 but the re-fold (what the log says NOW) does not, so
+    nothing is moved. Dropping the re-fold moves the lease off a state that was already
+    wrong -- the very race the re-fold exists for.
+    """
+    log, transfer, caller = _rehome_harness(monkeypatch, qualifies=("T1",), folded=())
+
+    assert ID.rehome_pre_upgrade_leases(log, None, caller, "derived") == []
+
+    assert transfer.moved == []
