@@ -202,3 +202,14 @@ def test_a_fresh_process_keeps_using_its_own_registry(monkeypatch):
     )
     assert UM.lint().clean
     assert called == []
+
+
+def test_a_tree_that_cannot_be_read_is_not_taken_for_current(monkeypatch):
+    """A file vanishing mid-scan (an in-place upgrade) must send the lint to a fresh
+    interpreter, not back to the process's own possibly stale registry."""
+
+    def broken(self, pattern):
+        raise OSError("gone")
+
+    monkeypatch.setattr(UR.Path, "rglob", broken)
+    assert UR.is_stale() is True
