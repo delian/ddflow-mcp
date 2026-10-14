@@ -3,8 +3,9 @@
 The changelog kind (``services/export/kind_changelog.py``) places every entry by the version
 tags that contain it. At cut time the tag does not exist yet, and the file written by the cut
 must be in the commit the tag will name. So the section is rendered with the tag present for a
-moment: a temporary annotated tag at the release source, removed again before this returns,
-whatever happens. The rendering is then exactly what ``ddflow export changelog`` prints once
+moment: a temporary annotated tag at the release source, removed again whatever happens. The
+tag is held again while the file is COMMITTED, because the pre-commit check regenerates the
+staged document with `ddflow export` and needs the same tag to produce the same file. The rendering is then exactly what ``ddflow export changelog`` prints once
 the real tag exists: the Unreleased entries become ``## [x.y.z] - date`` with its compare
 link, and an empty Unreleased remains.
 
@@ -66,7 +67,11 @@ def _render_tag(repo: Path, tag: str, sha: str) -> Iterator[None]:
     whatever happens. The section is RENDERED under it, and COMMITTED under it too: the
     pre-commit check regenerates the staged document with `ddflow export`, which places
     entries by the tags that contain them, so without the tag it renders a different file
-    and a blocking [enforce].generated_views refuses the commit (Ba41e4bb639)."""
+    and a blocking [enforce].generated_views refuses the commit (Ba41e4bb639).
+
+    The tag is removed only while it still names the object made here (a compare-and-delete),
+    so a real release tag created meanwhile is never taken away, and a failure to remove it
+    never replaces the error the caller was already raising."""
     made = _git(
         repo,
         "tag",
@@ -80,16 +85,31 @@ def _render_tag(repo: Path, tag: str, sha: str) -> Iterator[None]:
         raise ExportError(
             f"could not tag {sha[:12]} to render the changelog: {made.err}", EXIT_UNAVAILABLE
         )
+    obj = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}").out.strip()
     try:
         yield
-    finally:
-        gone = _git(repo, "tag", "-d", tag)
-        if not gone.ok:  # a leftover would read as a release and block the real cut
-            raise ExportError(
-                f"could not remove the temporary tag {tag} ({gone.err}); delete it with "
-                f"`git tag -d {tag}` before cutting again",
-                EXIT_UNAVAILABLE,
-            )
+    except BaseException as exc:
+        gone = _drop_tag(repo, tag, obj)
+        if gone is not None:
+            exc.add_note(f"and the temporary tag {tag} could not be removed ({gone})")
+        raise
+    gone = _drop_tag(repo, tag, obj)
+    if gone is not None:  # a leftover would read as a release and block the real cut
+        raise ExportError(
+            f"could not remove the temporary tag {tag} ({gone}); delete it with "
+            f"`git tag -d {tag}` before cutting again",
+            EXIT_UNAVAILABLE,
+        )
+
+
+def _drop_tag(repo: Path, tag: str, obj: str) -> str | None:
+    """Remove ``tag`` if it still names ``obj``; None when done or when it is no longer ours
+    (a tag that now names something else is left alone), else why not."""
+    now = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}")
+    if now.ok and obj and now.out.strip() != obj:
+        return None  # someone else's tag by now: never remove it
+    r = _git(repo, "update-ref", "-d", f"refs/tags/{tag}", *([obj] if obj else []))
+    return None if r.ok else (r.err or r.out or "git failed")
 
 
 def prepare(repo: Path, cfg: Config, *, version: str, ref: str, fallback_notes: str) -> Prepared:
