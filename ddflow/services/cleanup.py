@@ -42,7 +42,7 @@ from pathlib import Path
 from ..config import Config
 from ..core import clock as CK
 from ..core.flow import GITFLOW
-from ..core.model import ABANDONED, DONE, Item, State, fold
+from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import leases as L
@@ -406,6 +406,16 @@ def _drop_branch(repo: Path, cfg: Config, log: EventLog, it: Item) -> tuple[bool
     return False, f"branch {it.branch} kept: {(done.err or done.out).strip() or 'not merged'}"
 
 
+def _finish_stamps(log: EventLog) -> dict[str, str]:
+    """When each abandoned or removed item was finished with: its last such event. Read only
+    when a sweep meets such an item, since the fold keeps no time for them."""
+    stamps: dict[str, str] = {}
+    for ev in log.read_all():
+        if ev.kind in ("item.abandoned", "task.removed", "phase.removed"):
+            stamps[ev.subject] = ev.ts
+    return stamps
+
+
 def sweep_finished(
     repo: Path,
     cfg: Config,
@@ -415,10 +425,16 @@ def sweep_finished(
     now: float | None = None,
     callers: tuple[Path | None, ...] | None = None,
 ) -> list[str]:
-    """What a session start removes of DONE items' leftover trees (B4757c428f4): `merge`
-    keeps the tree it was run from and nothing else removes it later. Only an item finished
-    longer ago than ``worktree.sweep_min_age_s``, so the tree an agent just finished in, and
-    may still stand in, is left alone, and never the directory this process stands in. Returns the sentences for what was removed."""
+    """What a session start removes of a finished item's leftover tree (B4757c428f4): `merge`
+    keeps the tree it was run from, `abandon` and `remove` keep one the caller stood in or one
+    holding work, and nothing else removed them later.
+
+    Covers done, abandoned and removed items, each only once it has been finished longer
+    than ``worktree.sweep_min_age_s`` (an item with no known finish time is never old): the
+    tree an agent finished in a moment ago may be the directory it still stands in, and the
+    caller guard protects only THIS caller. Never the directory this process or the given
+    ``callers`` stand in; a tree holding work is kept and named. Returns the sentences for
+    what was removed or kept."""
     if not cfg.worktree.dispose_finished:
         return []
     now = time.time() if now is None else now
@@ -429,17 +445,19 @@ def sweep_finished(
     except OSError:
         pass
     out: list[str] = []
+    stamps: dict[str, str] | None = None
     for it in state.items.values():
-        finished = it.removed or it.state in (DONE, ABANDONED)
+        finished = it.removed or it.terminal
         if not finished or not it.worktree or it.adopted or it.lease:
             continue
         if it.state == DONE and not it.removed:
-            finished_for = CK.age_s(it.completed_at, now) if it.completed_at else 0.0
-            if finished_for < cfg.worktree.sweep_min_age_s:
-                continue  # too fresh (or no finish time): the tree may be an agent's cwd
-        # an abandoned or removed item was disposed at that moment, so what is left was KEPT
-        # (the caller stood in it, or it holds work): the rule is the same, the caller guard
-        # protects whoever stands in it now
+            stamp = it.completed_at
+        else:
+            stamps = _finish_stamps(log) if stamps is None else stamps
+            stamp = stamps.get(it.id, "")
+        finished_for = CK.age_s(stamp, now) if stamp else 0.0
+        if finished_for < cfg.worktree.sweep_min_age_s:
+            continue  # too fresh, or no finish time: the tree may be an agent's cwd
         removed, why = dispose_finished(repo, cfg, log, it, callers=callers)
         if removed:
             out.append(f"removed the finished worktree of {it.id}" + (f"; {why}" if why else ""))
