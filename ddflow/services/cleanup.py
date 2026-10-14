@@ -407,15 +407,26 @@ def _drop_branch(repo: Path, cfg: Config, log: EventLog, it: Item) -> tuple[bool
 
 
 def sweep_finished(
-    repo: Path, cfg: Config, log: EventLog, state: State, *, now: float | None = None
+    repo: Path,
+    cfg: Config,
+    log: EventLog,
+    state: State,
+    *,
+    now: float | None = None,
+    callers: tuple[Path | None, ...] | None = None,
 ) -> list[str]:
     """What a session start removes of DONE items' leftover trees (B4757c428f4): `merge`
     keeps the tree it was run from and nothing else removes it later. Only an item finished
     longer ago than ``worktree.sweep_min_age_s``, so the tree an agent just finished in, and
-    may still stand in, is left alone. Returns the sentences for what was removed."""
+    may still stand in, is left alone, and never the directory this process stands in. Returns the sentences for what was removed."""
     if not cfg.worktree.dispose_finished:
         return []
     now = time.time() if now is None else now
+    if callers is None:  # this process stands where its caller's shell does
+        try:
+            callers = (Path.cwd(),)
+        except OSError:
+            callers = ()
     out: list[str] = []
     for it in state.items.values():
         if it.removed or it.state != DONE or not it.worktree or it.adopted or it.lease:
@@ -423,7 +434,7 @@ def sweep_finished(
         finished_for = CK.age_s(it.completed_at, now) if it.completed_at else 0.0
         if finished_for < cfg.worktree.sweep_min_age_s:
             continue  # too fresh (or no finish time): the tree may be an agent's cwd
-        removed, why = dispose_finished(repo, cfg, log, it)
+        removed, why = dispose_finished(repo, cfg, log, it, callers=callers)
         if removed:
             out.append(f"removed the finished worktree of {it.id}" + (f"; {why}" if why else ""))
         elif why:

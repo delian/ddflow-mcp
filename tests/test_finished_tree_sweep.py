@@ -125,3 +125,13 @@ def test_the_sweep_names_a_branch_it_could_not_delete(repo, monkeypatch):
     said = CL.sweep_finished(repo, cfg, log, state, now=time.time() + 10**6)
     assert said == ["removed the finished worktree of T11; branch ddflow/T11 left: in use"]
     assert tree.exists()  # the stub removed nothing
+
+
+def test_the_sweep_never_removes_the_directory_the_process_stands_in(repo, monkeypatch):
+    tree = _seed(repo, "T12")
+    _finish(repo, "T12")
+    cfg, log = Config.load(repo), EventLog(repo, "later")
+    state = fold(log.read_all(), strict=False)
+    monkeypatch.chdir(tree)
+    said = CL.sweep_finished(repo, cfg, log, state, now=time.time() + 10**6)
+    assert tree.exists() and said and "standing in it" in said[0]
