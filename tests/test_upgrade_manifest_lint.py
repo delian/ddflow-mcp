@@ -39,6 +39,12 @@ def drift(monkeypatch):
     real_knobs, real_kinds = UM.knob_defaults, UM.event_kinds
     monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: {**real_knobs(cfg), "x.new_knob": 3})
     monkeypatch.setattr(UM, "event_kinds", lambda: real_kinds() | {"x.thing_happened"})
+    # a fresh interpreter would read the same drifted tree
+    monkeypatch.setattr(
+        UR,
+        "fresh",
+        lambda: ({**real_knobs(), "x.new_knob": 3}, real_kinds() | {"x.thing_happened"}),
+    )
 
 
 def test_this_tree_is_clean():
@@ -199,6 +205,17 @@ def test_a_removal_the_fresh_process_agrees_with_is_still_reported(monkeypatch):
     monkeypatch.setattr(UR, "fresh", lambda: (stale, UM.event_kinds()))
     res = UM.lint()
     assert [u.id for u in res.unmanifested] == [f"knob_removed:{gone}"]
+
+
+def test_a_stale_process_does_not_invent_a_changed_default_or_an_added_knob(monkeypatch):
+    """The other two directions of the same staleness: the tree flipped a default or removed
+    a knob (and the manifest says so) while the old process still holds the old registry."""
+    real = UM.knob_defaults()
+    flipped = "importer.phase_slug_chars"
+    stale = {**real, flipped: 12345, "x.removed_since": 1}
+    monkeypatch.setattr(UM, "knob_defaults", lambda cfg=None: stale)
+    res = UM.lint()
+    assert res.clean, UM.report(res)
 
 
 def test_a_clean_lint_costs_no_fresh_interpreter(monkeypatch):
