@@ -3,23 +3,38 @@
 A long-lived MCP server keeps the knob registry it imported at start. After an edit or an
 upgrade the manifest on disk (always read fresh) announces knobs the process has never heard
 of, and the release lint called them removed and refused a release for changes that do not
-exist. A process whose package source is newer than its own start reads the knob defaults and
+exist. A process whose package source differs from what it loaded reads the knob defaults and
 event kinds from a new interpreter instead; a process that is current pays nothing."""
 
 from __future__ import annotations
 
 import json
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
 from .. import config as C
 from ..infra import proc as P
 
-#: When this process loaded the registry. A source file written after it means the process
-#: runs older code than the tree.
-_STARTED = time.time()
+
+def _scan() -> dict[str, tuple[int, int]]:
+    """Every source file of the running package: its size and exact modification time."""
+    root = Path(C.__file__).resolve().parent
+    return {
+        str(p.relative_to(root)): (st.st_size, st.st_mtime_ns)
+        for p in root.rglob("*.py")
+        for st in (p.stat(),)
+    }
+
+
+#: The package as it was when this process loaded the registry (the MCP server imports it at
+#: start through api.flow). Any difference later (an edit, an upgrade, a file added or removed)
+#: means the process runs older code than the tree. Size AND exact mtime, not "newer than the
+#: process": a wheel or `tar -x` keeps the old build time, so "newer" misses the upgrade.
+try:
+    _SNAPSHOT: dict[str, tuple[int, int]] | None = _scan()
+except OSError:
+    _SNAPSHOT = None
 
 #: Runs in a fresh interpreter: the tree's own knobs and event kinds, as JSON.
 _FRESH = (
@@ -36,12 +51,14 @@ class FreshError(Exception):
 
 
 def is_stale() -> bool:
-    """Is any source file of the running package newer than this process's import?"""
-    root = Path(C.__file__).resolve().parent
+    """Has the package on disk changed since this process loaded it? A tree that cannot be
+    read, or no snapshot at import, is not known to be current: ask a fresh process."""
+    if _SNAPSHOT is None:
+        return True
     try:
-        return any(p.stat().st_mtime > _STARTED for p in root.rglob("*.py"))
+        return _scan() != _SNAPSHOT
     except OSError:
-        return True  # a tree that cannot be read is not known to be current: ask a fresh process
+        return True
 
 
 def fresh() -> tuple[dict[str, Any], set[str]]:
