@@ -263,3 +263,86 @@ def test_a_later_missing_binary_in_a_compound_gate_is_unavailable_not_failed(tmp
     )
     outcome, ev = G.run_command_gate(gd, tmp_path)
     assert outcome == "unavailable" and ev["exit"] == 127 and "not found" in ev["reason"]
+
+
+# -- the lines the mutation sample found surviving (U4, 2026-10-10) --------------------
+
+
+def test_a_declared_command_prints_its_line():
+    """`Declared.__str__` is how a command shows up in every message that names it (a
+    refusal, a review line, an upgrade plan): the line, not the source it came from, and
+    not nothing."""
+    assert str(decl("echo hi")) == "echo hi"
+    assert decl("echo hi").source == "test"
+
+
+def test_tick_s_zero_means_no_ticking_even_with_a_callback():
+    """`ticking` needs BOTH a callback and a positive interval.
+
+    The mutant (`and` -> `or`) starts the keep-alive thread for an interval of zero, which
+    is a spin: the callback runs in a tight loop for as long as the command does.
+    """
+    ticks: list[int] = []
+
+    run = CR.CommandRunner().run(
+        decl("sleep 0.3"), timeout_s=10, on_tick=lambda: ticks.append(1), tick_s=0
+    )
+
+    assert run.ran
+    assert ticks == []
+
+
+def test_output_of_exactly_the_cap_is_kept_whole():
+    """The clip fires ABOVE the cap: at exactly `max_output` nothing was lost, so nothing
+    is rewritten and `truncated` stays false.
+
+    The mutant (`>` -> `>=`) clips at the cap, which rewrites the output (re-encoding it
+    through the marker) and reports a truncation that did not happen.
+    """
+    n = 64
+
+    run = CR.CommandRunner(max_output=n).run(
+        decl(f"head -c {n} /dev/zero | tr '\\0' x"), timeout_s=10
+    )
+
+    assert run.ran
+    assert run.out == "x" * n
+    assert run.truncated is False
+
+
+def test_output_over_the_cap_is_clipped_to_the_tail_and_says_so():
+    """The clause it exists for, so the test above cannot pass by never clipping."""
+    n = 64
+
+    run = CR.CommandRunner(max_output=n).run(
+        decl(f"head -c {n * 2} /dev/zero | tr '\\0' y"), timeout_s=10
+    )
+
+    assert run.ran and run.truncated is True
+    assert run.out.endswith("y" * n)
+    assert f"clipped to the last {n} characters" in run.out
+
+
+def test_a_spawn_that_raises_is_unavailable_not_a_crash(monkeypatch):
+    """`P.spawn_shell` can raise -- an OSError from the OS (no processes), a ValueError
+    from the wrapper -- and `start` turns that into a "could not run", never a traceback
+    with no `Started` at all.
+
+    Reached by NO test until now: `test_a_bad_cwd_could_not_run` goes through `run` (which
+    spawns with `P.run_shell`) and is caught by a pre-check before its own spawn, and no
+    test called `start` at all. Patching the spawn is the only way into the `except` the
+    mutation sample found surviving.
+    """
+
+    def boom(*a, **k):
+        raise OSError("no free processes")
+
+    monkeypatch.setattr(CR.P, "spawn_shell", boom)
+
+    started = CR.CommandRunner().start(decl("true"))
+
+    assert started.proc is None
+    assert started.unavailable is not None, "a failed spawn must still say why"
+    run = started.unavailable
+    assert run.status == "unavailable" and run.kind == CR.COULD_NOT_RUN
+    assert "could not execute" in run.reason and "no free processes" in run.reason
