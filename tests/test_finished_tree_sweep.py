@@ -135,3 +135,15 @@ def test_the_sweep_never_removes_the_directory_the_process_stands_in(repo, monke
     monkeypatch.chdir(tree)
     said = CL.sweep_finished(repo, cfg, log, state, now=time.time() + 10**6)
     assert tree.exists() and said and "standing in it" in said[0]
+
+
+def test_the_brief_keeps_the_tree_its_caller_stands_in_even_over_mcp(repo):
+    """Over MCP the server's own directory says nothing about the agent's shell: the caller's
+    location (`called_from`) is what protects the tree."""
+    tree = _seed(repo, "T13")
+    _finish(repo, "T13")
+    assert run_cli(repo, "config", "worktree.sweep_min_age_s", "0")[0] == 0
+    LC.brief(repo, called_from=tree, agent="later")
+    assert tree.exists()
+    LC.brief(repo, agent="later")
+    assert not tree.exists()
