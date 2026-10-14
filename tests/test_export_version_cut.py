@@ -267,3 +267,22 @@ def test_a_bump_that_fails_after_the_changelog_commit_says_the_changelog_commit_
     assert landed[:10] in text and "git revert" in text and "stays" in text, text
     assert 'version = "1.0.0"' in (repo / "pyproject.toml").read_text(), "the bump rolled back"
     assert _git(repo, "tag", "-l", "v1.1.0") == ""
+
+
+def test_cut_with_changelog_commits_under_a_blocking_generated_views_policy(proj):
+    """Ba41e4bb639: the hook compares a staged generated document with what `ddflow export`
+    renders NOW. The cut renders the section with the new tag present for a moment and
+    removes it before the commit, so the committed file never matched: with
+    [enforce].generated_views = block the commit was refused as 'stale: the log moved'."""
+    repo = proj
+    assert run_cli(repo, "config", "enforce.generated_views", "block")[0] == 0
+    assert run_cli(repo, "config", "enforce.commit_without_lease", "off")[0] == 0  # not under test
+    _git(repo, "add", ".ddflow")
+    _git(repo, "commit", "-qm", "chore: block generated views")
+    hcode, hout, herr = run_cli(repo, "hooks", "install")
+    assert hcode == 0, hout + herr
+    code, out, err = _cut(repo, "--changelog")
+    assert code == 0, err + out
+    assert json.loads(out)["changelog"] == "CHANGELOG.md"
+    assert "[1.1.0]" in _git(repo, "show", "v1.1.0:CHANGELOG.md")
+    assert run_cli(repo, "export", "changelog", "--check")[0] == 0

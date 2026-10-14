@@ -24,7 +24,8 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,6 +49,8 @@ class Prepared:
     mode: str
     notes: str  # the version's section, for the tag message and the release request
     apply: Callable[..., str]  # (tree, *, force, dry) -> created | updated | unchanged | diff
+    tag: str = ""  # the version's tag, present for a moment while the file is committed
+    sha: str = ""  # the release source that tag names
 
 
 def _git(repo: Path, *args: str) -> W.GitResult:
@@ -55,6 +58,38 @@ def _git(repo: Path, *args: str) -> W.GitResult:
     if r.unavailable:  # a timeout or a missing git
         raise ExportError(f"could not run git: {r.err}", EXIT_UNAVAILABLE)
     return r
+
+
+@contextmanager
+def _render_tag(repo: Path, tag: str, sha: str) -> Iterator[None]:
+    """The new version's tag, present at ``sha`` only while it is needed and removed again
+    whatever happens. The section is RENDERED under it, and COMMITTED under it too: the
+    pre-commit check regenerates the staged document with `ddflow export`, which places
+    entries by the tags that contain them, so without the tag it renders a different file
+    and a blocking [enforce].generated_views refuses the commit (Ba41e4bb639)."""
+    made = _git(
+        repo,
+        "tag",
+        "--annotate",
+        tag,
+        "-m",
+        "ddflow: temporary, while the changelog is rendered",
+        sha,
+    )
+    if not made.ok:
+        raise ExportError(
+            f"could not tag {sha[:12]} to render the changelog: {made.err}", EXIT_UNAVAILABLE
+        )
+    try:
+        yield
+    finally:
+        gone = _git(repo, "tag", "-d", tag)
+        if not gone.ok:  # a leftover would read as a release and block the real cut
+            raise ExportError(
+                f"could not remove the temporary tag {tag} ({gone.err}); delete it with "
+                f"`git tag -d {tag}` before cutting again",
+                EXIT_UNAVAILABLE,
+            )
 
 
 def prepare(repo: Path, cfg: Config, *, version: str, ref: str, fallback_notes: str) -> Prepared:
@@ -70,20 +105,7 @@ def prepare(repo: Path, cfg: Config, *, version: str, ref: str, fallback_notes: 
     sha = W.rev(repo, ref)
     if not sha:
         raise ExportError(f"release source {ref!r} does not exist", EXIT_UNAVAILABLE)
-    made = _git(
-        repo,
-        "tag",
-        "--annotate",
-        tag,
-        "-m",
-        "ddflow: temporary, while the changelog is rendered",
-        sha,
-    )
-    if not made.ok:
-        raise ExportError(
-            f"could not tag {sha[:12]} to render the changelog: {made.err}", EXIT_UNAVAILABLE
-        )
-    try:
+    with _render_tag(repo, tag, sha):
         q = ops.load(repo, cfg)
         flt = dataclasses.replace(spec.filters, tag="")
         slice_ = dataclasses.replace(spec.filters, tag=version)
@@ -100,16 +122,10 @@ def prepare(repo: Path, cfg: Config, *, version: str, ref: str, fallback_notes: 
             )
             links = {x["label"]: x["url"] for x in KC.build_sections(q)["links"]}
             apply = _region(spec.path, unreleased, notes, version, links)
-    finally:
-        gone = _git(repo, "tag", "-d", tag)
-        if not gone.ok:  # a leftover would read as a release and block the real cut
-            raise ExportError(
-                f"could not remove the temporary tag {tag} ({gone.err}); delete it with "
-                f"`git tag -d {tag}` before cutting again",
-                EXIT_UNAVAILABLE,
-            )
     has_entries = "\n### " in notes
-    return Prepared(spec.path, spec.mode, notes if has_entries else fallback_notes, apply)
+    return Prepared(
+        spec.path, spec.mode, notes if has_entries else fallback_notes, apply, tag=tag, sha=sha
+    )
 
 
 def _whole(path: str, doc: str) -> Callable[..., str]:
@@ -220,6 +236,13 @@ def commit_on(
 ) -> str:
     """Write and commit the prepared changelog on local ``branch``. Returns the action."""
     root, throwaway = _tree_for(repo, cfg, branch)
+    if not prep.tag:  # a Prepared built without the render tag: nothing to hold open
+        return _commit_to(root, cfg, branch, throwaway, prep, force=force, message=message)
+    with _render_tag(root, prep.tag, prep.sha):
+        return _commit_to(root, cfg, branch, throwaway, prep, force=force, message=message)
+
+
+def _commit_to(root, cfg, branch, throwaway, prep, *, force: bool, message: str) -> str:
     if not throwaway:
         return _commit_in(root, prep, force=force, message=message)
     base = (root / cfg.worktree.root).resolve()
