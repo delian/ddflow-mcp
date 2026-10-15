@@ -157,3 +157,12 @@ def test_wait_queue_knob_queues_every_refusal(repo):
     assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
     run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)
     assert _state(repo).waiting["T1"]["queue"] is True
+
+
+def test_claim_queue_flag_queues_a_refused_claim(repo):
+    _two_holders(repo)
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/a.py", agent=A)[0] == 0
+    )
+    assert run_cli(repo, "claim", "T3", "--no-worktree", "--queue", agent="agent-c")[0] == 3
+    assert _state(repo).waiting["T3"]["queue"] is True
