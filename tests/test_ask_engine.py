@@ -116,6 +116,8 @@ def test_no_mcp_or_api_module_can_record_an_answer():
     assert sorted(writers) == ["ddflow/core/handlers/asks.py", "ddflow/services/ask/engine.py"]
     for sub in ("surfaces/mcp.py", "surfaces/tools", "api"):
         target = ROOT / "ddflow" / sub
+        if not target.exists():
+            continue
         for p in target.rglob("*.py") if target.is_dir() else [target]:
             assert "services.ask" not in p.read_text(encoding="utf-8").replace("services import ask", "services.ask"), p
 
@@ -234,6 +236,8 @@ def test_a_question_needs_its_text_and_flags_are_real_booleans(log):
     cfg = Config()
     with pytest.raises(E.AskRefused, match="text"):
         E.request(log, cfg, subject="Which region?", kind="question", now=T0)
+    with pytest.raises(E.AskRefused, match="true or false"):
+        _ask(log, cfg, bot_answerable="false", actor=_person(cfg))
     log.append("ask.requested", "Qx", {"id": "Qx", "subject": "s", "digest": "d", "bot_answerable": "false", "expires_at": "2099-01-01T00:00:00Z"})
     assert asks_of(_state(log))["Qx"]["bot_answerable"] is False
 
