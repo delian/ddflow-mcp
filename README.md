@@ -5378,7 +5378,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=e537cbe77f17 -->
+<!-- ddflow:begin README/tools sha=fa829c155003 -->
 <details><summary>All 115 MCP tools: 32 in the `core` tier, 47 more in `standard`, 36 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5479,6 +5479,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_similar` | core | 'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson… |
 | Looking at it | `ddflow_board` | standard | The whole work queue as a readable board, with the critical path. |
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
+| Looking at it | `ddflow_docs` | all | Documentation, read-only. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
@@ -5497,7 +5498,6 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
 | When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
-| Unmapped — add a prefix to `_GROUPS` | `ddflow_docs` | all | Documentation, read-only. |
 
 </details>
 <!-- ddflow:end README/tools -->
