@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 
 @declare("log")
@@ -45,4 +45,24 @@ class LogConfig:
         choices=("warn", "block", "off"),
         strictest=("block", "a push never leaves event shards out"),
         doc="What scripts/ci/pre-push does when event shards in the primary checkout are not committed, so the push leaves them out: `warn` (default) names them, `block` refuses the push, `off` says nothing.",
+    )
+    #: The on-disk read snapshot (B166) as knobs (B-log-snapshot-knobs).
+    snapshot: bool = knob(
+        True,
+        doc="Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over this setting.",
+    )
+    snapshot_min_events: int = knob(
+        5000,
+        doc="No snapshot is written below this many events: a cold parse is cheap there and a file is not free. Lower it to snapshot a small log (tests do), raise it to snapshot only a large one. 0 snapshots any log.",
+        check=int_at_least(0),
+    )
+    snapshot_stale_days: int = knob(
+        7,
+        doc="Days a snapshot written by OTHER code (another ddflow version or parser) is kept before the next write collects it. One snapshot exists per version and parser, so worktrees on different versions do not overwrite each other's; this bounds how long an abandoned one stays.",
+        check=int_at_least(1),
+    )
+    snapshot_touch_s: int = knob(
+        86400,
+        doc="A snapshot in use is marked as used (its modification time refreshed) at most this often, in seconds, so a long-lived reader's snapshot is not collected as abandoned by a sibling checkout on other code. 0 refreshes it on every read.",
+        check=int_at_least(0),
     )

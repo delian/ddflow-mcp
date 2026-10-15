@@ -20,14 +20,13 @@ from ddflow.infra.log import EventLog, clear_parse_cache
 from tests.test_log_merged_order import _ev, _put
 from tests.test_log_merged_order import _reference as _reference_ids
 
-CFG = LogConfig()
+CFG = LogConfig(snapshot_min_events=10)  # snapshot even a small test log
 N = 1600  # events per shard; the rewrite floor is 1000 events
 
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
     monkeypatch.setattr(EventLog, "stamp", False)
-    monkeypatch.setattr(L, "SNAPSHOT_MIN_EVENTS", 10)
     monkeypatch.delenv(L.SNAPSHOT_ENV, raising=False)
     clear_parse_cache()
     yield
@@ -102,9 +101,8 @@ def test_a_big_log_writes_a_git_ignored_snapshot(repo):
     assert (_snap(log).parent / ".gitignore").read_text() == "*\n"
 
 
-def test_a_small_log_writes_none(repo, monkeypatch):
-    monkeypatch.setattr(L, "SNAPSHOT_MIN_EVENTS", 5000)
-    log = _log(repo)
+def test_a_small_log_writes_none(repo):
+    log = _log(repo, LogConfig(snapshot_min_events=5000))
     _put(log, "a", [_ev("a", i) for i in range(1, 2000)])
     log.read_all()
     assert not _snap(log).exists()
@@ -229,7 +227,9 @@ def test_off_means_no_snapshot_is_written_or_read(repo, monkeypatch, parses):
     log = _build(repo)
     for how in ("reuse_parsed", "env"):
         clear_parse_cache()
-        cfg = LogConfig(reuse_parsed=False) if how == "reuse_parsed" else CFG
+        cfg = (
+            LogConfig(snapshot_min_events=10, reuse_parsed=False) if how == "reuse_parsed" else CFG
+        )
         if how == "env":
             monkeypatch.setenv(L.SNAPSHOT_ENV, "0")
         assert _check(repo, _log(repo, cfg)).parsed == 2 * N
