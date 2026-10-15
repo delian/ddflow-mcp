@@ -185,7 +185,11 @@ def test_a_parent_completes_once_its_children_do(repo):
     assert _finish(repo, "P1.T1a")[0] == OK
     # The parent closes with its last child; a gate is not recorded on it afterwards
     # (B8b2dafcbf3), so there is nothing left to finish.
-    assert "state done" in run_cli(repo, "show", "P1.T1")[1]
+    import json
+
+    assert json.loads(run_cli(repo, "--json", "show", "P1.T1")[1])["state"] == "done"
+    code, _out, err = run_cli(repo, "gate", "record", "P1.T1", "research", "--outcome", "passed")
+    assert code == 3, err
 
 
 def test_an_abandoned_child_does_not_hold_its_parent_open(repo):
