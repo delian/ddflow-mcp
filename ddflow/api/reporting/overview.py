@@ -113,6 +113,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     # is folded ONCE per command (B-gap-log-scale; tests/test_fold_once.py).
     log, cfg, st = _load(repo, agent)
     events = log.read_all()
+    if st.event_count != len(events):  # an append landed between `_load`'s read and this one
+        st = localize(fold(events, strict=False), log, time.time())
     tracked = PR.work(events, st)
     findings = PR.detect(events, st, cfg)
     # The offer `next` makes (reservation hold and parallelism limit alike), so "ready" here is

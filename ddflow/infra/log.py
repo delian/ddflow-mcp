@@ -1097,7 +1097,7 @@ class EventLog:
         finally:
             os.close(fd)
         if self._meta is not None:
-            self._meta.advance(self.shard, (size, before_mtime), ev)
+            self._meta.advance(self.shard, (size, before_mtime), ev, len(line))
         for hook in APPEND_HOOKS:  # every log, however built (Ba24a8d32ee)
             with contextlib.suppress(Exception):
                 hook(self, ev, size, size + len(line))
