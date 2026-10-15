@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.roles"
+new = "{\"operator\": [\"*\"], \"bot\": [\"read\", \"claim\", \"note\", \"start_lane\", \"approve_marked\"], \"agent\": [\"read\", \"claim\", \"note\"], \"observer\": [\"read\"]}"
+why = "A role-to-capabilities table: who may start lanes, approve, adopt and waive is data, not code. (SE-actors, the one actor resolver.)"
+impact = "additive"
