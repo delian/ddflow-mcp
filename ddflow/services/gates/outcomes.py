@@ -72,6 +72,9 @@ class GateStatus:
     rows: list[tuple[str, str]] = field(default_factory=list)
 
 
+SETTLED_VERDICTS = ("refuted", "confirmed")  # a finding with either has been triaged
+
+
 def triage_counts(it, gate: str) -> dict[str, int] | None:
     """How the findings of ``gate``'s recorded review stand: ``{"findings", "refuted",
     "confirmed", "untriaged"}``, or None when it reported none -- or is not a `ddflow
@@ -90,7 +93,7 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
         "findings": len(found),
         "refuted": verdicts.count("refuted"),
         "confirmed": verdicts.count("confirmed"),
-        "untriaged": sum(1 for v in verdicts if v not in ("refuted", "confirmed")),
+        "untriaged": sum(1 for v in verdicts if v not in SETTLED_VERDICTS),
     }
 
 
@@ -105,7 +108,7 @@ def untriaged_note(it, gate: str) -> str:
     left = [
         f"#{n}"
         for n, f in enumerate(found, 1)
-        if mine.get(f.get("digest"), {}).get("verdict", "") not in ("refuted", "confirmed")
+        if mine.get(f.get("digest"), {}).get("verdict", "") not in SETTLED_VERDICTS
     ]
     if not left:
         return ""
