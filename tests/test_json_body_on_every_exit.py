@@ -123,12 +123,12 @@ def test_refused_search_and_session_list_keep_the_list_envelope(repo, argv, kind
     assert body["schema"].startswith("list@")
 
 
-def test_the_remembered_stderr_is_still_the_real_stream():
+def test_the_remembered_streams_is_still_the_real_stream():
     """A proxy that lost `isatty`/`fileno` would break colour and `subprocess(stderr=...)`."""
-    from ddflow.surfaces.render import remembered_stderr
+    from ddflow.surfaces.render import remembered_streams
 
     real = sys.stderr
-    with remembered_stderr() as tee:
+    with remembered_streams() as (_out, tee):
         assert sys.stderr.isatty() == real.isatty()
         assert sys.stderr.encoding == real.encoding
         print("said", file=sys.stderr)

@@ -394,7 +394,7 @@
    "true"
   ],
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"the command must contain {tests} where the test list goes\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"bisect@1\"\n}\n",
   "the command must contain {tests} where the test list goes\n"
  ],
  [
@@ -918,7 +918,7 @@
    "g1"
   ],
   2,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"'g1' is in no pipeline; nothing to drop\",\n    \"outcome\": \"nothing\",\n    \"exit\": 2\n  },\n  \"schema\": \"workflow_drop@1\"\n}\n",
   "'g1' is in no pipeline; nothing to drop\n"
  ],
  [
@@ -1104,7 +1104,7 @@
    "AGENTS.md"
   ],
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"no such document: AGENTS.md\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"pins@1\"\n}\n",
   "no such document: AGENTS.md\n"
  ],
  [
