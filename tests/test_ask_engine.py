@@ -261,16 +261,20 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
     subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
     log = EventLog(root, "asker")
     ids: list[str] = []
+    model: dict[str, tuple[str, str]] = {}  # the expected (state, outcome), kept independently
     d = E.digest_of("c")
     for op, i in steps:
         try:
             if op == "ask":
                 ids.append(E.request(log, cfg, subject=f"s{i}", content="c", now=T0).id)
+                model[ids[-1]] = ("pending", "")
             elif ids and op in ("approve", "deny"):
-                E.answer(log, cfg, ids[i % len(ids)], "approved" if op == "approve" else "denied",
-                         actor=_person(cfg), digest=d, now=T0)
+                outcome = "approved" if op == "approve" else "denied"
+                E.answer(log, cfg, ids[i % len(ids)], outcome, actor=_person(cfg), digest=d, now=T0)
+                model[ids[i % len(ids)]] = ("answered", outcome)
             elif ids and op == "withdraw":
                 E.withdraw(log, ids[i % len(ids)], actor=_asker(cfg), now=T0)
+                model[ids[i % len(ids)]] = ("withdrawn", "")
             elif ids and op == "agent_try":
                 E.answer(log, cfg, ids[i % len(ids)], "approved", actor=_agent(cfg), digest=d, now=T0)
         except E.AskRefused:
@@ -288,6 +292,8 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
     keep = ("id", "state", "outcome", "human", "subject", "digest", "requested_by", "answered_by")
     project = lambda rows: {k: {f: r[f] for f in keep} for k, r in rows.items()}  # noqa: E731
     assert project(replayed) == project(live)
+    # ... and both equal what the operations that SUCCEEDED imply, worked out apart from the fold
+    assert {k: (r["state"], r["outcome"]) for k, r in replayed.items()} == model
     # no agent attempt ever landed: every recorded answer is a person's
     assert all(r["human"] for r in live.values() if r["state"] == "answered")
     # status is a function of the rows alone
