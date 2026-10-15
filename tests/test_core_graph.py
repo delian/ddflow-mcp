@@ -116,6 +116,25 @@ def test_find_cycles_names_an_item_only_on_a_cycle_through_a_finished_node():
     assert G.find_cycles(items) == [["n0", "n1", "n0"], ["n0", "n3", "n1", "n0"], ["n2", "n2"]]
 
 
+def test_find_cycles_does_not_consume_the_list_edges_returns():
+    """B693a09edfe: the iterative DFS popped the very list `edges` handed back, so a caller
+    returning the item's OWN list (`lambda it: it["needs"]`) lost its dependencies."""
+    plan = {"a": {"needs": []}, "b": {"needs": ["a"]}, "c": {"needs": ["a", "b"]}}
+    assert G.find_cycles(plan, lambda it: it["needs"]) == []
+    assert plan == {"a": {"needs": []}, "b": {"needs": ["a"]}, "c": {"needs": ["a", "b"]}}
+
+
+def test_find_cycles_leaves_a_cyclic_plan_intact_and_reports_the_same_cycles():
+    """The same, through the back-edge pass AND the missed-cycle pass (n3 is only on a cycle
+    through the finished n1): neither may empty the caller's lists, and the answer is the
+    one a copying `edges` gives."""
+    adj = {"n0": ["n3", "n1"], "n1": ["n0"], "n2": ["n0", "n2"], "n3": ["n1"]}
+    copying = G.find_cycles({k: list(v) for k, v in adj.items()}, list)
+    own = {k: list(v) for k, v in adj.items()}
+    assert G.find_cycles(own, lambda needs: needs) == copying
+    assert own == adj
+
+
 @settings(max_examples=150, deadline=None)
 @given(digraphs())
 def test_topological_order_puts_every_predecessor_first(adj):

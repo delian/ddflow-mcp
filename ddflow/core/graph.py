@@ -52,6 +52,9 @@ def find_cycles(
     and an item only on such a cycle was never named). Not every simple cycle: those
     can be exponentially many, and naming each item on one is what a health check needs.
 
+    The walk pops from a COPY of each edge list (B693a09edfe): a caller whose `edges`
+    returns the item's own list (`lambda it: it["needs"]`) keeps its dependencies.
+
     Iterative DFS. Recursion depth here is the length of the dependency chain, which is
     operator-authored and therefore unbounded by anything the code controls; a plan with
     a thousand-deep chain would raise RecursionError inside the health check that exists
@@ -71,7 +74,7 @@ def find_cycles(
     for root in sorted(items):
         if colour.get(root, WHITE) != WHITE:
             continue
-        stack: list[tuple[str, list[str]]] = [(root, edge(items[root]))]
+        stack: list[tuple[str, list[str]]] = [(root, list(edge(items[root])))]
         path: list[str] = [root]
         colour[root] = GREY
         while stack:
@@ -91,7 +94,7 @@ def find_cycles(
             elif c == WHITE:
                 colour[dep] = GREY
                 path.append(dep)
-                stack.append((dep, edge(items[dep])))
+                stack.append((dep, list(edge(items[dep]))))
     found += _missed_cycles(items, edge, {n for cyc in found for n in cyc})
     uniq = {tuple(c): c for c in found}
     return sorted(uniq.values())
