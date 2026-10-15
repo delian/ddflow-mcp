@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.lint_command"
+new = '""'
+why = "A markdown lint line the docs check runs; empty reports the lint as unavailable."
+impact = "additive"

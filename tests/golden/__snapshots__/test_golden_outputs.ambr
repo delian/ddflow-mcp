@@ -397,6 +397,16 @@
       lease.heartbeat_s = 300   [default]
           How often a live agent renews its lease. Must be comfortably below ttl_s (a
           6x margin is the default) or a slow turn looks like a crash.
+      lease.renew_log_min_s = 120   [default]
+          A heartbeat is written to the log only when the lease's last written renewal
+          is at least this many seconds old; closer ones are acknowledged and not
+          recorded, so a busy agent's hooks do not fill the log (lease renewals were
+          43% of a real log's events). A claim, a re-claim and any renewal that
+          changes the worktree, branch, globs or resources are always written. Cost:
+          another clone sees this lease's expiry up to this much earlier than the
+          holder's last heartbeat implies, so the window in force is never wider than
+          heartbeat_s or grace_s (the slack the lease already allows): raising this
+          alone changes nothing. 0 writes every heartbeat.
       lease.grace_s = 120   [default]
           Extra slack added to ttl_s before an expired lease is reported as
           reclaimable, absorbing clock skew between machines sharing an NFS checkout.
@@ -1477,6 +1487,29 @@
           most this often, in seconds, so a long-lived reader's snapshot is not
           collected as abandoned by a sibling checkout on other code. 0 refreshes it
           on every read.
+      log.evidence_blobs = False   [default]
+          Keep large gate evidence (a reviewer's findings, a command's output tail)
+          out of the event shards: the value is stored once under `.ddflow/blobs/` by
+          its sha256 and the event keeps a small reference, so the log you read,
+          commit and clone stays small (gate evidence was half the bytes of a real
+          log). Readers that show or reuse the evidence read the blob back; one that
+          is missing or altered is reported as unavailable, never as empty, and
+          `ddflow doctor` names it. Blobs are committed with the shards. Off by
+          default: the first write records the `evidence-blobs` capability, after
+          which a ddflow without it is refused every gate event on this log (and a
+          patch-skewed one every write), so turn it on once every checkout that writes
+          this log runs this release (`ddflow upgrade`). Existing references keep
+          resolving when it is off, and `false` writes evidence inline, as before.
+      log.evidence_blob_keys = ['chunk_findings', 'tail', 'selected_tests']   [default]
+          The evidence keys that may move out of line (needs evidence_blobs): by
+          default the reviewer findings, the command output tail and the selected-
+          tests list, which were 60% of gate evidence. A key a reader compares as
+          plain text should not be added: a reader that has not been taught to read
+          blobs back sees a reference where it expects the value.
+      log.evidence_blob_min_bytes = 1024   [default]
+          A value under an evidence key goes out of line only when its JSON is at
+          least this many bytes: a small value is cheaper in the shard than as a file.
+          0 turns moving values out off.
       upgrade.skew = 'refuse'   [default]
           What happens when a ddflow OLDER than the one that last worked on this
           project's log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse`
@@ -2019,6 +2052,60 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      docs.severity = 'warn'   [default]
+          What a finding from `ddflow docs check` costs. 'warn' (default) reports it
+          and leaves the docs gate skippable with a reason. 'block' keeps the docs
+          gate from being recorded passed while a finding stands. 'off' runs nothing
+          and the command says so (exit 2). A finding is printed at every severity but
+          off: this says what it costs, not whether it is seen. A check that could not
+          run is `unavailable` at every severity, never a pass. An unrecognised value
+          in a config file is warned about, reported by `doctor` and falls back to
+          'warn', the strictest (reports without blocking, so a typo cannot start
+          refusing merges); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      docs.check_links = 'local'   [default]
+          Which links `ddflow docs check` follows. 'off': none (no link or anchor
+          finding). 'local' (default): relative targets and `#anchors`, resolved
+          against the tree. 'network': also http(s) links, each fetched once with a
+          read-only GET (opt-in; CI flakiness is why it is not the default). A remote
+          link that cannot be reached because the network is down makes the check
+          `unavailable`, never a pass; one the server answers 404 or 410 is a `link`
+          finding. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'local', the strictest (follows only links inside
+          the tree, so a typo never reaches out); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
+      docs.link_timeout_s = 10   [default]
+          Seconds one remote link may take to answer when `check_links` is 'network'
+          before it counts as unreachable (the check is then `unavailable`, not
+          failed).
+      docs.check_paths = []   [default]
+          The documents `ddflow docs check` reads, as repo-relative globs: an explicit
+          allowlist (README plus the docs directories a project keeps true), because a
+          whole-tree check on a project with history drowns in findings about pages
+          that were accurate when written. Empty (default): the files matching
+          `[enforce].doc_globs` minus `[enforce].doc_exclude` and the generated export
+          targets, so what counts as documentation is written once.
+      docs.lint_command = ''   [default]
+          A markdown lint or formatter to run as part of the check, as a shell line in
+          the repository root (e.g. `npx markdownlint-cli2 "**/*.md"`). Exit 0 passes;
+          any other exit is a `lint` finding carrying its output. Empty (default):
+          none, and the report lists the lint as `unavailable` rather than passing it.
+          A line that cannot run (command not found, timed out) is `unavailable` too
+          and keeps a clean report from reading as clean. ddflow ships no lint and
+          adds no dependency: the project brings the command. Bounded by
+          `command_timeout_s`.
+      docs.ignore_paths = []   [default]
+          Globs of path-like references in the documents that are not worth even a
+          note: runtime paths, generated files, illustrative examples. Empty
+          (default). Path-like inline code is only 10-30% precise, so a note carries
+          this list instead of failing anyone.
+      docs.ignore_names = []   [default]
+          fnmatch patterns of identifiers and flags ANOTHER tool owns, which this
+          project's docs may name without the code having them (`ddflow_*` in the
+          agent-instructions page of a project that merely uses ddflow). Empty
+          (default); a name matched here is never a finding.
       docs.extract = []   [default]
           Extractors that list the public surface the code offers, so the check can
           say which of it no document mentions: `[[docs.extract]]` blocks with `kind`
@@ -2049,8 +2136,8 @@
           package.json. A command that cannot run (missing, timing out) is a note,
           never a pass.
       docs.command_timeout_s = 20   [default]
-          Seconds one `--help` walk step or one count command may run before the check
-          records it as not run (a note) instead of waiting.
+          Seconds one `--help` walk step, one count command or the `lint_command` may
+          run before the check records it as not run (a note) instead of waiting.
   
     ''',
   )

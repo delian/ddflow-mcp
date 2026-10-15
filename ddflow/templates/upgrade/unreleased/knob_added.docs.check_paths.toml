@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.check_paths"
+new = '[]'
+why = "The documents the docs check reads; empty uses [enforce].doc_globs minus doc_exclude."
+impact = "additive"

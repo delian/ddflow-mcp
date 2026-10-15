@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 238 knobs.
+cadences, and the rest of the 245 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5120,7 +5120,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 238): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 245): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5378,8 +5378,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=2a1d68092db5 -->
-<details><summary>All 114 MCP tools: 32 in the `core` tier, 47 more in `standard`, 35 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=fa829c155003 -->
+<details><summary>All 115 MCP tools: 32 in the `core` tier, 47 more in `standard`, 36 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5479,6 +5479,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_similar` | core | 'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson… |
 | Looking at it | `ddflow_board` | standard | The whole work queue as a readable board, with the critical path. |
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
+| Looking at it | `ddflow_docs` | all | Documentation, read-only. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
@@ -5520,6 +5521,11 @@ ddflow plan check <file|->      run plan check before filing a phase: a wildcard
                                 glob, a cycle, an unknown `needs`, two tasks that can run
                                 together whose globs collide, or a task with no acceptance
                                 (1 = findings, 0 = clean, 3 = not a plan at all)
+
+ddflow docs check [--diff BASE] do the names, flags, links and anchors the documents mention
+                                still exist? (`[docs]`: severity, check_paths, check_links,
+                                lint_command; --diff keeps the surface added since BASE;
+                                1 = findings, 2 = could not run, never a clean report)
 
 ddflow next [--phase P]         what may start now       (2 = nothing actionable)
 ddflow claim <id> [--globs ..]  lease + create worktree  (3 = refused)
@@ -5626,7 +5632,7 @@ declared once and persists — see
 
 ## Configuration
 
-238 knobs across 31 sections, every one documented in place and listed, with its default
+245 knobs across 31 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5693,8 +5699,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=5a496492d3a8 -->
-<details><summary>All 238 knobs across 31 sections</summary>
+<!-- ddflow:begin README/knobs sha=83bb0338b2db -->
+<details><summary>All 245 knobs across 31 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5932,6 +5938,13 @@ long default is left to `ddflow config --explain`.
 | `rag.command` | `""` |  |
 | `rag.model_dir` | `""` |  |
 | `rag.timeout_s` | `60` |  |
+| `docs.severity` | `"warn"` | `block` \| `warn` \| `off` |
+| `docs.check_links` | `"local"` | `off` \| `local` \| `network` |
+| `docs.link_timeout_s` | `10` |  |
+| `docs.check_paths` | `[]` |  |
+| `docs.lint_command` | `""` |  |
+| `docs.ignore_paths` | `[]` |  |
+| `docs.ignore_names` | `[]` |  |
 | `docs.extract` | `[]` |  |
 | `docs.count` | `[]` |  |
 | `docs.cli_command` | `[]` |  |
