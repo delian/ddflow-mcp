@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.evidence_blobs"
+new = 'false'
+why = "Large gate evidence is stored out of line under .ddflow/blobs/ and the event keeps a reference; turning it on records a capability that refuses older ddflow the gate events, so it is off until every writer is upgraded."
+impact = "additive"

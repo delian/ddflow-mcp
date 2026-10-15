@@ -19,6 +19,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import blobref as _blobref
 from . import clock
 from . import digest as _digest
 from . import redact as _redact
@@ -218,6 +219,10 @@ CAP_ID_TEMPLATE = "id-template"
 #: The committed log goes through the full `log` redaction profile (decision D-unify 6): a
 #: writer without it would commit text the profile removes, into a log that has none of it.
 CAP_LOG_REDACTION = "log-redaction-full"
+#: Large gate evidence is stored out of line and the event keeps a reference
+#: (B-gap-log-scale): a writer that merges prior evidence without reading the blobs back
+#: would write references into new evidence, so it is refused the gate events of such a log.
+CAP_EVIDENCE_BLOBS = "evidence-blobs"
 
 #: The capabilities THIS ddflow has. A new one is added here, with the release that ships it.
 #: `since` is the release that FIRST ships the capability (0.2.1 was cut before this one existed);
@@ -236,6 +241,12 @@ CAPABILITIES: dict[str, Capability] = {
             "0.2.2",
             frozenset(_redact.LOG_TEXT_FIELDS),  # a Mapping keyed by EVENT KIND -> its text fields
             "free text written through the full log redaction profile",
+        ),
+        Capability(
+            CAP_EVIDENCE_BLOBS,
+            "0.2.4",
+            _blobref.KINDS,
+            "large gate evidence stored out of line under .ddflow/blobs",
         ),
     )
 }
