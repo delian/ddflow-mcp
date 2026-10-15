@@ -290,9 +290,21 @@ def cmd_config(a, c: Ctx) -> int:
     )
     if key:
         where = f"   (in {out.data['path']}, not committed)" if out.data.get("local") else ""
+        note = out.data.get("shadow_note", "")
         c.out(
-            f"{out.data['key']} = {out.data['literal']}{where}{added}",
-            out.body(("key", "value", "path", "local", "gitattributes_added")),
+            f"{out.data['key']} = {out.data['literal']}{where}{note}{added}",
+            out.body(
+                (
+                    "key",
+                    "value",
+                    "path",
+                    "local",
+                    "gitattributes_added",
+                    "effective",
+                    "effective_source",
+                    "shadowed",
+                )
+            ),
         )
         return OK
     if a.append_toml:
