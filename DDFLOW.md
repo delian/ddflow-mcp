@@ -22,6 +22,12 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
   - Globs: ddflow/**, integrations/**
   - Priority: 90
 
+### Process
+
+- **r-ddflow-self-assessment**: Assess ddflow itself at the end of every agent run, phase and before context compaction; file what is found, without duplicates
+  - Globs: ddflow/**, docs/ddflow/**, tests/**
+  - Priority: 95
+
 ### Size
 
 - **r-small-files**: Keep every file under 20 KB: split into a package of smaller modules
