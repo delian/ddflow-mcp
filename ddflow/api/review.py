@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import family_for
+from ..core import blobref as B
 from ..core import clock
 from ..core import outcome as O
 from ..core.digest import content_digest
@@ -30,6 +31,7 @@ from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
+from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
@@ -294,7 +296,11 @@ def triage(
             )
         gate = withf[0]
     rec = it.gates.get(gate)
-    found = (rec.evidence or {}).get("chunk_findings") if rec else None
+    found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
+    if isinstance(found, B.Unavailable):
+        return bad(
+            f"the findings of {item}.{gate} are {found}: they cannot be triaged until the blob is restored"
+        )
     if not found or not all(f.get("digest") for f in found):
         return bad(
             f"{item}.{gate} has no `ddflow review` with numbered findings on record "
@@ -414,6 +420,19 @@ def _announce_rerun(rerun, revs, item: str, gate: str, say):
     return revs, prior, only
 
 
+def _prior_evidence(rec) -> dict[str, Any]:
+    """The evidence of a recorded gate with its out-of-line values read back."""
+    return dict(LB.full(rec.evidence)) if rec and rec.evidence else {}
+
+
+def _hold_unreadable(it, gate: str, lost, ev: dict[str, Any], say) -> int:
+    """Earlier findings that cannot be read back are earlier findings nobody has settled:
+    never merged as if there were none, and the gate is held (`_hold`)."""
+    ev["prior_findings_unavailable"] = str(lost)
+    say(f"the earlier findings of {it.id}.{gate} are {lost}: this delta cannot clear the gate.")
+    return 1
+
+
 def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
     """Fold a delta's findings and coverage into the evidence of the review it follows.
 
@@ -432,7 +451,9 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         return 0
     ev["delta_from"] = _last_head(it, gate)
     rec = it.gates.get(gate) if it else None
-    prior = dict(rec.evidence) if rec and rec.evidence else {}
+    prior = _prior_evidence(rec)
+    if isinstance(prior.get("chunk_findings"), B.Unavailable):
+        return _hold_unreadable(it, gate, prior["chunk_findings"], ev, say)
     kept = list(prior.get("chunk_findings") or [])
     mine = list(ev.get("chunk_findings") or [])
     ev["delta_findings"] = len(mine)
@@ -500,7 +521,9 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
     if it is None:
         return "--chunk re-reviews part of an ITEM's recorded review: name the item"
     rec = it.gates.get(gate)
-    prior = dict(rec.evidence) if rec and rec.evidence else {}
+    prior = _prior_evidence(rec)
+    if isinstance(prior.get("chunk_findings"), B.Unavailable):
+        return f"the recorded review's findings are {prior['chunk_findings']}: run the full review"
     if not prior.get("diff_sha") or "reviewed" not in prior:
         return (
             f"no `ddflow review` of {it.id}.{gate} with per-chunk evidence is on record; "
@@ -990,7 +1013,7 @@ def _with_previous_findings(
     if kind != "full" or rerun or it is None:
         return context
     found = _last_review(it, gate).get("chunk_findings")
-    if not found:
+    if not found or isinstance(found, B.Unavailable):
         return context
     mine = it.triage.get(gate, {})
     lines = [
@@ -1027,7 +1050,7 @@ def _last_review(it, gate: str) -> dict:
     and its status): a re-claim or `gate skip` replaces the gate's current record."""
     for r in reversed(_review_runs(it, gate)):
         if r.evidence.get("reviewed_head"):
-            return r.evidence
+            return LB.full(r.evidence)
     return {}
 
 

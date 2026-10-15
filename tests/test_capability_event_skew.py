@@ -58,7 +58,11 @@ def test_an_unreleased_capability_event_does_not_block_a_gate_record(repo: Path)
     log.append("phase.added", "P1", {"title": "p"})
 
 
-def test_a_released_capability_still_refuses_a_direct_conflict(repo: Path):
+def test_a_released_capability_still_refuses_a_direct_conflict(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # the older ddflow is one whose code does not have the capability at all
+    monkeypatch.delitem(E.CAPABILITIES, "evidence-blobs", raising=False)
     _announce(repo, ["gate.passed"], stamped=True)
     log = EventLog(repo, "me")
     with pytest.raises(SkewRefused):
@@ -80,7 +84,10 @@ def test_an_older_version_does_not_announce_a_capability_it_does_not_ship(
     assert rec.data["capability"] == "evidence-blobs"
 
 
-def test_a_released_capability_refuses_only_the_kind_it_governs(repo: Path):
+def test_a_released_capability_refuses_only_the_kind_it_governs(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delitem(E.CAPABILITIES, "evidence-blobs", raising=False)
     _announce(repo, ["gate.passed"], stamped=True)
     EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})  # patch skew, no conflict
 
