@@ -1273,7 +1273,7 @@ def _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reas
         if commit
         else closed_item_refusal(it, force=force, reason=reason, what=f"reviewing {gate}")
     )
-    if not why and _note == "" and not (branch or commit):
+    if not why and not (branch or commit):
         why = wrong_tree_refusal(repo, _load(repo, agent)[2], it, called_from)
     return O.refused("review", why, id=item, gate=gate) if why else None
 
