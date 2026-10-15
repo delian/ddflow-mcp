@@ -18,9 +18,12 @@ from ..render import emit_json, id_cell
 
 def view_head(c: Ctx, out) -> int | None:
     """What `search` and `session list` do first with a `view_read` answer: a refusal is
-    its reason on stderr, and --json is the body whole with the answer's own exit.
+    its reason on stderr (and, under --json, in the body, which keeps the list envelope with
+    no rows), and --json is the body whole with the answer's own exit.
     None when the human rendering goes on."""
     if out.exit == REFUSED:
+        if c.json:
+            emit_json({"rows": [], "total": 0, **out.data, "reason": out.reason})
         print(out.reason, file=sys.stderr)
         return REFUSED
     if c.json:

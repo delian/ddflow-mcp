@@ -337,8 +337,9 @@ def old_critical_path(state: State, phase: str = "") -> list[str]:
             todo += before(live[n])
         live = {k: v for k, v in live.items() if k in inside}
     items = live
-    if find_cycles(items, edges=before):
-        return []
+    opened = {k: v for k, v in live.items() if v.state != DONE}
+    if find_cycles(opened, edges=lambda it: [d for d in before(it) if d in opened]):
+        return []  # open work only: a loop through finished items is no cycle (Bbbcbfc4bbb)
     memo: dict[str, list[str]] = {}
 
     def longest(n: str, seen: frozenset[str]) -> list[str]:

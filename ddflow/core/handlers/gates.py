@@ -29,13 +29,20 @@ def _h_gate(outcome: str):
             # is not a recording, and counting it would deflate the rate by the number
             # of command gates, which are the ones that emit it.
             _count_recording(st, gate)
+            evidence = dict(d.get("evidence", {}))
+            prior = (it.gates.get(gate).evidence or {}) if it.gates.get(gate) else {}
+            # A hand record carries no review of its own: the findings of the review
+            # before it stay on the gate with their numbers, so `review triage` still
+            # addresses them (bug B754cfb0c96). A new `ddflow review` brings its own.
+            if prior.get("chunk_findings") and "review_kind" not in evidence:
+                evidence.setdefault("chunk_findings", prior["chunk_findings"])
             it.gates[gate] = GateRecord(
                 gate=gate,
                 outcome=outcome,
                 at=ev.ts,
                 by=d.get("by", ev.agent),
                 reason=d.get("reason", ""),
-                evidence=dict(d.get("evidence", {})),
+                evidence=evidence,
             )
             it.gate_history.append(
                 GateRun(gate=gate, outcome=outcome, at=ev.ts, evidence=dict(d.get("evidence", {})))
