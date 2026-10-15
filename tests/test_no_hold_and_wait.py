@@ -188,17 +188,19 @@ def test_asking_again_after_half_the_reservation_refreshes_the_place(repo):
 
 def test_a_changed_request_goes_to_the_back_of_the_line(repo):
     _two_holders(repo)
-    assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
-    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)  # T1 queued for b
-    assert (
-        run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/b.py", agent=A)[0] == 0
-    )
-    run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")  # T3 refused behind T1
-    st, cfg = _state(repo), _cfg(repo)
-    ahead = WG.queue_ahead(st, cfg, "T3", "agent-c", ["src/b.py"], time.time())
-    assert ahead is not None and ahead.item == "T1"
-    # T3 asks for something else, then again for b: its place is the new ask's, not the old.
-    assert WG.queue_ahead(st, cfg, "T3", "agent-c", ["src/b.py", "x.md"], time.time()).item == "T1"
+    for item, g in (("T3", "src/a.py"), ("T4", "src/b.py")):
+        assert run_cli(repo, "task", "add", item, "--title", item, "--globs", g, agent=A)[0] == 0
+    cfg = _cfg(repo)
+    base = _state(repo).items["T1"].lease.acquired_at
+    log = EventLog(repo, "agent-c")
+    # T3 asked first (for a.py, held by T1); T4 queued later (for b.py, held by T2).
+    WG.register(log, cfg, _state(repo), "T3", "agent-c", ["src/a.py"], base + 10)
+    WG.register(log, cfg, _state(repo), "T4", "agent-d", ["src/b.py"], base + 20, queue=True)
+    st = _state(repo)
+    assert WG.queue_ahead(st, cfg, "T3", "agent-c", ["src/a.py"], base + 30) is None
+    # T3 now asks for b.py as well: a CHANGED ask starts again at the back, behind T4.
+    ahead = WG.queue_ahead(st, cfg, "T3", "agent-c", ["src/a.py", "src/b.py"], base + 30)
+    assert ahead is not None and ahead.item == "T4"
 
 
 def test_the_release_advice_names_a_runnable_command(repo):
