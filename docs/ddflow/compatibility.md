@@ -120,10 +120,10 @@ newer than the reader.
 ### Patch skew
 
 When the log's highest stamp is ahead of the running ddflow by PATCH releases only -- the same
-major and minor, the same `FORMAT_LEVEL`, and no recorded capability the running ddflow lacks
+major and minor, the same `FORMAT_LEVEL`, and no recorded capability the running ddflow lacks for the kind written
 -- the write is NOT refused (B63635ddc6a, D-mu-bugfix-answers): it goes through with a
 one-time warning on stderr, and each event it writes carries the `older_ddflow` mark. A higher
-`FORMAT_LEVEL`, a higher minor or major, or a capability gap still refuses (exit 3);
+`FORMAT_LEVEL`, a higher minor or major, or a capability gap on the kind written still refuses (exit 3);
 `[upgrade].skew = "off"` is the operator's. `--allow-older-version` has nothing to override
 under a patch skew. The relaxation covers LOG writes only: commands that rewrite tracked files
 without appending an event (`adopt`, `adopt --refresh-docs`) ask the guard first and are refused
