@@ -2369,11 +2369,12 @@ prompt or note — runs the same check against the log **before it writes**, wit
 `[dedupe]` knobs above. What it does depends on how close the match is:
 
 - **A match** — a candidate scoring at least `ask_threshold` (0.55) when the new text has
-  at least `min_words` (8) content words, or text that names an existing record's id — is
+  at least `min_words` (8) content words, or text identical to an existing record — is
   **refused** (exit 3, `refused: possible duplicate`). Nothing is written. The refusal
   carries `candidates` (id, kind, title, state, score, the words shared) and `options`
   (`new`, then `extends` / `duplicate_of` / `related` for each candidate), and its reason
-  lists them in prose. Over MCP the refusal leads the reply as `{"refusal": {...}}`. A bug
+  lists them in prose; records the text merely names by id are listed apart, as information,
+  and never refuse by themselves. Over MCP the refusal leads the reply as `{"refusal": {...}}`. A bug
   filed against the task that fixes it (`--item T`) already answers that candidate and is
   not asked about it.
 - **An answer** lifts the refusal. `new`: it is a different record, filed as asked.
