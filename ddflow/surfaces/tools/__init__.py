@@ -13,6 +13,7 @@ from itertools import chain
 from typing import Any
 
 from ..declared import cadence as _cadence
+from ..declared import docs as _docs
 from ..declared import export as _export
 from ..declared import flow as _flow
 from ..declared import hooks as _hooks
@@ -20,6 +21,7 @@ from ..declared import knowledge as _knowledge
 from ..declared import lanes as _lanes
 from ..declared import lifecycle as _lifecycle
 from ..declared import memory as _memory
+from ..declared import metrics as _metrics
 from ..declared import plan as plan
 from ..declared import queue as _queue
 from ..declared import records as _records
@@ -39,7 +41,7 @@ DECLARED = by_tool(
         f.COMMANDS
         for f in (
             _knowledge, _records, _queue, _lifecycle, _rules, _review, _setup, _reporting,
-            _hooks, _flow, _memory, _export, _cadence, _lanes,
+            _hooks, _flow, _memory, _export, _cadence, _lanes, _docs, _metrics,
         )
     )
 )  # fmt: skip

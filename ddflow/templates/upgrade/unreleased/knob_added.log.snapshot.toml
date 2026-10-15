@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.snapshot"
+new = 'true'
+why = "Keep the on-disk read snapshot of the parsed log; false neither reads nor writes it (DDFLOW_SNAPSHOT=0 still wins)."
+impact = "additive"

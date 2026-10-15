@@ -774,7 +774,7 @@ EXPECTED = [
     (
         ("--json", "abandon", "T7", "--reason", "dropped"),
         0,
-        '{\n  "schema": "abandon@1",\n  "id": "T7",\n  "reason": "dropped",\n  "worktree_removed": false,\n  "kept_reason": ""\n}\n',
+        '{\n  "schema": "abandon@1",\n  "id": "T7",\n  "reason": "dropped",\n  "stranded": [],\n  "drop_edges": [],\n  "worktree_removed": false,\n  "kept_reason": ""\n}\n',
         "",
     ),
     (("abandon", "T4", "--reason", "again"), 0, "T4 abandoned: again\n", ""),
@@ -783,7 +783,7 @@ EXPECTED = [
     (
         ("--json", "remove", "T6", "--reason", "gone"),
         0,
-        '{\n  "schema": "remove@1",\n  "id": "T6",\n  "worktree_removed": false,\n  "kept_reason": ""\n}\n',
+        '{\n  "schema": "remove@1",\n  "id": "T6",\n  "stranded": [],\n  "drop_edges": [],\n  "worktree_removed": false,\n  "kept_reason": ""\n}\n',
         "",
     ),
     (("remove", "T8"), 1, "", "no such item 'T8' (it was removed from the queue)\n"),
@@ -1046,7 +1046,7 @@ EXPECTED = [
         "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n"
         "              [--allow-older-version] [--reason SKEW_REASON] [--version]\n"
         "              "
-        "{init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} "
+        "{init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} "
         "...\n"
         "ddflow: error: unrecognized arguments: --item T1\n",
     ),
@@ -1217,7 +1217,7 @@ EXPECTED = [
     (
         ("abandon", "T1", "--reason", "not now"),
         0,
-        "T1 abandoned: not now\n  worktree and branch removed\n",
+        'T1 abandoned: not now\n  worktree and branch removed\nwarning: T2 still need(s) T1 and can never start; drop the edge:\n  ddflow update T2 --needs ""\n',
         "",
     ),
     (

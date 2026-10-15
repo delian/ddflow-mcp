@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.check_links"
+new = '"local"'
+why = "Which links the docs check follows: off, local (the tree) or network."
+impact = "additive"

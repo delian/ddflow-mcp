@@ -75,12 +75,23 @@ def _tree_line(out) -> str:
     )
 
 
+def _stranded_line(out, a) -> str:
+    """The open items still needing this one: they are stuck for good until the edge goes."""
+    cmds = out.data.get("drop_edges") or []
+    if not cmds:
+        return ""
+    return (
+        f"\nwarning: {', '.join(out.data['stranded'])} still need(s) {a['id']} and can "
+        "never start; drop the edge:\n  " + "\n  ".join(cmds)
+    )
+
+
 def abandon_text(out, a) -> str:
-    return f"{a['id']} abandoned: {a['reason']}" + _tree_line(out)
+    return f"{a['id']} abandoned: {a['reason']}" + _tree_line(out) + _stranded_line(out, a)
 
 
 def remove_text(out, a) -> str:
-    return f"{a['id']} removed from the queue" + _tree_line(out)
+    return f"{a['id']} removed from the queue" + _tree_line(out) + _stranded_line(out, a)
 
 
 def block_text(out, a) -> str:
