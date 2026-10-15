@@ -31,6 +31,7 @@ from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, repla
 from ..infra.paths import launch_parent, launch_python
 from . import harnessreg as HR
 from . import install_info as _INSTALL
+from . import pins_merge as PM
 from . import shared_files as SF
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -790,9 +791,7 @@ def init_files(repo: Path) -> list[str]:
     # post-merge hook that regenerate its pin files (DX-pins-regenerate); one without
     # recipes is untouched.
     try:
-        from . import pins as PN
-
-        actions += PN.install(repo, Config.load(repo))
+        actions += PM.install(repo, Config.load(repo))
     except (OSError, RuntimeError):
         pass  # not a git repository yet, or hooks cannot be written: `pins regenerate --install` says so
     return actions

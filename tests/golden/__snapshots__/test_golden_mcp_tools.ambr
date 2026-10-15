@@ -2106,6 +2106,10 @@
           "type": "boolean",
           "description": "regenerate: write the merge driver and post-merge hook."
          },
+         "after_merge": {
+          "type": "boolean",
+          "description": "regenerate: what the post-merge hook runs."
+         },
          "tests": {
           "type": "string",
           "description": "Comma-separated test dirs (default: tests,test)."

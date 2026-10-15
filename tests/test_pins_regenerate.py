@@ -55,6 +55,7 @@ def git(repo: Path, *args: str) -> str:
 def ddflow_cli(repo: Path, *args: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "PYTHONPATH": SRC}
     env.pop("DDFLOW_AGENT", None)
+    env.pop("PYTEST_XDIST_WORKER", None)  # a regeneration refuses to run under xdist
     return subprocess.run(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "--agent", "t", *args],
         capture_output=True,
@@ -125,6 +126,7 @@ def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
     )
     git(repo, "commit", "-qam", "union knobs")
     env = {**os.environ, "PYTHONPATH": SRC}
+    env.pop("PYTEST_XDIST_WORKER", None)
     done = subprocess.run(
         ["git", "-C", str(repo), "merge", "--no-edit", "two"],
         capture_output=True,
@@ -141,8 +143,8 @@ def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
 def test_check_never_re_records_even_when_the_recipe_sets_env(repo: Path):
     (repo / ".ddflow" / "pins.toml").write_text(
         '[[pin]]\nname = "e"\nfiles = ["e.txt"]\n'
-        'check = ["{python}", "-c", "import os,sys; open(\'e.txt\',\'w\').write(os.environ.get(\'W\',\'\')); sys.exit(1)"]\n'
-        'regen = ["{python}", "-c", "import os; open(\'e.txt\',\'w\').write(os.environ[\'W\'])"]\n'
+        "check = [\"{python}\", \"-c\", \"import os,sys; open('e.txt','w').write(os.environ.get('W','')); sys.exit(1)\"]\n"
+        "regen = [\"{python}\", \"-c\", \"import os; open('e.txt','w').write(os.environ['W'])\"]\n"
         'env = { W = "1" }\n'
     )
     ddflow_cli(repo, "pins", "regenerate", "--check")
