@@ -194,6 +194,12 @@ def check_docs(  # noqa: PLR0913 -- one keyword per option of a public entry poi
         )
         counts["extracted"] = len(found)
     check_counts(report, texts, count, runner, walked, counts)
+    if runner is None and help_commands:  # asked for, not done: nobody looked
+        report.notes.append(
+            Finding(
+                "help", "", 0, ",".join(help_commands), "verb flags not checked: no command runner"
+            )
+        )
     for tool, why in sorted((help_.unavailable if help_ else {}).items()):
         report.notes.append(Finding("help", "", 0, tool, f"flags of its verbs not checked: {why}"))
     report.findings.sort(key=lambda f: (f.path, f.line, KINDS.index(f.kind), f.ref))

@@ -134,6 +134,8 @@ def test_without_a_runner_nothing_is_spawned(tmp_path):
         **{"pkg/cli.py": "'skip' 'gate' --nonesuch add_parser\n"},
     )
     assert D.check_docs(root, commands=["ddflow"]).clean
+    asked = D.check_docs(root, commands=["ddflow"], help_commands=["ddflow"])
+    assert [(n.kind, "no command runner" in n.detail) for n in asked.notes] == [("help", True)]
 
 
 def test_a_tool_that_cannot_run_is_a_note_never_a_pass(tmp_path):
@@ -281,7 +283,8 @@ def test_check_configured_applies_the_docs_section(tmp_path):
     cfg.docs.cli_command = ["nosuchtool"]
     root = repo(tmp_path, "`--alpha` and `nosuchtool run --alpha`\n")
     off = check_configured(root, cfg, run_commands=False)
-    assert found(off) == [("flag", "--beta")] and not off.notes  # nothing run
+    assert found(off) == [("flag", "--beta")]  # nothing run: only a note that help was not walked
+    assert [n.kind for n in off.notes] == ["help"]
     on = check_configured(root, cfg)  # the walked tool is missing: a note, never a pass
     assert found(on) == [("flag", "--beta")]
     assert [(n.kind, n.ref) for n in on.notes] == [("help", "nosuchtool")]
