@@ -258,7 +258,7 @@
 # ---
 # name: test_help[ddflow claim]
   '''
-  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] id
+  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] id
   
   positional arguments:
     id
@@ -273,6 +273,7 @@
     --no-worktree
     --resources RESOURCES
                           the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)
+    --queue               keep a refused claim in the first-in-first-out line for its files
   
   '''
 # ---
@@ -2252,7 +2253,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2269,6 +2270,8 @@
                           globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to
                           add more -- every value is kept
     --priority PRIORITY
+    --queue               keep a refused --globs widening in the first-in-first-out line for its
+                          files
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   

@@ -82,6 +82,7 @@ def cmd_item_update(a, c: Ctx) -> int:
             # Relative to where the caller stands, like any path typed in a shell.
             # An empty value stays empty, for the api to refuse: abspath("") is the cwd.
             worktree=a.worktree and os.path.abspath(a.worktree),
+            queue=bool(getattr(a, "queue", False)),
         ),
         agent=c.requested_agent,
     )

@@ -600,14 +600,16 @@ EXPECTED = [
         "\n"
         "You could take instead: T4, T5\n"
         "\n"
+        "Recorded: T1 is waiting for T1 (u5pin).\n"
+        "\n"
         "Or `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can "
         "be claimed.\n",
     ),
     (
         ("--json", "claim", "T1", "--no-worktree"),
         3,
-        '{\n  "refusal": {\n    "reason": "T1 is held by u5pin for another <n>s\\n\\nYou could take instead: T4, T5\\n\\nOr `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can be claimed.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "claim@1"\n}\n',
-        "T1 is held by u5pin for another <n>s\n\nYou could take instead: T4, T5\n\nOr `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can be claimed.\n",
+        '{\n  "refusal": {\n    "reason": "T1 is held by u5pin for another <n>s\\n\\nYou could take instead: T4, T5\\n\\nRecorded: T1 is waiting for T1 (u5pin).\\n\\nOr `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can be claimed.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "claim@1"\n}\n',
+        "T1 is held by u5pin for another <n>s\n\nYou could take instead: T4, T5\n\nRecorded: T1 is waiting for T1 (u5pin).\n\nOr `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can be claimed.\n",
     ),
     (
         ("claim", "T2", "--no-worktree"),
