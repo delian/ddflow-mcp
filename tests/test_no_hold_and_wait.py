@@ -120,7 +120,8 @@ def test_a_long_wait_names_the_own_globs_others_wait_for(repo):
 
 def test_a_queued_request_is_served_first_come_first_served(repo):
     _two_holders(repo)
-    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", "--queue", agent=A)
+    assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
+    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)
     assert (
         run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/b.py", agent=A)[0] == 0
     )
