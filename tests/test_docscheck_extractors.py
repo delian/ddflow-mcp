@@ -285,3 +285,9 @@ def test_check_configured_applies_the_docs_section(tmp_path):
     on = check_configured(root, cfg)  # the walked tool is missing: a note, never a pass
     assert found(on) == [("flag", "--beta")]
     assert [(n.kind, n.ref) for n in on.notes] == [("help", "nosuchtool")]
+
+
+def test_blank_and_one_word_lines_in_a_fence_do_not_crash_the_help_walk(tmp_path):
+    readme = "```console\n\n   \nddflow\n$ ddflow gate status\n```\n"
+    root = repo(tmp_path, readme, **{"pkg/cli.py": "add_parser('status') 'gate'\n"})
+    assert D.check_docs(root, runner=ddflow_runner(root), commands=["ddflow"]).clean

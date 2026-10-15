@@ -370,7 +370,7 @@ class _Scan:
     def _command(self, s: str, n: int) -> bool:
         """`<script> <verb> ...`: True when ``s`` is such a reference (checked)."""
         words = s.split()
-        walked = self.help is not None and words[0] in self.help.commands
+        walked = bool(words) and self.help is not None and words[0] in self.help.commands
         if len(words) < _VERB_WORDS or not (words[0] in self.cmds or walked):
             return False
         verb = words[1]
