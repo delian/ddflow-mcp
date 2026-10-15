@@ -1525,7 +1525,17 @@
 # name: test_json[render --show bogus]
   tuple(
     1,
-    '',
+    '''
+      {
+        "refusal": {
+          "reason": "unknown view 'bogus'; known: board, bugs, decisions, lessons, lessons-summary, research, sessions",
+          "outcome": "failed",
+          "exit": 1
+        },
+        "schema": "render@1"
+      }
+  
+    ''',
     '''
       unknown view 'bogus'; known: board, bugs, decisions, lessons, lessons-summary, research, sessions
   
@@ -1824,7 +1834,16 @@
 # name: test_json[search --regex (a+)+$]
   tuple(
     3,
-    '',
+    '''
+      {
+        "schema": "list@1",
+        "rows": [],
+        "total": 0,
+        "record_kind": "search",
+        "reason": "regex refused: a repeat of variable length inside another repeat can take exponential time"
+      }
+  
+    ''',
     '''
       regex refused: a repeat of variable length inside another repeat can take exponential time
   
@@ -1981,7 +2000,17 @@
 # name: test_json[session show nope]
   tuple(
     3,
-    '',
+    '''
+      {
+        "refusal": {
+          "reason": "no session 'nope' (`ddflow session list` shows them)",
+          "outcome": "refused",
+          "exit": 3
+        },
+        "schema": "list@1"
+      }
+  
+    ''',
     '''
       no session 'nope' (`ddflow session list` shows them)
   
@@ -2034,7 +2063,17 @@
 # name: test_json[show NOPE]
   tuple(
     1,
-    '',
+    '''
+      {
+        "refusal": {
+          "reason": "no such item or bug 'NOPE'",
+          "outcome": "failed",
+          "exit": 1
+        },
+        "schema": "show@1"
+      }
+  
+    ''',
     '''
       no such item or bug 'NOPE'
   
