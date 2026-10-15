@@ -239,3 +239,17 @@ def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(tmp_pa
         with monkeypatch.context() as m:
             m.setitem(model.HANDLERS, "lease.renewed", original)
             assert repr(fold(events, strict=False).items) == fast
+
+
+def test_tasks_below_a_phase_equal_the_full_scan_in_the_same_order(tmp_path):
+    """`State.tasks(phase)` walks the descendants, not every item; same answer, same order."""
+    logs = [_log(tmp_path, 4000)]
+    real = Path(__file__).resolve().parents[1]
+    if (real / ".ddflow" / "events").is_dir():
+        logs.append(EventLog(real))
+    for log in logs:
+        st = fold(log.read_all(), strict=False)
+        for iid in [*st.items, "no-such-item"]:
+            live = [i for i in st.items.values() if i.kind == "task" and not i.removed]
+            wanted = st.descendants(iid)
+            assert [i.id for i in st.tasks(iid)] == [i.id for i in live if i.id in wanted]

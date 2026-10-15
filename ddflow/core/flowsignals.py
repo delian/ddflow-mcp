@@ -65,6 +65,9 @@ MERGE_WINDOW_S = 120 * 60.0
 MERGE_GATE = "merge"
 
 _OUTCOME_KINDS = ("passed", "failed", "unavailable", "partial")
+#: event kind -> outcome, for the kinds that are one (a dict lookup: this runs once per event
+#: of the log, several times per command).
+_OUTCOME_OF = {f"gate.{k}": k for k in _OUTCOME_KINDS}
 
 
 @dataclass(frozen=True)
@@ -94,8 +97,7 @@ def _gate(ev: Event) -> str:
 
 
 def _outcome(ev: Event) -> str:
-    head, _, tail = ev.kind.partition(".")
-    return tail if head == "gate" and tail in _OUTCOME_KINDS else ""
+    return _OUTCOME_OF.get(ev.kind, "")
 
 
 def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, float, float]]:
@@ -105,11 +107,20 @@ def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, fl
     Nothing that ended after ``now`` (a skewed clock) is a sample or counts as in flight."""
     out = []
     seen: set[tuple] = set()
-    for ev in sorted(events, key=lambda e: (PR.epoch(e.ts), e.lamport)):
-        ev_data = ev.data if isinstance(ev.data, dict) else {}
-        evidence = ev_data.get("evidence")
-        if _gate(ev) not in PR.REVIEW_GATES or not _outcome(ev) or not isinstance(evidence, dict):
-            continue
+    # Filter BEFORE sorting: parsing the timestamp of every event of the log to order the
+    # few hundred reviews among them was most of this function's cost, and an event that
+    # is not a review outcome never touches `seen` or `out`, so the order of the rest is
+    # the same (B-gap-log-scale).
+    reviews = [
+        ev
+        for ev in events
+        if _gate(ev) in PR.REVIEW_GATES
+        and _outcome(ev)
+        and isinstance(ev.data, dict)
+        and isinstance(ev.data.get("evidence"), dict)
+    ]
+    for ev in sorted(reviews, key=lambda e: (PR.epoch(e.ts), e.lamport)):
+        evidence = ev.data["evidence"]
         took, chunks = evidence.get("elapsed_s"), evidence.get("chunks_total") or 1
         end = PR.epoch(ev.ts)
         if not isinstance(took, int | float) or isinstance(took, bool) or took <= 0:
