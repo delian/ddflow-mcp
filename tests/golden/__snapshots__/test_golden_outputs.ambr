@@ -1464,7 +1464,9 @@
       log.snapshot_min_events = 5000   [default]
           No snapshot is written below this many events: a cold parse is cheap there
           and a file is not free. Lower it to snapshot a small log (tests do), raise
-          it to snapshot only a large one. 0 snapshots any log.
+          it to snapshot only a large one. 0 removes this threshold only: a snapshot
+          is still rewritten just when at least 1000 events (or a tenth of what it
+          already covers) have been added.
       log.snapshot_stale_days = 7   [default]
           Days a snapshot written by OTHER code (another ddflow version or parser) is
           kept before the next write collects it. One snapshot exists per version and
