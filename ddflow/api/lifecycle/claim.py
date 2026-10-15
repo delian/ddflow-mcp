@@ -341,7 +341,7 @@ def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
 
 
 def _record_waiting(log, cfg, item: str, want, queue: bool) -> str:
-    """A claim refused for a live lease is recorded as waiting (`services.waiting`): it
+    """A claim refused for a live lease, or queued behind a waiter, is recorded as waiting (`services.waiting`): it
     returns at once, holding nothing. The sentence it adds to the refusal."""
     with log.transaction():
         now = time.time()
