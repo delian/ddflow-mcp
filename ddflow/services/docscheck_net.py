@@ -9,6 +9,7 @@ check reports itself ``unavailable`` rather than passing the links it could not 
 
 from __future__ import annotations
 
+import http.client
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -52,7 +53,7 @@ def _verdict(url: str, timeout_s: int) -> tuple[str, str]:
             return "ok", ""
     except urllib.error.HTTPError as exc:
         return ("gone" if exc.code in GONE else "refused"), str(exc.code)
-    except (urllib.error.URLError, OSError, ValueError) as exc:
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as exc:
         return "silent", str(getattr(exc, "reason", exc))
 
 

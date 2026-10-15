@@ -25,20 +25,34 @@ def added_lines(repo: Path | str, base: str) -> Added:
     untracked file whole. Raises OSError when git cannot tell: a diff nobody could read is
     not an empty one."""
     done = G.run(
-        repo, "-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-U0", base, "--"
+        repo,
+        "-c",
+        "core.quotepath=off",
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "-U0",
+        base,
+        "--",
     )
     if not done.ok:
         raise OSError(f"git diff {base} failed: {done.err.strip() or 'unknown base?'}")
     out: Added = {}
-    path = ""
+    path, header = "", False
     for line in done.out.splitlines():
-        if line.startswith("+++ "):
+        if line.startswith("diff --git "):  # a content line always starts with + - or a space
+            header, path = True, ""
+        elif header and line.startswith("+++ "):
+            if line[4:].startswith('"'):
+                raise OSError(f"git quotes a path in the diff of {base}; cannot read it")
             path = line[4:].removeprefix("b/") if line != "+++ /dev/null" else ""
-        elif path and (m := _HUNK.match(line)):
-            start, count = int(m.group(1)), int(m.group(2) or 1)
-            rows = out.setdefault(path, set())
-            if rows is not None:
-                rows.update(range(start, start + count))
+        elif m := _HUNK.match(line):
+            header = False
+            if path:
+                start, count = int(m.group(1)), int(m.group(2) or 1)
+                out.setdefault(path, set()).update(range(start, start + count))  # type: ignore[union-attr]
     untracked = G.files(repo, "untracked")
     if untracked is None:
         raise OSError("git ls-files failed")

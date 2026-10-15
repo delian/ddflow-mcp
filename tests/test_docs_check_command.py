@@ -247,3 +247,43 @@ def test_cli_exit_codes_follow_the_outcome(proj):
     assert run_cli(proj, "docs", "check")[0] == 0
     configure(proj, '[docs]\nseverity = "off"\n')
     assert run_cli(proj, "docs", "check")[0] == 2
+
+
+def test_block_also_holds_when_a_configured_check_could_not_run(proj):
+    configure(proj, '[docs]\nseverity = "block"\nlint_command = "no-such-linter-xyz"\n')
+
+    out = check(proj)
+
+    assert out.data["findings"] == [] and out.data["clean"] is False
+    assert out.data["blocking"] is True and out.exit == O.NOTHING
+
+
+def test_an_added_line_that_looks_like_a_diff_header_does_not_hide_later_surface(proj):
+    put(proj, "src/cli.py", 'p.add_argument("--old")\n')
+    git(proj, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "base")
+    put(proj, "src/cli.py", 'p.add_argument("--old")\n++ counter\n\np.add_argument("--new")\n')
+    configure(proj, EXTRACT)
+
+    out = check(proj, diff="HEAD")
+
+    assert kinds(out) == [("flag", "--new")]
+
+
+def test_a_malformed_remote_address_is_unavailable_not_a_crash(proj):
+    put(proj, "README.md", CLEAN + "[x](http://example.com:abc/path)\n")
+    configure(proj, '[docs]\ncheck_links = "network"\nlink_timeout_s = 2\n')
+
+    out = check(proj)
+
+    assert out.exit == O.NOTHING and "links" in out.data["unavailable"]
+
+
+def test_lint_is_not_run_when_commands_are_off(proj):
+    from ddflow.config import Config
+    from ddflow.services.docscheck_run import run_check
+
+    configure(proj, f'[docs]\nlint_command = "touch {proj}/ran.txt"\n')
+
+    res = run_check(proj, Config.load(proj), run_commands=False)
+
+    assert "lint" in res.unavailable and not (proj / "ran.txt").exists()
