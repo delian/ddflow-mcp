@@ -1564,12 +1564,13 @@ def _committed_log_if_unrecorded(
     repo: Path, log: EventLog, tree: Path | None, exports: dict
 ) -> EventLog | None:
     """The log as the commit's INDEX holds it, to check the staged files against instead
-    of the shards on disk -- or None to keep the disk's.
+    of the shards on disk -- or None when it cannot be used (the caller then refuses).
 
     The shards on disk carry what other agents append while this commit is made; those
     events are not part of the commit and cannot make a view disagree with the log
     committed beside it (bug B10725b2c5e). An exported document is regenerated from the
-    live log by `ddflow export` itself, so a staged one keeps the disk comparison."""
+    live log by `ddflow export` itself, so a commit staging one keeps the old refusal
+    (DX-export-committed-log)."""
     if exports:
         return None
     return committed_log(tree or _index_tree(repo), _rel(repo, log.dir), log.dir)  # type: ignore[return-value]
@@ -1652,9 +1653,10 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     # The view is committed WITH a log, and must agree with THAT log -- not with the
     # one on disk. Staging a view rendered from events that are not themselves staged
     # would commit a page describing work its own commit does not record (roborev on
-    # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
-    # be fully staged: then the log on disk IS the committed log, and the comparison
-    # below is exact.
+    # 7216f5e, reproduced). When the shards on disk are all staged, the log on disk IS
+    # the committed log. When some are not (another agent appending), the staged files
+    # are compared with the shards as the INDEX holds them; a view that disagrees with
+    # those, or an index git cannot read, is refused.
     probe_lines, probed = _unrecorded_log_lines(repo, log, tree, noun, staged, exports, rules)
     # Config from the FILES, as `ddflow render` writes with: env overrides belong to
     # whoever typed `git commit`, not to the view.
