@@ -468,7 +468,7 @@ def run(
     # Before anything is written, `gate.started` and the `unavailable` below included: bob,
     # who has no tree for alice's item, wrote `unavailable` over her recorded pass (B90b43dd2d8).
     refusal, forced_by = guard_record(
-        log, cfg, it, force=force, reason=reason, what=f"running {gate}"
+        log, cfg, st, it, force=force, reason=reason, what=f"running {gate}"
     )
     if refusal:
         return O.refused("gate.run", refusal, id=item, gate=gate, outcome="")
@@ -779,7 +779,7 @@ def record(
     # Recording over another clone's live lease replaces what its holder recorded (last
     # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).
     refusal, forced_by = guard_record(
-        log, cfg, it, force=force, reason=reason, what=f"recording {gate}"
+        log, cfg, st, it, force=force, reason=reason, what=f"recording {gate}"
     )
     if refusal:
         return O.refused("gate.record", refusal, id=item, gate=gate, outcome="")
