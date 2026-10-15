@@ -13,6 +13,19 @@ from ..services import viewers as V
 from ._base import _load
 
 
+def empty_list(kind: str, limit: int = V.DEFAULT_LIMIT) -> dict[str, Any]:
+    """The list payload with no rows: what a refused list carries, so `.rows` always exists."""
+    return {
+        "record_kind": kind,
+        "rows": [],
+        "total": 0,
+        "shown": 0,
+        "limit": limit,
+        "truncated": False,
+        "filters": {},
+    }
+
+
 def view_list(
     repo: Path,
     kind: str,
@@ -41,7 +54,9 @@ def view_list(
             limit=limit,
         )
     except V.ViewError as exc:
-        return O.refused("view.list", str(exc), record_kind=kind)
+        # A refusal keeps the list shape (no rows), so a reader of `.rows` never meets a
+        # missing key.
+        return O.refused("view.list", str(exc), **empty_list(kind, limit))
     data: dict[str, Any] = {
         "record_kind": view.kind,
         "rows": view.rows,
@@ -67,10 +82,10 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
 #: The selector arguments each kind takes, beyond the state/owner/since filters, which the
 #: engines check themselves; any other one that is set is refused.
 _TAKES: dict[str, frozenset[str]] = {
-    "task": frozenset({"phase", "tag"}),
-    "phase": frozenset({"tag"}),
+    "task": frozenset({"phase", "tag", "all"}),
+    "phase": frozenset({"tag", "all"}),
     "bug": frozenset({"phase", "all", "item"}),
-    "research": frozenset({"phase", "tag"}),
+    "research": frozenset({"phase", "tag", "all"}),
     "lesson": frozenset({"tag", "all"}),
     "session": frozenset({"id"}),
     "search": frozenset({"query", "mode", "sources", "source", "phase"}),
@@ -105,7 +120,9 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     `id` (session only) is one session in full; `query` is what `search` looks for."""
     if kind not in READ_KINDS:
         return O.refused(
-            "view.read", f"unknown kind {kind!r}: one of {', '.join(READ_KINDS)}", record_kind=kind
+            "view.read",
+            f"unknown kind {kind!r}: one of {', '.join(READ_KINDS)}",
+            **empty_list(kind, limit),
         )
     given = {
         "id": id,
@@ -125,7 +142,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         return O.refused(
             "view.read",
             f"kind={kind} has no {', '.join(stray)} (it takes: {', '.join(sorted(_TAKES[kind]))})",
-            record_kind=kind,
+            **empty_list(kind, limit),
         )
     if kind == "session":
         return _read_session(repo, id, state, owner, since, limit)
@@ -175,7 +192,7 @@ def _read_session(
             log.read_all(), cfg, state=state, agent=owner, since=since, limit=limit
         )
     except SV.SessionViewError as exc:
-        return O.refused("view.session", str(exc), record_kind="session")
+        return O.refused("view.session", str(exc), **empty_list("session", limit))
     data: dict[str, Any] = {
         "record_kind": "session",
         "rows": view.rows,
@@ -219,7 +236,7 @@ def _read_search(
             repo=repo,
         )
     except S.SearchError as exc:
-        return O.refused("view.search", str(exc), record_kind="search")
+        return O.refused("view.search", str(exc), **empty_list("search", limit))
     data: dict[str, Any] = {
         "record_kind": "search",
         "query": res.query,
