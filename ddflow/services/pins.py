@@ -109,8 +109,12 @@ def load_recipes(repo: Path, cfg: Config) -> list[Recipe]:
     return out
 
 
-def _run(repo: Path, argv: tuple[str, ...], r: Recipe, timeout: int) -> P.Captured:
-    env = {**os.environ, **dict(r.env)}
+def _run(repo: Path, argv: tuple[str, ...], r: Recipe, timeout: int, *, write: bool) -> P.Captured:
+    """One recipe command; the recipe's ``env`` reaches only ``regen``, so a check can never
+    re-record what it is checking."""
+    env = {**os.environ, **(dict(r.env) if write else {})}
+    if not write:
+        env.pop("DDFLOW_UPDATE_GOLDEN", None)
     env.pop("PYTEST_XDIST_WORKER", None)
     return P.capture(list(argv), timeout=timeout, cwd=repo, env=env)
 
@@ -131,7 +135,9 @@ def regenerate(
     """Check every pin (or `only`), and unless `check`, re-record the stale ones."""
     rep = Report()
     if os.environ.get("PYTEST_XDIST_WORKER"):
-        rep.problem = "pins regenerate must not run under xdist: a snapshot update is not parallel-safe"
+        rep.problem = (
+            "pins regenerate must not run under xdist: a snapshot update is not parallel-safe"
+        )
         return rep
     try:
         chosen = recipes if recipes is not None else load_recipes(repo, cfg)
@@ -150,18 +156,18 @@ def regenerate(
     for r in chosen:
         st = PinState(r.name, r.files)
         rep.pins.append(st)
-        first = _run(repo, r.check, r, limit)
+        first = _run(repo, r.check, r, limit, write=False)
         if first.error is None and first.returncode == 0:
             continue
         st.stale = True
         st.output = _tail(first)
         if check:
             continue
-        done = _run(repo, r.regen, r, limit)
+        done = _run(repo, r.regen, r, limit, write=True)
         if done.error is not None or done.returncode != 0:
             st.error = f"regeneration failed: {_tail(done)}"
             continue
-        again = _run(repo, r.check, r, limit)
+        again = _run(repo, r.check, r, limit, write=False)
         if again.error is not None or again.returncode != 0:
             st.error = f"still stale after regeneration: {_tail(again)}"
             continue
@@ -209,9 +215,11 @@ def after_merge(repo: Path, cfg: Config) -> str:
         parents = G.run(repo, "rev-list", "--parents", "-n", "1", "HEAD").out.split()[1:]
         msg = G.run(repo, "log", "-1", "--format=%B", "HEAD")
         args = ["commit-tree", tree.out.strip(), *[x for p in parents for x in ("-p", p)]]
-        new = G.run(repo, *args, input=msg.out + "\n") if all(
-            r.ok for r in (added, tree, head, msg)
-        ) else added
+        new = (
+            G.run(repo, *args, input=msg.out + "\n")
+            if all(r.ok for r in (added, tree, head, msg))
+            else added
+        )
         if new.ok and G.run(repo, "update-ref", "HEAD", new.out.strip(), head.out.strip()).ok:
             return f"pins regenerated into the merge commit: {', '.join(done)}"
         return f"pins regenerated, not committed ({new.err}): {', '.join(done)}"
@@ -258,5 +266,7 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
                 hook.chmod(0o755)
                 actions.append(f"wrote {hook}")
         else:
-            actions.append(f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it")
+            actions.append(
+                f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it"
+            )
     return actions

@@ -30,5 +30,8 @@ class PinsConfig:
         "amend",
         doc="What the post-merge hook installed by `ddflow pins regenerate --install` does after a merge: amend (regenerate the stale pins and fold them into the merge commit when nothing else is dirty), leave (regenerate and leave the files changed for you to commit) or off (do nothing).",
         choices=PINS_AFTER_MERGE,
-        strictest=("leave", "never rewrites a commit; the regenerated files are left for you to commit"),
+        strictest=(
+            "leave",
+            "never rewrites a commit; the regenerated files are left for you to commit",
+        ),
     )

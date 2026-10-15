@@ -16,8 +16,10 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import fields
+from pathlib import Path
 
 from ..config import KNOB_CHOICES, Config
+from ..infra.fsio import atomic_write
 from ..infra.tomlcfg import value
 from .readme_region import Region
 
@@ -74,9 +76,35 @@ hand_edited = _REGION.hand_edited
 _region = _REGION.match
 
 
+def fix_counts(text: str, knobs: int, sections: int) -> str:
+    """``text`` with every hand-written knob count made the true one: "N knobs [across M
+    sections]" and "knobs (K of the N)". K, one section's share, is left alone."""
+    text = re.sub(
+        r"(\d+) knobs( across )?(\d+)?( sections)?",
+        lambda m: f"{knobs} knobs" + (f"{m.group(2)}{sections}{m.group(4)}" if m.group(3) else ""),
+        text,
+    )
+    return re.sub(
+        r"(knobs\**[ ]*\n?[ ]*\(\d+ of the )\d+(\))", lambda m: f"{m.group(1)}{knobs}{m.group(2)}", text
+    )
+
+
 def main(argv: list[str]) -> int:
-    """Rewrite the knob table of the README named in `argv` (default README.md)."""
-    return _REGION.main(argv)
+    """Rewrite the knob table of the README named in `argv` (default README.md), then the
+    knob counts its prose states by hand."""
+    code = _REGION.main(argv)
+    if code:
+        return code
+    path = Path(([a for a in argv if a != "--force"] or ["README.md"])[0])
+    cfg = Config()
+    sections = list(cfg._sections())
+    knobs = sum(len(fields(getattr(cfg, s))) for s in sections)
+    text = path.read_text("utf-8")
+    fixed = fix_counts(text, knobs, len(sections))
+    if fixed != text:
+        atomic_write(path, fixed)
+        print(f"{path}: knob counts in prose corrected")
+    return 0
 
 
 if __name__ == "__main__":

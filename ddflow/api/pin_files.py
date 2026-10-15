@@ -50,7 +50,8 @@ def pins_regenerate(
     if check and rep.stale:
         return O.failed(
             "pins",
-            "stale pins: " + ", ".join(p.name for p in rep.stale)
+            "stale pins: "
+            + ", ".join(p.name for p in rep.stale)
             + ". `ddflow pins regenerate` re-records them",
             pins=rows,
         )

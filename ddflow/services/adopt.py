@@ -24,6 +24,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..config import Config
 from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
@@ -785,6 +786,15 @@ def init_files(repo: Path) -> list[str]:
     # here, so a config edited by hand is caught up by `init` / `adopt`.
 
     actions += [f"added '{ln}' to .gitattributes" for ln in SF.sync_attributes(repo)]
+    # A project that lists pin recipes (`[pins].recipes_file`) gets the merge driver and the
+    # post-merge hook that regenerate its pin files (DX-pins-regenerate); one without
+    # recipes is untouched.
+    try:
+        from . import pins as PN
+
+        actions += PN.install(repo, Config.load(repo))
+    except (OSError, RuntimeError):
+        pass  # not a git repository yet, or hooks cannot be written: `pins regenerate --install` says so
     return actions
 
 
