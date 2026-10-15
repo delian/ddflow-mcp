@@ -52,6 +52,13 @@ def _holders(repo: Path) -> set[str]:
     return out
 
 
+@pytest.fixture(autouse=True)
+def _no_caller_identity(monkeypatch):
+    """These tests are about the DERIVED id; an exported `DDFLOW_AGENT` (B3a8e04ca38) would
+    replace it in every `run_cli` subprocess."""
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+
+
 @pytest.fixture
 def claimed(tmp_path: Path) -> Path:
     repo = _repo(tmp_path / "proj")

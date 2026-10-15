@@ -136,6 +136,6 @@ def test_another_items_tree_is_not_reviewed_as_this_items_work(repo, tmp_path):
     _git(other, "add", "z.py")
     _git(other, "commit", "-qm", "t2")
     code, out, err = run_cli(other, "review", "T1")
-    assert code == NOTHING, out + err
+    assert code == REFUSED, out + err  # refused outright since B8b2dafcbf3
     assert not seen.exists() or "T2 WORK" not in seen.read_text()
     assert "T2" in out + err

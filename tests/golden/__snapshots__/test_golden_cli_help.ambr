@@ -754,8 +754,8 @@
   usage: ddflow help [-h] [topic]
   
   positional arguments:
-    topic       one of: cli, config, customise, export, gates, import, lanes, mcp, memory, parallel,
-                recovery, upgrade, verify, workflow. Omit for the overview.
+    topic       one of: cli, config, customise, export, gates, import, lanes, mcp, memory, metrics,
+                parallel, recovery, upgrade, verify, workflow. Omit for the overview.
   
   options:
     -h, --help  show this help message and exit
@@ -1238,6 +1238,23 @@
   
   '''
 # ---
+# name: test_help[ddflow metrics]
+  '''
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes}] [item]
+  
+  positional arguments:
+    {summary,forecast,retro,skips,lanes}
+                          summary (default), forecast, retro <id>, skips or lanes
+    item                  with retro: the item id
+  
+  options:
+    -h, --help            show this help message and exit
+    --phase PHASE         limit to one phase
+    --since SINCE         only since a duration back (7d, 12h) or a date YYYY-MM-DD
+    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase
+  
+  '''
+# ---
 # name: test_help[ddflow next]
   '''
   usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}]
@@ -1337,13 +1354,20 @@
 # ---
 # name: test_help[ddflow pins]
   '''
-  usage: ddflow pins [-h] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document
+  usage: ddflow pins [-h] [--check] [--only ONLY] [--install] [--after-merge] [--tests TESTS] [--min-needle MIN_NEEDLE] [--top TOP] document [target]
   
   positional arguments:
-    document              the instruction file, e.g. AGENTS.md
+    document              the instruction file, e.g. AGENTS.md; or `regenerate` to re-record stale
+                          pin files
+    target                merge-driver (git runs it): the file holding our side
   
   options:
     -h, --help            show this help message and exit
+    --check               regenerate: list the stale pins and write nothing (exit 1 when any)
+    --only ONLY           regenerate: just the pin of this name
+    --install             regenerate: install the git merge driver and post-merge hook for the pin
+                          files
+    --after-merge         regenerate: what the post-merge hook runs
     --tests TESTS         comma-separated test dirs (default: tests,test)
     --min-needle MIN_NEEDLE
                           shortest literal that counts as a pin (default 12)
@@ -2466,13 +2490,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2534,13 +2558,16 @@
       bisect              find which earlier test file makes a test fail only in full-suite order
                           (exit 0 = found, 2 = nothing to report)
       cadence             which periodic passes are due (exit 2 = none)
-      pins                which text of an instruction file a test pins, before you compress it
+      pins                which text of an instruction file a test pins; or `pins regenerate` re-
+                          records stale pin files
       tests               the tests your change reaches, and a parallel command to run them (exit 2
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
       lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
       docs                the mechanical documentation check: `docs check [--diff BASE]`
+      metrics             metrics from the log: cycle time, review rounds, waits; `forecast`, `retro
+                          <id>`, `skips`
       reviewers           find, list and test cross-family reviewers
       review              run the configured reviewer(s) over an item's diff
       adopt               install ddflow into this project for one or more agents
@@ -2661,6 +2688,7 @@
     'ddflow memory forget',
     'ddflow memory list',
     'ddflow merge',
+    'ddflow metrics',
     'ddflow next',
     'ddflow onboard',
     'ddflow phase',

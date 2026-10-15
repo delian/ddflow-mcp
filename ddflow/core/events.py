@@ -408,6 +408,14 @@ def stamp_facts(
         elif k == CAPABILITIES_KIND:
             _fold_capability(caps, e)
     session = _open_session(started, ended)
+    # A capability counts only once a release that ships it has stamped this log: a development
+    # build announcing a newer release's capability (B27842cfecd) names no data an older ddflow
+    # could misread, so it is no direct conflict (D-compat 2).
+    caps = {
+        n: c
+        for n, c in caps.items()
+        if version_key(c.version) and highest and not is_older(highest, c.version)
+    }
     format_skewed = format_level is not None and highest_format > format_level
     override = None
     for e in sorted(overrides, key=Event.sort_key):

@@ -12,11 +12,18 @@ from tests.conftest import run_cli
 
 @pytest.mark.parametrize("argv", [("similar", "some text"), ("dupes",)])
 @pytest.mark.parametrize("json_mode", [False, True])
-def test_an_unknown_kind_fails_on_stderr_with_no_body(repo: Path, argv, json_mode) -> None:
+def test_an_unknown_kind_fails_on_stderr_and_under_json_in_a_refusal_body(
+    repo: Path, argv, json_mode
+) -> None:
+    import json
+
     full = (("--json",) if json_mode else ()) + (*argv, "--kind", "nosuchkind")
     code, out, err = run_cli(repo, *full)
     assert code == 1
-    assert out == "", out
+    if json_mode:  # Bac9d773a44: --json answers a body on every exit path
+        assert "unknown kind nosuchkind" in json.loads(out)["refusal"]["reason"]
+    else:
+        assert out == "", out
     assert "unknown kind nosuchkind" in err
 
 
