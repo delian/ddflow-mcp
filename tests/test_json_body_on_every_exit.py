@@ -134,3 +134,12 @@ def test_the_remembered_streams_is_still_the_real_stream():
         print("said", file=sys.stderr)
     assert sys.stderr is real
     assert "said" in tee.text
+
+
+def test_no_fallback_body_after_a_command_that_printed_text(repo):
+    """A text-only command keeps its stdout whole: the fallback body is appended only when
+    nothing reached stdout, so text is never followed by a second document."""
+    run_cli(repo, "init")
+    code, out, _err = run_cli(repo, "--json", "reviewers", "list")
+    assert code == 2
+    assert out.startswith("No reviewers configured") and '"refusal"' not in out
