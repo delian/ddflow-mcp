@@ -192,7 +192,7 @@ def _read_session(
             log.read_all(), cfg, state=state, agent=owner, since=since, limit=limit
         )
     except SV.SessionViewError as exc:
-        return O.refused("view.session", str(exc), record_kind="session")
+        return O.refused("view.session", str(exc), **empty_list("session", limit))
     data: dict[str, Any] = {
         "record_kind": "session",
         "rows": view.rows,
@@ -236,7 +236,7 @@ def _read_search(
             repo=repo,
         )
     except S.SearchError as exc:
-        return O.refused("view.search", str(exc), record_kind="search")
+        return O.refused("view.search", str(exc), **empty_list("search", limit))
     data: dict[str, Any] = {
         "record_kind": "search",
         "query": res.query,
