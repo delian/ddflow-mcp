@@ -42,6 +42,31 @@ def durations_by_kind(facts: Facts) -> dict[str, list[float]]:
     return out
 
 
+def _empty_reason(state: State, phase: str) -> str:
+    """Why a phase has no critical path: a cycle (open work, no longest chain) or no work."""
+    scope = (
+        state.tasks(phase)
+        if phase
+        else [i for i in state.live_by_id().values() if i.kind == "task"]
+    )
+    if any(t.state != DONE for t in scope):
+        return (
+            "the dependency graph has a cycle, so there is no longest chain "
+            "(`ddflow plan check` names it)"
+        )
+    return "nothing unfinished: no critical path"
+
+
+def _elapsed(facts: Facts, chain: Sequence[str], now: float) -> list[float]:
+    """Seconds each link of the chain has already run (0 unless claimed and not finished)."""
+    out = []
+    for i in chain:
+        span = facts.spans.get(i)
+        held = span is not None and span.first_claim is not None and span.completed_at is None
+        out.append(max(now - span.first_claim, 0.0) if held and span else 0.0)
+    return out
+
+
 def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "") -> dict:
     """The forecast as data. ``available`` False says why there is no range (``reason``)."""
     m = cfg.metrics
@@ -63,18 +88,7 @@ def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "
         return {**base, "reason": f"no phase {phase!r}"}
     chain = critical_path(state, phase)
     if not chain:
-        scope = (
-            state.tasks(phase)
-            if phase
-            else [i for i in state.live_by_id().values() if i.kind == "task"]
-        )
-        if any(t.state != DONE for t in scope):
-            return {
-                **base,
-                "reason": "the dependency graph has a cycle, so there is no longest chain "
-                "(`ddflow plan check` names it)",
-            }
-        return {**base, "reason": "nothing unfinished: no critical path"}
+        return {**base, "reason": _empty_reason(state, phase)}
     pools_by_kind = durations_by_kind(facts)
     kinds = [state.items[i].kind for i in chain]
     samples = {k: len(pools_by_kind.get(k, [])) for k in dict.fromkeys(kinds)}
@@ -82,17 +96,13 @@ def forecast(facts: Facts, state: State, cfg: Config, now: float, phase: str = "
     short = {k: n for k, n in samples.items() if n < int(m.min_samples)}
     if short:
         need = ", ".join(f"{k}: {n}" for k, n in short.items())
-        return {
-            **base,
-            "reason": f"not enough data: completed items per kind ({need}), need {m.min_samples}",
-        }
-    elapsed = []
-    for i in chain:
-        span = facts.spans.get(i)
-        held = span is not None and span.first_claim is not None and span.completed_at is None
-        elapsed.append(max(now - span.first_claim, 0.0) if held and span else 0.0)
+        reason = f"not enough data: completed items per kind ({need}), need {m.min_samples}"
+        return {**base, "reason": reason}
     totals = draw_totals(
-        [pools_by_kind[k] for k in kinds], elapsed, int(m.forecast_runs), int(m.forecast_seed)
+        [pools_by_kind[k] for k in kinds],
+        _elapsed(facts, chain, now),
+        int(m.forecast_runs),
+        int(m.forecast_seed),
     )
     low, high = percentile(totals, m.forecast_low_pct), percentile(totals, m.forecast_high_pct)
     return {**base, "available": True, "low_s": low, "high_s": high}

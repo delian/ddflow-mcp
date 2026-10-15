@@ -14,7 +14,7 @@ from ..services import metrics as M
 from ._base import _load
 
 
-def metrics(
+def run_metrics(
     repo: Path,
     *,
     view: str = "summary",

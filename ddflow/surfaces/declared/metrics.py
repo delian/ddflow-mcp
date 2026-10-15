@@ -29,7 +29,7 @@ COMMANDS: tuple[Command, ...] = (
             "view=skips: the gate-skip audit. view=lanes: lane utilisation on an hourly grid. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
-        call=lambda repo, a, agent: _api().metrics(
+        call=lambda repo, a, agent: _api().run_metrics(
             repo,
             view=a.get("view") or "summary",
             item=a.get("item") or "",

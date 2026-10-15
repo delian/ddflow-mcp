@@ -10,10 +10,19 @@ from ...config import Config
 from ...core import clock
 from ...core.events import Event
 from ...core.model import State
-from . import facts as F
-from . import forecast as FC
-from . import grid, render, retro, skips, summary
+from .facts import collect
+from .forecast import forecast as forecast_view
+from .grid import sample as grid_sample
+from .grid import utilisation
 from .providers import Context
+from .render import forecast as text_forecast
+from .render import lanes as text_lanes
+from .render import retro as text_retro
+from .render import skips as text_skips
+from .render import summary as text_summary
+from .retro import timeline
+from .skips import audit
+from .summary import build, has_figures
 
 VIEWS = ("summary", "forecast", "retro", "skips", "lanes")
 
@@ -66,35 +75,35 @@ def run(
         return Answer(False, str(exc), failed=True)
     if phase and phase not in state.items:
         return Answer(False, f"no phase {phase!r}", failed=True)
-    facts = F.collect(events, state, now)
+    facts = collect(events, state, now)
     ctx = Context(facts, cfg, now, floor, phase)
     if view == "forecast":
-        f = FC.forecast(facts, state, cfg, now, phase)
-        return Answer(f["available"], f["reason"], metrics=f, text=render.forecast(f))
+        f = forecast_view(facts, state, cfg, now, phase)
+        return Answer(f["available"], f["reason"], metrics=f, text=text_forecast(f))
     if view == "retro":
         if not item:
             return Answer(False, "retro needs an item id", failed=True)
         if item not in state.items:
             return Answer(False, f"no item {item!r}", failed=True)
-        t = retro.timeline(events, facts, item)
+        t = timeline(events, facts, item)
         reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
-        return Answer(not reason, reason, metrics=t, text=render.retro(t))
+        return Answer(not reason, reason, metrics=t, text=text_retro(t))
     if view == "skips":
-        a = skips.audit(ctx)
-        return Answer(True, metrics=a, text=render.skips(a))
+        a = audit(ctx)
+        return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
-        g = grid.sample(events, cfg, now, floor)
-        u = grid.utilisation(g["rows"])
+        g = grid_sample(events, cfg, now, floor)
+        u = utilisation(g["rows"])
         reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
-        return Answer(not reason, reason, metrics={**g, **u}, text=render.lanes(g, u))
+        return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
     try:
-        data = summary.build(ctx, group_by or "gate")
+        data = build(ctx, group_by or "gate")
     except ValueError as exc:
         return Answer(False, str(exc), failed=True)
-    ok = summary.has_figures(data)
+    ok = has_figures(data)
     reason = (
         ""
         if ok
         else f"not enough data: fewer than {cfg.metrics.min_samples} samples behind any figure"
     )
-    return Answer(ok, reason, metrics=data, text=render.summary(data))
+    return Answer(ok, reason, metrics=data, text=text_summary(data))
