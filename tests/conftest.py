@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import _gitquiet
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,6 +16,9 @@ os.environ["DDFLOW_LAUNCH_ROOT"] = str(Path(__file__).resolve().parents[1])
 
 from ddflow.config import Config
 from ddflow.infra.log import EventLog
+
+# No background git maintenance in git processes that inherit this environment (B4bb3c23c45): see tests/_gitquiet.py.
+_gitquiet.quiet_git(os.environ)
 
 
 @pytest.fixture(autouse=True)
