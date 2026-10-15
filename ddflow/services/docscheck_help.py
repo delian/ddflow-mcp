@@ -19,8 +19,8 @@ from ..infra import proc as P
 #: Runs an argv and returns how it ended; injected so the check spawns nothing by default.
 Runner = Callable[[list[str]], P.Captured]
 
-_FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
-_VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _GAP = re.compile(r"\s{2,}")
 
 
@@ -40,16 +40,16 @@ def help_flags(text: str) -> set[str]:
         elif not line.strip():
             in_usage = False
         if in_usage:
-            out.update(_FLAG.findall(line))
+            out.update(FLAG.findall(line))
         elif line.lstrip().startswith("-"):
-            out.update(_FLAG.findall(_GAP.split(line.strip())[0]))
+            out.update(FLAG.findall(_GAP.split(line.strip())[0]))
     return out
 
 
 def flag_of(token: str) -> str | None:
     """The long flag a command-line token spells (``--reason,`` and ``--reason=x`` both
     spell ``--reason``), or None when it is not one."""
-    m = _FLAG.match(token)
+    m = FLAG.match(token)
     return m.group(0) if m and not token[m.end() :][:1].isalnum() else None
 
 
@@ -62,6 +62,7 @@ class HelpIndex:
         self._cache: dict[tuple[str, ...], set[str] | None] = {}
         #: Why a command could not be walked, one note each (command -> reason).
         self.unavailable: dict[str, str] = {}
+        self._broken: set[tuple[str, ...]] = set()  #: chains whose help could not run
 
     def resolve(self, words: list[str]) -> tuple[list[str], set[str]] | None:
         """For ``<cmd> <word>...``: the verb chain and its flags; None when ``cmd`` is not
@@ -73,9 +74,11 @@ class HelpIndex:
         if flags is None:
             return None
         for word in words[1:]:
-            if not _VERB.fullmatch(word):
+            if not VERB.fullmatch(word):
                 break
             deeper = self._help([*chain, word])
+            if (*chain, word) in self._broken:  # could not tell: judging by the parent would guess
+                return None
             if deeper is None:
                 break
             chain.append(word)
@@ -87,8 +90,8 @@ class HelpIndex:
         if key not in self._cache:
             done = self._run([*chain, "--help"])
             if not done.ran:
-                if len(chain) == 1:
-                    self.unavailable[chain[0]] = f"could not run: {done.error}"
+                self.unavailable[" ".join(chain)] = f"could not run: {done.error}"
+                self._broken.add(key)
                 self._cache[key] = None
             elif done.returncode == 0:
                 self._cache[key] = help_flags(done.stdout or done.stderr)

@@ -46,6 +46,8 @@ from ..core.digest import content_digest
 from ..infra import git as G
 from .docscheck_count import check_counts
 from .docscheck_extract import Extractor, surface, undocumented
+from .docscheck_help import FLAG as _FLAG
+from .docscheck_help import VERB as _VERB
 from .docscheck_help import HelpIndex, Runner, flag_of
 from .docscheck_md import (  # noqa: F401  (anchors_of, slugify: re-exported)
     SPAN,
@@ -74,7 +76,6 @@ _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 _SNAKE = re.compile(r"_*[A-Za-z][A-Za-z0-9]*(?:_+[A-Za-z0-9]+)+")
 _CAMEL = re.compile(r"[a-z]+(?:[A-Z][a-z0-9]*)+")
 _DOTTED = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")
-_FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _CORPUS_FLAG = re.compile(r"(?<![\w-])--[a-z](?:[a-z0-9-]*[a-z0-9])?")
 _QUOTED = re.compile(r"""["']([a-z][a-z0-9-]*)["']""")
@@ -84,7 +85,6 @@ _QUOTED = re.compile(r"""["']([a-z][a-z0-9-]*)["']""")
 _REGISTERS = ("add_parser", "add_subparsers", "click.", "typer.", ".command(", "cobra.", "Use:")
 _DEF = re.compile(r"^\s*(?:async\s+)?def\s+([a-z][a-z0-9_]*)", re.M)
 _VERB_WORDS = 2  #: `<script> <verb>`
-_VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 
 _EXT = (
     "py|md|rst|adoc|toml|json|jsonl|yml|yaml|sh|txt|cfg|ini|lock|rs|go|ts|tsx|js|jsx|html|css|"
