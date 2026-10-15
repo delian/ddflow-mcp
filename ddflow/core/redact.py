@@ -435,6 +435,8 @@ def redact_argv(
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "approval.granted": ("note",),
+    "ask.answered": ("answer",),
+    "ask.requested": ("text",),
     "bug.fixed": ("lesson", "changelog", "regression_verify"),
     "bug.found": ("summary", "title"),
     "bug.invalid": ("evidence", "reason"),
@@ -522,6 +524,16 @@ LOG_TEXT_NAMES = frozenset({"dedupe"})
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("approval.granted", "token_hash"): "a hash that is compared",
     ("approval.used", "token_hash"): "a hash that is compared",
+    ("ask.requested", "code_hash"): "a hash that is compared",
+    ("ask.requested", "expires_at"): "a time that is compared",
+    ("ask.requested", "type"): "a kind word",
+    ("ask.requested", "options"): "the choices an answer is compared with",
+    ("ask.answered", "outcome"): "the word or choice an answer is compared with",
+    ("ask.answered", "role"): "a role name",
+    ("ask.answered", "via"): "a channel word",
+    ("ask.answered", "by"): "an actor id, the audit trail's who",
+    ("ask.withdrawn", "by"): "an actor id, the audit trail's who",
+    ("ask.expired", "by"): "an actor id, the audit trail's who",
     ("worktree.merged", "branch_head"): "a sha",
     ("worktree.merged", "outside_globs"): "globs",
     ("schedule.defined", "scope_globs"): "globs",
