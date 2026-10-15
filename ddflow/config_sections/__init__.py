@@ -45,6 +45,7 @@ SECTION_NAMES = (
     "lanes",
     "docs",
     "metrics",
+    "pins",
 )
 
 SECTION_MODULES = tuple(importlib.import_module(f"{__name__}.{n}") for n in SECTION_NAMES)

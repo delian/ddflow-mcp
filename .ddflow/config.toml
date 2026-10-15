@@ -32,7 +32,15 @@
 ttl_s = 1800            # how long a claim survives without a heartbeat
 heartbeat_s = 300
 
-shared_globs = ["README.md"]
+# Pin files are regenerated, never leased or hand-merged (DX-pins-regenerate,
+# .ddflow/pins.toml): `ddflow pins regenerate`, and the merge driver `ddflow pins
+# regenerate --install` writes, keep them current.
+shared_globs = [
+  "README.md",
+  "tests/golden/__snapshots__/**",
+  "tests/golden/json/result_schemas.json",
+  "tests/test_uc_surf_setup_ops_transcript.json",
+]
 [worktree]
 enabled = true
 
