@@ -8,7 +8,7 @@ without a shell, and only when its first word is a configured tool (``[docs].cli
 a ``[[docs.count]]`` command) -- a document must not run arbitrary programs. A
 ``[[docs.count]]`` entry names a ``pattern`` (group 1 is the stated number) and the
 ``command`` that prints the true one. A command prints one integer, or lines that are
-counted. A count that could not be recomputed is a note, never a pass; marked text inside
+counted (a command that prints nothing is not a count of 0: print the 0). A count that could not be recomputed is a note, never a pass; marked text inside
 code spans and fences is an example, not a claim.
 """
 
