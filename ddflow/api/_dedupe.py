@@ -329,7 +329,7 @@ def check_add(
         if exact is None or exact.kind != rec.kind:
             out.refusal = O.refused(
                 rec.event_kind,
-                _reason(shown, cfg.dedupe.show_floor),
+                _reason(shown, min(cfg.dedupe.show_floor, cfg.dedupe.ask_threshold)),
                 id=rec.rid,
                 candidates=shown,
                 options=options(shown),
