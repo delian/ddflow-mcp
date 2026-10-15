@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "ask.answered"
+why = "A person (or an operator-proven channel) answered an ask: outcome, who, role, how, and whether it was a person."
+impact = "additive"
