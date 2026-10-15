@@ -16,8 +16,7 @@ from collections.abc import Sequence
 
 from ...config import Config
 from ...core.model import State
-from ...core.records import DONE
-from ...core.schedule import critical_path
+from ...core.schedule import chain_cycles, critical_path
 from .facts import Facts
 from .stats import percentile
 
@@ -43,16 +42,13 @@ def durations_by_kind(facts: Facts) -> dict[str, list[float]]:
 
 
 def _empty_reason(state: State, phase: str) -> str:
-    """Why a phase has no critical path: a cycle (open work, no longest chain) or no work."""
-    scope = (
-        state.tasks(phase)
-        if phase
-        else [i for i in state.live_by_id().values() if i.kind == "task"]
-    )
-    if any(t.state != DONE for t in scope):
+    """Why a phase has no critical path: a named cycle among open work, or no work."""
+    cycles = chain_cycles(state, phase)
+    if cycles:
         return (
-            "the dependency graph has a cycle, so there is no longest chain "
-            "(`ddflow plan check` names it)"
+            "the dependency graph has a cycle, so there is no longest chain: "
+            + " -> ".join(cycles[0])
+            + " (`ddflow plan check` names it)"
         )
     return "nothing unfinished: no critical path"
 
