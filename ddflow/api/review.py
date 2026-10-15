@@ -38,6 +38,7 @@ from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
 from ..views import human
 from ._base import _load
+from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import _lease_keeper, item_tree
 from .lifecycle import callers_tree
 
@@ -1261,6 +1262,22 @@ def _unknown_item(repo: Path, item: str, agent: str, gate: str) -> O.Outcome | N
     return O.failed("review", f"no such item {item!r}{gone}", id=item, gate=gate)
 
 
+def _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reason):
+    """A refusal (B8b2dafcbf3) for a review of a finished item, or from the wrong tree."""
+    if not item:
+        return None
+    it = _load(repo, agent)[2].items.get(item)
+    # `--commit` is the after-merge review: recorded against the item, done or not.
+    why, _note = (
+        ("", "")
+        if commit
+        else closed_item_refusal(it, force=force, reason=reason, what=f"reviewing {gate}")
+    )
+    if not why and _note == "" and not (branch or commit):
+        why = wrong_tree_refusal(repo, _load(repo, agent)[2], it, called_from)
+    return O.refused("review", why, id=item, gate=gate) if why else None
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -1289,6 +1306,9 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     """
     args = dict(locals())  # first: every later local would leak into the kwargs
     if (refused := _unknown_item(repo, item, agent, gate)) is not None:  # a refusal is falsy
+        return refused
+    refused = _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reason)
+    if refused is not None:  # a refusal is falsy
         return refused
     asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
     if len(asked) > 1:
