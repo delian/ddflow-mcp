@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.link_timeout_s"
+new = '10'
+why = "How long one remote link may take to answer when check_links is network."
+impact = "additive"
