@@ -13,17 +13,19 @@ import time
 
 import pytest
 
+from ddflow.config import LogConfig
 from ddflow.core import digest as D
 from ddflow.infra import fsio
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog, clear_parse_cache
 from tests.test_log_merged_order import _ev, _put
 
+_SNAP = LogConfig(snapshot_min_events=10)  # snapshot even a small test log
+
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
     monkeypatch.setattr(EventLog, "stamp", False)
-    monkeypatch.setattr(L, "SNAPSHOT_MIN_EVENTS", 10)
     monkeypatch.delenv(L.SNAPSHOT_ENV, raising=False)
     clear_parse_cache()
     yield
@@ -79,7 +81,7 @@ def test_the_snapshot_is_written_atomically_without_fsync(tmp_path, monkeypatch)
         real(path, data, **kw)
 
     monkeypatch.setattr(fsio, "atomic_write", spy)
-    log = EventLog(tmp_path, "x")
+    log = EventLog(tmp_path, "x", log_cfg=_SNAP)
     _put(log, "a", [_ev("a", i) for i in range(1, 1600)])
     log.read_all()
     snap = log._snapshot_path()
@@ -89,7 +91,7 @@ def test_the_snapshot_is_written_atomically_without_fsync(tmp_path, monkeypatch)
 
 
 def test_the_snapshot_digest_is_still_sha256_of_its_payload(tmp_path):
-    log = EventLog(tmp_path, "x")
+    log = EventLog(tmp_path, "x", log_cfg=_SNAP)
     _put(log, "a", [_ev("a", i) for i in range(1, 1600)])
     log.read_all()
     head, _, payload = log._snapshot_path().read_bytes().partition(b"\n")

@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ddflow.config import LogConfig
 from ddflow.infra import localstore as LS
 from ddflow.infra import log as L
 from ddflow.infra import store as S
@@ -100,7 +101,7 @@ def test_a_stale_snapshot_is_collected(repo):
     fresh = d / ("read-snapshot-" + "0" * 16 + ".bin")
     for f in (other, legacy, fresh):
         f.write_bytes(b"x")
-    ago = time.time() - (L.SNAPSHOT_STALE_DAYS + 1) * 86400
+    ago = time.time() - (LogConfig().snapshot_stale_days + 1) * 86400
     for f in (other, legacy):
         os.utime(f, (ago, ago))
     log._collect_stale_snapshots(mine)
@@ -222,7 +223,7 @@ def test_a_snapshot_in_use_is_touched(repo, monkeypatch):
     path = log._snapshot_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"not a snapshot\n")
-    ago = time.time() - (L.SNAPSHOT_STALE_DAYS + 1) * 86400
+    ago = time.time() - (LogConfig().snapshot_stale_days + 1) * 86400
     os.utime(path, (ago, ago))
     monkeypatch.setattr(L.EventLog, "_snapshot_enabled", lambda self: True)
     log._load_snapshot()  # unreadable header: not touched

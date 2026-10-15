@@ -97,22 +97,16 @@ SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
 #: git-ignored directory. Never merged and never committed: it is a CACHE of the log,
 #: and the log stays the only source of truth.
 SNAPSHOT_FILE = "read-snapshot.bin"
-#: How long a snapshot of OTHER code (another version or parser) is kept before the next
-#: write garbage-collects it. One snapshot per fingerprint (D-compat): worktrees on
-#: different ddflow versions stop overwriting each other's.
-SNAPSHOT_STALE_DAYS = 7.0
-#: A snapshot in use is touched at most this often (see `_touch_snapshot`).
-SNAPSHOT_TOUCH_S = 86400.0
+# How long a snapshot of OTHER code is kept (`[log].snapshot_stale_days`, one snapshot per
+# fingerprint, D-compat) and how often one in use is touched (`[log].snapshot_touch_s`)
+# are knobs; so is the size below which none is written (`[log].snapshot_min_events`).
 SNAPSHOT_FORMAT = 1
 #: A snapshot stores each event as a tuple in `Event`'s own field order, derived from the
 #: dataclass so the writer, the reader and the header cannot disagree about the layout.
 _EVENT_FIELDS = tuple(f.name for f in fields(Event))
 _event_tuple = operator.attrgetter(*_EVENT_FIELDS)
-#: No snapshot below this many events: a cold parse is cheap there and a file is not free.
-#: A module constant rather than a `[log]` knob for now (follow-up B-log-snapshot-knobs,
-#: waiting on config.py); tests lower it.
-SNAPSHOT_MIN_EVENTS = 5000
-#: `DDFLOW_SNAPSHOT=0` turns the snapshot off (neither read nor written) for a process.
+#: `DDFLOW_SNAPSHOT=0` turns the snapshot off (neither read nor written) for a process, and
+#: wins over `[log].snapshot`.
 SNAPSHOT_ENV = "DDFLOW_SNAPSHOT"
 
 
@@ -1466,14 +1460,14 @@ class EventLog:
         long-lived reader's snapshot as abandoned."""
         path = self._snapshot_path()
         with contextlib.suppress(OSError):
-            if time.time() - path.stat().st_mtime > SNAPSHOT_TOUCH_S:
+            if time.time() - path.stat().st_mtime > self.log_cfg.snapshot_touch_s:
                 os.utime(path)
 
     def _collect_stale_snapshots(self, mine: Path) -> None:
-        """Remove the snapshots of other code untouched for `SNAPSHOT_STALE_DAYS`, and the
+        """Remove the snapshots of other code untouched for `[log].snapshot_stale_days`, and the
         pre-fingerprint `read-snapshot.bin` once it is that old. Best effort."""
         stem = SNAPSHOT_FILE.removesuffix(".bin")
-        cutoff = time.time() - SNAPSHOT_STALE_DAYS * 86400
+        cutoff = time.time() - self.log_cfg.snapshot_stale_days * 86400
         for f in mine.parent.glob(f"{stem}*.bin"):
             if f == mine or not re.fullmatch(rf"{re.escape(stem)}(-[0-9a-f]{{16}})?\.bin", f.name):
                 continue
@@ -1486,7 +1480,10 @@ class EventLog:
         # writes NOR reads a snapshot there: what is in another checkout's `.ddflow/local/`
         # is that checkout's own state, not something to decode into this process.
         return (
-            self.log_cfg.reuse_parsed and self.cache_writes and os.environ.get(SNAPSHOT_ENV) != "0"
+            self.log_cfg.reuse_parsed
+            and self.log_cfg.snapshot
+            and self.cache_writes
+            and os.environ.get(SNAPSHOT_ENV) != "0"
         )
 
     def _load_snapshot(self) -> dict[str, tuple]:
@@ -1592,7 +1589,7 @@ class EventLog:
             return
         total = sum(len(d.whole) for _, d in deltas)
         covered = _SNAP_COVERED.get(self.dir, 0)
-        if total < SNAPSHOT_MIN_EVENTS or total - covered < max(1000, covered // 10):
+        if total < self.log_cfg.snapshot_min_events or total - covered < max(1000, covered // 10):
             return
         body = {
             p.name: (
