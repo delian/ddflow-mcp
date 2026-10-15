@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.count"
+new = '[]'
+why = "The [[docs.count]] entries: numbers a document states, recomputed by a command."
+impact = "additive"

@@ -1777,6 +1777,43 @@
           --model hydrafusion` refuses until you list the families your plan routes
           to, e.g. routers = { hydrafusion = ["anthropic", "openai", "google"] }. From
           the env, JSON only.
+      agent.roles = {'operator': ['*'], 'bot': ['read', 'claim', 'note', 'start_lane', 'approve_marked'], 'agent': ['read', 'claim', 'note'], 'observer': ['read']}   [default]
+          Role name to the capabilities it holds: the one table every auth and
+          approval path is to ask (serve auth, hub and scoped tokens, the approvals
+          engine, waiver approvers: each lands as its own item and reads it through
+          `services/actors`). A capability is any name a consumer asks for; the
+          shipped ones are read, claim, note, start_lane (start a lane within the caps
+          the operator sets), approve (answer any approval), approve_marked (answer
+          only approvals marked bot-answerable), adopt, waive. "*" holds every
+          capability. A role missing from the table, or a capability missing from its
+          list, is refused: the table fails closed. Default: operator = ["*"], bot =
+          read, claim, note, start_lane, approve_marked; agent = read, claim, note;
+          observer = read. Widening a role is an operator act. Change it for the
+          project (`ddflow config --set agent.roles ...`), for this machine (add
+          --local), per run (DDFLOW_AGENT_ROLES, JSON only), or over MCP with
+          `ddflow_configure` (the operator is told when an agent does).
+      agent.actors = {}   [default]
+          Actor id to role, for named actors such as a chat gateway or n8n: `{
+          openclaw = "bot" }`. Applied ONLY to an id a credential has proven (a paired
+          token); an id an agent merely declares with --agent or as_agent is a claim
+          and is never looked up here, so naming a role cannot be done by saying the
+          name. Empty by default. Change it for the project (`ddflow config --set
+          agent.actors ...`), for this machine (add --local), per run
+          (DDFLOW_AGENT_ACTORS, JSON only), or over MCP with `ddflow_configure`.
+      agent.default_role = 'agent'   [default]
+          The role of a caller no credential and no terminal vouches for: an agent
+          harness, `--agent`, `DDFLOW_AGENT`, the MCP surface. Default "agent". A
+          person at their own terminal is the operator role (see
+          `agent.operator_role`); setting this to "operator" makes every caller one
+          and is the widening it sounds like. Change it for the project (`ddflow
+          config --set agent.default_role observer`), for this machine (add --local),
+          per run (DDFLOW_AGENT_DEFAULT_ROLE), or over MCP with `ddflow_configure`.
+      agent.operator_role = 'operator'   [default]
+          The role of a person at their own terminal (a CLI call with no --agent, no
+          DDFLOW_AGENT and no agent-harness marker). Default "operator". Change it for
+          the project (`ddflow config --set agent.operator_role operator`), for this
+          machine (add --local), per run (DDFLOW_AGENT_OPERATOR_ROLE), or over MCP
+          with `ddflow_configure`.
       ids.bug = '{prefix}{hash}'   [default]
           Bug ids. Default {prefix}{hash}: B and ten hex digits, as ever
           (B9c56de9d58). Tokens: {prefix} (the kind's letter), {seq} (next free
@@ -1959,6 +1996,38 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      docs.extract = []   [default]
+          Extractors that list the public surface the code offers, so the check can
+          say which of it no document mentions: `[[docs.extract]]` blocks with `kind`
+          (flags, tools or knobs), `pattern` (a regular expression whose first group,
+          or the group named `name`, is the surface name) and `source_globs` (the
+          tracked files to read, in git glob syntax). A flag named in no checked
+          document is reported as a `flag` finding, a tool as a `command` and a knob
+          as an `identifier`, each pointing at the source line. Example:
+          `[[docs.extract]]` with `kind = "flags"`, `pattern =
+          "add_argument[(]'(--[a-z-]+)'"` and `source_globs = ["src/**/cli.py"]`.
+          Empty by default: nothing is extracted.
+      docs.count = []   [default]
+          Numbers the documents state that a command can recompute: `[[docs.count]]`
+          blocks with `pattern` (a regular expression whose first group is the stated
+          number), `command` (what prints the true number: one integer, or lines to
+          count) and optionally `docs` (globs of the documents to read; default every
+          checked document). A stated number that differs from the command's is a
+          `count` finding. A document can also keep a count current in place with
+          `<!-- ddflow:count cmd="ddflow list --json">42<!-- /ddflow:count -->`; a
+          marker's command is run only when its first word is one of `cli_command` or
+          the first word of a `[[docs.count]]` command, and never through a shell.
+          Empty by default.
+      docs.cli_command = []   [default]
+          The commands whose `<command> <verb> --help` is walked to check that
+          `<command> <verb> --flag` in a document names a flag that verb has (a flag
+          the project spells somewhere else does not pass). Empty (default) uses the
+          project's own scripts: `[project.scripts]` in pyproject.toml and `bin` in
+          package.json. A command that cannot run (missing, timing out) is a note,
+          never a pass.
+      docs.command_timeout_s = 20   [default]
+          Seconds one `--help` walk step or one count command may run before the check
+          records it as not run (a note) instead of waiting.
   
     ''',
   )

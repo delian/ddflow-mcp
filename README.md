@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 226 knobs.
+cadences, and the rest of the 230 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5116,7 +5116,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 226): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 230): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5512,6 +5512,11 @@ ddflow update <id> [...]        change title/body/needs/globs/tags/priority (--g
 ddflow update <id> --worktree P rebind the item and its lease to the linked worktree at P
 ddflow resolve <id> --keep X    settle a contested item: keep one definition or one claim
 
+ddflow plan check <file|->      run plan check before filing a phase: a wildcard-directory
+                                glob, a cycle, an unknown `needs`, two tasks that can run
+                                together whose globs collide, or a task with no acceptance
+                                (1 = findings, 0 = clean, 3 = not a plan at all)
+
 ddflow next [--phase P]         what may start now       (2 = nothing actionable)
 ddflow claim <id> [--globs ..]  lease + create worktree  (3 = refused)
 ddflow heartbeat <id>           renew a lease
@@ -5617,7 +5622,7 @@ declared once and persists — see
 
 ## Configuration
 
-226 knobs across 30 sections, every one documented in place and listed, with its default
+230 knobs across 31 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5684,8 +5689,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=90bbe809239b -->
-<details><summary>All 226 knobs across 30 sections</summary>
+<!-- ddflow:begin README/knobs sha=6007b5c668fc -->
+<details><summary>All 230 knobs across 31 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5915,6 +5920,10 @@ long default is left to `ddflow config --explain`.
 | `rag.command` | `""` |  |
 | `rag.model_dir` | `""` |  |
 | `rag.timeout_s` | `60` |  |
+| `docs.extract` | `[]` |  |
+| `docs.count` | `[]` |  |
+| `docs.cli_command` | `[]` |  |
+| `docs.command_timeout_s` | `20` |  |
 
 </details>
 <!-- ddflow:end README/knobs -->
