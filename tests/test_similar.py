@@ -225,9 +225,9 @@ def test_a_short_record_is_shown_not_asked():
     assert a.action == "show" and a.candidates[0].id == "T2" and a.words < 8
 
 
-def test_naming_an_existing_id_asks_whatever_the_score():
+def test_naming_an_existing_id_lists_it_and_asks_nothing():
     a = similar.assess(_idx(), {"kind": "task", "title": "follow-up to T3", "body": "x"}, _cfg())
-    assert a.action == "ask" and any(c.id == "T3" and "named" in c.flags for c in a.candidates)
+    assert a.action == "show" and any(c.id == "T3" and "named" in c.flags for c in a.candidates)
 
 
 def test_a_plain_word_id_is_not_named_by_using_the_word():
@@ -236,7 +236,7 @@ def test_a_plain_word_id_is_not_named_by_using_the_word():
     assert a.action == "none"
     dotted = similar.build([{"id": "34.8g", "kind": "task", "title": "tidy", "body": "x"}])
     a = similar.assess(dotted, {"kind": "task", "title": "after 34.8g lands", "body": ""}, _cfg())
-    assert a.action == "ask" and a.candidates[0].flags == ("named",)
+    assert a.action == "show" and a.candidates[0].flags == ("named",)
 
 
 def test_same_item_is_flagged_and_own_id_never_returned():
