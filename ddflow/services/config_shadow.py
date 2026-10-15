@@ -27,11 +27,15 @@ def shadow_report(repo: Path, key: str, layer: str) -> dict:
     shadowed = bool(source) and source not in (layer, "default")
     note = ""
     if shadowed:
-        who = _WINNER.get(source, f"the {source} setting")
-        fix = f"ddflow config --local {key} VALUE" if source == "local" else "unset it there"
+        if source == "local":
+            who, fix = _WINNER["local"], f"ddflow config --local {key} VALUE"
+        else:
+            var = f"DDFLOW_{sec.upper()}_{knob.upper()}"
+            who, fix = f"the environment ({var})", f"unset {var}"
         note = (
             f"\n  warning: shadowed -- {who} wins; the effective value of {key} is "
-            f"{value!r}, not what was just written.\n  To change the winning layer: {fix}"
+            f"{value!r}, so the committed write changes nothing here."
+            f"\n  To change the winning layer: {fix}"
         )
     return {
         "effective": value,
