@@ -1016,11 +1016,23 @@ class State:
         dependencies, be claimed by a different agent, and run in parallel with its
         siblings when nothing links them.
         """
-        live = [i for i in self.items.values() if i.kind == "task" and not i.removed]
         if not phase:
-            return live
-        wanted = self.descendants(phase)
-        return [i for i in live if i.id in wanted]
+            return [i for i in self.items.values() if i.kind == "task" and not i.removed]
+        # Only the items below ``phase``, put back in definition order: scanning every item
+        # for each of the thousand phase dependencies a plan weighs was the cost of `next`.
+        pos = self._positions()
+        below = [self.items[n] for n in self.descendants(phase) if n in pos]
+        below.sort(key=lambda i: pos[i.id])
+        return [i for i in below if i.kind == "task" and not i.removed]
+
+    def _positions(self) -> dict[str, int]:
+        """`item id -> definition order`. Items are only ever added (a removal sets a flag), so
+        a table of this length is still right."""
+        table = self.__dict__.get("_pos_table")
+        if table is None or len(table) != len(self.items):
+            table = {n: k for k, n in enumerate(self.items)}
+            self.__dict__["_pos_table"] = table
+        return table
 
     def _child_index(self) -> dict[str, list[Item]]:
         """`parent -> [children]`, built once per fold and cached on the State.
