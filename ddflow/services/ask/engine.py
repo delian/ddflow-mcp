@@ -76,7 +76,7 @@ def _state(log):
     return fold(log.read_all(), strict=False)
 
 
-def request(
+def request(  # noqa: PLR0913 -- one keyword per facet of an ask; all keyword-only
     log,
     cfg: Config,
     *,
@@ -259,7 +259,9 @@ def verdict(state, subject: str, digest: str, now: float | None = None) -> Verdi
     answered = [r for r in rows if r["state"] == ANSWERED]
     if not answered:
         waiting = any(status(r, now) == PENDING for r in rows)
-        return Verdict(False, f"{subject} is " + ("waiting for an answer" if waiting else "not approved"))
+        return Verdict(
+            False, f"{subject} is " + ("waiting for an answer" if waiting else "not approved")
+        )
     last = answered[-1]
     if last["outcome"] != APPROVED:
         return Verdict(False, f"{subject} was denied by {last['answered_by']}", last)
