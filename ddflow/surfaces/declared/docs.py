@@ -56,7 +56,7 @@ COMMANDS: tuple[Command, ...] = (
             "diff=BASE keeps only surface the diff since BASE added. Exit 1 findings, 2 could "
             "not run (never a clean report), 3 refused."
         ),
-        call=lambda repo, a, agent: _api().docs(
+        call=lambda repo, a, agent: _api().run_docs(
             repo, verb=a.get("verb") or "check", diff=a.get("diff") or ""
         ),
         payload=PAYLOAD,
