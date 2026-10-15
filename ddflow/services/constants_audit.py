@@ -3,7 +3,7 @@ constant and say whether it is a knob still to migrate, an exemption with a reas
 unclassified.
 
 A *candidate* is a module-level assignment of an int/float literal to an UPPER_CASE name
-whose words say it is a tunable (a timeout, a limit, a cap, a window, a threshold ...).
+(or literal arithmetic such as `30 * 60`) whose words say it is a tunable (a timeout, a limit, a cap, a window, a threshold ...).
 The register (`docs/ddflow/constants-exemptions.toml`) lists each as `[knob]` (to migrate;
 the value is the proposed config key) or `[exempt]` (structural, with the reason). The
 ratchet (tests/test_constants_ratchet.py) fails a NEW unclassified candidate and a stale
@@ -13,6 +13,7 @@ register entry, so the register only shrinks.
 from __future__ import annotations
 
 import ast
+import operator
 import re
 import tomllib
 from dataclasses import dataclass
@@ -41,10 +42,31 @@ class Candidate:
         return f"{self.path}:{self.name}"
 
 
+#: Arithmetic over literals is still a literal: `30 * 60.0`, `1 << 20`, `7 * 86400`.
+_FOLD_BOUND = 64
+_FOLD = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.FloorDiv: operator.floordiv,
+    ast.Div: operator.truediv,
+    ast.Pow: lambda a, b: a**b if abs(b) <= _FOLD_BOUND else None,  # no runaway exponents
+    ast.LShift: lambda a, b: int(a) << int(b) if 0 <= b <= _FOLD_BOUND else None,
+}
+
+
 def _number(node: ast.expr | None) -> float | None:
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
         inner = _number(node.operand)
         return None if inner is None else -inner
+    if isinstance(node, ast.BinOp) and type(node.op) in _FOLD:
+        left, right = _number(node.left), _number(node.right)
+        if left is None or right is None:
+            return None
+        try:
+            return _FOLD[type(node.op)](left, right)
+        except (ArithmeticError, TypeError, ValueError):
+            return None
     if isinstance(node, ast.Constant) and not isinstance(node.value, bool):
         if isinstance(node.value, (int, float)):
             return node.value
