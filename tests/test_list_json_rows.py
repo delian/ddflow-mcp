@@ -76,3 +76,13 @@ def test_mcp_read_takes_all_for_tasks_and_refusals_keep_rows(repo):
     out = view_read(repo, "lesson", phase="NOPE")
     assert out.exit != 0 and out.data["rows"] == []
     assert view_read(repo, "bogus").data["rows"] == []
+
+
+def test_engine_refusals_and_the_requested_limit_keep_the_shape(repo):
+    from ddflow.api import view_read
+
+    _seed(repo)
+    assert view_read(repo, "search").data["rows"] == []
+    assert view_read(repo, "session", state="nope-state").data["rows"] == []
+    _c, body, _ = _rows(repo, "task", "--item", "T1", "--limit", "5")
+    assert body["limit"] == 5

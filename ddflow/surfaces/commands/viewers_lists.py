@@ -38,7 +38,7 @@ _LISTS = {
 _ALL_HELP = {
     "bug": "include fixed and invalid bugs",
     "lesson": "include superseded lessons",
-    "": "accepted for every kind; this kind lists all its rows already",
+    "": "accepted for every list kind; this kind lists all its rows already",
 }
 _SHARED_FLAGS = ("state", "phase", "tag", "owner", "since")
 
@@ -183,7 +183,7 @@ def cmd_list_any(a, c: Ctx) -> int:
     if stray:
         reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
         if c.json:
-            emit_json({**empty_list(a.kind), "reason": reason})
+            emit_json({**empty_list(a.kind, _query(a, a.kind)[0]["limit"]), "reason": reason})
         print(reason, file=sys.stderr)
         return REFUSED
     return cmd_list(a, c)
