@@ -96,8 +96,9 @@ def remembered_stderr() -> Iterator[_Tee]:
         sys.stderr = real
 
 
-def refusal_body(code: int, said: str) -> dict[str, Any]:
+def refusal_body(code: int, said: str, outcome: str) -> dict[str, Any]:
     """The body of a ``--json`` run that exited ``code`` without printing one: the reason it
-    gave on stderr (the last line it wrote), under the `refusal` key every refusal body leads with."""
+    gave on stderr (the last line it wrote), led by `refusal` as every refusal body is."""
     lines = [ln for ln in said.strip().splitlines() if ln.strip()]
-    return {"refusal": lines[-1].strip() if lines else f"exit {code}", "exit": code}
+    reason = lines[-1].strip() if lines else f"exit {code}"
+    return {"refusal": {"reason": reason, "outcome": outcome, "exit": code}}
