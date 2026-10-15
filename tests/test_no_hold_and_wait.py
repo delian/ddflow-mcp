@@ -142,7 +142,7 @@ def test_the_waits_are_shown_in_status_brief_and_lanes(repo):
     code, out, _ = run_cli(repo, "brief", agent=A)
     assert "## Waiting for files" in out
     code, out, _ = run_cli(repo, "lanes", agent=A)
-    assert "T1 waits for T2 (agent-b)" in out, out
+    assert out.count("T1 waits for T2 (agent-b)") == 1, out  # once, not once per lane
 
 
 def test_wait_max_s_zero_never_tells_the_waiter_to_release(repo):
@@ -167,3 +167,14 @@ def test_claim_queue_flag_queues_a_refused_claim(repo):
     )
     assert run_cli(repo, "claim", "T3", "--no-worktree", "--queue", agent="agent-c")[0] == 3
     assert _state(repo).waiting["T3"]["queue"] is True
+
+
+def test_asking_again_after_half_the_reservation_refreshes_the_place(repo):
+    _two_holders(repo)
+    assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
+    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)
+    st, cfg = _state(repo), _cfg(repo)
+    w = st.waiting["T1"]
+    # B lets go long after A's first ask: A's place is still A's while it asks again.
+    later = w["at"] + cfg.lease.waiter_reservation_s * 0.9
+    assert WG._refresh_s(cfg) < later - w["at"]  # an ask at that time re-appends (refreshes `at`)

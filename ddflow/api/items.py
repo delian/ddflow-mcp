@@ -83,11 +83,13 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             id=item,
         )
     if edit.worktree is not None:
-        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree)
+        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
     return _record_update(log, cfg, it, fields, queue=edit.queue)
 
 
-def _update_and_rebind(repo: Path, log, cfg, item: str, fields: dict, path: str) -> O.Outcome:
+def _update_and_rebind(
+    repo: Path, log, cfg, item: str, fields: dict, path: str, queue: bool = False
+) -> O.Outcome:
     """Set ``fields`` and rebind ``item`` to ``path``, all or nothing, under ONE lock.
 
     Decided from a fold taken INSIDE the lock: from the caller's earlier snapshot, a
@@ -102,7 +104,7 @@ def _update_and_rebind(repo: Path, log, cfg, item: str, fields: dict, path: str)
         if isinstance(target, O.Outcome):
             return target
         if fields:
-            out = _record_update(log, cfg, it, fields)
+            out = _record_update(log, cfg, it, fields, queue=queue)
             if out.exit != O.OK:
                 return out
         else:
