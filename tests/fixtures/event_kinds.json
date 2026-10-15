@@ -474,6 +474,19 @@
    },
    "v": 1
   },
+  "lease.waiting": {
+   "fields": {
+    "at": ["float"],
+    "globs": ["list"],
+    "holder": ["str"],
+    "lease_event": ["str"],
+    "on": ["list"],
+    "queue": ["bool"],
+    "since": ["float"],
+    "ttl_s": ["int"]
+   },
+   "v": 1
+  },
   "lesson.recorded": {
    "fields": {
     "dedupe": ["dict"],

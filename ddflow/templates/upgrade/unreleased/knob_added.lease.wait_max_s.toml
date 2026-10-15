@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.wait_max_s"
+new = "600"
+why = "Seconds a refused claim or widening may wait while others wait for files in its own lease, before it is told to release them or report a cycle; 0 never tells it."
+impact = "additive"

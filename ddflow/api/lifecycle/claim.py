@@ -19,6 +19,7 @@ from ...services import choices as CHO
 from ...services import flow as FS
 from ...services import leases as L
 from ...services import ports as PT
+from ...services import waiting as WG
 from ...services import waits as WT
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
@@ -200,6 +201,7 @@ def claim(
     called_from: Path | None = None,
     resources: str = "",
     agent: str = "",
+    queue: bool = False,
 ) -> O.Outcome:
     """Acquire a lease and (optionally) bind a worktree. Exit 3 if refused.
 
@@ -236,8 +238,10 @@ def claim(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
     if early is not None:
+        if early.data.get("queued_behind"):  # in line behind a waiter: that is a wait too
+            _record_waiting(log, cfg, item, want, queue)
         return early
-    lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources)
+    lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources, queue)
     if isinstance(lz, O.Outcome):
         return lz
 
@@ -294,7 +298,9 @@ def _claimed(cfg, st, item: str, lz, bound: _Bound, port, target_item, stands: P
     )
 
 
-def _acquire(repo: Path, log, cfg, st, item: str, want, prior, note, force, resources):
+def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
+    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False
+):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
         return L.acquire(
@@ -326,11 +332,29 @@ def _acquire(repo: Path, log, cfg, st, item: str, want, prior, note, force, reso
             # asking a person. None of the three is needed when the block is a live
             # holder: `wait` wakes it when that holder lets go. Not for an EXPIRED lease,
             # which `wait` refuses at once -- that one is `recover`'s.
+            reason += _record_waiting(log, cfg, item, want, queue)
             reason += (
                 f"\n\nOr `ddflow wait --item {item}`: it sleeps until {exc.holder} lets "
                 f"go and returns the moment the item can be claimed."
             )
         return O.refused("item.claimed", reason, id=item, alternatives=list(exc.alternatives or []))
+
+
+def _record_waiting(log, cfg, item: str, want, queue: bool) -> str:
+    """A claim refused for a live lease, or queued behind a waiter, is recorded as waiting (`services.waiting`): it
+    returns at once, holding nothing. The sentence it adds to the refusal."""
+    with log.transaction():
+        now = time.time()
+        st = localize(fold(log.read_all(), strict=False), log, now)
+        it = st.items.get(item)
+        if it is None:
+            return ""
+        globs = list(want if want is not None else it.globs)
+        rec = WG.register(log, cfg, st, item, log.agent_id, globs, now, queue=queue)
+    if rec is None:
+        return ""
+    who = ", ".join(f"{o['item']} ({o['holder']})" for o in rec["on"])
+    return f"\n\nRecorded: {item} is waiting for {who}."
 
 
 def _bind_tree(
@@ -455,7 +479,30 @@ def _early_refusal(
     looped = _refuse_looping(events, st, cfg, item, force)
     if looped is not None:
         return looped
+    queued = _refuse_if_queued(cfg, st, item, want, me, skip=force or held_before)
+    if queued is not None:
+        return queued
     return _refuse_if_reserved(repo, cfg, st, item, want, me, skip=force or held_before)
+
+
+def _refuse_if_queued(cfg, st, item: str, want, me: str, *, skip: bool) -> O.Outcome | None:
+    """The refusal for a claim of files an earlier QUEUED waiter asked for first."""
+    it = st.items.get(item)
+    if skip or it is None:
+        return None
+    ahead = WG.queue_ahead(
+        st, cfg, item, me, list(want if want is not None else it.globs), time.time()
+    )
+    if ahead is None:
+        return None
+    return O.refused(
+        "item.claimed",
+        f"{item}: those files are queued behind {ahead.holder} ({ahead.item}), who asked for "
+        f"them first ([lease].wait_queue).",
+        id=item,
+        alternatives=[],
+        queued_behind=ahead.item,
+    )
 
 
 def _refuse_looping(events, st, cfg, item: str, force: bool) -> O.Outcome | None:

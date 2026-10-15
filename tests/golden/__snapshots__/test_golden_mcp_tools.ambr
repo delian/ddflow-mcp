@@ -405,6 +405,10 @@
           "type": "string",
           "description": "Physical resources this claim holds, e.g. 'gpu:2'; they REPLACE the item's declared ones. Refused (exit 3) when live claims already use the capacity ([schedule] resources), every holder counted."
          },
+         "queue": {
+          "type": "boolean",
+          "description": "Queue a refused request (FIFO per file)."
+         },
          "force": {
           "type": "boolean",
           "description": "Override a refusal. Legitimate only to retry after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or live lease is how two agents write one file; recorded either way."
@@ -3446,6 +3450,10 @@
          "resources": {
           "type": "string",
           "description": "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses while live claims use up the capacity ([schedule] resources). Declare for a GPU job, model server or long run. Empty clears."
+         },
+         "queue": {
+          "type": "boolean",
+          "description": "Queue a refused request (FIFO per file)."
          },
          "worktree": {
           "type": "string",

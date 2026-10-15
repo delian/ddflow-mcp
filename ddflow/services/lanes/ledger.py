@@ -7,7 +7,7 @@ arguments, so the same log and the same `now` always give the same ledger.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 import ddflow.services.lanes.states as S
@@ -17,6 +17,7 @@ from ...core.clock import epoch
 from ...core.events import Event
 from ...core.records import Item, State
 from ...core.schedule import Plan
+from .. import waiting as WG
 
 #: The event kinds that make an agent a lane.
 _LANE_KINDS = ("session.", "lease.")
@@ -52,11 +53,14 @@ class Lane:
     detail: str = ""
     ready: tuple[str, ...] = ()
     stalls: tuple[Stall, ...] = field(default=())
+    #: Its standing `lease.waiting` records: "<item> waits for <held item> (<holder>)".
+    waits: tuple[str, ...] = ()
 
     def as_dict(self, now: float) -> dict[str, Any]:
         d = asdict(self)
         d["stalls"] = [s.as_dict() for s in self.stalls]
         d["ready"] = list(self.ready)
+        d["waits"] = list(self.waits)
         d["for_s"] = max(0, int(now - self.since)) if self.since else 0
         d["heartbeat_age_s"] = max(0, int(now - self.heartbeat)) if self.heartbeat else None
         return d
@@ -206,6 +210,17 @@ def _with_session(lane: Lane, f: _Facts, st: State) -> Lane:
     )
 
 
+def _with_waits(lane: Lane, st: State, cfg: Config, now: float) -> Lane:
+    """``lane`` with the files it waits for (`services.waiting`), if it does."""
+    mine = tuple(
+        f"{w['item']} waits for "
+        + ", ".join(f"{o['item']} ({o['holder']})" for o in w["waiting_on"])
+        for w in WG.rows(st, cfg, now)
+        if w["agent"] == lane.name
+    )
+    return replace(lane, waits=mine) if mine else lane
+
+
 def build(events: Sequence[Event], st: State, cfg: Config, now: float, plan: Plan) -> list[Lane]:
     """Every lane active inside ``cfg.lanes.window_s`` (or holding a live lease), by name."""
     horizon = now - cfg.lanes.window_s
@@ -216,7 +231,7 @@ def build(events: Sequence[Event], st: State, cfg: Config, now: float, plan: Pla
         held = _held(st, name)
         live = bool(held and held.lease and held.lease.live(now, cfg.lease.grace_s))
         if live or epoch(f.last_ts) >= horizon:
-            lanes.append(_lane(name, f, st, cfg, now, plan))
+            lanes.append(_with_waits(_lane(name, f, st, cfg, now, plan), st, cfg, now))
     return sorted(lanes, key=lambda ln: ln.name)
 
 

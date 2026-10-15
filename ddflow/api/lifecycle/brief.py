@@ -25,6 +25,7 @@ from ...services import skills as SK
 from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
+from ...services import waiting as WG
 from ...services.export import select as export_select
 from ...services.guidance import inject as GI
 from ...services.guidance.kinds import unreconciled_with
@@ -52,6 +53,21 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
         + "\n\nFirst come, first served: the oldest gets the files the moment you let go. "
         "Claim when you are ready to edit; do not hold file globs while only gates, "
         "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
+    )
+
+
+def _waits_block(st, cfg) -> str:
+    """The standing `lease.waiting` records (who waits for whom), "" when none."""
+    waits = WG.rows(st, cfg, time.time())
+    if not waits:
+        return ""
+    return (
+        "\n\n## Waiting for files\n\n"
+        + "\n".join(f"- {WG.line(w)}" for w in waits)
+        + (
+            "\n\nDo not poll and do not hold files you do not need: a waiter that cannot get "
+            "its files releases the globs others wait for, or reports a cycle."
+        )
     )
 
 
@@ -291,6 +307,7 @@ def brief(
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
+    text += _waits_block(st, cfg)
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line

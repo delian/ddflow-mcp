@@ -336,6 +336,7 @@ COMMANDS: tuple[Command, ...] = (
                 line=a.get("line"),
                 resources=_list_or_none(a, "resources"),
                 worktree=a.get("worktree"),
+                queue=bool(a.get("queue")),
             ),
             agent=agent,
         ),
@@ -369,6 +370,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
             ),
             Param(
+                "queue",
+                type="boolean",
+                help="Queue a refused request (FIFO per file).",
+                cli_help="keep a refused --globs widening in the first-in-first-out line for its files",
+            ),
+            Param(
                 "worktree",
                 help="Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch.",
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
@@ -384,6 +391,7 @@ COMMANDS: tuple[Command, ...] = (
             "priority",
             "line",
             "resources",
+            "queue",
             "worktree",
         ),
     ),

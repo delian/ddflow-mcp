@@ -16,6 +16,7 @@ from ...infra.log import EventLog
 from ...services import gates as G
 from ...services import leases as L
 from ...services import upgrade_check as UC
+from ...services import waiting as WG
 from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
 from .._base import _load
@@ -200,6 +201,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     contested = [L.contest_row(st, cfg, i) for i in L.contested_items(st)]
     if contested:
         data["contested"] = contested
+    waits = WG.rows(st, cfg, time.time())
+    if waits:
+        data["waiting"] = waits  # who is refused which files, and by whom (no polling)
     if taken:
         data["taken_over"] = [
             {"id": i, "holder": holder, "taken_over_by": by}
@@ -239,6 +243,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "blocked": blocked,
         "taken_over": {i: by for i, (_holder, by) in taken.items()},
         "contested": contested,
+        "waiting": [WG.line(w) for w in waits],
         "recoverable": rec,
         "findings": findings,
         "hours": hours,

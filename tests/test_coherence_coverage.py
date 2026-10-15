@@ -153,6 +153,8 @@ EXEMPT: dict[str, str] = {
         "a person's approval of a digest, or a single-use approval spent: no authored "
         "text to compare (services.approval)",
     ),
+    "lease.waiting": "a refused claim or widening's own record of who waits for which files "
+    "(services.waiting): globs and ids, no authored text",
     **dict.fromkeys(
         ("ask.requested", "ask.answered", "ask.withdrawn", "ask.expired"),
         "a question or approval put to a person and its outcome: the asker's text is "
