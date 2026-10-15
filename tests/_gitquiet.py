@@ -7,7 +7,9 @@ remote's `objects/` directory file by file, and a lock file that disappears betw
 listing and the copy ends the clone with ``fatal: failed to copy file to
 .../objects/maintenance.lock: No such file or directory`` (seen once in the operator's pre-push
 run, 11763 passed and 1 setup error; the test passes alone). A test repository never needs
-maintenance, so it is switched off for every git process the suite starts.
+maintenance, so it is switched off for every git process that inherits the suite's environment
+(a test that builds its own ``env=`` mapping without ``os.environ`` is not covered; copy from
+``os.environ`` or call ``quiet_git`` on the mapping).
 
 Uses ``GIT_CONFIG_COUNT`` (git 2.31+), appended after any entries the environment already
 carries so a developer's own settings are kept.
