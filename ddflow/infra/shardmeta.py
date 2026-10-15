@@ -121,4 +121,3 @@ class ShardMeta:
         self._rows[name] = row
         with contextlib.suppress(Exception):
             self._store.write(name + ".json", row, schema=LAYOUT, derived=True)
-

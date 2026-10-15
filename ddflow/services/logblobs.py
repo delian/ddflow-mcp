@@ -46,7 +46,9 @@ def full(evidence: Any, root: Path | str | None = None) -> Any:
             got = fetch(store, ref)
             if not isinstance(got, B.Unavailable):
                 return got
-            if "missing" not in got:  # altered or unreadable outranks missing: keep the tamper signal
+            if (
+                "missing" not in got
+            ):  # altered or unreadable outranks missing: keep the tamper signal
                 worst = got
         return worst
 

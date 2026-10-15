@@ -1353,9 +1353,7 @@ class EventLog:
         meta = self._shard_meta()
         if meta is not None:
             return meta.facts(self.shards(), lambda p: self._read_shard(p)[0])[0]
-        return max(
-            (e.lamport for p in self.shards() for e in self._read_shard(p)[0]), default=0
-        )
+        return max((e.lamport for p in self.shards() for e in self._read_shard(p)[0]), default=0)
 
     def clone_id(self, *, create: bool = True) -> str:
         """This clone's id (`.ddflow/local/clone-id`), "" when the project is not adopted.

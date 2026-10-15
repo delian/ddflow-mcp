@@ -52,6 +52,7 @@ def test_fold_is_byte_identical_to_the_asdict_claim_on_a_contested_log(any_log, 
     and contests, on a generated log and on this repository's own log when it has one."""
     from ddflow.core import records
     from ddflow.core.handlers import leases as H
+
     events = any_log.read_all()
     now = repr(fold(events, strict=False).items)
     with monkeypatch.context() as m:
@@ -175,6 +176,8 @@ def test_a_busy_workload_writes_a_fraction_of_its_renewals(tmp_path):
     assert before / len(events) > 0.4
     assert share(120) < 0.35
     assert share(900) < 0.10
+
+
 def test_quiet_renewal_never_for_a_foreign_or_expired_lease():
     lease = Lease("a", 100.0, 100.0, 1800, clone="other")
     assert not quiet_renewal(lease, 110.0, 300, mine="me")
@@ -200,9 +203,17 @@ def test_the_window_is_never_wider_than_the_heartbeat():
 def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(any_log, monkeypatch):
     """A renewal on an item with no contest and nothing displaced skips the claim-window
     pass; the fold is the same as when the pass always runs (a contested log included)."""
+
     # simplest faithful oracle: the original handler body, kept here verbatim
     def original(st, ev):
-        from ddflow.core.handlers.leases import _clashing, _join, _key, _known, _late_renewal, _widen
+        from ddflow.core.handlers.leases import (
+            _clashing,
+            _join,
+            _key,
+            _known,
+            _late_renewal,
+            _widen,
+        )
         from ddflow.core.records import _claim
 
         it = st.items.get(ev.subject)
@@ -259,13 +270,18 @@ from ddflow.core.events import Event  # noqa: E402
 
 def _random_lease_log(seed: int) -> list[Event]:
     rng = random.Random(seed)
-    evs, lam = [Event("task.added", "T", {"title": "t"}, agent="a", lamport=1, ts="2026-10-01T00:00:00Z")], 1
+    evs, lam = (
+        [Event("task.added", "T", {"title": "t"}, agent="a", lamport=1, ts="2026-10-01T00:00:00Z")],
+        1,
+    )
     holders = ["a", "b", "c"]
     acquired: list[str] = []
     for _ in range(rng.randint(5, 40)):
         lam += 1
         h, at = rng.choice(holders), rng.uniform(0, 4000)
-        kind = rng.choice(["lease.acquired", "lease.renewed", "lease.renewed", "lease.released", "lease.expired"])
+        kind = rng.choice(
+            ["lease.acquired", "lease.renewed", "lease.renewed", "lease.released", "lease.expired"]
+        )
         data: dict = {"holder": h, "at": at, "ttl_s": rng.choice([300, 1800])}
         if kind == "lease.released" and acquired:
             data["event"] = rng.choice(acquired)
@@ -321,6 +337,7 @@ def test_shardmeta_facts_equal_the_full_stamp_facts(any_log):
     full = stamp_facts(any_log.read_all(), "probe", "0.2.3", 1)
     cached = stamp_facts(any_log._stamp_events(), "probe", "0.2.3", 1)
     cached2 = stamp_facts(any_log._stamp_events(), "probe", "0.2.3", 1)  # from the records
+
     # who stamped a version two agents both stamped depends on read order (cosmetic, already so)
     def same(f):
         return {k: v for k, v in vars(f).items() if k not in ("highest_by", "format_by")}
@@ -352,8 +369,18 @@ def test_an_unreadable_prior_finding_stops_a_chunk_rerun(repo):
 
     log = EventLog(repo, "a", log_cfg=LogConfig(evidence_blobs=True))
     log.append("task.added", "T1", {"title": "t", "globs": ["a.py"]})
-    ev = log.append("gate.failed", "T1", {"gate": "critic", "evidence": {
-        "chunk_findings": [{"detail": "d" * 3000, "digest": "x"}], "diff_sha": "s", "reviewed": [1]}})
+    ev = log.append(
+        "gate.failed",
+        "T1",
+        {
+            "gate": "critic",
+            "evidence": {
+                "chunk_findings": [{"detail": "d" * 3000, "digest": "x"}],
+                "diff_sha": "s",
+                "reviewed": [1],
+            },
+        },
+    )
     BS.BlobStore(repo).remove(ev.data["evidence"]["chunk_findings"]["$blob"])
     BS._KNOWN_ROOTS.clear()
     BS.remember(repo)

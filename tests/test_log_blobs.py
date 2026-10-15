@@ -36,13 +36,17 @@ BIG = [{"chunk": 1, "detail": "finding " * 400, "digest": "d1", "title": "t"}]
 
 def _gate(log: EventLog, kind="gate.failed", **ev):
     log.append("task.added", "T1", {"title": "t", "globs": ["a.py"]})
-    return log.append(kind, "T1", {"gate": "critic", "reason": "r", "evidence": {"status": "REVIEWED", **ev}})
+    return log.append(
+        kind, "T1", {"gate": "critic", "reason": "r", "evidence": {"status": "REVIEWED", **ev}}
+    )
 
 
 def test_big_evidence_leaves_the_shard_and_reads_back(repo):
     log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, chunk_findings=BIG, tail="x" * 5000)
-    assert B.is_stub(ev.data["evidence"]["chunk_findings"]) and B.is_stub(ev.data["evidence"]["tail"])
+    assert B.is_stub(ev.data["evidence"]["chunk_findings"]) and B.is_stub(
+        ev.data["evidence"]["tail"]
+    )
     assert ev.data["evidence"]["status"] == "REVIEWED"  # small keys stay
     shard = (repo / ".ddflow" / "events" / "a.jsonl").read_text()
     assert "finding finding" not in shard and "xxxxxxxx" not in shard
@@ -60,8 +64,12 @@ def test_small_values_and_a_disabled_knob_stay_inline(repo):
     off = EventLog(repo, "b", log_cfg=LogConfig())
     big = off.append("gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "y" * 5000}})
     assert big.data["evidence"]["tail"] == "y" * 5000
-    keyed = EventLog(repo, "c", log_cfg=LogConfig(evidence_blobs=True, evidence_blob_keys=["extra"]))
-    ev = keyed.append("gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "z" * 5000, "extra": "q" * 5000}})
+    keyed = EventLog(
+        repo, "c", log_cfg=LogConfig(evidence_blobs=True, evidence_blob_keys=["extra"])
+    )
+    ev = keyed.append(
+        "gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "z" * 5000, "extra": "q" * 5000}}
+    )
     assert ev.data["evidence"]["tail"] == "z" * 5000 and B.is_stub(ev.data["evidence"]["extra"])
 
 
@@ -97,7 +105,12 @@ def test_triage_counts_read_the_blob_and_hold_when_it_is_gone(repo):
     log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, chunk_findings=BIG)
     it = fold(log.read_all(), strict=False).items["T1"]
-    assert triage_counts(it, "critic") == {"findings": 1, "refuted": 0, "confirmed": 0, "untriaged": 1}
+    assert triage_counts(it, "critic") == {
+        "findings": 1,
+        "refuted": 0,
+        "confirmed": 0,
+        "untriaged": 1,
+    }
     BS.BlobStore(repo).remove(ev.data["evidence"]["chunk_findings"]["$blob"])
     gone = triage_counts(it, "critic")
     assert gone is not None and gone["untriaged"] == 1 and gone["unavailable"] == 1
@@ -120,7 +133,8 @@ def test_the_log_with_blobs_is_smaller_and_every_value_comes_back(tmp_path):
     inline_bytes = sum(len(json.dumps(e.data)) for e in src if e.kind in B.KINDS)
     stub_bytes = sum(
         len(json.dumps(BS.externalize(tmp_path / "blobs", out.log_cfg, e.kind, e.data)))
-        for e in src if e.kind in B.KINDS
+        for e in src
+        if e.kind in B.KINDS
     )
     assert stub_bytes < inline_bytes * 0.7
 
@@ -130,7 +144,9 @@ def test_the_event_commit_takes_the_blobs_with_the_shard(repo):
     _gate(log, tail="x" * 5000)
     sha, note = EC.commit_shards(repo, "test")
     assert sha, note
-    tracked = subprocess.run(["git", "-C", str(repo), "ls-files", ".ddflow/blobs"], capture_output=True, text=True).stdout
+    tracked = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", ".ddflow/blobs"], capture_output=True, text=True
+    ).stdout
     assert tracked.strip().endswith(".json")
     assert EC.uncommitted_blobs(repo) == []
 

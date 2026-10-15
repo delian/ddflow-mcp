@@ -856,7 +856,9 @@ def scan(
     it from the item's status is exactly how real work gets deleted.
     """
     now = time.time() if now is None else now
-    if state is None:  # a caller that already folded this log passes its State (one fold per command)
+    if (
+        state is None
+    ):  # a caller that already folded this log passes its State (one fold per command)
         state = _fold(log)
     # The same live-lease view the scheduler computes, so `schedule.interrupted` is
     # answering about the same moment `next` would.

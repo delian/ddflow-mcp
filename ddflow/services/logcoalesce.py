@@ -54,7 +54,11 @@ def coalesced(events: Iterable[Event], min_s: int) -> list[Event]:
         key = (ev.subject, str(ev.data.get("holder", ev.agent)))
         if ev.kind == "lease.acquired":
             last[key] = float(ev.data.get("at", 0.0))
-        elif ev.kind == "lease.renewed" and set(ev.data) <= {"at", "holder", "schema"} and "at" in ev.data:
+        elif (
+            ev.kind == "lease.renewed"
+            and set(ev.data) <= {"at", "holder", "schema"}
+            and "at" in ev.data
+        ):
             at = float(ev.data["at"])
             if key in last and 0 <= at - last[key] < min_s:
                 continue

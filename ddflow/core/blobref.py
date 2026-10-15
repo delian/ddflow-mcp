@@ -21,7 +21,9 @@ from . import digest as D
 KEY = "$blob"
 ALGO = "sha256"
 #: Event kinds whose `evidence` may carry stubs.
-KINDS = frozenset({"gate.passed", "gate.failed", "gate.partial", "gate.skipped", "gate.unavailable"})
+KINDS = frozenset(
+    {"gate.passed", "gate.failed", "gate.partial", "gate.skipped", "gate.unavailable"}
+)
 
 
 class Unavailable(str):
