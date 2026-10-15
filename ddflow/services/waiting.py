@@ -11,7 +11,7 @@ holder of the wanted glob did the same in the other direction (three agents, 45 
 * ``standing`` says which records still hold NOW: the waiter's lease unchanged and live and
   the wanted globs not yet its own (a claim wait has no lease: it lasts ``ttl_s``).
 * ``wait_for_graph`` is the data the cycle detector, the breakable lease and the auto-order
-  read: waiter item -> the items whose live leases overlap what it asked for, recomputed
+  (separate tasks, which have no reader yet) will read: waiter item -> the items whose live leases overlap what it asked for, recomputed
   against the leases standing now, so an edge vanishes the moment its holder lets go.
 * ``release_advice`` is the end of the wait: once a wait is older than `[lease].wait_max_s`,
   the waiter is told which of ITS OWN globs other agents are waiting for. It releases them
@@ -190,9 +190,9 @@ def queue_ahead(
             continue
         # Its place is kept while its files are held, and for `waiter_reservation_s` after
         # they free up (the time it needs to come back and take them).
-        edges = blockers(state, cfg, other, w["holder"], w["globs"], now)
-        if edges or now - w["at"] <= cfg.lease.waiter_reservation_s:
-            return Waiter(other, w["holder"], list(w["globs"]), w["since"], True, edges)
+        held_by = blockers(state, cfg, other, w["holder"], w["globs"], now)
+        if held_by or now - w["at"] <= cfg.lease.waiter_reservation_s:
+            return Waiter(other, w["holder"], list(w["globs"]), w["since"], True, held_by)
     return None
 
 
@@ -219,7 +219,7 @@ def register(
     ``lease`` is the lease a widening was made under (None for a claim). The wait keeps its
     ``since`` while it is the same request, and nothing is appended when nothing changed, so
     an agent that asks again every minute does not fill the log. Returns the record, or None
-    when no other lease stands in the way. Call under the log's transaction."""
+    when nothing stands in the way (no other lease, no queued waiter ahead). Call under the log's transaction."""
     on = edges(state, cfg, item_id, holder, globs, now)
     if not on:
         return None
