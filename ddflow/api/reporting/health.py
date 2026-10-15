@@ -30,6 +30,7 @@ from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
+from ...services import logblobs as LB
 from ...services import rates as RT
 from ...services import repairs as RP
 from ...services import sessions as SS
@@ -279,7 +280,7 @@ def _loose_shards(repo: Path) -> list[str]:
     loose = EC.uncommitted_shards(repo)
     if loose is None:
         return ["could not tell whether the event shards are committed: git status failed"]
-    if not loose:
+    if not (loose := [*loose, *EC.uncommitted_blobs(repo)]):
         return []
     named = ", ".join(loose[:_SHARDS_NAMED]) + (", ..." if len(loose) > _SHARDS_NAMED else "")
     return [
@@ -355,6 +356,8 @@ def doctor(
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
+    # A blob the log names that is missing or altered is evidence that cannot be shown.
+    problems.extend(f"evidence blob: {m}" for m in LB.problems(repo, events))
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
     # A KNOWN knob with a value this code does not know is an INVALID VALUE, not an
     # unknown key (Bf3566bbacd) -- asked of the config's bookkeeping, never of the entry's

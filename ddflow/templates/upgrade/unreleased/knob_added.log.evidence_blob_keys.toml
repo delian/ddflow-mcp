@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.evidence_blob_keys"
+new = '["chunk_findings", "tail", "selected_tests"]'
+why = "The evidence keys that may move out of line."
+impact = "additive"
