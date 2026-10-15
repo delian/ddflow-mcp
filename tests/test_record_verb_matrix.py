@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import pytest
 
+import ddflow.api as API
 from ddflow.api import records as R
+from ddflow.surfaces import exemptions as X
+from ddflow.surfaces.cli import build_parser
+from ddflow.surfaces.commands import viewers_lists as L
+from ddflow.surfaces.mcp import TOOLS
 from ddflow.views import record_matrix as M
 
 #: (kind, verb) pairs no surface offers. P-core-records closes these; delete an entry the
@@ -109,9 +114,13 @@ UNOFFERED: dict[str, tuple[str, ...]] = {
 CROSS_SURFACE: set[tuple[str, str, str]] = {("decision", "search", "mcp")}
 
 
+def probe() -> M.Probe:
+    return M.Probe(build_parser(), TOOLS, X.ROUTED_PATHS, API, L._LISTS, R.KINDS)
+
+
 @pytest.fixture(scope="module")
 def cells():
-    return M.matrix()
+    return M.matrix(probe())
 
 
 def _flat(table):
@@ -171,11 +180,11 @@ def test_a_declared_record_kind_offers_every_verb_it_declares_on_every_surface(c
 
 
 def test_a_removed_tool_turns_its_cell_into_a_gap():
-    probe = M.Probe()
-    assert probe.mcp_cell("bug", "add") == "ddflow_bug_found"
-    probe.tools = {k: v for k, v in probe.tools.items() if k != "ddflow_bug_found"}
-    probe.routed = {}
-    assert probe.mcp_cell("bug", "add") == ""
+    probe_ = probe()
+    assert probe_.mcp_cell("bug", "add") == "ddflow_bug_found"
+    probe_.tools = {k: v for k, v in probe_.tools.items() if k != "ddflow_bug_found"}
+    probe_.routed = {}
+    assert probe_.mcp_cell("bug", "add") == ""
 
 
 def test_hooks_reach_sessions_only(cells):
