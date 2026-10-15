@@ -2424,5 +2424,47 @@
    "additionalProperties": true
   },
   "array_schema": null
+ },
+ "ddflow_docs": {
+  "command": "docs",
+  "schema": "docs@1",
+  "shape": "object",
+  "payload": [
+   "findings",
+   "notes",
+   "checked",
+   "digest",
+   "clean",
+   "severity",
+   "blocking",
+   "diff",
+   "unavailable",
+   "not_configured"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "docs@1"
+    },
+    "findings": {},
+    "notes": {},
+    "checked": {},
+    "digest": {},
+    "clean": {},
+    "severity": {},
+    "blocking": {},
+    "diff": {},
+    "unavailable": {},
+    "not_configured": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
  }
 }
