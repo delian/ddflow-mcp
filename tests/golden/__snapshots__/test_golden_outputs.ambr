@@ -1364,6 +1364,34 @@
       lanes.brief_text_chars = 1200   [default]
           Characters kept of each text a lane brief quotes (the objective, the last
           session summary, a note), cut at a line boundary.
+      metrics.min_samples = 10   [default]
+          Fewest samples a metrics figure may rest on. Under it the figure is reported
+          unavailable (n/a, with its sample count), never as a number, and a view with
+          no figure at all exits 2 ('not enough data'). Applies to every figure, the
+          forecast and the figures other services register.
+      metrics.top = 5   [default]
+          How many rows `ddflow metrics skips` lists for the reasons given per gate
+          and for the agents who skip.
+      metrics.forecast_runs = 1000   [default]
+          Bootstrap draws behind `ddflow metrics forecast`: each draws one observed
+          duration per link of the critical path and sums them. More draws smooth the
+          range; they do not make it more certain.
+      metrics.forecast_seed = 0   [default]
+          Seed of the forecast's random draws, so the same log always gives the same
+          range. Change it to see how much the range moves with the draw.
+      metrics.forecast_low_pct = 50   [default]
+          The percentile of the forecast's simulated critical-path durations reported
+          as the likely end of the range (P50 by default).
+      metrics.forecast_high_pct = 90   [default]
+          The percentile of the forecast's simulated critical-path durations reported
+          as the cautious end of the range (P90 by default).
+      metrics.grid_step_s = 3600   [default]
+          Seconds between the instants `ddflow metrics lanes` replays the plan at (the
+          hourly grid, shared with headroom views).
+      metrics.grid_max_folds = 24   [default]
+          Most instants the grid sampler folds the log at, newest first. Each fold
+          replays the whole log up to that instant, so this caps the cost of `ddflow
+          metrics lanes`; the answer says when the cap cut the window short.
       review.max_rounds = 2   [default]
           How many cross-family review rounds one gate (rubber_duck, critic) may have
           on one item, full and delta alike (default 2; 0 = unlimited; decision
