@@ -13,7 +13,6 @@ Standard library only (and the registry): the surfaces may import it.
 
 from __future__ import annotations
 
-import io
 import json
 import sys
 from collections.abc import Iterator
@@ -69,8 +68,9 @@ def emit_json(data: Any, *, file: TextIO | None = None) -> None:
     print(dumps(tag_body(data, _COMMAND.get())), file=file)
 
 
-class _Tee(io.TextIOBase):
-    """stderr that also remembers what was written to it."""
+class _Tee:
+    """stderr that also remembers what was written to it; every other attribute (`isatty`,
+    `fileno`, `encoding`, ...) is the real stream's."""
 
     def __init__(self, inner: TextIO) -> None:
         self.inner, self.text = inner, ""
@@ -79,8 +79,8 @@ class _Tee(io.TextIOBase):
         self.text += s
         return self.inner.write(s)
 
-    def flush(self) -> None:
-        self.inner.flush()
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
 
 
 @contextmanager
