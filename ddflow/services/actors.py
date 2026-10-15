@@ -69,7 +69,7 @@ def _role(
     return cfg.agent.default_role, "default"
 
 
-def resolve_actor(  # noqa: PLR0913 -- one keyword per proof a surface can bring
+def resolve_actor(
     cfg: Config,
     agent_id: str,
     *,
