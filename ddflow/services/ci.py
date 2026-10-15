@@ -26,6 +26,7 @@ from ..core.slug import ascii_slug
 from ..infra import worktree as W
 from .cmdrunner import COULD_NOT_RUN, TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
+from .gateenv import child_env
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
 DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
@@ -177,6 +178,7 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
         p = CommandRunner().run(
             Declared(cmd, "[ci].command"),
             cwd=tree,
+            env=child_env(cfg, ci=True),
             timeout_s=cfg.ci.timeout_s,
             check_installed=False,  # checked above, before the scratch worktree was made
         )

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.scrub_env"
+new = '["DDFLOW_AGENT", "DDFLOW_SESSION_ID"]'
+why = "Variables removed from the environment a gate command and the CI command run with: the caller's identity."
+impact = "additive"

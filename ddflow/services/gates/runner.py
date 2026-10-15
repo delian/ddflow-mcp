@@ -9,11 +9,13 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from ...config import Config
 from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from ..flakes import failure_evidence
+from ..gateenv import child_env
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .evidence import diff_stat, digest, tree_identity
 from .testcmd import suggested_test_command, summary_lines
@@ -133,6 +135,7 @@ def run_command_gate(
     tick_s: float = 0,
     keep_output: Callable[[str], str] | None = None,
     log_host: str = "",
+    cfg: Any = None,
 ) -> tuple[str, dict[str, Any]]:
     """Execute a command gate. Returns (outcome, evidence).
 
@@ -179,7 +182,9 @@ def run_command_gate(
     # prefix -- and accepts the stale-cache hazard for itself, knowingly.
     with fsio.scratch_dir("ddflow-pyc-", ignore_cleanup_errors=True) as no_cache:
         full_env = {
-            **os.environ,
+            **child_env(
+                cfg if cfg is not None else Config.load(cwd)
+            ),  # minus the caller's identity (`[gates].scrub_env`)
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONPYCACHEPREFIX": str(no_cache),
             **gdef.env,
