@@ -1454,6 +1454,29 @@
           the strictest (a push never leaves event shards out); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
+      log.snapshot = True   [default]
+          Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a
+          cold one-shot command does not re-parse the whole log. It is a cache: every
+          doubt ends in parsing the log, and the log stays the only source of truth.
+          Needs `reuse_parsed`. `false` neither reads nor writes it; the environment
+          variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over
+          this setting.
+      log.snapshot_min_events = 5000   [default]
+          No snapshot is written below this many events: a cold parse is cheap there
+          and a file is not free. Lower it to snapshot a small log (tests do), raise
+          it to snapshot only a large one. 0 removes this threshold only: a snapshot
+          is still rewritten just when at least 1000 events (or a tenth of what it
+          already covers) have been added.
+      log.snapshot_stale_days = 7   [default]
+          Days a snapshot written by OTHER code (another ddflow version or parser) is
+          kept before the next write collects it. One snapshot exists per version and
+          parser, so worktrees on different versions do not overwrite each other's;
+          this bounds how long an abandoned one stays.
+      log.snapshot_touch_s = 86400   [default]
+          A snapshot in use is marked as used (its modification time refreshed) at
+          most this often, in seconds, so a long-lived reader's snapshot is not
+          collected as abandoned by a sibling checkout on other code. 0 refreshes it
+          on every read.
       upgrade.skew = 'refuse'   [default]
           What happens when a ddflow OLDER than the one that last worked on this
           project's log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse`
