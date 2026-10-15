@@ -1,4 +1,4 @@
-"""The forecast and `next` agree on cycles in open work for the same fold (bug Bbbcbfc4bbb).
+"""A loop through finished work is no cycle for the forecast or `next`; a real one is named (bug Bbbcbfc4bbb).
 
 The forecast's longest chain looked for cycles over EVERY live item, finished ones too, and
 with parent-contains-child edges added; a loop that ran only through finished work (which
