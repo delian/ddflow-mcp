@@ -372,7 +372,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "queue",
                 type="boolean",
-                help="With `globs`: if the widening is refused for files another lease holds, keep the request in the first-in-first-out line for them ([lease].wait_queue makes it the default). Either way the refusal is recorded as waiting, returns at once and leaves your current lease as it is.",
+                help="Queue a refused request (FIFO per file).",
                 cli_help="keep a refused --globs widening in the first-in-first-out line for its files",
             ),
             Param(

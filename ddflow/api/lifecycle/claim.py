@@ -353,7 +353,8 @@ def _record_waiting(log, cfg, item: str, want, queue: bool) -> str:
         rec = WG.register(log, cfg, st, item, log.agent_id, globs, now, queue=queue)
     if rec is None:
         return ""
-    return f"\n\nRecorded: {item} is waiting for {', '.join(o['item'] for o in rec['on'])}."
+    who = ", ".join(f"{o['item']} ({o['holder']})" for o in rec["on"])
+    return f"\n\nRecorded: {item} is waiting for {who}."
 
 
 def _bind_tree(

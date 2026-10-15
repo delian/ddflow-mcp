@@ -177,7 +177,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "queue",
                 type="boolean",
-                help="If refused for files another lease holds, keep this request in the first-in-first-out line for them: a later request for the same files is refused as queued behind you. Either way the refusal is recorded as waiting and returns at once ([lease].wait_queue makes it the default).",
+                help="Queue a refused request (FIFO per file).",
                 cli_help="keep a refused claim in the first-in-first-out line for its files",
             ),
         ),
