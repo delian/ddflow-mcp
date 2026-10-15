@@ -14,6 +14,9 @@ Standard library only (and the registry): the surfaces may import it.
 from __future__ import annotations
 
 import json
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, TextIO
 
@@ -51,3 +54,41 @@ def dumps(data: Any) -> str:
 def emit_json(data: Any, *, file: TextIO | None = None) -> None:
     """Print ``data`` as a ``--json`` body (stdout unless ``file`` is given)."""
     print(dumps(tag_body(data, _COMMAND.get())), file=file)
+
+
+class _Tee:
+    """A stream that remembers whether (and, with ``keep``, what) was written to it; every
+    other attribute (`isatty`, `fileno`, `encoding`, ...) is the real stream's."""
+
+    def __init__(self, inner: TextIO, *, keep: bool) -> None:
+        self.inner, self.keep, self.text, self.wrote = inner, keep, "", False
+
+    def write(self, s: str) -> int:
+        self.wrote = self.wrote or bool(s)
+        if self.keep:
+            self.text += s
+        return self.inner.write(s)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
+
+
+@contextmanager
+def remembered_streams() -> Iterator[tuple[_Tee, _Tee]]:
+    """Run with stdout and stderr remembered: whether a run printed anything to stdout, and
+    what it said on stderr, so a refusal that said its reason only there can say it in the
+    ``--json`` body too (bug Bac9d773a44). Yields ``(stdout, stderr)``."""
+    real_out, real_err = sys.stdout, sys.stderr
+    out, err = _Tee(real_out, keep=False), _Tee(real_err, keep=True)
+    sys.stdout, sys.stderr = out, err
+    try:
+        yield out, err
+    finally:
+        sys.stdout, sys.stderr = real_out, real_err
+
+
+def refusal_body(code: int, said: str, outcome: str) -> dict[str, Any]:
+    """The body of a ``--json`` run that exited ``code`` without printing one: the reason it
+    said on stderr, led by `refusal` as every refusal body is."""
+    reason = said.strip() or f"exit {code}"
+    return {"refusal": {"reason": reason, "outcome": outcome, "exit": code}}
