@@ -10,6 +10,7 @@ from typing import Any
 from ...core import outcome as O
 from ...core.events import parse_changelog
 from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, State, fold
+from ...core.stuck import stuck_edges_to
 from ...services import cleanup as CL
 from ...services import completion as CM
 from ...services import gates as G
@@ -294,6 +295,7 @@ def abandon(
             f"{item} is already done; abandoning it would rewrite finished history. "
             f"--force if you really mean it.",
         )
+    stranded = stuck_edges_to(st, item)
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
     if it.lease:
         L.release(log, item, note=f"abandoned: {reason}")
@@ -302,6 +304,8 @@ def abandon(
         data={
             "id": item,
             "reason": reason,
+            "stranded": [i for i, _ in stranded],
+            "drop_edges": [c for _, c in stranded],
             **_dispose(repo, cfg, log, item, (called_from, shell_cwd)),
         },
     )
@@ -364,6 +368,7 @@ def remove(
             id=item,
             dependents=dependents,
         )
+    stranded = stuck_edges_to(st, item)
     if it.lease:
         L.release(log, item, note="removed from the queue")
     log.append("phase.removed" if it.kind == "phase" else "task.removed", item, {"reason": reason})
@@ -372,6 +377,8 @@ def remove(
         id=item,
         children=[],
         dependents=[],
+        stranded=[i for i, _ in stranded],
+        drop_edges=[c for _, c in stranded],
         **_dispose(repo, cfg, log, item, (called_from, shell_cwd)),
     )
 
