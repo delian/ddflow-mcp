@@ -77,6 +77,16 @@ class GateStatus:
 SETTLED_VERDICTS = ("refuted", "confirmed")  # a finding with either has been triaged
 
 
+def is_triageable(found) -> bool:
+    """True only for a non-empty list of dicts that each carry a digest (bug Bf4647f7d04):
+    strings, blob references or a mixed list are evidence, not numbered findings."""
+    return (
+        isinstance(found, list)
+        and bool(found)
+        and all(isinstance(f, dict) and f.get("digest") for f in found)
+    )
+
+
 def triage_counts(it, gate: str) -> dict[str, int] | None:
     """How the findings of ``gate``'s recorded review stand: ``{"findings", "refuted",
     "confirmed", "untriaged"}``, or None when it reported none -- or is not a `ddflow
@@ -90,7 +100,7 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
     if isinstance(found, B.Unavailable):
         # findings that cannot be read back count as one unsettled finding (the true number is unknown)
         return {"findings": 1, "refuted": 0, "confirmed": 0, "untriaged": 1, "unavailable": 1}
-    if not found or not all(f.get("digest") for f in found):
+    if not is_triageable(found):
         return None
     mine = it.triage.get(gate, {})
     verdicts = [mine.get(f["digest"], {}).get("verdict", "") for f in found]
