@@ -113,7 +113,7 @@ def test_a_long_wait_names_the_own_globs_others_wait_for(repo):
     now = time.time() + cfg.lease.wait_max_s + 5
     adv = WG.release_advice(st, cfg, "T1", now)
     assert adv and adv["release"] == ["src/a.py"] and adv["waiters"][0]["holder"] == B
-    assert "update T1 --globs" in WG.advice_text("T1", adv, ["src/a.py"])
+    assert "ddflow release T1" in WG.advice_text("T1", adv, ["src/a.py"])
     assert WG.release_advice(st, cfg, "T1", time.time()) is None  # not yet over the limit
     assert WG.waiting_for(st, cfg, "T1", time.time())[0]["item"] == "T2"
 
@@ -171,18 +171,45 @@ def test_claim_queue_flag_queues_a_refused_claim(repo):
 
 def test_asking_again_after_half_the_reservation_refreshes_the_place(repo):
     _two_holders(repo)
-    assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
-    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)
+    log = EventLog(repo, A)
     st, cfg = _state(repo), _cfg(repo)
-    w = st.waiting["T1"]
-    # B lets go long after A's first ask: A's place is still A's while it asks again.
-    later = w["at"] + cfg.lease.waiter_reservation_s * 0.9
-    assert WG._refresh_s(cfg) < later - w["at"]  # an ask at that time re-appends (refreshes `at`)
+    lease = st.items["T1"].lease
+    want = ["src/a.py", "src/b.py"]
+    first = WG.register(log, cfg, st, "T1", A, want, 1000.0, queue=True, lease=lease)
+    n = len(log.read_all())
+    half = WG._refresh_s(cfg)
+    WG.register(log, cfg, _state(repo), "T1", A, want, 1000.0 + half * 0.5, queue=True, lease=lease)
+    assert len(log.read_all()) == n  # too soon: nothing appended
+    WG.register(log, cfg, _state(repo), "T1", A, want, 1000.0 + half * 1.1, queue=True, lease=lease)
+    mine = _state(repo).waiting["T1"]
+    assert len(log.read_all()) == n + 1
+    assert mine["at"] == 1000.0 + half * 1.1 and mine["since"] == first["since"]
+
+
+def test_a_changed_request_goes_to_the_back_of_the_line(repo):
+    _two_holders(repo)
+    assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
+    run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=A)  # T1 queued for b
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/b.py", agent=A)[0] == 0
+    )
+    run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")  # T3 refused behind T1
+    st, cfg = _state(repo), _cfg(repo)
+    ahead = WG.queue_ahead(st, cfg, "T3", "agent-c", ["src/b.py"], time.time())
+    assert ahead is not None and ahead.item == "T1"
+    # T3 asks for something else, then again for b: its place is the new ask's, not the old.
+    assert WG.queue_ahead(st, cfg, "T3", "agent-c", ["src/b.py", "x.md"], time.time()).item == "T1"
+
+
+def test_the_release_advice_names_a_runnable_command(repo):
+    adv = {"waited_s": 700, "release": ["src/a.py"], "waiters": [{"holder": B, "item": "T2"}]}
+    assert "ddflow release T1" in WG.advice_text("T1", adv, ["src/a.py"])  # nothing left to keep
+    assert "--globs docs/**" in WG.advice_text("T1", adv, ["src/a.py", "docs/**"])
 
 
 def test_a_request_queued_behind_a_waiter_is_a_wait_too(repo):
-    """A cycle through a queue is still a cycle: C waits for A's lease and B is queued
-    behind C, so B has an edge to C (it is not invisible to the graph)."""
+    """C waits for A's lease and D is queued behind C: D has an edge to C, so a cycle that
+    closes through a queue is visible in the wait-for graph."""
     _two_holders(repo)
     assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
     assert (

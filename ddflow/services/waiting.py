@@ -166,12 +166,16 @@ def release_advice(state, cfg, item_id: str, now: float) -> dict[str, Any] | Non
 def advice_text(item_id: str, advice: dict[str, Any], keep: list[str]) -> str:
     """The sentence a refusal appends when the wait ran past `[lease].wait_max_s`."""
     who = ", ".join(f"{a['holder']} ({a['item']})" for a in advice["waiters"])
-    left = ",".join(g for g in keep if g not in advice["release"]) or "<the globs you keep>"
+    left = ",".join(g for g in keep if g not in advice["release"])
+    how = (
+        f"release them (`ddflow update {item_id} --globs {left}`)"
+        if left
+        else f"release the lease (`ddflow release {item_id}`), since every glob in it is wanted"
+    )
     return (
         f"\n\n{item_id} has waited {advice['waited_s']:.0f}s, and {who} wait for files YOU hold: "
-        f"{', '.join(advice['release'])}. Do not keep holding them while you wait: release "
-        f"them (`ddflow update {item_id} --globs {left}`) or report a cycle to the "
-        f"coordinator. Nothing is taken from you."
+        f"{', '.join(advice['release'])}. Do not keep holding them while you wait: {how} "
+        f"or report a cycle to the coordinator. Nothing is taken from you."
     )
 
 
@@ -182,7 +186,10 @@ def queue_ahead(
     overlap and asked first -- ahead of ``item_id`` in the FIFO -- or None."""
     held = standing(state, cfg, now)
     mine = held.get(item_id)
-    cutoff = mine["since"] if mine else float("inf")
+    # Its place is its recorded ask -- but only while it is the same ask: a changed request
+    # starts again at the back (`register` restarts `since`), so it is judged as new.
+    same = mine is not None and mine["holder"] == holder and sorted(mine["globs"]) == sorted(globs)
+    cutoff = mine["since"] if same else float("inf")
     for other, w in sorted(held.items(), key=lambda kv: (kv[1]["since"], kv[0])):
         if not w["queue"] or w["holder"] == holder or other == item_id or w["since"] >= cutoff:
             continue
@@ -194,6 +201,12 @@ def queue_ahead(
         if held_by or now - w["at"] <= cfg.lease.waiter_reservation_s:
             return Waiter(other, w["holder"], list(w["globs"]), w["since"], True, held_by)
     return None
+
+
+def _shape(on: list[dict[str, Any]]) -> list[tuple[str, bool]]:
+    """The edges as a change is judged: which item, and whether it is a held lease or a place
+    in the queue."""
+    return [(o["item"], o.get("pair", ["", ""])[0] == "queue") for o in on]
 
 
 def _refresh_s(cfg) -> float:
@@ -246,7 +259,7 @@ def register(
     if (
         same
         and prior["queue"] == queue
-        and [o["item"] for o in prior["on"]] == [o["item"] for o in on]
+        and _shape(prior["on"]) == _shape(on)
         and now - prior["at"] < _refresh_s(cfg)
     ):
         return prior
