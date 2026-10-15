@@ -76,7 +76,9 @@ def test_a_stale_view_is_refused(adopted):
     """The ordinary way a view goes wrong: rendered, then the queue moved on."""
     run_cli(adopted, "render")
     run_cli(adopted, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
-    r = _commit(adopted, VIEW)
+    # The moved log is committed beside the view; a view that disagrees with the log
+    # committed with it is refused (events only on disk are tests/test_generated_views_race.py).
+    r = _commit(adopted, VIEW, ".ddflow/events")
     assert r.returncode != 0, "a view that no longer matches the log was committed"
 
 
@@ -335,18 +337,15 @@ def test_the_log_probe_survives_a_non_utf8_shard_name(adopted):
     """The log probe's own decode, pinned directly: the first test of this decode only
     called `check_views` with no view staged, which returns before the probe runs, so it
     passed with this call site reverted (roborev on e8543f9). Here the log dir is
-    tracked, a view IS staged, and an untracked shard has a non-UTF-8 name."""
+    tracked and an untracked shard has a non-UTF-8 name."""
     import os
 
     from ddflow.services import enforce as E
 
-    run_cli(adopted, "render")
-    _git(adopted, "add", VIEW)
     odd = adopted / ".ddflow" / "events" / os.fsdecode(b"caf\xe9.jsonl")
     odd.write_text("")
-    code, msg = E.check_views(adopted)
-    assert code == 1, msg
-    assert "caf" in msg and "could not report" not in msg, msg
+    probe = E._unstaged_under(adopted, adopted / ".ddflow" / "events")
+    assert not probe.failed and any("caf" in p for p in probe.paths), probe
 
 
 def test_git_paths_puts_z_before_the_pathspec(tmp_path):
