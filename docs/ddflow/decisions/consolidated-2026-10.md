@@ -1,6 +1,6 @@
 # Consolidated decisions (2026-10-15)
 
-Index for item `RH-merge-decisions`. Authority: the operator's D-roadmap-review item 8 (pure merges may be made as superseding records without asking per group) and item 4 (the order notes; the three proposed decisions accepted as they stand). The event log is the source of truth: `ddflow decision show <id>`. Each new record quotes its sources' text unchanged, section by section, under the source id in brackets; each old record is superseded (never deleted), so `ddflow decision show <old>` and a replay still give its text.
+Authority, by group. D-roadmap-review item 8 (pure merges may be made as superseding records without asking per group) names export, enum fallback, skills, perf with no-duckdb and the MCP surface. The operator's instruction of 2026-10-15 to this item adds quotas with governor, and the seven ordering notes as ONE current decision (item 4). The upgrade record is not a pure merge: it is the one decision the operator asked for to state D-roadmap-review item 2, and it is the meaning-changing synthesis item 8 would send back as a question, written on that explicit instruction. Item 4 also has the three proposed decisions accepted as they stand. The event log is the source of truth: `ddflow decision show <id>`. Each new record quotes its sources' text unchanged, section by section, under the source id in brackets; each old record is superseded (never deleted), so `ddflow decision show <old>` and a replay still give its text.
 
 | New record | Replaces | Decided by |
 | --- | --- | --- |
