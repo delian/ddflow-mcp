@@ -33,6 +33,7 @@ from ..core import textsim
 from ..infra.store import Store, similar_records
 from ..services import searchcore as SC
 from ..services import similar as sim
+from ._dedupe_reason import reason as _reason
 
 #: What an add can be answered with. ``new``: not a duplicate, record it. The others point
 #: at an existing record (``Answer.target``).
@@ -234,24 +235,6 @@ def rows(st, matcher, cands, text: str, *, grace_s: int = 0) -> list[dict[str, A
     return out
 
 
-def _reason(rows_: list[dict[str, Any]]) -> str:
-    lines = ["refused: possible duplicate. It reads like:"]
-    for r in rows_:
-        why = ", ".join(r["flags"]) or ", ".join(r["shared"])
-        lines.append(
-            f"  {r['id']} ({r['kind']}, {r['state']}, score {r['score']:.2f}): "
-            f"{r['title'][:100]}" + (f"  [{why}]" if why else "")
-        )
-    top = rows_[0]["id"]
-    lines.append(
-        f"Answer it: new (it is a different record), extends {top} / duplicate_of {top} "
-        f"(the same thing -- added to {top} while it is open and unclaimed, else filed as "
-        f"a new record linked to it), or related {top} (linked both ways). A bug that a "
-        f"task will fix is filed against that task (--item)."
-    )
-    return "\n".join(lines)
-
-
 def options(rows_: list[dict[str, Any]]) -> list[dict[str, str]]:
     """The answers offered with a refusal: ``new``, then each relation to each candidate."""
     out = [{"relation": "new", "target": ""}]
@@ -346,7 +329,7 @@ def check_add(
         if exact is None or exact.kind != rec.kind:
             out.refusal = O.refused(
                 rec.event_kind,
-                _reason(shown),
+                _reason(shown, cfg.dedupe.show_floor),
                 id=rec.rid,
                 candidates=shown,
                 options=options(shown),
