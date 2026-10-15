@@ -477,6 +477,19 @@
   
   '''
 # ---
+# name: test_help[ddflow docs]
+  '''
+  usage: ddflow docs [-h] [--diff BASE] [{check}]
+  
+  positional arguments:
+    {check}      check (default)
+  
+  options:
+    -h, --help   show this help message and exit
+    --diff BASE  check: only the extracted surface added since this git base
+  
+  '''
+# ---
 # name: test_help[ddflow doctor]
   '''
   usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events]
@@ -2453,13 +2466,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2527,6 +2540,7 @@
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
       lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
+      docs                the mechanical documentation check: `docs check [--diff BASE]`
       reviewers           find, list and test cross-family reviewers
       review              run the configured reviewer(s) over an item's diff
       adopt               install ddflow into this project for one or more agents
@@ -2596,6 +2610,7 @@
     'ddflow decision search',
     'ddflow decision show',
     'ddflow decision supersede',
+    'ddflow docs',
     'ddflow doctor',
     'ddflow dupes',
     'ddflow export',

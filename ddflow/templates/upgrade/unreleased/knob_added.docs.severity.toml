@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.severity"
+new = '"warn"'
+why = "What a finding from `ddflow docs check` costs: warn, block or off."
+impact = "additive"
