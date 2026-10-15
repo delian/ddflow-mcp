@@ -44,7 +44,7 @@ def render_ledger(lanes: Sequence[Lane], now: float) -> str:
     for ln in lanes:
         if ln.detail and ln.state not in ("working",):
             lines.append(f"  {safe(ln.name)}: {safe(ln.detail)}")
-        lines += [f"  {safe(ln.name)}: {safe(w)}" for ln in lanes for w in ln.waits]
+        lines += [f"  {safe(ln.name)}: {safe(w)}" for w in ln.waits]
     return "\n".join(lines) if lanes else "no lanes active in the window"
 
 

@@ -185,6 +185,12 @@ def queue_ahead(
     return None
 
 
+def _refresh_s(cfg) -> float:
+    """How old a record may grow before asking again re-appends it, so ``at`` (the last
+    ask, which a queued place is measured from) stays within half the place's lifetime."""
+    return (cfg.lease.waiter_reservation_s or cfg.lease.ttl_s) / 2
+
+
 def register(
     log,
     cfg,
@@ -230,7 +236,7 @@ def register(
         same
         and prior["queue"] == queue
         and [o["item"] for o in prior["on"]] == [o["item"] for o in on]
-        and (lease_event or now - prior["at"] < cfg.lease.ttl_s / 2)
+        and now - prior["at"] < _refresh_s(cfg)
     ):
         return prior
     log.append("lease.waiting", item_id, row)
