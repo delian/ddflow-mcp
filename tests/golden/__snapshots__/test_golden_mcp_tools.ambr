@@ -774,6 +774,30 @@
        }
       }
     ''',
+    'ddflow_docs': '''
+      {
+       "name": "ddflow_docs",
+       "description": "Documentation, read-only. verb=check: do the names, flags, links and anchors the documents ([docs].check_paths) mention exist? Findings, what was checked, a digest. diff=BASE keeps only surface the diff since BASE added. Exit 1 findings, 2 could not run (never a clean report), 3 refused.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "verb": {
+          "type": "string",
+          "description": "check (default)."
+         },
+         "diff": {
+          "type": "string",
+          "description": "check: a git base; report only the extracted surface added since it."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_doctor': '''
       {
        "name": "ddflow_doctor",
@@ -3803,6 +3827,7 @@
     'ddflow_decision_list',
     'ddflow_decision_show',
     'ddflow_decision_supersede',
+    'ddflow_docs',
     'ddflow_doctor',
     'ddflow_dupes',
     'ddflow_export',

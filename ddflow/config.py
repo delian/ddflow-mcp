@@ -52,6 +52,7 @@ from .config_sections.dedupe import (  # noqa: F401 -- re-exported, as before th
     DedupeConfig,
 )
 from .config_sections.docs import (  # noqa: F401
+    DOCS_LINK_MODES,
     EXTRACT_KINDS,
     DocsConfig,
 )

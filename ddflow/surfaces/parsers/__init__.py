@@ -8,6 +8,7 @@ the subcommands, so it is part of the interface.
 from __future__ import annotations
 
 from . import (
+    docs,
     flow,
     jobs,
     knowledge,
@@ -36,6 +37,7 @@ REGISTER_ORDER = (
     reporting.register,
     maintenance.register,
     lanes.register,
+    docs.register,
     review.register,
     workflow.register,
 )
