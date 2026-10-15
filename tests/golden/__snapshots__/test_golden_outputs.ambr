@@ -1982,6 +1982,60 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      docs.severity = 'warn'   [default]
+          What a finding from `ddflow docs check` costs. 'warn' (default) reports it
+          and leaves the docs gate skippable with a reason. 'block' keeps the docs
+          gate from being recorded passed while a finding stands. 'off' runs nothing
+          and the command says so (exit 2). A finding is printed at every severity but
+          off: this says what it costs, not whether it is seen. A check that could not
+          run is `unavailable` at every severity, never a pass. An unrecognised value
+          in a config file is warned about, reported by `doctor` and falls back to
+          'warn', the strictest (reports without blocking, so a typo cannot start
+          refusing merges); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      docs.check_links = 'local'   [default]
+          Which links `ddflow docs check` follows. 'off': none (no link or anchor
+          finding). 'local' (default): relative targets and `#anchors`, resolved
+          against the tree. 'network': also http(s) links, each fetched once with a
+          read-only GET (opt-in; CI flakiness is why it is not the default). A remote
+          link that cannot be reached because the network is down makes the check
+          `unavailable`, never a pass; one the server answers 404 or 410 is a `link`
+          finding. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'local', the strictest (follows only links inside
+          the tree, so a typo never reaches out); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
+      docs.link_timeout_s = 10   [default]
+          Seconds one remote link may take to answer when `check_links` is 'network'
+          before it counts as unreachable (the check is then `unavailable`, not
+          failed).
+      docs.check_paths = []   [default]
+          The documents `ddflow docs check` reads, as repo-relative globs: an explicit
+          allowlist (README plus the docs directories a project keeps true), because a
+          whole-tree check on a project with history drowns in findings about pages
+          that were accurate when written. Empty (default): the files matching
+          `[enforce].doc_globs` minus `[enforce].doc_exclude` and the generated export
+          targets, so what counts as documentation is written once.
+      docs.lint_command = ''   [default]
+          A markdown lint or formatter to run as part of the check, as a shell line in
+          the repository root (e.g. `npx markdownlint-cli2 "**/*.md"`). Exit 0 passes;
+          any other exit is a `lint` finding carrying its output. Empty (default):
+          none, and the report lists the lint as `unavailable` rather than passing it.
+          A line that cannot run (command not found, timed out) is `unavailable` too
+          and keeps a clean report from reading as clean. ddflow ships no lint and
+          adds no dependency: the project brings the command. Bounded by
+          `command_timeout_s`.
+      docs.ignore_paths = []   [default]
+          Globs of path-like references in the documents that are not worth even a
+          note: runtime paths, generated files, illustrative examples. Empty
+          (default). Path-like inline code is only 10-30% precise, so a note carries
+          this list instead of failing anyone.
+      docs.ignore_names = []   [default]
+          fnmatch patterns of identifiers and flags ANOTHER tool owns, which this
+          project's docs may name without the code having them (`ddflow_*` in the
+          agent-instructions page of a project that merely uses ddflow). Empty
+          (default); a name matched here is never a finding.
       docs.extract = []   [default]
           Extractors that list the public surface the code offers, so the check can
           say which of it no document mentions: `[[docs.extract]]` blocks with `kind`
@@ -2012,8 +2066,8 @@
           package.json. A command that cannot run (missing, timing out) is a note,
           never a pass.
       docs.command_timeout_s = 20   [default]
-          Seconds one `--help` walk step or one count command may run before the check
-          records it as not run (a note) instead of waiting.
+          Seconds one `--help` walk step, one count command or the `lint_command` may
+          run before the check records it as not run (a note) instead of waiting.
   
     ''',
   )

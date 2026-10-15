@@ -18,6 +18,7 @@ PAYLOAD = (
     "notes",
     "checked",
     "digest",
+    "clean",
     "severity",
     "blocking",
     "diff",

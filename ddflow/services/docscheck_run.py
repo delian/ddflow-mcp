@@ -38,14 +38,21 @@ class Check:
     not_configured: dict[str, str] = field(default_factory=dict)
 
     @property
+    def clean(self) -> bool:
+        """No finding AND everything asked for ran: an unavailable check is never clean."""
+        return self.report.clean and not self.unavailable
+
+    @property
     def blocking(self) -> bool:
-        """A finding stands and ``severity`` is 'block': the docs gate may not pass."""
-        return self.severity == "block" and not self.report.clean
+        """``severity`` is 'block' and the check is not clean (a finding stands, or something
+        asked for did not run): the docs gate may not pass."""
+        return self.severity == "block" and not self.clean
 
     def as_dict(self) -> dict:
         return {
             **self.report.as_dict(),
             "severity": self.severity,
+            "clean": self.clean,
             "blocking": self.blocking,
             "diff": self.diff,
             "unavailable": dict(sorted(self.unavailable.items())),
@@ -74,8 +81,11 @@ def _documents(repo: Path, cfg: Config) -> list[str] | None:
     return [p for p in _tree(repo) if any(r.fullmatch(p) for r in rx)]
 
 
-def _lint(repo: Path, cfg: Config, report: Report, check: Check) -> None:
+def _lint(repo: Path, cfg: Config, report: Report, check: Check, run_commands: bool) -> None:
     line = cfg.docs.lint_command.strip()
+    if line and not run_commands:
+        check.unavailable["lint"] = f"`{line}` not run: commands are off for this check"
+        return
     if not line:
         check.not_configured["lint"] = "no [docs].lint_command is configured"
         return
@@ -132,6 +142,6 @@ def run_check(repo: Path | str, cfg: Config, *, diff: str = "", run_commands: bo
     if diff:
         docs = set(report.checked["docs"])
         report.findings = restrict(report.findings, docs, added_lines(root, diff))
-    _lint(root, cfg, report, check)
+    _lint(root, cfg, report, check, run_commands)
     _seal(check)
     return check
