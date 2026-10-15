@@ -135,8 +135,12 @@ def test_the_event_commit_takes_the_blobs_with_the_shard(repo):
     assert EC.uncommitted_blobs(repo) == []
 
 
-def test_the_capability_is_recorded_with_the_first_gate_write(repo):
+def test_the_capability_is_recorded_with_the_first_gate_write(repo, monkeypatch):
+    import ddflow
     from ddflow.core import events as E
+
+    # only the release that ships a capability announces it (B27842cfecd)
+    monkeypatch.setattr(ddflow, "__version__", E.CAPABILITIES[E.CAP_EVIDENCE_BLOBS].since)
 
     log = EventLog(repo, "a", log_cfg=ON)
     _gate(log, tail="x" * 5000)
