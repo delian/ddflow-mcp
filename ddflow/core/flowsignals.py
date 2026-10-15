@@ -100,18 +100,12 @@ def _outcome(ev: Event) -> str:
     return _OUTCOME_OF.get(ev.kind, "")
 
 
-def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, float, float]]:
-    """(start, end, seconds per wave) of every review `ddflow review` recorded: an outcome
-    of a review gate whose evidence carries the command's own ``elapsed_s``. A later
-    `gate record` that carries the same review's evidence along is not a second sample.
-    Nothing that ended after ``now`` (a skewed clock) is a sample or counts as in flight."""
-    out = []
-    seen: set[tuple] = set()
-    # Filter BEFORE sorting: parsing the timestamp of every event of the log to order the
-    # few hundred reviews among them was most of this function's cost, and an event that
-    # is not a review outcome never touches `seen` or `out`, so the order of the rest is
-    # the same (B-gap-log-scale).
-    reviews = [
+def _review_outcomes(events: Sequence[Event]) -> list[Event]:
+    """The outcomes of a review gate that carry evidence. Filtered before `_review_samples`
+    sorts: parsing the timestamp of every event of the log to order the few hundred reviews
+    among them was most of its cost, and an event that is not a review outcome never touches
+    its `seen` or `out`, so the order of the rest is the same (B-gap-log-scale)."""
+    return [
         ev
         for ev in events
         if _gate(ev) in PR.REVIEW_GATES
@@ -119,6 +113,16 @@ def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, fl
         and isinstance(ev.data, dict)
         and isinstance(ev.data.get("evidence"), dict)
     ]
+
+
+def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, float, float]]:
+    """(start, end, seconds per wave) of every review `ddflow review` recorded: an outcome
+    of a review gate whose evidence carries the command's own ``elapsed_s``. A later
+    `gate record` that carries the same review's evidence along is not a second sample.
+    Nothing that ended after ``now`` (a skewed clock) is a sample or counts as in flight."""
+    out = []
+    seen: set[tuple] = set()
+    reviews = _review_outcomes(events)  # filtered BEFORE sorting (see there)
     for ev in sorted(reviews, key=lambda e: (PR.epoch(e.ts), e.lamport)):
         evidence = ev.data["evidence"]
         took, chunks = evidence.get("elapsed_s"), evidence.get("chunks_total") or 1

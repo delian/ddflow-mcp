@@ -13,7 +13,9 @@ import random
 from pathlib import Path
 from typing import Any
 
+from ..config import LogConfig
 from ..core.events import Event
+from ..infra.blobstore import externalize
 
 GATES = ("research", "rules", "implement", "ci", "unit_tests", "rubber_duck", "critic", "standards")
 _BASE_AT = 1_790_000_000.0
@@ -66,9 +68,6 @@ class _Writer:
                 return
             self.last_beat[subject] = data["at"]
         if self.blobs and kind.startswith("gate."):
-            from ..infra.blobstore import externalize
-            from ..config import LogConfig
-
             data = externalize(self.dir.parents[1], LogConfig(evidence_blobs=True), kind, data)
         self.lamport += 1
         self.t += dt
