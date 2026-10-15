@@ -51,3 +51,19 @@ def test_abandon_with_no_dependents_says_nothing_extra(repo):
     _seed(repo, needs="")
     code, out, _ = run_cli(repo, "abandon", "D1", "--reason", "x")
     assert code == 0 and "needs" not in out
+
+
+def test_two_gone_needs_get_one_command_that_drops_both(repo):
+    _seed(repo, needs="D1,D2")
+    run_cli(repo, "abandon", "D1", "--reason", "x")
+    _, out, _ = run_cli(repo, "--json", "abandon", "D2", "--reason", "x")
+    assert json.loads(out)["drop_edges"] == ['ddflow update T1 --needs ""']
+    text = "".join(run_cli(repo, "doctor")[1:])
+    assert 'ddflow update T1 --needs "D2"' not in text
+    assert text.count('ddflow update T1 --needs ""') == 2
+
+
+def test_a_dependent_whose_only_need_is_abandoned_is_still_warned(repo):
+    _seed(repo, needs="D1")
+    _, out, _ = run_cli(repo, "abandon", "D1", "--reason", "x")
+    assert "T1" in out and "ddflow update T1 --needs" in out
