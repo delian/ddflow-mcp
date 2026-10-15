@@ -107,3 +107,6 @@
 {"agent":"fleet-metrics","data":{"at":1792077032.8099942,"holder":"fleet-metrics"},"id":"eea7cf5e50d8fc5fe7dd60191","kind":"lease.renewed","lamport":63783,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T15:10:32.954804Z"}
 {"agent":"fleet-metrics","data":{"at":1792077226.1932352,"holder":"fleet-metrics"},"id":"eb595f82c1e11721c0f9b3340","kind":"lease.renewed","lamport":63792,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T15:13:46.344075Z"}
 {"agent":"fleet-metrics","data":{"at":1792077239.2892284,"holder":"fleet-metrics"},"id":"efd48c3fea53c99cfce82a86b","kind":"lease.renewed","lamport":63793,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T15:13:59.434314Z"}
+{"agent":"fleet-metrics","data":{"at":1792077426.3984368,"holder":"fleet-metrics"},"id":"e34bdf582156ca457435d1329","kind":"lease.renewed","lamport":63840,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T15:17:06.598931Z"}
+{"agent":"fleet-metrics","data":{"at":1792077442.9728343,"holder":"fleet-metrics"},"id":"e29bff4387067d973a8b93347","kind":"lease.renewed","lamport":63842,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T15:17:23.051450Z"}
+{"agent":"fleet-metrics","data":{"at":1792077627.727361,"holder":"fleet-metrics"},"id":"ee54afd32b51c082467cb2b3e","kind":"lease.renewed","lamport":63850,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T15:20:27.856692Z"}
