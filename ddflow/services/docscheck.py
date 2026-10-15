@@ -35,6 +35,7 @@ import posixpath
 import re
 import tomllib
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote
@@ -42,21 +43,24 @@ from urllib.parse import unquote
 from ..config import EnforceConfig
 from ..core.bookkeeping import is_state
 from ..core.digest import content_digest
-from ..core.slug import github_anchor
 from ..infra import git as G
+from .docscheck_count import check_counts
+from .docscheck_extract import Extractor, surface, undocumented
+from .docscheck_help import HelpIndex, Runner, flag_of
+from .docscheck_md import (  # noqa: F401  (anchors_of, slugify: re-exported)
+    SPAN,
+    Headings,
+    anchors_of,
+    lines,
+    slugify,
+)
+from .docscheck_types import KINDS, Finding, Report
 from .docsync import glob_regex
 
 #: Files larger than this are not scanned for names: a lockfile or a data dump is not a
 #: place a document's identifier lives, and reading it costs the second the check lacks.
 _MAX_CODE_BYTES = 1_000_000
 
-_FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
-#: A line that cannot continue a paragraph: a list item, a quote or a table row.
-_NOT_PARAGRAPH = re.compile(
-    r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\||(?:\*\s*){3,}$|(?:-\s*){3,}$|(?:_\s*){3,}$)"
-)
-_SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
-_SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 _LINK = re.compile(
     r"(?<!\\)!?\[[^\]\n]*\]\(\s*<?((?:[^()\s>]|\([^()\s]*\))+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)"
 )
@@ -65,8 +69,6 @@ _LINK = re.compile(
 _REFDEF = re.compile(
     r"""^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s<>]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$"""
 )
-_ATX = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
-_HTML_ANCHOR = re.compile(r"""<a\s[^>]*?\b(?:name|id)\s*=\s*["']([^"']+)["']""", re.I)
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
 _SNAKE = re.compile(r"_*[A-Za-z][A-Za-z0-9]*(?:_+[A-Za-z0-9]+)+")
@@ -98,48 +100,6 @@ _DOTTED_NOT_NAMES = frozenset(_EXT.split("|")) | {"com", "org", "io", "dev", "ne
 DEFAULT_DOC_GLOBS = tuple(EnforceConfig().doc_globs)
 DEFAULT_DOC_EXCLUDE = tuple(EnforceConfig().doc_exclude)
 
-#: Finding kinds, in the order a report lists them.
-KINDS = ("identifier", "flag", "command", "link", "anchor")
-
-
-@dataclass(frozen=True)
-class Finding:
-    kind: str  #: one of KINDS, or "path" for a note
-    path: str  #: the document
-    line: int
-    ref: str  #: what the document names
-    detail: str = ""
-
-    def as_dict(self) -> dict:
-        return {
-            "kind": self.kind,
-            "path": self.path,
-            "line": self.line,
-            "ref": self.ref,
-            "detail": self.detail,
-        }
-
-
-@dataclass
-class Report:
-    findings: list[Finding] = field(default_factory=list)
-    notes: list[Finding] = field(default_factory=list)
-    #: What was looked at: the documents and how many references of each kind were checked.
-    checked: dict = field(default_factory=dict)
-    digest: str = ""
-
-    @property
-    def clean(self) -> bool:
-        return not self.findings
-
-    def as_dict(self) -> dict:
-        return {
-            "findings": [f.as_dict() for f in self.findings],
-            "notes": [n.as_dict() for n in self.notes],
-            "checked": self.checked,
-            "digest": self.digest,
-        }
-
 
 def _is_export_file(root, rel: str) -> bool:
     """True when ``rel`` starts with a ddflow export header (a generated document)."""
@@ -151,7 +111,7 @@ def _is_export_file(root, rel: str) -> bool:
     return first.startswith(b"<!-- ddflow:generated doc=")
 
 
-def check_docs(
+def check_docs(  # noqa: PLR0913 -- one keyword per option of a public entry point
     repo,
     *,
     docs: list[str] | None = None,
@@ -161,6 +121,10 @@ def check_docs(
     commands: list[str] | None = None,
     ignore_names: list[str] | tuple[str, ...] = (),
     generated: list[str] | tuple[str, ...] = (),
+    extract: Sequence[Mapping] = (),
+    count: Sequence[Mapping] = (),
+    runner: Runner | None = None,
+    help_commands: list[str] | None = None,
 ) -> Report:
     """Check ``docs`` (default: tracked files matching ``doc_globs`` minus ``doc_exclude``)
     against the tracked tree of ``repo``.
@@ -174,6 +138,12 @@ def check_docs(
     document is checked by ``ddflow export --check``, so it is neither scanned nor named
     explicitly here, and a tracked file whose first line is an export header is left out
     the same way. Raises
+    ``extract`` are ``[[docs.extract]]`` entries (names the code offers that no document
+    mentions), ``count`` are ``[[docs.count]]`` entries (``<!-- ddflow:count -->`` markers
+    are always read). ``runner`` runs commands (``docscheck_help.command_runner``); without
+    one nothing is spawned, so ``<tool> <verb> --flag`` mentions are checked only against the
+    verb list and counts are noted as not recomputed. ``help_commands`` are the tools whose
+    ``--help`` is walked (default: ``commands``). Raises
     OSError when git cannot list the tree or a named document cannot be read: "could not tell" is
     never a clean report.
     """
@@ -194,6 +164,8 @@ def check_docs(
     ignore = [glob_regex(g) for g in ignore_paths]
     names = [re.compile(fnmatch.translate(g)) for g in ignore_names]
     tree = _Tree(files)
+    walked = list(cmds if help_commands is None else help_commands)
+    help_ = HelpIndex(runner, walked) if runner is not None and walked else None
     texts, unreadable = {}, []
     for d in docs:
         try:
@@ -203,13 +175,27 @@ def check_docs(
     if unreadable:
         # a document nobody read is "could not tell", never a clean report
         raise OSError(f"cannot read: {', '.join(unreadable)}")
-    heads = _Headings(root, texts)
+    heads = Headings(root, texts)
 
     report = Report()
     counts: Counter = Counter()
     for d in sorted(texts):
         scan = _Scan(d, texts[d], corpus, tree, heads, cmds, ignore, names, report, counts)
+        scan.help = help_
         scan.run()
+    if extract:
+        found = surface(
+            root,
+            [p for p in files if not is_doc(p) and not is_state(p)],
+            [Extractor.from_config(e) for e in extract],
+        )
+        report.findings += undocumented(
+            found, texts.values(), lambda n: any(r.match(n) for r in names)
+        )
+        counts["extracted"] = len(found)
+    check_counts(report, texts, count, runner, walked, counts)
+    for tool, why in sorted((help_.unavailable if help_ else {}).items()):
+        report.notes.append(Finding("help", "", 0, tool, f"flags of its verbs not checked: {why}"))
     report.findings.sort(key=lambda f: (f.path, f.line, KINDS.index(f.kind), f.ref))
     report.notes.sort(key=lambda f: (f.path, f.line, f.ref))
     report.checked = {"docs": sorted(texts), **dict(sorted(counts.items()))}
@@ -303,91 +289,6 @@ def _project_commands(root) -> list[str]:
 
 
 # ---------------------------------------------------------------------------------------
-# headings
-
-
-slugify = github_anchor  # kept under its old name for callers and tests
-
-
-class _Headings:
-    def __init__(self, root, texts: dict[str, str]) -> None:
-        self.root = root
-        self.texts = texts
-        self._cache: dict[str, set[str] | None] = {}
-
-    def of(self, path: str) -> set[str] | None:
-        """The anchors ``path`` offers; None when it cannot be read (could not tell)."""
-        if path not in self._cache:
-            text = self.texts.get(path)
-            if text is None:
-                try:
-                    text = (self.root / path).read_text("utf-8", errors="replace")
-                except OSError:
-                    self._cache[path] = None
-                    return None
-            self._cache[path] = anchors_of(text)
-        return self._cache[path]
-
-
-def _lines(text: str):
-    """(number, line, in_code) for each line; fence lines themselves are in_code. A fence
-    closes only on a run of the SAME character at least as long as the one that opened it
-    and carrying no info string (CommonMark), so a short fence inside a long one is code."""
-    opened: tuple[str, int] | None = None
-    for n, line in enumerate(text.splitlines(), 1):
-        m = _FENCE.match(line)
-        if opened is None:
-            if m and not ("`" in m.group(2) and m.group(1)[0] == "`"):
-                opened = (m.group(1)[0], len(m.group(1)))
-            yield n, line, opened is not None
-        else:
-            yield n, line, True
-            if (
-                m
-                and m.group(1)[0] == opened[0]
-                and len(m.group(1)) >= opened[1]
-                and not m.group(2).strip()
-            ):
-                opened = None
-
-
-def anchors_of(text: str) -> set[str]:
-    """Every anchor a markdown document offers, lower-cased: heading slugs (ATX and
-    setext; GitHub numbers repeats `-1`, `-2`, ...) and explicit `<a name=...>` / `id=...`
-    targets."""
-    out: set[str] = set()
-    seen: Counter = Counter()
-    taken: set[str] = set()  #: heading slugs only: an explicit anchor never bumps a heading
-
-    def add(heading: str) -> None:
-        base = slug = slugify(heading)
-        while slug in taken:  # github-slugger: bump the suffix until the candidate is free
-            seen[base] += 1
-            slug = f"{base}-{seen[base]}"
-        taken.add(slug)
-        out.add(slug)
-
-    paragraph: list[str] = []  #: prose lines so far; a setext underline makes them a heading
-    for _, line, code in _lines(text):
-        if code:
-            paragraph = []
-            continue
-        h = _ATX.match(line)
-        if h:
-            add(h.group(2))
-            paragraph = []
-        elif paragraph and _SETEXT.match(line):
-            add(" ".join(paragraph))
-            paragraph = []
-        elif line.strip() and not (_SETEXT.match(line) or _NOT_PARAGRAPH.match(line)):
-            paragraph.append(line.strip())
-        else:
-            paragraph = []
-        out.update(a.lower() for a in _HTML_ANCHOR.findall(line))
-    return out
-
-
-# ---------------------------------------------------------------------------------------
 # one document
 
 
@@ -399,20 +300,21 @@ class _Scan:
         self.corpus, self.tree, self.heads = corpus, tree, heads
         self.cmds, self.ignore, self.names = cmds, ignore, names
         self.report, self.counts = report, counts
+        self.help: HelpIndex | None = None
         self.dir = posixpath.dirname(path)
 
     def run(self) -> None:
-        for n, line, code in _lines(self.text):
+        for n, line, code in lines(self.text):
             if code:  # fence markers are no command either: the first word must be a script
                 self._command(line.strip().lstrip("$ ").strip(), n)
                 continue
-            prose = _SPAN.sub(lambda s: " " * len(s.group(0)), line)
+            prose = SPAN.sub(lambda s: " " * len(s.group(0)), line)
             for lm in _LINK.finditer(prose):
                 self._link(lm.group(1), n)
             ref = _REFDEF.match(prose)
             if ref:
                 self._link(ref.group(1), n)
-            for sm in _SPAN.finditer(line):
+            for sm in SPAN.finditer(line):
                 self._span(sm.group(2).strip(), n)
 
     # -- inline code
@@ -468,13 +370,14 @@ class _Scan:
     def _command(self, s: str, n: int) -> bool:
         """`<script> <verb> ...`: True when ``s`` is such a reference (checked)."""
         words = s.split()
-        if len(words) < _VERB_WORDS or words[0] not in self.cmds:
+        walked = self.help is not None and words[0] in self.help.commands
+        if len(words) < _VERB_WORDS or not (words[0] in self.cmds or walked):
             return False
         verb = words[1]
         if not _VERB.fullmatch(verb):
             return False
         self.counts["commands"] += 1
-        if verb not in self.corpus.verbs:
+        if words[0] in self.cmds and verb not in self.corpus.verbs:
             self.report.findings.append(
                 Finding(
                     "command",
@@ -484,7 +387,31 @@ class _Scan:
                     f"no tracked code registers {verb!r} as a command",
                 )
             )
+        elif walked:  # a walked tool outside the project's scripts: --help is the authority
+            self._verb_flags(words, n)
         return True
+
+    def _verb_flags(self, words: list[str], n: int) -> None:
+        """The flags of ``<tool> <verb>...`` must be ones that verb's own ``--help`` lists."""
+        got = self.help.resolve(words)
+        if got is None:
+            return
+        chain, flags = got
+        for tok in words[len(chain) :]:
+            flag = flag_of(tok)
+            if flag is None or self._owned(flag):
+                continue
+            self.counts["verb_flags"] += 1
+            if flag not in flags:
+                self.report.findings.append(
+                    Finding(
+                        "flag",
+                        self.path,
+                        n,
+                        f"{' '.join(chain)} {flag}",
+                        f"`{' '.join(chain)} --help` lists no {flag}",
+                    )
+                )
 
     def _path(self, tok: str, n: int) -> None:
         if any(c in tok for c in "*~$<") or tok.startswith(("/", "http")):

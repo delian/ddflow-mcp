@@ -51,6 +51,10 @@ from .config_sections.dedupe import (  # noqa: F401 -- re-exported, as before th
     DEDUPE_ON_MATCH,
     DedupeConfig,
 )
+from .config_sections.docs import (  # noqa: F401
+    EXTRACT_KINDS,
+    DocsConfig,
+)
 from .config_sections.enforce import (
     EnforceConfig,
 )
@@ -241,6 +245,7 @@ class Config:
     ids: IdsConfig = field(default_factory=IdsConfig)
     triggers: TriggersConfig = field(default_factory=TriggersConfig)
     rag: RagConfig = field(default_factory=RagConfig)
+    docs: DocsConfig = field(default_factory=DocsConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "local" | "env",
     #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong
