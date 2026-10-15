@@ -298,7 +298,9 @@ def triage(
     rec = it.gates.get(gate)
     found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
     if isinstance(found, B.Unavailable):
-        return bad(f"the findings of {item}.{gate} are {found}: they cannot be triaged until the blob is restored")
+        return bad(
+            f"the findings of {item}.{gate} are {found}: they cannot be triaged until the blob is restored"
+        )
     if not found or not all(f.get("digest") for f in found):
         return bad(
             f"{item}.{gate} has no `ddflow review` with numbered findings on record "

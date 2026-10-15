@@ -14,7 +14,11 @@ def _oracle(events, now):
     for ev in sorted(events, key=lambda e: (PR.epoch(e.ts), e.lamport)):
         d = ev.data if isinstance(ev.data, dict) else {}
         evidence = d.get("evidence")
-        if FS._gate(ev) not in PR.REVIEW_GATES or not FS._outcome(ev) or not isinstance(evidence, dict):
+        if (
+            FS._gate(ev) not in PR.REVIEW_GATES
+            or not FS._outcome(ev)
+            or not isinstance(evidence, dict)
+        ):
             continue
         took, chunks = evidence.get("elapsed_s"), evidence.get("chunks_total") or 1
         end = PR.epoch(ev.ts)

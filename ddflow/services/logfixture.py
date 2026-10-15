@@ -37,13 +37,21 @@ def _text(rng: random.Random, n_chars: int) -> str:
 
 def _evidence(rng: random.Random, failed: bool, gate: str = "") -> dict[str, Any]:
     """Gate evidence: mostly small notes, sometimes a long reviewer report."""
-    ev: dict[str, Any] = {"note": _text(rng, rng.randint(80, 600)), "tree_sha": "%040x" % rng.getrandbits(160)}
+    ev: dict[str, Any] = {
+        "note": _text(rng, rng.randint(80, 600)),
+        "tree_sha": "%040x" % rng.getrandbits(160),
+    }
     if gate in ("rubber_duck", "critic"):  # a review records how long it took and what it covered
-        ev.update(elapsed_s=round(rng.uniform(30, 900), 1), chunks_total=rng.randint(1, 6),
-                  reviewed_head="%040x" % rng.getrandbits(160), diff_sha="%040x" % rng.getrandbits(160))
+        ev.update(
+            elapsed_s=round(rng.uniform(30, 900), 1),
+            chunks_total=rng.randint(1, 6),
+            reviewed_head="%040x" % rng.getrandbits(160),
+            diff_sha="%040x" % rng.getrandbits(160),
+        )
     if failed or rng.random() < 0.15:
         ev["chunk_findings"] = [
-            {"chunk": i, "detail": _text(rng, rng.randint(800, 2400))} for i in range(rng.randint(1, 4))
+            {"chunk": i, "detail": _text(rng, rng.randint(800, 2400))}
+            for i in range(rng.randint(1, 4))
         ]
     return ev
 
@@ -60,7 +68,9 @@ class _Writer:
         self.t = _BASE_AT
         self._open: dict[str, Any] = {}
 
-    def add(self, agent: str, kind: str, subject: str, data: dict[str, Any], dt: float = 1.0) -> None:
+    def add(
+        self, agent: str, kind: str, subject: str, data: dict[str, Any], dt: float = 1.0
+    ) -> None:
         if kind == "lease.acquired":
             self.last_beat[subject] = data["at"]
         elif kind == "lease.renewed" and set(data) == {"at", "holder"} and self.coalesce_s:
@@ -71,8 +81,14 @@ class _Writer:
             data = externalize(self.dir.parents[1], LogConfig(evidence_blobs=True), kind, data)
         self.lamport += 1
         self.t += dt
-        ev = Event(kind=kind, subject=subject, data=data, agent=agent, lamport=self.lamport,
-                   ts="2026-10-01T00:00:00.%06dZ" % (self.count % 1_000_000))
+        ev = Event(
+            kind=kind,
+            subject=subject,
+            data=data,
+            agent=agent,
+            lamport=self.lamport,
+            ts="2026-10-01T00:00:00.%06dZ" % (self.count % 1_000_000),
+        )
         line = ev.to_json() + "\n"
         fh = self._open.get(agent)
         if fh is None:
@@ -85,9 +101,17 @@ class _Writer:
             fh.close()
 
 
-def generate(events_dir: Path | str, target_events: int, *, seed: int = 0, agents: int = 40,
-             beat_gap_s: float = 120.0, beats: int = 13, blobs: bool = False,
-             coalesce_s: int = 0) -> int:
+def generate(
+    events_dir: Path | str,
+    target_events: int,
+    *,
+    seed: int = 0,
+    agents: int = 40,
+    beat_gap_s: float = 120.0,
+    beats: int = 13,
+    blobs: bool = False,
+    coalesce_s: int = 0,
+) -> int:
     """Write about ``target_events`` events under ``events_dir``; return how many.
 
     ``blobs`` writes the gate evidence out of line (as a current ddflow does) under the
@@ -104,15 +128,43 @@ def generate(events_dir: Path | str, target_events: int, *, seed: int = 0, agent
         n += 1
         item = f"B-synth-{n}"
         agent = f"synth-{n % agents}"
-        w.add(agent, "task.added", item, {
-            "title": _text(rng, 60), "body": _text(rng, rng.randint(400, 2400)), "globs": [f"ddflow/synth{n % 97}.py"],
-            "needs": [], "parent": "P-synth", "priority": 100, "tags": [],
-        })
+        w.add(
+            agent,
+            "task.added",
+            item,
+            {
+                "title": _text(rng, 60),
+                "body": _text(rng, rng.randint(400, 2400)),
+                "globs": [f"ddflow/synth{n % 97}.py"],
+                "needs": [],
+                "parent": "P-synth",
+                "priority": 100,
+                "tags": [],
+            },
+        )
         at = w.t
-        w.add(agent, "lease.acquired", item, {"at": at, "holder": agent, "kind": "task", "ttl_s": 1800,
-                                              "globs": [f"ddflow/synth{n % 97}.py"], "note": "", "resources": [],
-                                              "worktree": "", "branch": ""})
-        w.add(agent, "lease.renewed", item, {"at": at + 0.2, "holder": agent, "globs": [f"ddflow/synth{n % 97}.py"]})
+        w.add(
+            agent,
+            "lease.acquired",
+            item,
+            {
+                "at": at,
+                "holder": agent,
+                "kind": "task",
+                "ttl_s": 1800,
+                "globs": [f"ddflow/synth{n % 97}.py"],
+                "note": "",
+                "resources": [],
+                "worktree": "",
+                "branch": "",
+            },
+        )
+        w.add(
+            agent,
+            "lease.renewed",
+            item,
+            {"at": at + 0.2, "holder": agent, "globs": [f"ddflow/synth{n % 97}.py"]},
+        )
         w.add(agent, "item.started", item, {})
         for k in range(2):
             w.add(agent, "task.updated", item, {"title": _text(rng, 60), "tags": [f"t{k}"]})
@@ -127,14 +179,38 @@ def generate(events_dir: Path | str, target_events: int, *, seed: int = 0, agent
                 failed = rng.random() < 0.2
                 if g in ("ci", "unit_tests"):  # only command gates announce a start
                     w.add(agent, "gate.started", item, {"gate": g})
-                w.add(agent, "gate.failed" if failed else "gate.passed", item,
-                      {"gate": g, "by": agent, "reason": "1 finding(s)" if failed else "",
-                       "evidence": _evidence(rng, failed, g)})
+                w.add(
+                    agent,
+                    "gate.failed" if failed else "gate.passed",
+                    item,
+                    {
+                        "gate": g,
+                        "by": agent,
+                        "reason": "1 finding(s)" if failed else "",
+                        "evidence": _evidence(rng, failed, g),
+                    },
+                )
                 if failed:
                     for k in range(rng.randint(1, 3)):
-                        w.add(agent, "review.triaged", item, {"gate": g, "finding": k + 1, "verdict": "refuted",
-                                                              "probe": _text(rng, rng.randint(100, 500))})
-        w.add(agent, "lease.released", item, {"holder": agent, "by": agent, "event": "", "note": ""})
-        w.add(agent, "item.completed", item, {"forced": False, "kind": "task", "overridden": [], "sha": ""})
+                        w.add(
+                            agent,
+                            "review.triaged",
+                            item,
+                            {
+                                "gate": g,
+                                "finding": k + 1,
+                                "verdict": "refuted",
+                                "probe": _text(rng, rng.randint(100, 500)),
+                            },
+                        )
+        w.add(
+            agent, "lease.released", item, {"holder": agent, "by": agent, "event": "", "note": ""}
+        )
+        w.add(
+            agent,
+            "item.completed",
+            item,
+            {"forced": False, "kind": "task", "overridden": [], "sha": ""},
+        )
     w.close()
     return w.count

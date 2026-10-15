@@ -47,7 +47,9 @@ def _folds(monkeypatch, repo: Path, *argv: str) -> int:
 @pytest.mark.parametrize("cmd", [("status",), ("next",)])
 def test_a_read_command_folds_the_log_once(project, monkeypatch, cmd):
     _run(project, *cmd)  # builds the index and the snapshot: a cold first run folds for them too
-    assert _folds(monkeypatch, project, *cmd) == 1  # and not 0: a command that bailed out folds nothing
+    assert (
+        _folds(monkeypatch, project, *cmd) == 1
+    )  # and not 0: a command that bailed out folds nothing
 
 
 def test_brief_folds_at_most_twice(project, monkeypatch):

@@ -19,8 +19,12 @@ def LOCAL_DIR_FILES(repo: Path):
 
 def _full(repo: Path) -> int:
     return max(
-        (json.loads(ln)["lamport"] for f in (repo / ".ddflow" / "events").glob("*.jsonl")
-         for ln in f.read_text().splitlines() if ln.strip()),
+        (
+            json.loads(ln)["lamport"]
+            for f in (repo / ".ddflow" / "events").glob("*.jsonl")
+            for ln in f.read_text().splitlines()
+            if ln.strip()
+        ),
         default=0,
     )
 
@@ -86,6 +90,8 @@ def test_an_append_in_a_fresh_process_does_not_parse_every_shard(tmp_path, monke
     L.clear_parse_cache()
     reads = []
     real = EventLog._read_shard
-    monkeypatch.setattr(EventLog, "_read_shard", lambda self, p: (reads.append(p), real(self, p))[1])
+    monkeypatch.setattr(
+        EventLog, "_read_shard", lambda self, p: (reads.append(p), real(self, p))[1]
+    )
     EventLog(repo, "writer").append("session.note", "S1", {"text": "y"})
     assert len(reads) <= 3  # the stamp guard reads for the version stamp; not one per shard

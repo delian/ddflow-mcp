@@ -81,9 +81,7 @@ def externalize(root: Path | str, log_cfg: Any, kind: str, data: dict[str, Any])
     names them is written. Everything else comes back unchanged."""
     if kind not in B.KINDS or not log_cfg.evidence_blobs:
         return data
-    new, bodies = B.split(
-        data, log_cfg.evidence_blob_keys, log_cfg.evidence_blob_min_bytes
-    )
+    new, bodies = B.split(data, log_cfg.evidence_blob_keys, log_cfg.evidence_blob_min_bytes)
     if bodies:
         store = BlobStore(root)
         for ref, raw in bodies.items():

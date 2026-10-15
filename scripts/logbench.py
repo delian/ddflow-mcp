@@ -46,7 +46,9 @@ def timed(cmd: list[str], cwd: Path) -> tuple[float, float, int]:
     """(wall seconds, CPU seconds) of one run in a fresh process. CPU is the number to compare
     on a busy machine: wall time includes waiting for other people's work."""
     argv = [sys.executable, "-m", "ddflow", "--agent", "bench", *cmd]
-    code = os.environ.get("LOGBENCH_CODE", str(ROOT))  # time another checkout's ddflow on the same log
+    code = os.environ.get(
+        "LOGBENCH_CODE", str(ROOT)
+    )  # time another checkout's ddflow on the same log
     env = {"PYTHONPATH": code, "PATH": "/usr/bin:/bin", "HOME": str(cwd)}
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
     t0 = time.perf_counter()
@@ -61,20 +63,37 @@ def main() -> int:
     ap.add_argument("--events", type=Path, help="copy this events directory")
     ap.add_argument("--synth", type=int, default=0, help="generate this many synthetic events")
     ap.add_argument("--repeat", type=int, default=2)
-    ap.add_argument("--modern", action="store_true", help="synthetic log as a current ddflow writes it")
+    ap.add_argument(
+        "--modern", action="store_true", help="synthetic log as a current ddflow writes it"
+    )
     a = ap.parse_args()
     if not a.events and not a.synth:
         ap.error("give --events or --synth")
     with tempfile.TemporaryDirectory() as d:
         proj = project(a.events, a.synth, Path(d) / "p", a.modern)
         size = sum(f.stat().st_size for f in (proj / ".ddflow" / "events").glob("*.jsonl"))
-        print(json.dumps({"bytes": size, "events": sum(1 for f in (proj / ".ddflow" / "events").glob("*.jsonl")
-                                                         for _ in f.open())}))
+        print(
+            json.dumps(
+                {
+                    "bytes": size,
+                    "events": sum(
+                        1 for f in (proj / ".ddflow" / "events").glob("*.jsonl") for _ in f.open()
+                    ),
+                }
+            )
+        )
         for cmd in COMMANDS:
             runs = [timed(cmd, proj) for _ in range(a.repeat)]
-            print(json.dumps({"command": " ".join(cmd), "wall_s": round(min(r[0] for r in runs), 3),
-                              "cpu_s": round(min(r[1] for r in runs), 3),
-                              "exit": max(r[2] for r in runs)}))  # a failing command is a refusal path, not a measurement
+            print(
+                json.dumps(
+                    {
+                        "command": " ".join(cmd),
+                        "wall_s": round(min(r[0] for r in runs), 3),
+                        "cpu_s": round(min(r[1] for r in runs), 3),
+                        "exit": max(r[2] for r in runs),
+                    }
+                )
+            )  # a failing command is a refusal path, not a measurement
     return 0
 
 
