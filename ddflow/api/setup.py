@@ -53,6 +53,7 @@ from ..services import upgrade_plan as UP
 from ..services import upgrade_start as US
 from ..services import upgrade_status as UST
 from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, init_files, refresh_docs
+from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
 from ..services.prompts import TemplateError
@@ -387,6 +388,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             done = O.refused if isinstance(res.error, CW.KeyRefused) else O.failed
             return done("config", res.error, key=edit.set, value=edit.value, rows=[], text="")
         literal = TC.literal(edit.value)
+        shadow = shadow_report(repo, edit.set, layer)
         return O.ok(
             "config",
             key=edit.set,
@@ -396,7 +398,10 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             local=edit.local,
             rows=[],
             gitattributes_added=res.attributes_added,
-            text=f"{edit.set} = {literal}  ({target})" + _said(res.attributes_added),
+            text=f"{edit.set} = {literal}  ({target})"
+            + shadow["shadow_note"]
+            + _said(res.attributes_added),
+            **shadow,
         )
 
     if edit.append_toml:
