@@ -2395,6 +2395,40 @@
   },
   "array_schema": null
  },
+ "ddflow_metrics": {
+  "command": "metrics",
+  "schema": "metrics@1",
+  "shape": "object",
+  "payload": [
+   "view",
+   "now",
+   "phase",
+   "since",
+   "metrics",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "metrics@1"
+    },
+    "view": {},
+    "now": {},
+    "phase": {},
+    "since": {},
+    "metrics": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_phase_close": {
   "command": "phase_close",
   "schema": "phase_close@1",
