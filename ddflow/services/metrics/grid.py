@@ -42,10 +42,11 @@ def sample(events: Sequence[Event], cfg: Config, now: float, since: float | None
     stamped = sorted(((PR.epoch(e.ts), e) for e in events), key=lambda p: (p[0], p[1].lamport))
     stamped = [p for p in stamped if p[0] > 0]
     m = cfg.metrics
+    step = max(float(m.grid_step_s), 1.0)  # the one clamp: spacing, lookback and the report
     if not stamped:
-        return {"rows": [], "step_s": m.grid_step_s, "capped": False, "folds": 0}
+        return {"rows": [], "step_s": step, "capped": False, "folds": 0}
     times = [t for t, _ in stamped]
-    ats, capped = instants(times[0], now, m.grid_step_s, int(m.grid_max_folds), since)
+    ats, capped = instants(times[0], now, step, int(m.grid_max_folds), since)
     rows = []
     for t in ats:
         upto = bisect_right(times, t)
@@ -54,7 +55,7 @@ def sample(events: Sequence[Event], cfg: Config, now: float, since: float | None
         working = {it.lease.holder for it in st.items.values() if it.lease and it.lease.live(t)}
         recent = {
             e.agent
-            for _, e in stamped[bisect_left(times, t - m.grid_step_s) : upto]
+            for _, e in stamped[bisect_left(times, t - step) : upto]
             if e.kind.startswith("lease.")
         }
         lanes = recent | working
@@ -69,7 +70,7 @@ def sample(events: Sequence[Event], cfg: Config, now: float, since: float | None
                 "working": len(working),
             }
         )
-    return {"rows": rows, "step_s": m.grid_step_s, "capped": capped, "folds": len(rows)}
+    return {"rows": rows, "step_s": step, "capped": capped, "folds": len(rows)}
 
 
 def utilisation(rows: Sequence[dict]) -> dict:

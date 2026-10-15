@@ -58,7 +58,7 @@ def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
 def review_rounds(ctx: Context) -> list[int]:
     """Review verdicts per completed item (0 for an item whose reviews were all skipped)."""
     counts: Counter[str] = Counter(
-        o.item for o in ctx.facts.outcomes if o.gate in PR.REVIEW_GATES and o.kind in RAN
+        o.item for o in scoped_outcomes(ctx) if o.gate in PR.REVIEW_GATES and o.kind in RAN
     )
     return [counts.get(s.item, 0) for s in completed_spans(ctx)]
 
@@ -207,6 +207,8 @@ def has_figures(data: dict) -> bool:
         data["cycle_time"]["p50_s"] is not None
         or any(r["p50_s"] is not None for r in data["gate_time"])
         or data["review_rounds"]["p50_rounds"] is not None
+        or data["queue_wait"]["p50_s"] is not None
+        or data["lease_wait"]["p50_s"] is not None
         or data["rework"]["rate"] is not None
         or any(r["failure_rate"] is not None for r in data["outcomes"])
         or any(r.get("value") is not None for r in data["providers"])

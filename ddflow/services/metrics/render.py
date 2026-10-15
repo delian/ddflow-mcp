@@ -8,10 +8,12 @@ UNAVAILABLE = "n/a"
 
 
 def dur(seconds: float | None) -> str:
-    """A length of time, or n/a: minutes under an hour, else hours (a figure never reads 0)."""
+    """A length of time, or n/a: seconds under a minute, minutes under an hour, else hours."""
     if seconds is None:
         return UNAVAILABLE
     hour, minute = clock.DURATION_UNITS["h"], clock.DURATION_UNITS["m"]
+    if seconds < minute:
+        return f"{seconds:.0f}s"
     return f"{seconds / minute:.0f}m" if seconds < hour else f"{seconds / hour:.1f}h"
 
 

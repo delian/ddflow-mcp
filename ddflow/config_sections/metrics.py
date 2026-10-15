@@ -11,7 +11,9 @@ from ._docs import declare, knob
 
 def _percent(value: object) -> str:
     return (
-        "" if isinstance(value, int) and value in range(1, 100) else "a percentile between 1 and 99"
+        ""
+        if isinstance(value, int) and not isinstance(value, bool) and value in range(1, 100)
+        else "a percentile between 1 and 99"
     )
 
 

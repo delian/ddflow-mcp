@@ -212,12 +212,41 @@ def test_retro_names_the_injected_slow_gap():
     assert big["seconds"] == 9 * H and t["entries"][0]["what"] == "task.added"
 
 
-def test_retro_on_an_unknown_item_fails_and_on_a_bare_one_is_nothing():
+def test_retro_on_an_unknown_item_fails_and_a_claim_only_item_names_its_queue_wait():
     log = twelve()
-    log.task("BARE", "b.py")
+    log.task("W", "w.py", needs="T12")
+    log.claim("a3", "W", T0 + 400 * H, "w.py")
     assert run(log, view="retro", item="NOPE").failed
-    bare = run(log, view="retro", item="BARE")
-    assert not bare.ok and not bare.failed and bare.metrics["biggest_gap"] is None
+    t = run(log, view="retro", item="W").metrics
+    assert t["biggest_gap"]["to"] == "lease.acquired"
+    assert t["biggest_gap"]["from"].startswith("ready")
+
+
+def test_durations_under_a_minute_do_not_read_as_zero():
+    from ddflow.services.metrics.render import dur
+
+    assert dur(20) == "20s" and dur(90) == "2m" and dur(7200) == "2.0h" and dur(None) == "n/a"
+
+
+def test_a_zero_grid_step_is_clamped_once_and_reported_clamped():
+    _, cfg, _ = frozen(multi_lane())
+    cfg.metrics.grid_step_s = 0
+    cfg.metrics.grid_max_folds = 3
+    g = M.sample_grid(multi_lane().events, cfg, T0 + 600)
+    assert g["step_s"] == 1.0 and len(g["rows"]) == 3
+
+
+def test_review_rounds_only_count_verdicts_inside_the_window():
+    log = twelve()
+    kept = run(log, since="2026-01-01", knobs={"min_samples": 1}).metrics["review_rounds"]
+    late = run(log, since="1d", knobs={"min_samples": 1}, now=NOW).metrics["review_rounds"]
+    assert kept["max_rounds"] == 2 and late["n"] < kept["n"]
+
+
+def test_a_bool_is_not_a_percentile():
+    from ddflow.config_sections.metrics import _percent
+
+    assert _percent(True) and _percent(0) and _percent(100) and _percent(90) == ""
 
 
 # -- the skip audit --------------------------------------------------------------------
