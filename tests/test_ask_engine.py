@@ -44,6 +44,10 @@ def _agent(cfg, via_mcp=False):
     return A.resolve_actor(cfg, "bot-1", requested_agent="bot-1", via_mcp=via_mcp)
 
 
+def _asker(cfg):
+    return A.resolve_actor(cfg, "asker", requested_agent="asker")
+
+
 def _channel(cfg, role="operator", ident="gw"):
     return A.resolve_actor(cfg, ident, credential_role=role, authenticated=True)
 
@@ -111,7 +115,8 @@ def test_no_mcp_or_api_module_can_record_an_answer():
     ]
     assert sorted(writers) == ["ddflow/core/handlers/asks.py", "ddflow/services/ask/engine.py"]
     for sub in ("surfaces/mcp.py", "surfaces/tools", "api"):
-        for p in (ROOT / "ddflow" / sub).rglob("*.py") if (ROOT / "ddflow" / sub).is_dir() else [ROOT / "ddflow" / sub]:
+        target = ROOT / "ddflow" / sub
+        for p in target.rglob("*.py") if target.is_dir() else [target]:
             assert "services.ask" not in p.read_text(encoding="utf-8").replace("services import ask", "services.ask"), p
 
 
@@ -201,11 +206,11 @@ def test_an_ask_that_could_never_be_answered_is_refused(log):
 
 def test_a_question_takes_one_of_its_options_or_free_text(log):
     cfg = Config()
-    q = E.request(log, cfg, subject="which?", kind="question", options=["a", "b"], now=T0)
+    q = E.request(log, cfg, subject="which?", text="a or b?", kind="question", options=["a", "b"], now=T0)
     with pytest.raises(E.AskRefused, match="one of"):
         E.answer(log, cfg, q.id, "c", actor=_person(cfg), now=T0)
     E.answer(log, cfg, q.id, "b", actor=_person(cfg), text="because", now=T0)
-    free = E.request(log, cfg, subject="why?", kind="question", now=T0)
+    free = E.request(log, cfg, subject="why?", text="why?", kind="question", now=T0)
     row = E.answer(log, cfg, free.id, "see text", actor=_person(cfg), text="x", now=T0)
     assert row["state"] == "answered"
 
@@ -213,12 +218,24 @@ def test_a_question_takes_one_of_its_options_or_free_text(log):
 def test_the_asker_can_withdraw_a_pending_ask_only(log):
     cfg = Config()
     ask = _ask(log, cfg)
-    E.withdraw(log, ask.id, actor_id="asker")
+    E.withdraw(log, ask.id, actor=_asker(cfg), now=T0)
     assert asks_of(_state(log))[ask.id]["state"] == "withdrawn"
     with pytest.raises(E.AskRefused):
-        E.withdraw(log, ask.id, actor_id="asker")
+        E.withdraw(log, ask.id, actor=_asker(cfg), now=T0)
+    other = _ask(log, cfg, subject="o")
+    with pytest.raises(E.AskRefused, match="may withdraw"):
+        E.withdraw(log, other.id, actor=A.resolve_actor(cfg, "stranger", requested_agent="stranger"), now=T0)
+    E.withdraw(log, other.id, actor=_person(cfg), now=T0)  # an approver may
     with pytest.raises(E.AskRefused, match="already withdrawn"):
         E.answer(log, cfg, ask.id, "approved", actor=_person(cfg), digest=E.digest_of("hello world"), now=T0)
+
+
+def test_a_question_needs_its_text_and_flags_are_real_booleans(log):
+    cfg = Config()
+    with pytest.raises(E.AskRefused, match="text"):
+        E.request(log, cfg, subject="Which region?", kind="question", now=T0)
+    log.append("ask.requested", "Qx", {"id": "Qx", "subject": "s", "digest": "d", "bot_answerable": "false", "expires_at": "2099-01-01T00:00:00Z"})
+    assert asks_of(_state(log))["Qx"]["bot_answerable"] is False
 
 
 # -- replay ---------------------------------------------------------------------------------
@@ -249,7 +266,7 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
                 E.answer(log, cfg, ids[i % len(ids)], "approved" if op == "approve" else "denied",
                          actor=_person(cfg), digest=d, now=T0)
             elif ids and op == "withdraw":
-                E.withdraw(log, ids[i % len(ids)], actor_id="asker")
+                E.withdraw(log, ids[i % len(ids)], actor=_asker(cfg), now=T0)
             elif ids and op == "agent_try":
                 E.answer(log, cfg, ids[i % len(ids)], "approved", actor=_agent(cfg), digest=d, now=T0)
         except E.AskRefused:
