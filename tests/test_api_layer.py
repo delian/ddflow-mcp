@@ -39,6 +39,7 @@ _MEASURED_KEYS = {
     "ddflow_rebuild": frozenset({"seconds"}),
     # Ages are measured against the clock of each call.
     "ddflow_lanes": frozenset({"now", "for_s", "heartbeat_age_s", "since"}),
+    "ddflow_metrics": frozenset({"now"}),
 }
 _MEASURED = "\x00measured"
 
@@ -342,6 +343,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_cleanup": (["cleanup"], {}),
     "ddflow_cadence": (["cadence"], {}),
     "ddflow_lanes": (["lanes"], {}),
+    "ddflow_metrics": (["metrics"], {}),
     # The fixture repository has no suite, so this is the exit-2 body; the OK body is compared
     # against the CLI's in tests/test_prose_pins.py.
     "ddflow_pins": (["pins", "README.md"], {"document": "README.md"}),
