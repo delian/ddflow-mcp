@@ -40,7 +40,11 @@ def _fold_into_merge(repo: Path, files: list[str], done: list[str]) -> str:
     steps = (added, tree, head, msg)
     bad = next((r for r in steps if not r.ok), None)
     # `commit-tree` ignores commit.gpgsign, which `git merge` honoured for the commit it replaces.
-    signed = G.run(repo, "config", "--type=bool", "--get", "commit.gpgsign").out.strip() == "true"
+    # The commit being replaced decides (`git merge -S` signs without any config); the config
+    # is the fallback for a merge whose signature cannot be read back.
+    was = G.run(repo, "log", "-1", "--format=%G?", "HEAD").out.strip()
+    cfgd = G.run(repo, "config", "--type=bool", "--get", "commit.gpgsign").out.strip() == "true"
+    signed = (was not in ("", "N")) if was else cfgd
     new = bad or G.run(
         repo,
         "commit-tree",
