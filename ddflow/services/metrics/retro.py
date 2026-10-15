@@ -65,7 +65,8 @@ def timeline(events: Sequence[Event], facts: Facts, item: str) -> dict:
         if at > 0:
             rows.append({"at": at, "what": _label(ev, rounds), "by": ev.agent})
     span = facts.spans.get(item)
-    if rows and span is not None and span.ready_at is not None:  # readiness alone is no story
+    story = [r for r in rows if r["what"] != "task.added"]  # filing alone is no story
+    if story and span is not None and span.ready_at is not None:
         rows.append({"at": span.ready_at, "what": "ready (dependencies done)", "by": ""})
         rows.sort(key=lambda r: r["at"])
     if not rows[1:]:
