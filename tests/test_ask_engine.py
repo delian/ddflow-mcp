@@ -277,8 +277,17 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
             pass
     events = log.read_all()
     live = asks_of(_state(log))
-    replayed = asks_of(fold(list(events), strict=False))
-    assert replayed == live
+    # Replay: the same kind/subject/data appended into a FRESH log (new ids and times) folds to
+    # the same pending/answered state; the fold keeps nothing but what the events say.
+    other_root = tmp_path_factory.mktemp("q")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(other_root)], check=True)
+    other = EventLog(other_root, "asker")
+    for ev in events:
+        other.append(ev.kind, ev.subject, dict(ev.data))
+    replayed = asks_of(_state(other))
+    keep = ("id", "state", "outcome", "human", "subject", "digest", "requested_by", "answered_by")
+    project = lambda rows: {k: {f: r[f] for f in keep} for k, r in rows.items()}  # noqa: E731
+    assert project(replayed) == project(live)
     # no agent attempt ever landed: every recorded answer is a person's
     assert all(r["human"] for r in live.values() if r["state"] == "answered")
     # status is a function of the rows alone
