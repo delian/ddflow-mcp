@@ -18,8 +18,8 @@ The invariants, each pinned by `tests/test_ask_engine.py`:
 * DIGEST. An approval is of ``digest``: the answer must present the digest the person saw, and
   `verdict` approves only exactly that digest -- a later edit of the thing is not approved.
 * ONE-TIME CODE. ``with_code`` mints a code, shown once and kept only as its hash; an answer
-  from a credential (a remote channel proving the person got the message) must present it, a
-  person at the terminal need not. The code is returned to the transport and never stored.
+  from anything but a terminal (a remote channel proving the person got the message) must
+  present it; a person at the terminal need not. The code is returned to the transport and never stored.
 * EXPIRY. An ask lapses at ``expires_at`` (``[agent].ask_ttl_s`` unless given); an answer after
   that is refused. The fold never reads a clock: `status` does.
 """
@@ -43,6 +43,7 @@ APPROVAL = "approval"
 QUESTION = "question"
 APPROVED = "approved"
 DENIED = "denied"
+ANSWERED_WORD = "answered"  #: the outcome of a free-text answer; the text itself is `text`
 #: Where an answer may come from: a person at a shell, a credential a caller proved, or an id a credential proved that
 #: `[agent].actors` names (a gateway).
 ANSWER_SOURCES = ("terminal", "credential", "named")
@@ -165,8 +166,9 @@ def answer(
     now: float | None = None,
 ) -> dict[str, Any]:
     """Record a person's answer. Raises `AskRefused` unless every invariant holds. Returns the
-    folded row. ``outcome`` is approved/denied for an approval, one of the options (or free
-    text, when it has none) for a question; ``digest`` is what the person saw."""
+    folded row. ``outcome`` is approved/denied for an approval, one of the options for a
+    question that has them, else 'answered' with the free text in ``text``; ``digest`` is what
+    the person saw."""
     if actor.source not in ANSWER_SOURCES:
         raise AskRefused(
             f"refusing: answering is a person's act, and {actor.id} acts as an agent "
@@ -176,7 +178,7 @@ def answer(
         row = get(_state(log), ask_id)
         if row is None:
             raise AskRefused(f"no ask {ask_id}")
-        _check_answerable(cfg, row, actor, outcome, digest, code, now)
+        _check_answerable(row, actor, outcome, digest, code, text, now)
         human = actor.source == "terminal" or actor.can(CAP_APPROVE)
         log.append(
             "ask.answered",
@@ -196,7 +198,7 @@ def answer(
         return dict(get(_state(log), ask_id) or {})
 
 
-def _check_answerable(cfg, row, actor, outcome, digest, code, now) -> None:
+def _check_answerable(row, actor, outcome, digest, code, text, now) -> None:
     ask_id = row["id"]
     state = status(row, now)
     if state == EXPIRED:
@@ -206,7 +208,6 @@ def _check_answerable(cfg, row, actor, outcome, digest, code, now) -> None:
     if not actor.can(CAP_APPROVE) and not (row["bot_answerable"] and actor.can(CAP_APPROVE_MARKED)):
         raise AskRefused(
             require(actor, CAP_APPROVE_MARKED if row["bot_answerable"] else CAP_APPROVE)
-            or f"{actor.id} may not answer {ask_id}"
         )
     if row["type"] == APPROVAL:
         if outcome not in (APPROVED, DENIED):
@@ -216,8 +217,12 @@ def _check_answerable(cfg, row, actor, outcome, digest, code, now) -> None:
                 f"{ask_id} is of digest {row['digest']}, not {digest or 'none given'}: "
                 "look at what is being approved and present its digest"
             )
-    elif row["options"] and outcome not in row["options"]:
-        raise AskRefused(f"{ask_id} is answered with one of: {', '.join(row['options'])}")
+    elif row["options"]:
+        if outcome not in row["options"]:
+            raise AskRefused(f"{ask_id} is answered with one of: {', '.join(row['options'])}")
+    elif outcome != ANSWERED_WORD or not text:
+        # free text goes in `text` (redacted in the log), never in the compared `outcome`
+        raise AskRefused(f"{ask_id} takes free text: outcome '{ANSWERED_WORD}' and the text")
     if row["code_hash"] and actor.source != "terminal":
         if not code or not hmac.compare_digest(token_hash(code), row["code_hash"]):
             raise AskRefused(f"{ask_id} needs the one-time code it was sent with")
