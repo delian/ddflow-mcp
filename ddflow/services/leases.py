@@ -834,7 +834,14 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
 # -- recovery ------------------------------------------------------------------------
 
 
-def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) -> list[Recovery]:
+def scan(
+    log: EventLog,
+    cfg: Config,
+    repo: Path,
+    *,
+    now: float | None = None,
+    state: State | None = None,
+) -> list[Recovery]:
     """Find everything a crash could have left behind, and say what to do with each.
 
     Three distinct situations, deliberately not merged:
@@ -849,7 +856,8 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
     it from the item's status is exactly how real work gets deleted.
     """
     now = time.time() if now is None else now
-    state = _fold(log)
+    if state is None:  # a caller that already folded this log passes its State (one fold per command)
+        state = _fold(log)
     # The same live-lease view the scheduler computes, so `schedule.interrupted` is
     # answering about the same moment `next` would.
     live = state.active_leases(now, cfg.lease.grace_s)

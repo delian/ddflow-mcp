@@ -193,7 +193,7 @@ def brief(
     arrive without its having to suspect they exist.
     """
 
-    log, cfg, _ = _load(repo, agent)
+    log, cfg, loaded = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
     _sweep_finished(repo, cfg, log, st, (called_from, shell_cwd))
@@ -236,7 +236,7 @@ def brief(
             rules = f"See `{candidate}` (loaded separately by your agent)."
             break
 
-    recovery = L.scan(log, cfg, repo) if check_recovery else []
+    recovery = L.scan(log, cfg, repo, state=loaded) if check_recovery else []
     decisions, rules = _governing(cfg, st, item, rules)
 
     live = sorted(
