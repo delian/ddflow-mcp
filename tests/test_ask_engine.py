@@ -219,6 +219,8 @@ def test_a_question_takes_one_of_its_options_or_free_text(log):
     free = E.request(log, cfg, subject="why?", text="why?", kind="question", now=T0)
     with pytest.raises(E.AskRefused, match="free text"):
         E.answer(log, cfg, free.id, "see text", actor=_person(cfg), text="x", now=T0)
+    with pytest.raises(E.AskRefused, match="free text"):
+        E.answer(log, cfg, free.id, "answered", actor=_person(cfg), now=T0)  # no text
     row = E.answer(log, cfg, free.id, "answered", actor=_person(cfg), text="x", now=T0)
     assert row["state"] == "answered"
 

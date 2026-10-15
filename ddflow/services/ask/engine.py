@@ -43,7 +43,7 @@ APPROVAL = "approval"
 QUESTION = "question"
 APPROVED = "approved"
 DENIED = "denied"
-ANSWERED_WORD = "answered"  #: the outcome of a free-text answer; the text itself is `text`
+ANSWERED_WORD = ANSWERED  #: the outcome of a free-text answer; the text itself is `text`
 #: Where an answer may come from: a person at a shell, a credential a caller proved, or an id a credential proved that
 #: `[agent].actors` names (a gateway).
 ANSWER_SOURCES = ("terminal", "credential", "named")
