@@ -1840,6 +1840,10 @@
         "rows": [],
         "total": 0,
         "record_kind": "search",
+        "shown": 0,
+        "limit": 20,
+        "truncated": false,
+        "filters": {},
         "reason": "regex refused: a repeat of variable length inside another repeat can take exponential time"
       }
   
