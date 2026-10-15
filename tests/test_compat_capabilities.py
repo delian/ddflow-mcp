@@ -337,6 +337,11 @@ def test_a_version_skew_is_not_reported_as_format_only_even_with_a_higher_format
 # -- slice 2: capabilities ----------------------------------------------------------------
 
 
+_PATCH_AHEAD = ".".join(
+    [*ddflow.__version__.split(".")[:2], str(int(ddflow.__version__.split(".")[2]) + 1)]
+)  # a release a patch ahead: it stamped the log, so its capabilities count
+
+
 def _record(repo: Path, name: str, kinds: list[str], version: str, agent="future", n=1) -> None:
     """A `ddflow.capabilities` event another clone wrote, as a merge brings it in."""
     shard = repo / ".ddflow" / "events"
@@ -352,6 +357,8 @@ def _record(repo: Path, name: str, kinds: list[str], version: str, agent="future
     ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
     with (shard / f"{agent}.jsonl").open("a") as fh:
         fh.write(ev.to_json() + "\n")
+    # the release that records a capability has stamped the log first (`_stamp_and_guard`)
+    _stamp(repo, version, ddflow.FORMAT_LEVEL, agent=agent, n=n + 1000)
 
 
 def _caps(log: EventLog) -> list[Event]:
@@ -393,34 +400,34 @@ def test_default_templates_do_not_record_the_id_capability(repo: Path):
 
 
 def test_a_writer_lacking_a_recorded_capability_is_refused_just_its_kinds(repo: Path):
-    _record(repo, "future-thing", ["bug.found"], "9.9.9")
+    _record(repo, "future-thing", ["bug.found"], _PATCH_AHEAD)
     log = EventLog(repo, "me")
     with pytest.raises(SkewRefused) as exc:
         log.append("bug.found", "B1", {"summary": "s"})
     msg = str(exc.value)
     assert exc.value.exit_code == 3
-    assert "`future-thing`" in msg and "bug.found" in msg and upgrade_remedy("9.9.9") in msg
+    assert "`future-thing`" in msg and "bug.found" in msg and upgrade_remedy(_PATCH_AHEAD) in msg
     assert "everything else proceeds" in msg
     log.append("lease.renewed", "T1", {})  # a kind it does not govern proceeds
     assert [e for e in log.read_all() if e.kind == "bug.found"] == []
 
 
 def test_a_known_capability_whose_kinds_this_writer_lacks_is_refused(repo: Path):
-    _record(repo, E.CAP_ID_TEMPLATE, ["bug.found", "gate.passed"], "9.9.9")
+    _record(repo, E.CAP_ID_TEMPLATE, ["bug.found", "gate.passed"], _PATCH_AHEAD)
     with pytest.raises(SkewRefused):
         EventLog(repo, "me").append("gate.passed", "T1", {"gate": "x"})
     EventLog(repo, "me").append("bug.found", "B1", {"summary": "s"})  # it has this one
 
 
 def test_the_cli_refuses_the_governed_write_and_still_reads(repo: Path):
-    _record(repo, "future-thing", ["phase.added"], "9.9.9")
+    _record(repo, "future-thing", ["phase.added"], _PATCH_AHEAD)
     code, _out, err = run_cli(repo, "phase", "add", "P1", "--title", "p")
     assert code == 3 and "future-thing" in err
     assert run_cli(repo, "status")[0] == 0
 
 
 def test_policy_off_and_warn_never_refuse_a_capability_gap(repo: Path):
-    _record(repo, "future-thing", ["phase.added"], "9.9.9")
+    _record(repo, "future-thing", ["phase.added"], _PATCH_AHEAD)
     cfg = repo / ".ddflow" / "config.toml"
     cfg.parent.mkdir(exist_ok=True)
     for policy in ("warn", "off"):
@@ -439,13 +446,14 @@ def test_the_capability_fold_is_independent_of_event_order():
         )
 
     a, b = ev(["x"], "0.1.9", "p", 1), ev(["y"], "0.1.10", "q", 2)
+    stamp = _events(("1.0", None))  # a release has stamped the log, so the capabilities count
     t1, t2 = ev(["x"], "0.1.9", "alice", 3), ev(["x"], "0.1.9", "bob", 4)
     assert (
-        stamp_facts([t1, t2], "me", "1.0").capabilities["c"].by
-        == stamp_facts([t2, t1], "me", "1.0").capabilities["c"].by
+        stamp_facts([*stamp, t1, t2], "me", "1.0").capabilities["c"].by
+        == stamp_facts([*stamp, t2, t1], "me", "1.0").capabilities["c"].by
     )
-    one = stamp_facts([a, b], "me", "1.0").capabilities["c"]
-    two = stamp_facts([b, a], "me", "1.0").capabilities["c"]
+    one = stamp_facts([*stamp, a, b], "me", "1.0").capabilities["c"]
+    two = stamp_facts([*stamp, b, a], "me", "1.0").capabilities["c"]
     assert one == two
     assert one.kinds == {"x", "y"} and one.version == "0.1.10" and one.by == "q"
 

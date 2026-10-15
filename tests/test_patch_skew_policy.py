@@ -105,17 +105,19 @@ def test_a_higher_minor_or_major_still_refuses(repo: Path, stamped: str):
     assert exc.value.exit_code == 3
 
 
-def test_a_capability_gap_still_refuses_even_for_a_patch(repo: Path):
+def test_a_capability_gap_still_refuses_its_kind_even_for_a_patch(repo: Path):
     _stamp(repo, "0.5.7")
     _shard_write(
         repo,
         "future",
         "ddflow.capabilities",
-        {"capability": "from-the-future", "kinds": ["x.y"], "version": "0.5.7"},
+        {"capability": "from-the-future", "kinds": ["phase.added"], "version": "0.5.7"},
         n=2,
     )
+    log = EventLog(repo, "me")
     with pytest.raises(SkewRefused):
-        EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
+        log.append("phase.added", "P1", {"title": "p"})
+    log.append("lease.renewed", "T1", {})  # a kind it does not govern is no direct conflict
 
 
 def test_reads_are_unaffected_by_any_skew(repo: Path):
