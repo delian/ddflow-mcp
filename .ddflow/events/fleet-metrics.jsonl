@@ -72,3 +72,5 @@
 {"agent":"fleet-metrics","data":{"at":1792072662.151607,"holder":"fleet-metrics"},"id":"e2f11f241df03123b35079073","kind":"lease.renewed","lamport":63449,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T13:57:42.302569Z"}
 {"agent":"fleet-metrics","data":{"at":1792072817.4871452,"holder":"fleet-metrics"},"id":"e5e727c8567e0193ec6121bd1","kind":"lease.renewed","lamport":63464,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T14:00:17.634017Z"}
 {"agent":"fleet-metrics","data":{"at":1792073092.0548105,"holder":"fleet-metrics"},"id":"e4ba303b5d565e6e838e28d5f","kind":"lease.renewed","lamport":63493,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T14:04:52.203862Z"}
+{"agent":"fleet-metrics","data":{"gate":"rubber_duck","older_ddflow":"0.2.2"},"id":"ebbd519d44576984a2a8d2070","kind":"gate.started","lamport":63504,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T14:05:39.867123Z"}
+{"agent":"fleet-metrics","data":{"gate":"critic","older_ddflow":"0.2.2"},"id":"e62e74a2402170eb582fce79c","kind":"gate.started","lamport":63505,"schema":1,"subject":"B-gap-metrics","ts":"2026-10-15T14:05:40.123271Z"}
