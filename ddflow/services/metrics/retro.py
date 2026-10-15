@@ -64,12 +64,12 @@ def timeline(events: Sequence[Event], facts: Facts, item: str) -> dict:
         at = PR.epoch(ev.ts)
         if at > 0:
             rows.append({"at": at, "what": _label(ev, rounds), "by": ev.agent})
-    if not rows[1:]:  # the item's own events: readiness alone is no story
-        return {"item": item, "entries": rows, "gaps": [], "biggest_gap": None, "total_s": None}
     span = facts.spans.get(item)
-    if span is not None and span.ready_at is not None:
+    if rows and span is not None and span.ready_at is not None:  # readiness alone is no story
         rows.append({"at": span.ready_at, "what": "ready (dependencies done)", "by": ""})
         rows.sort(key=lambda r: r["at"])
+    if not rows[1:]:
+        return {"item": item, "entries": rows, "gaps": [], "biggest_gap": None, "total_s": None}
     gaps = [
         {
             "from": a["what"],
