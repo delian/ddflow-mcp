@@ -74,7 +74,9 @@ def test_force_records_on_a_completed_item_and_logs_why(repo):
         "--evidence", "x", "--force", "--reason", "late finding",
     )  # fmt: skip
     assert code in (OK, FAIL), err
-    assert any("late finding" in f.read_text() for f in (repo / ".ddflow" / "events").glob("*.jsonl"))
+    assert any(
+        "late finding" in f.read_text() for f in (repo / ".ddflow" / "events").glob("*.jsonl")
+    )
 
 
 def test_review_from_another_items_tree_is_refused(repo):
@@ -84,11 +86,13 @@ def test_review_from_another_items_tree_is_refused(repo):
     run_cli(repo, "claim", "A")
     code, out, err = run_cli(repo, "claim", "B")
     assert code == OK, out + err
-    trees = {
-        i: json.loads(run_cli(repo, "--json", "show", i)[1])["worktree"] for i in ("A", "B")
-    }
-    tree_a = (repo / trees["A"]).resolve() if not Path(trees["A"]).is_absolute() else Path(trees["A"])
-    tree_b = (repo / trees["B"]).resolve() if not Path(trees["B"]).is_absolute() else Path(trees["B"])
+    trees = {i: json.loads(run_cli(repo, "--json", "show", i)[1])["worktree"] for i in ("A", "B")}
+    tree_a = (
+        (repo / trees["A"]).resolve() if not Path(trees["A"]).is_absolute() else Path(trees["A"])
+    )
+    tree_b = (
+        (repo / trees["B"]).resolve() if not Path(trees["B"]).is_absolute() else Path(trees["B"])
+    )
     before = _gate_events(repo, "A", "rubber_duck")
     code, _out, err = _from(repo, tree_b, "review", "A", "--gate", "rubber_duck")
     assert code == REFUSED, err
