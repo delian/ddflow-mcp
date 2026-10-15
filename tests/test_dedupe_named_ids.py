@@ -54,3 +54,21 @@ def test_a_refusal_lists_named_ids_apart_from_the_near_match(repo):
     assert any("P-view" in ln for ln in lines[:split])
     assert [ln for ln in lines[split + 1 :] if "P-acp" in ln or "P-spawn" in ln]
     assert not any("P-acp" in ln for ln in lines[:split])
+
+
+def test_reason_keeps_a_below_floor_named_row_out_of_the_cause():
+    from ddflow.api._dedupe_reason import reason
+
+    near = {
+        "id": "P-view",
+        "kind": "phase",
+        "state": "open",
+        "score": 0.9,
+        "title": "t",
+        "shared": [],
+        "flags": [],
+    }
+    cited = {**near, "id": "P-acp", "score": 0.2, "flags": ["named"]}
+    lines = reason([near, cited], 0.5).splitlines()
+    assert "P-view" in lines[1] and lines[2].startswith("Also named") and "P-acp" in lines[3]
+    assert "Also named" not in reason([near], 0.5)
