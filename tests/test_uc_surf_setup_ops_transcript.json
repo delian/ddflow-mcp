@@ -1499,7 +1499,7 @@
    "4"
   ],
   0,
-  "review.max_rounds = 4\n",
+  "review.max_rounds = 4\n  warning: shadowed -- the machine-local layer (.ddflow/local/config.toml) wins; the effective value of review.max_rounds is 3, not what was just written.\n  To change the winning layer: ddflow config --local review.max_rounds VALUE\n",
   ""
  ],
  [
