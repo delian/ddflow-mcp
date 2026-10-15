@@ -1901,6 +1901,42 @@
        }
       }
     ''',
+    'ddflow_metrics': '''
+      {
+       "name": "ddflow_metrics",
+       "description": "Metrics derived from the event log, read-only. view=summary (default): cycle time, time per gate, review rounds per item, gate failure/skip/unavailable rates (group_by gate, reviewer, agent, kind or phase), queue and glob-conflict wait, rework. view=forecast: the critical-path ETA of a phase as a P50..P90 estimate. view=retro + item: that item's timeline and its biggest gap (why it was slow). view=skips: the gate-skip audit. view=lanes: lane utilisation on an hourly grid. A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "view": {
+          "type": "string",
+          "description": "summary (default), forecast, retro, skips or lanes."
+         },
+         "item": {
+          "type": "string",
+          "description": "The item to look back on; with view=retro."
+         },
+         "phase": {
+          "type": "string",
+          "description": "Limit to one phase (and, for forecast, its critical path)."
+         },
+         "since": {
+          "type": "string",
+          "description": "Only what happened since: a duration back from now (7d, 12h) or a date YYYY-MM-DD."
+         },
+         "group_by": {
+          "type": "string",
+          "description": "Group the outcome rates by gate (default), reviewer, agent, kind or phase."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_next': '''
       {
        "name": "ddflow_next",
@@ -3862,6 +3898,7 @@
     'ddflow_memory_forget',
     'ddflow_memory_list',
     'ddflow_merge',
+    'ddflow_metrics',
     'ddflow_next',
     'ddflow_onboard',
     'ddflow_phase_add',

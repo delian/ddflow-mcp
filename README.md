@@ -204,6 +204,7 @@ the same implementation, so neither drifts from the other.
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` (read-only; see [Lanes](#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
+| **see where the time went, and when a phase will end** | `ddflow metrics` · `ddflow metrics forecast [--phase P]` · `ddflow metrics retro <id>` · `ddflow metrics skips` · `ddflow metrics lanes` (read-only, from the log; a figure under `[metrics] min_samples` is `n/a`, never 0) | `ddflow_metrics` (`view`, `item`, `phase`, `since`, `group_by`) |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, rules, skills, agents, jobs, schedules, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--source S] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`, `source`) |
@@ -987,7 +988,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 241 knobs.
+cadences, and the rest of the 249 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5120,7 +5121,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 241): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 249): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5378,8 +5379,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=fa829c155003 -->
-<details><summary>All 115 MCP tools: 32 in the `core` tier, 47 more in `standard`, 36 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=7bb94c0aeac8 -->
+<details><summary>All 116 MCP tools: 32 in the `core` tier, 47 more in `standard`, 37 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5484,6 +5485,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
 | Looking at it | `ddflow_list` | standard | Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. |
+| Looking at it | `ddflow_metrics` | all | Metrics derived from the event log, read-only. |
 | Looking at it | `ddflow_progress` | standard | What work has ACTUALLY been done, aggregated from the event log: attempts per item, wall-clock held, gate… |
 | Looking at it | `ddflow_render` | standard | Regenerate the human-readable markdown views (queue, lessons, the one-paragraph lessons summary, research)… |
 | Looking at it | `ddflow_show` | core | Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared globs, the… |
@@ -5632,7 +5634,7 @@ declared once and persists — see
 
 ## Configuration
 
-241 knobs across 31 sections, every one documented in place and listed, with its default
+249 knobs across 32 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5699,8 +5701,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=2594e19f0601 -->
-<details><summary>All 241 knobs across 31 sections</summary>
+<!-- ddflow:begin README/knobs sha=2d5facd72c08 -->
+<details><summary>All 249 knobs across 32 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5861,6 +5863,14 @@ long default is left to `ddflow config --explain`.
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
+| `metrics.min_samples` | `10` |  |
+| `metrics.top` | `5` |  |
+| `metrics.forecast_runs` | `1000` |  |
+| `metrics.forecast_seed` | `0` |  |
+| `metrics.forecast_low_pct` | `50` |  |
+| `metrics.forecast_high_pct` | `90` |  |
+| `metrics.grid_step_s` | `3600` |  |
+| `metrics.grid_max_folds` | `24` |  |
 | `review.max_rounds` | `2` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
 | `review.delta_default` | `false` |  |
