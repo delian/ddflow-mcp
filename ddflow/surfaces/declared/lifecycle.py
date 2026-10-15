@@ -126,6 +126,7 @@ COMMANDS: tuple[Command, ...] = (
             called_from=called_from,
             resources=a.get("resources", "") or "",
             agent=agent,
+            queue=bool(a.get("queue")),
         ),
         # `rebound`/`here`: the item kept its OWN tree from an earlier claim, and whether
         # the caller is standing in it -- over MCP the payload is the only way an agent
@@ -173,8 +174,14 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)",
                 default="",
             ),
+            Param(
+                "queue",
+                type="boolean",
+                help="If refused for files another lease holds, keep this request in the first-in-first-out line for them: a later request for the same files is refused as queued behind you. Either way the refusal is recorded as waiting and returns at once ([lease].wait_queue makes it the default).",
+                cli_help="keep a refused claim in the first-in-first-out line for its files",
+            ),
         ),
-        tool_order=("id", "globs", "note", "no_worktree", "resources", "force"),
+        tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "force"),
     ),
     Command(
         path=("heartbeat",),

@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "lease.waiting"
+why = "Records that an agent was refused files another lease holds (who, which globs, since when, behind which leases), so a refusal returns at once and the wait-for graph can be read from the log."
+impact = "additive"

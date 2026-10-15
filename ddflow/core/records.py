@@ -952,6 +952,10 @@ class State:
     #: {"digest", "user", "host", "human", "note", "token_hash", "used_at", "agent", "at"}.
     #: What runs is approved only when its digest is one approved here.
     approvals: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: item id -> the newest `lease.waiting` record of an agent refused the files it asked for
+    #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
+    #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.
+    waiting: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: document kind -> who last enabled or disabled its export and when, and whether the
     #: operator vetoed it: {"enabled", "by", "human", "at", "path", "mode", "local",
     #: "locked", "acked"}. The SELECTION itself lives in the config; this is the record

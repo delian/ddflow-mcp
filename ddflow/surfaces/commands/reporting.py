@@ -50,6 +50,13 @@ def _contested_lines(r) -> list[str]:
     return out
 
 
+def _waiting_lines(r) -> list[str]:
+    """Agents refused files another lease holds: recorded, not polling."""
+    if not r.get("waiting"):
+        return []
+    return ["", "Waiting for files:", *(f"  [w] {w}" for w in r["waiting"])]
+
+
 def _queue_lines(r) -> list[str]:
     """Completed, in flight, ready, blocked — the four lists a person scans for."""
     out: list[str] = []
@@ -65,6 +72,7 @@ def _queue_lines(r) -> list[str]:
             held = f"  — {t.lease.holder}{_taken(r, t.id)}" if t.lease else ""
             out.append(f"  [~] {t.id:<12} {t.title}{held}")
     out += _contested_lines(r)
+    out += _waiting_lines(r)
     if r["ready"]:
         out.append("")
         out.append("Ready to start:")

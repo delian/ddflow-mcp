@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.wait_queue"
+new = "false"
+why = "Whether every refused claim or widening is kept in a first-in-first-out line per file."
+impact = "additive"
