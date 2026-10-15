@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.min_samples"
+new = "10"
+why = "Fewest samples a metrics figure may rest on; under it the figure is n/a, never zero."
+impact = "additive"
