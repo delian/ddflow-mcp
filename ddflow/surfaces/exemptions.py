@@ -26,6 +26,7 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lanes import COMMANDS as _LANES
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.memory import COMMANDS as _MEMORY
+from .declared.metrics import COMMANDS as _METRICS
 from .declared.plan import COMMANDS as _PLAN
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
@@ -85,6 +86,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_HOOKS,
     *_LANES,
     *_DOCS,
+    *_METRICS,
     *_lists.COMMANDS,
     *_sessions.COMMANDS,
     _search.COMMAND,

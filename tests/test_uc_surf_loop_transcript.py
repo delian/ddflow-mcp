@@ -606,13 +606,8 @@ EXPECTED = [
     (
         ("--json", "claim", "T1", "--no-worktree"),
         3,
-        "",
-        "T1 is held by u5pin for another <n>s\n"
-        "\n"
-        "You could take instead: T4, T5\n"
-        "\n"
-        "Or `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can "
-        "be claimed.\n",
+        '{\n  "refusal": {\n    "reason": "T1 is held by u5pin for another <n>s\\n\\nYou could take instead: T4, T5\\n\\nOr `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can be claimed.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "claim@1"\n}\n',
+        "T1 is held by u5pin for another <n>s\n\nYou could take instead: T4, T5\n\nOr `ddflow wait --item T1`: it sleeps until u5pin lets go and returns the moment the item can be claimed.\n",
     ),
     (
         ("claim", "T2", "--no-worktree"),
@@ -624,7 +619,12 @@ EXPECTED = [
         "You could take instead: T4, T5\n",
     ),
     (("claim", "nope"), 3, "", "no such item 'nope'\n"),
-    (("--json", "claim", "nope"), 3, "", "no such item 'nope'\n"),
+    (
+        ("--json", "claim", "nope"),
+        3,
+        '{\n  "refusal": {\n    "reason": "no such item \'nope\'",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "claim@1"\n}\n',
+        "no such item 'nope'\n",
+    ),
     (
         ("claim", "T4", "--globs", "d/*,d2/*", "--no-worktree"),
         0,
@@ -1046,7 +1046,7 @@ EXPECTED = [
         "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n"
         "              [--allow-older-version] [--reason SKEW_REASON] [--version]\n"
         "              "
-        "{init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} "
+        "{init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} "
         "...\n"
         "ddflow: error: unrecognized arguments: --item T1\n",
     ),
@@ -1200,18 +1200,8 @@ EXPECTED = [
     (
         ("--json", "complete", "T1"),
         3,
-        "",
-        "cannot complete T1 — 3 unmet condition(s):\n"
-        "  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not "
-        "run, unit_tests=not run, merge=not run)\n"
-        "  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, "
-        "merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip "
-        "<id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n"
-        "  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be "
-        "shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once "
-        "with `ddflow session start --model <author model>` under the same identity.\n"
-        "\n"
-        "`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\n",
+        '{\n  "refusal": {\n    "reason": "cannot complete T1 \\u2014 3 unmet condition(s):\\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\\n  - reviewer independence not satisfied: the author\'s model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\\n\\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "complete@1"\n}\n',
+        "cannot complete T1 — 3 unmet condition(s):\n  - required gate(s) not passed: implement, unit_tests, merge (current outcome: implement=not run, unit_tests=not run, merge=not run)\n  - gate(s) never run and never skipped: implement, rubber_duck, critic, standards, unit_tests, merge. Record an outcome (`ddflow gate run|record`) or skip it on the record (`ddflow gate skip <id> <gate> --reason ...`); set [gates].require_outcome = false to make the pipeline advisory.\n  - reviewer independence not satisfied: the author's model is unknown, so no reviewer can be shown to differ from it: pass `--model <author model>` (`model` over MCP), or declare it once with `ddflow session start --model <author model>` under the same identity.\n\n`ddflow gate status T1` shows the pipeline. --force overrides, and the override is recorded.\n",
     ),
     (("complete", "nope"), 1, "", "no such item 'nope'\n"),
     (
@@ -1234,10 +1224,8 @@ EXPECTED = [
     (
         ("--json", "merge", "T3"),
         3,
-        "",
-        "T3 was claimed without a worktree, so it has no branch of its own. Name the branch that holds "
-        "its commits -- `ddflow merge T3 --branch <branch>` -- or run merge from the worktree it was "
-        "worked in.\n",
+        '{\n  "refusal": {\n    "reason": "T3 was claimed without a worktree, so it has no branch of its own. Name the branch that holds its commits -- `ddflow merge T3 --branch <branch>` -- or run merge from the worktree it was worked in.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "merge@1"\n}\n',
+        "T3 was claimed without a worktree, so it has no branch of its own. Name the branch that holds its commits -- `ddflow merge T3 --branch <branch>` -- or run merge from the worktree it was worked in.\n",
     ),
     (("merge", "nope"), 1, "", "no such item 'nope'\n"),
     (
@@ -1271,12 +1259,8 @@ EXPECTED = [
     (
         ("--json", "merge", "T5"),
         3,
-        "",
-        "1 uncommitted file(s) in <repo>/.ddflow/worktrees/T5 would NOT be included in the merge:\n"
-        "  ?? wip.txt\n"
-        "\n"
-        "Commit them, add them to .gitignore if they are build output, or pass --allow-dirty to merge "
-        "without them.\n",
+        '{\n  "refusal": {\n    "reason": "1 uncommitted file(s) in <repo>/.ddflow/worktrees/T5 would NOT be included in the merge:\\n  ?? wip.txt\\n\\nCommit them, add them to .gitignore if they are build output, or pass --allow-dirty to merge without them.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "merge@1"\n}\n',
+        "1 uncommitted file(s) in <repo>/.ddflow/worktrees/T5 would NOT be included in the merge:\n  ?? wip.txt\n\nCommit them, add them to .gitignore if they are build output, or pass --allow-dirty to merge without them.\n",
     ),
     (
         ("merge", "T5", "--allow-dirty", "--allow-empty"),
@@ -1564,9 +1548,8 @@ EXPECTED = [
     (
         ("--json", "resolve", "S1", "--keep", "someone"),
         3,
-        "",
-        "S1 is not contested: there is nothing to resolve. `ddflow update` changes an item; `ddflow "
-        "release` gives up a claim.\n",
+        '{\n  "refusal": {\n    "reason": "S1 is not contested: there is nothing to resolve. `ddflow update` changes an item; `ddflow release` gives up a claim.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "resolve@1"\n}\n',
+        "S1 is not contested: there is nothing to resolve. `ddflow update` changes an item; `ddflow release` gives up a claim.\n",
     ),
     (("resolve", "nope", "--keep", "x"), 1, "", "no such item 'nope'\n"),
     (("pr", "status"), 0, "no pull requests recorded\n", ""),
@@ -2043,7 +2026,7 @@ EXPECTED = [
     (
         ("--json", "bug", "reopen", "Bx", "--reason", "again"),
         3,
-        "",
+        '{\n  "refusal": {\n    "reason": "bug Bx is open; there is nothing to reopen.",\n    "outcome": "refused",\n    "exit": 3\n  },\n  "schema": "bug_invalid@1"\n}\n',
         "bug Bx is open; there is nothing to reopen.\n",
     ),
     (

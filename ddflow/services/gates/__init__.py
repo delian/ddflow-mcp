@@ -46,6 +46,7 @@ from .defs import (  # noqa: F401
     pipelines,
     required_gates,
 )
+from .drift import gate_config_drift  # noqa: F401
 from .evidence import (  # noqa: F401
     FINGERPRINT_EXCLUDE,
     LEGACY_CLEAN,
@@ -114,6 +115,7 @@ from .outcomes import (  # noqa: F401
     status,
     triage_counts,
     triage_line,
+    untriaged_note,
 )
 from .reviewers import (  # noqa: F401
     REVIEWER_GATES,
@@ -134,7 +136,6 @@ from .runner import (  # noqa: F401
     Classified,
     classify_exit,
     command_layer_evidence,
-    gate_config_drift,
     output_evidence,
     run_command_gate,
     run_log_writer,
