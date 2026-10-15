@@ -16,9 +16,9 @@ from __future__ import annotations
 import io
 import json
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from collections.abc import Iterator
 from typing import Any, TextIO
 
 from .registry import tag_body
@@ -98,7 +98,6 @@ def remembered_stderr() -> Iterator[_Tee]:
 
 def refusal_body(code: int, said: str, outcome: str) -> dict[str, Any]:
     """The body of a ``--json`` run that exited ``code`` without printing one: the reason it
-    gave on stderr (the last line it wrote), led by `refusal` as every refusal body is."""
-    lines = [ln for ln in said.strip().splitlines() if ln.strip()]
-    reason = lines[-1].strip() if lines else f"exit {code}"
+    said on stderr, led by `refusal` as every refusal body is."""
+    reason = said.strip() or f"exit {code}"
     return {"refusal": {"reason": reason, "outcome": outcome, "exit": code}}
