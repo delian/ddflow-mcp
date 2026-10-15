@@ -22,13 +22,18 @@ from ...core.schedule import plan
 NOBODY = "\0metrics"
 
 
+def clamp_step(step_s: float) -> float:
+    """The sampling step: at least one second, so a zero or negative knob cannot divide by 0."""
+    return max(float(step_s), 1.0)
+
+
 def instants(
     first: float, now: float, step_s: float, max_folds: int, since: float | None
 ) -> tuple[list[float], bool]:
     """(instants oldest first, whether the cap cut the window short): ``now`` and every
     ``step_s`` before it, back to ``since`` (or the first event), at most ``max_folds``."""
     start = max(first, since) if since is not None else first
-    step = float(step_s)
+    step = clamp_step(step_s)
     count = int((now - start) // step) + 1
     capped = count > max_folds
     count = max(min(count, max(int(max_folds), 1)), 1)
@@ -42,7 +47,7 @@ def sample(events: Sequence[Event], cfg: Config, now: float, since: float | None
     stamped = sorted(((PR.epoch(e.ts), e) for e in events), key=lambda p: (p[0], p[1].lamport))
     stamped = [p for p in stamped if p[0] > 0]
     m = cfg.metrics
-    step = max(float(m.grid_step_s), 1.0)  # the one clamp: spacing, lookback and the report
+    step = clamp_step(m.grid_step_s)  # spacing, lookback and the report
     if not stamped:
         return {"rows": [], "step_s": step, "capped": False, "folds": 0}
     times = [t for t, _ in stamped]

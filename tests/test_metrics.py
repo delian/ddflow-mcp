@@ -241,6 +241,9 @@ def test_a_zero_grid_step_is_clamped_once_and_reported_clamped():
     cfg.metrics.grid_max_folds = 3
     g = M.sample_grid(multi_lane().events, cfg, T0 + 600)
     assert g["step_s"] == 1.0 and len(g["rows"]) == 3
+    from ddflow.services.metrics.grid import instants
+
+    assert len(instants(0.0, 10.0, 0.0, 24, None)[0]) == 11  # no ZeroDivisionError for a caller
 
 
 def test_review_rounds_follow_the_items_completed_in_the_window():
@@ -253,7 +256,9 @@ def test_review_rounds_follow_the_items_completed_in_the_window():
 def test_a_bool_is_not_a_percentile():
     from ddflow.config_sections.metrics import _percent
 
-    assert _percent(True) and _percent(0) and _percent(100) and _percent(90) == ""
+    for bad in (True, 0, 100):  # the check returns why a value is refused
+        assert _percent(bad)
+    assert _percent(90) == ""
 
 
 # -- the skip audit --------------------------------------------------------------------
