@@ -1784,7 +1784,9 @@ def setup(
     try:
         actions += PM.install(tree, cfg)
     except (OSError, RuntimeError) as exc:
-        actions.append(f"pin merge driver NOT installed ({exc}); `ddflow pins regenerate --install`")
+        actions.append(
+            f"pin merge driver NOT installed ({exc}); `ddflow pins regenerate --install`"
+        )
 
     statuses = _scan(repo)
     if isinstance(statuses, O.Outcome):
