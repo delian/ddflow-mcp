@@ -42,6 +42,7 @@ from ..core import upcasters as UP
 from ..core import version as V
 from ..core.events import (
     CAP_ID_TEMPLATE,
+    CAP_EVIDENCE_BLOBS,
     CAP_LOG_REDACTION,
     CAPABILITIES_KIND,
     OLDER_MARK,
@@ -66,10 +67,12 @@ from ..core.events import (
 )
 from ..core.model import known_kinds
 from ..core.slug import safe_filename
+from . import blobstore as BS
 from . import fsio
 from . import git as G
 from . import hostinfo as H
 from . import paths as P
+from . import shardmeta as SMT
 from . import worktree as W
 
 __all__ = [
@@ -871,6 +874,7 @@ class EventLog:
         #: in `external.sync`, an export): reading it must not leave a snapshot in it.
         self.cache_writes = cache_writes
         self.root = Path(root)
+        BS.remember(self.root)
         self.dir = self.root / ".ddflow" / "events"
         # Derived on first USE, not here (bug B244aeaad5c): deriving can create this
         # clone's `.ddflow/local/clone-id`, and a log built only to be read -- a sibling
@@ -885,6 +889,7 @@ class EventLog:
         # next question about whether `.ddflow` existed answered yes about itself.
         # The directory is created on the first append instead.
         self._lamport = 0
+        self._meta: SMT.ShardMeta | None = None
         self._redactor: Any = None
         self._caps_active: set[str] | None = None
         self.skipped_lines = 0
@@ -1056,6 +1061,8 @@ class EventLog:
         # The log is committed: free text goes through the `log` redaction profile HERE,
         # where every write passes, declared per kind (D-unify 6, bug B5deba76d04).
         data = self._redact_data(kind, data)
+        # Large gate evidence leaves the shard, after redaction so the blob holds what the shard would.
+        data = BS.externalize(self.root, self.log_cfg, kind, data)
         # Re-read inside the lock: another agent may have advanced the clock.
         high = self._highest_lamport()
         for e in observed:
@@ -1088,6 +1095,8 @@ class EventLog:
             os.fsync(fd)
         finally:
             os.close(fd)
+        if self._meta is not None:
+            self._meta.advance(self.shard, size, ev)
         for hook in APPEND_HOOKS:  # every log, however built (Ba24a8d32ee)
             with contextlib.suppress(Exception):
                 hook(self, ev, size, size + len(line))
@@ -1128,9 +1137,24 @@ class EventLog:
         return R.redact_event_data(kind, data, red)
 
     # -- the version stamp and the skew guard -----------------------------------------
-    def _all_events(self) -> Iterator[Event]:
-        """Every parsed event, unsorted and not de-duplicated: the stamp facts do not need
+    def _shard_meta(self) -> SMT.ShardMeta | None:
+        """The per-clone shard facts (`infra.shardmeta`), or None where no cache is kept
+        (`[log].snapshot` off, a log built only to read another repository)."""
+        if not self._snapshot_enabled():
+            return None
+        if self._meta is None:
+            self._meta = SMT.ShardMeta(self.root)
+        return self._meta
+
+    def _stamp_events(self) -> Iterator[Event]:
+        """The events the version guard folds, in any order, not de-duplicated. From the
+        per-shard record where one is current, so an append does not parse the whole log
+        (B-gap-log-scale); otherwise every shard's events: the stamp facts do not need
         order, and sorting the whole log on each append would cost more than the append."""
+        meta = self._shard_meta()
+        if meta is not None:
+            yield from meta.facts(self.shards(), lambda p: self._read_shard(p)[0])[1]
+            return
         for p in self.shards():
             yield from self._read_shard(p)[0]
 
@@ -1142,7 +1166,7 @@ class EventLog:
         Caller holds the lock."""
         version, fmt = running_version(), V.format_level()
         # a level of 0 is "this code declares no format": never compared
-        facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
+        facts = stamp_facts(self._stamp_events(), self.agent_id, version, fmt or None)
         extra = self._judge_skew(facts, version, fmt)
         gap = capability_gap(facts.capabilities, kind) if kind else None
         if gap is not None and self._skew_policy() == "refuse" and facts.override is None:
@@ -1165,6 +1189,8 @@ class EventLog:
         record to the next object; the guard never depends on it)."""
         if self._caps_active is None:
             active = {CAP_LOG_REDACTION}
+            if self.log_cfg.evidence_blobs:
+                active.add(CAP_EVIDENCE_BLOBS)
             try:
                 ids = Config.load(self.root).ids
                 if ids != type(ids)():
@@ -1232,7 +1258,7 @@ class EventLog:
         files without appending an event (`adopt`): the managed text it renders is worded
         per release, so an older ddflow must not overwrite a newer one's."""
         version, fmt = running_version(), V.format_level()
-        facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
+        facts = stamp_facts(self._stamp_events(), self.agent_id, version, fmt or None)
         self._judge_skew(facts, version, fmt, strict=True)
 
     @staticmethod
@@ -1264,7 +1290,7 @@ class EventLog:
         reason = (reason or "").strip()
         with self.transaction():
             version, fmt = running_version(), V.format_level()
-            facts = stamp_facts(self._all_events(), self.agent_id, version, fmt or None)
+            facts = stamp_facts(self._stamp_events(), self.agent_id, version, fmt or None)
             if not facts.skewed:
                 return None
             if facts.override is not None:
@@ -1312,11 +1338,12 @@ class EventLog:
         against 0.04 ms for the tail read — and an append is almost always preceded by a
         fold that warmed the cache.
         """
-        high = 0
-        for p in self.shards():
-            for e in self._read_shard(p)[0]:
-                high = max(high, e.lamport)
-        return high
+        meta = self._shard_meta()
+        if meta is not None:
+            return meta.facts(self.shards(), lambda p: self._read_shard(p)[0])[0]
+        return max(
+            (e.lamport for p in self.shards() for e in self._read_shard(p)[0]), default=0
+        )
 
     def clone_id(self, *, create: bool = True) -> str:
         """This clone's id (`.ddflow/local/clone-id`), "" when the project is not adopted.
