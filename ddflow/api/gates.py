@@ -836,6 +836,7 @@ def record(
     by, note = _roborev_reviewer(repo, wt, gate, ev, evidence.model, skip=skip, gdef=gdef)
     warning = " ".join(filter(None, [warning, note]))
 
+    warning = " ".join(filter(None, [warning, G.untriaged_note(it, gate)]))
     try:
         R.record_measured(
             log,

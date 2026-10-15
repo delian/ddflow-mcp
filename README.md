@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=c1e0bd0d1f9d -->
+<!-- ddflow:begin README/toc sha=0fdf370c61b2 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -270,6 +270,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [What CI checks](#what-ci-checks)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
   - [Companion tools](#companion-tools)
+- [Pin files regenerate; they are never hand-merged](#pin-files-regenerate-they-are-never-hand-merged)
 - [Finding a test polluter](#finding-a-test-polluter)
 - [Wiring it into your agent](#wiring-it-into-your-agent)
   - [One set of rules, every agent](#one-set-of-rules-every-agent)
@@ -988,7 +989,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 251 knobs.
+cadences, and the rest of the 255 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1651,6 +1652,26 @@ command = "my-linter"
 args    = ["mcp"]
 install = "cargo install my-linter"
 ```
+
+## Pin files regenerate; they are never hand-merged
+
+A golden snapshot, a pinned CLI transcript or a generated table changes whenever a knob,
+command or event kind does, so every parallel branch touches the same few files. ddflow
+re-records them instead of leasing or merging them by hand. A project lists its pin kinds
+as data in `.ddflow/pins.toml` (`[pins].recipes_file`), one `[[pin]]` per kind with
+`files`, `check` (exit 0 = current) and `regen` (re-records only what differs):
+
+    ddflow pins regenerate --check      # list the stale pins, write nothing (exit 1 if any)
+    ddflow pins regenerate              # re-record exactly the stale ones
+    ddflow pins regenerate --only NAME  # one pin
+    ddflow pins regenerate --install    # optional: the git merge driver + post-merge hook
+
+`--install` (also run by `ddflow adopt` when the recipes file exists) writes
+`<file> merge=pinsregen` to `.gitattributes`, sets `merge.pinsregen.driver` and installs a
+`post-merge` hook: on a conflict in a pin file the driver keeps our side, the hook then
+regenerates the stale pins and folds them into the merge commit (`[pins].after_merge` =
+`amend`, `leave` or `off`). List the pin files in `[lease].shared_globs` so a lease on them is
+not exclusive. A recipe never runs under xdist.
 
 ## Finding a test polluter
 
@@ -5122,7 +5143,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 251): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 255): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5635,7 +5656,7 @@ declared once and persists — see
 
 ## Configuration
 
-251 knobs across 32 sections, every one documented in place and listed, with its default
+255 knobs across 33 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5702,8 +5723,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=1bc551cc65b4 -->
-<details><summary>All 251 knobs across 32 sections</summary>
+<!-- ddflow:begin README/knobs sha=d9c899f68236 -->
+<details><summary>All 255 knobs across 33 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5712,8 +5733,6 @@ long default is left to `ddflow config --explain`.
 | `lease.grace_s` | `120` |  |
 | `lease.acquire_timeout_s` | `30` |  |
 | `lease.waiter_reservation_s` | `300` |  |
-| `lease.wait_max_s` | `600` |  |
-| `lease.wait_queue` | `false` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
 | `lease.shared_globs` | `[]` |  |
 | `lease.append_only_globs` | `[]` |  |
@@ -5771,6 +5790,8 @@ long default is left to `ddflow config --explain`.
 | `gates.evidence_required` | (long: see `ddflow config --explain`) |  |
 | `gates.unit_tests_scope` | `"selected"` | `selected` \| `full` |
 | `gates.unit_tests_small_lines` | `150` |  |
+| `gates.scrub_env` | (long: see `ddflow config --explain`) |  |
+| `gates.keep_env` | `[]` |  |
 | `lessons.search_backend` | `"fts5"` | `fts5` \| `like` |
 | `lessons.max_results` | `5` |  |
 | `lessons.snippet_chars` | `320` |  |
@@ -5900,12 +5921,16 @@ long default is left to `ddflow config --explain`.
 | `upgrade.index_url` | `""` |  |
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
+| `pins.recipes_file` | `".ddflow/pins.toml"` |  |
+| `pins.timeout_s` | `900` |  |
+| `pins.after_merge` | `"amend"` | `amend` \| `leave` \| `off` |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
 | `ci.command` | `""` |  |
 | `ci.base` | `""` |  |
 | `ci.timeout_s` | `3600` |  |
+| `ci.keep_env` | `[]` |  |
 | `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
