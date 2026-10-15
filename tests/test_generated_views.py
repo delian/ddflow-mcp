@@ -337,7 +337,7 @@ def test_the_log_probe_survives_a_non_utf8_shard_name(adopted):
     """The log probe's own decode, pinned directly: the first test of this decode only
     called `check_views` with no view staged, which returns before the probe runs, so it
     passed with this call site reverted (roborev on e8543f9). Here the log dir is
-    tracked, a view IS staged, and an untracked shard has a non-UTF-8 name."""
+    tracked and an untracked shard has a non-UTF-8 name."""
     import os
 
     from ddflow.services import enforce as E
