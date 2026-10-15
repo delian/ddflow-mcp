@@ -943,12 +943,16 @@ def _chain_scope(state: State, phase: str) -> tuple[dict[str, Item], Callable[[I
     return live, before
 
 
-def chain_cycles(state: State, phase: str = "") -> list[list[str]]:
+def chain_cycles(
+    state: State,
+    phase: str = "",
+    scope: tuple[dict[str, Item], Callable[[Item], list[str]]] | None = None,
+) -> list[list[str]]:
     """Cycles among the NOT-DONE items of a critical path's scope, by the edges it walks.
 
     Finished work cannot be waited on, so a loop that runs through it is no cycle
     (Bbbcbfc4bbb: a whole-project forecast refused over one, while `next` found none)."""
-    live, before = _chain_scope(state, phase)
+    live, before = scope or _chain_scope(state, phase)
     open_items = {k: v for k, v in live.items() if v.state != DONE}
     return find_cycles(open_items, edges=lambda it: [d for d in before(it) if d in open_items])
 
@@ -965,7 +969,7 @@ def critical_path(state: State, phase: str = "") -> list[str]:
     # The longest chain is only defined on an acyclic graph: on a cyclic one a chain
     # computed for one node is reused where it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
     # than return a confidently wrong number.
-    if chain_cycles(state, phase):
+    if chain_cycles(state, phase, (items, before)):
         return []
     # INHERITED dependencies, like readiness uses. The path used to walk `it.needs`
     # alone, so a phase-level dependency did not lengthen the reported floor at all --

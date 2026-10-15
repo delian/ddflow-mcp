@@ -1,4 +1,4 @@
-"""Metrics forecast, `next` and `plan check` agree on cycles for the same fold (bug Bbbcbfc4bbb).
+"""The forecast and `next` agree on cycles in open work for the same fold (bug Bbbcbfc4bbb).
 
 The forecast's longest chain looked for cycles over EVERY live item, finished ones too, and
 with parent-contains-child edges added; a loop that ran only through finished work (which
