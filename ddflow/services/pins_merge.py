@@ -78,7 +78,9 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
     line = line or command_line
     files = pin_files(repo, cfg)
-    if not files:
+    # Keeping our side is only safe while the post-merge hook re-records the other side's
+    # pins: with after_merge off nothing would, so nothing is installed.
+    if not files or cfg.pins.after_merge == "off":
         return []
     actions: list[str] = []
     attrs = Path(repo) / ".gitattributes"
@@ -102,17 +104,16 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
         if cur.out.strip() != val:
             G.run(repo, "config", "--local", key, val)
             actions.append(f"set git config {key}")
-    if cfg.pins.after_merge != "off":
-        hook = hooks_dir(repo) / "post-merge"
-        body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
-        if not hook.exists() or HOOK_MARK in hook.read_text("utf-8", errors="replace"):
-            if not hook.exists() or hook.read_text("utf-8") != body:
-                hook.parent.mkdir(parents=True, exist_ok=True)
-                atomic_write(hook, body)
-                hook.chmod(0o755)
-                actions.append(f"wrote {hook}")
-        else:
-            actions.append(
-                f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it"
-            )
+    hook = hooks_dir(repo) / "post-merge"
+    body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
+    if not hook.exists() or HOOK_MARK in hook.read_text("utf-8", errors="replace"):
+        if not hook.exists() or hook.read_text("utf-8") != body:
+            hook.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(hook, body)
+            hook.chmod(0o755)
+            actions.append(f"wrote {hook}")
+    else:
+        actions.append(f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it")
+
+
     return actions

@@ -91,6 +91,8 @@ def load_recipes(repo: Path, cfg: Config) -> list[Recipe]:
         if not (isinstance(files, list) and all(isinstance(f, str) for f in files)):
             raise ValueError(f"{cfg.pins.recipes_file}: pin {name!r}: files must be strings")
         env = t.get("env", {})
+        if not isinstance(env, dict):
+            raise ValueError(f"{cfg.pins.recipes_file}: pin {name!r}: env must be a table")
         out.append(
             Recipe(
                 name,

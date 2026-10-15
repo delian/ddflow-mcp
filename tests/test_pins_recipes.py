@@ -55,6 +55,7 @@ def test_a_recipe_that_outlives_timeout_s_is_reported_failed(tmp_path):
         ('[[pin]]\nname = "a"\ncheck = ["true"]\n', "regen"),
         ('[[pin]]\nfiles = []\ncheck = ["true"]\nregen = ["true"]\n', "no name"),
         (GOOD + GOOD, "twice"),
+        (GOOD + 'env = ["CI=1"]\n', "env must be a table"),
     ],
 )
 def test_a_malformed_recipe_file_is_a_clear_problem(tmp_path, bad, word):
@@ -87,3 +88,14 @@ def test_after_merge_off_does_nothing_and_leave_does_not_commit(tmp_path):
     assert (repo / "x").read_text() == "old\n"
     assert "not committed" in PM.after_merge(repo, _cfg(after_merge="leave"))
     assert (repo / "x").read_text() == "new\n"
+
+
+def test_nothing_is_installed_when_after_merge_is_off(tmp_path):
+    """With after_merge off no hook re-records the other side's pins, so a keep-ours driver
+    would silently drop them: neither the driver nor the attribute is written."""
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    repo = _repo(tmp_path, GOOD)
+    assert PM.install(repo, _cfg(after_merge="off")) == []
+    assert not (repo / ".gitattributes").exists()
+    assert PM.install(repo, _cfg(after_merge="amend"))
+    assert f"merge={PM.DRIVER}" in (repo / ".gitattributes").read_text()
