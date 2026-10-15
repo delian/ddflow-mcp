@@ -34,6 +34,11 @@ _LISTS = {
 }
 #: `research` has no subcommands (`research add` is the verb form), so its list lives
 #: behind `research list` as the optional verb.
+_ALL_HELP = {
+    "bug": "include fixed and invalid bugs",
+    "lesson": "include superseded lessons",
+    "": "accepted for every kind; this kind lists all its rows already",
+}
 _SHARED_FLAGS = ("state", "phase", "tag", "owner", "since")
 
 
@@ -57,13 +62,13 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
             help=f"most rows to show (default {R.LIST_DEFAULT_LIMIT})",
         )
     )
+    # Every kind takes --all so one command line works for any kind; only bugs and lessons
+    # narrow by default, so for the others it changes nothing.
+    out.append(Param("all", type="boolean", help=_ALL_HELP.get(kind, _ALL_HELP[""])))
     if kind == "bug":
-        out.append(Param("all", type="boolean", help="include fixed and invalid bugs"))
         out.append(
             Param("item", default=None, help="only bugs filed in or against this queue item id")
         )
-    if kind == "lesson":
-        out.append(Param("all", type="boolean", help="include superseded lessons"))
     return tuple(out)
 
 
@@ -177,7 +182,9 @@ def cmd_list_any(a, c: Ctx) -> int:
     if stray:
         reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
         if c.json:
-            emit_json({"record_kind": a.kind, "reason": reason})
+            emit_json(
+            {"record_kind": a.kind, "reason": reason, "rows": [], "total": 0, "shown": 0}
+        )
         print(reason, file=sys.stderr)
         return REFUSED
     return cmd_list(a, c)

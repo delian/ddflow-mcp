@@ -41,7 +41,19 @@ def view_list(
             limit=limit,
         )
     except V.ViewError as exc:
-        return O.refused("view.list", str(exc), record_kind=kind)
+        # A refusal keeps the list shape (no rows), so a reader of `.rows` never meets a
+        # missing key.
+        return O.refused(
+            "view.list",
+            str(exc),
+            record_kind=kind,
+            rows=[],
+            total=0,
+            shown=0,
+            limit=limit,
+            truncated=False,
+            filters={},
+        )
     data: dict[str, Any] = {
         "record_kind": view.kind,
         "rows": view.rows,
