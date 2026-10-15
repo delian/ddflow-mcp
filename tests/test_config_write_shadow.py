@@ -33,3 +33,28 @@ def test_an_unshadowed_write_has_no_warning(repo):
     code, out, err = run_cli(repo, "config", KEY, "7")
     assert code == 0
     assert "shadow" not in out + err
+
+
+def test_an_environment_winner_is_named_with_its_variable(repo):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {**os.environ, "DDFLOW_SCHEDULE_MAX_PARALLEL_TASKS": "6"}
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    p = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "config", KEY, "7"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+    )
+    assert p.returncode == 0, p.stderr
+    assert "DDFLOW_SCHEDULE_MAX_PARALLEL_TASKS" in p.stdout and "shadow" in p.stdout
+
+
+def test_a_shadow_holding_the_same_value_does_not_claim_a_difference(repo):
+    run_cli(repo, "config", "--local", KEY, "7")
+    _, out, _ = run_cli(repo, "config", KEY, "7")
+    assert "shadow" in out and "not what was just written" not in out
