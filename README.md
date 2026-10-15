@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 237 knobs.
+cadences, and the rest of the 241 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5120,7 +5120,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 237): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 241): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5378,7 +5378,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=fa829c155003 -->
+<!-- ddflow:begin README/tools sha=e537cbe77f17 -->
 <details><summary>All 115 MCP tools: 32 in the `core` tier, 47 more in `standard`, 36 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5479,7 +5479,6 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_similar` | core | 'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson… |
 | Looking at it | `ddflow_board` | standard | The whole work queue as a readable board, with the critical path. |
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
-| Looking at it | `ddflow_docs` | all | Documentation, read-only. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
@@ -5498,6 +5497,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
 | When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
+| Unmapped — add a prefix to `_GROUPS` | `ddflow_docs` | all | Documentation, read-only. |
 
 </details>
 <!-- ddflow:end README/tools -->
@@ -5632,7 +5632,7 @@ declared once and persists — see
 
 ## Configuration
 
-237 knobs across 31 sections, every one documented in place and listed, with its default
+241 knobs across 31 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5699,8 +5699,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=41e378d360ef -->
-<details><summary>All 237 knobs across 31 sections</summary>
+<!-- ddflow:begin README/knobs sha=2594e19f0601 -->
+<details><summary>All 241 knobs across 31 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5912,6 +5912,10 @@ long default is left to `ddflow config --explain`.
 | `agent.reviewer_family_must_differ` | `true` |  |
 | `agent.families` | (long: see `ddflow config --explain`) |  |
 | `agent.routers` | `{hydrafusion = []}` |  |
+| `agent.roles` | (long: see `ddflow config --explain`) |  |
+| `agent.actors` | `{}` |  |
+| `agent.default_role` | `"agent"` |  |
+| `agent.operator_role` | `"operator"` |  |
 | `ids.bug` | `"{prefix}{hash}"` |  |
 | `ids.lesson` | `"{prefix}{hash}"` |  |
 | `ids.research` | `"{prefix}{hash}"` |  |

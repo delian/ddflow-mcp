@@ -13,6 +13,7 @@ from ...core.events import is_older
 from ...core.model import ABANDONED, DONE
 from ...core.plain import plain
 from ...core.schedule import is_external, stale_package_globs, unpickable
+from ...core.stuck import stuck_edges
 from ...core.tier import unknown_tier_notes
 from ...infra import container as CT
 from ...infra import signals as SIG
@@ -88,6 +89,12 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
     """Dependencies that can never be met, and external ones not yet observed."""
 
     configured = EX.repos(cfg, repo)
+    for iid, dep, cmd in stuck_edges(st):
+        how = "removed" if st.items[dep].removed else "abandoned"
+        problems.append(
+            f"{iid} needs {dep!r}, which is {how} and will never be done, so {iid} is "
+            f"stuck for good: `{cmd}`"
+        )
     # Live items only, as `external.referenced` observes: a removed item's dependency
     # produced a finding `external sync` would never clear (roborev 829).
     for it in (i for i in st.items.values() if not i.removed):

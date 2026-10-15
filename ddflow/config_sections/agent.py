@@ -146,3 +146,39 @@ class AgentConfig:
             else 'must be a table of lists of family names, e.g. { hydrafusion = ["openai"] }'
         ),
     )
+
+    # The actor model (SE-actors, decisions D-remote and D-shared-engines-r2 10): a role is
+    # a name, a capability is a name, and which role holds which capability is this table --
+    # nothing is hard-coded per role. `services/actors.resolve_actor` is the one reader.
+    roles: dict[str, list[str]] = knob(
+        factory=lambda: {
+            "operator": ["*"],
+            "bot": ["read", "claim", "note", "start_lane", "approve_marked"],
+            "agent": ["read", "claim", "note"],
+            "observer": ["read"],
+        },
+        doc='Role name to the capabilities it holds: the one table every auth and approval path is to ask (serve auth, hub and scoped tokens, the approvals engine, waiver approvers: each lands as its own item and reads it through `services/actors`). A capability is any name a consumer asks for; the shipped ones are read, claim, note, start_lane (start a lane within the caps the operator sets), approve (answer any approval), approve_marked (answer only approvals marked bot-answerable), adopt, waive. "*" holds every capability. A role missing from the table, or a capability missing from its list, is refused: the table fails closed. Default: operator = ["*"], bot = read, claim, note, start_lane, approve_marked; agent = read, claim, note; observer = read. Widening a role is an operator act. Change it for the project (`ddflow config --set agent.roles ...`), for this machine (add --local), per run (DDFLOW_AGENT_ROLES, JSON only), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
+        check=lambda v: (
+            ""
+            if isinstance(v, dict)
+            and all(isinstance(m, list) and all(isinstance(x, str) for x in m) for m in v.values())
+            else 'must be a table of lists of capability names, e.g. { bot = ["read", "start_lane"] }'
+        ),
+    )
+    actors: dict[str, str] = knob(
+        factory=dict,
+        doc='Actor id to role, for named actors such as a chat gateway or n8n: `{ openclaw = "bot" }`. Applied ONLY to an id a credential has proven (a paired token); an id an agent merely declares with --agent or as_agent is a claim and is never looked up here, so naming a role cannot be done by saying the name. Empty by default. Change it for the project (`ddflow config --set agent.actors ...`), for this machine (add --local), per run (DDFLOW_AGENT_ACTORS, JSON only), or over MCP with `ddflow_configure`.',
+        check=lambda v: (
+            ""
+            if isinstance(v, dict) and all(isinstance(r, str) for r in v.values())
+            else 'must be a table of role names, e.g. { openclaw = "bot" }'
+        ),
+    )
+    default_role: str = knob(
+        "agent",
+        doc='The role of a caller no credential and no terminal vouches for: an agent harness, `--agent`, `DDFLOW_AGENT`, the MCP surface. Default "agent". A person at their own terminal is the operator role (see `agent.operator_role`); setting this to "operator" makes every caller one and is the widening it sounds like. Change it for the project (`ddflow config --set agent.default_role observer`), for this machine (add --local), per run (DDFLOW_AGENT_DEFAULT_ROLE), or over MCP with `ddflow_configure`.',
+    )
+    operator_role: str = knob(
+        "operator",
+        doc='The role of a person at their own terminal (a CLI call with no --agent, no DDFLOW_AGENT and no agent-harness marker). Default "operator". Change it for the project (`ddflow config --set agent.operator_role operator`), for this machine (add --local), per run (DDFLOW_AGENT_OPERATOR_ROLE), or over MCP with `ddflow_configure`.',
+    )
