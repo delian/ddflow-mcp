@@ -5512,6 +5512,11 @@ ddflow update <id> [...]        change title/body/needs/globs/tags/priority (--g
 ddflow update <id> --worktree P rebind the item and its lease to the linked worktree at P
 ddflow resolve <id> --keep X    settle a contested item: keep one definition or one claim
 
+ddflow plan check <file|->      run plan check before filing a phase: a wildcard-directory
+                                glob, a cycle, an unknown `needs`, two tasks that can run
+                                together whose globs collide, or a task with no acceptance
+                                (1 = findings, 0 = clean, 3 = not a plan at all)
+
 ddflow next [--phase P]         what may start now       (2 = nothing actionable)
 ddflow claim <id> [--globs ..]  lease + create worktree  (3 = refused)
 ddflow heartbeat <id>           renew a lease

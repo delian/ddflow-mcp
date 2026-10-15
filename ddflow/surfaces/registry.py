@@ -892,7 +892,17 @@ def unknown_arg_hint(known: Iterable[str], unknown: Iterable[str]) -> str:
 def exempt_paths(commands: tuple[Command, ...]) -> dict[tuple[str, ...], str]:
     """CLI paths with no tool of their own, each with its reason. A command routed by a
     selector (``via`` of two) is served, not exempt, even when it also carries a reason."""
-    return {c.path: c.reason for c in commands if c.path and c.reason and len(c.via) != MAX_VIA}
+    # A one-word command WITH subcommands is a GROUP: its exemption is its WORD
+    # (`declared_words`), never its path -- so it is not offered here as a leaf exemption.
+    words_with_children = {c.path[0] for c in commands if len(c.path) > 1}
+    return {
+        c.path: c.reason
+        for c in commands
+        if c.path
+        and c.reason
+        and len(c.via) != MAX_VIA
+        and (len(c.path) > 1 or c.path[0] not in words_with_children)
+    }
 
 
 def routed_paths(commands: tuple[Command, ...]) -> dict[tuple[str, ...], tuple[str, str]]:
