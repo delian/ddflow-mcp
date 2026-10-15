@@ -153,6 +153,8 @@ EXEMPT: dict[str, str] = {
         "a person's approval of a digest, or a single-use approval spent: no authored "
         "text to compare (services.approval)",
     ),
+    "lease.waiting": "a refused claim or widening's own record of who waits for which files "
+    "(services.waiting): globs and ids, no authored text",
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
     "repair.applied": "a versioned data repair's own record of the findings it settled "

@@ -156,7 +156,10 @@ def test_widening_into_another_live_lease_is_refused_and_records_nothing(repo):
     code, out, err = run_cli(repo, "update", "T1", "--globs", "src/a.py,docs/x.md", agent=HOLDER)
     assert code == 3, (code, out, err)
     assert "T2" in out + err and OTHER in out + err, out + err
-    assert len(EventLog(repo, "reader").read_all()) == n, "a refused update recorded events"
+    # The edit and the lease change record nothing; the refusal only registers the wait
+    # (DX-no-hold-and-wait), one `lease.waiting` event.
+    kinds = [e.kind for e in EventLog(repo, "reader").read_all()[n:]]
+    assert kinds == ["lease.waiting"], kinds
     st = fold(EventLog(repo, "reader").read_all(), strict=False)
     assert st.items["T1"].globs == ["src/a.py"]
     assert st.items["T1"].lease.globs == ["src/a.py"]

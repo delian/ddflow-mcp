@@ -37,6 +37,7 @@ from ..core.schedule import plan as _plan
 from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id
+from . import waiting as WG
 from .leaseclock import foreign, localize
 
 
@@ -591,9 +592,17 @@ def plan_retarget(
         other_id, other, pair = clash
         return lz, (
             f"{item_id} is claimed, so its globs are its lease: {pair[0]!r} overlaps "
-            f"{pair[1]!r} held by {other.holder} on {other_id}. Nothing was recorded. "
-            f"Wait for {other_id} to finish, or keep {item_id} off those paths."
+            f"{pair[1]!r} held by {other.holder} on {other_id}. The globs were not changed; "
+            f"your lease stays as it is and the request is recorded as waiting. Do not poll: "
+            f"keep {item_id} off those paths, or ask again when {other_id} is done."
         )
+    if globs is not None:
+        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, globs, now)
+        if ahead is not None:
+            return lz, (
+                f"{item_id}: those globs are queued behind {ahead.holder} ({ahead.item}), who "
+                f"asked for them first. The globs were not changed."
+            )
     if resources:
         try:
             short = resource_shortfall(

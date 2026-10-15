@@ -22,6 +22,7 @@ from ..services import choices as CH
 from ..services import items as IT
 from ..services import leases as L
 from ..services import phase_close as PC
+from ..services import waiting as WG
 from ._base import _load
 from .lifecycle.claim import _worktree_held_by
 
@@ -45,6 +46,8 @@ class ItemEdit:
     resources: list[str] | None = None
     #: Rebind the item to this linked worktree and its branch (D-sticky-binding-remedy).
     worktree: str | None = None
+    #: Keep a refused widening in the first-in-first-out line for its files (`--queue`).
+    queue: bool = False
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -81,7 +84,7 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         )
     if edit.worktree is not None:
         return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree)
-    return _record_update(log, cfg, it, fields)
+    return _record_update(log, cfg, it, fields, queue=edit.queue)
 
 
 def _update_and_rebind(repo: Path, log, cfg, item: str, fields: dict, path: str) -> O.Outcome:
@@ -205,7 +208,7 @@ def _edit_fields(edit: ItemEdit) -> dict[str, Any]:
     return fields
 
 
-def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
+def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False) -> O.Outcome:
     """Append the edit, and retarget the item's live lease when its globs or resources
     change.
 
@@ -224,7 +227,9 @@ def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
             else (None, "")
         )
         if refusal:
-            return O.refused("item.updated", refusal, id=it.id)
+            return O.refused(
+                "item.updated", refusal + _waiting(log, cfg, it, lease, globs, queue), id=it.id
+            )
         log.append(f"{it.kind}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, globs, resources)
@@ -236,6 +241,19 @@ def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, globs),
     )
+
+
+def _waiting(log, cfg, it, lease, globs: list[str] | None, queue: bool) -> str:
+    """Record a refused widening as waiting (it returns at once; the lease is kept) and, once
+    the wait outlasts `[lease].wait_max_s`, name the own globs others are waiting for.
+    "" when nothing was refused for a file another lease holds."""
+    if lease is None or globs is None:
+        return ""
+    now = time.time()
+    state = L._fold(log)
+    WG.register(log, cfg, state, it.id, lease.holder, globs, now, queue=queue, lease=lease)
+    advice = WG.release_advice(L._fold(log), cfg, it.id, now)
+    return WG.advice_text(it.id, advice, list(lease.globs)) if advice else ""
 
 
 def _dropped(it, globs: list[str] | None) -> list[str]:

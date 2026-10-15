@@ -520,6 +520,9 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("lease.waiting", "holder"): "an agent id compared with a lease's holder",
+    ("lease.waiting", "lease_event"): "an event id compared with the waiter's lease",
+    ("lease.waiting", "on"): "item ids, holders and glob pairs of the leases waited for",
     ("approval.granted", "token_hash"): "a hash that is compared",
     ("approval.used", "token_hash"): "a hash that is compared",
     ("worktree.merged", "branch_head"): "a sha",

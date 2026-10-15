@@ -35,6 +35,14 @@ class LeaseConfig:
         300,
         doc="Claims on a contended file are served first come, first served. A live `ddflow wait` (or a claim refused for an overlap and retried) is a place in line; while a waiter is next and its item could be claimed now, a younger or unqueued claim of an overlapping file is refused as 'reserved for <agent>'. The place lapses this many seconds after the waiter could claim (it woke and did not come back), and at once when its process died or its wait deadline passed, so a dead or slow waiter never blocks anyone for long. 0 turns the queue off: whoever claims first wins.",
     )
+    wait_max_s: int = knob(
+        600,
+        doc="A claim or `update --globs` refused for files another lease holds returns at once and leaves a waiting record (who, which files, since when) instead of making the agent poll while it holds its old files. A waiter that has waited longer than this many seconds while OTHER agents wait for files in its own lease is told which of its own globs to release (`update --globs` without them) or to report a cycle; nothing is taken from it. 0 never tells it.",
+    )
+    wait_queue: bool = knob(
+        False,
+        doc="Keep every refused request in a first-in-first-out line per file: a later request for files an earlier waiter asked for is refused as 'queued behind <item>' until that waiter has them or its wait ends. `claim --queue` and `update --queue` ask for it per request. Off: a refusal is only recorded, and whoever asks first when the files free up wins.",
+    )
     #: report | auto
     reclaim_policy: str = knob(
         "report",
