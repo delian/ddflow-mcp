@@ -94,12 +94,15 @@ def undocumented(
     another tool owns (``ignore_names``): never reported."""
     flags: set[str] = set()
     words: set[str] = set()
+    spaced: list[str] = []  #: whitespace-normalised text, for a name of several words
     for text in doc_texts:
         flags.update(_FLAG_TOKEN.findall(text))
         words.update(_WORD_TOKEN.findall(_QUALIFIED.sub(r"\1.", text)))
+        spaced.append(" ".join(text.split()))
+    blob = "\n".join(spaced)
     out = []
     for s in names:
-        if owned(s.name) or s.name in (flags if s.kind == "flags" else words):
+        if owned(s.name) or _mentioned(s, flags, words, blob):
             continue
         out.append(
             Finding(
@@ -111,3 +114,12 @@ def undocumented(
             )
         )
     return out
+
+
+def _mentioned(s: Surface, flags: set[str], words: set[str], blob: str) -> bool:
+    if s.kind == "flags":
+        return s.name in flags
+    if s.name in words:
+        return True
+    name = " ".join(s.name.split())
+    return " " in name and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", blob) is not None

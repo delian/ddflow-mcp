@@ -377,7 +377,12 @@ class _Scan:
         if not _VERB.fullmatch(verb):
             return False
         self.counts["commands"] += 1
-        if words[0] in self.cmds and verb not in self.corpus.verbs:
+        got = self.help.resolve(words) if walked else None
+        if (
+            words[0] in self.cmds
+            and verb not in self.corpus.verbs
+            and not (got and len(got[0]) > 1)
+        ):
             self.report.findings.append(
                 Finding(
                     "command",
@@ -387,15 +392,12 @@ class _Scan:
                     f"no tracked code registers {verb!r} as a command",
                 )
             )
-        elif walked:  # a walked tool outside the project's scripts: --help is the authority
-            self._verb_flags(words, n)
+        elif got:  # --help is the authority for a walked tool
+            self._verb_flags(words, n, got)
         return True
 
-    def _verb_flags(self, words: list[str], n: int) -> None:
+    def _verb_flags(self, words: list[str], n: int, got: tuple[list[str], set[str]]) -> None:
         """The flags of ``<tool> <verb>...`` must be ones that verb's own ``--help`` lists."""
-        got = self.help.resolve(words)
-        if got is None:
-            return
         chain, flags = got
         for tok in words[len(chain) :]:
             flag = flag_of(tok)
