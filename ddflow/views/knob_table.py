@@ -85,7 +85,9 @@ def fix_counts(text: str, knobs: int, sections: int) -> str:
         text,
     )
     return re.sub(
-        r"(knobs\**[ ]*\n?[ ]*\(\d+ of the )\d+(\))", lambda m: f"{m.group(1)}{knobs}{m.group(2)}", text
+        r"(knobs\**[ ]*\n?[ ]*\(\d+ of the )\d+(\))",
+        lambda m: f"{m.group(1)}{knobs}{m.group(2)}",
+        text,
     )
 
 
