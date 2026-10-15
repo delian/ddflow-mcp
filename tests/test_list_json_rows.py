@@ -51,7 +51,7 @@ def test_every_kind_has_rows_even_when_refused_or_empty(repo, kind):
     _seed(repo)
     _code, body, _ = _rows(repo, kind, "--phase", "NOPE")
     assert body["rows"] == [] and body["total"] == 0 and body["record_kind"] == kind
-    code, body, _ = _rows(repo, kind, "--all", "--state", "no-such-state")
+    _code, body, _ = _rows(repo, kind, "--all", "--state", "no-such-state")
     assert isinstance(body["rows"], list)
 
 
