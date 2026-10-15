@@ -94,6 +94,28 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
     }
 
 
+def untriaged_note(it, gate: str) -> str:
+    """The findings of ``gate``'s recorded review that still lack a verdict, as a
+    warning for a hand record that is about to follow it, or "" (bug B754cfb0c96)."""
+    rec = it.gates.get(gate)
+    found = (rec.evidence or {}).get("chunk_findings") if rec else None
+    if not found or not triage_counts(it, gate):
+        return ""
+    mine = it.triage.get(gate, {})
+    left = [
+        f"#{n}"
+        for n, f in enumerate(found, 1)
+        if mine.get(f.get("digest"), {}).get("verdict", "") not in ("refuted", "confirmed")
+    ]
+    if not left:
+        return ""
+    return (
+        f"NOTE: {gate} has untriaged finding(s) {', '.join(left)} from its last review; "
+        f"they stay on the record -- `ddflow review triage {it.id} --gate {gate} "
+        "--finding N` settles each."
+    )
+
+
 def rounds_line(it, gate: str) -> str:
     """ "1 full round, 2 delta rounds" from the gate's recorded `ddflow review`, or ""."""
     rec = it.gates.get(gate)
