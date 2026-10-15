@@ -98,7 +98,7 @@ def request(
         digest = digest or (digest_of(content) if content else "")
         if not digest:
             raise AskRefused("an approval is of something: give its digest or its content")
-    elif not (text or subject):
+    elif not text:
         raise AskRefused("a question needs its text")
     if bot_answerable:
         why = require(actor, CAP_APPROVE) if actor is not None else "no actor named"
@@ -219,13 +219,15 @@ def _check_answerable(cfg, row, actor, outcome, digest, code, now) -> None:
             raise AskRefused(f"{ask_id} needs the one-time code it was sent with")
 
 
-def withdraw(log, ask_id: str, *, actor_id: str) -> None:
-    """The asker takes an ask back. Only a pending ask; recorded as the actor who did it."""
+def withdraw(log, ask_id: str, *, actor: Actor, now: float | None = None) -> None:
+    """The asker (or an approver) takes a still-open ask back. Recorded as the actor."""
     with log.transaction():
         row = get(_state(log), ask_id)
-        if row is None or row["state"] != PENDING:
+        if row is None or status(row, now) != PENDING:
             raise AskRefused(f"{ask_id} is not pending")
-        log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor_id})
+        if actor.id != row["requested_by"] and not actor.can(CAP_APPROVE):
+            raise AskRefused(f"only {row['requested_by']} or an approver may withdraw {ask_id}")
+        log.append("ask.withdrawn", ask_id, {"id": ask_id, "by": actor.id})
 
 
 def sweep(log, now: float | None = None) -> list[str]:

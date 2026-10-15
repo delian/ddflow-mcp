@@ -44,7 +44,7 @@ def h_requested(st: State, ev: Event) -> None:
         "options": list(d.get("options") or []),
         "expires_at": str(d.get("expires_at", "")),
         "code_hash": str(d.get("code_hash", "")),
-        "bot_answerable": bool(d.get("bot_answerable")),
+        "bot_answerable": d.get("bot_answerable") is True,
         "requested_by": ev.agent,
         "requested_at": ev.ts,
         "state": PENDING,
@@ -70,7 +70,7 @@ def h_answered(st: State, ev: Event) -> None:
         answered_by=str(d.get("by", "")),
         role=str(d.get("role", "")),
         via=str(d.get("via", "")),
-        human=bool(d.get("human")),
+        human=d.get("human") is True,
         answered_at=ev.ts,
     )
 
