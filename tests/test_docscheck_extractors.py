@@ -291,3 +291,21 @@ def test_blank_and_one_word_lines_in_a_fence_do_not_crash_the_help_walk(tmp_path
     readme = "```console\n\n   \nddflow\n$ ddflow gate status\n```\n"
     root = repo(tmp_path, readme, **{"pkg/cli.py": "add_parser('status') 'gate'\n"})
     assert D.check_docs(root, runner=ddflow_runner(root), commands=["ddflow"]).clean
+
+
+def test_a_multiword_tool_name_is_documented_by_its_spelling(tmp_path):
+    cli = "add_parser('docs') CMDS = ['ddflow docs check']\n"
+    ex = {"kind": "tools", "pattern": r"'(ddflow docs check)'", "source_globs": ["pkg/*.py"]}
+    root = repo(tmp_path, "Run `ddflow   docs\ncheck`.\n", **{"pkg/cli.py": cli})
+    assert D.check_docs(root, extract=[ex]).clean
+    root2 = repo(tmp_path / "b", "Run `ddflow docs`.\n", **{"pkg/cli.py": cli})
+    assert found(D.check_docs(root2, extract=[ex])) == [("command", "ddflow docs check")]
+
+
+def test_the_walked_help_is_the_authority_on_a_script_s_verbs(tmp_path):
+    readme = "Run `ddflow gate skip --reason x`.\n"
+    root = repo(tmp_path, readme, **{"pkg/cli.py": "# no verbs registered here\n"})
+    plain = D.check_docs(root, commands=["ddflow"])
+    assert found(plain) == [("command", "ddflow gate")]  # the corpus alone cannot tell
+    rep = D.check_docs(root, runner=ddflow_runner(root), commands=["ddflow"])
+    assert rep.clean, found(rep)
