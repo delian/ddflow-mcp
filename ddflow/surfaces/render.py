@@ -13,8 +13,12 @@ Standard library only (and the registry): the surfaces may import it.
 
 from __future__ import annotations
 
+import io
 import json
+import sys
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
+from collections.abc import Iterator
 from typing import Any, TextIO
 
 from .registry import tag_body
@@ -48,6 +52,52 @@ def dumps(data: Any) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
+#: How many bodies this process has printed to stdout (`bodies_emitted`).
+_EMITTED = [0]
+
+
+def bodies_emitted() -> int:
+    """How many ``--json`` bodies have gone to stdout so far: a run that ends with the same
+    count it began with printed none."""
+    return _EMITTED[0]
+
+
 def emit_json(data: Any, *, file: TextIO | None = None) -> None:
     """Print ``data`` as a ``--json`` body (stdout unless ``file`` is given)."""
+    if file is None:
+        _EMITTED[0] += 1
     print(dumps(tag_body(data, _COMMAND.get())), file=file)
+
+
+class _Tee(io.TextIOBase):
+    """stderr that also remembers what was written to it."""
+
+    def __init__(self, inner: TextIO) -> None:
+        self.inner, self.text = inner, ""
+
+    def write(self, s: str) -> int:
+        self.text += s
+        return self.inner.write(s)
+
+    def flush(self) -> None:
+        self.inner.flush()
+
+
+@contextmanager
+def remembered_stderr() -> Iterator[_Tee]:
+    """Run with stderr remembered, so a refusal that said its reason only there can say it
+    in the ``--json`` body too (bug Bac9d773a44)."""
+    real = sys.stderr
+    tee = _Tee(real)
+    sys.stderr = tee
+    try:
+        yield tee
+    finally:
+        sys.stderr = real
+
+
+def refusal_body(code: int, said: str) -> dict[str, Any]:
+    """The body of a ``--json`` run that exited ``code`` without printing one: the reason it
+    gave on stderr (the last line it wrote), under the `refusal` key every refusal body leads with."""
+    lines = [ln for ln in said.strip().splitlines() if ln.strip()]
+    return {"refusal": lines[-1].strip() if lines else f"exit {code}", "exit": code}
