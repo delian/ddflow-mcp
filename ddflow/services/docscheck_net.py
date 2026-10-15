@@ -44,37 +44,36 @@ def remote_links(texts: Mapping[str, str]) -> list[tuple[str, int, str]]:
     return out
 
 
-def _status(url: str, timeout_s: int) -> tuple[int | None, str]:
-    """(HTTP status, "") when the server answered; (None, why) when nothing did."""
+def _verdict(url: str, timeout_s: int) -> tuple[str, str]:
+    """("ok" | "gone" | "refused" | "silent", why): what the address said to a GET."""
     req = urllib.request.Request(url, headers={"User-Agent": "ddflow-docs-check"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # nosec B310 -- http(s) only
-            return resp.status, ""
+        with urllib.request.urlopen(req, timeout=timeout_s):  # nosec B310 -- http(s) only
+            return "ok", ""
     except urllib.error.HTTPError as exc:
-        return exc.code, ""
+        return ("gone" if exc.code in GONE else "refused"), str(exc.code)
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        return None, str(getattr(exc, "reason", exc))
+        return "silent", str(getattr(exc, "reason", exc))
 
 
 def check_remote(texts: Mapping[str, str], timeout_s: int) -> RemoteResult:
     """GET each distinct http(s) link of ``texts`` once."""
     result = RemoteResult()
-    seen: dict[str, tuple[int | None, str]] = {}
-    silent = unsure = 0
+    seen: dict[str, tuple[str, str]] = {}
     for path, n, url in remote_links(texts):
         if url not in seen:
-            seen[url] = _status(url, timeout_s)
+            seen[url] = _verdict(url, timeout_s)
             result.checked += 1
-            status, _why = seen[url]
-            silent += status is None
-            unsure += status is not None and status >= 400 and status not in GONE
-        status, why = seen[url]
-        if status in GONE:
-            result.findings.append(Finding("link", path, n, url, f"the server answered {status}"))
-    if silent or unsure:
+        if seen[url][0] == "gone":
+            result.findings.append(
+                Finding("link", path, n, url, f"the server answered {seen[url][1]}")
+            )
+    silent = [why for kind, why in seen.values() if kind == "silent"]
+    refused = sum(kind == "refused" for kind, _ in seen.values())
+    if silent or refused:
         result.unavailable = (
-            f"{silent} of {result.checked} remote link(s) could not be reached"
-            f"{' (' + next(w for s, w in seen.values() if s is None) + ')' if silent else ''}"
-            f"; {unsure} answered with an error that says nothing about the page"
+            f"{len(silent)} of {result.checked} remote link(s) could not be reached"
+            f"{' (' + silent[0] + ')' if silent else ''}; {refused} answered with an error "
+            "that says nothing about the page"
         )
     return result

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core.digest import content_digest
-from ..infra import proc as P
+from .cmdrunner import CommandRunner, Declared
 from .docscheck import _tree
 from .docscheck_config import check_configured
 from .docscheck_diff import added_lines, restrict
@@ -23,11 +23,6 @@ from .docscheck_net import check_remote
 from .docscheck_types import KINDS, Finding, Report
 from .docsync import glob_regex
 from .shared_files import doc_exclude, export_targets
-
-#: Shell exit statuses that mean the line never ran as a lint (not found, not executable).
-_NOT_RUN = (126, 127)
-#: Lines of a failing lint kept in its finding.
-_LINT_LINES = 8
 
 
 @dataclass
@@ -84,18 +79,20 @@ def _lint(repo: Path, cfg: Config, report: Report, check: Check) -> None:
     if not line:
         check.not_configured["lint"] = "no [docs].lint_command is configured"
         return
-    done = P.run_shell(line, timeout_s=cfg.docs.command_timeout_s, cwd=repo, merge_stderr=True)
-    if done.timed_out:
-        check.unavailable["lint"] = f"`{line}` timed out after {cfg.docs.command_timeout_s}s"
-    elif done.could_not_run or done.code in _NOT_RUN:
-        check.unavailable["lint"] = (
-            f"`{line}` could not run: {(done.output or 'not found').strip()}"
+    run = CommandRunner().run(
+        Declared(line, "[docs].lint_command"),
+        cwd=repo,
+        timeout_s=cfg.docs.command_timeout_s,
+        merge_stderr=True,
+    )
+    if not run.ran:
+        check.unavailable["lint"] = f"`{line}` did not run: {run.reason}"
+        return
+    report.checked["lint"] = 1
+    if run.code != 0:
+        report.findings.append(
+            Finding("lint", "", 0, line, f"exit {run.code}: {run.output.strip()}")
         )
-    else:
-        report.checked["lint"] = 1
-        if not done.ok:
-            tail = "\n".join(done.output.strip().splitlines()[:_LINT_LINES])
-            report.findings.append(Finding("lint", "", 0, line, f"exit {done.code}: {tail}"))
 
 
 def _links(repo: Path, cfg: Config, check: Check) -> None:

@@ -16,7 +16,7 @@ from ..services.docscheck_run import run_check
 VERBS = ("check",)
 
 
-def docs(repo: Path, *, verb: str = "check", diff: str = "") -> O.Outcome:
+def run_docs(repo: Path, *, verb: str = "check", diff: str = "") -> O.Outcome:
     """Run ``verb`` of the documentation tool; ``diff`` is a git base for ``check``."""
     if verb not in VERBS:
         return O.refused("docs", f"unknown docs verb {verb!r}; one of {', '.join(VERBS)}")

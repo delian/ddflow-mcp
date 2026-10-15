@@ -53,7 +53,7 @@ def proj(repo: Path) -> Path:
 
 
 def check(repo: Path, **kw) -> O.Outcome:
-    return api.docs(repo, verb="check", **kw)
+    return api.run_docs(repo, verb="check", **kw)
 
 
 def kinds(out: O.Outcome) -> list[tuple[str, str]]:
@@ -80,7 +80,7 @@ def test_a_finding_is_exit_1_and_changes_the_digest(proj):
 
 
 def test_unknown_verb_is_refused_not_run(proj):
-    assert api.docs(proj, verb="frobnicate").exit == O.REFUSED
+    assert api.run_docs(proj, verb="frobnicate").exit == O.REFUSED
 
 
 def test_severity_off_runs_nothing_and_says_so(proj):

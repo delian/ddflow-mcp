@@ -42,7 +42,7 @@ def added_lines(repo: Path | str, base: str) -> Added:
     untracked = G.files(repo, "untracked")
     if untracked is None:
         raise OSError("git ls-files failed")
-    out.update({p: None for p in untracked})
+    out.update(dict.fromkeys(untracked))
     return out
 
 
