@@ -990,9 +990,9 @@ dutifully reviews nothing and reports no findings.
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
 <<<<<<< HEAD
-cadences, and the rest of the 257 knobs.
+cadences, and the rest of the 261 knobs.
 =======
-cadences, and the rest of the 259 knobs.
+cadences, and the rest of the 261 knobs.
 >>>>>>> main
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
@@ -5148,9 +5148,9 @@ MCP is always an agent's (it names the agent and the stop command), and MCP cann
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
 <<<<<<< HEAD
-**The `[export]` knobs** (5 of the 257): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 261): `documents` (the selection, default `[]`), `redact`
 =======
-**The `[export]` knobs** (5 of the 259): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 261): `documents` (the selection, default `[]`), `redact`
 >>>>>>> main
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
@@ -5665,9 +5665,9 @@ declared once and persists — see
 ## Configuration
 
 <<<<<<< HEAD
-257 knobs across 33 sections, every one documented in place and listed, with its default
+261 knobs across 33 sections, every one documented in place and listed, with its default
 =======
-259 knobs across 33 sections, every one documented in place and listed, with its default
+261 knobs across 33 sections, every one documented in place and listed, with its default
 >>>>>>> main
 and its values, in the [table below](#all-knobs):
 
@@ -5736,12 +5736,8 @@ given `--force`) and a test fails when it differs, so its count and defaults can
 long default is left to `ddflow config --explain`.
 
 <<<<<<< HEAD
-<!-- ddflow:begin README/knobs sha=87af7f6a1064 -->
-<details><summary>All 257 knobs across 33 sections</summary>
-=======
-<!-- ddflow:begin README/knobs sha=a8ff55a8ccf2 -->
-<details><summary>All 259 knobs across 33 sections</summary>
->>>>>>> main
+<!-- ddflow:begin README/knobs sha=23183204c953 -->
+<details><summary>All 261 knobs across 33 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
