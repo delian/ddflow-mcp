@@ -14,6 +14,24 @@ from .providers import Context
 from .stats import rate
 
 
+def _gate_row(gate: str, outs: list, passes: dict, minimum: int, top: int) -> dict | None:
+    """One gate's skip row, or None for a gate nobody skipped."""
+    skipped = [o for o in outs if o.kind == "skipped"]
+    if not skipped:
+        return None
+    passed = sum(o.kind == "passed" for o in outs)
+    orphan = [o for o in skipped if not any(t > o.at for t in passes[(o.item, gate)])]
+    reasons = Counter(" ".join(o.reason.split())[:100] or "(no reason)" for o in skipped)
+    return {
+        "gate": gate,
+        "skipped": len(skipped),
+        "passed": passed,
+        "skip_rate": rate(len(skipped), len(skipped) + passed, minimum),
+        "never_passed_after": len(orphan),
+        "reasons": [{"reason": r, "n": n} for r, n in reasons.most_common(top)],
+    }
+
+
 def audit(ctx: Context) -> dict:
     """Skips per gate with reasons, skips never followed by a pass, and skips by agent."""
     minimum = int(ctx.cfg.metrics.min_samples)
@@ -26,24 +44,11 @@ def audit(ctx: Context) -> dict:
     for o in ctx.facts.outcomes:
         if o.kind == "passed":
             passes[(o.item, o.gate)].append(o.at)
-    gates = []
-    for gate, outs in sorted(by_gate.items()):
-        skipped = [o for o in outs if o.kind == "skipped"]
-        if not skipped:
-            continue
-        passed = sum(o.kind == "passed" for o in outs)
-        orphan = [o for o in skipped if not any(t > o.at for t in passes[(o.item, gate)])]
-        reasons = Counter(" ".join(o.reason.split())[:100] or "(no reason)" for o in skipped)
-        gates.append(
-            {
-                "gate": gate,
-                "skipped": len(skipped),
-                "passed": passed,
-                "skip_rate": rate(len(skipped), len(skipped) + passed, minimum),
-                "never_passed_after": len(orphan),
-                "reasons": [{"reason": r, "n": n} for r, n in reasons.most_common(top)],
-            }
-        )
+    gates = [
+        row
+        for gate, outs in sorted(by_gate.items())
+        if (row := _gate_row(gate, outs, passes, minimum, top))
+    ]
     gates.sort(key=lambda g: -g["skipped"])
     agents = Counter(o.by or "(unknown)" for o in scoped if o.kind == "skipped")
     return {

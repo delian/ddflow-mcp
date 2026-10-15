@@ -18,6 +18,10 @@ from ...core.schedule import inherited_deps
 
 #: gate.* kinds that are a verdict on a gate (not `started` or `out_of_order`).
 OUTCOMES = ("passed", "failed", "skipped", "unavailable", "partial")
+#: Events that open or close a hold on an item.
+LEASE_KINDS = frozenset(
+    {"lease.acquired", "lease.released", "lease.expired", "item.abandoned", "item.completed"}
+)
 
 
 @dataclass(frozen=True)
@@ -112,12 +116,9 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
     )
 
 
-def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
-    kind, d = ev.kind, ev.data if isinstance(ev.data, dict) else {}
-    span = facts.spans.setdefault(ev.subject, Span(ev.subject))
-    if kind in ("task.added", "phase.added"):
-        span.added_at = span.added_at if span.added_at is not None else at
-    elif kind == "lease.acquired":
+def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str, Lease]) -> None:
+    d = ev.data if isinstance(ev.data, dict) else {}
+    if ev.kind == "lease.acquired":
         holder = str(d.get("holder") or ev.agent)
         span.claims.append((at, holder))
         globs = d.get("globs") if isinstance(d.get("globs"), list) else []
@@ -126,13 +127,19 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
         lease = Lease(ev.subject, holder, at, None, tuple(g for g in globs if isinstance(g, str)))
         held[ev.subject] = lease
         facts.leases.append(lease)
-    elif kind in ("lease.released", "lease.expired", "item.abandoned"):
-        if ev.subject in held:
-            held.pop(ev.subject).end = at
-    elif kind == "item.completed":
-        span.completed_at = span.completed_at if span.completed_at is not None else at
-        if ev.subject in held:
-            held.pop(ev.subject).end = at
+    elif ev.subject in held:  # released, expired, abandoned, completed: the hold ends
+        held.pop(ev.subject).end = at
+
+
+def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
+    kind, d = ev.kind, ev.data if isinstance(ev.data, dict) else {}
+    span = facts.spans.setdefault(ev.subject, Span(ev.subject))
+    if kind in ("task.added", "phase.added"):
+        span.added_at = span.added_at if span.added_at is not None else at
+    elif kind in LEASE_KINDS:
+        if kind == "item.completed":
+            span.completed_at = span.completed_at if span.completed_at is not None else at
+        _lease_event(facts, span, at, ev, held)
     elif kind == "gate.started" and isinstance(d.get("gate"), str):
         facts.starts.setdefault((ev.subject, d["gate"]), []).append(at)
     elif kind == "bug.found" and isinstance(d.get("item"), str) and d["item"]:
