@@ -44,6 +44,7 @@ TOPICS: dict[str, str] = {
     "export": "project documents (roadmap, bugs, status, log, ...) generated from the log",
     "verify": "checking that a done task is really done, and what to do when it is not",
     "lanes": "which agents are working, their state, their brief, and what to do next",
+    "metrics": "cycle time, review rounds, waits, forecast and retro, derived from the log",
     "upgrade": "newer releases, upgrading it and the project, watching and resuming an upgrade",
 }
 
@@ -124,6 +125,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Looking at it",
         (
             "lanes",
+            "metrics",
             "board",
             "show",
             "status",
