@@ -758,6 +758,19 @@
           runs only the selected tests under `gates.unit_tests_scope = "selected"`. A
           bug-fix task is selected whatever its size. 0 = no task is small (bug fixes
           still are).
+      gates.scrub_env = ['DDFLOW_AGENT', 'DDFLOW_SESSION_ID', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID']   [default]
+          Environment variables removed from the environment a gate command and the CI
+          command run with. Default: the identity variables ddflow reads
+          (`DDFLOW_AGENT` and the session ids `DDFLOW_SESSION_ID`,
+          `CLAUDE_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`): they name the caller, not
+          the suite, and a shell that exports one made tests that read the caller's
+          identity fail in the gate while passing without it. Add a variable a
+          project's tests must not inherit; list one in `keep_env` to preserve it.
+      gates.keep_env = []   [default]
+          Variables a gate command keeps although `scrub_env` removes them, e.g.
+          `["DDFLOW_AGENT"]` for a gate whose command runs ddflow as the calling
+          agent. Empty by default. `[ci].keep_env` does the same for the CI command
+          alone.
       lessons.search_backend = 'fts5'   [default]
           'fts5' uses SQLite full-text BM25 ranking; 'like' is a portable fallback for
           a SQLite built without FTS5. Detected automatically at init; this knob
@@ -1750,6 +1763,11 @@
       ci.timeout_s = 3600   [default]
           Seconds the CI command may run before the gate records UNAVAILABLE. Default
           3600: the pre-push set includes the whole test suite.
+      ci.keep_env = []   [default]
+          Variables the CI command keeps although `[gates].scrub_env` removes them
+          from a gate's or the CI command's environment (the caller's identity
+          variables). Empty by default; `[gates].keep_env` applies to every gate
+          command as well.
       ci.on_merge = 'fast'   [default]
           Health check of the base right after a merge lands: off | fast (default: the
           project's pre-commit set without the test hooks, `SKIP=tests,scenarios`; an
