@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.actors"
+new = "{}"
+why = "Named actors (an id a credential proved) mapped to a role. (SE-actors, the one actor resolver.)"
+impact = "additive"
