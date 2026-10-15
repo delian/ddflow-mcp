@@ -405,6 +405,10 @@
           "type": "string",
           "description": "Physical resources this claim holds, e.g. 'gpu:2'; they REPLACE the item's declared ones. Refused (exit 3) when live claims already use the capacity ([schedule] resources), every holder counted."
          },
+         "queue": {
+          "type": "boolean",
+          "description": "If refused for files another lease holds, keep this request in the first-in-first-out line for them: a later request for the same files is refused as queued behind you. Either way the refusal is recorded as waiting and returns at once ([lease].wait_queue makes it the default)."
+         },
          "force": {
           "type": "boolean",
           "description": "Override a refusal. Legitimate only to retry after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or live lease is how two agents write one file; recorded either way."
@@ -3446,6 +3450,10 @@
          "resources": {
           "type": "string",
           "description": "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses while live claims use up the capacity ([schedule] resources). Declare for a GPU job, model server or long run. Empty clears."
+         },
+         "queue": {
+          "type": "boolean",
+          "description": "With `globs`: if the widening is refused for files another lease holds, keep the request in the first-in-first-out line for them ([lease].wait_queue makes it the default). Either way the refusal is recorded as waiting, returns at once and leaves your current lease as it is."
          },
          "worktree": {
           "type": "string",
