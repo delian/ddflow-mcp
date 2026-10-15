@@ -12,8 +12,8 @@ import sys
 from typing import Any
 
 from ...api import phase_progress, view_list
-from ...api.viewers import empty_list
 from ...api import surf_reporting as R
+from ...api.viewers import empty_list
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
