@@ -47,7 +47,9 @@ def test_named_actor_needs_a_proved_id():
 
 def test_credential_role_wins_and_unknown_role_fails_closed():
     cfg = Config()
-    assert A.resolve_actor(cfg, "t", via_mcp=True, credential_role="observer").capabilities == {"read"}
+    assert A.resolve_actor(cfg, "t", via_mcp=True, credential_role="observer").capabilities == {
+        "read"
+    }
     ghost = A.resolve_actor(cfg, "t", via_mcp=True, credential_role="ghost")
     assert not ghost.can("read") and A.require(ghost, "read")
 
