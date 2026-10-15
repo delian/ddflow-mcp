@@ -109,16 +109,19 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     appeared in only one of them.
     """
 
-    log, cfg, _ = _load(repo, agent)
+    # The fold `_load` made (localized, overlaid) answers every part of this view: the log
+    # is folded ONCE per command (B-gap-log-scale; tests/test_fold_once.py).
+    log, cfg, st = _load(repo, agent)
     events = log.read_all()
-    st = localize(fold(events, strict=False), log, time.time())
+    if st.event_count != len(events):  # an append landed between `_load`'s read and this one
+        st = localize(fold(events, strict=False), log, time.time())
     tracked = PR.work(events, st)
     findings = PR.detect(events, st, cfg)
     # The offer `next` makes (reservation hold and parallelism limit alike), so "ready" here is
     # never an item `next` withholds for a waiter in line.
     p = plan_for(repo, log, cfg, st, purpose="view", agent=log.agent_id, events=events)
     L.surface_contests(p, st, cfg)  # B2809f4213b: contested is not 'in flight'
-    rec = L.scan(log, cfg, repo)
+    rec = L.scan(log, cfg, repo, state=st)
 
     phases, tasks = st.phases(), st.tasks()
     # Every bucket is read off the ONE plan `next` and `brief` use, so each task is in
