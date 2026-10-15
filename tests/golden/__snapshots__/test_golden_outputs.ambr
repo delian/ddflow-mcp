@@ -1959,6 +1959,38 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      docs.extract = []   [default]
+          Extractors that list the public surface the code offers, so the check can
+          say which of it no document mentions: `[[docs.extract]]` blocks with `kind`
+          (flags, tools or knobs), `pattern` (a regular expression whose first group,
+          or the group named `name`, is the surface name) and `source_globs` (the
+          tracked files to read, in git glob syntax). A flag named in no checked
+          document is reported as a `flag` finding, a tool as a `command` and a knob
+          as an `identifier`, each pointing at the source line. Example:
+          `[[docs.extract]]` with `kind = "flags"`, `pattern =
+          "add_argument[(]'(--[a-z-]+)'"` and `source_globs = ["src/**/cli.py"]`.
+          Empty by default: nothing is extracted.
+      docs.count = []   [default]
+          Numbers the documents state that a command can recompute: `[[docs.count]]`
+          blocks with `pattern` (a regular expression whose first group is the stated
+          number), `command` (what prints the true number: one integer, or lines to
+          count) and optionally `docs` (globs of the documents to read; default every
+          checked document). A stated number that differs from the command's is a
+          `count` finding. A document can also keep a count current in place with
+          `<!-- ddflow:count cmd="ddflow list --json">42<!-- /ddflow:count -->`; a
+          marker's command is run only when its first word is one of `cli_command` or
+          the first word of a `[[docs.count]]` command, and never through a shell.
+          Empty by default.
+      docs.cli_command = []   [default]
+          The commands whose `<command> <verb> --help` is walked to check that
+          `<command> <verb> --flag` in a document names a flag that verb has (a flag
+          the project spells somewhere else does not pass). Empty (default) uses the
+          project's own scripts: `[project.scripts]` in pyproject.toml and `bin` in
+          package.json. A command that cannot run (missing, timing out) is a note,
+          never a pass.
+      docs.command_timeout_s = 20   [default]
+          Seconds one `--help` walk step or one count command may run before the check
+          records it as not run (a note) instead of waiting.
   
     ''',
   )
