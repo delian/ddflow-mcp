@@ -61,6 +61,8 @@ class _Recount:
         if not done.ran or done.returncode != 0:
             return None, f"`{cmd}` did not run to success: {done.error or done.returncode}"
         out = (done.stdout or "").strip()
+        if not out:
+            return None, f"`{cmd}` printed nothing: that is not a count of 0"
         n = _stated(out)
         return (n if n is not None else len([x for x in out.splitlines() if x.strip()])), ""
 

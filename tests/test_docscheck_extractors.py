@@ -312,3 +312,22 @@ def test_the_walked_help_is_the_authority_on_a_script_s_verbs(tmp_path):
     assert found(plain) == [("command", "ddflow gate")]  # the corpus alone cannot tell
     rep = D.check_docs(root, runner=ddflow_runner(root), commands=["ddflow"])
     assert rep.clean, found(rep)
+
+
+def test_a_verb_whose_help_cannot_run_is_not_judged_by_its_parent(tmp_path):
+    def run(argv):
+        if argv == ["t", "go", "--help"]:
+            return P.Captured(error=TimeoutError("slow"))
+        return P.Captured(0, "usage: t [--x X]\n", "")
+
+    idx = H.HelpIndex(run, ["t"])
+    assert idx.resolve(["t", "go", "--y"]) is None
+    assert "slow" in idx.unavailable["t go"]
+
+
+def test_a_count_command_that_prints_nothing_is_not_a_count_of_zero(tmp_path):
+    readme = '<!-- ddflow:count cmd="ddflow list">0<!-- /ddflow:count -->\n'
+    rep = D.check_docs(
+        repo(tmp_path, readme), runner=counting({("ddflow", "list"): ""}), commands=["ddflow"]
+    )
+    assert rep.clean and "printed nothing" in rep.notes[0].detail
