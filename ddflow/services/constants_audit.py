@@ -64,9 +64,10 @@ def _number(node: ast.expr | None) -> float | None:
         if left is None or right is None:
             return None
         try:
-            return _FOLD[type(node.op)](left, right)
+            folded = _FOLD[type(node.op)](left, right)
         except (ArithmeticError, TypeError, ValueError):
             return None
+        return folded if isinstance(folded, (int, float)) else None  # not complex
     if isinstance(node, ast.Constant) and not isinstance(node.value, bool):
         if isinstance(node.value, (int, float)):
             return node.value

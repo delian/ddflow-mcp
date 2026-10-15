@@ -32,7 +32,7 @@
 "ddflow/core/flowsignals.py:MIN_RECENT_FAILURES" = "flowsignals.min_recent_failures"
 "ddflow/core/handlers/jobs.py:TRIGGER_FIRES_KEPT" = "handlers.jobs.trigger_fires_kept"
 "ddflow/core/provenance.py:_ATTR_CAP" = "provenance.attr_cap"
-"ddflow/core/records.py:DEFAULT_LEASE_TTL_S" = "records.default_lease_ttl_s"
+"ddflow/core/records.py:DEFAULT_LEASE_TTL_S" = "lease.default_ttl_s"
 "ddflow/infra/claimref.py:TIMEOUT_S" = "claimref.timeout_s"
 "ddflow/infra/forge.py:FEEDBACK_MAX" = "forge.feedback_max"
 "ddflow/infra/forge.py:THREAD_BODY_MAX" = "forge.thread_body_max"
