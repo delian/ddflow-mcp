@@ -53,6 +53,17 @@ def test_detector_flags_a_planted_tunable(tmp_path: Path) -> None:
     assert [c.name for c in a.unclassified] == ["FETCH_TIMEOUT_S", "_MAX_ROWS", "NEG_LIMIT"]
 
 
+def test_detector_folds_literal_arithmetic(tmp_path: Path) -> None:
+    a = _plant(
+        tmp_path,
+        "A_WINDOW_S = 30 * 60.0\nB_MAX_BYTES = 1 << 20\nC_LIMIT = 2 ** 100000\nD_MAX = 1 / 0\n",
+    )
+    assert [(c.name, c.value) for c in a.unclassified] == [
+        ("A_WINDOW_S", 1800.0),
+        ("B_MAX_BYTES", 1048576),
+    ]
+
+
 def test_detector_ignores_what_is_not_a_tunable(tmp_path: Path) -> None:
     src = (
         "NAME = 'x'\nENABLED = True\nRETRY_LIMIT = True\nlower_limit = 3\nPLAIN = 7\n"
