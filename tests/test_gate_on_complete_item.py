@@ -95,8 +95,13 @@ def test_review_from_another_items_tree_is_refused(repo):
     assert str(tree_a) in err, err
     assert _gate_events(repo, "A", "rubber_duck") == before, "nothing may be recorded"
     # --force waives the finished-item rule only, never the tree check
+    run_cli(repo, "task", "add", "C", "--title", "c", "--globs", "c/*")
+    run_cli(repo, "claim", "C", "--no-worktree")
+    assert finish(repo, "C")[0] == OK
+    before = _gate_events(repo, "C", "rubber_duck")
     code, _out, err = _from(
-        repo, tree_b, "review", "A", "--gate", "rubber_duck", "--force", "--reason", "x"
+        repo, tree_b, "review", "C", "--gate", "rubber_duck", "--force", "--reason", "x"
     )
     assert code == REFUSED, err
-    assert _gate_events(repo, "A", "rubber_duck") == before
+    assert "B's worktree" in err, err
+    assert _gate_events(repo, "C", "rubber_duck") == before

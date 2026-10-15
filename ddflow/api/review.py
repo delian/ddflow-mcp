@@ -1268,7 +1268,7 @@ def _misplaced(repo, item, agent, gate, branch, commit, called_from, force, reas
         return None
     it = _load(repo, agent)[2].items.get(item)
     # `--commit` is the after-merge review: recorded against the item, done or not.
-    why, _note = (
+    why, _ = (
         ("", "")
         if commit
         else closed_item_refusal(it, force=force, reason=reason, what=f"reviewing {gate}")

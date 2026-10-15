@@ -3,7 +3,7 @@
 A finished item is not a place to record a gate: a stray `failed` on a completed item
 reads as a regression nobody can explain. And a review of item A run from item B's tree
 reviews the wrong diff. Both are refused, naming the way through; ``--force --reason``
-overrides the first and is recorded.
+overrides the first (recorded on gate record/run; a review keeps its own round evidence).
 """
 
 from __future__ import annotations
