@@ -57,13 +57,14 @@ The log is append-only and the only source of truth, so every optimisation below
 or a smaller encoding of it, and each is pinned by a test that its fold equals the
 unoptimised path's.
 
-- **Renewals are coalesced.** A heartbeat closer than `[lease].renew_log_min_s` (never more
-  than `heartbeat_s`) to the lease's last *written* renewal is acknowledged and not
-  recorded: renewals were 43% of a real log's events. The fold already keeps only the
-  newest renewal, so the cost is that another clone sees the expiry up to that window
-  early, inside `ttl_s` and `grace_s`. A claim, a re-claim and anything that changes the
-  worktree, branch, globs or resources is always written (`services/logcoalesce.py`).
-- **Large gate evidence lives out of line.** A value under a `[log].evidence_blob_keys` key
+- **Renewals are coalesced.** A heartbeat closer than `[lease].renew_log_min_s` to the
+  lease's last *written* renewal is acknowledged and not recorded: renewals were 43% of a
+  real log's events. The window in force is never wider than `heartbeat_s` or `grace_s`, so
+  the expiry another clone computes is early by less than the slack the lease already allows
+  (the fold keeps only the newest renewal, and `_late_renewal` widens a window from it, so
+  the same bound applies there). A claim, a re-claim and anything that changes the worktree,
+  branch, globs or resources is always written (`services/logcoalesce.py`).
+- **Large gate evidence lives out of line (opt-in, `[log].evidence_blobs`).** A value under a `[log].evidence_blob_keys` key
   of at least `evidence_blob_min_bytes` is stored once under `.ddflow/blobs/<aa>/<sha256>.json`
   and the event keeps `{"$blob": "sha256:…", "bytes": n}`. The event id hashes the reference
   and the reference names the content, so tamper-evidence is unchanged. Readers that need

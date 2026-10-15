@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import resource
 import shutil
 import subprocess
@@ -38,17 +39,18 @@ def project(events: Path | None, synth: int, tmp: Path, modern: bool = False) ->
     return tmp
 
 
-def timed(cmd: list[str], cwd: Path) -> tuple[float, float]:
+def timed(cmd: list[str], cwd: Path) -> tuple[float, float, int]:
     """(wall seconds, CPU seconds) of one run in a fresh process. CPU is the number to compare
     on a busy machine: wall time includes waiting for other people's work."""
     argv = [sys.executable, "-m", "ddflow", "--agent", "bench", *cmd]
-    env = {"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin", "HOME": str(cwd)}
+    code = os.environ.get("LOGBENCH_CODE", str(ROOT))  # time another checkout's ddflow on the same log
+    env = {"PYTHONPATH": code, "PATH": "/usr/bin:/bin", "HOME": str(cwd)}
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
     t0 = time.perf_counter()
-    subprocess.run(argv, cwd=cwd, env=env, capture_output=True, check=False)
+    rc = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, check=False).returncode
     wall = time.perf_counter() - t0
     after = resource.getrusage(resource.RUSAGE_CHILDREN)
-    return wall, (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
+    return wall, (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime), rc
 
 
 def main() -> int:
@@ -68,7 +70,8 @@ def main() -> int:
         for cmd in COMMANDS:
             runs = [timed(cmd, proj) for _ in range(a.repeat)]
             print(json.dumps({"command": " ".join(cmd), "wall_s": round(min(r[0] for r in runs), 3),
-                              "cpu_s": round(min(r[1] for r in runs), 3)}))
+                              "cpu_s": round(min(r[1] for r in runs), 3),
+                              "exit": max(r[2] for r in runs)}))  # a failing command is a refusal path, not a measurement
     return 0
 
 

@@ -30,6 +30,7 @@ def _only_this_tests_projects():
     BS._KNOWN_ROOTS.clear()
 
 
+ON = LogConfig(evidence_blobs=True)
 BIG = [{"chunk": 1, "detail": "finding " * 400, "digest": "d1", "title": "t"}]
 
 
@@ -39,7 +40,7 @@ def _gate(log: EventLog, kind="gate.failed", **ev):
 
 
 def test_big_evidence_leaves_the_shard_and_reads_back(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, chunk_findings=BIG, tail="x" * 5000)
     assert B.is_stub(ev.data["evidence"]["chunk_findings"]) and B.is_stub(ev.data["evidence"]["tail"])
     assert ev.data["evidence"]["status"] == "REVIEWED"  # small keys stay
@@ -53,25 +54,25 @@ def test_big_evidence_leaves_the_shard_and_reads_back(repo):
 
 
 def test_small_values_and_a_disabled_knob_stay_inline(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, chunk_findings=[{"detail": "short"}])
     assert ev.data["evidence"]["chunk_findings"] == [{"detail": "short"}]
-    off = EventLog(repo, "b", log_cfg=LogConfig(evidence_blobs=False))
+    off = EventLog(repo, "b", log_cfg=LogConfig())
     big = off.append("gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "y" * 5000}})
     assert big.data["evidence"]["tail"] == "y" * 5000
-    keyed = EventLog(repo, "c", log_cfg=LogConfig(evidence_blob_keys=["extra"]))
+    keyed = EventLog(repo, "c", log_cfg=LogConfig(evidence_blobs=True, evidence_blob_keys=["extra"]))
     ev = keyed.append("gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "z" * 5000, "extra": "q" * 5000}})
     assert ev.data["evidence"]["tail"] == "z" * 5000 and B.is_stub(ev.data["evidence"]["extra"])
 
 
 def test_only_gate_events_move_evidence(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     ev = log.append("cadence.ran", "c1", {"result": "ok", "evidence": {"tail": "x" * 5000}})
     assert ev.data["evidence"]["tail"] == "x" * 5000
 
 
 def test_a_missing_blob_is_unavailable_never_empty(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, chunk_findings=BIG)
     ref = ev.data["evidence"]["chunk_findings"]["$blob"]
     BS.BlobStore(repo).remove(ref)
@@ -83,7 +84,7 @@ def test_a_missing_blob_is_unavailable_never_empty(repo):
 
 
 def test_a_tampered_blob_is_detected(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, tail="x" * 5000)
     path = BS.BlobStore(repo).path(ev.data["evidence"]["tail"]["$blob"])
     path.write_text(json.dumps("y" * 5000))
@@ -93,7 +94,7 @@ def test_a_tampered_blob_is_detected(repo):
 
 
 def test_triage_counts_read_the_blob_and_hold_when_it_is_gone(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     ev = _gate(log, chunk_findings=BIG)
     it = fold(log.read_all(), strict=False).items["T1"]
     assert triage_counts(it, "critic") == {"findings": 1, "refuted": 0, "confirmed": 0, "untriaged": 1}
@@ -106,7 +107,7 @@ def test_the_log_with_blobs_is_smaller_and_every_value_comes_back(tmp_path):
     inline = tmp_path / "inline"
     logfixture.generate(inline / ".ddflow" / "events", 3000, seed=4)
     src = EventLog(inline).read_all()
-    out = EventLog(tmp_path / "blobs", "w", log_cfg=LogConfig())
+    out = EventLog(tmp_path / "blobs", "w", log_cfg=ON)
     out.stamp = False
     blobbed = 0
     for e in src:
@@ -125,7 +126,7 @@ def test_the_log_with_blobs_is_smaller_and_every_value_comes_back(tmp_path):
 
 
 def test_the_event_commit_takes_the_blobs_with_the_shard(repo):
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     _gate(log, tail="x" * 5000)
     sha, note = EC.commit_shards(repo, "test")
     assert sha, note
@@ -137,8 +138,21 @@ def test_the_event_commit_takes_the_blobs_with_the_shard(repo):
 def test_the_capability_is_recorded_with_the_first_gate_write(repo):
     from ddflow.core import events as E
 
-    log = EventLog(repo, "a")
+    log = EventLog(repo, "a", log_cfg=ON)
     _gate(log, tail="x" * 5000)
     caps = [e.data["capability"] for e in log.read_all() if e.kind == "ddflow.capabilities"]
     assert E.CAP_EVIDENCE_BLOBS in caps
     assert E.CAPABILITIES[E.CAP_EVIDENCE_BLOBS].kinds == B.KINDS
+
+
+def test_it_is_off_by_default_and_then_records_no_capability(repo):
+    """The rollout guard: a project that has not turned it on writes evidence inline and
+    never records the capability that would refuse an older ddflow on a shared log."""
+    from ddflow.core import events as E
+
+    log = EventLog(repo, "a")
+    ev = _gate(log, tail="x" * 5000)
+    assert ev.data["evidence"]["tail"] == "x" * 5000
+    caps = [e.data["capability"] for e in log.read_all() if e.kind == "ddflow.capabilities"]
+    assert E.CAP_EVIDENCE_BLOBS not in caps
+    assert not (repo / ".ddflow" / "blobs").exists()

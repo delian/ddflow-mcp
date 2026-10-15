@@ -69,7 +69,7 @@ class _Writer:
             from ..infra.blobstore import externalize
             from ..config import LogConfig
 
-            data = externalize(self.dir.parents[1], LogConfig(), kind, data)
+            data = externalize(self.dir.parents[1], LogConfig(evidence_blobs=True), kind, data)
         self.lamport += 1
         self.t += dt
         ev = Event(kind=kind, subject=subject, data=data, agent=agent, lamport=self.lamport,
@@ -87,7 +87,7 @@ class _Writer:
 
 
 def generate(events_dir: Path | str, target_events: int, *, seed: int = 0, agents: int = 40,
-             beat_gap_s: float = 120.0, beats: int = 20, blobs: bool = False,
+             beat_gap_s: float = 120.0, beats: int = 13, blobs: bool = False,
              coalesce_s: int = 0) -> int:
     """Write about ``target_events`` events under ``events_dir``; return how many.
 
@@ -115,15 +115,19 @@ def generate(events_dir: Path | str, target_events: int, *, seed: int = 0, agent
                                               "worktree": "", "branch": ""})
         w.add(agent, "lease.renewed", item, {"at": at + 0.2, "holder": agent, "globs": [f"ddflow/synth{n % 97}.py"]})
         w.add(agent, "item.started", item, {})
+        for k in range(2):
+            w.add(agent, "task.updated", item, {"title": _text(rng, 60), "tags": [f"t{k}"]})
+        w.add(agent, "session.prompt", f"S-{n}", {"text": _text(rng, rng.randint(200, 900))})
         gates = list(GATES)
         for i in range(beats):
             at += rng.uniform(0.5, 1.5) * beat_gap_s
             w.t = at
             w.add(agent, "lease.renewed", item, {"at": at, "holder": agent})
-            if i % 4 == 3 and gates:
+            if i % 2 == 1 and gates:
                 g = gates.pop(0)
                 failed = rng.random() < 0.2
-                w.add(agent, "gate.started", item, {"gate": g})
+                if g in ("ci", "unit_tests"):  # only command gates announce a start
+                    w.add(agent, "gate.started", item, {"gate": g})
                 w.add(agent, "gate.failed" if failed else "gate.passed", item,
                       {"gate": g, "by": agent, "reason": "1 finding(s)" if failed else "",
                        "evidence": _evidence(rng, failed, g)})

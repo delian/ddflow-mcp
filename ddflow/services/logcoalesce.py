@@ -4,9 +4,9 @@ A heartbeat that would move a lease's expiry by less than `[lease].renew_log_min
 written: lease renewals were 43% of the events of a real log and nothing but the newest of
 a run matters to the fold. Soundness rests on two facts. The fold already takes only the
 latest renewal of a lease (`renewed_at` moves forward only), so an unwritten one changes
-nothing but how recent the newest WRITTEN one is, by less than the window; and an observer
-on another clone times a foreign lease from when IT saw the renewal (`leaseclock`), so the
-window adds to a delay it already tolerates, inside `grace_s`.
+nothing but how recent the newest WRITTEN one is, by less than the window; the window is
+never wider than `grace_s` (`renew_window`), the slack a clone already allows, and an
+observer times a foreign lease from when IT saw the renewal (`leaseclock`).
 
 Pure: no I/O, no clock of its own.
 """
@@ -21,8 +21,11 @@ from ..core.events import Event
 
 def renew_window(cfg: Any) -> int:
     """The window in force: `renew_log_min_s`, never wider than `heartbeat_s` (a project
-    that heartbeats every second has asked to see each one)."""
-    return min(int(cfg.lease.renew_log_min_s), int(cfg.lease.heartbeat_s))
+    that heartbeats every second has asked to see each one) nor than `grace_s` (the slack
+    the lease already allows for another clone's view, so an unwritten heartbeat can never
+    move the expiry a clone computes by more than that)."""
+    lease = cfg.lease
+    return min(int(lease.renew_log_min_s), int(lease.heartbeat_s), int(lease.grace_s))
 
 
 def quiet_renewal(lease: Any, now: float, min_s: int, mine: str = "") -> bool:

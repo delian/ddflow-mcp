@@ -23,8 +23,8 @@ class LeaseConfig:
         doc="How often a live agent renews its lease. Must be comfortably below ttl_s (a 6x margin is the default) or a slow turn looks like a crash.",
     )
     renew_log_min_s: int = knob(
-        300,
-        doc="A heartbeat is written to the log only when the lease's last written renewal is at least this many seconds old; closer ones are acknowledged and not recorded, so a busy agent's hooks do not fill the log (lease renewals were 43% of a real log's events). A claim, a re-claim and any renewal that changes the worktree, branch, globs or resources are always written. Cost: another clone sees this lease's expiry up to this much earlier than the holder's last heartbeat implies, absorbed by ttl_s and grace_s; never effectively wider than heartbeat_s; keep it well under ttl_s. 0 writes every heartbeat.",
+        120,
+        doc="A heartbeat is written to the log only when the lease's last written renewal is at least this many seconds old; closer ones are acknowledged and not recorded, so a busy agent's hooks do not fill the log (lease renewals were 43% of a real log's events). A claim, a re-claim and any renewal that changes the worktree, branch, globs or resources are always written. Cost: another clone sees this lease's expiry up to this much earlier than the holder's last heartbeat implies, so the window in force is never wider than heartbeat_s or grace_s (the slack the lease already allows): raising this alone changes nothing. 0 writes every heartbeat.",
         check=int_at_least(0),
     )
     grace_s: int = knob(

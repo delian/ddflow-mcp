@@ -1086,7 +1086,8 @@ class EventLog:
             # Terminate it in the SAME write: the fragment stays its own unreadable line,
             # which doctor reports, and this event gets a line of its own instead of being
             # glued onto the fragment and lost with it (B28b3839fe6).
-            size = os.fstat(fd).st_size
+            st0 = os.fstat(fd)
+            size, before_mtime = st0.st_size, st0.st_mtime_ns
             if size and os.pread(fd, 1, size - 1) != b"\n":
                 line = b"\n" + line
             view = memoryview(line)
@@ -1096,7 +1097,7 @@ class EventLog:
         finally:
             os.close(fd)
         if self._meta is not None:
-            self._meta.advance(self.shard, size, ev)
+            self._meta.advance(self.shard, (size, before_mtime), ev)
         for hook in APPEND_HOOKS:  # every log, however built (Ba24a8d32ee)
             with contextlib.suppress(Exception):
                 hook(self, ev, size, size + len(line))
