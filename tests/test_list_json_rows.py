@@ -53,3 +53,26 @@ def test_every_kind_has_rows_even_when_refused_or_empty(repo, kind):
     assert body["rows"] == [] and body["total"] == 0 and body["record_kind"] == kind
     code, body, _ = _rows(repo, kind, "--all", "--state", "no-such-state")
     assert isinstance(body["rows"], list)
+
+
+def test_a_stray_flag_refusal_has_the_same_keys_as_a_view_refusal(repo):
+    _seed(repo)
+    _c, stray, _ = _rows(repo, "task", "--item", "T1")
+    _c, viewer, _ = _rows(repo, "task", "--phase", "NOPE")
+    assert set(viewer) <= set(stray)
+
+
+def test_research_add_refuses_all(repo):
+    _seed(repo)
+    code, _out, err = run_cli(repo, "research", "add", "--all")
+    assert code != 0 and "--all" in err
+
+
+def test_mcp_read_takes_all_for_tasks_and_refusals_keep_rows(repo):
+    from ddflow.api import view_read
+
+    _seed(repo)
+    assert view_read(repo, "task", all=True).data["total"] == 4
+    out = view_read(repo, "lesson", phase="NOPE")
+    assert out.exit != 0 and out.data["rows"] == []
+    assert view_read(repo, "bogus").data["rows"] == []
