@@ -25,6 +25,7 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lanes import COMMANDS as _LANES
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.memory import COMMANDS as _MEMORY
+from .declared.plan import COMMANDS as _PLAN
 from .declared.queue import COMMANDS as _QUEUE
 from .declared.records import COMMANDS as _RECORDS
 from .declared.reporting import COMMANDS as _REPORTING
@@ -47,6 +48,10 @@ EXEMPTIONS: tuple[Command, ...] = (
     Command(
         path=("mcp",),
         reason="starts the MCP server itself; exposing it over MCP would be recursive",
+    ),
+    Command(
+        path=("plan",),
+        reason="its only command, `plan check`, is CLI-only: a pre-filing convenience on a document",
     ),
     Command(
         path=(),
@@ -74,6 +79,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_EXPORT,
     *_CADENCE,
     *_MEMORY,
+    *_PLAN,
     *_FLOW,
     *_HOOKS,
     *_LANES,

@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.globs import inside, overlap
+from ..core.graph import find_cycles
+from ..core.schedule import waves
 
 
 @dataclass(frozen=True)
@@ -136,8 +138,6 @@ def unknown_deps(plan: Mapping[str, Any]) -> list[Finding]:
 
 def cycles(plan: Mapping[str, Any]) -> list[Finding]:
     """Dependency cycles, each reported once (the walk that finds them is `find_cycles`)."""
-    from ..core.graph import find_cycles
-
     return [
         Finding(
             "cycle",
@@ -264,8 +264,6 @@ def check(
     The waves are computed even when there are findings: a plan with one wide glob is still
     worth seeing laid out, and the two answers are read together.
     """
-    from ..core.schedule import waves
-
     report = Report(
         findings=[
             *wide_globs(plan),
