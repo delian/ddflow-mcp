@@ -3,9 +3,10 @@
 An actor is an id, a role (operator, bot, agent, observer ... -- names in `[agent].roles`), a
 model family and the capabilities its role holds. Nothing is decided per role in code: a
 capability is a name a consumer asks for (``can(actor, "waive")``) and the `[agent].roles`
-table says who holds it (decisions D-remote and D-shared-engines-r2 10). Serve auth, hub and
-scoped tokens, the approvals engine and waiver approvers all call `resolve_actor` and `require`
-rather than each branching on "is this an agent".
+table says who holds it (decisions D-remote and D-shared-engines-r2 10). This is the engine
+the serve auth, hub and scoped tokens, the approvals engine and waiver approvers are to call
+(`resolve_actor`, `require`) rather than each branching on "is this an agent"; those consumers
+land as their own items, none calls it yet.
 
 Where the role comes from, strongest first:
 
