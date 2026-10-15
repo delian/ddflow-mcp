@@ -1374,6 +1374,34 @@
       lanes.brief_text_chars = 1200   [default]
           Characters kept of each text a lane brief quotes (the objective, the last
           session summary, a note), cut at a line boundary.
+      metrics.min_samples = 10   [default]
+          Fewest samples a metrics figure may rest on. Under it the figure is reported
+          unavailable (n/a, with its sample count), never as a number, and a view with
+          no figure at all exits 2 ('not enough data'). Applies to every figure, the
+          forecast and the figures other services register.
+      metrics.top = 5   [default]
+          How many rows `ddflow metrics skips` lists for the reasons given per gate
+          and for the agents who skip.
+      metrics.forecast_runs = 1000   [default]
+          Bootstrap draws behind `ddflow metrics forecast`: each draws one observed
+          duration per link of the critical path and sums them. More draws smooth the
+          range; they do not make it more certain.
+      metrics.forecast_seed = 0   [default]
+          Seed of the forecast's random draws, so the same log always gives the same
+          range. Change it to see how much the range moves with the draw.
+      metrics.forecast_low_pct = 50   [default]
+          The percentile of the forecast's simulated critical-path durations reported
+          as the likely end of the range (P50 by default).
+      metrics.forecast_high_pct = 90   [default]
+          The percentile of the forecast's simulated critical-path durations reported
+          as the cautious end of the range (P90 by default).
+      metrics.grid_step_s = 3600   [default]
+          Seconds between the instants `ddflow metrics lanes` replays the plan at (the
+          hourly grid, shared with headroom views).
+      metrics.grid_max_folds = 24   [default]
+          Most instants the grid sampler folds the log at, newest first. Each fold
+          replays the whole log up to that instant, so this caps the cost of `ddflow
+          metrics lanes`; the answer says when the cap cut the window short.
       review.max_rounds = 2   [default]
           How many cross-family review rounds one gate (rubber_duck, critic) may have
           on one item, full and delta alike (default 2; 0 = unlimited; decision
@@ -1665,6 +1693,28 @@
           exits 2. An unrecognised value in a config file is warned about, reported by
           `doctor` and falls back to 'operator', the strictest (a bad value leaves the
           installing to the operator); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
+      pins.recipes_file = '.ddflow/pins.toml'   [default]
+          The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
+          with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the
+          pin is current) and `regen` (an argv that re-records it, touching only what
+          differs), and optionally `env` (a table of environment variables given to
+          `regen` only, never to `check`, so a check can not re-record what it is
+          checking). `{python}` in an argv is this interpreter. `ddflow pins
+          regenerate [--check] [--only NAME]` runs them; a new kind of pin is a new
+          table, no code. Relative to the repository root.
+      pins.timeout_s = 900   [default]
+          Seconds one recipe's check or regeneration may run before it is stopped and
+          reported as failed.
+      pins.after_merge = 'amend'   [default]
+          What the post-merge hook installed by `ddflow pins regenerate --install`
+          does after a merge: 'amend' (regenerate the stale pins and fold them into
+          the merge commit when nothing else is dirty), 'leave' (regenerate and leave
+          the files changed for you to commit) or 'off' (do nothing). An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'leave', the strictest (never rewrites a commit; the regenerated files
+          are left for you to commit); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
       release.manifest_lint = 'block'   [default]

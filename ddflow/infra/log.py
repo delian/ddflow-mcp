@@ -61,6 +61,7 @@ from ..core.events import (
     capabilities_used,
     capability_gap,
     capability_unrecorded,
+    is_older,
     stamp_facts,
     utcnow,
     version_key,
@@ -1168,11 +1169,11 @@ class EventLog:
         version, fmt = running_version(), V.format_level()
         # a level of 0 is "this code declares no format": never compared
         facts = stamp_facts(self._stamp_events(), self.agent_id, version, fmt or None)
-        extra = self._judge_skew(facts, version, fmt)
         gap = capability_gap(facts.capabilities, kind) if kind else None
         if gap is not None and self._skew_policy() == "refuse" and facts.override is None:
             name, rec = gap
             raise SkewRefused(capability_message(name, rec.version, kind, version, rec.by))
+        extra = self._judge_skew(facts, version, fmt, kind=kind)
         if not facts.seen_by_me and version_known(version):
             stamp: dict[str, Any] = {"version": version, "install": install_kind()}
             if fmt:
@@ -1206,7 +1207,10 @@ class EventLog:
         log does not yet record in full (`ddflow.capabilities`). Caller holds the lock."""
         for name in capabilities_used(kind, self._active_capabilities()):
             cap = capability_unrecorded(recorded, name)
-            if cap is not None:
+            # Only the release that ships a capability announces it: an older build (a
+            # development branch against a live log) would block every older ddflow
+            # (B27842cfecd). A branch tests a capability by running as the release.
+            if cap is not None and not is_older(running_version(), cap.since):
                 self._write(
                     CAPABILITIES_KIND,
                     "ddflow",
@@ -1214,7 +1218,7 @@ class EventLog:
                 )
 
     def _judge_skew(
-        self, facts: StampFacts, version: str, fmt: int, *, strict: bool = False
+        self, facts: StampFacts, version: str, fmt: int, *, strict: bool = False, kind: str = ""
     ) -> dict[str, Any]:
         """Apply the skew policy to ``facts``: raise `SkewRefused`, warn, or let the write
         through. Returns the extra `data` for an event written under an older-ddflow mark.
@@ -1228,7 +1232,7 @@ class EventLog:
             policy == "refuse"
             and facts.override is None
             and not strict
-            and self._patch_skew(facts, version, fmt)
+            and self._patch_skew(facts, version, fmt, kind)
         ):
             _warn_patch_skew_once(version, facts.highest)
             extra[OLDER_MARK] = version
@@ -1263,14 +1267,21 @@ class EventLog:
         self._judge_skew(facts, version, fmt, strict=True)
 
     @staticmethod
-    def _patch_skew(facts: StampFacts, version: str, fmt: int) -> bool:
+    def _patch_skew(facts: StampFacts, version: str, fmt: int, kind: str | None = None) -> bool:
         """The log is ahead by PATCH releases only: the same data format, the same minor, and
-        no recorded capability this ddflow lacks. Such a skew warns instead of refusing
-        (decision D-mu-bugfix-answers); everything else still refuses."""
+        no recorded capability this ddflow lacks FOR THE KIND being written (``kind`` None: for
+        any kind, as an override must see it). Such a skew warns instead of refusing (decision
+        D-mu-bugfix-answers); a write of a governed kind is refused for its capability alone
+        (a direct conflict, D-compat 2), everything else still refuses."""
+        gap = (
+            capabilities_ahead(facts.capabilities)
+            if kind is None
+            else capability_gap(facts.capabilities, kind) is not None
+        )
         return (
             V.patch_only_skew(version, facts.highest)
             and not (fmt and facts.highest_format > fmt)
-            and not capabilities_ahead(facts.capabilities)
+            and not gap
         )
 
     def _skew_policy(self) -> str:
@@ -1298,7 +1309,7 @@ class EventLog:
                 return facts.override
             if self._skew_policy() != "refuse":
                 return None  # warn/off never refuse, so there is nothing to override
-            if self._patch_skew(facts, version, fmt):
+            if self._patch_skew(facts, version, fmt, None):
                 return None  # a patch skew warns and never refuses
             if not reason:
                 raise SkewRefused(

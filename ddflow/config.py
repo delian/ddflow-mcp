@@ -113,6 +113,12 @@ from .config_sections.mcp import (  # noqa: F401 -- re-exported, as before the m
 from .config_sections.memory import (
     MemoryConfig,
 )
+from .config_sections.metrics import (
+    MetricsConfig,
+)
+from .config_sections.pins import (
+    PinsConfig,
+)
 from .config_sections.prompts import (
     PromptsConfig,
 )
@@ -233,9 +239,11 @@ class Config:
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     lanes: LanesConfig = field(default_factory=LanesConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
+    pins: PinsConfig = field(default_factory=PinsConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)

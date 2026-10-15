@@ -43,6 +43,7 @@ from ..services import help as H
 from ..services import hookio as HI
 from ..services import identity as ID
 from ..services import launchers as LA
+from ..services import pins_merge as PM
 from ..services import prompts as P
 from ..services import selfupgrade as SU
 from ..services import sessions as S
@@ -53,6 +54,7 @@ from ..services import upgrade_plan as UP
 from ..services import upgrade_start as US
 from ..services import upgrade_status as UST
 from ..services.adopt import AGENT_TARGETS, Refused, adopt, adopted_agents, init_files, refresh_docs
+from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
 from ..services.prompts import TemplateError
@@ -387,6 +389,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             done = O.refused if isinstance(res.error, CW.KeyRefused) else O.failed
             return done("config", res.error, key=edit.set, value=edit.value, rows=[], text="")
         literal = TC.literal(edit.value)
+        shadow = shadow_report(repo, edit.set, layer)
         return O.ok(
             "config",
             key=edit.set,
@@ -396,7 +399,10 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             local=edit.local,
             rows=[],
             gitattributes_added=res.attributes_added,
-            text=f"{edit.set} = {literal}  ({target})" + _said(res.attributes_added),
+            text=f"{edit.set} = {literal}  ({target})"
+            + shadow["shadow_note"]
+            + _said(res.attributes_added),
+            **shadow,
         )
 
     if edit.append_toml:
@@ -1773,6 +1779,14 @@ def setup(
         )
     except ValueError as exc:
         return O.failed("setup", str(exc), actions=[], agents=agents, text="")
+    # A project that lists pin recipes gets the merge driver and post-merge hook that
+    # regenerate its pin files (DX-pins-regenerate); one without recipes is untouched.
+    try:
+        actions += PM.install(tree, cfg)
+    except (OSError, RuntimeError) as exc:
+        actions.append(
+            f"pin merge driver NOT installed ({exc}); `ddflow pins regenerate --install`"
+        )
 
     statuses = _scan(repo)
     if isinstance(statuses, O.Outcome):
