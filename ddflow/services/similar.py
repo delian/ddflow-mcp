@@ -276,10 +276,7 @@ def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
         return True
     if "filed_against" in c.flags:
         return False
-    return (
-        "identical" in c.flags
-        or (c.score >= dd.ask_threshold and words >= dd.min_words)
-    )
+    return "identical" in c.flags or (c.score >= dd.ask_threshold and words >= dd.min_words)
 
 
 def checked(cfg: Config, kind: str) -> bool:

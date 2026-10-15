@@ -44,3 +44,13 @@ def test_a_real_near_duplicate_is_still_refused_even_when_it_names_ids(repo):
     out = A.phase_add(repo, "P-dup", title="P-view", body=body, agent="a")
     assert out.exit == 3 and "possible duplicate" in out.reason, out
     assert out.data["candidates"][0]["id"] == "P-view"
+
+
+def test_a_refusal_lists_named_ids_apart_from_the_near_match(repo):
+    body = TEXT + " (reuses P-acp and P-spawn)"
+    out = A.phase_add(repo, "P-dup", title="P-view", body=body, agent="a")
+    lines = out.reason.splitlines()
+    split = next(i for i, ln in enumerate(lines) if ln.startswith("Also named"))
+    assert any("P-view" in ln for ln in lines[:split])
+    assert [ln for ln in lines[split + 1 :] if "P-acp" in ln or "P-spawn" in ln]
+    assert not any("P-acp" in ln for ln in lines[:split])
