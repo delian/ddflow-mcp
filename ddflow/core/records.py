@@ -5,7 +5,7 @@ events; `ddflow.core.model` re-exports every name here."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import Any
 
@@ -1101,9 +1101,20 @@ class State:
         }
 
 
+_LEASE_FIELDS = tuple(f.name for f in fields(Lease))
+
+
 # Claim-window helpers: `State`'s contest methods use them, and so do the lease handlers.
 def _claim(lease: Lease) -> dict[str, Any]:
-    return {"holder": lease.holder, "event": lease.event, "lease": asdict(lease)}
+    """The claim window of ``lease``: a copy, so widening it never moves the lease.
+
+    Built from a flat read of the fields (the only mutable ones are two lists, copied):
+    `dataclasses.asdict` recurses and deep-copies, and was 40% of a fold's time, called
+    three times per renewal."""
+    snap = {n: getattr(lease, n) for n in _LEASE_FIELDS}
+    snap["globs"] = list(lease.globs)
+    snap["resources"] = list(lease.resources)
+    return {"holder": lease.holder, "event": lease.event, "lease": snap}
 
 
 def _span(lease: dict[str, Any]) -> tuple[float, float]:
