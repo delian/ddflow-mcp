@@ -222,6 +222,13 @@ def test_retro_on_an_unknown_item_fails_and_a_claim_only_item_names_its_queue_wa
     assert t["biggest_gap"]["from"].startswith("ready")
 
 
+def test_a_filed_but_untouched_item_has_no_retro():
+    log = twelve()
+    log.task("BARE", "b.py")
+    bare = run(log, view="retro", item="BARE")
+    assert not bare.ok and not bare.failed and bare.metrics["biggest_gap"] is None
+
+
 def test_durations_under_a_minute_do_not_read_as_zero():
     from ddflow.services.metrics.render import dur
 
@@ -236,11 +243,11 @@ def test_a_zero_grid_step_is_clamped_once_and_reported_clamped():
     assert g["step_s"] == 1.0 and len(g["rows"]) == 3
 
 
-def test_review_rounds_only_count_verdicts_inside_the_window():
+def test_review_rounds_follow_the_items_completed_in_the_window():
     log = twelve()
-    kept = run(log, since="2026-01-01", knobs={"min_samples": 1}).metrics["review_rounds"]
+    whole = run(log, knobs={"min_samples": 1}).metrics["review_rounds"]
     late = run(log, since="1d", knobs={"min_samples": 1}, now=NOW).metrics["review_rounds"]
-    assert kept["max_rounds"] == 2 and late["n"] < kept["n"]
+    assert whole["max_rounds"] == late["max_rounds"] == 2 and late["n"] < whole["n"]
 
 
 def test_a_bool_is_not_a_percentile():

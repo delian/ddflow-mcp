@@ -56,9 +56,9 @@ def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
 
 
 def review_rounds(ctx: Context) -> list[int]:
-    """Review verdicts per completed item (0 for an item whose reviews were all skipped)."""
+    """Review verdicts per item completed inside the view, over its whole life (0 for an item whose reviews were all skipped)."""
     counts: Counter[str] = Counter(
-        o.item for o in scoped_outcomes(ctx) if o.gate in PR.REVIEW_GATES and o.kind in RAN
+        o.item for o in ctx.facts.outcomes if o.gate in PR.REVIEW_GATES and o.kind in RAN
     )
     return [counts.get(s.item, 0) for s in completed_spans(ctx)]
 

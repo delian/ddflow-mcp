@@ -28,7 +28,7 @@ def instants(
     """(instants oldest first, whether the cap cut the window short): ``now`` and every
     ``step_s`` before it, back to ``since`` (or the first event), at most ``max_folds``."""
     start = max(first, since) if since is not None else first
-    step = max(float(step_s), 1.0)
+    step = float(step_s)
     count = int((now - start) // step) + 1
     capped = count > max_folds
     count = max(min(count, max(int(max_folds), 1)), 1)
