@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.ignore_paths"
+new = '[]'
+why = "Globs of path-like references the docs check does not even note."
+impact = "additive"
