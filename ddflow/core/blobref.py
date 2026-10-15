@@ -38,13 +38,9 @@ class Unavailable(str):
         return self
 
 
-SHA_HEX = 64
-STUB_MAX_KEYS = 2  # the reference key and an optional size
-
-
 def is_stub(value: Any) -> bool:
     return (
-        isinstance(value, dict) and isinstance(value.get(KEY), str) and len(value) <= STUB_MAX_KEYS
+        isinstance(value, dict) and isinstance(value.get(KEY), str) and len(value) <= 2  # noqa: PLR2004
     )
 
 
@@ -60,7 +56,7 @@ def address(raw: bytes) -> str:
 def hexof(ref: str) -> str:
     """The hex part of ``sha256:<hex>``, "" for anything that is not a well-formed reference."""
     algo, _, hexed = ref.partition(":")
-    ok = algo == ALGO and len(hexed) == SHA_HEX and all(c in "0123456789abcdef" for c in hexed)
+    ok = algo == ALGO and len(hexed) == 64 and all(c in "0123456789abcdef" for c in hexed)  # noqa: PLR2004
     return hexed if ok else ""
 
 

@@ -35,10 +35,6 @@ def _text(rng: random.Random, n_chars: int) -> str:
     return " ".join(out)
 
 
-FINDINGS_RATE = 0.15  # share of gates whose evidence carries long findings
-FAIL_RATE = 0.2  # share of gates that fail
-
-
 def _evidence(rng: random.Random, failed: bool, gate: str = "") -> dict[str, Any]:
     """Gate evidence: mostly small notes, sometimes a long reviewer report."""
     ev: dict[str, Any] = {
@@ -52,7 +48,7 @@ def _evidence(rng: random.Random, failed: bool, gate: str = "") -> dict[str, Any
             reviewed_head=f"{rng.getrandbits(160):040x}",
             diff_sha=f"{rng.getrandbits(160):040x}",
         )
-    if failed or rng.random() < FINDINGS_RATE:
+    if failed or rng.random() < 0.15:  # noqa: PLR2004
         ev["chunk_findings"] = [
             {"chunk": i, "detail": _text(rng, rng.randint(800, 2400))}
             for i in range(rng.randint(1, 4))
@@ -180,7 +176,7 @@ def generate(
             w.add(agent, "lease.renewed", item, {"at": at, "holder": agent})
             if i % 2 == 1 and gates:
                 g = gates.pop(0)
-                failed = rng.random() < FAIL_RATE
+                failed = rng.random() < 0.2  # noqa: PLR2004
                 if g in ("ci", "unit_tests"):  # only command gates announce a start
                     w.add(agent, "gate.started", item, {"gate": g})
                 w.add(
