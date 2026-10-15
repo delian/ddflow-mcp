@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 230 knobs.
+cadences, and the rest of the 234 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3904,15 +3904,19 @@ is ignored and the log parsed. `ddflow doctor`'s integrity check (`EventLog.veri
 uses it, and a log opened only to read another repository (`external sync`, exports)
 neither reads nor writes one. It has the trust of the rest of `.ddflow/local/`: your own
 checkout's machine-local state, never fetched or merged. Deleting the file is always safe; `DDFLOW_SNAPSHOT=0` turns it off for a
-process. It covers up to `max_cached_events` (a larger log is parsed each time, as
+process (or `[log] snapshot = false`). It covers up to `max_cached_events` (a larger log is parsed each time, as
 before). The table above is reproduced by `python tests/bench_log_read.py`.
 
-Two knobs, `[log]`:
+Six knobs for reading the log, `[log]`:
 
 | knob | default | what it trades |
 |---|---|---|
 | `reuse_parsed` | `true` | Off = always re-parse from scratch. Slower, and worth it only if a shard is being rewritten in place under a running process. |
 | `max_cached_events` | `100000` | Memory ceiling, in events. ~736 bytes per parsed event, so the default holds ~74 MB in a long-lived MCP server. Over the ceiling the cache is dropped and reads cost what they always did. |
+| `snapshot` | `true` | Off = the on-disk snapshot is neither read nor written (`DDFLOW_SNAPSHOT=0` does the same for one process and wins). A cold command then re-parses the whole log. |
+| `snapshot_min_events` | `5000` | No snapshot below this many events: a cold parse is cheap there and a file is not free. |
+| `snapshot_stale_days` | `7` | Days a snapshot written by another ddflow version or parser is kept before it is collected. |
+| `snapshot_touch_s` | `86400` | How often, in seconds, a snapshot in use is marked as used, so a sibling checkout on other code does not collect it as abandoned. |
 
 **The validity check is a content check, and that is the whole design.** The consumed
 prefix is re-hashed on every read — 1.1 ms to read plus 4.3 ms to digest, against the
@@ -5116,7 +5120,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 230): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 234): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5622,7 +5626,7 @@ declared once and persists — see
 
 ## Configuration
 
-230 knobs across 31 sections, every one documented in place and listed, with its default
+234 knobs across 31 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5689,8 +5693,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=6007b5c668fc -->
-<details><summary>All 230 knobs across 31 sections</summary>
+<!-- ddflow:begin README/knobs sha=660b6e098e5d -->
+<details><summary>All 234 knobs across 31 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5861,6 +5865,10 @@ long default is left to `ddflow config --explain`.
 | `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
 | `log.commit_events_message` | `"events: {reason}"` |  |
 | `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
+| `log.snapshot` | `true` |  |
+| `log.snapshot_min_events` | `5000` |  |
+| `log.snapshot_stale_days` | `7` |  |
+| `log.snapshot_touch_s` | `86400` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |

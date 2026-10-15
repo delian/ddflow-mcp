@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.snapshot_touch_s"
+new = '86400'
+why = "How often, in seconds, a snapshot in use is marked as used."
+impact = "additive"
