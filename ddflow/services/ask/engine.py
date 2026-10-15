@@ -100,6 +100,8 @@ def request(
             raise AskRefused("an approval is of something: give its digest or its content")
     elif not text:
         raise AskRefused("a question needs its text")
+    if not isinstance(bot_answerable, bool):
+        raise AskRefused("bot_answerable is true or false, not " + repr(bot_answerable))
     if bot_answerable:
         why = require(actor, CAP_APPROVE) if actor is not None else "no actor named"
         if why:
