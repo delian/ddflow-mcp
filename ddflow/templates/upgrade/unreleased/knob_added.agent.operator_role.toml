@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.operator_role"
+new = "\"operator\""
+why = "The role of a person at their own terminal. (SE-actors, the one actor resolver.)"
+impact = "additive"

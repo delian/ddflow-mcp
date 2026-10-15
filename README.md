@@ -5684,8 +5684,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=86ac53899616 -->
-<details><summary>All 222 knobs across 30 sections</summary>
+<!-- ddflow:begin README/knobs sha=90bbe809239b -->
+<details><summary>All 226 knobs across 30 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5893,6 +5893,10 @@ long default is left to `ddflow config --explain`.
 | `agent.reviewer_family_must_differ` | `true` |  |
 | `agent.families` | (long: see `ddflow config --explain`) |  |
 | `agent.routers` | `{hydrafusion = []}` |  |
+| `agent.roles` | (long: see `ddflow config --explain`) |  |
+| `agent.actors` | `{}` |  |
+| `agent.default_role` | `"agent"` |  |
+| `agent.operator_role` | `"operator"` |  |
 | `ids.bug` | `"{prefix}{hash}"` |  |
 | `ids.lesson` | `"{prefix}{hash}"` |  |
 | `ids.research` | `"{prefix}{hash}"` |  |
