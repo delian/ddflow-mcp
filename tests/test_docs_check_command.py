@@ -287,3 +287,15 @@ def test_lint_is_not_run_when_commands_are_off(proj):
     res = run_check(proj, Config.load(proj), run_commands=False)
 
     assert "lint" in res.unavailable and not (proj / "ran.txt").exists()
+
+
+def test_a_quoted_path_in_the_diff_does_not_stop_the_run(proj):
+    from ddflow.services.docscheck_diff import _unquote, added_lines
+
+    assert _unquote('"a\\"b\\\\c\\td"') == 'a"b\\c\td' and _unquote("plain") == "plain"
+    git(proj, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "base")
+    put(proj, 'src/we"ird.py', "x = 1\ny = 2\n")
+    git(proj, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "odd")
+    put(proj, 'src/we"ird.py', "x = 1\ny = 3\n")
+
+    assert added_lines(proj, "HEAD") == {'src/we"ird.py': {2}}

@@ -14,10 +14,25 @@ from pathlib import Path
 from ..infra import git as G
 from .docscheck_types import Finding
 
+_ESCAPE = re.compile(r"\\([0-7]{3}|.)")
+_SIMPLE = {"t": "\t", "n": "\n", "r": "\r", "a": "\a", "b": "\b", "f": "\f", "v": "\v"}
 _HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@")
 
 #: Path -> the added line numbers, or None when the whole file is new.
 Added = dict[str, set[int] | None]
+
+
+def _unquote(name: str) -> str:
+    """A path as git prints it: C-quoted when it holds a quote, a backslash or a control
+    character (``core.quotepath=off`` leaves other characters alone)."""
+    if not (name.startswith('"') and name.endswith('"') and len(name) > 1):
+        return name
+    return _ESCAPE.sub(
+        lambda m: (
+            chr(int(m.group(1), 8)) if m.group(1).isdigit() else _SIMPLE.get(m.group(1), m.group(1))
+        ),
+        name[1:-1],
+    )
 
 
 def added_lines(repo: Path | str, base: str) -> Added:
@@ -45,9 +60,7 @@ def added_lines(repo: Path | str, base: str) -> Added:
         if line.startswith("diff --git "):  # a content line always starts with + - or a space
             header, path = True, ""
         elif header and line.startswith("+++ "):
-            if line[4:].startswith('"'):
-                raise OSError(f"git quotes a path in the diff of {base}; cannot read it")
-            path = line[4:].removeprefix("b/") if line != "+++ /dev/null" else ""
+            path = _unquote(line[4:]).removeprefix("b/") if line != "+++ /dev/null" else ""
         elif m := _HUNK.match(line):
             header = False
             if path:
