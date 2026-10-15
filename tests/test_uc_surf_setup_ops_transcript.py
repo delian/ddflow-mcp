@@ -5,9 +5,11 @@ upgrade, config, prompts, help, adopt, hooks status and init, in one scripted se
 fresh adopted repository.
 
 The expected transcript (`test_uc_surf_setup_ops_transcript.json`) was recorded from the code
-BEFORE the slice and is never regenerated to make the slice pass. Only what differs between
-runs is normalised: the repository and package paths, the home directory, timestamps, short
-hashes and durations."""
+BEFORE the slice. It is re-recorded only on purpose, by `ddflow pins regenerate` (which sets
+DDFLOW_UPDATE_GOLDEN=1): the entries that differ are replaced and every other entry is kept
+byte for byte, so the diff is exactly the commands whose output changed. Only what differs
+between runs is normalised: the repository and package paths, the home directory,
+timestamps, short hashes and durations."""
 
 from __future__ import annotations
 
@@ -172,8 +174,23 @@ def record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[list]:
 
 
 def test_the_setup_and_operations_cli_transcript_is_unchanged(tmp_path, monkeypatch):
+    update = bool(os.environ.get("DDFLOW_UPDATE_GOLDEN"))  # before `record` clears DDFLOW_*
     got = record(tmp_path, monkeypatch)
     want = json.loads(EXPECTED.read_text("utf-8"))
+    if update:
+        # By command, not by position: a step added to or dropped from SCRIPT changes the
+        # count, and every unchanged step still keeps its recorded text byte for byte.
+        old: dict[tuple, list] = {}
+        for w in want:
+            old.setdefault(tuple(w[0]), []).append(w)
+        merged = []
+        for g in got:
+            queue = old.get(tuple(g[0]))
+            w = queue.pop(0) if queue else None
+            merged.append(w if w is not None and stable(g) == stable(w) else g)
+        if merged != want:
+            EXPECTED.write_text(json.dumps(merged, indent=1, ensure_ascii=False) + "\n", "utf-8")
+            want = merged
     assert len(got) == len(want)
     bad = [
         f"{' '.join(g[0])}:\n got {g[1:]!r}\nwant {w[1:]!r}"

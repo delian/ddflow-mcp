@@ -1,7 +1,7 @@
 {
  "--json decision applicable T-nope": [
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"no such item 'T-nope'\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"decision_applicable@1\"\n}\n",
   "no such item 'T-nope'\n"
  ],
  "--json decision applicable T1": [
@@ -11,7 +11,7 @@
  ],
  "--json decision show D-nope": [
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"no such decision 'D-nope'\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"decision_show@1\"\n}\n",
   "no such decision 'D-nope'\n"
  ],
  "--json decision show D-one": [
@@ -31,7 +31,7 @@
  ],
  "--json decision supersede D-nope --by D-two": [
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"no such decision 'D-nope'\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"decision_supersede@1\"\n}\n",
   "no such decision 'D-nope'\n"
  ],
  "--json decision supersede D-three --by D-two": [
@@ -56,7 +56,7 @@
  ],
  "--json dupes --kind nosuchkind": [
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"dupes@1\"\n}\n",
   "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
  ],
  "--json lesson search probe": [
@@ -106,7 +106,7 @@
  ],
  "--json similar always probe first --kind nosuchkind": [
   1,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"similar@1\"\n}\n",
   "unknown kind nosuchkind: [dedupe].kinds is bug, task, phase, lesson, decision, research, memory, rule\n"
  ],
  "--json similar zzzz nothing like it qqqq": [

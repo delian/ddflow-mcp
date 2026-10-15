@@ -72,6 +72,9 @@ class GateStatus:
     rows: list[tuple[str, str]] = field(default_factory=list)
 
 
+SETTLED_VERDICTS = ("refuted", "confirmed")  # a finding with either has been triaged
+
+
 def triage_counts(it, gate: str) -> dict[str, int] | None:
     """How the findings of ``gate``'s recorded review stand: ``{"findings", "refuted",
     "confirmed", "untriaged"}``, or None when it reported none -- or is not a `ddflow
@@ -90,8 +93,30 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
         "findings": len(found),
         "refuted": verdicts.count("refuted"),
         "confirmed": verdicts.count("confirmed"),
-        "untriaged": sum(1 for v in verdicts if v not in ("refuted", "confirmed")),
+        "untriaged": sum(1 for v in verdicts if v not in SETTLED_VERDICTS),
     }
+
+
+def untriaged_note(it, gate: str) -> str:
+    """The findings of ``gate``'s recorded review that still lack a verdict, as a
+    warning for a hand record that is about to follow it, or "" (bug B754cfb0c96)."""
+    rec = it.gates.get(gate)
+    found = (rec.evidence or {}).get("chunk_findings") if rec else None
+    if not found or not triage_counts(it, gate):
+        return ""
+    mine = it.triage.get(gate, {})
+    left = [
+        f"#{n}"
+        for n, f in enumerate(found, 1)
+        if mine.get(f.get("digest"), {}).get("verdict", "") not in SETTLED_VERDICTS
+    ]
+    if not left:
+        return ""
+    return (
+        f"NOTE: {gate} has untriaged finding(s) {', '.join(left)} from its last review; "
+        f"they stay on the record -- `ddflow review triage {it.id} --gate {gate} "
+        "--finding N` settles each."
+    )
 
 
 def rounds_line(it, gate: str) -> str:
