@@ -13,6 +13,7 @@ from typing import Any
 
 from ..events import Event
 from ..records import State
+from .asks import ASK_HANDLERS
 
 #: The subject prefix of a reviewer approval: ``reviewer:<name>``.
 REVIEWER = "reviewer:"
@@ -63,5 +64,5 @@ def h_used(st: State, ev: Event) -> None:
             return
 
 
-#: event kind -> its handler, for `model.HANDLERS`.
-APPROVAL_HANDLERS = {"approval.granted": h_granted, "approval.used": h_used}
+#: event kind -> its handler, for `model.HANDLERS` (the ask events: `handlers/asks`).
+APPROVAL_HANDLERS = {"approval.granted": h_granted, "approval.used": h_used, **ASK_HANDLERS}

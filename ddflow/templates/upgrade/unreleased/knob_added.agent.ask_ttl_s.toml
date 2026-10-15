@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.ask_ttl_s"
+new = '86400'
+why = "How long an ask put through the approvals engine stays answerable before it expires (default 86400 seconds, a day)."
+impact = "additive"

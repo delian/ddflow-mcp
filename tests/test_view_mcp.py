@@ -100,7 +100,7 @@ def test_refusals(proj):
         {"kind": "search", "query": "x", "tag": "web"},
         {"kind": "task", "query": "login"},
         {"kind": "task", "mode": "regex"},
-        {"kind": "task", "all": True},
+        {"kind": "phase", "item": "T1"},
         {"kind": "bug", "sources": "task"},
     )
     for args in ({"kind": "nope"}, {"kind": "search"}, {"kind": "task", "id": "S1"}, *stray):
