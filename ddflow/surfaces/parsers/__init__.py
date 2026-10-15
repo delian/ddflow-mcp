@@ -14,6 +14,7 @@ from . import (
     lanes,
     lifecycle,
     maintenance,
+    plan,
     queue,
     records,
     reporting,
@@ -25,6 +26,7 @@ from . import (
 #: Each command group's `register`, in `ddflow --help` order.
 REGISTER_ORDER = (
     queue.register,
+    plan.register,
     lifecycle.register,
     flow.register,
     jobs.register,

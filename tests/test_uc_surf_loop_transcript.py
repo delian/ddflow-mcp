@@ -1046,7 +1046,7 @@ EXPECTED = [
         "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n"
         "              [--allow-older-version] [--reason SKEW_REASON] [--version]\n"
         "              "
-        "{init,phase,task,split,resolve,update,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} "
+        "{init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} "
         "...\n"
         "ddflow: error: unrecognized arguments: --item T1\n",
     ),
