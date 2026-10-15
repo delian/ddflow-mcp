@@ -280,3 +280,4 @@
 {"agent":"fleet-docscmd","data":{"at":1792078111.1553235,"holder":"fleet-docscmd"},"id":"e5dee9d5a5c83481e3ef4f3f3","kind":"lease.renewed","lamport":63895,"schema":1,"subject":"B-docs-check-command","ts":"2026-10-15T15:28:31.290559Z"}
 {"agent":"fleet-docscmd","data":{"at":1792078151.4312742,"holder":"fleet-docscmd"},"id":"ed5a1fc180b8c8a07c70f871f","kind":"lease.renewed","lamport":63897,"schema":1,"subject":"B-docs-check-command","ts":"2026-10-15T15:29:11.598492Z"}
 {"agent":"fleet-docscmd","data":{"at":1792078194.1396701,"holder":"fleet-docscmd"},"id":"e57e3044dc00a99e95737891f","kind":"lease.renewed","lamport":63899,"schema":1,"subject":"B-docs-check-command","ts":"2026-10-15T15:29:54.312912Z"}
+{"agent":"fleet-docscmd","data":{"at":1792078236.8340137,"holder":"fleet-docscmd"},"id":"e69ea759669df3a39ed6cb26d","kind":"lease.renewed","lamport":63902,"schema":1,"subject":"B-docs-check-command","ts":"2026-10-15T15:30:36.993991Z"}
