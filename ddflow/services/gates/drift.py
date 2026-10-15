@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from ...infra import tomlcfg
 from ...infra import worktree as W
 from .defs import GateDef
 
@@ -55,9 +56,6 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     recorded as a test failure (bug B8ea7a90aea). The config-knob half of the same
     class warns "merge main" from `config._warn_unknown`.
     """
-    # Function-level (deferred, as it was before the area split).
-    from ...infra import tomlcfg
-
     try:
         primary = W.repo_root(tree)
     except (W.GitError, OSError):
