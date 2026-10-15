@@ -66,8 +66,8 @@ def guard_record(log, cfg, st, it, *, force: bool, reason: str, what: str) -> tu
     An umbrella (an item with sub-tasks) closes by itself when its last child does, and its
     own gates are recorded after that: it is not finished in the sense this guard means."""
     umbrella = bool(st.descendants(it.id))
-    shut, note = ("", "") if umbrella else closed_item_refusal(
-        it, force=force, reason=reason, what=what
+    shut, note = (
+        ("", "") if umbrella else closed_item_refusal(it, force=force, reason=reason, what=what)
     )
     if shut:
         return shut, ""
