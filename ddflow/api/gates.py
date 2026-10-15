@@ -46,6 +46,7 @@ from ..services.gates.reviewers import run_watching_git
 from ..services.guidance import inject as GI
 from ..views.markdown import new_reports_line
 from ._base import _load
+from .gate_guard import guard_record
 from .lifecycle import callers_tree
 from .lifecycle.claim import _new_report_count
 from .lifecycle.complete import _session_model
@@ -466,8 +467,8 @@ def run(
 
     # Before anything is written, `gate.started` and the `unavailable` below included: bob,
     # who has no tree for alice's item, wrote `unavailable` over her recorded pass (B90b43dd2d8).
-    refusal, forced_by = L.foreign_guard(
-        log, cfg, item, force=force, reason=reason, what=f"running {gate}"
+    refusal, forced_by = guard_record(
+        log, cfg, st, it, force=force, reason=reason, what=f"running {gate}"
     )
     if refusal:
         return O.refused("gate.run", refusal, id=item, gate=gate, outcome="")
@@ -777,8 +778,8 @@ def record(
 
     # Recording over another clone's live lease replaces what its holder recorded (last
     # event wins): `--force` with the reason the record carries anyway (B90b43dd2d8).
-    refusal, forced_by = L.foreign_guard(
-        log, cfg, item, force=force, reason=reason, what=f"recording {gate}"
+    refusal, forced_by = guard_record(
+        log, cfg, st, it, force=force, reason=reason, what=f"recording {gate}"
     )
     if refusal:
         return O.refused("gate.record", refusal, id=item, gate=gate, outcome="")
