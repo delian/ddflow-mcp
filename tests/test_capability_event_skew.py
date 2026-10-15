@@ -78,3 +78,19 @@ def test_an_older_version_does_not_announce_a_capability_it_does_not_ship(
     log.append("phase.added", "P2", {"title": "p"})
     (rec,) = [e for e in log.read_all() if e.kind == "ddflow.capabilities"]
     assert rec.data["capability"] == "evidence-blobs"
+
+
+def test_a_released_capability_refuses_only_the_kind_it_governs(repo: Path):
+    _announce(repo, ["gate.passed"], stamped=True)
+    EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})  # patch skew, no conflict
+
+
+def test_a_capability_without_a_parseable_version_counts_for_nothing(repo: Path):
+    _write(
+        repo,
+        "dev",
+        "ddflow.capabilities",
+        {"capability": "x", "kinds": ["gate.passed"], "version": ""},
+        2,
+    )
+    EventLog(repo, "me").append("gate.passed", "T1", {"gate": "x"})

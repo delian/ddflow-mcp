@@ -414,7 +414,7 @@ def stamp_facts(
     caps = {
         n: c
         for n, c in caps.items()
-        if not version_key(c.version) or (highest and not is_older(highest, c.version))
+        if version_key(c.version) and highest and not is_older(highest, c.version)
     }
     format_skewed = format_level is not None and highest_format > format_level
     override = None
