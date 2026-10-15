@@ -10,14 +10,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..core.model import ABANDONED, DONE
+from ..core.model import DONE
 from ..infra import worktree as W
+from ..services import leases as L
 
 
 def closed_item_refusal(it, *, force: bool, reason: str, what: str) -> tuple[str, str]:
     """(refusal, forced-by): ("", "") for an open item; (text, "") to refuse a COMPLETE or
     abandoned one; ("", note) when ``--force`` with a reason overrides, ``note`` recorded."""
-    if it is None or it.state not in (DONE, ABANDONED):
+    if it is None or not it.terminal:
         return "", ""
     state = "complete" if it.state == DONE else "abandoned"
     base = (
@@ -56,3 +57,13 @@ def wrong_tree_refusal(repo: Path, st, it, called_from: Path | None) -> str:
                 f"review from its own tree, or pass --branch <branch>."
             )
     return ""
+
+
+def guard_record(log, cfg, it, *, force: bool, reason: str, what: str) -> tuple[str, str]:
+    """(refusal, forced-by) for recording or running a gate on ``it``: a finished item, then
+    another clone's live lease. Either may be overridden with ``--force --reason``."""
+    shut, note = closed_item_refusal(it, force=force, reason=reason, what=what)
+    if shut:
+        return shut, ""
+    refusal, forced = L.foreign_guard(log, cfg, it.id, force=force, reason=reason, what=what)
+    return refusal, forced or note
