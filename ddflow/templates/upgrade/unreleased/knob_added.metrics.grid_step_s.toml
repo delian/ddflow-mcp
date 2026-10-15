@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.grid_step_s"
+new = "3600"
+why = "Seconds between the instants the lane-utilisation grid replays the plan at."
+impact = "additive"
