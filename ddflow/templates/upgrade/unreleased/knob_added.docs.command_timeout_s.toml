@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "docs.command_timeout_s"
+new = '20'
+why = "How long one --help walk step or count command may run."
+impact = "additive"

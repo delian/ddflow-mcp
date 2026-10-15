@@ -144,6 +144,7 @@ from .operations import (
     precommit,
     relevant_tests,
 )
+from .plan import plan_check
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -295,6 +296,7 @@ __all__ = [
     "phase_close",
     "phase_progress",
     "pins",
+    "plan_check",
     "pr_status",
     "pr_sync",
     "pr_threads",

@@ -20,6 +20,7 @@ from ..declared import knowledge as _knowledge
 from ..declared import lanes as _lanes
 from ..declared import lifecycle as _lifecycle
 from ..declared import memory as _memory
+from ..declared import plan as plan
 from ..declared import queue as _queue
 from ..declared import records as _records
 from ..declared import reporting as _reporting
