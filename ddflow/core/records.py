@@ -5,7 +5,7 @@ events; `ddflow.core.model` re-exports every name here."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import Any
 
@@ -1020,11 +1020,23 @@ class State:
         dependencies, be claimed by a different agent, and run in parallel with its
         siblings when nothing links them.
         """
-        live = [i for i in self.items.values() if i.kind == "task" and not i.removed]
         if not phase:
-            return live
-        wanted = self.descendants(phase)
-        return [i for i in live if i.id in wanted]
+            return [i for i in self.items.values() if i.kind == "task" and not i.removed]
+        # Only the items below ``phase``, put back in definition order: scanning every item
+        # for each of the thousand phase dependencies a plan weighs was the cost of `next`.
+        pos = self._positions()
+        below = [self.items[n] for n in self.descendants(phase) if n in self.items and n in pos]
+        below.sort(key=lambda i: pos[i.id])
+        return [i for i in below if i.kind == "task" and not i.removed]
+
+    def _positions(self) -> dict[str, int]:
+        """`item id -> definition order`. Items are only ever added (a removal sets a flag), so
+        a table of this length is still right."""
+        table = self.__dict__.get("_pos_table")
+        if table is None or len(table) != len(self.items):
+            table = {n: k for k, n in enumerate(self.items)}
+            self.__dict__["_pos_table"] = table
+        return table
 
     def _child_index(self) -> dict[str, list[Item]]:
         """`parent -> [children]`, built once per fold and cached on the State.
@@ -1105,9 +1117,20 @@ class State:
         }
 
 
+_LEASE_FIELDS = tuple(f.name for f in fields(Lease))
+
+
 # Claim-window helpers: `State`'s contest methods use them, and so do the lease handlers.
 def _claim(lease: Lease) -> dict[str, Any]:
-    return {"holder": lease.holder, "event": lease.event, "lease": asdict(lease)}
+    """The claim window of ``lease``: a copy, so widening it never moves the lease.
+
+    Built from a flat read of the fields (the only mutable ones are two lists, copied):
+    `dataclasses.asdict` recurses and deep-copies, and was 40% of a fold's time, called
+    three times per renewal."""
+    snap = {n: getattr(lease, n) for n in _LEASE_FIELDS}
+    snap["globs"] = list(lease.globs)
+    snap["resources"] = list(lease.resources)
+    return {"holder": lease.holder, "event": lease.event, "lease": snap}
 
 
 def _span(lease: dict[str, Any]) -> tuple[float, float]:
