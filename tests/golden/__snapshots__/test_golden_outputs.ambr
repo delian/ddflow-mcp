@@ -1454,6 +1454,29 @@
           the strictest (a push never leaves event shards out); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
+      log.snapshot = True   [default]
+          Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a
+          cold one-shot command does not re-parse the whole log. It is a cache: every
+          doubt ends in parsing the log, and the log stays the only source of truth.
+          Needs `reuse_parsed`. `false` neither reads nor writes it; the environment
+          variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over
+          this setting.
+      log.snapshot_min_events = 5000   [default]
+          No snapshot is written below this many events: a cold parse is cheap there
+          and a file is not free. Lower it to snapshot a small log (tests do), raise
+          it to snapshot only a large one. 0 removes this threshold only: a snapshot
+          is still rewritten just when at least 1000 events (or a tenth of what it
+          already covers) have been added.
+      log.snapshot_stale_days = 7   [default]
+          Days a snapshot written by OTHER code (another ddflow version or parser) is
+          kept before the next write collects it. One snapshot exists per version and
+          parser, so worktrees on different versions do not overwrite each other's;
+          this bounds how long an abandoned one stays.
+      log.snapshot_touch_s = 86400   [default]
+          A snapshot in use is marked as used (its modification time refreshed) at
+          most this often, in seconds, so a long-lived reader's snapshot is not
+          collected as abandoned by a sibling checkout on other code. 0 refreshes it
+          on every read.
       upgrade.skew = 'refuse'   [default]
           What happens when a ddflow OLDER than the one that last worked on this
           project's log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse`
@@ -1777,6 +1800,43 @@
           --model hydrafusion` refuses until you list the families your plan routes
           to, e.g. routers = { hydrafusion = ["anthropic", "openai", "google"] }. From
           the env, JSON only.
+      agent.roles = {'operator': ['*'], 'bot': ['read', 'claim', 'note', 'start_lane', 'approve_marked'], 'agent': ['read', 'claim', 'note'], 'observer': ['read']}   [default]
+          Role name to the capabilities it holds: the one table every auth and
+          approval path is to ask (serve auth, hub and scoped tokens, the approvals
+          engine, waiver approvers: each lands as its own item and reads it through
+          `services/actors`). A capability is any name a consumer asks for; the
+          shipped ones are read, claim, note, start_lane (start a lane within the caps
+          the operator sets), approve (answer any approval), approve_marked (answer
+          only approvals marked bot-answerable), adopt, waive. "*" holds every
+          capability. A role missing from the table, or a capability missing from its
+          list, is refused: the table fails closed. Default: operator = ["*"], bot =
+          read, claim, note, start_lane, approve_marked; agent = read, claim, note;
+          observer = read. Widening a role is an operator act. Change it for the
+          project (`ddflow config --set agent.roles ...`), for this machine (add
+          --local), per run (DDFLOW_AGENT_ROLES, JSON only), or over MCP with
+          `ddflow_configure` (the operator is told when an agent does).
+      agent.actors = {}   [default]
+          Actor id to role, for named actors such as a chat gateway or n8n: `{
+          openclaw = "bot" }`. Applied ONLY to an id a credential has proven (a paired
+          token); an id an agent merely declares with --agent or as_agent is a claim
+          and is never looked up here, so naming a role cannot be done by saying the
+          name. Empty by default. Change it for the project (`ddflow config --set
+          agent.actors ...`), for this machine (add --local), per run
+          (DDFLOW_AGENT_ACTORS, JSON only), or over MCP with `ddflow_configure`.
+      agent.default_role = 'agent'   [default]
+          The role of a caller no credential and no terminal vouches for: an agent
+          harness, `--agent`, `DDFLOW_AGENT`, the MCP surface. Default "agent". A
+          person at their own terminal is the operator role (see
+          `agent.operator_role`); setting this to "operator" makes every caller one
+          and is the widening it sounds like. Change it for the project (`ddflow
+          config --set agent.default_role observer`), for this machine (add --local),
+          per run (DDFLOW_AGENT_DEFAULT_ROLE), or over MCP with `ddflow_configure`.
+      agent.operator_role = 'operator'   [default]
+          The role of a person at their own terminal (a CLI call with no --agent, no
+          DDFLOW_AGENT and no agent-harness marker). Default "operator". Change it for
+          the project (`ddflow config --set agent.operator_role operator`), for this
+          machine (add --local), per run (DDFLOW_AGENT_OPERATOR_ROLE), or over MCP
+          with `ddflow_configure`.
       ids.bug = '{prefix}{hash}'   [default]
           Bug ids. Default {prefix}{hash}: B and ten hex digits, as ever
           (B9c56de9d58). Tokens: {prefix} (the kind's letter), {seq} (next free
@@ -1959,6 +2019,60 @@
       rag.timeout_s = 60   [default]
           Seconds one embedding call (the companion command) may take before it is
           `unavailable` (default 60, 1 to 600).
+      docs.severity = 'warn'   [default]
+          What a finding from `ddflow docs check` costs. 'warn' (default) reports it
+          and leaves the docs gate skippable with a reason. 'block' keeps the docs
+          gate from being recorded passed while a finding stands. 'off' runs nothing
+          and the command says so (exit 2). A finding is printed at every severity but
+          off: this says what it costs, not whether it is seen. A check that could not
+          run is `unavailable` at every severity, never a pass. An unrecognised value
+          in a config file is warned about, reported by `doctor` and falls back to
+          'warn', the strictest (reports without blocking, so a typo cannot start
+          refusing merges); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      docs.check_links = 'local'   [default]
+          Which links `ddflow docs check` follows. 'off': none (no link or anchor
+          finding). 'local' (default): relative targets and `#anchors`, resolved
+          against the tree. 'network': also http(s) links, each fetched once with a
+          read-only GET (opt-in; CI flakiness is why it is not the default). A remote
+          link that cannot be reached because the network is down makes the check
+          `unavailable`, never a pass; one the server answers 404 or 410 is a `link`
+          finding. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'local', the strictest (follows only links inside
+          the tree, so a typo never reaches out); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
+      docs.link_timeout_s = 10   [default]
+          Seconds one remote link may take to answer when `check_links` is 'network'
+          before it counts as unreachable (the check is then `unavailable`, not
+          failed).
+      docs.check_paths = []   [default]
+          The documents `ddflow docs check` reads, as repo-relative globs: an explicit
+          allowlist (README plus the docs directories a project keeps true), because a
+          whole-tree check on a project with history drowns in findings about pages
+          that were accurate when written. Empty (default): the files matching
+          `[enforce].doc_globs` minus `[enforce].doc_exclude` and the generated export
+          targets, so what counts as documentation is written once.
+      docs.lint_command = ''   [default]
+          A markdown lint or formatter to run as part of the check, as a shell line in
+          the repository root (e.g. `npx markdownlint-cli2 "**/*.md"`). Exit 0 passes;
+          any other exit is a `lint` finding carrying its output. Empty (default):
+          none, and the report lists the lint as `unavailable` rather than passing it.
+          A line that cannot run (command not found, timed out) is `unavailable` too
+          and keeps a clean report from reading as clean. ddflow ships no lint and
+          adds no dependency: the project brings the command. Bounded by
+          `command_timeout_s`.
+      docs.ignore_paths = []   [default]
+          Globs of path-like references in the documents that are not worth even a
+          note: runtime paths, generated files, illustrative examples. Empty
+          (default). Path-like inline code is only 10-30% precise, so a note carries
+          this list instead of failing anyone.
+      docs.ignore_names = []   [default]
+          fnmatch patterns of identifiers and flags ANOTHER tool owns, which this
+          project's docs may name without the code having them (`ddflow_*` in the
+          agent-instructions page of a project that merely uses ddflow). Empty
+          (default); a name matched here is never a finding.
       docs.extract = []   [default]
           Extractors that list the public surface the code offers, so the check can
           say which of it no document mentions: `[[docs.extract]]` blocks with `kind`
@@ -1989,8 +2103,8 @@
           package.json. A command that cannot run (missing, timing out) is a note,
           never a pass.
       docs.command_timeout_s = 20   [default]
-          Seconds one `--help` walk step or one count command may run before the check
-          records it as not run (a note) instead of waiting.
+          Seconds one `--help` walk step, one count command or the `lint_command` may
+          run before the check records it as not run (a note) instead of waiting.
   
     ''',
   )

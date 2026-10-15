@@ -126,6 +126,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "lanes",
             "metrics",
+            "docs",
             "board",
             "show",
             "status",

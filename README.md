@@ -987,7 +987,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 226 knobs.
+cadences, and the rest of the 241 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3904,15 +3904,19 @@ is ignored and the log parsed. `ddflow doctor`'s integrity check (`EventLog.veri
 uses it, and a log opened only to read another repository (`external sync`, exports)
 neither reads nor writes one. It has the trust of the rest of `.ddflow/local/`: your own
 checkout's machine-local state, never fetched or merged. Deleting the file is always safe; `DDFLOW_SNAPSHOT=0` turns it off for a
-process. It covers up to `max_cached_events` (a larger log is parsed each time, as
+process (or `[log] snapshot = false`). It covers up to `max_cached_events` (a larger log is parsed each time, as
 before). The table above is reproduced by `python tests/bench_log_read.py`.
 
-Two knobs, `[log]`:
+Six knobs for reading the log, `[log]`:
 
 | knob | default | what it trades |
 |---|---|---|
 | `reuse_parsed` | `true` | Off = always re-parse from scratch. Slower, and worth it only if a shard is being rewritten in place under a running process. |
 | `max_cached_events` | `100000` | Memory ceiling, in events. ~736 bytes per parsed event, so the default holds ~74 MB in a long-lived MCP server. Over the ceiling the cache is dropped and reads cost what they always did. |
+| `snapshot` | `true` | Off = the on-disk snapshot is neither read nor written (`DDFLOW_SNAPSHOT=0` does the same for one process and wins). A cold command then re-parses the whole log. |
+| `snapshot_min_events` | `5000` | No snapshot below this many events: a cold parse is cheap there and a file is not free. |
+| `snapshot_stale_days` | `7` | Days a snapshot written by another ddflow version or parser is kept before it is collected. |
+| `snapshot_touch_s` | `86400` | How often, in seconds, a snapshot in use is marked as used, so a sibling checkout on other code does not collect it as abandoned. |
 
 **The validity check is a content check, and that is the whole design.** The consumed
 prefix is re-hashed on every read — 1.1 ms to read plus 4.3 ms to digest, against the
@@ -5116,7 +5120,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 226): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 241): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5374,8 +5378,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=2a1d68092db5 -->
-<details><summary>All 114 MCP tools: 32 in the `core` tier, 47 more in `standard`, 35 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=fa829c155003 -->
+<details><summary>All 115 MCP tools: 32 in the `core` tier, 47 more in `standard`, 36 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5475,6 +5479,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_similar` | core | 'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson… |
 | Looking at it | `ddflow_board` | standard | The whole work queue as a readable board, with the critical path. |
 | Looking at it | `ddflow_brief` | core | START HERE every session. |
+| Looking at it | `ddflow_docs` | all | Documentation, read-only. |
 | Looking at it | `ddflow_export` | all | Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). |
 | Looking at it | `ddflow_history` | standard | ONE timeline of everything that happened: claims, releases, gates, bugs, decisions, lessons, completions. |
 | Looking at it | `ddflow_lanes` | all | Agent lanes from the log, read-only: harness, model, item, heartbeat and state (working, stale… |
@@ -5516,6 +5521,11 @@ ddflow plan check <file|->      run plan check before filing a phase: a wildcard
                                 glob, a cycle, an unknown `needs`, two tasks that can run
                                 together whose globs collide, or a task with no acceptance
                                 (1 = findings, 0 = clean, 3 = not a plan at all)
+
+ddflow docs check [--diff BASE] do the names, flags, links and anchors the documents mention
+                                still exist? (`[docs]`: severity, check_paths, check_links,
+                                lint_command; --diff keeps the surface added since BASE;
+                                1 = findings, 2 = could not run, never a clean report)
 
 ddflow next [--phase P]         what may start now       (2 = nothing actionable)
 ddflow claim <id> [--globs ..]  lease + create worktree  (3 = refused)
@@ -5622,7 +5632,7 @@ declared once and persists — see
 
 ## Configuration
 
-226 knobs across 31 sections, every one documented in place and listed, with its default
+241 knobs across 31 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5689,8 +5699,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=cc4f0a69cdb8 -->
-<details><summary>All 226 knobs across 31 sections</summary>
+<!-- ddflow:begin README/knobs sha=2594e19f0601 -->
+<details><summary>All 241 knobs across 31 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5861,6 +5871,10 @@ long default is left to `ddflow config --explain`.
 | `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
 | `log.commit_events_message` | `"events: {reason}"` |  |
 | `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
+| `log.snapshot` | `true` |  |
+| `log.snapshot_min_events` | `5000` |  |
+| `log.snapshot_stale_days` | `7` |  |
+| `log.snapshot_touch_s` | `86400` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |
@@ -5898,6 +5912,10 @@ long default is left to `ddflow config --explain`.
 | `agent.reviewer_family_must_differ` | `true` |  |
 | `agent.families` | (long: see `ddflow config --explain`) |  |
 | `agent.routers` | `{hydrafusion = []}` |  |
+| `agent.roles` | (long: see `ddflow config --explain`) |  |
+| `agent.actors` | `{}` |  |
+| `agent.default_role` | `"agent"` |  |
+| `agent.operator_role` | `"operator"` |  |
 | `ids.bug` | `"{prefix}{hash}"` |  |
 | `ids.lesson` | `"{prefix}{hash}"` |  |
 | `ids.research` | `"{prefix}{hash}"` |  |
@@ -5916,6 +5934,13 @@ long default is left to `ddflow config --explain`.
 | `rag.command` | `""` |  |
 | `rag.model_dir` | `""` |  |
 | `rag.timeout_s` | `60` |  |
+| `docs.severity` | `"warn"` | `block` \| `warn` \| `off` |
+| `docs.check_links` | `"local"` | `off` \| `local` \| `network` |
+| `docs.link_timeout_s` | `10` |  |
+| `docs.check_paths` | `[]` |  |
+| `docs.lint_command` | `""` |  |
+| `docs.ignore_paths` | `[]` |  |
+| `docs.ignore_names` | `[]` |  |
 | `docs.extract` | `[]` |  |
 | `docs.count` | `[]` |  |
 | `docs.cli_command` | `[]` |  |

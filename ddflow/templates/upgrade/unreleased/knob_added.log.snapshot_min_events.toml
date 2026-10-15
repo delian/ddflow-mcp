@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.snapshot_min_events"
+new = '5000'
+why = "No snapshot is written below this many events."
+impact = "additive"
