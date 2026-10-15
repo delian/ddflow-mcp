@@ -183,7 +183,9 @@ def test_a_parent_completes_once_its_children_do(repo):
     run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
     run_cli(repo, "claim", "P1.T1a", "--no-worktree")
     assert _finish(repo, "P1.T1a")[0] == OK
-    assert _finish(repo, "P1.T1")[0] == OK
+    # The parent closes with its last child; a gate is not recorded on it afterwards
+    # (B8b2dafcbf3), so there is nothing left to finish.
+    assert "state done" in run_cli(repo, "show", "P1.T1")[1]
 
 
 def test_an_abandoned_child_does_not_hold_its_parent_open(repo):
