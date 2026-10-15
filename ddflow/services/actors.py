@@ -1,4 +1,4 @@
-"""Who is acting, as a role with capabilities: the one resolver every auth and approval path asks.
+"""Who is acting, as a role with capabilities: the resolver the auth and approval paths will ask.
 
 An actor is an id, a role (operator, bot, agent, observer ... -- names in `[agent].roles`), a
 model family and the capabilities its role holds. Nothing is decided per role in code: a
