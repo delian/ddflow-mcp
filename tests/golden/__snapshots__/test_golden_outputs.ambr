@@ -1662,6 +1662,26 @@
           installing to the operator); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      pins.recipes_file = '.ddflow/pins.toml'   [default]
+          The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
+          with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the
+          pin is current) and `regen` (an argv that re-records it, touching only what
+          differs), and optionally `env`. `{python}` in an argv is this interpreter.
+          `ddflow pins regenerate [--check] [--only NAME]` runs them; a new kind of
+          pin is a new table, no code. Relative to the repository root.
+      pins.timeout_s = 900   [default]
+          Seconds one recipe's check or regeneration may run before it is stopped and
+          reported as failed.
+      pins.after_merge = 'amend'   [default]
+          What the post-merge hook installed by `ddflow pins regenerate --install`
+          does after a merge: amend (regenerate the stale pins and fold them into the
+          merge commit when nothing else is dirty), leave (regenerate and leave the
+          files changed for you to commit) or off (do nothing). An unrecognised value
+          in a config file is warned about, reported by `doctor` and falls back to
+          'leave', the strictest (never rewrites a commit; the regenerated files are
+          left for you to commit); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest
