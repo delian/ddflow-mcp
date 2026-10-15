@@ -24,14 +24,12 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import Config
 from ..core import clock
 from ..infra import paths
 from ..infra.fsio import Managed, NewerContent, RegionError, atomic_write, replace_text
 from ..infra.paths import launch_parent, launch_python
 from . import harnessreg as HR
 from . import install_info as _INSTALL
-from . import pins_merge as PM
 from . import shared_files as SF
 from .backups import make_backup
 from .mcpconfig import (  # noqa: F401 -- re-exported: their home was here
@@ -787,13 +785,6 @@ def init_files(repo: Path) -> list[str]:
     # here, so a config edited by hand is caught up by `init` / `adopt`.
 
     actions += [f"added '{ln}' to .gitattributes" for ln in SF.sync_attributes(repo)]
-    # A project that lists pin recipes (`[pins].recipes_file`) gets the merge driver and the
-    # post-merge hook that regenerate its pin files (DX-pins-regenerate); one without
-    # recipes is untouched.
-    try:
-        actions += PM.install(repo, Config.load(repo))
-    except (OSError, RuntimeError) as exc:
-        actions.append(f"pin merge driver NOT installed ({exc}); `ddflow pins regenerate --install`")
     return actions
 
 

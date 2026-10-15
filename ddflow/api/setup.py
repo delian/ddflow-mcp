@@ -43,6 +43,7 @@ from ..services import help as H
 from ..services import hookio as HI
 from ..services import identity as ID
 from ..services import launchers as LA
+from ..services import pins_merge as PM
 from ..services import prompts as P
 from ..services import selfupgrade as SU
 from ..services import sessions as S
@@ -1778,6 +1779,12 @@ def setup(
         )
     except ValueError as exc:
         return O.failed("setup", str(exc), actions=[], agents=agents, text="")
+    # A project that lists pin recipes gets the merge driver and post-merge hook that
+    # regenerate its pin files (DX-pins-regenerate); one without recipes is untouched.
+    try:
+        actions += PM.install(tree, cfg)
+    except (OSError, RuntimeError) as exc:
+        actions.append(f"pin merge driver NOT installed ({exc}); `ddflow pins regenerate --install`")
 
     statuses = _scan(repo)
     if isinstance(statuses, O.Outcome):

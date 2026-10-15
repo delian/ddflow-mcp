@@ -40,7 +40,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="which text of an instruction file a test pins; or `pins regenerate` re-records stale pin files",
         tool="ddflow_pins",
         description=(
-            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]`: re-record exactly the pin files (golden snapshots, transcripts, generated tables) the tree differs on, by the recipes in [pins].recipes_file; --check only lists the stale ones (exit 1); --install writes the git merge driver and post-merge hook that make parallel branches merge into green pins."
+            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1)."
         ),
         call=lambda repo, a, agent: (
             _api().pins_regenerate(
@@ -65,7 +65,7 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "document",
-                help="Path of the instruction file, relative to the repo; or the verb `regenerate`.",
+                help="Instruction file path; or `regenerate`.",
                 cli_help="the instruction file, e.g. AGENTS.md; or `regenerate` to re-record stale pin files",
                 positional=True,
             ),
@@ -80,7 +80,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "check",
                 type="boolean",
-                help="regenerate: only list the stale pins (exit 1 when any).",
+                help="regenerate: list stale pins only.",
                 cli_help="regenerate: list the stale pins and write nothing (exit 1 when any)",
             ),
             Param(
@@ -92,13 +92,13 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "install",
                 type="boolean",
-                help="regenerate: write the merge driver and post-merge hook.",
+                help="regenerate: install merge driver + hook.",
                 cli_help="regenerate: install the git merge driver and post-merge hook for the pin files",
             ),
             Param(
                 "after_merge",
                 type="boolean",
-                help="regenerate: what the post-merge hook runs.",
+                help="regenerate: the post-merge hook entry.",
                 cli_help="regenerate: what the post-merge hook runs",
             ),
             Param(
