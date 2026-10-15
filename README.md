@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=c1e0bd0d1f9d -->
+<!-- ddflow:begin README/toc sha=0fdf370c61b2 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -270,6 +270,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [What CI checks](#what-ci-checks)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
   - [Companion tools](#companion-tools)
+- [Pin files regenerate; they are never hand-merged](#pin-files-regenerate-they-are-never-hand-merged)
 - [Finding a test polluter](#finding-a-test-polluter)
 - [Wiring it into your agent](#wiring-it-into-your-agent)
   - [One set of rules, every agent](#one-set-of-rules-every-agent)

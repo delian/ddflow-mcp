@@ -9,7 +9,6 @@ from ...api import operations as A
 from ...api import pin_files as PF
 from ...api import surf_setup as SS
 from ...core import provenance as PV
-from ...infra import git as G
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..render import emit_json
 
@@ -225,11 +224,9 @@ def cmd_external(a, c: Ctx) -> int:
 
 def _pins_regenerate(a, c: Ctx) -> int:
     """`pins regenerate`: one line per pin, and the stale ones named."""
-    # The working tree the caller stands in, not the primary checkout `c.repo` resolves to:
-    # a pin file is re-recorded where the code under test is.
-    top = G.run(c._start, "rev-parse", "--show-toplevel")
     out = PF.pins_regenerate(
-        Path(top.out.strip()) if top.ok and top.out.strip() else c.repo,
+        c.repo,
+        start=Path(c._start),
         only=a.only or "",
         check=a.check,
         install=a.install,

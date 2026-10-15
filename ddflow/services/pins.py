@@ -16,7 +16,7 @@ of pin is a new table. `regenerate` runs `check` for each pin, `regen` for each 
 stale, then `check` again. It refuses to run inside an xdist worker: a snapshot update is
 not safe in parallel.
 
-`merge_driver` (a no-op that keeps our side) plus the post-merge hook `install` writes make
+`services.pins_merge` holds the git side: the merge driver and the post-merge hook that make
 two branches that each changed a pin merge into green pins with no manual step.
 """
 
@@ -29,13 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
-from ..infra import git as G
 from ..infra import proc as P
-from ..infra.fsio import atomic_write, replace_text
-
-#: The merge driver's name in `.gitattributes` and `git config merge.<name>.driver`.
-DRIVER = "pinsregen"
-HOOK_MARK = "# DDFLOW-PINS-HOOK v1 -- managed by `ddflow pins regenerate --install`"
 
 
 @dataclass(frozen=True)
@@ -175,98 +169,8 @@ def regenerate(
     return rep
 
 
-def merge_driver(ours: str) -> int:
-    """`git merge` driver for a pin file: keep our side (the file at `ours` is the result) so
-    the merge does not stop; the post-merge hook then re-records every stale pin."""
-    return 0 if Path(ours).exists() else 1
-
-
 def pin_files(repo: Path, cfg: Config) -> list[str]:
     try:
         return sorted({f for r in load_recipes(repo, cfg) for f in r.files})
     except ValueError:
         return []
-
-
-def after_merge(repo: Path, cfg: Config) -> str:
-    """Post-merge: regenerate; fold the result into the merge commit when only pin files
-    changed. Returns one line saying what happened."""
-    mode = cfg.pins.after_merge
-    if mode == "off":
-        return ""
-    rep = regenerate(repo, cfg)
-    if rep.problem or not rep.pins:
-        return ""
-    if rep.failed:
-        return "pins: " + "; ".join(f"{p.name}: {p.error}" for p in rep.failed)
-    done = [p.name for p in rep.pins if p.regenerated]
-    if not done:
-        return ""
-    files = pin_files(repo, cfg)
-    paths = G.run(repo, "diff", "--name-only", "-z", "HEAD", z=True).paths() or []
-    own = tuple(f.rstrip("/") for f in files)
-    merge = G.run(repo, "rev-parse", "-q", "--verify", "HEAD^2").ok
-    if mode == "amend" and merge and paths and all(p.startswith(own) for p in paths):
-        # `git commit --amend` is refused while MERGE_HEAD still exists, which it does in
-        # this hook: write the amended commit with plumbing and move the branch to it.
-        added = G.run(repo, "add", "-A", "--", *files)
-        tree = G.run(repo, "write-tree")
-        head = G.run(repo, "rev-parse", "HEAD")
-        parents = G.run(repo, "rev-list", "--parents", "-n", "1", "HEAD").out.split()[1:]
-        msg = G.run(repo, "log", "-1", "--format=%B", "HEAD")
-        args = ["commit-tree", tree.out.strip(), *[x for p in parents for x in ("-p", p)]]
-        new = (
-            G.run(repo, *args, input=msg.out + "\n")
-            if all(r.ok for r in (added, tree, head, msg))
-            else added
-        )
-        if new.ok and G.run(repo, "update-ref", "HEAD", new.out.strip(), head.out.strip()).ok:
-            return f"pins regenerated into the merge commit: {', '.join(done)}"
-        return f"pins regenerated, not committed ({new.err}): {', '.join(done)}"
-    return f"pins regenerated, not committed: {', '.join(done)}; commit them"
-
-
-def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
-    """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
-    from .enforce import command_line, hooks_dir
-
-    line = line or command_line
-    files = pin_files(repo, cfg)
-    if not files:
-        return []
-    actions: list[str] = []
-    attrs = Path(repo) / ".gitattributes"
-    text = attrs.read_text("utf-8") if attrs.exists() else ""
-    have = set(text.splitlines())
-    add = [
-        f"{f.rstrip('/')}{'/**' if f.endswith('/') or (Path(repo) / f).is_dir() else ''} merge={DRIVER}"
-        for f in files
-    ]
-    new = [a for a in add if a not in have]
-    if new:
-        body = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(new) + "\n"
-        replace_text(attrs, body)
-        actions += [f"added '{a}' to .gitattributes" for a in new]
-    driver = line("pins merge-driver", extra="%A")
-    for key, val in (
-        (f"merge.{DRIVER}.name", "ddflow pin file: keep ours, regenerate after the merge"),
-        (f"merge.{DRIVER}.driver", driver),
-    ):
-        cur = G.run(repo, "config", "--local", "--get", key)
-        if cur.out.strip() != val:
-            G.run(repo, "config", "--local", key, val)
-            actions.append(f"set git config {key}")
-    if cfg.pins.after_merge != "off":
-        hook = hooks_dir(repo) / "post-merge"
-        body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
-        if not hook.exists() or HOOK_MARK in hook.read_text("utf-8", errors="replace"):
-            if not hook.exists() or hook.read_text("utf-8") != body:
-                hook.parent.mkdir(parents=True, exist_ok=True)
-                atomic_write(hook, body)
-                hook.chmod(0o755)
-                actions.append(f"wrote {hook}")
-        else:
-            actions.append(
-                f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it"
-            )
-    return actions

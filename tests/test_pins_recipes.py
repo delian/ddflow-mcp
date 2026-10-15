@@ -9,6 +9,13 @@ import pytest
 
 from ddflow.config import Config
 from ddflow.services import pins as PN
+from ddflow.services import pins_merge as PM
+
+
+@pytest.fixture(autouse=True)
+def _outside_xdist(monkeypatch):
+    """A regeneration refuses to run in an xdist worker, which is where this suite runs."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
 
 def _repo(tmp_path: Path, toml: str, name: str = ".ddflow/pins.toml") -> Path:
@@ -76,7 +83,7 @@ def test_after_merge_off_does_nothing_and_leave_does_not_commit(tmp_path):
     _repo(repo, toml)
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "c"], check=True)
-    assert PN.after_merge(repo, _cfg(after_merge="off")) == ""
+    assert PM.after_merge(repo, _cfg(after_merge="off")) == ""
     assert (repo / "x").read_text() == "old\n"
-    assert "not committed" in PN.after_merge(repo, _cfg(after_merge="leave"))
+    assert "not committed" in PM.after_merge(repo, _cfg(after_merge="leave"))
     assert (repo / "x").read_text() == "new\n"
