@@ -72,7 +72,9 @@ def test_an_agent_and_the_mcp_surface_can_ask_and_read_but_never_answer(log, via
     ask = _ask(log, cfg)
     agent = _agent(cfg, via_mcp)
     with pytest.raises(E.AskRefused, match="person's act"):
-        E.answer(log, cfg, ask.id, "approved", actor=agent, digest=E.digest_of("hello world"), now=T0)
+        E.answer(
+            log, cfg, ask.id, "approved", actor=agent, digest=E.digest_of("hello world"), now=T0
+        )
     assert E.pending(_state(log), T0)[0]["id"] == ask.id  # read works
     assert not [e for e in log.read_all() if e.kind == "ask.answered"]
 
@@ -89,7 +91,9 @@ def test_a_credentialed_agent_role_still_cannot_answer(log):
     ask = _ask(log, cfg)
     actor = _channel(cfg, role="agent")  # a proven id, but the role holds no approve
     with pytest.raises(E.AskRefused):
-        E.answer(log, cfg, ask.id, "approved", actor=actor, digest=E.digest_of("hello world"), now=T0)
+        E.answer(
+            log, cfg, ask.id, "approved", actor=actor, digest=E.digest_of("hello world"), now=T0
+        )
 
 
 def test_a_bot_answers_only_what_is_marked_bot_answerable(log):
@@ -123,7 +127,9 @@ def test_no_mcp_or_api_module_can_record_an_answer():
         if not target.exists():
             continue
         for p in target.rglob("*.py") if target.is_dir() else [target]:
-            assert "services.ask" not in p.read_text(encoding="utf-8").replace("services import ask", "services.ask"), p
+            assert "services.ask" not in p.read_text(encoding="utf-8").replace(
+                "services import ask", "services.ask"
+            ), p
 
 
 # -- digest ---------------------------------------------------------------------------------
@@ -134,7 +140,9 @@ def test_an_answer_must_present_the_digest_it_saw(log):
     ask = _ask(log, cfg)
     with pytest.raises(E.AskRefused, match="digest"):
         E.answer(log, cfg, ask.id, "approved", actor=_person(cfg), digest="wrong", now=T0)
-    E.answer(log, cfg, ask.id, "approved", actor=_person(cfg), digest=E.digest_of("hello world"), now=T0)
+    E.answer(
+        log, cfg, ask.id, "approved", actor=_person(cfg), digest=E.digest_of("hello world"), now=T0
+    )
     st_ = _state(log)
     assert E.verdict(st_, "send:draft-1", E.digest_of("hello world"), T0).ok
     edited = E.verdict(st_, "send:draft-1", E.digest_of("hello world!"), T0)
@@ -175,7 +183,9 @@ def test_the_code_is_kept_as_a_hash_and_a_channel_must_present_it(log):
 def test_a_person_at_the_terminal_needs_no_code(log):
     cfg = Config()
     ask = _ask(log, cfg, with_code=True)
-    E.answer(log, cfg, ask.id, "approved", actor=_person(cfg), digest=E.digest_of("hello world"), now=T0)
+    E.answer(
+        log, cfg, ask.id, "approved", actor=_person(cfg), digest=E.digest_of("hello world"), now=T0
+    )
 
 
 def test_the_code_length_is_a_knob(log):
@@ -212,7 +222,9 @@ def test_an_ask_that_could_never_be_answered_is_refused(log):
 
 def test_a_question_takes_one_of_its_options_or_free_text(log):
     cfg = Config()
-    q = E.request(log, cfg, subject="which?", text="a or b?", kind="question", options=["a", "b"], now=T0)
+    q = E.request(
+        log, cfg, subject="which?", text="a or b?", kind="question", options=["a", "b"], now=T0
+    )
     with pytest.raises(E.AskRefused, match="one of"):
         E.answer(log, cfg, q.id, "c", actor=_person(cfg), now=T0)
     E.answer(log, cfg, q.id, "b", actor=_person(cfg), text="because", now=T0)
@@ -234,10 +246,23 @@ def test_the_asker_can_withdraw_a_pending_ask_only(log):
         E.withdraw(log, ask.id, actor=_asker(cfg), now=T0)
     other = _ask(log, cfg, subject="o")
     with pytest.raises(E.AskRefused, match="may withdraw"):
-        E.withdraw(log, other.id, actor=A.resolve_actor(cfg, "stranger", requested_agent="stranger"), now=T0)
+        E.withdraw(
+            log,
+            other.id,
+            actor=A.resolve_actor(cfg, "stranger", requested_agent="stranger"),
+            now=T0,
+        )
     E.withdraw(log, other.id, actor=_person(cfg), now=T0)  # an approver may
     with pytest.raises(E.AskRefused, match="already withdrawn"):
-        E.answer(log, cfg, ask.id, "approved", actor=_person(cfg), digest=E.digest_of("hello world"), now=T0)
+        E.answer(
+            log,
+            cfg,
+            ask.id,
+            "approved",
+            actor=_person(cfg),
+            digest=E.digest_of("hello world"),
+            now=T0,
+        )
 
 
 def test_a_question_needs_its_text_and_flags_are_real_booleans(log):
@@ -246,7 +271,17 @@ def test_a_question_needs_its_text_and_flags_are_real_booleans(log):
         E.request(log, cfg, subject="Which region?", kind="question", now=T0)
     with pytest.raises(E.AskRefused, match="true or false"):
         _ask(log, cfg, bot_answerable="false", actor=_person(cfg))
-    log.append("ask.requested", "Qx", {"id": "Qx", "subject": "s", "digest": "d", "bot_answerable": "false", "expires_at": "2099-01-01T00:00:00Z"})
+    log.append(
+        "ask.requested",
+        "Qx",
+        {
+            "id": "Qx",
+            "subject": "s",
+            "digest": "d",
+            "bot_answerable": "false",
+            "expires_at": "2099-01-01T00:00:00Z",
+        },
+    )
     assert asks_of(_state(log))["Qx"]["bot_answerable"] is False
 
 
@@ -284,7 +319,9 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
                 E.withdraw(log, ids[i % len(ids)], actor=_asker(cfg), now=T0)
                 model[ids[i % len(ids)]] = ("withdrawn", "")
             elif ids and op == "agent_try":
-                E.answer(log, cfg, ids[i % len(ids)], "approved", actor=_agent(cfg), digest=d, now=T0)
+                E.answer(
+                    log, cfg, ids[i % len(ids)], "approved", actor=_agent(cfg), digest=d, now=T0
+                )
         except E.AskRefused:
             pass
     events = log.read_all()
@@ -305,7 +342,9 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
     # no agent attempt ever landed: every recorded answer is a person's
     assert all(r["human"] for r in live.values() if r["state"] == "answered")
     # status is a function of the rows alone
-    assert {k: E.status(r, T0) for k, r in replayed.items()} == {k: E.status(r, T0) for k, r in live.items()}
+    assert {k: E.status(r, T0) for k, r in replayed.items()} == {
+        k: E.status(r, T0) for k, r in live.items()
+    }
 
 
 def test_an_answer_of_another_digest_does_not_approve_the_requested_one(log):
@@ -313,7 +352,11 @@ def test_an_answer_of_another_digest_does_not_approve_the_requested_one(log):
     request's (a hand-written or repaired log) approves nothing."""
     cfg = Config()
     ask = _ask(log, cfg)
-    log.append("ask.answered", ask.id, {"id": ask.id, "outcome": "approved", "digest": "other", "by": "me", "human": True})
+    log.append(
+        "ask.answered",
+        ask.id,
+        {"id": ask.id, "outcome": "approved", "digest": "other", "by": "me", "human": True},
+    )
     assert not E.verdict(_state(log), "send:draft-1", E.digest_of("hello world"), T0).ok
 
 
