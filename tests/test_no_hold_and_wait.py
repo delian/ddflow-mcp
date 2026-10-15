@@ -178,3 +178,21 @@ def test_asking_again_after_half_the_reservation_refreshes_the_place(repo):
     # B lets go long after A's first ask: A's place is still A's while it asks again.
     later = w["at"] + cfg.lease.waiter_reservation_s * 0.9
     assert WG._refresh_s(cfg) < later - w["at"]  # an ask at that time re-appends (refreshes `at`)
+
+
+def test_a_request_queued_behind_a_waiter_is_a_wait_too(repo):
+    """A cycle through a queue is still a cycle: C waits for A's lease and B is queued
+    behind C, so B has an edge to C (it is not invisible to the graph)."""
+    _two_holders(repo)
+    assert run_cli(repo, "config", "lease.wait_queue", "true", agent=A)[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/a.py", agent=A)[0] == 0
+    )
+    assert (
+        run_cli(repo, "task", "add", "T4", "--title", "t", "--globs", "src/a.py", agent=A)[0] == 0
+    )
+    assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 3
+    code, _out, _err = run_cli(repo, "claim", "T4", "--no-worktree", agent="agent-d")
+    assert code == 3
+    graph = WG.wait_for_graph(_state(repo), _cfg(repo), time.time())
+    assert graph["T3"] == ["T1"] and "T3" in graph["T4"], graph

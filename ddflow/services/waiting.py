@@ -61,6 +61,17 @@ def blockers(
         live.pop(clash.item, None)
 
 
+def edges(state, cfg, item_id: str, holder: str, globs: list[str], now: float) -> list[dict]:
+    """``blockers`` plus the queued waiter ahead of ``item_id`` (``pair`` ``["queue", ""]``):
+    a request queued behind another waits for that waiter's turn, and the wait-for graph
+    must show it or a cycle through a queue goes unseen."""
+    out = blockers(state, cfg, item_id, holder, globs, now)
+    ahead = queue_ahead(state, cfg, item_id, holder, globs, now)
+    if ahead is not None and all(o["item"] != ahead.item for o in out):
+        out.append({"item": ahead.item, "holder": ahead.holder, "pair": ["queue", ""]})
+    return out
+
+
 def standing(state, cfg, now: float) -> dict[str, dict[str, Any]]:
     """Item id -> its `lease.waiting` record, for the records that still hold at ``now``."""
     out: dict[str, dict[str, Any]] = {}
@@ -91,11 +102,11 @@ def wait_for_graph(state, cfg, now: float) -> dict[str, list[str]]:
     at least one edge now appear (a wait whose holders let go is no longer a wait)."""
     graph: dict[str, list[str]] = {}
     for item_id, w in standing(state, cfg, now).items():
-        edges = sorted(
-            {b["item"] for b in blockers(state, cfg, item_id, w["holder"], w["globs"], now)}
+        found = sorted(
+            {b["item"] for b in edges(state, cfg, item_id, w["holder"], w["globs"], now)}
         )
-        if edges:
-            graph[item_id] = edges
+        if found:
+            graph[item_id] = found
     return graph
 
 
@@ -115,7 +126,7 @@ def waiters(state, cfg, now: float) -> list[Waiter]:
     """Every standing wait that still has an edge, oldest first (then by item id)."""
     out = []
     for item_id, w in standing(state, cfg, now).items():
-        on = blockers(state, cfg, item_id, w["holder"], w["globs"], now)
+        on = edges(state, cfg, item_id, w["holder"], w["globs"], now)
         if on:
             out.append(Waiter(item_id, w["holder"], list(w["globs"]), w["since"], w["queue"], on))
     return sorted(out, key=lambda x: (x.since, x.item))
@@ -209,7 +220,7 @@ def register(
     ``since`` while it is the same request, and nothing is appended when nothing changed, so
     an agent that asks again every minute does not fill the log. Returns the record, or None
     when no other lease stands in the way. Call under the log's transaction."""
-    on = blockers(state, cfg, item_id, holder, globs, now)
+    on = edges(state, cfg, item_id, holder, globs, now)
     if not on:
         return None
     queue = bool(queue or cfg.lease.wait_queue)

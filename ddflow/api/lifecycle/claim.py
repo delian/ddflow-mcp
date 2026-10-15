@@ -238,6 +238,8 @@ def claim(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
     if early is not None:
+        if early.data.get("queued_behind"):  # in line behind a waiter: that is a wait too
+            _record_waiting(log, cfg, item, want, queue)
         return early
     lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources, queue)
     if isinstance(lz, O.Outcome):
