@@ -792,8 +792,8 @@ def init_files(repo: Path) -> list[str]:
     # recipes is untouched.
     try:
         actions += PM.install(repo, Config.load(repo))
-    except (OSError, RuntimeError):
-        pass  # not a git repository yet, or hooks cannot be written: `pins regenerate --install` says so
+    except (OSError, RuntimeError) as exc:
+        actions.append(f"pin merge driver NOT installed ({exc}); `ddflow pins regenerate --install`")
     return actions
 
 

@@ -19,7 +19,7 @@ class PinsConfig:
 
     recipes_file: str = knob(
         ".ddflow/pins.toml",
-        doc="The project's pin recipes, as data: one `[[pin]]` table per kind of pin file with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the pin is current) and `regen` (an argv that re-records it, touching only what differs), and optionally `env`. `{python}` in an argv is this interpreter. `ddflow pins regenerate [--check] [--only NAME]` runs them; a new kind of pin is a new table, no code. Relative to the repository root.",
+        doc="The project's pin recipes, as data: one `[[pin]]` table per kind of pin file with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the pin is current) and `regen` (an argv that re-records it, touching only what differs), and optionally `env` (a table of environment variables given to `regen` only, never to `check`, so a check can not re-record what it is checking). `{python}` in an argv is this interpreter. `ddflow pins regenerate [--check] [--only NAME]` runs them; a new kind of pin is a new table, no code. Relative to the repository root.",
     )
     timeout_s: int = knob(
         900,
