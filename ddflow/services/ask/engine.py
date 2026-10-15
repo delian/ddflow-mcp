@@ -9,7 +9,8 @@ the CLI today, `ddflow serve` and the chat gateways later hand it an `Actor`
 The invariants, each pinned by `tests/test_ask_engine.py`:
 
 * HUMAN-ONLY. `answer` records an outcome only for an actor whose role came from a terminal
-  (a person at their own shell) or a credential (a paired token the caller verified), and who
+  (a person at their own shell) or a credential (a paired token the caller verified; also an
+  id it proved that `[agent].actors` names), and who
   holds capability ``approve`` -- or ``approve_marked`` for an ask the operator marked
   bot-answerable. An agent, and the whole MCP surface, resolves to the default role: it can
   ask (`request`) and read (`pending`, `verdict`), never answer. Marking an ask bot-answerable
@@ -42,8 +43,9 @@ APPROVAL = "approval"
 QUESTION = "question"
 APPROVED = "approved"
 DENIED = "denied"
-#: Where an answer may come from: a person at a shell, or a credential a caller proved.
-ANSWER_SOURCES = ("terminal", "credential")
+#: Where an answer may come from: a person at a shell, a credential a caller proved, or an id a credential proved that
+#: `[agent].actors` names (a gateway).
+ANSWER_SOURCES = ("terminal", "credential", "named")
 CAP_APPROVE = "approve"
 CAP_APPROVE_MARKED = "approve_marked"
 
@@ -258,10 +260,11 @@ def verdict(state, subject: str, digest: str, now: float | None = None) -> Verdi
         return Verdict(False, f"{subject} was denied by {last['answered_by']}", last)
     if not (last["human"] or last["bot_answerable"]):
         return Verdict(False, f"{subject}: the answer was not a person's", last)
-    if last["digest"] != digest:
+    if last["digest"] != digest or last["answered_digest"] != digest:
         return Verdict(
             False,
-            f"{subject} changed since it was approved (approved {last['digest']}, now {digest})",
+            f"{subject} changed since it was approved (approved {last['answered_digest']}, "
+            f"now {digest})",
             last,
         )
     return Verdict(True, f"{subject} approved by {last['answered_by']}", last)

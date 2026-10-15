@@ -22,7 +22,9 @@ EXPIRED = "expired"
 
 
 def asks_of(st: State) -> dict[str, dict[str, Any]]:
-    """The folded asks, ask id -> row (created on first use)."""
+    """The folded asks, ask id -> row (created on first use). Held beside `State`'s declared
+    fields until `core/records.py` is free to take an `asks` field; every reader goes through
+    here, so that move changes this one line."""
     return st.__dict__.setdefault("asks", {})
 
 
@@ -51,6 +53,8 @@ def h_requested(st: State, ev: Event) -> None:
         "outcome": "",
         "answer": "",
         "answered_by": "",
+        "answered_digest": "",
+        "coded": False,
         "role": "",
         "via": "",
         "human": False,
@@ -68,6 +72,8 @@ def h_answered(st: State, ev: Event) -> None:
         outcome=str(d.get("outcome", "")),
         answer=str(d.get("answer", "")),
         answered_by=str(d.get("by", "")),
+        answered_digest=str(d.get("digest", "")),
+        coded=d.get("coded") is True,
         role=str(d.get("role", "")),
         via=str(d.get("via", "")),
         human=d.get("human") is True,

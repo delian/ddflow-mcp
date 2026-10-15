@@ -113,7 +113,11 @@ def test_no_mcp_or_api_module_can_record_an_answer():
         for p in (ROOT / "ddflow").rglob("*.py")
         if re.search(r"[\"']ask\.answered[\"']", p.read_text(encoding="utf-8"))
     ]
-    assert sorted(writers) == ["ddflow/core/handlers/asks.py", "ddflow/services/ask/engine.py"]
+    assert sorted(writers) == [
+        "ddflow/core/handlers/asks.py",
+        "ddflow/core/redact.py",  # classifies the fields; writes nothing
+        "ddflow/services/ask/engine.py",
+    ]
     for sub in ("surfaces/mcp.py", "surfaces/tools", "api"):
         target = ROOT / "ddflow" / sub
         if not target.exists():
@@ -298,3 +302,21 @@ def test_replaying_the_events_restores_the_same_pending_and_answered_state(tmp_p
     assert all(r["human"] for r in live.values() if r["state"] == "answered")
     # status is a function of the rows alone
     assert {k: E.status(r, T0) for k, r in replayed.items()} == {k: E.status(r, T0) for k, r in live.items()}
+
+
+def test_an_answer_of_another_digest_does_not_approve_the_requested_one(log):
+    """The fold keeps the digest the person saw: an answer event whose digest differs from the
+    request's (a hand-written or repaired log) approves nothing."""
+    cfg = Config()
+    ask = _ask(log, cfg)
+    log.append("ask.answered", ask.id, {"id": ask.id, "outcome": "approved", "digest": "other", "by": "me", "human": True})
+    assert not E.verdict(_state(log), "send:draft-1", E.digest_of("hello world"), T0).ok
+
+
+def test_a_gateway_named_in_the_actors_table_may_answer_within_its_role(log):
+    cfg = Config()
+    cfg.agent.actors = {"openclaw": "bot"}
+    marked = _ask(log, cfg, bot_answerable=True, actor=_person(cfg))
+    gw = A.resolve_actor(cfg, "openclaw", authenticated=True, requested_agent="openclaw")
+    assert gw.source == "named"
+    E.answer(log, cfg, marked.id, "approved", actor=gw, digest=E.digest_of("hello world"), now=T0)
