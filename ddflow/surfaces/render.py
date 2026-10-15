@@ -51,32 +51,22 @@ def dumps(data: Any) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
-#: How many bodies this process has printed to stdout (`bodies_emitted`).
-_EMITTED = [0]
-
-
-def bodies_emitted() -> int:
-    """How many ``--json`` bodies have gone to stdout so far: a run that ends with the same
-    count it began with printed none."""
-    return _EMITTED[0]
-
-
 def emit_json(data: Any, *, file: TextIO | None = None) -> None:
     """Print ``data`` as a ``--json`` body (stdout unless ``file`` is given)."""
-    if file is None:
-        _EMITTED[0] += 1
     print(dumps(tag_body(data, _COMMAND.get())), file=file)
 
 
 class _Tee:
-    """stderr that also remembers what was written to it; every other attribute (`isatty`,
-    `fileno`, `encoding`, ...) is the real stream's."""
+    """A stream that remembers whether (and, with ``keep``, what) was written to it; every
+    other attribute (`isatty`, `fileno`, `encoding`, ...) is the real stream's."""
 
-    def __init__(self, inner: TextIO) -> None:
-        self.inner, self.text = inner, ""
+    def __init__(self, inner: TextIO, *, keep: bool) -> None:
+        self.inner, self.keep, self.text, self.wrote = inner, keep, "", False
 
     def write(self, s: str) -> int:
-        self.text += s
+        self.wrote = self.wrote or bool(s)
+        if self.keep:
+            self.text += s
         return self.inner.write(s)
 
     def __getattr__(self, name: str) -> Any:
@@ -84,16 +74,17 @@ class _Tee:
 
 
 @contextmanager
-def remembered_stderr() -> Iterator[_Tee]:
-    """Run with stderr remembered, so a refusal that said its reason only there can say it
-    in the ``--json`` body too (bug Bac9d773a44)."""
-    real = sys.stderr
-    tee = _Tee(real)
-    sys.stderr = tee
+def remembered_streams() -> Iterator[tuple[_Tee, _Tee]]:
+    """Run with stdout and stderr remembered: whether a run printed anything to stdout, and
+    what it said on stderr, so a refusal that said its reason only there can say it in the
+    ``--json`` body too (bug Bac9d773a44). Yields ``(stdout, stderr)``."""
+    real_out, real_err = sys.stdout, sys.stderr
+    out, err = _Tee(real_out, keep=False), _Tee(real_err, keep=True)
+    sys.stdout, sys.stderr = out, err
     try:
-        yield tee
+        yield out, err
     finally:
-        sys.stderr = real
+        sys.stdout, sys.stderr = real_out, real_err
 
 
 def refusal_body(code: int, said: str, outcome: str) -> dict[str, Any]:

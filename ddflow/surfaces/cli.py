@@ -52,10 +52,9 @@ from .registry import (
     used_aliases,
 )
 from .render import (
-    bodies_emitted,
     emit_json,
     refusal_body,
-    remembered_stderr,
+    remembered_streams,
     reset_command,
     set_command,
 )
@@ -355,8 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
     # The schema every object body of this run is tagged with (D-compat-json-views).
     tagged = set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
-    with remembered_stderr() as said:
-        before = bodies_emitted()
+    with remembered_streams() as (out, said):
         try:
             code = _run(args)
         except BaseException as exc:
@@ -372,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
         # --json is a body on every exit path: a run that ended in a refusal, an error or
         # nothing to do without printing one still answers the reason (Bac9d773a44).
-        if getattr(args, "json", False) and code != 0 and bodies_emitted() == before:
+        if getattr(args, "json", False) and code != 0 and not out.wrote:
             emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
         reset_command(tagged)
         return code
