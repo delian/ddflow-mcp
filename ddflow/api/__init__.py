@@ -56,6 +56,7 @@ from .decisions import (
 # Managed definitions (B-uni-def-records): the one write path every definition family
 # records through; its surfaces are B-uni-record-surface.
 from .defs import def_list, def_merge, def_record, def_retire, def_show, def_supersede, def_update
+from .docs import docs
 from .export import export as export_documents
 from .export import export_list as export_list_documents
 from .export import export_tool
@@ -256,6 +257,7 @@ __all__ = [
     "def_show",
     "def_supersede",
     "def_update",
+    "docs",
     "doctor",
     "dupes",
     "export_documents",
