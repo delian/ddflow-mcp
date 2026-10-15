@@ -60,7 +60,7 @@ class HelpIndex:
         self._run = run
         self.commands = set(commands)
         self._cache: dict[tuple[str, ...], set[str] | None] = {}
-        #: Why a command could not be walked, one note each (command -> reason).
+        #: Why a command could not be walked, one note each (command or verb chain -> reason).
         self.unavailable: dict[str, str] = {}
         self._broken: set[tuple[str, ...]] = set()  #: chains whose help could not run
 
