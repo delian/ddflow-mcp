@@ -519,6 +519,8 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
         return "--chunk re-reviews part of an ITEM's recorded review: name the item"
     rec = it.gates.get(gate)
     prior = _prior_evidence(rec)
+    if isinstance(prior.get("chunk_findings"), B.Unavailable):
+        return f"the recorded review's findings are {prior['chunk_findings']}: run the full review"
     if not prior.get("diff_sha") or "reviewed" not in prior:
         return (
             f"no `ddflow review` of {it.id}.{gate} with per-chunk evidence is on record; "

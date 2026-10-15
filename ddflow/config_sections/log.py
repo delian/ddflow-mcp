@@ -68,8 +68,8 @@ class LogConfig:
     )
 
     evidence_blobs: bool = knob(
-        True,
-        doc="Keep large gate evidence (a reviewer's findings, a command's output tail) out of the event shards: the value is stored once under `.ddflow/blobs/` by its sha256 and the event keeps a small reference, so the log you read, commit and clone stays small (gate evidence was half the bytes of a real log). Readers that show or reuse the evidence read the blob back; one that is missing or altered is reported as unavailable, never as empty, and `ddflow doctor` names it. Blobs are committed with the shards. An older ddflow is refused the gate events of a log that uses this. false writes evidence inline, as before; existing references keep resolving.",
+        False,
+        doc="Keep large gate evidence (a reviewer's findings, a command's output tail) out of the event shards: the value is stored once under `.ddflow/blobs/` by its sha256 and the event keeps a small reference, so the log you read, commit and clone stays small (gate evidence was half the bytes of a real log). Readers that show or reuse the evidence read the blob back; one that is missing or altered is reported as unavailable, never as empty, and `ddflow doctor` names it. Blobs are committed with the shards. Off by default: the first write records the `evidence-blobs` capability, after which a ddflow without it is refused every gate event on this log (and a patch-skewed one every write), so turn it on once every checkout that writes this log runs this release (`ddflow upgrade`). Existing references keep resolving when it is off, and `false` writes evidence inline, as before.",
     )
     evidence_blob_keys: list[str] = knob(
         factory=lambda: ["chunk_findings", "tail", "selected_tests"],

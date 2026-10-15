@@ -11,6 +11,7 @@ from ddflow.core.model import fold
 from ddflow.core.records import Lease, _claim
 from ddflow.infra.log import EventLog
 from ddflow.services import logfixture
+from logscale_helpers import _real_copy, any_log  # noqa: F401  (fixtures)
 
 
 def _log(tmp_path: Path, n: int = 1500) -> EventLog:
@@ -22,7 +23,7 @@ def test_fixture_has_the_real_logs_shape(tmp_path):
     log = _log(tmp_path, 3000)
     kinds = [e.kind for e in log.read_all()]
     share = kinds.count("lease.renewed") / len(kinds)
-    assert 0.35 < share < 0.6  # the real log: 43%
+    assert 0.38 < share < 0.5  # the real log: 43%
 
 
 def test_claim_window_equals_asdict_and_is_a_copy():
@@ -46,23 +47,18 @@ def _asdict_claim(lease):
     return {"holder": lease.holder, "event": lease.event, "lease": asdict(lease)}
 
 
-def test_fold_is_byte_identical_to_the_asdict_claim_on_a_contested_log(tmp_path, monkeypatch):
+def test_fold_is_byte_identical_to_the_asdict_claim_on_a_contested_log(any_log, monkeypatch):
     """The flat claim copy changes nothing the fold computes: same State, lease windows
     and contests, on a generated log and on this repository's own log when it has one."""
     from ddflow.core import records
     from ddflow.core.handlers import leases as H
-    logs = [_log(tmp_path)]
-    real = Path(__file__).resolve().parents[1]
-    if (real / ".ddflow" / "events").is_dir():
-        logs.append(EventLog(real))
-    for log in logs:
-        events = log.read_all()
-        now = repr(fold(events, strict=False).items)
-        with monkeypatch.context() as m:
-            m.setattr(records, "_claim", _asdict_claim)
-            m.setattr(H, "_claim", _asdict_claim)
-            before = repr(fold(events, strict=False).items)
-        assert now == before
+    events = any_log.read_all()
+    now = repr(fold(events, strict=False).items)
+    with monkeypatch.context() as m:
+        m.setattr(records, "_claim", _asdict_claim)
+        m.setattr(H, "_claim", _asdict_claim)
+        before = repr(fold(events, strict=False).items)
+    assert now == before
 
 
 # -- step 2: coalesced lease renewals -----------------------------------------------------
@@ -101,6 +97,7 @@ def test_heartbeats_inside_the_window_are_not_written(repo, monkeypatch):
 def _cfg(window: int) -> Config:
     c = Config()
     c.lease.renew_log_min_s = window
+    c.lease.grace_s = max(window, 1)  # the window in force is also capped by grace_s
     return c
 
 
@@ -162,13 +159,19 @@ def test_coalesced_log_folds_to_the_same_items_but_the_lease_clock(tmp_path):
         assert repr(a) == repr(b), k
 
 
-def test_renewal_share_of_a_busy_workload_falls_under_ten_percent(tmp_path):
+def test_a_busy_workload_writes_a_fifth_of_its_renewals_and_a_fraction_of_the_events(tmp_path):
+    """The saving, measured on a generated workload with a heartbeat every 20 s (the hooks'
+    pace): a window of 300 s keeps about one renewal in fifteen, and the renewal share of
+    all events falls from about half to under a quarter. The share stays above 10% at the
+    default window (120 s, = grace_s): an item's life is hours of heartbeats, and bounding
+    the drift by grace_s bounds the saving."""
     logfixture.generate(tmp_path / ".ddflow" / "events", 20000, seed=1, beat_gap_s=20.0, beats=60)
     events = EventLog(tmp_path).read_all()
     small = coalesced(events, 300)
-    share = sum(e.kind == "lease.renewed" for e in small) / len(small)
-    assert share < 0.25  # and 5x fewer renewals than written
-    assert sum(e.kind == "lease.renewed" for e in small) * 5 < sum(e.kind == "lease.renewed" for e in events)
+    before = sum(e.kind == "lease.renewed" for e in events)
+    after = sum(e.kind == "lease.renewed" for e in small)
+    assert after * 5 < before
+    assert after / len(small) < 0.25 < before / len(events)
 
 
 def test_quiet_renewal_never_for_a_foreign_or_expired_lease():
@@ -185,20 +188,17 @@ def test_the_window_is_never_wider_than_the_heartbeat():
     from ddflow.services.logcoalesce import renew_window
 
     c = Config()
-    c.lease.renew_log_min_s, c.lease.heartbeat_s = 300, 1
+    c.lease.renew_log_min_s, c.lease.heartbeat_s, c.lease.grace_s = 300, 1, 900
     assert renew_window(c) == 1
     c.lease.heartbeat_s = 900
     assert renew_window(c) == 300
+    c.lease.grace_s = 120  # the slack the lease already allows bounds it too
+    assert renew_window(c) == 120
 
 
-def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(tmp_path, monkeypatch):
+def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(any_log, monkeypatch):
     """A renewal on an item with no contest and nothing displaced skips the claim-window
     pass; the fold is the same as when the pass always runs (a contested log included)."""
-    logs = [_log(tmp_path, 6000)]
-    real = Path(__file__).resolve().parents[1]
-    if (real / ".ddflow" / "events").is_dir():
-        logs.append(EventLog(real))  # this repository's own log has contested claims
-
     # simplest faithful oracle: the original handler body, kept here verbatim
     def original(st, ev):
         from ddflow.core.handlers.leases import _clashing, _join, _key, _known, _late_renewal, _widen
@@ -233,23 +233,142 @@ def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(tmp_pa
 
     from ddflow.core import model
 
-    for log in logs:
-        events = log.read_all()
-        fast = repr(fold(events, strict=False).items)
+    events = any_log.read_all()
+    fast = repr(fold(events, strict=False).items)
+    with monkeypatch.context() as m:
+        m.setitem(model.HANDLERS, "lease.renewed", original)
+        assert repr(fold(events, strict=False).items) == fast
+
+
+def test_tasks_below_a_phase_equal_the_full_scan_in_the_same_order(any_log):
+    """`State.tasks(phase)` walks the descendants, not every item; same answer, same order."""
+    st = fold(any_log.read_all(), strict=False)
+    for iid in [*st.items, "no-such-item"]:
+        live = [i for i in st.items.values() if i.kind == "task" and not i.removed]
+        wanted = st.descendants(iid)
+        assert [i.id for i in st.tasks(iid)] == [i.id for i in live if i.id in wanted]
+
+
+# -- review findings: probes ---------------------------------------------------------------
+
+import random  # noqa: E402
+
+from ddflow.core.events import Event  # noqa: E402
+
+
+def _random_lease_log(seed: int) -> list[Event]:
+    rng = random.Random(seed)
+    evs, lam = [Event("task.added", "T", {"title": "t"}, agent="a", lamport=1, ts="2026-10-01T00:00:00Z")], 1
+    holders = ["a", "b", "c"]
+    acquired: list[str] = []
+    for _ in range(rng.randint(5, 40)):
+        lam += 1
+        h, at = rng.choice(holders), rng.uniform(0, 4000)
+        kind = rng.choice(["lease.acquired", "lease.renewed", "lease.renewed", "lease.released", "lease.expired"])
+        data: dict = {"holder": h, "at": at, "ttl_s": rng.choice([300, 1800])}
+        if kind == "lease.released" and acquired:
+            data["event"] = rng.choice(acquired)
+        ev = Event(kind, "T", data, agent=h, lamport=lam, ts="2026-10-01T00:00:%02dZ" % (lam % 60))
+        ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
+        if kind == "lease.acquired":
+            acquired.append(ev.id)
+        evs.append(ev)
+    return evs
+
+
+def test_the_renewal_fast_path_is_the_old_fold_on_random_contested_logs(monkeypatch):
+    """Late renewals, rival holders, releases and expiries in random order: the guarded
+    handler and the original (always run the window pass) fold to the same items."""
+    from ddflow.core import model, records
+    from ddflow.core.handlers import leases as H
+
+    def original(st, ev):
+        it = st.items.get(ev.subject)
+        if not it:
+            return
+        d = ev.data
+        stale = it.lease is not None and "at" in d and float(d["at"]) < it.lease.acquired_at
+        if "holder" in d and (it.lease is None or d["holder"] != it.lease.holder or stale):
+            H._late_renewal(it, d)
+            return
+        if not it.lease:
+            return
+        at = float(d.get("at", it.lease.renewed_at))
+        if at < it.lease.renewed_at:
+            return
+        it.lease.renewed_at = at
+        H._widen(it, H._key(records._claim(it.lease)), at)
+        rivals = H._clashing(H._known(it), records._claim(it.lease))
+        if rivals:
+            H._join(it, [records._claim(it.lease), *rivals])
+
+    contested = 0
+    for seed in range(300):
+        evs = _random_lease_log(seed)
+        fast = fold(evs, strict=False).items
+        contested += any(i.lease_contest or i.displaced for i in fast.values())
+        fast_repr = repr(fast)  # before the second fold: folds may share event payload objects
         with monkeypatch.context() as m:
             m.setitem(model.HANDLERS, "lease.renewed", original)
-            assert repr(fold(events, strict=False).items) == fast
+            assert repr(fold(evs, strict=False).items) == fast_repr, seed
+    assert contested > 30  # the generator does exercise contests
 
 
-def test_tasks_below_a_phase_equal_the_full_scan_in_the_same_order(tmp_path):
-    """`State.tasks(phase)` walks the descendants, not every item; same answer, same order."""
-    logs = [_log(tmp_path, 4000)]
-    real = Path(__file__).resolve().parents[1]
-    if (real / ".ddflow" / "events").is_dir():
-        logs.append(EventLog(real))
-    for log in logs:
-        st = fold(log.read_all(), strict=False)
-        for iid in [*st.items, "no-such-item"]:
-            live = [i for i in st.items.values() if i.kind == "task" and not i.removed]
-            wanted = st.descendants(iid)
-            assert [i.id for i in st.tasks(iid)] == [i.id for i in live if i.id in wanted]
+def test_shardmeta_facts_equal_the_full_stamp_facts(any_log):
+    from ddflow.core.events import stamp_facts
+
+    full = stamp_facts(any_log.read_all(), "probe", "0.2.3", 1)
+    cached = stamp_facts(any_log._stamp_events(), "probe", "0.2.3", 1)
+    cached2 = stamp_facts(any_log._stamp_events(), "probe", "0.2.3", 1)  # from the records
+    # who stamped a version two agents both stamped depends on read order (cosmetic, already so)
+    def same(f):
+        return {k: v for k, v in vars(f).items() if k not in ("highest_by", "format_by")}
+
+    assert same(full) == same(cached) == same(cached2)
+
+
+def test_shardmeta_does_not_launder_a_same_length_rewrite(tmp_path):
+    from ddflow.infra import shardmeta as SMT
+
+    logfixture.generate(tmp_path / ".ddflow" / "events", 400, seed=1)
+    log = EventLog(tmp_path, "w")
+    log.append("session.note", "S", {"text": "a"})
+    shard = log.shard
+    before = (shard.stat().st_size, shard.stat().st_mtime_ns)
+    meta = log._meta
+    ev = log.read_all()[-1]
+    import os
+
+    os.utime(shard, ns=(before[1] + 5, before[1] + 5))  # rewritten: same size, newer mtime
+    meta.advance(shard, (before[0], before[1] + 5), ev)  # what the append saw just before
+    assert meta._rows.get(shard.name) is None  # dropped, so the next read re-reads the shard
+
+
+def test_an_unreadable_prior_finding_stops_a_chunk_rerun(repo):
+    from ddflow.api.review import _rerun_scope
+    from ddflow.config import LogConfig
+    from ddflow.infra import blobstore as BS
+
+    log = EventLog(repo, "a", log_cfg=LogConfig(evidence_blobs=True))
+    log.append("task.added", "T1", {"title": "t", "globs": ["a.py"]})
+    ev = log.append("gate.failed", "T1", {"gate": "critic", "evidence": {
+        "chunk_findings": [{"detail": "d" * 3000, "digest": "x"}], "diff_sha": "s", "reviewed": [1]}})
+    BS.BlobStore(repo).remove(ev.data["evidence"]["chunk_findings"]["$blob"])
+    BS._KNOWN_ROOTS.clear()
+    BS.remember(repo)
+    it = fold(log.read_all(), strict=False).items["T1"]
+    why = _rerun_scope(it, "critic", [], "diff", "1")
+    assert isinstance(why, str) and "unavailable" in why
+
+
+def test_doctor_reports_a_missing_evidence_blob(repo):
+    from ddflow.api.reporting.health import doctor
+    from ddflow.config import LogConfig
+    from ddflow.infra import blobstore as BS
+
+    log = EventLog(repo, "a", log_cfg=LogConfig(evidence_blobs=True))
+    log.append("task.added", "T1", {"title": "t", "globs": ["a.py"]})
+    ev = log.append("gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "x" * 4000}})
+    BS.BlobStore(repo).remove(ev.data["evidence"]["tail"]["$blob"])
+    out = doctor(repo)
+    assert any("evidence blob" in str(p) for p in out.data.get("problems", [])), out.data

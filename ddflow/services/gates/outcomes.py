@@ -85,8 +85,8 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
     rec = it.gates.get(gate)
     found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
     if isinstance(found, B.Unavailable):
-        # findings that cannot be read back are findings nobody can be said to have settled
-        return {"findings": 0, "refuted": 0, "confirmed": 0, "untriaged": 1, "unavailable": 1}
+        # findings that cannot be read back count as one unsettled finding (the true number is unknown)
+        return {"findings": 1, "refuted": 0, "confirmed": 0, "untriaged": 1, "unavailable": 1}
     if not found or not all(f.get("digest") for f in found):
         return None
     mine = it.triage.get(gate, {})

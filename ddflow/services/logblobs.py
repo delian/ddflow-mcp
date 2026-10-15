@@ -1,6 +1,6 @@
 """Reading evidence that lives out of line (B-gap-log-scale).
 
-`full(root, evidence)` is what every reader of a stored gate record that needs the BIG values
+`full(evidence, root=None)` is what every reader of a stored gate record that needs the BIG values
 (a reviewer's findings, a command's output tail) calls: the evidence with its stubs replaced
 by the blobs they name. A blob that is missing or does not hash to its address reads as
 `Unavailable`, never as an empty value, and `problems` is the doctor's check of the whole log.
@@ -41,12 +41,14 @@ def full(evidence: Any, root: Path | str | None = None) -> Any:
     stores = [BlobStore(r) for r in roots]
 
     def get(ref: str) -> Any:
-        got: Any = B.Unavailable(ref, "is missing from .ddflow/blobs")
+        worst: Any = B.Unavailable(ref, "is missing from .ddflow/blobs")
         for store in stores:
             got = fetch(store, ref)
             if not isinstance(got, B.Unavailable):
                 return got
-        return got
+            if "missing" not in got:  # altered or unreadable outranks missing: keep the tamper signal
+                worst = got
+        return worst
 
     return B.join(evidence, get)
 

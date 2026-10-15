@@ -5693,14 +5693,14 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b7801f27d1b3 -->
+<!-- ddflow:begin README/knobs sha=5a496492d3a8 -->
 <details><summary>All 238 knobs across 31 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
 | `lease.ttl_s` | `1800` |  |
 | `lease.heartbeat_s` | `300` |  |
-| `lease.renew_log_min_s` | `300` |  |
+| `lease.renew_log_min_s` | `120` |  |
 | `lease.grace_s` | `120` |  |
 | `lease.acquire_timeout_s` | `30` |  |
 | `lease.waiter_reservation_s` | `300` |  |
@@ -5870,7 +5870,7 @@ long default is left to `ddflow config --explain`.
 | `log.snapshot_min_events` | `5000` |  |
 | `log.snapshot_stale_days` | `7` |  |
 | `log.snapshot_touch_s` | `86400` |  |
-| `log.evidence_blobs` | `true` |  |
+| `log.evidence_blobs` | `false` |  |
 | `log.evidence_blob_keys` | (long: see `ddflow config --explain`) |  |
 | `log.evidence_blob_min_bytes` | `1024` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |

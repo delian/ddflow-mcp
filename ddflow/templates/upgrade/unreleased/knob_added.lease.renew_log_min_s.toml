@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "lease.renew_log_min_s"
-new = "300"
+new = "120"
 why = "A heartbeat closer than this to the last written renewal is acknowledged but not logged, so renewals stop dominating the log."
 impact = "additive"

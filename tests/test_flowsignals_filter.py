@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from ddflow.core import flowsignals as FS
 from ddflow.core import progress as PR
-from ddflow.infra.log import EventLog
-from ddflow.services import logfixture
+from logscale_helpers import _real_copy, any_log  # noqa: F401  (fixtures)
 
 
 def _oracle(events, now):
@@ -42,14 +40,7 @@ def _oracle(events, now):
     return out
 
 
-def test_filtering_first_gives_the_same_samples(tmp_path):
-    logfixture.generate(tmp_path / ".ddflow" / "events", 3000, seed=8)
-    logs = [EventLog(tmp_path)]
-    real = Path(__file__).resolve().parents[1]
-    if (real / ".ddflow" / "events").is_dir():
-        logs.append(EventLog(real))
-    for log in logs:
-        events = log.read_all()
-        for now in (1e12, 1.79e9 + 40000):
-            assert FS._review_samples(events, now) == _oracle(events, now)
-    assert len(_oracle(logs[0].read_all(), 1e12)) > 0
+def test_filtering_first_gives_the_same_samples(any_log):
+    events = any_log.read_all()
+    for now in (1e12, 1.79e9 + 40000):
+        assert FS._review_samples(events, now) == _oracle(events, now)

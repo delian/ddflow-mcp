@@ -94,13 +94,14 @@ class ShardMeta:
             stamps.extend(Event.from_json(line) for line in row["stamps"])
         return high, stamps
 
-    def advance(self, shard: Path, size_before: int, ev: Event) -> None:
-        """``ev`` was appended to ``shard`` (lock held) when it was ``size_before`` bytes. The
-        record is extended only if it described the shard as it was just before: it was
-        refreshed by `facts` in this same write; any doubt leaves it to be re-read."""
+    def advance(self, shard: Path, before: tuple[int, int], ev: Event) -> None:
+        """``ev`` was appended to ``shard`` (lock held) when it had the ``(size, mtime_ns)``
+        ``before``. The record is extended only if it described the shard as it was just
+        before -- both numbers, so a same-length rewrite is not laundered into a current
+        record; any doubt leaves the shard to be re-read."""
         row = self._rows.get(shard.name)
         stamp = self._stamp(shard)
-        if row is None or stamp is None or row.get("size") != size_before:
+        if row is None or stamp is None or (row.get("size"), row.get("mtime_ns")) != before:
             self._rows.pop(shard.name, None)
             return
         new = {
