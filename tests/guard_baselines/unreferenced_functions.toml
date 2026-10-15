@@ -38,3 +38,6 @@ baseline = 0
 # a report are its callers; the two modules stay whole until they exist.
 "ddflow/services/upstream_dedupe.py:report_text" = "B-upstream-surfaces"
 "ddflow/services/upstream_delivery.py:send_gh" = "B-upstream-surfaces"
+# The documentation check as `[docs]` configures it (B-docscheck-extractors): the check
+# command is its caller, and the only reader of the four `docs.*` knobs until it exists.
+"ddflow/services/docscheck_config.py:check_configured" = "B-docs-check-command"
