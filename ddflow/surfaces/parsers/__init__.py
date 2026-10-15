@@ -15,6 +15,7 @@ from . import (
     lanes,
     lifecycle,
     maintenance,
+    metrics,
     plan,
     queue,
     records,
@@ -38,6 +39,7 @@ REGISTER_ORDER = (
     maintenance.register,
     lanes.register,
     docs.register,
+    metrics.register,
     review.register,
     workflow.register,
 )

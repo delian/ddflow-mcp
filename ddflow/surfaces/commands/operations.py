@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from ...api import operations as A
+from ...api import pin_files as PF
 from ...api import surf_setup as SS
 from ...core import provenance as PV
 from ..context import FAIL, NOTHING, OK, Ctx
@@ -220,8 +222,44 @@ def cmd_external(a, c: Ctx) -> int:
     return out.exit
 
 
+def _pins_regenerate(a, c: Ctx) -> int:
+    """`pins regenerate`: one line per pin, and the stale ones named."""
+    out = PF.pins_regenerate(
+        c.repo,
+        start=Path(c._start),
+        only=a.only or "",
+        check=a.check,
+        install=a.install,
+        after_merge=a.after_merge,
+        verb=a.document,
+        target=a.target or "",
+    )
+    if c.json:
+        emit_json(out.body())
+        return out.exit
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        for p in out.data.get("pins", []):
+            if p["stale"] or p["error"]:
+                print(f"  {p['name']}: {p['error'] or 'stale'} ({', '.join(p['files'])})")
+        return FAIL
+    if out.exit == NOTHING:
+        print(out.reason)
+        return NOTHING
+    for line in out.data.get("installed", []):
+        print(line)
+    if out.data.get("note"):
+        print(out.data["note"])
+    for p in out.data.get("pins", []):
+        state = "re-recorded" if p["regenerated"] else "current"
+        print(f"{p['name']}: {state}")
+    return OK
+
+
 def cmd_pins(a, c: Ctx) -> int:
     """Which text of an instruction file is pinned by a test, and which is free."""
+    if a.document in ("regenerate", "merge-driver"):
+        return _pins_regenerate(a, c)
     tests = tuple(t.strip() for t in (a.tests or "").split(",") if t.strip())
     out = A.pins(c.repo, a.document, tests=tests, min_chars=a.min_needle, top=a.top)
     if out.exit == FAIL:
