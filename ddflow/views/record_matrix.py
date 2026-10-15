@@ -237,11 +237,10 @@ def matrix(probe: Probe) -> dict[tuple[str, str, str], str]:
     return {(k, v, s): probe.cell(k, v, s) for k in KINDS for v in VERBS for s in SURFACES}
 
 
-def gaps(cells: dict[tuple[str, str, str], str] | None = None) -> list[tuple[str, str, str]]:
+def gaps(cells: dict[tuple[str, str, str], str]) -> list[tuple[str, str, str]]:
     """The (kind, verb, surface) cells where the verb is offered on SOME surface but not
     this one: a surface lacking what another has is the inconsistency the phase removes.
     A verb offered nowhere for a kind is a gap in the kind, listed by `unoffered`."""
-    cells = cells or matrix()
     out = []
     for k in KINDS:
         for v in VERBS:
@@ -251,16 +250,14 @@ def gaps(cells: dict[tuple[str, str, str], str] | None = None) -> list[tuple[str
     return out
 
 
-def unoffered(cells: dict[tuple[str, str, str], str] | None = None) -> list[tuple[str, str]]:
+def unoffered(cells: dict[tuple[str, str, str], str]) -> list[tuple[str, str]]:
     """The (kind, verb) pairs no surface offers."""
-    cells = cells or matrix()
     return [(k, v) for k in KINDS for v in VERBS if not any(cells[(k, v, s)] for s in SURFACES)]
 
 
-def render(cells: dict[tuple[str, str, str], str] | None = None) -> str:
+def render(cells: dict[tuple[str, str, str], str]) -> str:
     """The matrix as Markdown: one row per kind, one column per verb; a cell lists the
     surfaces that offer it (``C`` CLI, ``M`` MCP, ``A`` API, ``H`` hooks) or ``-``."""
-    cells = cells or matrix()
     mark = {"cli": "C", "mcp": "M", "api": "A", "hooks": "H"}
     head = "| kind | " + " | ".join(VERBS) + " |"
     rows = [head, "|---|" + "---|" * len(VERBS)]
