@@ -21,6 +21,8 @@ from ..infra import git as G
 from ..infra import worktree as W
 
 EVENTS = ".ddflow/events"
+#: Out-of-line gate evidence (B-gap-log-scale): committed with the shards that name it.
+BLOBS = ".ddflow/blobs"
 
 
 def uncommitted_shards(repo: Path) -> list[str] | None:
@@ -32,6 +34,12 @@ def uncommitted_shards(repo: Path) -> list[str] | None:
     if entries is None:
         return None
     return sorted(e.path for e in entries if e.path.endswith(".jsonl"))
+
+
+def uncommitted_blobs(repo: Path) -> list[str]:
+    """Blob files git has not committed (they are only ever created, never changed)."""
+    entries = G.status(repo, BLOBS, untracked="all")
+    return sorted(e.path for e in entries or [] if e.path.endswith(".json"))
 
 
 def _busy(repo: Path) -> str:
@@ -69,7 +77,8 @@ def commit_shards(repo: Path, reason: str, template: str = "events: {reason}") -
     shards = [s for s in listed if whole(repo, s)]
     left = [s for s in listed if s not in shards]
     skipped = f"left out, being written or unreadable: {', '.join(left)}" if left else ""
-    if not shards:
+    blobs = uncommitted_blobs(repo)
+    if not shards and not blobs:
         return "", f"event log not committed: {skipped}" if skipped else ""
     busy = _busy(repo)
     if busy:
@@ -78,6 +87,7 @@ def commit_shards(repo: Path, reason: str, template: str = "events: {reason}") -
         message = template.format(reason=reason)
     except (KeyError, IndexError, ValueError):
         message = f"events: {reason}"
+    shards = [*shards, *blobs]
     add = W.git(repo, "add", "--", *shards)
     if not add.ok:
         return "", f"event log not committed: git add failed: {(add.err or add.out)[-200:]}"

@@ -66,3 +66,17 @@ class LogConfig:
         doc="A snapshot in use is marked as used (its modification time refreshed) at most this often, in seconds, so a long-lived reader's snapshot is not collected as abandoned by a sibling checkout on other code. 0 refreshes it on every read.",
         check=int_at_least(0),
     )
+
+    evidence_blobs: bool = knob(
+        True,
+        doc="Keep large gate evidence (a reviewer's findings, a command's output tail) out of the event shards: the value is stored once under `.ddflow/blobs/` by its sha256 and the event keeps a small reference, so the log you read, commit and clone stays small (gate evidence was half the bytes of a real log). Readers that show or reuse the evidence read the blob back; one that is missing or altered is reported as unavailable, never as empty, and `ddflow doctor` names it. Blobs are committed with the shards. An older ddflow is refused the gate events of a log that uses this. false writes evidence inline, as before; existing references keep resolving.",
+    )
+    evidence_blob_keys: list[str] = knob(
+        factory=lambda: ["chunk_findings", "tail", "selected_tests"],
+        doc="The evidence keys that may move out of line (needs evidence_blobs): by default the reviewer findings, the command output tail and the selected-tests list, which were 60% of gate evidence. A key a reader compares as plain text should not be added: a reader that has not been taught to read blobs back sees a reference where it expects the value.",
+    )
+    evidence_blob_min_bytes: int = knob(
+        1024,
+        doc="A value under an evidence key goes out of line only when its JSON is at least this many bytes: a small value is cheaper in the shard than as a file. 0 turns moving values out off.",
+        check=int_at_least(0),
+    )

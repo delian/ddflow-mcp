@@ -44,10 +44,37 @@ Events carry a **Lamport counter**; the total order is `(lamport, agent, id)` (`
 - Wall-clock `ts` is recorded for humans and is **explicitly not the sort key** — clock
   skew between machines sharing one NFS checkout would otherwise reorder history.
 
-The clock is read from the *tail* of each shard rather than by re-reading everything:
-a shard has exactly one writer, so its Lamport values are non-decreasing and the last
-line carries its maximum. That makes an append O(shards), not O(events) — which matters
-because the probe measured NFS at ~36× the cost of local I/O.
+The clock is the highest Lamport value of any event of any shard — not a shard's last
+line, which two clones under one agent id break (a merged shard can read `1, 2, 3, 4, 2`).
+An append stays O(shards) because each clone remembers, per shard, its size, modification
+time, highest Lamport value and version-stamp events (`.ddflow/local/shardmeta/`, derived,
+never committed), trusts a record only while the shard is byte-for-byte the size and age it
+recorded, and re-reads just a shard that changed. See *Log scale* below.
+
+## Log scale
+
+The log is append-only and the only source of truth, so every optimisation below is a cache
+or a smaller encoding of it, and each is pinned by a test that its fold equals the
+unoptimised path's.
+
+- **Renewals are coalesced.** A heartbeat closer than `[lease].renew_log_min_s` (never more
+  than `heartbeat_s`) to the lease's last *written* renewal is acknowledged and not
+  recorded: renewals were 43% of a real log's events. The fold already keeps only the
+  newest renewal, so the cost is that another clone sees the expiry up to that window
+  early, inside `ttl_s` and `grace_s`. A claim, a re-claim and anything that changes the
+  worktree, branch, globs or resources is always written (`services/logcoalesce.py`).
+- **Large gate evidence lives out of line.** A value under a `[log].evidence_blob_keys` key
+  of at least `evidence_blob_min_bytes` is stored once under `.ddflow/blobs/<aa>/<sha256>.json`
+  and the event keeps `{"$blob": "sha256:…", "bytes": n}`. The event id hashes the reference
+  and the reference names the content, so tamper-evidence is unchanged. Readers that need
+  the value call `services.logblobs.full`; a blob that is missing or does not hash to its
+  address reads as `Unavailable` (a non-empty marker, never an empty value) and `ddflow
+  doctor` reports it. Blobs are committed with the shards. The log records the
+  `evidence-blobs` capability, so an older ddflow is refused the gate events it could not
+  keep consistent. All file I/O is in `infra/blobstore.py`, the seam a different store plugs in.
+- **One fold per command.** `status` folds once and hands the State down.
+- **Measured.** `scripts/logbench.py` times the commands on a copied or generated
+  (`services/logfixture.py`) log.
 
 ## Concurrency
 
