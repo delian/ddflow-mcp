@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "pins.timeout_s"
+new = '900'
+why = "Seconds one pin recipe may run before it is stopped."
+impact = "additive"
