@@ -54,12 +54,12 @@ def test_list_takes_the_filters_and_kinds(repo):
 
 def test_list_refuses_a_flag_the_kind_does_not_take(repo):
     _seed(repo)
-    code, _, err = run_cli(repo, "list", "task", "--all")
-    assert code == 3 and "--all" in err
+    code, _, err = run_cli(repo, "list", "task", "--item", "T1")
+    assert code == 3 and "--item" in err
 
 
 def test_list_refusal_under_json_carries_a_body(repo):
     _seed(repo)
-    code, out, _ = run_cli(repo, "list", "task", "--all", "--json")
+    code, out, _ = run_cli(repo, "list", "task", "--item", "T1", "--json")
     body = json.loads(out)
-    assert code == 3 and "--all" in body["reason"] and body["schema"] == "list@1"
+    assert code == 3 and "--item" in body["reason"] and body["schema"] == "list@1"
