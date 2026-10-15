@@ -29,6 +29,10 @@ class CiConfig:
         3600,
         doc="Seconds the CI command may run before the gate records UNAVAILABLE. Default 3600: the pre-push set includes the whole test suite.",
     )
+    keep_env: list[str] = knob(
+        factory=list,
+        doc="Variables the CI command keeps although `[gates].scrub_env` removes them from a gate's or the CI command's environment (the caller's identity variables). Empty by default; `[gates].keep_env` applies to every gate command as well.",
+    )
     #: Health of the base after a merge lands: off | fast (lint, format, security: the
     #: pre-commit set without the test hooks) | full (the whole command).
     on_merge: str = knob(

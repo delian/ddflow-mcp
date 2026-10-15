@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.keep_env"
+new = "[]"
+why = "Variables a gate command keeps although gates.scrub_env removes them."
+impact = "additive"
