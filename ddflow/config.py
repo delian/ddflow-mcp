@@ -122,6 +122,9 @@ from .config_sections.rag import (
 from .config_sections.reinstruct import (
     ReinstructConfig,
 )
+from .config_sections.pins import (
+    PinsConfig,
+)
 from .config_sections.release import (
     RELEASE_LINT_POLICIES,  # noqa: F401
     ReleaseConfig,
@@ -236,6 +239,7 @@ class Config:
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
+    pins: PinsConfig = field(default_factory=PinsConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)
