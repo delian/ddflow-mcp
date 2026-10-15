@@ -1217,7 +1217,7 @@ EXPECTED = [
     (
         ("abandon", "T1", "--reason", "not now"),
         0,
-        "T1 abandoned: not now\n  worktree and branch removed\nwarning: T2 still need(s) T1 and can never start; drop the edge:\n  ddflow update T2 --needs \"\"\n",
+        'T1 abandoned: not now\n  worktree and branch removed\nwarning: T2 still need(s) T1 and can never start; drop the edge:\n  ddflow update T2 --needs ""\n',
         "",
     ),
     (
