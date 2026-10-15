@@ -38,6 +38,7 @@ from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id
 from .leaseclock import foreign, localize
+from .logcoalesce import quiet_renewal, renew_window
 
 
 class LeaseError(RuntimeError):
@@ -493,6 +494,7 @@ def _transition(
     holder: str,
     payload: Callable[[Lease], dict[str, Any]],
     refuse: Callable[[State, Item], bool] | None = None,
+    quiet: Callable[[Lease], bool] | None = None,
 ) -> bool:
     """Append one lease-lifecycle event, under the lock, if the lease is in a fit state.
 
@@ -516,6 +518,8 @@ def _transition(
             return False
         if refuse is not None and refuse(state, it):
             return False
+        if quiet is not None and quiet(it.lease):
+            return True  # held and renewed, but not worth an event (`logcoalesce`)
         log.append(kind, item_id, payload(it.lease))
         return True
 
@@ -547,6 +551,9 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         holder=holder,
         payload=lambda _lease: {"at": time.time(), "holder": holder},
         refuse=lapsed_onto_a_live_claim,
+        quiet=lambda lease: quiet_renewal(
+            lease, time.time(), renew_window(Config.load(log.root)), log.clone_id(create=False)
+        ),
     )
     if ok:
         # A claim someone else took over on the remote is not renewed: False, as for any
