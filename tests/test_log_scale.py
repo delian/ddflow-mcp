@@ -7,11 +7,12 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from logscale_helpers import _real_copy, any_log  # noqa: F401  (fixtures)
+
 from ddflow.core.model import fold
 from ddflow.core.records import Lease, _claim
 from ddflow.infra.log import EventLog
 from ddflow.services import logfixture
-from logscale_helpers import _real_copy, any_log  # noqa: F401  (fixtures)
 
 
 def _log(tmp_path: Path, n: int = 1500) -> EventLog:
@@ -47,7 +48,7 @@ def _asdict_claim(lease):
     return {"holder": lease.holder, "event": lease.event, "lease": asdict(lease)}
 
 
-def test_fold_is_byte_identical_to_the_asdict_claim_on_a_contested_log(any_log, monkeypatch):
+def test_fold_is_byte_identical_to_the_asdict_claim_on_a_contested_log(any_log, monkeypatch):  # noqa: F811
     """The flat claim copy changes nothing the fold computes: same State, lease windows
     and contests, on a generated log and on this repository's own log when it has one."""
     from ddflow.core import records
@@ -113,7 +114,7 @@ def test_expiry_an_observer_computes_moves_by_less_than_the_window(repo, monkeyp
     state) computes as the lease's expiry differs from the unwritten truth by < window,
     and a lease the holder kept alive never reads expired by more than that."""
     monkeypatch.setattr(Config, "load", classmethod(lambda cls, *_a, **_k: _cfg(300)))
-    log, clock = _beats(repo, monkeypatch, window=300, every_s=45, n=60)
+    _log, clock = _beats(repo, monkeypatch, window=300, every_s=45, n=60)
     observer = EventLog(repo, "observer")  # another reader of the same shards
     st = fold(observer.read_all(), strict=False)
     lease = st.items["T1"].lease
@@ -124,7 +125,7 @@ def test_expiry_an_observer_computes_moves_by_less_than_the_window(repo, monkeyp
 
 def test_a_renewal_carrying_attachments_is_always_written(repo, monkeypatch):
     monkeypatch.setattr(Config, "load", classmethod(lambda cls, *_a, **_k: _cfg(300)))
-    log, clock = _beats(repo, monkeypatch, window=300, every_s=10, n=2)
+    log, _clock = _beats(repo, monkeypatch, window=300, every_s=10, n=2)
     before = len([e for e in log.read_all() if e.kind == "lease.renewed"])
     cfg = _cfg(300)
     L.acquire(log, cfg, "T1", holder="holder", worktree="/wt", branch="b")  # re-claim attaches
@@ -155,7 +156,7 @@ def test_coalesced_log_folds_to_the_same_items_but_the_lease_clock(tmp_path):
         if a.lease and b.lease:
             assert 0 <= a.lease.renewed_at - b.lease.renewed_at < 300
             b.lease.renewed_at = a.lease.renewed_at
-            for c, d in zip(a.lease_contest, b.lease_contest):
+            for c, d in zip(a.lease_contest, b.lease_contest, strict=True):
                 d["lease"]["renewed_at"] = c["lease"]["renewed_at"]
         assert repr(a) == repr(b), k
 
@@ -200,7 +201,7 @@ def test_the_window_is_never_wider_than_the_heartbeat():
     assert renew_window(c) == 120
 
 
-def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(any_log, monkeypatch):
+def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(any_log, monkeypatch):  # noqa: F811
     """A renewal on an item with no contest and nothing displaced skips the claim-window
     pass; the fold is the same as when the pass always runs (a contested log included)."""
 
@@ -234,7 +235,7 @@ def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(any_lo
         rivals = _clashing(_known(it), _claim(it.lease))
         if rivals:
             _join(it, [_claim(it.lease), *rivals])
-        for k, setter in (("worktree", None), ("branch", None)):
+        for k in ("worktree", "branch"):
             if k in d:
                 setattr(it.lease, k, d[k])
                 setattr(it, k, d[k] or getattr(it, k))
@@ -252,7 +253,7 @@ def test_the_renewal_fast_path_folds_identically_to_the_full_window_logic(any_lo
         assert repr(fold(events, strict=False).items) == fast
 
 
-def test_tasks_below_a_phase_equal_the_full_scan_in_the_same_order(any_log):
+def test_tasks_below_a_phase_equal_the_full_scan_in_the_same_order(any_log):  # noqa: F811
     """`State.tasks(phase)` walks the descendants, not every item; same answer, same order."""
     st = fold(any_log.read_all(), strict=False)
     for iid in [*st.items, "no-such-item"]:
@@ -285,7 +286,7 @@ def _random_lease_log(seed: int) -> list[Event]:
         data: dict = {"holder": h, "at": at, "ttl_s": rng.choice([300, 1800])}
         if kind == "lease.released" and acquired:
             data["event"] = rng.choice(acquired)
-        ev = Event(kind, "T", data, agent=h, lamport=lam, ts="2026-10-01T00:00:%02dZ" % (lam % 60))
+        ev = Event(kind, "T", data, agent=h, lamport=lam, ts=f"2026-10-01T00:00:{lam % 60:02d}Z")
         ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
         if kind == "lease.acquired":
             acquired.append(ev.id)
@@ -331,7 +332,7 @@ def test_the_renewal_fast_path_is_the_old_fold_on_random_contested_logs(monkeypa
     assert contested > 30  # the generator does exercise contests
 
 
-def test_shardmeta_facts_equal_the_full_stamp_facts(any_log):
+def test_shardmeta_facts_equal_the_full_stamp_facts(any_log):  # noqa: F811
     from ddflow.core.events import stamp_facts
 
     full = stamp_facts(any_log.read_all(), "probe", "0.2.3", 1)
@@ -346,7 +347,6 @@ def test_shardmeta_facts_equal_the_full_stamp_facts(any_log):
 
 
 def test_shardmeta_does_not_launder_a_same_length_rewrite(tmp_path):
-    from ddflow.infra import shardmeta as SMT
 
     logfixture.generate(tmp_path / ".ddflow" / "events", 400, seed=1)
     log = EventLog(tmp_path, "w")

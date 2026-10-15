@@ -41,8 +41,8 @@ from ..core import redact as R
 from ..core import upcasters as UP
 from ..core import version as V
 from ..core.events import (
-    CAP_ID_TEMPLATE,
     CAP_EVIDENCE_BLOBS,
+    CAP_ID_TEMPLATE,
     CAP_LOG_REDACTION,
     CAPABILITIES_KIND,
     OLDER_MARK,

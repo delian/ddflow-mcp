@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
+
+import pytest
 
 from ddflow.config import LogConfig
 from ddflow.core import blobref as B
@@ -17,8 +18,6 @@ from ddflow.services import eventcommit as EC
 from ddflow.services import logblobs as LB
 from ddflow.services import logfixture
 from ddflow.services.gates.outcomes import triage_counts
-
-import pytest
 
 
 @pytest.fixture(autouse=True)

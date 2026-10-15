@@ -3,8 +3,8 @@ many views they build from it, and the answers are what the several folds gave."
 
 from __future__ import annotations
 
-import io
 import contextlib
+import io
 import json
 import subprocess
 from pathlib import Path

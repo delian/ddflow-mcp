@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from logscale_helpers import _real_copy, any_log  # noqa: F401  (fixtures)
 
 from ddflow.core import flowsignals as FS
 from ddflow.core import progress as PR
-from logscale_helpers import _real_copy, any_log  # noqa: F401  (fixtures)
 
 
 def _oracle(events, now):
@@ -44,7 +44,7 @@ def _oracle(events, now):
     return out
 
 
-def test_filtering_first_gives_the_same_samples(any_log):
+def test_filtering_first_gives_the_same_samples(any_log):  # noqa: F811
     events = any_log.read_all()
     for now in (1e12, 1.79e9 + 40000):
         assert FS._review_samples(events, now) == _oracle(events, now)

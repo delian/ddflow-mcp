@@ -35,20 +35,24 @@ def _text(rng: random.Random, n_chars: int) -> str:
     return " ".join(out)
 
 
+FINDINGS_RATE = 0.15  # share of gates whose evidence carries long findings
+FAIL_RATE = 0.2  # share of gates that fail
+
+
 def _evidence(rng: random.Random, failed: bool, gate: str = "") -> dict[str, Any]:
     """Gate evidence: mostly small notes, sometimes a long reviewer report."""
     ev: dict[str, Any] = {
         "note": _text(rng, rng.randint(80, 600)),
-        "tree_sha": "%040x" % rng.getrandbits(160),
+        "tree_sha": f"{rng.getrandbits(160):040x}",
     }
     if gate in ("rubber_duck", "critic"):  # a review records how long it took and what it covered
         ev.update(
             elapsed_s=round(rng.uniform(30, 900), 1),
             chunks_total=rng.randint(1, 6),
-            reviewed_head="%040x" % rng.getrandbits(160),
-            diff_sha="%040x" % rng.getrandbits(160),
+            reviewed_head=f"{rng.getrandbits(160):040x}",
+            diff_sha=f"{rng.getrandbits(160):040x}",
         )
-    if failed or rng.random() < 0.15:
+    if failed or rng.random() < FINDINGS_RATE:
         ev["chunk_findings"] = [
             {"chunk": i, "detail": _text(rng, rng.randint(800, 2400))}
             for i in range(rng.randint(1, 4))
@@ -87,7 +91,7 @@ class _Writer:
             data=data,
             agent=agent,
             lamport=self.lamport,
-            ts="2026-10-01T00:00:00.%06dZ" % (self.count % 1_000_000),
+            ts=f"2026-10-01T00:00:00.{self.count % 1_000_000:06d}Z",
         )
         line = ev.to_json() + "\n"
         fh = self._open.get(agent)
@@ -176,7 +180,7 @@ def generate(
             w.add(agent, "lease.renewed", item, {"at": at, "holder": agent})
             if i % 2 == 1 and gates:
                 g = gates.pop(0)
-                failed = rng.random() < 0.2
+                failed = rng.random() < FAIL_RATE
                 if g in ("ci", "unit_tests"):  # only command gates announce a start
                     w.add(agent, "gate.started", item, {"gate": g})
                 w.add(
