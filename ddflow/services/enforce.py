@@ -63,6 +63,7 @@ from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_differe
 from . import changes as CH
 from . import docsync
 from .backups import make_backup
+from .enforce_committed import committed_log
 from .export import frame as F
 from .export import ops as X
 from .export import registry as R
@@ -1511,9 +1512,9 @@ def _unrecorded_log_lines(
     staged: dict,
     exports: dict,
     rules: dict,
-) -> list[str]:
-    """Why the event log a staged generated file must agree with is not fully staged
-    (empty when it is)."""
+) -> tuple[list[str], bool]:
+    """(why the event log a staged generated file must agree with is not fully staged --
+    empty when it is --, whether git said so: False when it could not tell)."""
     probe = _unstaged_under(repo, log.dir, tree)
     if probe.failed:
         return [
@@ -1522,9 +1523,9 @@ def _unrecorded_log_lines(
             "",
             "Refusing rather than guessing: an unreadable log state is not a clean one.",
             "Check `git status`; a locked or damaged index is the usual cause.",
-        ]
+        ], False
     if not probe.paths:
-        return []
+        return [], True
     # Each case gets the command that CLEARS it. A plain `git add` stages nothing for
     # an ignored file and exits 0, so the one remedy for every case left an ignored
     # shard refused forever with identical output (roborev on 8b167e9, reproduced).
@@ -1556,7 +1557,22 @@ def _unrecorded_log_lines(
             else []
         ),
         "    git add " + " ".join(shlex.quote(p) for p in sorted({**staged, **exports, **rules})),
-    ]
+    ], True
+
+
+def _committed_log_if_unrecorded(
+    repo: Path, log: EventLog, tree: Path | None, exports: dict
+) -> EventLog | None:
+    """The log as the commit's INDEX holds it, to check the staged files against instead
+    of the shards on disk -- or None to keep the disk's.
+
+    The shards on disk carry what other agents append while this commit is made; those
+    events are not part of the commit and cannot make a view disagree with the log
+    committed beside it (bug B10725b2c5e). An exported document is regenerated from the
+    live log by `ddflow export` itself, so a staged one keeps the disk comparison."""
+    if exports:
+        return None
+    return committed_log(tree or _index_tree(repo), _rel(repo, log.dir), log.dir)  # type: ignore[return-value]
 
 
 def _disagreements(
@@ -1639,12 +1655,19 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
     # be fully staged: then the log on disk IS the committed log, and the comparison
     # below is exact.
-    probe_lines = _unrecorded_log_lines(repo, log, tree, noun, staged, exports, rules)
-    if probe_lines:
-        return _verdict(mode, probe_lines)
+    probe_lines, probed = _unrecorded_log_lines(repo, log, tree, noun, staged, exports, rules)
     # Config from the FILES, as `ddflow render` writes with: env overrides belong to
     # whoever typed `git commit`, not to the view.
     fresh_cfg = Config.load(repo, env={})
+    if probe_lines:
+        # Shards the commit does not record: events another agent is writing right now
+        # are no reason to refuse, so compare with the log as committed. A view that
+        # disagrees with THAT (rendered from events not staged) is refused as before.
+        committed = _committed_log_if_unrecorded(repo, log, tree, exports)
+        if committed is None or not probed:
+            return _verdict(mode, probe_lines)
+        err, lines = _disagreements(repo, committed, fresh_cfg, staged, exports, rules)
+        return _verdict(mode, probe_lines) if err or lines else Verdict(OK, "")
     err, lines = _disagreements(repo, log, fresh_cfg, staged, exports, rules)
     if err:
         return _verdict(mode, err)
