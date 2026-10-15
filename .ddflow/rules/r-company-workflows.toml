@@ -1,0 +1,10 @@
+id = "r-company-workflows"
+title = "Users and companies can change anything: config, CLI, MCP command or prompt, per company and per project"
+tags = ["config", "workflow", "principle", "org"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**"]
+created = "2026-10-15T10:55:11.179020+00:00"
+updated = "2026-10-15T10:55:11.179030+00:00"
+
+Decision D-company-workflows (operator 2026-10-15, verbatim: 'Keep as a rule, that the user or company policies should be able to change anything with config, cli, mcp command, or prompt, to allow companies or projects to have specific and individual workflows'). Extends r-everything-configurable and D-universal-principles. When you add or change a feature: (1) nothing ddflow ships is a fixed policy: every workflow, pipeline, gate, role, rule, template, prompt, default, threshold and shipped record is a default that a USER or a COMPANY policy can change, per company and per project, by config file, CLI, MCP command or a plain prompt, with no code change; (2) layers are system, company (organisation config, P-org-config), project, user; a company may mark keys non-overridable below it (floors) and a project may tighten but not loosen a floor; (3) a feature that cannot be adapted this way is not done: the standards gate and reviewers check that the new behaviour has a knob or an overridable record, a way to turn it off or replace it, and tests that run with the override; (4) every change is logged and restorable from the log (config.changed, record events); (5) company defaults arrive through the org bundle and are reviewable, diffable and revertible; (6) shipped examples (workflow packs, policies, pipelines) are copied, never edited in place, so an upgrade does not overwrite a customisation.
