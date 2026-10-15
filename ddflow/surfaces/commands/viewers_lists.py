@@ -12,6 +12,7 @@ import sys
 from typing import Any
 
 from ...api import phase_progress, view_list
+from ...api.viewers import empty_list
 from ...api import surf_reporting as R
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
@@ -182,9 +183,7 @@ def cmd_list_any(a, c: Ctx) -> int:
     if stray:
         reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
         if c.json:
-            emit_json(
-            {"record_kind": a.kind, "reason": reason, "rows": [], "total": 0, "shown": 0}
-        )
+            emit_json({**empty_list(a.kind), "reason": reason})
         print(reason, file=sys.stderr)
         return REFUSED
     return cmd_list(a, c)
@@ -235,6 +234,8 @@ def register(s) -> None:
             a.list_kind = "research"
             return cmd_list(a, c)
         stray = [f"--{f}" for f in (*_SHARED_FLAGS, "limit") if getattr(a, f, None) is not None]
+        if getattr(a, "all", False):
+            stray.append("--all")
         if stray:
             rs.error(f"{', '.join(stray)} apply to `research list`, not to recording a finding")
         for x in required:
