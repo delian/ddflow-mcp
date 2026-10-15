@@ -60,9 +60,9 @@ def _argv(path, p):
         if a.option_strings:
             out.append(a.option_strings[0])
             if a.nargs != 0:
-                out.append(a.choices and next(iter(a.choices)) or BOGUS)
+                out.append((a.choices and next(iter(a.choices))) or BOGUS)
         else:
-            out.append(a.choices and next(iter(a.choices)) or BOGUS)
+            out.append((a.choices and next(iter(a.choices))) or BOGUS)
     return out
 
 
@@ -86,7 +86,7 @@ def test_every_command_prints_a_json_body_when_refused(repo):
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda la: _run(repo, la[1]), LEAVES))
     bad = []
-    for (path, argv), p in zip(LEAVES, results, strict=True):
+    for (_path, argv), p in zip(LEAVES, results, strict=True):
         if p is None:
             bad.append(f"{' '.join(argv)}: timed out")
             continue
