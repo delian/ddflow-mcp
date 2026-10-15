@@ -84,5 +84,5 @@ def test_engine_refusals_and_the_requested_limit_keep_the_shape(repo):
     _seed(repo)
     assert view_read(repo, "search").data["rows"] == []
     assert view_read(repo, "session", state="nope-state").data["rows"] == []
-    _c, body, _ = _rows(repo, "task", "--item", "T1", "--limit", "5")
-    assert body["limit"] == 5
+    code, body, _ = _rows(repo, "task", "--item", "T1", "--limit", "5")
+    assert code == 3 and "reason" in body and body["limit"] == 5
