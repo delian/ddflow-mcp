@@ -39,9 +39,12 @@ def _fold_into_merge(repo: Path, files: list[str], done: list[str]) -> str:
     msg = G.run(repo, "log", "-1", "--format=%B", "HEAD")
     steps = (added, tree, head, msg)
     bad = next((r for r in steps if not r.ok), None)
+    # `commit-tree` ignores commit.gpgsign, which `git merge` honoured for the commit it replaces.
+    signed = G.run(repo, "config", "--type=bool", "--get", "commit.gpgsign").out.strip() == "true"
     new = bad or G.run(
         repo,
         "commit-tree",
+        *(["-S"] if signed else []),
         tree.out.strip(),
         *[x for p in parents for x in ("-p", p)],
         input=msg.out + "\n",
@@ -114,6 +117,5 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
             actions.append(f"wrote {hook}")
     else:
         actions.append(f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it")
-
 
     return actions
