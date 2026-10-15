@@ -31,7 +31,7 @@ from ..config_sections._layers import tolerating_conflicts
 from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
-from ..core.outcome import INTERRUPTED, exit_for
+from ..core.outcome import EXIT_NAMES, INTERRUPTED, exit_for
 from .context import (
     FAIL,
     NOTHING,
@@ -373,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
         # --json is a body on every exit path: a run that ended in a refusal, an error or
         # nothing to do without printing one still answers the reason (Bac9d773a44).
         if getattr(args, "json", False) and code != 0 and bodies_emitted() == before:
-            emit_json(refusal_body(code, said.text))
+            emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
         reset_command(tagged)
         return code
 
