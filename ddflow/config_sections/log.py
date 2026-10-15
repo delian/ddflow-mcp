@@ -53,7 +53,7 @@ class LogConfig:
     )
     snapshot_min_events: int = knob(
         5000,
-        doc="No snapshot is written below this many events: a cold parse is cheap there and a file is not free. Lower it to snapshot a small log (tests do), raise it to snapshot only a large one. 0 snapshots any log.",
+        doc="No snapshot is written below this many events: a cold parse is cheap there and a file is not free. Lower it to snapshot a small log (tests do), raise it to snapshot only a large one. 0 removes this threshold only: a snapshot is still rewritten just when at least 1000 events (or a tenth of what it already covers) have been added.",
         check=int_at_least(0),
     )
     snapshot_stale_days: int = knob(
