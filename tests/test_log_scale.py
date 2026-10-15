@@ -159,21 +159,22 @@ def test_coalesced_log_folds_to_the_same_items_but_the_lease_clock(tmp_path):
         assert repr(a) == repr(b), k
 
 
-def test_a_busy_workload_writes_a_fifth_of_its_renewals_and_a_fraction_of_the_events(tmp_path):
-    """The saving, measured on a generated workload with a heartbeat every 20 s (the hooks'
-    pace): a window of 300 s keeps about one renewal in fifteen, and the renewal share of
-    all events falls from about half to under a quarter. The share stays above 10% at the
-    default window (120 s, = grace_s): an item's life is hours of heartbeats, and bounding
-    the drift by grace_s bounds the saving."""
+def test_a_busy_workload_writes_a_fraction_of_its_renewals(tmp_path):
+    """The saving on a workload with a heartbeat every 20 s (the hooks' pace). The default
+    window is grace_s (120 s): the drift is bounded by it, so the renewal share only falls to
+    about a quarter. The acceptance number (under 10% of events) needs the window raised,
+    with grace_s and heartbeat_s, to 900 s: pinned here as what that configuration buys."""
     logfixture.generate(tmp_path / ".ddflow" / "events", 20000, seed=1, beat_gap_s=20.0, beats=60)
     events = EventLog(tmp_path).read_all()
-    small = coalesced(events, 300)
     before = sum(e.kind == "lease.renewed" for e in events)
-    after = sum(e.kind == "lease.renewed" for e in small)
-    assert after * 5 < before
-    assert after / len(small) < 0.25 < before / len(events)
 
+    def share(window: int) -> float:
+        small = coalesced(events, window)
+        return sum(e.kind == "lease.renewed" for e in small) / len(small)
 
+    assert before / len(events) > 0.4
+    assert share(120) < 0.35
+    assert share(900) < 0.10
 def test_quiet_renewal_never_for_a_foreign_or_expired_lease():
     lease = Lease("a", 100.0, 100.0, 1800, clone="other")
     assert not quiet_renewal(lease, 110.0, 300, mine="me")
@@ -340,7 +341,7 @@ def test_shardmeta_does_not_launder_a_same_length_rewrite(tmp_path):
     import os
 
     os.utime(shard, ns=(before[1] + 5, before[1] + 5))  # rewritten: same size, newer mtime
-    meta.advance(shard, (before[0], before[1] + 5), ev)  # what the append saw just before
+    meta.advance(shard, (before[0], before[1] + 5), ev, 10)  # what the append saw just before
     assert meta._rows.get(shard.name) is None  # dropped, so the next read re-reads the shard
 
 
@@ -372,3 +373,30 @@ def test_doctor_reports_a_missing_evidence_blob(repo):
     BS.BlobStore(repo).remove(ev.data["evidence"]["tail"]["$blob"])
     out = doctor(repo)
     assert any("evidence blob" in str(p) for p in out.data.get("problems", [])), out.data
+
+
+def test_a_log_read_for_another_repository_leaves_no_shard_records(tmp_path):
+    logfixture.generate(tmp_path / ".ddflow" / "events", 300, seed=1)
+    log = EventLog(tmp_path, cache_writes=False)
+    list(log._stamp_events())
+    assert log._highest_lamport() > 0
+    assert not (tmp_path / ".ddflow" / "local").exists()
+
+
+def test_doctor_finds_a_missing_blob_that_another_project_still_holds(repo, tmp_path):
+    """Readers find a blob by hash in any project this process opened; the doctor checks the
+    log's OWN store, so a copy elsewhere does not hide the loss."""
+    from ddflow.config import LogConfig
+    from ddflow.infra import blobstore as BS
+    from ddflow.services import logblobs as LB
+
+    log = EventLog(repo, "a", log_cfg=LogConfig(evidence_blobs=True))
+    log.append("task.added", "T1", {"title": "t", "globs": ["a.py"]})
+    ev = log.append("gate.failed", "T1", {"gate": "ci", "evidence": {"tail": "x" * 4000}})
+    ref = ev.data["evidence"]["tail"]["$blob"]
+    other = tmp_path / "other"
+    BS.BlobStore(other).put(ref, BS.BlobStore(repo).get_bytes(ref))
+    BS.remember(other)
+    BS.BlobStore(repo).remove(ref)
+    assert LB.full(ev.data["evidence"])["tail"] == "x" * 4000  # found in the other project
+    assert LB.problems(repo, log.read_all())  # and still reported for this one

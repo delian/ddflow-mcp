@@ -32,6 +32,9 @@ def project(events: Path | None, synth: int, tmp: Path, modern: bool = False) ->
     subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
     if events is not None:
         shutil.copytree(events, tmp / ".ddflow" / "events")
+        blobs = events.parent / "blobs"  # out-of-line evidence the events refer to
+        if blobs.is_dir():
+            shutil.copytree(blobs, tmp / ".ddflow" / "blobs")
     else:
         logfixture.generate(
             tmp / ".ddflow" / "events", synth, blobs=modern, coalesce_s=300 if modern else 0

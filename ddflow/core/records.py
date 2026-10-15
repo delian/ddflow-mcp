@@ -1021,7 +1021,7 @@ class State:
         # Only the items below ``phase``, put back in definition order: scanning every item
         # for each of the thousand phase dependencies a plan weighs was the cost of `next`.
         pos = self._positions()
-        below = [self.items[n] for n in self.descendants(phase) if n in pos]
+        below = [self.items[n] for n in self.descendants(phase) if n in self.items and n in pos]
         below.sort(key=lambda i: pos[i.id])
         return [i for i in below if i.kind == "task" and not i.removed]
 

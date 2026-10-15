@@ -15,7 +15,7 @@ from typing import Any
 
 from ..core.events import Event
 
-GATES = ("research", "rules", "implement", "rubber_duck", "critic", "standards", "ci", "unit_tests")
+GATES = ("research", "rules", "implement", "ci", "unit_tests", "rubber_duck", "critic", "standards")
 _BASE_AT = 1_790_000_000.0
 _WORDS = (
     "lease fold shard event gate render queue claim digest lamport merge review item state "
