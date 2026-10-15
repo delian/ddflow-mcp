@@ -116,6 +116,9 @@ from .config_sections.memory import (
 from .config_sections.metrics import (
     MetricsConfig,
 )
+from .config_sections.pins import (
+    PinsConfig,
+)
 from .config_sections.prompts import (
     PromptsConfig,
 )
@@ -124,9 +127,6 @@ from .config_sections.rag import (
 )
 from .config_sections.reinstruct import (
     ReinstructConfig,
-)
-from .config_sections.pins import (
-    PinsConfig,
 )
 from .config_sections.release import (
     RELEASE_LINT_POLICIES,  # noqa: F401

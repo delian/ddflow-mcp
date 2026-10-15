@@ -15,9 +15,8 @@ from pathlib import Path
 import pytest
 
 import ddflow
-from ddflow.surfaces.cli import main
 
-GEN = '''\
+GEN = """\
 import sys
 from pathlib import Path
 
@@ -27,7 +26,7 @@ pin = Path("pin.txt")
 if "--check" in sys.argv:
     sys.exit(0 if pin.exists() and pin.read_text() == want else 1)
 pin.write_text(want)
-'''
+"""
 
 RECIPES = """\
 [[pin]]
@@ -121,7 +120,9 @@ def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
     git(repo, "merge", "-q", "--no-edit", "one")
     # the second merge would conflict on knobs.txt and pin.txt without the driver; knobs.txt
     # is a source and merges by union here, only the pin needs the driver
-    (repo / ".gitattributes").write_text((repo / ".gitattributes").read_text() + "knobs.txt merge=union\n")
+    (repo / ".gitattributes").write_text(
+        (repo / ".gitattributes").read_text() + "knobs.txt merge=union\n"
+    )
     git(repo, "commit", "-qam", "union knobs")
     env = {**os.environ, "PYTHONPATH": SRC}
     done = subprocess.run(
@@ -135,3 +136,14 @@ def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
     assert (repo / "pin.txt").read_text() == "3 knobs\n- a\n- b\n- c\n"
     assert git(repo, "status", "--porcelain").strip() == ""  # committed into the merge
     assert ddflow_cli(repo, "pins", "regenerate", "--check").returncode == 0
+
+
+def test_check_never_re_records_even_when_the_recipe_sets_env(repo: Path):
+    (repo / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "e"\nfiles = ["e.txt"]\n'
+        'check = ["{python}", "-c", "import os,sys; open(\'e.txt\',\'w\').write(os.environ.get(\'W\',\'\')); sys.exit(1)"]\n'
+        'regen = ["{python}", "-c", "import os; open(\'e.txt\',\'w\').write(os.environ[\'W\'])"]\n'
+        'env = { W = "1" }\n'
+    )
+    ddflow_cli(repo, "pins", "regenerate", "--check")
+    assert (repo / "e.txt").read_text() == ""
