@@ -37,25 +37,69 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("pins",),
-        summary="which text of an instruction file a test pins, before you compress it",
+        summary="which text of an instruction file a test pins; or `pins regenerate` re-records stale pin files",
         tool="ddflow_pins",
         description=(
-            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission."
+            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1)."
         ),
-        call=lambda repo, a, agent: _api().pins(
-            repo,
-            a["document"],
-            tests=tuple(t.strip() for t in (a.get("tests") or "").split(",") if t.strip()),
-            min_chars=None if a.get("min_needle") is None else int(a["min_needle"]),
-            top=int(a.get("top") if a.get("top") is not None else 10),
+        call=lambda repo, a, agent: (
+            _api().pins_regenerate(
+                repo,
+                only=a.get("only") or "",
+                check=bool(a.get("check")),
+                install=bool(a.get("install")),
+                after_merge=bool(a.get("after_merge")),
+                verb=a["document"],
+                target=a.get("target") or "",
+            )
+            if a["document"] in ("regenerate", "merge-driver")
+            else _api().pins(
+                repo,
+                a["document"],
+                tests=tuple(t.strip() for t in (a.get("tests") or "").split(",") if t.strip()),
+                min_chars=None if a.get("min_needle") is None else int(a["min_needle"]),
+                top=int(a.get("top") if a.get("top") is not None else 10),
+            )
         ),
         payload="",
         params=(
             Param(
                 "document",
-                help="Path of the instruction file, relative to the repo.",
-                cli_help="the instruction file, e.g. AGENTS.md",
+                help="Instruction file path; or `regenerate`.",
+                cli_help="the instruction file, e.g. AGENTS.md; or `regenerate` to re-record stale pin files",
                 positional=True,
+            ),
+            Param(
+                "target",
+                positional=True,
+                nargs="?",
+                default="",
+                cli_only=True,
+                cli_help="merge-driver (git runs it): the file holding our side",
+            ),
+            Param(
+                "check",
+                type="boolean",
+                help="regenerate: list stale pins only.",
+                cli_help="regenerate: list the stale pins and write nothing (exit 1 when any)",
+            ),
+            Param(
+                "only",
+                help="regenerate: just this pin.",
+                default="",
+                cli_help="regenerate: just the pin of this name",
+            ),
+            Param(
+                "install",
+                type="boolean",
+                help="regenerate: install merge driver + hook.",
+                cli_help="regenerate: install the git merge driver and post-merge hook for the pin files",
+            ),
+            Param(
+                "after_merge",
+                type="boolean",
+                help="regenerate: the post-merge hook entry.",
+                cli_help="regenerate: what the post-merge hook runs",
             ),
             Param(
                 "tests",

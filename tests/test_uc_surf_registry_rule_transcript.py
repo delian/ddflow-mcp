@@ -530,7 +530,12 @@ EXPECTED = [
         "",
     ),
     (("rule", "show", "r-nope"), 1, "", "Rule r-nope not found\n"),
-    (("--json", "rule", "show", "r-nope"), 1, "", "Rule r-nope not found\n"),
+    (
+        ("--json", "rule", "show", "r-nope"),
+        1,
+        '{\n  "refusal": {\n    "reason": "Rule r-nope not found",\n    "outcome": "failed",\n    "exit": 1\n  },\n  "schema": "rule_show@1"\n}\n',
+        "Rule r-nope not found\n",
+    ),
     (
         ("rule", "edit", "r-b", "--priority", "80", "--tags", "style"),
         0,
@@ -558,7 +563,12 @@ EXPECTED = [
     ),
     (("rule", "edit", "r-b"), 0, "updated r-b: nothing\n", ""),
     (("rule", "edit", "r-nope", "--title", "x"), 1, "", "Rule r-nope not found\n"),
-    (("--json", "rule", "edit", "r-nope", "--title", "x"), 1, "", "Rule r-nope not found\n"),
+    (
+        ("--json", "rule", "edit", "r-nope", "--title", "x"),
+        1,
+        '{\n  "refusal": {\n    "reason": "Rule r-nope not found",\n    "outcome": "failed",\n    "exit": 1\n  },\n  "schema": "rule_edit@1"\n}\n',
+        "Rule r-nope not found\n",
+    ),
     (
         ("rule", "edit", "r-c", "--content", "write the failing test before the fix"),
         0,
@@ -627,7 +637,7 @@ EXPECTED = [
     (
         ("--json", "rule", "remove", "r-nope"),
         1,
-        "",
+        '{\n  "refusal": {\n    "reason": "Failed to delete rule: Rule r-nope not found at <repo>/.ddflow/rules/r-nope.toml",\n    "outcome": "failed",\n    "exit": 1\n  },\n  "schema": "rule_remove@1"\n}\n',
         "Failed to delete rule: Rule r-nope not found at <repo>/.ddflow/rules/r-nope.toml\n",
     ),
     (

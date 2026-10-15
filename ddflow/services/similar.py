@@ -269,17 +269,14 @@ def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
     """Does this candidate make the add ask? An identical record of the SAME kind always
     does (it is merged, not asked about, but it is the strongest match there is); a record
     the new one is filed AGAINST asks nothing -- a bug with ``--item T`` already says T is
-    what fixes it -- even when the texts are identical; otherwise a named id or a score at
-    the ask threshold with enough words."""
+    what fixes it -- even when the texts are identical; otherwise a score at the ask
+    threshold with enough words. A NAMED id asks nothing by itself (bug Bf29855c414): text
+    that cites a record is not a copy of it; the candidate is only listed."""
     if "identical" in c.flags and c.kind == kind:
         return True
     if "filed_against" in c.flags:
         return False
-    return (
-        "identical" in c.flags
-        or "named" in c.flags
-        or (c.score >= dd.ask_threshold and words >= dd.min_words)
-    )
+    return "identical" in c.flags or (c.score >= dd.ask_threshold and words >= dd.min_words)
 
 
 def checked(cfg: Config, kind: str) -> bool:
@@ -294,7 +291,7 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
     whose id the text names (always, whatever it scores). Asked: when a candidate
     scores at least ``ask_threshold`` and the record has at least ``min_words`` content
     words -- a two-word title matches everything, and asking on it is noise -- or when
-    the text names an existing id, or is identical to an existing record.
+    the text is identical to an existing record. Naming an existing id lists it, never asks.
     ``on_match = "warn"`` turns the ask into a warning; ``"off"`` skips the check.
     Candidates come from every kind in ``[dedupe].kinds``, not only the record's own.
     """

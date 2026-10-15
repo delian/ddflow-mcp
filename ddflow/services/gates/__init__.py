@@ -114,6 +114,7 @@ from .outcomes import (  # noqa: F401
     status,
     triage_counts,
     triage_line,
+    untriaged_note,
 )
 from .reviewers import (  # noqa: F401
     REVIEWER_GATES,

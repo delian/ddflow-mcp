@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "pins.recipes_file"
+new = '".ddflow/pins.toml"'
+why = "Where the pin recipes live (one [[pin]] table per kind of pin file) for `ddflow pins regenerate`."
+impact = "additive"

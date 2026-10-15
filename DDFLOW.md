@@ -13,6 +13,12 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
   - Globs: ddflow/**
   - Priority: 90
 
+### Locking
+
+- **r-lock-cycle-selfheal**: ddflow heals an undetected circular wait by adding needs edges; agents never poll-wait or hold while waiting
+  - Globs: ddflow/**, docs/ddflow/**, tests/**
+  - Priority: 94
+
 ### Principle
 
 - **r-everything-managed**: Every definition is a managed record: edit, delete, review, search, RAG, logged, restorable
@@ -21,6 +27,12 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
 - **r-reuse-core**: Reuse the shared core: search before writing, never implement the same behaviour twice
   - Globs: ddflow/**, integrations/**
   - Priority: 90
+
+### Process
+
+- **r-ddflow-self-assessment**: Assess ddflow itself at the end of every agent run, phase and before context compaction; file what is found, without duplicates
+  - Globs: ddflow/**, docs/ddflow/**, tests/**
+  - Priority: 95
 
 ### Size
 

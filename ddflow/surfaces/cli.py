@@ -31,7 +31,7 @@ from ..config_sections._layers import tolerating_conflicts
 from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
-from ..core.outcome import INTERRUPTED, exit_for
+from ..core.outcome import EXIT_NAMES, INTERRUPTED, exit_for
 from .context import (
     FAIL,
     NOTHING,
@@ -51,7 +51,13 @@ from .registry import (
     parsed_path,
     used_aliases,
 )
-from .render import emit_json, reset_command, set_command
+from .render import (
+    emit_json,
+    refusal_body,
+    remembered_streams,
+    reset_command,
+    set_command,
+)
 from .tools import TOOLS
 from .vocabulary import provide
 
@@ -348,29 +354,40 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ddflow: {alias.notice()}", file=sys.stderr)
     # The schema every object body of this run is tagged with (D-compat-json-views).
     tagged = set_command(command_for_path(parsed_path(args), ROUTED_PATHS, COVERING_TOOLS, args))
-    try:
-        with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
-            ctx = Ctx(args)
-        if getattr(args, "allow_older", False):
-            reason = getattr(args, "skew_reason", "") or str(getattr(args, "reason", "") or "")
-            if ctx.log.override_skew(reason) is None:
+    with remembered_streams() as (out, said):
+        try:
+            code = _run(args)
+        except BaseException as exc:
+            # One table with MCP (`exit_for`, B5f3a650c40): a refusal says only its message
+            # (the remedy), an error names its kind, and anything else is a bug -- re-raised.
+            code = exit_for(exc)
+            if code is None:
+                reset_command(tagged)
+                raise
+            if code != INTERRUPTED:
                 print(
-                    "ddflow: nothing to override (no skew); --allow-older-version ignored",
-                    file=sys.stderr,
+                    str(exc) if code == REFUSED else f"{type(exc).__name__}: {exc}", file=sys.stderr
                 )
-        with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
-            return int(args.fn(args, ctx))
-    except BaseException as exc:
-        # One table with MCP (`exit_for`, B5f3a650c40): a refusal says only its message
-        # (the remedy), an error names its kind, and anything else is a bug -- re-raised.
-        code = exit_for(exc)
-        if code is None:
-            raise
-        if code != INTERRUPTED:
-            print(str(exc) if code == REFUSED else f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        return code
-    finally:
+        # --json is a body on every exit path: a run that ended in a refusal, an error or
+        # nothing to do without printing one still answers the reason (Bac9d773a44).
+        if getattr(args, "json", False) and code != 0 and not out.wrote:
+            emit_json(refusal_body(code, said.text, EXIT_NAMES.get(code, "failed")))
         reset_command(tagged)
+        return code
+
+
+def _run(args: argparse.Namespace) -> int:
+    with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
+        ctx = Ctx(args)
+    if getattr(args, "allow_older", False):
+        reason = getattr(args, "skew_reason", "") or str(getattr(args, "reason", "") or "")
+        if ctx.log.override_skew(reason) is None:
+            print(
+                "ddflow: nothing to override (no skew); --allow-older-version ignored",
+                file=sys.stderr,
+            )
+    with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
+        return int(args.fn(args, ctx))
 
 
 if __name__ == "__main__":

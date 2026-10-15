@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.forecast_high_pct"
+new = "90"
+why = "Percentile reported as the cautious end of the forecast range."
+impact = "additive"
