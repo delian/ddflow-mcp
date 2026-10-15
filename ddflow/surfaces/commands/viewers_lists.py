@@ -13,6 +13,7 @@ from typing import Any
 
 from ...api import phase_progress, view_list
 from ...api import surf_reporting as R
+from ...api.viewers import empty_list
 from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
@@ -34,6 +35,11 @@ _LISTS = {
 }
 #: `research` has no subcommands (`research add` is the verb form), so its list lives
 #: behind `research list` as the optional verb.
+_ALL_HELP = {
+    "bug": "include fixed and invalid bugs",
+    "lesson": "include superseded lessons",
+    "": "accepted for every list kind; this kind lists all its rows already",
+}
 _SHARED_FLAGS = ("state", "phase", "tag", "owner", "since")
 
 
@@ -57,13 +63,13 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
             help=f"most rows to show (default {R.LIST_DEFAULT_LIMIT})",
         )
     )
+    # Every kind takes --all so one command line works for any kind; only bugs and lessons
+    # narrow by default, so for the others it changes nothing.
+    out.append(Param("all", type="boolean", help=_ALL_HELP.get(kind, _ALL_HELP[""])))
     if kind == "bug":
-        out.append(Param("all", type="boolean", help="include fixed and invalid bugs"))
         out.append(
             Param("item", default=None, help="only bugs filed in or against this queue item id")
         )
-    if kind == "lesson":
-        out.append(Param("all", type="boolean", help="include superseded lessons"))
     return tuple(out)
 
 
@@ -177,7 +183,7 @@ def cmd_list_any(a, c: Ctx) -> int:
     if stray:
         reason = f"{a.kind} has no {', '.join(stray)} (`{a.kind} list` does not take it)"
         if c.json:
-            emit_json({"record_kind": a.kind, "reason": reason})
+            emit_json({**empty_list(a.kind, _query(a, a.kind)[0]["limit"]), "reason": reason})
         print(reason, file=sys.stderr)
         return REFUSED
     return cmd_list(a, c)
@@ -228,6 +234,8 @@ def register(s) -> None:
             a.list_kind = "research"
             return cmd_list(a, c)
         stray = [f"--{f}" for f in (*_SHARED_FLAGS, "limit") if getattr(a, f, None) is not None]
+        if getattr(a, "all", False):
+            stray.append("--all")
         if stray:
             rs.error(f"{', '.join(stray)} apply to `research list`, not to recording a finding")
         for x in required:
