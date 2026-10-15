@@ -989,7 +989,11 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
+<<<<<<< HEAD
 cadences, and the rest of the 257 knobs.
+=======
+cadences, and the rest of the 259 knobs.
+>>>>>>> main
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5143,7 +5147,11 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
+<<<<<<< HEAD
 **The `[export]` knobs** (5 of the 257): `documents` (the selection, default `[]`), `redact`
+=======
+**The `[export]` knobs** (5 of the 259): `documents` (the selection, default `[]`), `redact`
+>>>>>>> main
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5656,7 +5664,11 @@ declared once and persists — see
 
 ## Configuration
 
+<<<<<<< HEAD
 257 knobs across 33 sections, every one documented in place and listed, with its default
+=======
+259 knobs across 33 sections, every one documented in place and listed, with its default
+>>>>>>> main
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5723,13 +5735,19 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
+<<<<<<< HEAD
 <!-- ddflow:begin README/knobs sha=87af7f6a1064 -->
 <details><summary>All 257 knobs across 33 sections</summary>
+=======
+<!-- ddflow:begin README/knobs sha=a8ff55a8ccf2 -->
+<details><summary>All 259 knobs across 33 sections</summary>
+>>>>>>> main
 
 | Knob | Default | Values |
 |---|---|---|
 | `lease.ttl_s` | `1800` |  |
 | `lease.heartbeat_s` | `300` |  |
+| `lease.renew_log_min_s` | `120` |  |
 | `lease.grace_s` | `120` |  |
 | `lease.acquire_timeout_s` | `30` |  |
 | `lease.waiter_reservation_s` | `300` |  |
@@ -5911,6 +5929,9 @@ long default is left to `ddflow config --explain`.
 | `log.snapshot_min_events` | `5000` |  |
 | `log.snapshot_stale_days` | `7` |  |
 | `log.snapshot_touch_s` | `86400` |  |
+| `log.evidence_blobs` | `false` |  |
+| `log.evidence_blob_keys` | (long: see `ddflow config --explain`) |  |
+| `log.evidence_blob_min_bytes` | `1024` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
 | `upgrade.backup_keep` | `10` |  |

@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, _is_code_tree, family_for
+from ..core import blobref as B
 from ..core import unidiff
 from ..core.digest import content_digest
 from ..infra import proc as P
@@ -1592,6 +1593,8 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
             )
     if "reviewed" not in prior:
         return "the recorded review predates per-chunk evidence: run the full review"
+    if isinstance(prior.get("chunk_findings"), B.Unavailable):
+        return f"the recorded review's findings are {prior['chunk_findings']}: run the full review"
     again = set(res.requested)
     kept = {int(n) for n in prior["reviewed"]} - again
     res.reviewed = sorted(kept | set(res.reviewed))

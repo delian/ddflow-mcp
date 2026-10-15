@@ -219,11 +219,15 @@ def _h_lease_renewed(st: State, ev: Event) -> None:
         return
     it.lease.renewed_at = at
     # The displayed claim may be contested or on the record too: its window widens
-    # there as well, and whatever it now overlapped joins it.
-    _widen(it, _key(_claim(it.lease)), at)
-    rivals = _clashing(_known(it), _claim(it.lease))
-    if rivals:
-        _join(it, [_claim(it.lease), *rivals])
+    # there as well, and whatever it now overlapped joins it. With neither a contest nor
+    # a displaced claim on the item there is nothing to widen and nothing to meet (the
+    # displayed claim never clashes with itself), which is nearly every renewal: skip
+    # building the claim windows for it (B-gap-log-scale).
+    if it.lease_contest or it.displaced:
+        _widen(it, _key(_claim(it.lease)), at)
+        rivals = _clashing(_known(it), _claim(it.lease))
+        if rivals:
+            _join(it, [_claim(it.lease), *rivals])
     # Absent keys leave the field alone; only a present key updates, so a plain
     # heartbeat never clears an attachment.
     if "worktree" in d:

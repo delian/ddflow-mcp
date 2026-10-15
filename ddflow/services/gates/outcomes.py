@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...core import blobref as B
 from ...core.model import GATE_OUTCOMES, OUTCOME_MARK, State
 from ...infra import hostinfo as H
 from ...infra.log import EventLog
+from .. import logblobs as LB
 from .. import reviewer_trust as RT
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
@@ -84,7 +86,10 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
     so a re-review carries a triage over only when the finding is unchanged.
     """
     rec = it.gates.get(gate)
-    found = (rec.evidence or {}).get("chunk_findings") if rec else None
+    found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
+    if isinstance(found, B.Unavailable):
+        # findings that cannot be read back count as one unsettled finding (the true number is unknown)
+        return {"findings": 1, "refuted": 0, "confirmed": 0, "untriaged": 1, "unavailable": 1}
     if not found or not all(f.get("digest") for f in found):
         return None
     mine = it.triage.get(gate, {})
