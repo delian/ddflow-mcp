@@ -153,6 +153,11 @@ EXEMPT: dict[str, str] = {
         "a person's approval of a digest, or a single-use approval spent: no authored "
         "text to compare (services.approval)",
     ),
+    **dict.fromkeys(
+        ("ask.requested", "ask.answered", "ask.withdrawn", "ask.expired"),
+        "a question or approval put to a person and its outcome: the asker's text is "
+        "compared by the asker, not here (services.ask)",
+    ),
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
     "repair.applied": "a versioned data repair's own record of the findings it settled "

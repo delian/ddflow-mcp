@@ -182,3 +182,11 @@ class AgentConfig:
         "operator",
         doc='The role of a person at their own terminal (a CLI call with no --agent, no DDFLOW_AGENT and no agent-harness marker). Default "operator". Change it for the project (`ddflow config --set agent.operator_role operator`), for this machine (add --local), per run (DDFLOW_AGENT_OPERATOR_ROLE), or over MCP with `ddflow_configure`.',
     )
+    ask_ttl_s: int = knob(
+        86400,
+        doc="How long an ask (a question or an approval put to a person through the approvals engine) stays answerable before it expires, in seconds. An answer after that is refused and the asker must ask again; 0 or less refuses every ask, so keep it above 0. Default 86400 (a day). Change it for the project (`ddflow config --set agent.ask_ttl_s 3600`), for this machine (add --local), per run (DDFLOW_AGENT_ASK_TTL_S), or over MCP with `ddflow_configure`.",
+    )
+    ask_code_length: int = knob(
+        8,
+        doc="How many characters the one-time code of an ask has, when the transport asks for one (a remote channel proves the person got the message by presenting it). Read aloud or typed on a phone, so it avoids look-alike characters; the engine never makes it shorter than 4. Default 8. Change it for the project (`ddflow config --set agent.ask_code_length 6`), for this machine (add --local), per run (DDFLOW_AGENT_ASK_CODE_LENGTH), or over MCP with `ddflow_configure`.",
+    )

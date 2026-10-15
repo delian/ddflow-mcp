@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.ask_code_length"
+new = '8'
+why = "How many characters the one-time code of an ask has (default 8)."
+impact = "additive"
