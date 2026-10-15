@@ -53,7 +53,12 @@ def capabilities_of(cfg: Config, role: str) -> frozenset[str]:
 
 
 def _role(
-    cfg: Config, agent_id: str, requested_agent: str, via_mcp: bool, credential_role: str, authenticated: bool
+    cfg: Config,
+    agent_id: str,
+    requested_agent: str,
+    via_mcp: bool,
+    credential_role: str,
+    authenticated: bool,
 ) -> tuple[str, str]:
     if credential_role:
         return credential_role, "credential"
