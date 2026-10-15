@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "gates.scrub_env"
-new = '["DDFLOW_AGENT", "DDFLOW_SESSION_ID"]'
+new = '["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"]'
 why = "Variables removed from the environment a gate command and the CI command run with: the caller's identity."
 impact = "additive"

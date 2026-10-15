@@ -111,8 +111,13 @@ class GatesConfig:
         doc='A task with fewer changed lines than this (added plus removed since its base, `.ddflow/` excluded; default 150) is SMALL, and its unit_tests gate runs only the selected tests under `gates.unit_tests_scope = "selected"`. A bug-fix task is selected whatever its size. 0 = no task is small (bug fixes still are).',
     )
     scrub_env: list[str] = knob(
-        factory=lambda: ["DDFLOW_AGENT", "DDFLOW_SESSION_ID"],
-        doc="Environment variables removed from the environment a gate command and the CI command run with. Default: the identity variables ddflow reads (`DDFLOW_AGENT`, `DDFLOW_SESSION_ID`): they name the caller, not the suite, and a shell that exports one made tests that read the caller's identity fail in the gate while passing without it. Add a variable a project's tests must not inherit; list one in `keep_env` to preserve it.",
+        factory=lambda: [
+            "DDFLOW_AGENT",
+            "DDFLOW_SESSION_ID",
+            "CLAUDE_SESSION_ID",
+            "CLAUDE_CODE_SESSION_ID",
+        ],
+        doc="Environment variables removed from the environment a gate command and the CI command run with. Default: the identity variables ddflow reads (`DDFLOW_AGENT` and the session ids `DDFLOW_SESSION_ID`, `CLAUDE_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`): they name the caller, not the suite, and a shell that exports one made tests that read the caller's identity fail in the gate while passing without it. Add a variable a project's tests must not inherit; list one in `keep_env` to preserve it.",
     )
     keep_env: list[str] = knob(
         factory=list,

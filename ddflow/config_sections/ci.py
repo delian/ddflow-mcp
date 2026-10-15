@@ -31,7 +31,7 @@ class CiConfig:
     )
     keep_env: list[str] = knob(
         factory=list,
-        doc="Variables the CI command keeps although `[gates].scrub_env` removes them from a gate's or the CI command's environment (default `DDFLOW_AGENT`, `DDFLOW_SESSION_ID`). Empty by default; `[gates].keep_env` applies to every gate command as well.",
+        doc="Variables the CI command keeps although `[gates].scrub_env` removes them from a gate's or the CI command's environment (the caller's identity variables). Empty by default; `[gates].keep_env` applies to every gate command as well.",
     )
     #: Health of the base after a merge lands: off | fast (lint, format, security: the
     #: pre-commit set without the test hooks) | full (the whole command).
