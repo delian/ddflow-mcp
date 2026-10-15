@@ -94,3 +94,9 @@ def test_review_from_another_items_tree_is_refused(repo):
     assert code == REFUSED, err
     assert str(tree_a) in err, err
     assert _gate_events(repo, "A", "rubber_duck") == before, "nothing may be recorded"
+    # --force waives the finished-item rule only, never the tree check
+    code, _out, err = _from(
+        repo, tree_b, "review", "A", "--gate", "rubber_duck", "--force", "--reason", "x"
+    )
+    assert code == REFUSED, err
+    assert _gate_events(repo, "A", "rubber_duck") == before
