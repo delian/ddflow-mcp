@@ -17,13 +17,13 @@ _WINNER = {"local": "the machine-local layer (.ddflow/local/config.toml)"}
 
 def shadow_report(repo: Path, key: str, layer: str) -> dict:
     """`effective`, `effective_source`, `shadowed` and a printable `shadow_note`."""
+    sec, _, knob = key.partition(".")
     try:
         cfg = Config.load(repo)
-        sec, _, knob = key.partition(".")
-        value = getattr(getattr(cfg, sec), knob)
-        source = cfg.sources.get(key, "")
-    except Exception:  # an unknown or dynamic key (gate.*, reviewers): nothing to report
+    except (OSError, ValueError):  # the write succeeded; a load problem is `doctor`'s to say
         return {"effective": None, "effective_source": "", "shadowed": False, "shadow_note": ""}
+    source = cfg.sources.get(key, "")  # dynamic keys (gate.*, reviewers) have none recorded
+    value = getattr(getattr(cfg, sec, None), knob, None)
     shadowed = bool(source) and source not in (layer, "default")
     note = ""
     if shadowed:
