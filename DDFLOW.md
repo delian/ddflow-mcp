@@ -6,6 +6,9 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
 
 ### Config
 
+- **r-company-workflows**: Users and companies can change anything: config, CLI, MCP command or prompt, per company and per project
+  - Globs: ddflow/**
+  - Priority: 90
 - **r-everything-configurable**: No hard-coded tunables: every tunable value is a knob, settable four ways, logged
   - Globs: ddflow/**
   - Priority: 90

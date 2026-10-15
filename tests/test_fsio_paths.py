@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from conftest import add_block
 
+from ddflow.config import LogConfig
 from ddflow.infra import fsio
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog, clear_parse_cache
@@ -35,10 +36,12 @@ def _umask_default() -> int:
 # -- pins: each former copy still writes what it wrote ---------------------------------
 
 
+_SNAP = LogConfig(snapshot_min_events=10)  # snapshot even a small test log
+
+
 @pytest.fixture
 def _log_isolated(monkeypatch):
     monkeypatch.setattr(EventLog, "stamp", False)
-    monkeypatch.setattr(L, "SNAPSHOT_MIN_EVENTS", 10)
     monkeypatch.delenv(L.SNAPSHOT_ENV, raising=False)
     clear_parse_cache()
     yield
@@ -59,7 +62,7 @@ def test_pin_clone_id_dir_ignores_itself(tmp_path):
 
 
 def test_pin_snapshot_dir_ignores_itself(tmp_path, _log_isolated):
-    log = EventLog(tmp_path, "x")
+    log = EventLog(tmp_path, "x", log_cfg=_SNAP)
     _put(log, "a", [_ev("a", i) for i in range(1, 1600)])
     log.read_all()
     snap = log._snapshot_path()

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "log.snapshot_stale_days"
+new = '7'
+why = "Days a snapshot written by other code is kept before it is collected."
+impact = "additive"
