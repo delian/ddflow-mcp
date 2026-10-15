@@ -21,6 +21,48 @@
    },
    "v": 1
   },
+  "ask.answered": {
+   "fields": {
+    "answer": ["str"],
+    "by": ["str"],
+    "coded": ["bool"],
+    "digest": ["str"],
+    "human": ["bool"],
+    "id": ["str"],
+    "outcome": ["str"],
+    "role": ["str"],
+    "via": ["str"]
+   },
+   "v": 1
+  },
+  "ask.expired": {
+   "fields": {
+    "by": ["str"],
+    "id": ["str"]
+   },
+   "v": 1
+  },
+  "ask.requested": {
+   "fields": {
+    "bot_answerable": ["bool"],
+    "code_hash": ["str"],
+    "digest": ["str"],
+    "expires_at": ["str"],
+    "id": ["str"],
+    "options": ["list"],
+    "subject": ["str"],
+    "text": ["str"],
+    "type": ["str"]
+   },
+   "v": 1
+  },
+  "ask.withdrawn": {
+   "fields": {
+    "by": ["str"],
+    "id": ["str"]
+   },
+   "v": 1
+  },
   "backmerge.recorded": {
    "fields": {
     "forge": ["str"],
