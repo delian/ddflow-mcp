@@ -27,7 +27,9 @@ may only shrink.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 KINDS = (
     "bug",
@@ -108,12 +110,6 @@ GENERIC: dict[str, Generic] = {
 }
 
 
-def _parser() -> argparse.ArgumentParser:
-    from ..surfaces.cli import build_parser
-
-    return build_parser()
-
-
 def _subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
@@ -121,19 +117,18 @@ def _subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentP
     return {}
 
 
-def leaves() -> dict[tuple[str, ...], argparse.ArgumentParser]:
+def leaves(parser: argparse.ArgumentParser) -> dict[tuple[str, ...], argparse.ArgumentParser]:
     """Every CLI command by its path (a group's subcommands, and a group that is a command
     in its own right, are both there)."""
     out: dict[tuple[str, ...], argparse.ArgumentParser] = {}
 
-    def walk(parser: argparse.ArgumentParser, prefix: tuple[str, ...]) -> None:
-        subs = _subparsers(parser)
+    def walk(node: argparse.ArgumentParser, prefix: tuple[str, ...]) -> None:
         if prefix:
-            out[prefix] = parser
-        for name, sub in subs.items():
+            out[prefix] = node
+        for name, sub in _subparsers(node).items():
             walk(sub, (*prefix, name))
 
-    walk(_parser(), ())
+    walk(parser, ())
     return out
 
 
@@ -142,21 +137,29 @@ def _flags(parser: argparse.ArgumentParser) -> set[str]:
 
 
 class Probe:
-    """The registries a cell is read from, loaded once."""
+    """The registries a cell is read from. They are handed in, not imported: this layer sits
+    below the surfaces and the API (`.importlinter`), whose registries it reads.
 
-    def __init__(self) -> None:
-        from .. import api
-        from ..api import records as R
-        from ..surfaces import exemptions as X
-        from ..surfaces.commands import viewers_lists as L
-        from ..surfaces.mcp import TOOLS
+    ``parser`` is the CLI's root parser, ``tools`` the MCP tool table, ``routed`` the CLI
+    paths declared to be served by a tool argument (``exemptions.ROUTED_PATHS``), ``api`` the
+    API module, ``listed`` the kinds the viewers list, ``declared`` the `RecordKind`s by name.
+    """
 
-        self.cli = leaves()
-        self.tools = TOOLS
-        self.routed = X.ROUTED_PATHS
+    def __init__(
+        self,
+        parser: argparse.ArgumentParser,
+        tools: Mapping[str, Any],
+        routed: Mapping[tuple[str, ...], tuple[str, str]],
+        api: Any,
+        listed: Iterable[str],
+        declared: Mapping[str, Any],
+    ) -> None:
+        self.cli = leaves(parser)
+        self.tools = tools
+        self.routed = routed
         self.api = api
-        self.listed = tuple(L._LISTS)
-        self.declared = R.KINDS
+        self.listed = tuple(listed)
+        self.declared = declared
 
     def _word(self, kind: str, verb: str) -> str:
         return WORDS.get((kind, verb), verb)
@@ -215,8 +218,9 @@ class Probe:
             names.append(gen.api)
         for name in names:
             if name.startswith("records."):
-                return name
-            if hasattr(self.api, name):
+                if hasattr(getattr(self.api, "records", None), name.split(".", 1)[1]):
+                    return name
+            elif hasattr(self.api, name):
                 return name
         return ""
 
@@ -228,9 +232,8 @@ class Probe:
         return getattr(self, f"{surface}_cell")(kind, verb)
 
 
-def matrix(probe: Probe | None = None) -> dict[tuple[str, str, str], str]:
+def matrix(probe: Probe) -> dict[tuple[str, str, str], str]:
     """(kind, verb, surface) -> what offers it there, "" when nothing does."""
-    probe = probe or Probe()
     return {(k, v, s): probe.cell(k, v, s) for k in KINDS for v in VERBS for s in SURFACES}
 
 
@@ -265,12 +268,3 @@ def render(cells: dict[tuple[str, str, str], str] | None = None) -> str:
         cols = ["".join(mark[s] for s in SURFACES if cells[(k, v, s)]) or "-" for v in VERBS]
         rows.append(f"| {k} | " + " | ".join(cols) + " |")
     return "\n".join(rows)
-
-
-def main() -> int:
-    print(render())
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
