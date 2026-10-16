@@ -142,6 +142,7 @@ def test_a_derived_companion_settles_the_pair_in_either_direction(repo):
 
     run_cli(repo, "init")
     run_cli(repo, "bug", "found", "--id", "B1", "--summary", BUG_A)
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", BUG_B, "--no-task")
     from ddflow.api._base import _load
 
     _log, _cfg, st = _load(repo, "")
