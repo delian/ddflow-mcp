@@ -995,7 +995,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 291 knobs.
+cadences, and the rest of the 305 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5154,7 +5154,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 291): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 305): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5412,7 +5412,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=d6fa39acbd0c -->
+<!-- ddflow:begin README/tools sha=99e766bbfd14 -->
 <details><summary>All 117 MCP tools: 32 in the `core` tier, 48 more in `standard`, 37 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5464,7 +5464,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
-| Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
+| Gates and review | `ddflow_ci` | standard | CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status). |
 | Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check. |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
 | Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
@@ -5668,7 +5668,7 @@ declared once and persists — see
 
 ## Configuration
 
-291 knobs across 34 sections, every one documented in place and listed, with its default
+305 knobs across 34 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5735,8 +5735,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=91bb7cea0e89 -->
-<details><summary>All 291 knobs across 34 sections</summary>
+<!-- ddflow:begin README/knobs sha=a2a53624ef34 -->
+<details><summary>All 305 knobs across 34 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5836,6 +5836,11 @@ long default is left to `ddflow config --explain`.
 | `session.replay_verify_diffs` | `true` |  |
 | `session.progress_after_complete` | `"on"` | `on` \| `phase` \| `off` |
 | `session.compaction_digest_chars` | `2000` |  |
+| `session.agent_brief_max_chars` | `9000` |  |
+| `session.agent_brief_off` | `[]` |  |
+| `session.agent_brief_decisions` | `6` |  |
+| `session.agent_brief_lessons` | `3` |  |
+| `session.agent_brief_extra` | `""` |  |
 | `schedule.parallel` | `"auto"` | `auto` \| `fixed` |
 | `schedule.max_parallel_tasks` | `4` |  |
 | `schedule.max_parallel_min` | `2` |  |
@@ -5854,6 +5859,13 @@ long default is left to `ddflow config --explain`.
 | `schedule.repos` | `[]` |  |
 | `bugs.file_task` | `true` |  |
 | `bugs.phase` | `"bugs"` |  |
+| `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
+| `bugs.repro_max_bytes` | `65536` |  |
+| `bugs.repro_tail_bytes` | `4096` |  |
+| `bugs.repro_events` | `10` |  |
+| `bugs.repro_test_timeout_s` | `300` |  |
+| `bugs.repro_env` | (long: see `ddflow config --explain`) |  |
+| `bugs.repro_redact_extra` | `[]` |  |
 | `importer.max_tasks` | `200` |  |
 | `importer.preview_rows` | `8` |  |
 | `importer.phase_slug_chars` | `32` |  |
@@ -5978,11 +5990,13 @@ long default is left to `ddflow config --explain`.
 | `ci.timeout_s` | `3600` |  |
 | `ci.keep_env` | `[]` |  |
 | `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
+| `ci.tests_scope` | `"selected"` | `selected` \| `full` |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
 | `prompts.gate_instruction` | `""` |  |
 | `prompts.session_brief_header` | `""` |  |
 | `prompts.mcp_instructions` | `""` |  |
+| `prompts.agent_brief` | `""` |  |
 | `export.documents` | `[]` |  |
 | `export.redact` | `true` |  |
 | `export.max_bytes` | `60000` |  |

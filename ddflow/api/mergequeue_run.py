@@ -122,7 +122,7 @@ def _run_checks(
     asked. "" when they pass, else why the entry is parked (``detail`` then holds what failed)."""
     if "ci" in GS.pipeline_for(it, cfg):
         log = MQ.log_path(repo, e)
-        out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log)
+        out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log, full=True)
         if out.exit != O.OK:
             detail.update(_ci_detail(repo, e, out, log))
             return f"ci {out.data.get('status', 'did not pass')}: {out.reason}"

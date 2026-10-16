@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.agent_brief_max_chars"
+new = "9000"
+why = "Characters the subagent launch brief may take before its lessons and decisions are cut."
+impact = "additive"

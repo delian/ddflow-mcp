@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "prompts.agent_brief"
+new = "\"\""
+why = "Path to a launch-brief template replacing the shipped one."
+impact = "additive"

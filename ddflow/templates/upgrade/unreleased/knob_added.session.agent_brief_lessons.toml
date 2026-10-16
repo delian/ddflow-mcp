@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.agent_brief_lessons"
+new = "3"
+why = "Task-relevant lessons the subagent launch brief carries."
+impact = "additive"
