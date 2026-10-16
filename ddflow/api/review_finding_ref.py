@@ -29,7 +29,7 @@ def resolve(ref, found: list[dict], where: str) -> tuple[int, str]:
         "a number (#N) or a unique digest prefix of at least "
         f"{MIN_PREFIX} hex characters; the findings of {where}:\n{listing}"
     )
-    if text.isdigit() and 1 <= int(text) <= len(found):
+    if text.isascii() and text.isdigit() and 1 <= int(text) <= len(found):
         return int(text), ""
     if len(text) >= MIN_PREFIX and _HEX.fullmatch(text):
         hits = [n for n, f in enumerate(found, 1) if str(f.get("digest", "")).startswith(text)]
@@ -43,6 +43,6 @@ def resolve(ref, found: list[dict], where: str) -> tuple[int, str]:
         return 0, f"no finding of {where} has digest {text!r}. Name {forms}"
     if not text:
         return 0, f"say which finding. Name {forms}"
-    if text.isdigit():
+    if text.isascii() and text.isdigit():
         return 0, f"no finding #{text}: {where} has #1..#{len(found)}. Name {forms}"
     return 0, f"{text!r} is no finding of {where} (#1..#{len(found)}). Name {forms}"
