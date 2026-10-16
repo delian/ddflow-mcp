@@ -989,6 +989,18 @@
           no task fails doctor); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      schedule.auto_order = 'propose'   [default]
+          What ddflow does about a lease deadlock (a cycle of agents waiting on each
+          other's files) that nothing declared: 'propose' (default) reports the
+          `needs` edge it would add; 'apply' adds it, as a logged task.updated event
+          marked auto-order, so the circle cannot recur (`ddflow update --needs` drops
+          it); 'off' does nothing. It never touches a done, abandoned or decide item,
+          an item tagged no-auto-order, or adds an edge that would close a needs
+          cycle. An unrecognised value in a config file is warned about, reported by
+          `doctor` and falls back to 'propose', the strictest (a deadlock is reported,
+          never rewired by a typo); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
       schedule.bugs_first = True   [default]
           Offer bug fixes before features (default true). A task is a bug fix when it
           carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record
