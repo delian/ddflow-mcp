@@ -100,6 +100,13 @@ class EnforceConfig:
         choices=("own", "all"),
         strictest=("all", "every path the merge stages is judged"),
     )
+    #: accept | holder | refuse
+    lapsed_lease: str = knob(
+        "accept",
+        doc="What the pre-commit hook does with a commit its own item's lease covers but which LAPSED (no heartbeat within the TTL and grace) and which nobody has taken over. 'accept' (default) lets the commit stand, with a note naming the heartbeat that renews it, for the holder and for whoever commits in the item's own worktree (a claim made under an explicit --agent name is not the identity the hook derives from the tree); 'holder' accepts only the holder's own declared name; 'refuse' treats the lapse as no lease. A lapsed lease whose paths another agent now holds live is never accepted.",
+        choices=("accept", "holder", "refuse"),
+        strictest=("refuse", "a lapsed lease covers nothing"),
+    )
     #: block | warn | off
     environment_commits: str = knob(
         "block",
