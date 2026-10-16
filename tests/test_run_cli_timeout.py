@@ -6,7 +6,7 @@ import subprocess
 
 import _wait
 import pytest
-from conftest import RUN_CLI_TIMEOUT_S, run_cli
+from conftest import RUN_CLI_TIMEOUT_MAX_S, RUN_CLI_TIMEOUT_S, run_cli
 
 
 def _capture(monkeypatch) -> dict:
@@ -33,13 +33,15 @@ def test_a_saturated_machine_gets_a_longer_ceiling(monkeypatch, tmp_path):
     _wait.pretend_saturated(monkeypatch)
     seen = _capture(monkeypatch)
     run_cli(tmp_path, "status")
-    assert seen["timeout"] >= RUN_CLI_TIMEOUT_S * 10
+    assert RUN_CLI_TIMEOUT_S * 3 <= seen["timeout"] <= RUN_CLI_TIMEOUT_MAX_S
 
 
 def test_a_timed_out_call_names_the_command(monkeypatch, tmp_path):
     def hang(argv, **kw):
-        raise subprocess.TimeoutExpired(argv, kw["timeout"])
+        raise subprocess.TimeoutExpired(argv, kw["timeout"], output=b"partial out")
 
     monkeypatch.setattr(subprocess, "run", hang)
-    with pytest.raises(AssertionError, match=r"`ddflow task add T1` did not finish within"):
+    with pytest.raises(
+        AssertionError, match=r"`ddflow task add T1` did not finish within.*partial out"
+    ):
         run_cli(tmp_path, "task", "add", "T1")
