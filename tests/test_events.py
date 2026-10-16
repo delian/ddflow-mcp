@@ -141,10 +141,10 @@ def test_concurrent_writers_lose_nothing(repo):
 
 
 def test_a_slow_lock_wait_is_not_a_failed_append(repo, monkeypatch):
-    """The same run forced onto the slow path: the lock is busy for 2 s while each writer
-    accepts a wait of scaled(0.5) (32 s: the load factor is capped at 16). Unscaled (the old fixed timeout) it times out."""
-    monkeypatch.setattr(_wait.os, "getloadavg", lambda: (1000.0, 0.0, 0.0))  # a saturated host
-    _lose_nothing(repo, scaled(0.5), held_for_s=2.0)
+    """The same run forced onto the slow path: the lock is busy for 3 s while each writer
+    accepts a wait of scaled(1.0) (64 s: the load factor is capped at 16). Unscaled (the old fixed timeout) it times out."""
+    _wait.pretend_saturated(monkeypatch)
+    _lose_nothing(repo, scaled(1.0), held_for_s=3.0)
 
 
 def test_canonical_json_is_stable():
