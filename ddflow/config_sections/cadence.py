@@ -16,7 +16,7 @@ class CadenceConfig:
 
     integration_tests_every_tasks: int = knob(
         5,
-        doc="Run the integration suite after this many completed tasks. Unit gates are per-task and cannot see cross-task interaction regressions.",
+        doc="Run the FULL test suite (`ddflow ci run --full`) after this many completed tasks. An item's ci and unit_tests gates run only the tests its change reaches (D-test-economy-r2), so this pass, the merge queue's batch run and the phase-end acceptance are where the whole suite runs and cross-task interaction regressions show.",
     )
     architecture_review_every_phases: int = knob(
         2,

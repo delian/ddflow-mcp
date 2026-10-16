@@ -245,7 +245,7 @@
 # ---
 # name: test_help[ddflow ci]
   '''
-  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
   
   positional arguments:
     {run,status,record}   run: check the merge result; status (default): what would run, and whether
@@ -256,6 +256,7 @@
     --ref REF             run: the commit or item id (default: HEAD here)
     --base BASE           run: merge this branch in first (default [ci].base)
     --command COMMAND     run: use this instead of [ci].command
+    --full                run: the whole test suite, not only the tests the change reaches
     --stage STAGE         record: gate | merge | pre-push | schedule
     --result {passed,failed}
                           record: how it went
