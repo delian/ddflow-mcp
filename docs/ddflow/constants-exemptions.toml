@@ -137,6 +137,9 @@
 "ddflow/services/flowstate.py:KEEP_S" = "flowstate.keep_s"
 
 [exempt]
+"ddflow/config_sections/bugs.py:_MIN_BUNDLE" = "the floor [bugs] repro_max_bytes accepts: below it not even the bundle's skeleton fits"
+"ddflow/services/repro_facts.py:_VALUE_MAX" = "the cut of one recorded value, a structural bound on a single environment or config value in a bundle (the bundle as a whole is capped by repro_max_bytes)"
+"ddflow/services/reprobundle.py:_MIN_LEAF" = "the length under which the bundle's cap stops halving a string and drops it instead"
 "ddflow/api/review_finding_ref.py:MIN_PREFIX" = "length floor of a digest prefix a user types (a format fact of the printed digests), not a preference"
 "ddflow/api/items.py:MIN_SPLIT_PARTS" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/api/items.py:_MIN_EVENT_PREFIX" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"

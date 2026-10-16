@@ -42,7 +42,7 @@ def _bug_found(a, c: Ctx) -> int:
         task = f"\nfix task: {fix}"
     link = out.data.get("repro") or {}
     if link.get("ref"):
-        task += f"\nrepro bundle stored ({link['mode']}, {link['bytes']} bytes)"
+        task += f"\nrepro bundle stored ({link['mode']})"
     elif link.get("unavailable"):
         task += f"\nrepro bundle NOT stored: {link['unavailable']}"
     c.out(

@@ -1997,13 +1997,13 @@ EXPECTED = [
     (
         ("bug", "found", "--id", "Bx", "--summary", "first problem", "--no-task"),
         0,
-        "bug Bx recorded\n",
+        "bug Bx recorded\nrepro bundle stored (full)\n",
         "",
     ),
     (
         ("bug", "found", "--id", "By", "--summary", "second one", "--no-task"),
         0,
-        "bug By recorded\n",
+        "bug By recorded\nrepro bundle stored (full)\n",
         "",
     ),
     (

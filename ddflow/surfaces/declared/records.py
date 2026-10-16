@@ -126,7 +126,12 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("bug", "found"),
         tool="ddflow_bug_found",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
+        flag_exempt={
+            **ANSWER_FLAG_EXEMPT,
+            "--test": "CLI only: the tools list has no room (DX-bug-repro-gate-and-mcp)",
+            "--repro-cmd": "CLI only: the tools list has no room (DX-bug-repro-gate-and-mcp)",
+            "--repro-capture": "CLI only; over MCP set [bugs] repro_capture with ddflow_configure",
+        },
         description="Report a bug the moment you find it, BEFORE fixing it. Recording it first "
         "makes the fix accountable: `ddflow_bug_fixed` refuses to close one without "
         "a regression test. A hunt that records nothing looks like one that found nothing.",
