@@ -507,6 +507,12 @@ You get everything except the judgement. Command gates run themselves; agent gat
 for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
+**Merge queue.** Where several agents land work at once, `ddflow queue add <id>` enqueues an item,
+`ddflow queue run` (any agent may) integrates the head of the queue — one entry's ci at a time,
+`--max-batch N` entries per run, `--unit-tests` / `--no-unit-tests` to run or skip each entry's
+`unit_tests` gate on the merged result — `ddflow queue status` (the default) prints the line, and
+`ddflow queue remove <id>` drops an entry. Defaults live in `[merge_queue]`.
+
 **Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
 `ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on
 `ddflow_complete` / `ddflow_bug_fixed`) records one line for the project's changelog on the
@@ -1400,6 +1406,11 @@ required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` ar
 Finding numbers are per gate, so `--gate` is never defaulted on `review triage`: omitted, it is
 refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
+
+`ddflow review show <item> [--gate G]` lists the recorded round's numbered findings -- the `#N` that
+`review triage` takes -- each with severity, location, digest, triage state and probe; omit `--gate` for every
+gate that has a round (a gate whose findings blob is gone is named, not hidden). Over MCP,
+`ddflow_review_triage` without `finding`, `verdict` and `probe` lists them.
 
 **The review-round budget (`[review]`).** A shipped default in every project, with no
 configuration: a gate (`rubber_duck`, `critic`) gets **2 review rounds** per item, full and
