@@ -446,8 +446,9 @@ COMMANDS: tuple[Command, ...] = (
             "--report": "`ci record`: see --stage",
             "--sha": "`ci record`: see --stage",
         },
-        call=lambda repo, a, agent: _api().ci_tool(
+        call=lambda repo, a, agent, called_from=None: _api().ci_tool(
             repo,
+            called_from=called_from,
             action=a.get("action", "status") or "status",
             ref=a.get("ref", "HEAD") or "HEAD",
             base=a.get("base", "") or "",
@@ -455,6 +456,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
         ),
         payload="",
+        wants_called_from=True,
     ),
 )
 

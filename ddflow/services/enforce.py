@@ -1236,6 +1236,17 @@ def _merge_own_paths(tree: Path, paths: list[str]) -> list[str]:
     return [p for p in paths if p in set(differs)]
 
 
+def _commit_scope(tree: Path, paths: list[str], cfg: Config, *, lease: bool = False) -> list[str]:
+    """The staged ``paths`` a check answers for: `_merge_own_paths` under
+    `[enforce].merge_commit_scope = "own"`; every path under "all", save that the lease
+    check still waves through git's own automatic merge (``lease``)."""
+    if cfg.enforce.merge_commit_scope != "all":
+        return _merge_own_paths(tree, paths)
+    if lease and paths and clean_merge_conclusion(tree):
+        return []
+    return paths
+
+
 def clean_merge_conclusion(tree: Path) -> bool:
     """Is the commit being made exactly the automatic merge of HEAD and one other commit?
 
@@ -1446,7 +1457,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
             (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
         )
     paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
-    paths = _merge_own_paths(_index_tree(repo), paths)
+    paths = _commit_scope(_index_tree(repo), paths, cfg, lease=True)
     if not paths:
         return Verdict(OK, "")
 
@@ -1642,6 +1653,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> Ve
     listed = staged_paths(repo, tree=tree)
     if listed is None:
         return _verdict(mode, [_UNKNOWN_STAGED])
+    listed = _commit_scope(tree, listed, cfg)
     configured = {p for _d, p, _m in cfg.export.targets()}
     staged, exports = _staged_generated(repo, listed, names, tree, configured)
     rules = _staged_rule_files(repo, listed, tree)
@@ -1880,7 +1892,18 @@ def check_docs(repo: Path, cfg: Config | None = None) -> Verdict:
         return Verdict(OK, "")
     # The committing tree: the diff is this commit's, against that tree's own HEAD.
 
-    hits = docsync.stale_mentions(_index_tree(repo), cfg.enforce.doc_globs, doc_exclude(cfg))
+    tree = _index_tree(repo)
+    diff = None
+    if _merged_in(tree):
+        # A merge removes what the MERGED PARENT removed; only the paths the branch itself
+        # changed are this commit's to answer for.
+        listed = staged_paths(repo, tree=tree)
+        own = None if listed is None else _commit_scope(tree, listed, cfg)
+        if own is not None and own != listed:
+            if not own:
+                return Verdict(OK, "")
+            diff = docsync.staged_diff(tree, own)
+    hits = docsync.stale_mentions(tree, cfg.enforce.doc_globs, doc_exclude(cfg), diff=diff)
     if hits is None:
         return _verdict(
             mode,
