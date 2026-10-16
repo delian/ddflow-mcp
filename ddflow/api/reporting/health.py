@@ -58,7 +58,7 @@ from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
-from .waitcycles import wait_cycles, wait_findings
+from .waitcycles import wait_cycles, wait_findings, wait_order
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
@@ -400,12 +400,10 @@ def doctor(
     notes += _stale_glob_notes(repo, st)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
-
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
     shared_problems, shared_notes = SF.findings(repo, cfg, render_views(st, cfg))
     problems += shared_problems
     notes += shared_notes
-
     # The workflow's own coherence. A pipeline naming a gate that has no definition is the
     # one config error that is both silent and permanent -- every item entering the
     # pipeline blocks on an outcome that can never be recorded -- so it belongs in the
@@ -453,6 +451,7 @@ def doctor(
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
+    ordered = wait_order(log, st, cfg, cycles, notes)
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
@@ -463,6 +462,7 @@ def doctor(
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
         "wait_cycles": [c.as_dict() for c in cycles],
+        "auto_order": ordered,
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)
