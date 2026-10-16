@@ -267,7 +267,7 @@ def _finish(proj: Path, item: str, text: str = "", note: str = "") -> Path:
 
 
 def _queue(proj: Path, item: str):
-    return run_cli(proj, "merge", item, "--queue", agent=item.lower())
+    return run_cli(proj, "queue", "add", item, agent=item.lower())
 
 
 def _status(proj: Path) -> dict:

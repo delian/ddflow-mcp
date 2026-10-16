@@ -1237,7 +1237,7 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--queue] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
@@ -1251,8 +1251,6 @@
                        would record the item merged with nothing landed)
     --branch BRANCH    for an item claimed without a worktree: the branch to land (default: the one
                        checked out in the worktree you are standing in)
-    --queue            do not land it now: put it in the merge queue and keep working (`ddflow queue
-                       run` lands the line)
     --model MODEL      the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and
                        the reviewer-independence check needs it then
   

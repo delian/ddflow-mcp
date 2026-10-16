@@ -12,7 +12,7 @@ from ._docs import declare, int_at_least, knob
 @declare("merge_queue")
 @dataclass
 class MergeQueueConfig:
-    """The merge queue (`ddflow queue`, `ddflow merge --queue`): agents enqueue a finished
+    """The merge queue (`ddflow queue`): agents enqueue a finished
     item and one integrator at a time lands the queue head."""
 
     max_batch: int = knob(

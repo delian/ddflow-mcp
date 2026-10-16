@@ -1,6 +1,6 @@
 """The merge queue's store: durable entries, their order, and the integrator's lock.
 
-An agent that finished an item enqueues it (`ddflow merge --queue`, `ddflow queue add`) and
+An agent that finished an item enqueues it (`ddflow queue add`) and
 goes on; one integrator at a time (`ddflow queue run`) lands the head: it merges main into
 the item's branch, regenerates the pins, runs the ci gate once and merges, in the order the
 entries were added. This module is the part that needs no git and no gate: the entries, the
