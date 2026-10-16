@@ -148,10 +148,12 @@ def reach(g: Graph, changed: list[str], hubs: dict[str, int]) -> Reach:
             fm = module_name(f)
             if f not in out.files:
                 out.files[f] = (why, hops)
-            if hops >= MAX_HOPS or f.endswith("__init__.py") or fm in seen:
+            if hops >= MAX_HOPS or fm in seen:
                 continue
             if fm in hubs:
                 out.cut_at.add(fm)
+                continue
+            if f.endswith("__init__.py"):
                 continue
             seen.add(fm)
             queue.append((fm, origin, f"imports {fm}, which imports {origin}", hops + 1))

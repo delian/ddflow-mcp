@@ -93,7 +93,7 @@ def test_the_budget_cuts_the_farthest_tests_and_reports_them(hubbed):
     assert sel is not None
     assert len(sel.tests) == 5 and len(sel.cut) == USERS + 1 - 5
     assert "tests/test_knob.py" in {t.path for t in sel.tests}, "the nearest test is kept"
-    assert all(t.rank == T.RANK_NEAR for t in sel.cut), "a direct importer outranks a far one"
+    assert all(t.rank == T.RANK_TWO_HOP for t in sel.cut), "a direct importer outranks a far one"
 
 
 def test_a_changed_test_is_never_cut(hubbed):
@@ -124,3 +124,30 @@ def test_ddflow_tests_reports_the_cut_and_the_hub(hubbed):
     assert body["cut_at_hubs"] == ["pkg.hub"] and body["full_reason"] == ""
     _code, text, _err = run_cli(hubbed, "tests")
     assert "import walk not continued through hub(s): pkg.hub" in text
+
+
+def test_a_hub_that_is_a_package_init_is_still_reported_as_the_cut(repo):
+    """A facade `pkg/__init__.py` that imports the changed module and is itself a hub: the
+    walk stops there and says so, rather than the cut going unreported."""
+    files = {
+        "pkg/__init__.py": "from pkg import m\n",
+        "pkg/m.py": "M = 1\n",
+        "tests/conftest.py": "",
+        "tests/test_m.py": "from pkg import m\n\ndef test_m():\n    assert m.M\n",
+    }
+    for i in range(USERS):
+        files[f"tests/test_p{i}.py"] = "import pkg\n\ndef test_p():\n    assert pkg\n"
+    _write(repo, files)
+    (repo / "pkg/m.py").write_text("M = 2\n")
+    sel = T.select(repo, "main", hub_importers=USERS)
+    assert sel is not None
+    assert "pkg" in sel.cut_at
+    assert {t.path for t in sel.tests} == {"tests/test_m.py"}
+
+
+def test_a_removed_definition_is_attributed_to_its_neighbours_not_lost():
+    from ddflow.services import testidents as TI
+
+    diff = "@@ -3 +2,0 @@\n-def gone_function_name():\n"
+    assert TI._touched_lines(diff) == {2, 3}
+    assert TI._touched_lines("@@ -5,2 +5,3 @@\n") == {5, 6, 7}

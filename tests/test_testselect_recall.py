@@ -110,7 +110,7 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
         lost += gone
         if replayed >= MERGES:
             break
-    if replayed < 2:
+    if replayed < 2 or total == 0:
         pytest.skip("too few replayable merges in this history")
     assert not lost, f"the precise selection lost tests the earlier selector held: {lost}"
     assert held / total >= ABSOLUTE_FLOOR, f"recall {held}/{total} over {replayed} merges"
