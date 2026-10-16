@@ -29,7 +29,8 @@ def _held(repo: Path, agent: str = "me"):
     return mine, Config.load(repo)
 
 
-def test_a_pins_recipe_ticks_while_it_runs(repo):
+def test_a_pins_recipe_ticks_while_it_runs(repo, monkeypatch):
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     """Fails on the unfixed code: `regenerate` had no tick and ran its commands blind."""
     seen: list[int] = []
     rec = PN.Recipe("p", ("x",), ("sleep", "2.4"), ("true",), ())
@@ -38,7 +39,8 @@ def test_a_pins_recipe_ticks_while_it_runs(repo):
     assert len(seen) >= 2, seen
 
 
-def test_a_pins_recipe_still_reports_its_failure_with_a_tick(repo):
+def test_a_pins_recipe_still_reports_its_failure_with_a_tick(repo, monkeypatch):
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     rec = PN.Recipe("p", ("x",), ("false",), ("false",), ())
     rep = PN.regenerate(repo, Config.load(repo), recipes=[rec], tick=(lambda: None, 1.0))
     assert rep.pins[0].stale and rep.pins[0].error
@@ -76,7 +78,8 @@ def test_a_renewing_long_command_is_not_progress(repo):
     assert LB.progress_at(events, "T1", lz, lambda _l: 0.0) == before
 
 
-def test_pins_regenerate_renews_the_callers_lease_while_a_recipe_runs(repo):
+def test_pins_regenerate_renews_the_callers_lease_while_a_recipe_runs(repo, monkeypatch):
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     """End to end: the API hands the recipe loop the caller's lease keeper."""
     from ddflow.api import pin_files as PF
 

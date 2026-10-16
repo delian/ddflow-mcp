@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import os
 import shlex
-import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
@@ -33,6 +32,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..infra import proc as P
+from .cmdrunner import TIMEOUT, CommandRunner, Declared
 
 
 @dataclass(frozen=True)
@@ -130,13 +130,18 @@ def _run(
     if tick is None:
         return P.capture(list(argv), timeout=timeout, cwd=repo, env=env)
     # A long recipe command renews its caller's lease between polls, on this thread.
-    res = P.run_shell(
-        shlex.join(argv), timeout_s=timeout, cwd=repo, env=env, on_tick=tick[0], tick_s=tick[1]
+    res = CommandRunner().run(
+        Declared(shlex.join(argv), f"{r.name} in [pins].recipes_file"),
+        cwd=repo,
+        env=env,
+        timeout_s=timeout,
+        on_tick=tick[0],
+        tick_s=tick[1],
     )
-    if res.timed_out:
-        return P.Captured(error=subprocess.TimeoutExpired(list(argv), timeout))
-    if res.could_not_run:
-        return P.Captured(error=OSError(res.err))
+    if res.kind == TIMEOUT:
+        return P.Captured(error=P.TimeoutExpired(list(argv), timeout))
+    if not res.ran:
+        return P.Captured(error=OSError(res.reason))
     return P.Captured(res.code, res.out, res.err)
 
 
