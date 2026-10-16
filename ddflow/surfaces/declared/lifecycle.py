@@ -113,9 +113,9 @@ COMMANDS: tuple[Command, ...] = (
         summary="lease an item + create its worktree (exit 3 = refused)",
         tool="ddflow_claim",
         description="Lease an item and create its isolated git worktree. Refuses (exit 3) if "
-        "another agent holds it or holds an item whose file globs overlap, and names "
-        "what you could take instead. NEVER steals an expired lease: a crashed "
-        "agent's worktree often holds finished work.",
+        "another agent holds it or an overlapping item, and names what you could take "
+        "instead. NEVER steals an expired lease: a crashed agent's tree often holds "
+        "finished work.",
         call=lambda repo, a, agent, called_from=None: _api().claim(
             repo,
             a["id"],
@@ -127,6 +127,7 @@ COMMANDS: tuple[Command, ...] = (
             resources=a.get("resources", "") or "",
             agent=agent,
             queue=bool(a.get("queue")),
+            break_lease=bool(a.get("break")),
         ),
         # `rebound`/`here`: the item kept its OWN tree from an earlier claim, and whether
         # the caller is standing in it -- over MCP the payload is the only way an agent
@@ -141,6 +142,7 @@ COMMANDS: tuple[Command, ...] = (
             "here",
             "port",
             "port_advice",
+            "broke",
         ),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
@@ -159,7 +161,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Override a refusal. Legitimate only to retry after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or live lease is how two agents write one file; recorded either way.",
+                help="Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded.",
                 cli_help="",
             ),
             Param(
@@ -180,8 +182,14 @@ COMMANDS: tuple[Command, ...] = (
                 help="Queue a refused request (FIFO per file).",
                 cli_help="keep a refused claim in the first-in-first-out line for its files",
             ),
+            Param(
+                "break",
+                type="boolean",
+                help="Break a contended, idle lease (work kept).",
+                cli_help="break a contended lease idle for [lease].hold_max_s (its work is kept)",
+            ),
         ),
-        tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "force"),
+        tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "break", "force"),
     ),
     Command(
         path=("heartbeat",),
@@ -192,7 +200,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent, called_from=None: _api().heartbeat(
             repo, a["id"], agent=agent, called_from=called_from
         ),
-        payload=("renewed", "waiters", "globs_withheld"),
+        payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,

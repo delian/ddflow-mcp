@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import clock, schedule
 from ..core import globspec as GS
 from ..core import outcome as O
-from ..core import schedule
 from ..core.admission import glob_conflict
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
@@ -37,6 +37,7 @@ from ..core.schedule import plan as _plan
 from ..infra import claimref as CR
 from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id
+from . import leasebreak as LB
 from . import waiting as WG
 from .leaseclock import foreign, localize
 from .logcoalesce import quiet_renewal, renew_window
@@ -237,6 +238,9 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
     force: bool = False,
     resources: list[str] | None = None,
     offer: Offer | None = None,
+    break_lease: bool = False,
+    activity: LB.Activity | None = None,
+    broke: list[dict[str, Any]] | None = None,
 ) -> Lease:
     """Claim an item. Raises ``LeaseError`` (never steals) if someone live holds it. A refusal
     names what the caller could take instead: ``offer`` says (the API hands in the offer
@@ -335,6 +339,10 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
 
         mine = list(globs if globs is not None else it.globs)
         clash = glob_clash(state, cfg, it, holder, mine, now)
+        if clash and not (force and existing is None):
+            clash = _break_idle(
+                log, cfg, state, it, holder, mine, now, clash, break_lease, activity, broke
+            )
         # Taking over an EXPIRED lease -- the holder's own or a crashed agent's -- needs
         # --force for the expiry alone. It must not also waive the overlap check: expiry
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
@@ -408,6 +416,62 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             note=note,
             resources=wants,
         )
+
+
+def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
+    log: EventLog,
+    cfg: Config,
+    state: State,
+    it: Item,
+    holder: str,
+    globs: list[str],
+    now: float,
+    clash: tuple[str, Lease, tuple[str, str]] | None,
+    asked: bool,
+    activity: LB.Activity | None,
+    broke: list[dict[str, Any]] | None,
+):
+    """Break every clashing lease that is contended (this claim contends it) and has shown no
+    progress for `[lease].hold_max_s`, when `[lease].break_on_timeout` or ``asked``
+    (`claim --break`) allows it; the clash that remains, or None. Each break is a logged
+    `lease.expired` naming who broke it; the holder's branch and worktree are kept
+    (`services.leasebreak`)."""
+    if not (asked or cfg.lease.break_on_timeout) or not cfg.lease.hold_max_s:
+        return clash
+    act = activity or LB.tree_activity(log.root)
+    events = log.read_all()
+    plan: list[tuple[str, Lease, tuple[str, str], LB.Verdict]] = []
+    stamp = clock.iso_at(now)
+    try:
+        while clash:  # decide ALL of it before any write: a half-broken claim helps no one
+            other_id, lease, pair = clash
+            v = LB.judge(cfg, events, other_id, lease, [it.id], now, act)
+            if v is None or not v.breakable:
+                if asked:
+                    raise LeaseError(
+                        f"{it.id} writes {pair[0]!r} held by {lease.holder} on {other_id}"
+                        + LB.break_hint(cfg),
+                        holder=lease.holder,
+                        item=it.id,
+                    )
+                for _o, held, _p, _v in plan:
+                    held.expired_at = ""
+                return clash
+            plan.append((other_id, lease, pair, v))
+            lease.expired_at = stamp  # this snapshot no longer sees it live
+            clash = glob_clash(state, cfg, it, holder, globs, now)
+    except LeaseError:
+        for _o, lease, _p, _v in plan:
+            lease.expired_at = ""
+        raise
+    if clash is not None:
+        return clash
+    for other_id, lease, pair, v in plan:
+        log.append("lease.expired", other_id, LB.breaking_record(lease, it.id, holder, pair, v))
+        _remote_drop(log, other_id, lease.holder)
+        if broke is not None:
+            broke.append({"item": other_id, "holder": lease.holder, "idle_s": round(v.idle_s, 1)})
+    return None
 
 
 #: Who says what a refused claimant could take instead: `(state, item_id, holder, now)` ->

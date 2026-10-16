@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.break_on_timeout"
+new = "false"
+why = "Whether a plain claim that meets a breakable lease breaks it by itself; off (default), the waiter must pass --break."
+impact = "additive"

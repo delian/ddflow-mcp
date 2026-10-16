@@ -258,7 +258,7 @@
 # ---
 # name: test_help[ddflow claim]
   '''
-  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] id
+  usage: ddflow claim [-h] [--globs GLOBS] [--note NOTE] [--force] [--no-worktree] [--resources RESOURCES] [--queue] [--break] id
   
   positional arguments:
     id
@@ -274,6 +274,7 @@
     --resources RESOURCES
                           the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)
     --queue               keep a refused claim in the first-in-first-out line for its files
+    --break               break a contended lease idle for [lease].hold_max_s (its work is kept)
   
   '''
 # ---

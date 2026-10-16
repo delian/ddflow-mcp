@@ -48,6 +48,20 @@ class LeaseConfig:
         False,
         doc="Keep every refused request in a first-in-first-out line per file: a later request for files an earlier waiter asked for is refused as 'queued behind <item>' until that waiter has them or its wait ends. `claim --queue` and `update --queue` ask for it per request. Off: a refusal is only recorded, and whoever asks first when the files free up wins.",
     )
+    idle_max_s: int = knob(
+        900,
+        doc="A lease that another agent waits for (a recorded wait, or a claim of an overlapping file) and that has shown no PROGRESS for this many seconds is marked yield-requested in the holder's heartbeat and in brief. Progress is a commit, a gate outcome, a note or any other event on the item, or a changed file in its worktree; a heartbeat is not progress, because an idle loop renews a lease forever. 0 never asks. Nothing is taken from the holder.",
+        check=int_at_least(0),
+    )
+    hold_max_s: int = knob(
+        3600,
+        doc="A CONTENDED lease with no progress for this many seconds (see idle_max_s) is BREAKABLE (D-lease-hold-limit): the waiter's claim goes through, recorded as a lease.expired event naming who broke it, why and how long it had been idle, and both agents are told. The holder's branch, worktree and recorded gates are kept for it to be restored (DX-park-and-resume). An uncontended lease is never broken, however old; a lease that shows progress never is. 0 = never (the old behaviour).",
+        check=int_at_least(0),
+    )
+    break_on_timeout: bool = knob(
+        False,
+        doc="A claim that meets a breakable lease breaks it by itself. Off (default): the waiter must say so (`ddflow claim --break`), so breaking another agent's lease is always a deliberate, attributed act. On: any plain claim of a contended, idle lease breaks it.",
+    )
     #: report | auto
     reclaim_policy: str = knob(
         "report",
