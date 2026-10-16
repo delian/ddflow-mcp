@@ -110,6 +110,14 @@ class GatesConfig:
         150,
         doc='A task with fewer changed lines than this (added plus removed since its base, `.ddflow/` excluded; default 150) is SMALL, and its unit_tests gate runs only the selected tests under `gates.unit_tests_scope = "selected"`. A bug-fix task is selected whatever its size. 0 = no task is small (bug fixes still are).',
     )
+    unit_tests_max_files: int = knob(
+        100,
+        doc="The most test files a selected unit_tests run (and `ddflow tests --item`) takes (default 100; 0 = no bound). Past it the farthest tests are cut -- two-hop importers first, then direct importers, never a test the change itself touches -- and the cut set is recorded in the gate evidence. The whole suite still runs in the merge queue, on the integration cadence and at phase end (D-test-economy-r2).",
+    )
+    unit_tests_hub_importers: int = knob(
+        100,
+        doc="A module imported by this many files or more (default 100; 0 = no hubs) is a HUB: the selection's import walk does not continue through it (a test that only reaches the change by importing a hub is not selected), and a change to a hub itself runs the whole suite, since it reaches everything. Raise it to select more, lower it to select less.",
+    )
     scrub_env: list[str] = knob(
         factory=lambda: [
             "DDFLOW_AGENT",

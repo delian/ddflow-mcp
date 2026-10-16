@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.unit_tests_max_files"
+new = "100"
+why = "The most test files a selected unit_tests run takes; the farthest are cut and the cut set is recorded."
+impact = "additive"

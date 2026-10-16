@@ -243,7 +243,7 @@ def test_a_ci_pass_with_no_measured_tree_does_not_select(repo):
     """roborev on e1cbc816: an unmeasured ci pass said 'uncommitted changes'; it cannot
     tell which tree it passed on, and says so."""
     from ddflow.api._base import _load
-    from ddflow.services import testselect as TS
+    from ddflow.services import testscope as TS
 
     _project(repo)
     wt = _fix(repo)
