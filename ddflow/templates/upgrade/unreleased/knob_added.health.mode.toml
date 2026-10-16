@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "health.mode"
+new = '"propose"'
+why = "What the watchdog does about a stalled, locked, crashed or runaway lane: off, propose the correction, or apply the ones that lose no work."
+impact = "additive"

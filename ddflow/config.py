@@ -80,6 +80,9 @@ from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow impo
 from .config_sections.gates import (
     GatesConfig,
 )
+from .config_sections.health import (
+    HealthConfig,
+)
 from .config_sections.ids import (  # noqa: F401
     ID_KINDS,
     ID_PREFIXES,
@@ -239,6 +242,7 @@ class Config:
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     lanes: LanesConfig = field(default_factory=LanesConfig)
+    health: HealthConfig = field(default_factory=HealthConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)

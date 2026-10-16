@@ -10,6 +10,7 @@ from __future__ import annotations
 from . import (
     docs,
     flow,
+    health,
     jobs,
     knowledge,
     lanes,
@@ -38,6 +39,7 @@ REGISTER_ORDER = (
     reporting.register,
     maintenance.register,
     lanes.register,
+    health.register,
     docs.register,
     metrics.register,
     review.register,
