@@ -1203,6 +1203,30 @@
        }
       }
     ''',
+    'ddflow_health': '''
+      {
+       "name": "ddflow_health",
+       "description": "The watchdog. Inspects every lane for STALLED (current lease, no progress), LOCKED (in a wait cycle, or waiting on a stalled lane), CRASHED (lease expired over work) and RUNAWAY (a job running past [health].runaway_s), each with evidence and the command that corrects it. run=true is the periodic pass: it also makes the corrections [health].mode allows (off | propose | apply; apply breaks a stalled contended lease, adds auto-order needs edges, records a crashed lane recoverable) and records the run for `cadence`. It never kills a process or deletes work.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "run": {
+          "type": "boolean",
+          "description": "Also make the corrections [health].mode allows and record the pass."
+         },
+         "mode": {
+          "type": "string",
+          "description": "Override [health].mode for this call: off, propose or apply."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_heartbeat': '''
       {
        "name": "ddflow_heartbeat",
@@ -3904,6 +3928,7 @@
     'ddflow_gate_skip',
     'ddflow_gate_status',
     'ddflow_gate_verify',
+    'ddflow_health',
     'ddflow_heartbeat',
     'ddflow_help',
     'ddflow_history',
