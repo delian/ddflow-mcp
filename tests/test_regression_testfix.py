@@ -138,3 +138,34 @@ def test_a_fix_that_changes_source_still_needs_the_test_to_fail_first(repo):
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_h.py::test_h")
     assert out.exit == REFUSED and "pre-fix tree" in out.reason, out
     assert "test_only_fix" not in out.reason
+
+
+def test_a_mutation_naming_a_file_the_fix_deletes_is_refused_not_a_crash(repo):
+    wt = _repo(repo, FLAKY_BASE, "test_h.py")
+    (wt / "tests" / "test_h.py").write_text(GUARDED)
+    (wt / "tests" / "test_gone.py").write_text("")
+    _commit(wt, "guard, and a file to delete")
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "same")
+    (wt / "tests" / "test_gone.py").unlink()
+    _commit(wt, "delete")
+    out = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test="tests/test_h.py::test_h",
+        mutation={"file": "tests/test_gone.py", "old": "x", "new": "y"},
+    )
+    assert out.exit == REFUSED, out
+    assert "traceback" not in out.reason.lower()
+
+
+def test_a_restored_run_that_could_not_execute_is_not_reported_as_passing(repo, monkeypatch):
+    from ddflow.services.gates import regression_testfix as RT
+
+    wt = _repo(repo, FLAKY_BASE, "test_h.py")
+    (wt / "tests" / "test_h.py").write_text(GUARDED)
+    _commit(wt, "guard")
+    monkeypatch.setattr(RT, "run_command_gate", lambda *a, **k: ("unavailable", {"reason": "x"}))
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_h.py::test_h")
+    assert out.exit == REFUSED, out
+    assert "restored: unavailable" in out.reason, out.reason
+    assert "passes with the pre-fix" not in out.reason

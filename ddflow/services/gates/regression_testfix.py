@@ -95,6 +95,7 @@ def verify_test_only_fix(
         return None
     ev: dict[str, Any] = {"test_only_fix": True, "changed_files": changed}
 
+    restored = "not run (the test is not in the base's test files)"
     with CI.merge_tree(repo, base_sha, "") as (ptree, why):
         if ptree is None:
             return UNRUN, {**ev, "reason": why}
@@ -103,6 +104,7 @@ def verify_test_only_fix(
             if command:
                 run = GateDef(id="regression_check", title="regression test", command=command)
                 outcome, rev = run_command_gate(run, ptree)
+                restored = outcome
                 if outcome == "failed":
                     return VERIFIED, {
                         **ev,
@@ -112,12 +114,13 @@ def verify_test_only_fix(
                         "restored_run": _ran(rev),
                     }
 
+    ev["restored_outcome"] = restored
     if not mutation:
         return PASSES, {
             **ev,
             "reason": "the named test PASSES on the pre-fix tree, and the fix is confined to "
             f"test files ({', '.join(changed)}), so the pre-fix tree has no old behaviour to "
-            "fail on; the test also passes with the pre-fix test files restored. Show it "
+            f"fail on; run with the pre-fix test files restored: {restored}. Show it "
             "guards the fix with a mutation (--mutation-file/--mutation-old/--mutation-new: an "
             "edit to a changed test file that disables the fix, which must make it FAIL), "
             "or close with --skip-regression-verify --verify-reason (recorded)",
@@ -165,6 +168,12 @@ def _by_mutation(
             else:
                 dst.unlink(missing_ok=True)
         target = ptree / rel
+        if not target.is_file():
+            return PASSES, {
+                **ev,
+                "reason": f"{rel} does not exist in the fixed tree (the fix deletes or "
+                "renames it), so the mutation cannot be applied",
+            }
         text = target.read_text("utf-8")
         if text.count(old) != 1:
             return PASSES, {
