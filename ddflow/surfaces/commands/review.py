@@ -65,7 +65,10 @@ def _show_verb(a, c: Ctx, ids: list[str]) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    c.out(out.data["text"], {"id": out.data["id"], "findings": out.data["findings"]})
+    c.out(
+        out.data["text"],
+        {k: out.data[k] for k in ("id", "gate", "findings", "unreadable")},
+    )
     return OK
 
 

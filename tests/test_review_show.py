@@ -52,7 +52,8 @@ def test_the_cli_verb_and_json(repo, tmp_path):
     assert "#1 [HIGH]" in out and "#2 [LOW]" in out, out
     code, out, err = run_cli(repo, "--json", "review", "show", "T1")
     assert code == OK, err
-    assert len(json.loads(out)["findings"]["critic"]) == 2
+    body = json.loads(out)
+    assert len(body["findings"]["critic"]) == 2 and body["unreadable"] == {}
 
 
 def test_an_item_without_findings_is_refused_with_the_reason(repo, tmp_path):
