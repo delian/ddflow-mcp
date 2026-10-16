@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "loops.wait_cycle"
+new = 'true'
+why = "Report a cycle of agents waiting on each other's leases in doctor (default on)."
+impact = "additive"
