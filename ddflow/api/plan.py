@@ -17,9 +17,11 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from ..config import Config
 from ..core import outcome as O
 from ..infra import git as G
 from ..services import plancheck as PC
+from ._globwarn import missing_globs
 
 
 def _items(data: Any) -> dict[str, Any] | None:
@@ -67,8 +69,7 @@ def _tracked(repo: Path) -> list[str]:
     Empty when git cannot list them: the check then simply does not make that comparison,
     and says so in nothing -- a plan is not refused because a listing failed.
     """
-    done = G.run(repo, "ls-files")
-    return done.text().split() if done.ok else []
+    return G.files(repo, "tracked") or []
 
 
 def plan_check(repo: Path, source: str) -> O.Outcome:
@@ -80,13 +81,22 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
     plan = _parse(text, source)
     if isinstance(plan, str):
         return O.refused("plan.check", plan)
-    report = PC.check(plan, tracked=_tracked(repo))
+    tracked = _tracked(repo)
+    report = PC.check(plan, tracked=tracked)
+    cfg = Config.load(repo)
+    # Warnings, not findings: a path the plan does not find may be a file it creates.
+    warnings = [
+        {"id": iid, "detail": w}
+        for iid in sorted(plan)
+        for w in missing_globs(repo, cfg, [str(g) for g in plan[iid].get("globs", [])], tracked)
+    ]
     data: dict[str, Any] = {
         "source": source,
         "clean": report.clean,
         "findings": [f.as_dict() for f in report.findings],
         "waves": dict(sorted(report.waves.items(), key=lambda kv: (kv[1], kv[0]))),
         "items": len(plan),
+        "warnings": warnings,
     }
     if report.findings:
         kinds = ", ".join(sorted({f.kind for f in report.findings}))
