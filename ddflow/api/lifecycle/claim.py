@@ -20,6 +20,7 @@ from ...services import flow as FS
 from ...services import leases as L
 from ...services import ports as PT
 from ...services import waiting as WG
+from ...services.completion import bug_globs_of
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
@@ -232,6 +233,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
+    if want is None and parked is not None and not parked.globs:
+        want = bug_globs_of(st, item, cfg) or None  # a fix task declared no files: its bug did
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
