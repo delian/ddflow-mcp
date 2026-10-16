@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core import outcome as O
+from ..infra import fsio
 from ..infra import git as G
 from ..infra import worktree as W
 from ..services import flow as FS
@@ -40,6 +41,24 @@ def _is_pin(path: str, files: list[str]) -> bool:
     return any(path == f.rstrip("/") or path.startswith(f.rstrip("/") + "/") for f in files)
 
 
+def _keep_ours_in_hunks(tree: Path, path: str) -> bool:
+    """Resolve a conflicted pin file by taking OUR side of the hunks that conflict and keeping
+    every other change of both sides (`git merge-file --ours`), then stage it. Not our side of
+    the whole file: a pin file can hold prose too (a README with a generated table), and the
+    other side's edit of that prose must survive. The conflicting hunks are the generated ones,
+    and the recipe re-records them next. False when git cannot (a delete against an edit)."""
+    with fsio.scratch_dir("ddflow-mq.") as d:
+        for name, stage in (("ours", 2), ("base", 1), ("theirs", 3)):
+            blob = G.run(tree, "show", f":{stage}:{path}", binary=True)
+            if not blob.ok and stage != 1:  # no base: both sides added the file
+                return False
+            (d / name).write_bytes(blob.out_bytes or b"")
+        if not G.run(d, "merge-file", "--ours", "ours", "base", "theirs").ok:
+            return False
+        (Path(tree) / path).write_bytes((d / "ours").read_bytes())
+    return G.run(tree, "add", "--", path).ok
+
+
 def _bring_in_base(repo: Path, cfg, wt: W.Worktree) -> str:
     """Merge the base into the item's branch, in its own tree. "" on success, else why not
     (the tree is then as it was). A conflict in a pin file alone is not a conflict: the
@@ -53,14 +72,9 @@ def _bring_in_base(repo: Path, cfg, wt: W.Worktree) -> str:
     conflicts = G.unmerged(wt.path) or []
     pins = PN.pin_files(wt.path, cfg)
     if conflicts and all(_is_pin(c, pins) for c in conflicts):
-        steps = [
-            G.run(wt.path, cmd, *args, "--", c)
-            for c in conflicts
-            for cmd, args in (("checkout", ("--ours",)), ("add", ()))
-        ]
-        done = G.run(wt.path, *ident, "commit", "--no-edit")
-        if done.ok and all(s.ok for s in steps):
-            return ""
+        if all(_keep_ours_in_hunks(wt.path, c) for c in conflicts):
+            if G.run(wt.path, *ident, "commit", "--no-edit").ok:
+                return ""
     G.run(wt.path, "merge", "--abort")
     named = ", ".join(conflicts[:10]) or (r.err or r.out)[-300:]
     return f"merging {wt.base} into {wt.branch} conflicts in: {named}"
