@@ -175,8 +175,17 @@ def _real_repo_config_untouched(request: pytest.FixtureRequest):
         )
 
 
+def _updating(session: pytest.Session) -> bool:
+    """Whether this session re-records pin files (a snapshot update, `DDFLOW_UPDATE_GOLDEN`):
+    changing tracked files is its job (`ddflow pins regenerate` runs it)."""
+    config = getattr(session, "config", None)
+    return bool(os.environ.get("DDFLOW_UPDATE_GOLDEN")) or bool(
+        config is not None and config.getoption("snapshot_update", False)
+    )
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    changed = _changes(_BASELINE, snapshot())
+    changed = _changes(_BASELINE, snapshot(status=not _updating(session)))
     if changed:
         print(f"\nREAL repository {REAL_REPO} was modified by the suite: {'; '.join(changed)}")
         session.exitstatus = 1
