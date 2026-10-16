@@ -20,8 +20,7 @@ def missing_globs(
     if not globs or not cfg.plan.warn_missing_globs:
         return []
     if tracked is None:
-        done = G.run(repo, "ls-files")
-        tracked = done.text().splitlines() if done.ok else []
+        tracked = G.files(repo, "tracked") or []
     return [
         m.text() for m in GC.missing(globs, exists=lambda p: (repo / p).exists(), files=tracked)
     ]
