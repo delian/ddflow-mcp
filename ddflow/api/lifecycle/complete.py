@@ -17,6 +17,7 @@ from ...services import gates as G
 from ...services import leases as L
 from ...services import ledger as LG
 from ...services import progress_line as PL
+from ...services import umbrella as UM
 from ...services.export import refresh as RF
 from .._base import _load
 from ..bug_reopen import refile_reported
@@ -99,12 +100,13 @@ def complete(
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
+    if umbrella:  # gates get a rolled-up outcome naming the sub-tasks (Bd37a921536)
+        UM.roll_up(log, cfg, repo, st, item, umbrella)
+        st = fold(log.read_all(), strict=False)
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
     if umbrella:
-        # Its work is its sub-tasks', each of which ran its own pipeline: the umbrella
-        # has no diff for implement, unit_tests or merge to judge (B651a63e574). An open
-        # bug it was filed to fix still holds it, as for any item.
-        v.blockers = [b for b in v.blockers if b.startswith(CM.OPEN_BUG_BLOCKER)]
+        # No diff of its own to judge (B651a63e574); an open bug or a silent gate holds it.
+        v.blockers = [b for b in v.blockers if b.startswith(UM.KEPT)]
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
