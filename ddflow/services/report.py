@@ -56,16 +56,11 @@ def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
 def _window(events, item_id: str, who: str) -> tuple[str, str]:
     """(start, end) of the work: the first claim of the item (by ``who`` when given) and its
     completion, or "" for the open end."""
-    start = next(
-        (
-            ev.ts
-            for ev in events
-            if ev.kind == "lease.acquired"
-            and ev.subject == item_id
-            and (not who or ev.data.get("holder") == who)
-        ),
-        "",
-    )
+    claims = [ev for ev in events if ev.kind == "lease.acquired" and ev.subject == item_id]
+    # The claim of ``who``; the item's first claim when ``who`` never held it (an agent that
+    # completed work another claimed).
+    mine = [ev for ev in claims if not who or ev.data.get("holder") == who]
+    start = (mine or claims)[0].ts if claims else ""
     end = max(
         (ev.ts for ev in events if ev.kind == "item.completed" and ev.subject == item_id),
         default="",
