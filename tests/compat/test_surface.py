@@ -45,6 +45,8 @@ DECLARED: dict[tuple[str, str, str], str] = {
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_list.json"): "Bf84a50bce3",
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_list.limit"): "Bf84a50bce3",
     ("0.1.15", "0.1.18", "tool argument removed: ddflow_rule_remove.reason"): "Bf84a50bce3",
+    # integer -> string so a digest prefix fits; a JSON integer is still read as the number.
+    ("0.1.18", "current", "tool argument retyped: ddflow_review_triage.finding"): "B8b2e487a13",
 }
 
 
