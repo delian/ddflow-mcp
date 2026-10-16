@@ -315,6 +315,22 @@
   },
   "array_schema": null
  },
+ "ddflow_queue": {
+  "command": "queue",
+  "schema": "queue@1",
+  "shape": "object",
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "queue@1"
+    },
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_pr_sync": {
   "command": "pr_sync",
   "schema": "pr_sync@1",

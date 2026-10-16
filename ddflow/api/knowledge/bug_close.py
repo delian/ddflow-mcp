@@ -43,7 +43,7 @@ def _missing_tests(item: str, missing: list[str], tests: list[str]) -> O.Outcome
     )
 
 
-def bug_fixed(
+def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
     repo: Path,
     item: str,
     *,
@@ -55,6 +55,7 @@ def bug_fixed(
     changelog: str = "",
     verify_regression: bool = True,
     verify_reason: str = "",
+    mutation: dict[str, str] | None = None,
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
 
@@ -73,6 +74,11 @@ def bug_fixed(
     worktree, no base ref -- the check is `could-not-run`, recorded, and the bug closes
     with the gap on the record rather than locked open. `verify_regression=False` with a
     `verify_reason` records the override instead; a reason is required and is recorded.
+
+    A fix confined to test files cannot fail on a pre-fix tree that has the new test
+    file: `mutation` ({file, old, new}, an edit to a changed test file disabling the
+    fix) is then applied by ddflow and the test must fail on it -- recorded as
+    `verified-by-mutation` with the mutation and the run (B Bc262739f62).
     """
     entry: dict[str, Any] = {}
     if changelog:
@@ -103,7 +109,14 @@ def bug_fixed(
             id=item,
         )
     verified, verify_ev = _verify_regression(
-        repo, cfg, st, item, tests, verify_regression=verify_regression, reason=verify_reason
+        repo,
+        cfg,
+        st,
+        item,
+        tests,
+        verify_regression=verify_regression,
+        reason=verify_reason,
+        mutation=mutation,
     )
     if verified in ("passed-on-prefix", "failed-on-fix"):
         return O.refused(
@@ -322,6 +335,7 @@ def _verify_regression(
     *,
     verify_regression: bool,
     reason: str,
+    mutation: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Run a bug's regression test on the pre-fix and fixed trees (B-bugfix-verified).
 
@@ -345,7 +359,13 @@ def _verify_regression(
         # which now holds the fix -- the driver merges first and completes after
         # (B0d5253d31f). `tree` is unused: the fixed tree is a checkout of `after`.
         status, ev = G.verify_regression_test(
-            repo, cfg, tree=repo, base=fx.landed_before, tests=module_tests, after=fx.landed_after
+            repo,
+            cfg,
+            tree=repo,
+            base=fx.landed_before,
+            tests=module_tests,
+            after=fx.landed_after,
+            mutation=mutation,
         )
         return _regression_status(status, ev, G)
     tree = W.load_path(repo, fx.worktree) if fx is not None and fx.worktree else None
@@ -362,7 +382,9 @@ def _verify_regression(
             base = ""
     if not base:
         return "could-not-run", {"reason": "no base ref to build the pre-fix tree from"}
-    status, ev = G.verify_regression_test(repo, cfg, tree=tree, base=base, tests=module_tests)
+    status, ev = G.verify_regression_test(
+        repo, cfg, tree=tree, base=base, tests=module_tests, mutation=mutation
+    )
     return _regression_status(status, ev, G)
 
 
@@ -374,6 +396,8 @@ def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, di
     # verified, the vacuous pass this whole feature exists to prevent (rubber_duck #1).
     if status == G.REGRESSION_VERIFIED:
         return "verified", ev
+    if status == G.VERIFIED_BY_MUTATION:
+        return "verified-by-mutation", ev
     if status == G.REGRESSION_PASSES_ON_PREFIX:
         return "passed-on-prefix", ev
     if status == G.REGRESSION_FAILS_ON_FIX:
