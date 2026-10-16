@@ -21,6 +21,7 @@ from ...infra import worktree as W
 from ...infra.store import Store
 from ...infra.worktree import absolutise
 from ...services import adopt as AD
+from ...services import autoorder as AOS
 from ...services import cleanup as CL
 from ...services import configcompat as CC
 from ...services import embed as EMB
@@ -453,6 +454,8 @@ def doctor(
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
+    ordered = AOS.run(log, st, cfg, [c.as_dict() for c in cycles])
+    notes += AOS.lines(ordered)
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
@@ -463,6 +466,7 @@ def doctor(
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
         "wait_cycles": [c.as_dict() for c in cycles],
+        "auto_order": {**ordered, "standing": AOS.auto_edges(log.read_all(), st)},
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)
