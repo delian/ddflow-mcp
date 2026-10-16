@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.hold_max_s"
+new = "3600"
+why = "Seconds a contended lease may show no progress before the waiter may break it (the holder keeps its branch and worktree); 0 never breaks."
+impact = "additive"

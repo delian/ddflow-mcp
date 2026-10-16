@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.idle_max_s"
+new = "900"
+why = "Seconds a contended lease may show no progress (a heartbeat is not progress) before its holder is asked to yield; 0 never asks."
+impact = "additive"

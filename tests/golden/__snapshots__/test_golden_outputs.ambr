@@ -435,6 +435,26 @@
           <item>' until that waiter has them or its wait ends. `claim --queue` and
           `update --queue` ask for it per request. Off: a refusal is only recorded,
           and whoever asks first when the files free up wins.
+      lease.idle_max_s = 900   [default]
+          A lease that another agent waits for (a recorded wait, or a claim of an
+          overlapping file) and that has shown no PROGRESS for this many seconds is
+          marked yield-requested in the holder's heartbeat and in brief. Progress is a
+          commit, a gate outcome, a note or any other event on the item, or a changed
+          file in its worktree; a heartbeat is not progress, because an idle loop
+          renews a lease forever. 0 never asks. Nothing is taken from the holder.
+      lease.hold_max_s = 3600   [default]
+          A CONTENDED lease with no progress for this many seconds (see idle_max_s) is
+          BREAKABLE (D-lease-hold-limit): the waiter's claim goes through, recorded as
+          a lease.expired event naming who broke it, why and how long it had been
+          idle, and both agents are told. The holder's branch, worktree and recorded
+          gates are kept for it to be restored (DX-park-and-resume). An uncontended
+          lease is never broken, however old; a lease that shows progress never is. 0
+          = never (the old behaviour).
+      lease.break_on_timeout = False   [default]
+          A claim that meets a breakable lease breaks it by itself. Off (default): the
+          waiter must say so (`ddflow claim --break`), so breaking another agent's
+          lease is always a deliberate, attributed act. On: any plain claim of a
+          contended, idle lease breaks it.
       lease.reclaim_policy = 'report'   [default]
           'report' (default) never steals an expired lease — it names the worktree so
           a human can rescue in-flight work. 'auto' reclaims it. 'report' exists

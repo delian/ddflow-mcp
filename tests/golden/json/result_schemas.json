@@ -36,7 +36,8 @@
    "rebound",
    "here",
    "port",
-   "port_advice"
+   "port_advice",
+   "broke"
   ],
   "output_schema": {
    "type": "object",
@@ -53,6 +54,7 @@
     "here": {},
     "port": {},
     "port_advice": {},
+    "broke": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -70,7 +72,8 @@
   "payload": [
    "renewed",
    "waiters",
-   "globs_withheld"
+   "globs_withheld",
+   "yield_requested"
   ],
   "output_schema": {
    "type": "object",
@@ -81,6 +84,7 @@
     "renewed": {},
     "waiters": {},
     "globs_withheld": {},
+    "yield_requested": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
