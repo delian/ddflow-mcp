@@ -79,6 +79,12 @@ def log(repo: Path) -> EventLog:
 
 #: The quiet-machine ceiling of one CLI call; `run_cli` multiplies it by `_wait.slow_factor()`.
 RUN_CLI_TIMEOUT_S = 300
+#: ... capped, so a real deadlock still ends the run in half an hour.
+RUN_CLI_TIMEOUT_MAX_S = 1800
+
+
+def _text(blob) -> str:
+    return blob.decode(errors="replace") if isinstance(blob, bytes) else (blob or "")
 
 
 def run_cli(repo: Path, *argv: str, agent: str = "") -> tuple[int, str, str]:
@@ -89,12 +95,13 @@ def run_cli(repo: Path, *argv: str, agent: str = "") -> tuple[int, str, str]:
         args += ["--agent", agent]
     # The ceiling for a hang, not a measurement: a CLI start under the load of many agents'
     # ci runs takes minutes (Bfaef48ced6), so it grows with the load (tests/_wait.py).
-    limit = RUN_CLI_TIMEOUT_S * slow_factor()
+    limit = min(RUN_CLI_TIMEOUT_S * slow_factor(), RUN_CLI_TIMEOUT_MAX_S)
     try:
         p = subprocess.run([*args, *argv], capture_output=True, text=True, env=env, timeout=limit)
-    except subprocess.TimeoutExpired as exc:  # say WHICH command, not a bare traceback
+    except subprocess.TimeoutExpired as exc:  # say WHICH command, with what it printed
+        seen = f"stdout={_text(exc.stdout)!r} stderr={_text(exc.stderr)!r}"
         raise AssertionError(
-            f"`ddflow {' '.join(argv)}` did not finish within {limit:.0f}s"
+            f"`ddflow {' '.join(argv)}` did not finish within {limit:.0f}s: {seen}"
         ) from exc
     return p.returncode, p.stdout, p.stderr
 
