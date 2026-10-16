@@ -751,48 +751,16 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
     sc.check("P1.T3.b completes", code == 0, text)
 
     sc.step("Now the umbrella closes, and the lesson survives the task that produced it")
-    for gate in ("research", "rules", "implement", "bug_hunt", "dedupe", "merge"):
-        alpha.tool(
-            "ddflow_gate_record",
-            id="P1.T3",
-            gate=gate,
-            outcome="passed",
-            evidence="rolled up from the sub-tasks",
-        )
-    for gate, model in (("rubber_duck", "qwen3-coder"), ("critic", "gemini-2.5-pro")):
-        alpha.tool(
-            "ddflow_gate_record",
-            id="P1.T3",
-            gate=gate,
-            outcome="passed",
-            evidence="both halves reviewed together",
-            model=model,
-        )
-    alpha.tool(
-        "ddflow_gate_record",
-        id="P1.T3",
-        gate="unit_tests",
-        outcome="passed",
-        evidence="full suite green",
-        command="python -m pytest -q",
-        exit_code="0",
-    )
-
-    text, code = alpha.tool("ddflow_complete", id="P1.T3", model="claude-opus-5")
-    sc.check("a gate left silent blocks the umbrella too — silence is not a pass", code == 3, text)
-    sc.check("and it names the one step missing", "standards" in text, text)
-
+    # Closing the last child closed the umbrella; none of its gates is left silent
+    # (Bd37a921536): each is rolled up from the children, naming them, on the record.
+    text, code = alpha.tool("ddflow_show", id="P1.T3")
+    sc.check("the umbrella closed with its last child", code == 0 and "done" in text, text)
+    text, code = alpha.tool("ddflow_gate_status", id="P1.T3")
+    sc.check("no gate of the umbrella is left silent", "never run" not in text, text)
     text, code = alpha.tool(
-        "ddflow_gate_skip",
-        id="P1.T3",
-        gate="standards",
-        reason="each half was put through the standards pass on its own; no new code "
-        "lives at this level, only the two children",
+        "ddflow_gate_record", id="P1.T3", gate="standards", outcome="passed", evidence="late"
     )
-    sc.check("skipping ON THE RECORD is the auditable way past it", code == 0, text)
-
-    text, code = alpha.tool("ddflow_complete", id="P1.T3", model="claude-opus-5")
-    sc.check("the umbrella completes once both children have", code == 0, text)
+    sc.check("a finished umbrella takes no more gates, like any item", code != 0, text)
 
 
 # =====================================================================================
@@ -951,40 +919,12 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
         {"ledger/report/format.py": FORMAT_PY, "tests/test_summary.py": SUMMARY_TEST},
     )
 
-    for gate in ("research", "rules", "implement", "bug_hunt", "dedupe", "merge"):
-        alpha.tool(
-            "ddflow_gate_record",
-            id="P2.T4",
-            gate=gate,
-            outcome="passed",
-            evidence="rolled up from both halves",
-        )
-    for gate, model in (("rubber_duck", "qwen3-coder"), ("critic", "gemini-2.5-pro")):
-        alpha.tool(
-            "ddflow_gate_record",
-            id="P2.T4",
-            gate=gate,
-            outcome="passed",
-            evidence="reviewed as one change",
-            model=model,
-        )
-    alpha.tool(
-        "ddflow_gate_record",
-        id="P2.T4",
-        gate="unit_tests",
-        outcome="passed",
-        evidence="green",
-        command="python -m pytest -q",
-        exit_code="0",
+    text, code = alpha.tool("ddflow_show", id="P2.T4")
+    sc.check("the split umbrella closes when both halves do", "done" in text, text)
+    text, code = alpha.tool("ddflow_gate_status", id="P2.T4")
+    sc.check(
+        "and its gates are rolled up from the halves, none silent", "never run" not in text, text
     )
-    alpha.tool(
-        "ddflow_gate_skip",
-        id="P2.T4",
-        gate="standards",
-        reason="both halves passed it individually; no code lives at this level",
-    )
-    text, code = alpha.tool("ddflow_complete", id="P2.T4", model="claude-opus-5")
-    sc.check("the split umbrella closes when both halves do", code == 0, text)
 
     plan = alpha.jtool("ddflow_next")
     sc.check(

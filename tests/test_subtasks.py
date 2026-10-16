@@ -183,7 +183,11 @@ def test_a_parent_completes_once_its_children_do(repo):
     run_cli(repo, "task", "add", "P1.T1a", "--parent", "P1.T1", "--globs", "src/a.py")
     run_cli(repo, "claim", "P1.T1a", "--no-worktree")
     assert _finish(repo, "P1.T1a")[0] == OK
-    assert _finish(repo, "P1.T1")[0] == OK
+    # It closed itself with the last child, its gates rolled up (Bd37a921536): finishing it
+    # by hand is the recording on a finished item that every item is refused.
+    code, out, _ = run_cli(repo, "--json", "show", "P1.T1")
+    assert code == OK and json.loads(out)["state"] == "done", out
+    assert _finish(repo, "P1.T1")[0] == REFUSED
 
 
 def test_an_abandoned_child_does_not_hold_its_parent_open(repo):
