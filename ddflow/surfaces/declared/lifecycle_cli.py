@@ -260,9 +260,9 @@ def claim_text(out, a, ctx) -> str:
     owner = ctx.tree_owner
     if owner and d["worktree"] and not d["rebound"]:
         msg += (
-            f"\n  not adopted: the tree you are in is {owner}'s working tree, and you are "
-            f"{ctx.log.agent_id}. Run claim from the tree without --agent (or as {owner}) "
-            f"to adopt it."
+            f"\n  leased to {ctx.log.agent_id}, in a worktree made for it: the tree you are in "
+            f"is {owner}'s, so it was not adopted. To work in that tree instead, run claim "
+            f"there as {owner}."
         )
     if d["worktree"] and d["rebound"] and not d["here"]:
         # The item already had a tree from an earlier claim, possibly holding unmerged
@@ -294,6 +294,11 @@ def claim_text(out, a, ctx) -> str:
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
+    if not d["globs"]:
+        msg += (
+            f"\n  The commit hook refuses files no glob covers; to cover yours: "
+            f"ddflow --agent {ctx.log.agent_id} update {a['id']} --globs <comma,separated>"
+        )
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
     if d.get("guidance"):

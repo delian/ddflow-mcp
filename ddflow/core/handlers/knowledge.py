@@ -104,6 +104,7 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.scope = ev.data.get("scope", "") or bug.scope  # absent: the default, `project`
     bug.fix_task = ev.data.get("fix_task", "") or bug.fix_task
     bug.repro = dict(ev.data.get("repro") or {}) or bug.repro
+    bug.globs = list(ev.data.get("globs") or bug.globs)
     bug.found_at = bug.found_at or ev.ts
 
 
