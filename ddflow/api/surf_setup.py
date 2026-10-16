@@ -28,16 +28,21 @@ def tree_is_dirty(tree: Path, rel: str) -> bool:
     return W.status(tree, rel) != []
 
 
+def _same_repo(here: Path, repo: Path) -> bool:
+    """Whether ``here`` is a tree of the clone ``repo`` belongs to."""
+    common = [
+        W.git(p, "rev-parse", "--path-format=absolute", "--git-common-dir") for p in (here, repo)
+    ]
+    return (
+        all(r.ok for r in common) and Path(common[0].out).resolve() == Path(common[1].out).resolve()
+    )
+
+
 def head_here_or_repo(repo: Path, where: Path | None = None) -> str:
     """HEAD of ``where`` (default: the current directory) when it is a worktree of THIS
     repository, else the repository's HEAD."""
     here = where if where is not None else Path.cwd()
-    common = [
-        W.git(p, "rev-parse", "--path-format=absolute", "--git-common-dir") for p in (here, repo)
-    ]
-    if all(r.ok for r in common) and Path(common[0].out).resolve() == Path(common[1].out).resolve():
-        return W.rev(here, "HEAD") or "HEAD"
-    return "HEAD"
+    return (W.rev(here, "HEAD") or "HEAD") if _same_repo(here, repo) else "HEAD"
 
 
 def caller_tree(repo: Path, called_from: Path, foreign: bool, agent: str, events: Any) -> Path:
@@ -48,12 +53,7 @@ def caller_tree(repo: Path, called_from: Path, foreign: bool, agent: str, events
     if foreign or W.current(called_from) is not None:
         return called_from
     here = Path.cwd()
-    common = [
-        W.git(p, "rev-parse", "--path-format=absolute", "--git-common-dir") for p in (here, repo)
-    ]
-    if not all(r.ok for r in common):
-        return called_from
-    if Path(common[0].out).resolve() != Path(common[1].out).resolve():
+    if not _same_repo(here, repo):
         return called_from
     return called_from if foreign_tree_owner(repo, here, agent, events) else here
 
