@@ -247,7 +247,9 @@ def claim_body(out, a) -> Any:
 
 
 def claim_text(out, a, ctx) -> str:
-    d = out.data
+    from ...services import reprobundle as RB  # a claim of a bug's fix task starts from its bundle
+
+    d = RB.lead_with(out, ctx.repo, ctx.log.read_all(), a["id"]).data
     msg = f"claimed {a['id']} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
     for b in d.get("broke") or []:
         msg += (
