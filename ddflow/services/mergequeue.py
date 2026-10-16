@@ -308,7 +308,7 @@ def board(repo: Path, *, window: int, default_s: int, now: float | None = None) 
             else:
                 left = each
             ahead += left
-            row["eta_s"] = math.ceil(ahead)  # work not done has an ETA of at least a second
+            row["eta_s"] = max(1, math.ceil(ahead))  # unfinished work: at least a second
         out.append(row)
     return out
 
