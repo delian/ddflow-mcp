@@ -150,6 +150,7 @@ from .operations import (
     relevant_tests,
 )
 from .plan import plan_check
+from .report import report
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -328,6 +329,7 @@ __all__ = [
     "remove_item",
     "render",
     "replay",
+    "report",
     "research_add",
     "resolve",
     "review_show",
