@@ -291,7 +291,8 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 item=item_id,
                 alternatives=_alts(offer, state, cfg, item_id, holder, now),
             )
-        if existing and not force and cfg.lease.reclaim_policy == "report":
+        own_lapsed = existing is not None and existing.holder == holder and cfg.lease.resume_own
+        if existing and not force and not own_lapsed and cfg.lease.reclaim_policy == "report":
             if existing.expired_at:
                 # Recorded by `recover --apply`, which records only a tree it measured
                 # EMPTY. Sending the agent back to `recover` sent it round in a circle:
@@ -355,6 +356,11 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                     f". {item_id}'s lease lapsed and those files were claimed since: "
                     f"--force takes over the expired lease, not another live one: "
                     f"{lease.holder} releases {other_id}, or you wait for it."
+                    + (
+                        " Claim again with --globs naming only the files nobody holds."
+                        if own_lapsed
+                        else ""
+                    )
                     if existing is not None
                     else ""
                 ),
