@@ -84,7 +84,8 @@ def gather(
         else:
             at, rec = lz.renewed_at, recs.get(i)
             work = None if rec is None else rec.salvageable
-        lanes.append(H.Lane(i, lz.holder, live, at, work, bool(lz.expired_at), lz.worktree))
+        recorded = not lz.live(lz.renewed_at)  # an expiry is recorded, whatever the clock says
+        lanes.append(H.Lane(i, lz.holder, live, at, work, recorded, lz.worktree))
     procs = [
         H.Proc(j.id, j.item, clock.epoch(j.started_at), JOBS.status(j).state == "running")
         for j in st.jobs.values()
@@ -166,7 +167,7 @@ def correct(
                         "expire",
                         f.item,
                         done,
-                        f"recorded {f.item} expired; `ddflow recover {f.item}`",
+                        f"recorded {f.item} expired; `ddflow recover` lists it",
                     )
                 )
             else:

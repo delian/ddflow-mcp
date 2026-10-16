@@ -134,7 +134,7 @@ def _crashed(ln: Lane, now: float) -> Finding:
         now - ln.progress_at,
         f"lease expired with {held}{where}"
         + ("; recorded expired, awaiting recovery" if ln.recorded else ""),
-        f"`ddflow recover {ln.item}` shows the work; `ddflow claim {ln.item}` resumes it",
+        f"`ddflow recover` shows the work; `ddflow claim {ln.item}` resumes it",
         {"worktree": ln.worktree, "recorded": ln.recorded, "work": ln.work},
     )
 

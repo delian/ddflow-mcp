@@ -68,7 +68,6 @@ def health(
         "health",
         mode=mode,
         ran=run and mode != "off",
-        now=at,
         findings=[f.as_dict() for f in found],
         moves=moves,
         count=len(found),

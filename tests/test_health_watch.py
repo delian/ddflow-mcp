@@ -68,7 +68,11 @@ def test_an_expired_lease_over_work_is_crashed_and_a_clean_one_is_not():
     ]
     found = H.inspect(lanes, [], [], [], NOW, LIM)
     assert _kinds(found) == [(H.CRASHED, "T1"), (H.CRASHED, "T2")]
-    assert "ddflow recover T1" in found[0].fix and "/w/T1" in found[0].detail
+    assert (
+        "ddflow recover`" in found[0].fix
+        and "claim T1" in found[0].fix
+        and "/w/T1" in found[0].detail
+    )
 
 
 def test_lanes_in_a_cycle_are_locked():
@@ -101,7 +105,9 @@ def _backdate(repo, item: str, seconds: float) -> None:
         out, hit = [], False
         for line in f.read_text().splitlines():
             e = json.loads(line)
-            if e.get("subject") == item and e.get("kind") != "lease.renewed":
+            if (
+                e.get("subject") == item
+            ):  # renewals too: the lease must look old to the clock as well
                 if "at" in e["data"]:
                     e["data"]["at"] -= seconds
                 e["ts"] = clock.iso_at(clock.epoch(e["ts"]) - seconds)
@@ -238,7 +244,7 @@ def test_a_crashed_lane_is_marked_recoverable_in_apply_and_its_work_survives(rep
     ).stdout
     assert branch in listed  # the branch is kept as well
     assert _health(repo, "--run", "--mode", "apply")["moves"] == []  # idempotent
-    assert run_cli(repo, "recover", "T1", agent=A)[0] == 0 and tree.exists()
+    assert run_cli(repo, "recover", agent=A)[0] == 0 and tree.exists()
 
 
 def test_a_deadlock_is_locked_and_apply_adds_the_ordering_edge(repo):
