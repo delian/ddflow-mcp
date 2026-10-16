@@ -237,6 +237,7 @@ def _pins_regenerate(a, c: Ctx) -> int:
         verb=a.document,
         target=a.target or "",
         agent=c.requested_agent,
+        on_progress=lambda line: print(line, file=sys.stderr, flush=True),
     )
     if c.json:
         emit_json(out.body())
@@ -254,6 +255,8 @@ def _pins_regenerate(a, c: Ctx) -> int:
         print(line)
     if out.data.get("note"):
         print(out.data["note"])
+    for line in out.data.get("resolved", []):
+        print(f"resolved {line}; `git add` marks it resolved")
     for p in out.data.get("pins", []):
         state = "re-recorded" if p["regenerated"] else "current"
         print(f"{p['name']}: {state}")

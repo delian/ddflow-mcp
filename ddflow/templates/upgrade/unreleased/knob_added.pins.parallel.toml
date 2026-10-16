@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "pins.parallel"
+new = "4"
+why = "`ddflow pins regenerate` runs its pin checks concurrently, up to this many at once (1 = one after the other)."
+impact = "additive"
