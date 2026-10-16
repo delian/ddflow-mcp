@@ -278,3 +278,35 @@ def test_with_two_reviewers_the_recorded_ones_findings_are_named(repo, tmp_path)
     text = "\n".join(lines)
     assert "fake FAILED" not in text and "fake REVIEWED" in text and "fake2 REVIEWED" in text
     assert "triage addresses fake's findings: #1..#2" in text, text
+
+
+def test_triage_finding_by_digest_prefix_and_clear_errors(repo, tmp_path):
+    """B8b2e487a13: --finding takes the digest `review show` prints, not just the number."""
+    _setup(repo, tmp_path)
+    run_cli(repo, "review", "T1", "--gate", "critic")
+    digests = [f["digest"] for f in _state(repo).gates["critic"].evidence["chunk_findings"]]
+    assert len(digests) >= 2
+    out = api.triage(
+        repo, "T1", gate="critic", finding=digests[1][:8], verdict="refuted", probe="ran it"
+    )
+    assert out.exit == OK, out.reason
+    assert out.data["finding"] == 2
+    code, _out, err = run_cli(
+        repo,
+        "review",
+        "triage",
+        "T1",
+        "--gate",
+        "critic",
+        "--finding",
+        digests[0],
+        "--confirmed",
+        "--probe",
+        "fixed",
+    )
+    assert code == OK, err
+    bad = api.triage(repo, "T1", gate="critic", finding="ffffff", verdict="refuted", probe="x")
+    assert bad.exit == FAIL
+    assert "digest" in bad.reason and "#1" in bad.reason and digests[0] in bad.reason
+    short = api.triage(repo, "T1", gate="critic", finding="2f40", verdict="refuted", probe="x")
+    assert short.exit == FAIL and "at least 6" in short.reason
