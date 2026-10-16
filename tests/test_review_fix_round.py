@@ -116,3 +116,5 @@ def test_extensionless_files_and_dash_content_lines():
     ch = SS.changed_old_lines(diff)
     assert SS.is_superseded("Makefile:10", ch) and not SS.is_superseded("Makefile:9", ch)
     assert SS.is_superseded("p.py:2", ch)
+    assert SS.is_superseded("see Makefile:10", ch) and SS.is_superseded("in p.py:2", ch)
+    assert not SS.is_superseded("footer() in Makefile", ch)

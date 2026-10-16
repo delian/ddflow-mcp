@@ -10,7 +10,7 @@ import re
 
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 _FILE = re.compile(r"^--- (?:a/)?(.+?)\s*$")
-_LOC = re.compile(r"([\w./+@-]+)(?::(\d+)(?:\s*[-\u2013]\s*(\d+))?)?")
+_LOC = re.compile(r"([\w./+@-]+):(\d+)(?:\s*[-\u2013]\s*(\d+))?")
 
 
 def changed_old_lines(diff: str) -> dict[str, list[tuple[int, int]]]:
@@ -58,8 +58,6 @@ def is_superseded(location: str, changed: dict[str, list[tuple[int, int]]]) -> b
         (r for p, r in changed.items() if p == m.group(1) or p.endswith("/" + m.group(1))), None
     )
     if not ranges:
-        return False
-    if m.group(2) is None:
         return False
     lo = int(m.group(2))
     hi = int(m.group(3) or lo)
