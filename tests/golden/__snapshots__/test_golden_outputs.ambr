@@ -1819,6 +1819,32 @@
           are left for you to commit); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      merge_queue.max_batch = 5   [default]
+          How many queue entries one `ddflow queue run` integrates before it returns
+          (each merges main into its branch, regenerates the pins, runs the ci gate
+          once and merges, strictly in queue order). A run takes at most this many
+          even when more are waiting; run it again for the rest. `ddflow queue run
+          --max-batch N` and the `max_batch` argument of `ddflow_queue` override it
+          for one run.
+      merge_queue.run_unit_tests = False   [default]
+          Whether the integrator also runs each entry's `unit_tests` gate on the
+          merged result, beside ci. Off by default: the ci gate is the check run once
+          on the merged result. Every other gate of the item's pipeline must already
+          carry an outcome before an entry runs, whatever this says. `--unit-tests` /
+          `--no-unit-tests` on `ddflow queue run` override it for one run.
+      merge_queue.timeout_s = 0   [default]
+          Seconds the integrator lets one entry's ci run before it stops it and parks
+          the entry. 0 (default) uses `[ci].timeout_s`. `ddflow queue run --timeout N`
+          overrides it for one run.
+      merge_queue.eta_default_s = 900   [default]
+          Seconds `ddflow queue status` assumes one entry takes to integrate while no
+          entry has been integrated yet, to estimate when each queued entry will land.
+      merge_queue.eta_history = 5   [default]
+          How many of the most recent integrated entries `ddflow queue status`
+          averages to estimate how long one entry takes.
+      merge_queue.keep_history = 50   [default]
+          How many finished (merged or parked) entries the queue keeps for `ddflow
+          queue status` and the ETA; older ones are deleted when an entry is added.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest

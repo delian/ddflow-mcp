@@ -150,8 +150,17 @@ def _merge_base(
     )
 
 
-def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: str = "") -> Result:
-    """Run the CI command on `ref` merged with `base` (default: the repo's default branch)."""
+def run(
+    repo: Path,
+    cfg: Config,
+    *,
+    ref: str = "HEAD",
+    base: str = "",
+    command: str = "",
+    timeout_s: int = 0,
+) -> Result:
+    """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -179,7 +188,7 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
             Declared(cmd, "[ci].command"),
             cwd=tree,
             env=child_env(cfg, ci=True),
-            timeout_s=cfg.ci.timeout_s,
+            timeout_s=timeout_s if timeout_s > 0 else cfg.ci.timeout_s,
             check_installed=False,  # checked above, before the scratch worktree was made
         )
         if p.kind == TIMEOUT:
