@@ -426,7 +426,10 @@ def test_a_crashed_integrators_leftover_is_no_holder_and_does_not_block_the_line
     gone.wait()
     here = proj / MQ.QUEUE_DIR
     here.mkdir(parents=True, exist_ok=True)
-    (here / "integrator.json").write_text(json.dumps({"pid": gone.pid, "agent": "x", "since": 1}))
+    # a start time no live process has either: even if the OS gave the pid to a new process
+    # meanwhile, it is not the integrator that wrote this
+    stale = {"pid": gone.pid, "started": "1", "agent": "x", "since": 1}
+    (here / "integrator.json").write_text(json.dumps(stale))
     assert MQ.holder(proj) is None
     _finish(proj, "T1")
     assert _queue(proj, "T1")[0] == 0
@@ -455,3 +458,17 @@ def test_an_eta_window_of_zero_ignores_history_and_a_negative_timeout_is_refused
     assert MQ.typical_s([done], window=0, default_s=60) == 60.0
     code, out, err = run_cli(proj, "queue", "run", "--timeout", "-5")
     assert code == 3, out + err
+
+
+def test_removing_an_entry_and_taking_it_never_both_succeed(proj):
+    here = proj / MQ.QUEUE_DIR
+    here.mkdir(parents=True, exist_ok=True)
+    entry, _ = MQ.add(proj, "T1", agent="a", keep_history=5)
+    assert MQ.take(proj, entry).state == MQ.RUNNING
+    assert MQ.remove(proj, "T1") is None  # being landed: refused, not unlinked
+    assert MQ.get(proj, "T1").state == MQ.RUNNING
+    MQ.finish(proj, entry, MQ.PARKED, reason="x")
+    second, _ = MQ.add(proj, "T2", agent="a", keep_history=5)
+    assert MQ.remove(proj, "T2") is not None
+    assert MQ.take(proj, second) is None  # removed after the integrator looked: not resurrected
+    assert MQ.get(proj, "T2") is None
