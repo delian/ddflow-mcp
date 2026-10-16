@@ -6107,9 +6107,12 @@ part that matters.
   words instead (`trailer_waivers = { "Phase-ships" = ["none", "recon"] }`). It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
   tool-attribution line), merges included, for every agent and every route that runs
   git hooks -- which a harness-side hook reading only the command text cannot promise.
-  The hook's refusals say what to do. A **lapsed lease** on the item whose tree you commit
-  from is named with when it lapsed and its remedy (`ddflow --agent <holder> heartbeat <id>`
-  for its holder; for anyone else `recover --item`, `release --note salvaged`, `claim`). When
+  The hook's refusals say what to do. A **lapsed lease** nobody has taken over, on the item
+  whose tree you commit from (or held by you), is accepted with a note naming when it lapsed
+  and the heartbeat that renews it (`ddflow --agent <holder> heartbeat <id>`);
+  `[enforce].lapsed_lease` = `holder` accepts only the holder's own name, `refuse` restores
+  refusing it with that remedy (and, for anyone else, `recover --item`, `release --note
+  salvaged`, `claim`). Another agent's live lease is never accepted. When
   nothing declared who is committing, it says the name was derived from the tree and how to
   declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
   or a squash that names what it squashes — passes without a lease lookup, and a conflicted

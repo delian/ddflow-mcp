@@ -1120,7 +1120,9 @@ def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> boo
     return bool(here and leased_tree and leased_tree.resolve() == here)
 
 
-def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
+def _lapsed_lines(
+    item_id: str, lease: Lease, now: float, me: str, *, allowed: bool = False
+) -> list[str]:
     """What to say about a lapsed lease on this work: when it lapsed, and how to renew
     it -- as its holder, since a heartbeat from the tree will not revive an expired one.
 
@@ -1138,6 +1140,12 @@ def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
         f"heartbeat for {idle}, past its {ttl} TTL, and nobody has taken",
         "it over.",
     ]
+    if allowed:
+        return [
+            *lines,
+            f"Renew it so later commits are not on a lapse: ddflow --agent {lease.holder} heartbeat {item_id}",
+            "",
+        ]
     if lease.holder == me:
         lines += ["Renew it, then commit again:"]
     else:
@@ -1417,7 +1425,7 @@ def _accepted_note(accepted: list, now: float, me: str) -> str:
         "",
     ]
     for item_id, lease in accepted:
-        lines += _lapsed_lines(item_id, lease, now, me)
+        lines += _lapsed_lines(item_id, lease, now, me, allowed=True)
     return "\n".join(lines).rstrip()
 
 
@@ -1517,6 +1525,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     if not uncovered:
         return Verdict(OK, note)
     msg = _uncovered_message(cfg, state, uncovered, stolen, lapsed, mine, me, now, mode, agent)
+    msg = f"{note}\n\n{msg}" if note else msg
     if mode == "warn":
         return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
     return Verdict(FAIL, msg)
