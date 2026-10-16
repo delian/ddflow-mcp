@@ -171,6 +171,17 @@ def driver_gaps(repo: Path, cfg: Config) -> list[str]:
     return gaps
 
 
+def driver_notes(repo: Path, cfg: Config) -> list[str]:
+    """`doctor`'s note when `git merge` would not use the driver on a pin file, with the remedy."""
+    gaps = driver_gaps(repo, cfg)
+    if not gaps:
+        return []
+    return [
+        "pin files will conflict on a merge: " + "; ".join(gaps) + " -- `ddflow pins regenerate"
+        " --install` sets the driver up (a claim re-sets the git config)"
+    ]
+
+
 def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
     line = line or command_line

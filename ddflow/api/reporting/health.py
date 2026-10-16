@@ -249,17 +249,6 @@ def _driver_drift_notes(repo: Path) -> list[str]:
     ]
 
 
-def _pin_driver_notes(repo: Path, cfg: Config) -> list[str]:
-    """A note when `git merge` would not use the pin-file merge driver, with the remedy."""
-    gaps = PM.driver_gaps(repo, cfg)
-    if not gaps:
-        return []
-    return [
-        "pin files will conflict on a merge: " + "; ".join(gaps)
-        + " — `ddflow pins regenerate --install` sets the driver up (a claim re-sets the git config)"
-    ]
-
-
 def _orphan_notes(events: list) -> list[str]:
 
     lost = len(SS.unadopted_orphans(events))
@@ -349,7 +338,6 @@ def doctor(
     notes += [f"{g.shard}: accepted the new count ({g.now}, was {g.was})" for g in accepted]
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
-
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
     notes.extend(RULEVIEW.notes(repo, cfg, st))
@@ -443,8 +431,7 @@ def doctor(
     found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
-    notes += _driver_drift_notes(repo)
-    notes += _pin_driver_notes(repo, cfg)
+    notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
