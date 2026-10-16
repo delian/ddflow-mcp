@@ -229,7 +229,10 @@ def _tracked_tokens(repo) -> set[str] | None:
 
 def staged_diff(repo, paths: list[str] | None = None) -> str | None:
     """The staged diff, or None when git could not give it. ``paths`` limits it to those
-    files (a merge commit answers only for what the branch changed)."""
+    files (a merge commit answers only for what the branch changed); an empty list
+    selects nothing, so it is the empty diff, never the whole one."""
+    if paths is not None and not paths:
+        return ""
     r = G.run(
         repo,
         *("-c", "core.quotepath=false", "diff", "--cached", "-U0", "-M", "--no-color"),
