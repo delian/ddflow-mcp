@@ -1085,7 +1085,7 @@ def _obligation_footer(server) -> str:
 
 
 #: Keys a tool's payload carries only when the operation produced them.
-_OPTIONAL_KEYS = ("export_refresh", "ci", "progress", "guidance")
+_OPTIONAL_KEYS = ("export_refresh", "ci", "progress", "guidance", "glob_warnings")
 
 
 _VAR_DEFAULTS: dict[str, Any] = {

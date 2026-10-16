@@ -92,3 +92,23 @@ def test_plan_check_warns_and_keeps_its_exit_code(proj, tmp_path):
     code, out, err = run_cli(proj, "plan", "check", str(plan))
     assert code == 0, out + err
     assert "warning  A:" in out and "src/real.py" in out
+
+
+def test_claim_over_mcp_carries_glob_warnings_only_when_there_are_some(proj):
+    from ddflow.surfaces.mcp import Server
+
+    def claim(item):
+        reply = Server(proj).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "ddflow_claim", "arguments": {"id": item, "no_worktree": True}},
+            }
+        )
+        return json.loads(reply["result"]["content"][0]["text"])
+
+    run_cli(proj, "task", "add", "T1", "--globs", "sorc/real.py")
+    run_cli(proj, "task", "add", "T2", "--globs", "src/brand_new.py")
+    assert "src/real.py" in " ".join(claim("T1")["glob_warnings"])
+    assert "glob_warnings" not in claim("T2")
