@@ -84,3 +84,5 @@
 {"agent":"fleet-dupesself","data":{"at":1792157194.8022728,"holder":"fleet-dupesself"},"id":"eee3201cfac2e34b15c068dca","kind":"lease.renewed","lamport":69453,"schema":1,"subject":"fix-B623baa4359","ts":"2026-10-16T13:26:34.850117Z"}
 {"agent":"fleet-dupesself","data":{"at":1792157496.1171246,"holder":"fleet-dupesself"},"id":"e1c32e67c35091dd90bb25afe","kind":"lease.renewed","lamport":69462,"schema":1,"subject":"fix-B623baa4359","ts":"2026-10-16T13:31:36.159032Z"}
 {"agent":"fleet-dupesself","data":{"at":1792157797.2882638,"holder":"fleet-dupesself"},"id":"e2c7cead7e0d6935025aeaab4","kind":"lease.renewed","lamport":69480,"schema":1,"subject":"fix-B623baa4359","ts":"2026-10-16T13:36:37.320743Z"}
+{"agent":"fleet-dupesself","data":{"at":1792158078.1373723,"holder":"fleet-dupesself"},"id":"ee2a0561d5e5fbe15e537f892","kind":"lease.renewed","lamport":69516,"schema":1,"subject":"fix-B623baa4359","ts":"2026-10-16T13:41:18.156725Z"}
+{"agent":"fleet-dupesself","data":{"gate":"unit_tests"},"id":"ef49fad56d907f03be5bb0235","kind":"gate.started","lamport":69517,"schema":1,"subject":"fix-B623baa4359","ts":"2026-10-16T13:41:21.555785Z"}
