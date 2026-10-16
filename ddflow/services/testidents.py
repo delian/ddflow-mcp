@@ -132,9 +132,14 @@ def listed_packages(files: list[str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for f in files:
         parent = str(PurePosixPath(f).parent)
-        if f.endswith(".py") and parent != ".":
-            out.setdefault(module_name(f"{parent}/__init__.py"), f)
-            out.setdefault(parent, f)
+        if not f.endswith(".py") or parent == ".":
+            continue
+        out.setdefault(module_name(f"{parent}/__init__.py"), f)
+        out.setdefault(parent, f)
+        grand = str(PurePosixPath(parent).parent)
+        if PurePosixPath(f).name == "__init__.py" and grand != ".":  # a new subpackage
+            out.setdefault(module_name(f"{grand}/__init__.py"), f)
+            out.setdefault(grand, f)
     return out
 
 
