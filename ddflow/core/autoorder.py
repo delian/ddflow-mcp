@@ -79,16 +79,20 @@ def eligible(c: Cand | None) -> str:
     return ""
 
 
+def _blockers(k: Mapping[str, Any]) -> list[str]:
+    return list(
+        dict.fromkeys([*([k["blocker"]] if k.get("blocker") else []), *k.get("blockers", [])])
+    )
+
+
 def _candidates(cycle: Mapping[str, Any]) -> list[tuple[str, str]]:
     """(later, earlier) pairs in the order to try them: the victim's item waits for the
-    waiter it blocks; then each waiter for the item it waits behind."""
+    waiter it blocks; then each waiter for the items it waits behind."""
     links = cycle.get("links", [])
     out: list[tuple[str, str]] = []
     victim_item = cycle.get("victim_item", "")
-    for k in links:
-        if k.get("blocker") == victim_item or victim_item in k.get("blockers", []):
-            out.append((victim_item, k["item"]))
-    out += [(k["item"], k["blocker"]) for k in links]
+    out += [(victim_item, k["item"]) for k in links if victim_item in _blockers(k)]
+    out += [(k["item"], b) for k in links for b in _blockers(k)]
     return list(dict.fromkeys(p for p in out if p[0] != p[1]))
 
 
