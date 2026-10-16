@@ -291,6 +291,8 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 item=item_id,
                 alternatives=_alts(offer, state, cfg, item_id, holder, now),
             )
+        # Only reached for a lease that is NOT live (a live own one returned above), so a
+        # holder's own lease here is, by construction, a lapsed one.
         own_lapsed = existing is not None and existing.holder == holder and cfg.lease.resume_own
         if existing and not force and not own_lapsed and cfg.lease.reclaim_policy == "report":
             if existing.expired_at:

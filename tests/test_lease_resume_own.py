@@ -39,3 +39,13 @@ def test_another_agent_still_cannot_take_a_lapsed_lease_without_force(repo):
     assert run_cli(repo, "--agent", "second", "release", "T2")[0] == 0
     out = LC.claim(repo, "T1", agent="third", no_worktree=True)
     assert out.exit == 3 and "EXPIRED" in out.reason, out.reason
+
+
+def test_a_live_own_lease_is_still_just_renewed(repo):
+    _lapsed_then_taken(repo)
+    assert run_cli(repo, "--agent", "second", "release", "T2")[0] == 0
+    assert LC.claim(repo, "T1", agent="first", no_worktree=True).exit == 0
+    again = LC.claim(repo, "T1", agent="first", no_worktree=True)
+    assert again.exit == 0, again.reason
+    st = fold(EventLog(repo, "r").read_all())
+    assert set(st.active_leases(time.time())) == {"T1"}
