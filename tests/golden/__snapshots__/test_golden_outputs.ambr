@@ -803,9 +803,9 @@
           `ddflow tests --item <id>`, plus the regression tests of the bugs it fixes
           -- and lists in the evidence which ran and why; 'full' runs the whole suite
           as every other item does. Selected only once the item's `ci` gate -- the
-          whole suite, or with `[ci].tests_scope = 'selected'` its own selection (the
-          tests that ci did not take are all this gate then runs, and none when it
-          took them all), on the branch merged with the base -- has PASSED on the
+          whole suite, or with `[ci].tests_scope = 'selected'` its own selection (this
+          gate then runs only the tests of ITS selection that ci did not take,
+          normally none), on the branch merged with the base -- has PASSED on the
           clean commit its tree holds now (ci tests the committed HEAD) (a fix spent
           about 2.1 full-suite runs of 12 minutes each before this). A ci with no
           outcome, skipped, unavailable, failed, run over uncommitted edits or on
