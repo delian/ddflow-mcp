@@ -147,3 +147,9 @@ def test_nested_or_unclosed_markers_leave_the_file_to_a_person(tmp_path):
 def test_a_lone_unclosed_marker_is_reported_not_ignored(tmp_path):
     repo = _repo(tmp_path, "intro\n<<<<<<< HEAD\nours\n=======\ntheirs\n")
     assert "line 2" in PN.regenerate(repo, Config()).problem
+
+
+def test_a_lone_closing_marker_is_reported_and_not_called_prose(tmp_path):
+    repo = _repo(tmp_path, "intro\nours\n=======\ntheirs\n>>>>>>> main\n")
+    problem = PN.regenerate(repo, Config()).problem
+    assert "line 5" in problem and "do not pair up" in problem and "prose" not in problem

@@ -219,8 +219,13 @@ def _unsettled(repo: Path, chosen: list[Recipe], rep: Report) -> bool:
     stuck = [s for s in found if s.refused]
     if stuck:
         rep.problem = "; ".join(
-            f"{s.path}: conflict in prose outside the generated regions (line "
-            f"{', '.join(map(str, s.refused))}): resolve it by hand, then run this again"
+            f"{s.path}: "
+            + (
+                "conflict markers that do not pair up"
+                if not s.hunks or s.stray
+                else "conflict in prose outside the generated regions"
+            )
+            + f" (line {', '.join(map(str, s.refused))}): resolve it by hand, then run this again"
             for s in stuck
         )
         return True
