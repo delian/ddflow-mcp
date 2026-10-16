@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.api.reporting.health import wait_cycles
+from ddflow.api.reporting import wait_cycles
 from ddflow.config import Config
 from ddflow.core import leasewait as LW
 from ddflow.core.model import fold
