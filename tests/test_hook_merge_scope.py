@@ -154,3 +154,27 @@ def test_scope_all_restores_judging_everything_the_merge_stages(merging):
     _git(merging, "add", "own.py")
     r = _git(merging, "commit", "-qm", "merge main")
     assert r.returncode != 0 and "from_main.txt" in r.stderr, r.stderr
+
+
+def test_an_empty_path_filter_selects_no_diff_not_the_whole_one(merging):
+    from ddflow.services import docsync
+
+    (merging / "own.py").write_text("x = 3\n")
+    _git(merging, "add", "own.py")
+    assert docsync.staged_diff(merging, ["own.py"])
+    assert docsync.staged_diff(merging, []) == ""
+    assert docsync.staged_diff(merging)
+
+
+def test_an_automatic_merge_of_a_file_both_sides_changed_passes_by_default(merging):
+    """The clean-merge exemption holds under the default scope: both sides edit the
+    unleased `shared.txt` in different places and git merges it by itself."""
+    base = "".join(f"line {i}\n" for i in range(1, 11))
+    _main_moves(merging, {"shared.txt": base})
+    assert _git(merging, "merge", "-q", "main").returncode == 0
+    (merging / "shared.txt").write_text(base.replace("line 1\n", "feat 1\n"))
+    _git(merging, "commit", "-qam", "feat edit", "--no-verify")
+    _main_moves(merging, {"shared.txt": base.replace("line 10\n", "main 10\n")})
+    _merge_no_commit(merging)
+    r = _git(merging, "commit", "-qm", "merge main")
+    assert r.returncode == 0, r.stderr
