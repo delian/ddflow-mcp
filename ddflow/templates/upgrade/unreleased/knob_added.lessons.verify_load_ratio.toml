@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lessons.verify_load_ratio"
+new = "1.0"
+why = "Load per CPU above which a failed regression-test run is flagged as run under load."
+impact = "additive"
