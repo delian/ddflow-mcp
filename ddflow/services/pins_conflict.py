@@ -96,8 +96,6 @@ def settle(path: str, text: str) -> Settled:
     res = Settled(path)
     lines = text.splitlines(keepends=True)
     found = hunks_of(lines)
-    if not found:
-        return res
     res.hunks = len(found)
     # A marker no complete conflict accounts for (a nested or an unclosed one) means the file was
     # merged over unresolved markers: no hunk of it is ours to settle.
@@ -107,7 +105,7 @@ def settle(path: str, text: str) -> Settled:
         for n, ln in enumerate(lines)
         if ln.startswith(("<<<<<<< ", ">>>>>>> ")) and n not in known
     ]
-    if res.refused:
+    if res.refused or not found:
         return res
     mixed = any(_BEGIN.search(ln) for ln in lines)
     out: list[str] = []
@@ -145,7 +143,7 @@ def settle_files(repo: Path, files: list[str]) -> list[Settled]:
                 continue
             res = settle(p.relative_to(repo).as_posix(), text)
             res.file = p
-            if res.hunks:
+            if res.hunks or res.refused:
                 done.append(res)
     return done
 

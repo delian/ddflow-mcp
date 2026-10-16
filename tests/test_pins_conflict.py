@@ -140,5 +140,10 @@ def test_nested_or_unclosed_markers_leave_the_file_to_a_person(tmp_path):
     assert res.text is None and res.refused == [1, 10]
     repo = _repo(tmp_path, "intro\n" + _conflict(_block("a"), _block("b")) + "<<<<<<< HEAD\nx\n")
     before = (repo / "README.md").read_text()
-    assert "line 6" in PN.regenerate(repo, Config()).problem
+    assert "line 11" in PN.regenerate(repo, Config()).problem
     assert (repo / "README.md").read_text() == before
+
+
+def test_a_lone_unclosed_marker_is_reported_not_ignored(tmp_path):
+    repo = _repo(tmp_path, "intro\n<<<<<<< HEAD\nours\n=======\ntheirs\n")
+    assert "line 2" in PN.regenerate(repo, Config()).problem
