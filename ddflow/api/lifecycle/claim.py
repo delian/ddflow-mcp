@@ -18,6 +18,7 @@ from ...infra import worktree as W
 from ...services import choices as CHO
 from ...services import flow as FS
 from ...services import leases as L
+from ...services import pins_merge as PM
 from ...services import ports as PT
 from ...services import waiting as WG
 from ...services.bug_globs import bug_globs_of
@@ -270,6 +271,8 @@ def claim(  # noqa: PLR0913 -- the door's own flags
         return bound
     wt = bound.wt
     _bring_local_files(repo, cfg, wt)
+    if wt is not None:  # a pin file merges through its driver in the tree an agent works in
+        PM.ensure_driver(Path(wt.path), cfg)
     log.append("item.started", item, {})
     # The first branch made is where the branching model starts to matter. An unmade
     # choice is defaulted here, on the record, and followed from now on.

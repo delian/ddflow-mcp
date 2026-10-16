@@ -955,6 +955,26 @@
           hook hands it back after compaction. The hook gets no summary from Claude
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
+      session.agent_brief_max_chars = 9000   [default]
+          Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME
+          ITEM` renders for a subagent. Over it, the lessons and then the decisions
+          are cut (down to a pointer); the standard sections are only ever left out by
+          `agent_brief_off`. 0 means no ceiling.
+      session.agent_brief_off = []   [default]
+          Sections of the launch brief to leave out: identity, item, decisions,
+          lessons, start, tests, reviews, gates, finish, forbidden, filing, project,
+          report. Turning one off removes that standing rule from every launch brief:
+          only for a project whose own instruction file already says it.
+      session.agent_brief_decisions = 6   [default]
+          How many of the decisions that govern the item's files the launch brief
+          quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.
+      session.agent_brief_lessons = 3   [default]
+          How many task-relevant lessons the launch brief carries.
+      session.agent_brief_extra = ''   [default]
+          Project text added to every launch brief as its `project` section: the
+          commands and rules that hold only here (how to run the full test suite, a
+          forbidden path). The standard text stays in one place; this is the project's
+          addition to it.
       schedule.parallel = 'fixed'   [file]
           'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts
           between `max_parallel_min` and `max_parallel_max`, starting at
@@ -1105,6 +1125,41 @@
           The standing phase (default `bugs`) a fix task is filed under when the bug
           names no item, or names one whose phase is already finished. Made on first
           use, with the title `Bugs`.
+      bugs.repro_capture = 'full'   [default]
+          How much of a reproduction bundle `bug found` stores with the bug (default
+          `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch
+          and tree, the agent identity and how it was derived, the DDFLOW_*/CI/gate
+          environment variables (secrets redacted) and the config keys that differ
+          from the defaults with the layer each came from; `full` also the item with
+          its lease and gate records, the machine's load and free disk, the agent's
+          recent events and, with `--test ID`, the pytest output tail. `--repro-
+          capture` overrides it for one bug. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'off', the strictest
+          (stores nothing, so nothing unredacted can be kept); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      bugs.repro_max_bytes = 65536   [default]
+          The largest reproduction bundle stored, in bytes (default 65536). Over it,
+          the biggest parts are cut down (output tails first) and the bundle says it
+          was truncated.
+      bugs.repro_tail_bytes = 4096   [default]
+          How many trailing bytes of a command's or a test run's output a reproduction
+          bundle keeps (default 4096).
+      bugs.repro_events = 10   [default]
+          How many of the filing agent's latest log events a `full` reproduction
+          bundle lists (default 10). ddflow keeps no log of the commands an agent ran,
+          so these stand in for the last commands (0 lists none).
+      bugs.repro_test_timeout_s = 300   [default]
+          Seconds `bug found --test ID` lets pytest run to capture its output tail
+          (default 300); a run cut short is recorded as such.
+      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDE*', '*GATE*']   [default]
+          Environment variable name patterns (fnmatch) whose values a reproduction
+          bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and
+          the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN,
+          SECRET, PASSWORD, ...) is recorded as set, never with its value.
+      bugs.repro_redact_extra = []   [default]
+          More redaction regexes applied to a reproduction bundle, IN ADDITION to
+          `[session] redact_patterns` and `redact_extra`.
       importer.max_tasks = 200   [default]
           Refuse to propose more tasks than this in one import. An import writes
           events into a log that is committed to git, and five thousand of them is not
@@ -2072,6 +2127,12 @@
           the workflow, the reporting duties and the companion tools it should use.
           This is the file to edit to change how the project works. `ddflow prompts
           eject mcp_instructions` writes an editable copy into .ddflow/prompts/.
+      prompts.agent_brief = ''   [default]
+          Path to the launch-brief template `ddflow brief --for-agent` renders for a
+          subagent: sections split by `<!-- section: NAME -->` lines. Variables:
+          agent, item, title, body, globs, needs, base, lease_s, heartbeat_s,
+          decisions_text, lessons_text, note, extra. `ddflow prompts eject
+          agent_brief` writes an editable copy.
       export.documents = []   [default]
           The documents `ddflow export --all` writes and keeps (roadmap, bugs, status,
           worklog, sessions, decisions, rules, changelog). EMPTY by default: nothing
