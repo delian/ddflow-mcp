@@ -19,7 +19,7 @@ MODES = ("off", "propose", "apply")
 
 def view(st) -> dict[str, AO.Cand]:
     return {
-        i: AO.Cand(i, it.state, it.kind, tuple(it.tags), tuple(it.needs))
+        i: AO.Cand(i, it.terminal, it.kind, tuple(it.tags), tuple(it.needs))
         for i, it in st.items.items()
         if not getattr(it, "removed", False)
     }
