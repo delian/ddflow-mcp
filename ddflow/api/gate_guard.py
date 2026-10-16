@@ -62,13 +62,9 @@ def wrong_tree_refusal(repo: Path, st, it, called_from: Path | None) -> str:
 def guard_record(log, cfg, st, it, *, force: bool, reason: str, what: str) -> tuple[str, str]:
     """(refusal, forced-by) for recording or running a gate on ``it``: a finished item, then
     another clone's live lease. Either may be overridden with ``--force --reason``.
-
-    An umbrella (an item with sub-tasks) closes by itself when its last child does, and its
-    own gates are recorded after that: it is not finished in the sense this guard means."""
-    umbrella = bool(st.descendants(it.id))
-    shut, note = (
-        ("", "") if umbrella else closed_item_refusal(it, force=force, reason=reason, what=what)
-    )
+    An umbrella is no exception (Bd37a921536): its gates are recorded, rolled up from its
+    sub-tasks, when it closes, so nothing is left to record on it afterwards."""
+    shut, note = closed_item_refusal(it, force=force, reason=reason, what=what)
     if shut:
         return shut, ""
     refusal, forced = L.foreign_guard(log, cfg, it.id, force=force, reason=reason, what=what)
