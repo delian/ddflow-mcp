@@ -323,6 +323,15 @@ def wait(
                 f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same "
                 f"release woke too."
             )
+            it = st.items.get(item) if item else None
+            if it is not None and not want:
+                # READY is the verdict for THESE globs; a claim naming others is judged again.
+                data["judged_globs"] = list(it.globs)
+                data["advice"] += (
+                    f" That is judged on {item}'s declared globs"
+                    + (f" ({', '.join(it.globs)})" if it.globs else " (none)")
+                    + "; to claim with other --globs, wait with the same --globs."
+                )
             return O.ok("wait", **data)
         if v["status"] == "hopeless":
             return O.nothing("wait", f"Not waiting: {v['why']}", **data)
