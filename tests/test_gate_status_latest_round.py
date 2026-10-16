@@ -76,4 +76,6 @@ def test_triage_without_a_verdict_points_at_the_findings(repo, tmp_path):
     api.review(repo, gate="critic", item="T1")
     out = api.triage(repo, "T1", gate="critic", finding=1, verdict="", probe="")
     assert out.exit != 0
-    assert "ddflow review show T1" in out.reason
+    assert "critic #1 [HIGH] x.py:1" in out.reason
+    assert "critic #2 [HIGH] x.py:2" in out.reason
+    assert out.reason.count("untriaged") == 2
