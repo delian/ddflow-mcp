@@ -104,6 +104,7 @@ from .outcomes import (  # noqa: F401
     GateStatus,
     StaleNote,
     approve,
+    is_triageable,
     local_command_notes,
     on_refutation,
     record,
