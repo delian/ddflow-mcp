@@ -914,3 +914,10 @@ key = "release.manifest_lint"
 new = "\"block\""
 why = "What a release does about a knob or event kind change the upgrade manifest does not announce: block (default), warn or off."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.fix_round_free"
+new = "true"
+why = "A review round that only re-checks fixes (every prior finding's lines rewritten or confirmed fixed) no longer counts against review.max_rounds; false restores counting it."
+impact = "additive"

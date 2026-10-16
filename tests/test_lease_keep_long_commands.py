@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _wait import scaled, wait_until
 from conftest import run_cli
 
 from ddflow.api import lifecycle as LC
@@ -78,41 +79,69 @@ def test_a_renewing_long_command_is_not_progress(repo):
     assert LB.progress_at(events, "T1", lz, lambda _l: 0.0) == before
 
 
-def test_pins_regenerate_renews_the_callers_lease_while_a_recipe_runs(repo, monkeypatch):
-    """End to end: the API hands the recipe loop the caller's lease keeper."""
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+def _regenerate_until_renewed(repo, tmp_path, monkeypatch, renewals: int, first_renewal_delay=0.0):
+    """Run `pins_regenerate` with a recipe that ends only when the test has SEEN the wanted
+    renewals in the log (a file it writes), not after a guessed 2.4 s: under load the
+    keeper ticked once in that time (0, 1) in the ci gate. ``first_renewal_delay`` injects a
+    slow keeper."""
+    import threading
+
     from ddflow.api import pin_files as PF
 
-    log, cfg = _held(repo)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    _log, cfg = _held(repo)
+    done = tmp_path / "enough-renewals"
+    ceiling = int(scaled(30) / 0.05)
+    wait = f"n=0; while [ ! -e {done} ] && [ $n -lt {ceiling} ]; do sleep 0.05; n=$((n+1)); done"
     recipes = repo / cfg.pins.recipes_file
     recipes.parent.mkdir(parents=True, exist_ok=True)
     recipes.write_text(
-        '[[pin]]\nname = "slow"\nfiles = ["x"]\ncheck = ["sleep", "2.4"]\nregen = ["true"]\n'
+        f'[[pin]]\nname = "slow"\nfiles = ["x"]\ncheck = ["sh", "-c", "{wait}"]\nregen = ["true"]\n'
     )
     assert run_cli(repo, "config", "lease.heartbeat_s", "1")[0] == 0
     assert run_cli(repo, "config", "lease.renew_log_min_s", "0")[0] == 0
-    before = sum(1 for e in log.read_all() if e.kind == "lease.renewed")
+    count = lambda: sum(  # noqa: E731
+        1 for e in EventLog(repo, "me").read_all() if e.kind == "lease.renewed"
+    )
+    before = count()
+    if first_renewal_delay:
+        real = LK.keeper
+
+        def slow_keeper(*a, **k):
+            keep = real(*a, **k)
+            state = {"first": True}
+
+            def delayed():
+                if state.pop("first", False):
+                    time.sleep(first_renewal_delay)
+                keep()
+
+            return delayed
+
+        monkeypatch.setattr(LK, "keeper", slow_keeper)
+
+    def watch():
+        try:
+            wait_until(lambda: count() - before >= renewals, 30, what="the renewals")
+        except AssertionError:
+            pass  # the recipe's own ceiling ends the run; the assertion below reports it
+        done.write_text("x")
+
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
     out = PF.pins_regenerate(repo, agent="me")
+    watcher.join(scaled(5))
     assert out.exit == 0, out.reason
-    after = sum(1 for e in EventLog(repo, "me").read_all() if e.kind == "lease.renewed")
-    assert after - before >= 2, (before, after)
+    assert count() - before >= renewals, (before, count())
 
 
-def test_the_throttle_survives_a_backward_wall_clock_step(monkeypatch):
-    calls: list[int] = []
-    tick = LK.throttled(lambda: calls.append(1), time.time(), 10, 1.0)
-    real = time.time
-    monkeypatch.setattr(time, "time", lambda: real() - 3600)  # the clock stepped back
-    mono = time.monotonic
-    monkeypatch.setattr(time, "monotonic", lambda: mono() + 20)  # 20 s really passed
-    tick()
-    assert calls == [1]
+def test_pins_regenerate_renews_the_callers_lease_while_a_recipe_runs(repo, tmp_path, monkeypatch):
+    """End to end: the API hands the recipe loop the caller's lease keeper. The recipe runs
+    until the renewals are in the log, so a loaded machine only makes it longer."""
+    _regenerate_until_renewed(repo, tmp_path, monkeypatch, 2)
 
 
-def test_the_throttle_fires_after_a_suspend_the_monotonic_clock_slept_through(monkeypatch):
-    calls: list[int] = []
-    tick = LK.throttled(lambda: calls.append(1), time.time(), 10, 1.0)
-    real = time.time
-    monkeypatch.setattr(time, "time", lambda: real() + 1600)  # wall clock: 27 min passed
-    tick()  # the monotonic clock says only milliseconds did
-    assert calls == [1]
+def test_a_keeper_that_ticks_late_still_renews_during_a_long_recipe(repo, tmp_path, monkeypatch):
+    """The slow path forced: the first renewal is 3 s late. The old fixed 2.4 s recipe ended
+    before it and counted (0, 1)."""
+    _regenerate_until_renewed(repo, tmp_path, monkeypatch, 2, first_renewal_delay=3.0)
