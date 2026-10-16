@@ -87,9 +87,9 @@ def run(
         ref = st.items[ref].branch
     res = CI.run(repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s)
     data = res.as_data()
-    if log_to is not None and res.output:
+    if log_to is not None and not res.ok:  # a pass keeps no log
         log_to.parent.mkdir(parents=True, exist_ok=True)
-        fsio.atomic_write(log_to, res.output, fsync=False)
+        fsio.atomic_write(log_to, res.output, fsync=False)  # empty too: a log that says so
     if item and not command and os.environ.get(IN_GATE_ENV) != "ci":
         why = _record_gate(repo, item, res, agent, called_from)
         data["recorded"] = {
