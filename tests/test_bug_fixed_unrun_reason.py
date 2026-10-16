@@ -43,3 +43,11 @@ def test_a_could_not_run_without_a_reason_still_gets_one():
 
     status, ev = _regression_status(G.REGRESSION_COULD_NOT_RUN, {}, G)
     assert status == "could-not-run" and ev["reason"] and ev["remedy"]
+
+
+def test_an_unrecognized_status_also_names_a_remedy():
+    from ddflow.api.knowledge.bug_close import _regression_status, could_not_run_text
+    from ddflow.services import gates as G
+
+    status, ev = _regression_status("brand-new", {}, G)
+    assert status == "could-not-run" and "to fix:" in could_not_run_text(ev)
