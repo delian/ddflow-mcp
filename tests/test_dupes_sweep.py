@@ -135,6 +135,21 @@ def test_a_summary_lesson_is_not_paired_with_the_lesson_it_cites(repo):
     assert frozenset(("L1", "L2")) in pairs, "a real duplicate was lost"
 
 
+def test_a_derived_companion_settles_the_pair_in_either_direction(repo):
+    """The pair test is symmetric: the fix task and its bug are settled whichever of the
+    two ids the sweep reaches first (the sweep keeps the pair under one canonical key)."""
+    from ddflow.api.knowledge import pairs as P
+
+    run_cli(repo, "init")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", BUG_A)
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", BUG_B, "--no-task")
+    from ddflow.api._base import _load
+
+    _log, _cfg, st = _load(repo, "")
+    assert P._settled(st, "B1", "fix-B1") and P._settled(st, "fix-B1", "B1")
+    assert not P._settled(st, "B1", "B2")
+
+
 def test_a_related_link_also_settles_the_pair(repo):
     _two_bugs(repo)
     assert run_cli(repo, "link", "B2", "--related", "B1")[0] == 0
