@@ -26,7 +26,7 @@ def _carry_reviewer(prior: dict, evidence: dict) -> None:
     it (an explicit `model`) keeps no part of the prior one, or a stale family would
     override it. The reviewed sha is kept unless restated."""
     carried = []
-    if not any(k in evidence for k in _REVIEWER_KEYS):
+    if not any(evidence.get(k) for k in _REVIEWER_KEYS):
         for k in _REVIEWER_KEYS:
             if prior.get(k):
                 evidence[k] = prior[k]
