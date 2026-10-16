@@ -75,6 +75,8 @@ def cmd_item_update(a, c: Ctx) -> int:
             # The raw values: the api reads them once. Parsed here as well, a JSON
             # array's element holding a comma was split by the second read (roborev).
             globs=a.globs,
+            add_globs=getattr(a, "add_globs", None),
+            remove_globs=getattr(a, "remove_globs", None),
             tags=None if a.tags is None else _csv(a.tags),
             priority=a.priority,
             line=a.line,

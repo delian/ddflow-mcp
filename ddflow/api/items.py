@@ -40,6 +40,10 @@ class ItemEdit:
     body: str | None = None
     needs: list[str] | None = None
     globs: list[str] | None = None
+    #: Globs added to / taken from the item's current ones (or from ``globs`` when that is
+    #: given too), so widening a lease never repeats the whole list (`--add-globs`).
+    add_globs: list[str] | None = None
+    remove_globs: list[str] | None = None
     tags: list[str] | None = None
     priority: int | None = None
     line: str | None = None
@@ -72,6 +76,19 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
+    if edit.add_globs is not None or edit.remove_globs is not None:
+        held = fields.get("globs")
+        if held is None:
+            held = [*it.globs, *(it.lease.globs if it.lease else [])]
+            held = list(dict.fromkeys(held))
+        fields["globs"] = GS.adjust(held, edit.add_globs, edit.remove_globs)
+        if fields["globs"] == held and edit.globs is None and len(fields) == 1:
+            return O.nothing(
+                "item.updated",
+                f"nothing to change: --add-globs are all held already and --remove-globs "
+                f"name none of {', '.join(held) or '(no globs)'}.",
+                id=item,
+            )
     bad = GS.problem(fields.get("globs", []))
     if bad:
         return O.failed("item.updated", f"{item}: {bad}", id=item)

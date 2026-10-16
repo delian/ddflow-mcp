@@ -2292,7 +2292,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2305,9 +2305,16 @@
     --tags TAGS
     --line LINE
     --resources RESOURCES
-    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these; path
-                          globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to
-                          add more -- every value is kept
+    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these -- the
+                          whole list, not an addition (see --add-globs); path globs, comma-separated
+                          (a.py,src/**) or a JSON array; repeat the flag to add more -- every value
+                          is kept
+    --add-globs ADD_GLOBS
+                          ADD these comma-separated globs to the item's current ones (and a claimed
+                          item's lease); the rest are kept
+    --remove-globs REMOVE_GLOBS
+                          REMOVE these comma-separated globs from the item's current ones (and a
+                          claimed item's lease)
     --priority PRIORITY
     --queue               keep a refused --globs widening in the first-in-first-out line for its
                           files
