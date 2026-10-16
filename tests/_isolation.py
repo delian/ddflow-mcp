@@ -48,7 +48,8 @@ REPO_VARS = (
 
 #: What the scratch global git configuration carries: the identity the `repo` fixture uses
 #: (so a test that commits without configuring one still can), and nothing else.
-GLOBAL_CONFIG = "[user]\n\tname = Test\n\temail = t@example.com\n"
+SUITE_EMAIL = "t@example.com"
+GLOBAL_CONFIG = f"[user]\n\tname = Test\n\temail = {SUITE_EMAIL}\n"
 
 REAL_REPO = Path(__file__).resolve().parents[1]
 HOME_ENV = "DDFLOW_SUITE_HOME"
@@ -114,8 +115,13 @@ def stray_commits(since: str) -> list[str]:
         return []
     if _git("merge-base", "--is-ancestor", since, head).returncode != 0:
         return [f"HEAD {since[:8]} is no longer an ancestor of {head[:8]} (branch rewritten)"]
-    rows = _git("log", "--format=%h %s", f"{since}..{head}").stdout.splitlines()
-    return [r for r in rows if r.split(" ", 1)[-1] in STRAY_SUBJECTS]
+    rows = _git("log", "--format=%h %ae %s", f"{since}..{head}").stdout.splitlines()
+    out = []
+    for row in rows:
+        sha, email, subject = (row.split(" ", 2) + ["", ""])[:3]
+        if email == SUITE_EMAIL or subject in STRAY_SUBJECTS:
+            out.append(f"{sha} {subject}")
+    return out
 
 
 def snapshot(*, status: bool = True) -> dict[str, object]:
