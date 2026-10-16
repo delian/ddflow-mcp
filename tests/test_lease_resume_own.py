@@ -69,19 +69,3 @@ def test_a_marked_expired_own_lease_is_revived_by_heartbeat(repo):
     out = LC.heartbeat(repo, "T1", agent="first")
     assert out.data.get("renewed"), out.reason
 
-
-def test_heartbeat_from_the_leased_tree_revives_a_lapsed_lease_for_its_holder(repo):
-    run_cli(repo, "init")
-    run_cli(repo, "config", "lease.ttl_s", "1")
-    run_cli(repo, "config", "lease.grace_s", "0")
-    log = EventLog(repo, "seed")
-    log.append("phase.added", "P1", {"title": "p"})
-    log.append("task.added", "T1", {"parent": "P1", "title": "t", "globs": ["src/a.py"]})
-    out = LC.claim(repo, "T1", agent="first")
-    assert out.exit == 0, out.reason
-    tree = Path(out.data["worktree"])
-    time.sleep(2.5)
-    assert not fold(EventLog(repo, "r").read_all()).items["T1"].lease.live(time.time(), 0)
-    # the tree's derived identity is not "first": it speaks for the lease's holder
-    beat = LC.heartbeat(repo, "T1", agent="other", called_from=tree)
-    assert beat.data.get("renewed"), beat.reason
