@@ -19,33 +19,29 @@ COMMANDS: tuple[Command, ...] = (
         path=("health",),
         summary="stalled, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass",
         tool="ddflow_health",
-        description=(
-            "The watchdog. Inspects every lane for STALLED (current lease, no progress), "
-            "LOCKED (in a wait cycle, or waiting on a stalled lane), CRASHED (lease expired over "
-            "work) and RUNAWAY (a job running past [health].runaway_s), each with evidence and the "
-            "command that corrects it. run=true is the periodic pass: it also makes the "
-            "corrections [health].mode allows (off | propose | apply; apply breaks a stalled "
-            "contended lease, adds auto-order needs edges, records a crashed lane recoverable) "
-            "and records the run for `cadence`. It never kills a process or deletes work."
-        ),
+        description="Watchdog: stalled, locked, crashed, runaway lanes and their fixes; run=true corrects per [health].mode.",
         call=lambda repo, a, agent: _api().health(
             repo, run=bool(a.get("run")), mode=a.get("mode") or "", agent=agent
         ),
-        payload=("mode", "ran", "now", "findings", "moves", "count", "text"),
+        payload=("mode", "ran", "findings", "moves", "count", "text"),
         render=_text,
+        flag_exempt={
+            "--mode": "per-call override of [health].mode; over MCP set it with ddflow_configure"
+        },
         params=(
             Param(
                 "run",
                 type="boolean",
-                help="Also make the corrections [health].mode allows and record the pass.",
+                help="Correct per mode.",
                 cli_help="the periodic pass: correct per mode and record it for `cadence`",
             ),
             Param(
                 "mode",
-                help="Override [health].mode for this call: off, propose or apply.",
+                help="",
                 cli_help="override [health].mode: off, propose or apply",
                 choices=("off", "propose", "apply"),
                 default=None,
+                cli_only=True,
             ),
         ),
     ),

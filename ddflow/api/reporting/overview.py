@@ -21,8 +21,7 @@ from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..lifecycle.planning import plan_for
-from .healthnotes import lines as health_lines
-from .waitcycles import wait_cycles
+from .waitcycles import health_lines, wait_cycles
 
 
 def loops(repo: Path) -> O.Outcome:
