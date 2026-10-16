@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.unit_tests_max_hops"
+new = "2"
+why = "How far along the import graph a test still counts as reaching a change."
+impact = "additive"
