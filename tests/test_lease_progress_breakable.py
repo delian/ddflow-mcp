@@ -130,7 +130,9 @@ def test_break_flag_is_required_unless_break_on_timeout_is_on(repo):
     time.sleep(3.3)
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # the default: deliberate
     run_cli(repo, "config", "lease.break_on_timeout", "true", agent=A)
-    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 0  # on: a plain claim breaks
+    assert (
+        run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 0
+    )  # on: a plain claim breaks
 
 
 def test_an_uncontended_old_lease_survives_an_unrelated_claim(repo):
