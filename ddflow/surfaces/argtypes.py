@@ -41,16 +41,25 @@ _GLOB_FLAGS = ("--globs", "--add-globs", "--remove-globs")
 
 def glob_list_hint(message: str, argv: list[str]) -> str:
     """``message`` (an argparse error) with the way to write a glob list, when it is the
-    "unrecognized arguments" of `--globs a b c`: the second glob was read as a stray word.
-    A list is ONE comma-separated value (`--globs a,b,c`), or the flag repeated."""
+    "unrecognized arguments" of `--globs a b c`: the words after the flag's one value were
+    read as strays. A list is ONE comma-separated value (`--globs a,b,c`), or the flag
+    repeated. Only a flag whose value is IMMEDIATELY followed by the first stray word is
+    named; a stray after some other flag gets the plain error."""
     if not message.startswith("unrecognized arguments:"):
         return message
     stray = message.split(":", 1)[1].split()
-    for flag in _GLOB_FLAGS:
-        if flag in argv and argv[argv.index(flag) + 2 : argv.index(flag) + 3] and stray:
+    for i, tok in enumerate(argv):
+        flag = tok.split("=", 1)[0]
+        if flag not in _GLOB_FLAGS or not stray:
+            continue
+        if "=" in tok:
+            value, first = tok.split("=", 1)[1], i + 1
+        else:
+            value, first = (argv[i + 1] if i + 1 < len(argv) else ""), i + 2
+        if argv[first : first + 1] == stray[:1] and not stray[0].startswith("-") and value:
             return (
                 f"{message}\n{flag} takes ONE value, a comma-separated list "
-                f"({flag} {','.join([argv[argv.index(flag) + 1], *stray])}), "
-                f"or the flag repeated; not space-separated words"
+                f"({flag} {','.join([value, *stray])}), or the flag repeated; "
+                f"not space-separated words"
             )
     return message

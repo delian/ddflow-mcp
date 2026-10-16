@@ -56,3 +56,20 @@ def test_the_globs_help_says_replace_and_comma(repo):
     _o = run_cli(repo, "update", "--help")[1]
     flat = " ".join(_o.split())
     assert "REPLACES" in flat and "comma-separated" in flat and "--add-globs" in flat
+
+
+def test_a_stray_word_after_another_flag_gets_no_glob_hint(repo):
+    _task(repo)
+    code, _o, err = run_cli(repo, "update", "T1", "--globs", "a.py", "--tags", "x", "y")
+    assert code != 0 and "unrecognized arguments: y" in err and "comma-separated" not in err
+
+
+def test_the_hint_reads_the_parsed_words_not_the_process_argv(monkeypatch, capsys):
+    import pytest
+
+    from ddflow.surfaces.cli import build_parser
+
+    monkeypatch.setattr("sys.argv", ["pytest", "-q"])
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["update", "T1", "--globs", "a.py", "b.py"])
+    assert "--globs a.py,b.py" in capsys.readouterr().err
