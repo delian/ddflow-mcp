@@ -118,7 +118,7 @@ def stray_commits(since: str) -> list[str]:
     rows = _git("log", "--format=%h %ae %s", f"{since}..{head}").stdout.splitlines()
     out = []
     for row in rows:
-        sha, email, subject = (row.split(" ", 2) + ["", ""])[:3]
+        sha, email, subject = [*row.split(" ", 2), "", ""][:3]
         if email == SUITE_EMAIL or subject in STRAY_SUBJECTS:
             out.append(f"{sha} {subject}")
     return out
