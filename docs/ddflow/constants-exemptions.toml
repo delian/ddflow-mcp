@@ -138,6 +138,7 @@
 "ddflow/services/flowstate.py:KEEP_S" = "flowstate.keep_s"
 
 [exempt]
+"ddflow/api/review_finding_ref.py:MIN_PREFIX" = "length floor of a digest prefix a user types (a format fact of the printed digests), not a preference"
 "ddflow/api/items.py:MIN_SPLIT_PARTS" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/api/items.py:_MIN_EVENT_PREFIX" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/api/knowledge/pairs.py:_MIN_PAIR" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
