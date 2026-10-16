@@ -109,11 +109,13 @@ def _lose_nothing(repo, lock_s: float, held_for_s: float = 0.0):
     taken, release, counter = ctx.Event(), ctx.Event(), ctx.Value("i", 0)
     holder = None
     if held_for_s:
-        holder = ctx.Process(target=_hold_lock, args=(repo, taken, release))
+        holder = ctx.Process(target=_hold_lock, args=(repo, taken, release), daemon=True)
         holder.start()
-        assert taken.wait(scaled(30)), "the holder never took the lock"
     jobs = [(str(repo), f"w{i}", per, lock_s) for i in range(n_proc)]
     try:
+        if holder:
+            _wait.wait_until(lambda: taken.is_set() or not holder.is_alive(), 30, what="lock taken")
+            assert taken.is_set(), "the holder died before it took the lock"
         with mp.Pool(n_proc, initializer=_init_worker, initargs=(counter,)) as pool:
             pending = pool.map_async(_writer, jobs)
             if holder:
