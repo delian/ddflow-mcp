@@ -79,7 +79,9 @@ def test_the_ask_threshold_doc_agrees_with_what_a_named_id_does(repo):
     from ddflow.config_sections._docs import KNOB_DOCS
 
     doc = KNOB_DOCS["dedupe.ask_threshold"]
-    low = A.phase_add(repo, "P-low", title="Telemetry", body="Uses P-acp for plumbing, nothing else.", agent="a")
+    low = A.phase_add(
+        repo, "P-low", title="Telemetry", body="Uses P-acp for plumbing, nothing else.", agent="a"
+    )
     assert low.exit == 0, low  # a named id below the threshold does not ask
     assert "naming an existing id, asks" not in doc
     assert "never refuses" in doc
