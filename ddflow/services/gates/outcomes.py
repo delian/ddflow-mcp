@@ -84,8 +84,7 @@ def is_triageable(found) -> bool:
         isinstance(found, list)
         and bool(found)
         and all(
-            isinstance(f, dict) and isinstance(f.get("digest"), str) and f["digest"]
-            for f in found
+            isinstance(f, dict) and isinstance(f.get("digest"), str) and f["digest"] for f in found
         )
     )
 
