@@ -68,6 +68,8 @@ def limits(cfg) -> dict[str, int]:
     return {
         "max_files": cfg.gates.unit_tests_max_files,
         "hub_importers": cfg.gates.unit_tests_hub_importers,
+        "max_hops": cfg.gates.unit_tests_max_hops,
+        "name_max_tests": cfg.gates.unit_tests_name_max_tests,
     }
 
 

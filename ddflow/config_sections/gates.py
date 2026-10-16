@@ -118,6 +118,14 @@ class GatesConfig:
         100,
         doc="A module imported by this many files or more (default 100; 0 = no hubs) is a HUB: the selection's import walk does not continue through it (a test that only reaches the change by importing a hub is not selected), and a change to a hub itself runs the whole suite, since it reaches everything. Raise it to select more, lower it to select less.",
     )
+    unit_tests_max_hops: int = knob(
+        2,
+        doc="How far along the import graph a test still counts as reaching a change (default 2): it imports the changed module (1), or imports a module that does (2). Unbounded, the layer that imports everything makes every test reach every module.",
+    )
+    unit_tests_name_max_tests: int = knob(
+        30,
+        doc="A distinctive identifier the change defines, edits or removes selects the tests that spell it, unless more than this many tests do (default 30): then it is a word, not a name.",
+    )
     scrub_env: list[str] = knob(
         factory=lambda: [
             "DDFLOW_AGENT",

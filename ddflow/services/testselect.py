@@ -32,7 +32,7 @@ What it misses, stated so nobody mistakes it for the suite -- the whole run catc
 
 * a test that only drives the program in a SUBPROCESS (`python -m pkg ...`) imports
   nothing it exercises;
-* a test more than `MAX_HOPS` imports away from the change (it imports C, C imports B,
+* a test more than `[gates].unit_tests_max_hops` imports away from the change (it imports C, C imports B,
   B imports the changed A);
 * a test that reaches the change only through a re-exporting package ``__init__``;
 * a test that builds a changed data file's path at run time, when another test spells
@@ -188,6 +188,8 @@ def select(
     *,
     max_files: int = 0,
     hub_importers: int = 0,
+    max_hops: int = 2,
+    name_max_tests: int = 30,
     changed: list[str] | None = None,
     listed: list[str] | None = None,
     idents: dict[str, str] | None = None,
@@ -197,7 +199,8 @@ def select(
 
     ``hub_importers`` (`[gates].unit_tests_hub_importers`) is the importer count from which
     a module is a hub (0 = none): the import walk is cut at one, and a changed hub sets
-    ``full``. ``max_files`` (`[gates].unit_tests_max_files`, 0 = unlimited) bounds the
+    ``full``; ``max_hops`` and ``name_max_tests`` are `unit_tests_max_hops` and
+    `unit_tests_name_max_tests`. ``max_files`` (`[gates].unit_tests_max_files`, 0 = unlimited) bounds the
     selection: the farthest tests are moved to ``cut`` until it fits, never a changed test.
     ``changed``, ``listed`` and ``idents`` stand in for git's answers (and
     `testidents.changed_identifiers`), to select over a checkout of an older commit that
@@ -218,7 +221,7 @@ def select(
     graph = TR.build(tree, py, changed)
     sel.unparsed.extend(graph.unparsed)
     hubs = graph.hubs(hub_importers)
-    walked = TR.reach(graph, changed, hubs)
+    walked = TR.reach(graph, changed, hubs, max_hops)
     sel.cut_at = sorted(walked.cut_at)
     if touched := TR.hubs_touched(changed, hubs):
         sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
@@ -232,7 +235,10 @@ def select(
     if idents is None:
         idents = TI.changed_identifiers(tree, base, [c for c in changed if c in py])
     if idents:
-        pick.many(TI.spelling_tests(idents, {t: _read(tree / t) for t in tests}), RANK_DECLARED)
+        pick.many(
+            TI.spelling_tests(idents, {t: _read(tree / t) for t in tests}, name_max_tests),
+            RANK_DECLARED,
+        )
     _bounded(sel, pick, max_files)
     return sel
 
