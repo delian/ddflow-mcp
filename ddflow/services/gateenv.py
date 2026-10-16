@@ -16,7 +16,6 @@ from collections.abc import Mapping
 from ..config import Config
 from ..config_sections.gates import GatesConfig
 
-
 #: Variables that make git ignore the directory it is told to work in. A gate run from a git
 #: hook inherits them, and then every `git init` / `git -C tmp config` / `git -C tmp commit`
 #: of the project's tests acts on the repository running the gate instead of the test's own

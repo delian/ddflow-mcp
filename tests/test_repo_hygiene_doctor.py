@@ -8,9 +8,18 @@ import json
 import subprocess
 from pathlib import Path
 
-from conftest import run_cli
+import pytest
 
+from conftest import run_cli
 from ddflow.services import repo_hygiene as RH
+
+
+@pytest.fixture(autouse=True)
+def _global_identity(tmp_path_factory, monkeypatch) -> None:
+    """The global identity these tests compare with is written here, not assumed."""
+    cfg = tmp_path_factory.mktemp("global") / "gitconfig"
+    cfg.write_text("[user]\n\tname = Test\n\temail = t@example.com\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg))
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -41,9 +50,8 @@ def test_a_local_identity_unlike_the_global_one_is_named_with_its_unset_command(
 
 
 def test_a_local_identity_equal_to_the_global_one_is_not_a_finding(repo: Path) -> None:
-    for key in ("name", "email"):
-        shared = _git(repo, "config", "--global", f"user.{key}").strip()
-        _git(repo, "config", f"user.{key}", shared)
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "config", "user.email", "t@example.com")
     assert RH.doctor_notes(repo) == []
 
 
