@@ -182,15 +182,24 @@ def summary(bundle: Any, link: dict[str, Any] | None = None) -> str:
     return "\n".join(lines)
 
 
-def lead_with(out: Any, repo: Path, st: State, item: str) -> Any:
+def lead_with(out: Any, repo: Path, events: Any, item: str) -> Any:
     """``out`` (a claim's answer), with the repro bundle of each bug ``item`` is the fix task
-    of put FIRST in its guidance: the reader of a fix task starts from how the bug was seen."""
+    of put FIRST in its guidance: the reader of a fix task starts from how the bug was seen.
+    ``events`` is the log (the newest `bug.found` that names the link wins)."""
+    links: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if (
+            e.kind == "bug.found"
+            and e.data.get("repro")
+            and item
+            and e.data.get("fix_task") == item
+        ):
+            links[e.subject] = e.data["repro"]
     notes = []
-    for bug in st.bugs.values():
-        if bug.fix_task == item and bug.repro:
-            text = shown(repo, bug.repro).get("repro_text", "")
-            if text:
-                notes.append(f"## Repro bundle of bug {bug.id}\n{text}")
+    for bug, link in links.items():
+        text = shown(repo, link).get("repro_text", "")
+        if text:
+            notes.append(f"## Repro bundle of bug {bug}\n{text}")
     if notes and out.data is not None:
         out.data["guidance"] = "\n\n".join([*notes, out.data.get("guidance", "")]).strip()
     return out
