@@ -37,7 +37,7 @@ def _merge_file(files: tuple[bytes, bytes, bytes], *flags: str) -> tuple[int, by
     with fsio.scratch_dir("ddflow-pt.") as d:
         for name, data in zip(("ours", "base", "theirs"), files, strict=True):
             (d / name).write_bytes(data)
-        r = G.run(d, "merge-file", *flags, "ours", "base", "theirs")
+        r = G.run(d, "merge-file", "-q", *flags, "ours", "base", "theirs")
         code = -1 if r.err or r.code < 0 else r.code  # an error says why on stderr
         return code, (d / "ours").read_bytes()
 
