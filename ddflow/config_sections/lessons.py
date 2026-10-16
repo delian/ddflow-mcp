@@ -53,3 +53,11 @@ class LessonsConfig:
         factory=lambda: ["tests/**", "test/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"],
         doc="Path globs naming TEST files. When a bug's fix changes only files matching these, the regression check cannot expect the test to fail on a pre-fix tree (the fix is in the test file itself): it runs the base's own test files, or applies the mutation given with the close (verified-by-mutation).",
     )
+    verify_output_lines: int = knob(
+        12,
+        doc="How many of the last output lines a regression-test run that did not pass shows, in the refusal and in the recorded evidence. 0 omits them.",
+    )
+    verify_load_ratio: float = knob(
+        1.0,
+        doc="Load average per CPU above which a regression-test run that did not pass is flagged as run under load: a slow test can miss its own timeout there, so the refusal says to re-run when the machine is quieter before reading it as a verdict.",
+    )
