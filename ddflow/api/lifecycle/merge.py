@@ -416,7 +416,9 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg=None) -> list[s
     ng = new_file_globs(cfg) if cfg is not None else []
     if ng and any(path_in_glob(p, g) for p in changed for g in ng):
         added = CH.changed_paths(repo, target, tip=branch, include=("committed",), diff_filter="A")
-        fresh = {p for p in added or () if any(path_in_glob(p, g) for g in ng)}
+        if added is None:
+            return None
+        fresh = {p for p in added if any(path_in_glob(p, g) for g in ng)}
     return [
         p
         for p in changed
