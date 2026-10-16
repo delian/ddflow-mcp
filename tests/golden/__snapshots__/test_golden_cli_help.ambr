@@ -1797,7 +1797,7 @@
     --force            run a full round past [review].max_rounds; needs --reason, recorded in the
                        evidence
     --reason REASON    why --force
-    --finding FINDING  triage: the finding's number (#N)
+    --finding FINDING  triage: the finding's number (#N) or a unique digest prefix (6+ hex)
     --refuted          triage: --probe shows the finding is false
     --confirmed        triage: --probe is the fix/test that answers it
     --probe PROBE      triage: the evidence for the verdict

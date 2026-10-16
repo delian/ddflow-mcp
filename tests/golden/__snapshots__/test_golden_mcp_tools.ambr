@@ -2769,8 +2769,8 @@
           "description": "Omit if one gate has findings."
          },
          "finding": {
-          "type": "integer",
-          "description": "The finding's number (#N) in the recorded review."
+          "type": "string",
+          "description": "Finding #N or digest prefix (6+ hex)."
          },
          "verdict": {
           "type": "string",
