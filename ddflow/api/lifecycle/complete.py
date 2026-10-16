@@ -37,7 +37,7 @@ def _session_model(st: State, agent: str) -> str:
     return max(open_, key=lambda s: s.started_at).model if open_ else ""
 
 
-def complete(
+def complete(  # noqa: PLR0913 -- one keyword per completion facet, all keyword-only
     repo: Path,
     item: str,
     *,
@@ -47,6 +47,7 @@ def complete(
     agent: str = "",
     changelog: str = "",
     regression_test: str | list[str] = "",
+    mutation: dict[str, str] | None = None,
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
 ) -> O.Outcome:
@@ -142,7 +143,7 @@ def complete(
         # Only now, with the completion going through: a refusal above closed nothing.
 
         for bid in pending:
-            out = bug_fixed(repo, bid, regression_test=tests, agent=agent)
+            out = bug_fixed(repo, bid, regression_test=tests, mutation=mutation, agent=agent)
             if out.exit != O.OK:
                 return O.Outcome(
                     kind="item.completed",

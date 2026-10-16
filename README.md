@@ -5769,6 +5769,7 @@ long default is left to `ddflow config --explain`.
 | `lease.hold_max_s` | `3600` |  |
 | `lease.break_on_timeout` | `false` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
+| `lease.resume_own` | `true` |  |
 | `lease.shared_globs` | `[]` |  |
 | `lease.append_only_globs` | `[]` |  |
 | `worktree.enabled` | `true` |  |
@@ -5835,6 +5836,7 @@ long default is left to `ddflow config --explain`.
 | `lessons.auto_capture_on_bug` | `true` |  |
 | `lessons.require_regression_test` | `true` |  |
 | `lessons.reflect_after_items` | `3` |  |
+| `lessons.test_file_globs` | (long: see `ddflow config --explain`) |  |
 | `session.log_prompts` | `true` |  |
 | `session.redact_patterns` | (long: see `ddflow config --explain`) |  |
 | `session.redact_extra` | `[]` |  |
