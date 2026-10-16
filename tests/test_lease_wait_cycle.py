@@ -136,3 +136,20 @@ def test_zero_shown_prints_no_deadlock_line():
     cfg = Config()
     cfg.loops.wait_cycle_shown = 0
     assert wait_findings(["x", "y"], cfg) == []
+
+
+def test_a_waiter_blocked_by_two_leases_of_one_holder_gets_both_released():
+    held = [
+        LW.Held("alpha", "V", ("src/utils/**",)),
+        LW.Held("beta", "V", ("conf/*.yml",)),
+        LW.Held("docs", "P", ("docs/**",)),
+    ]
+    waits = [
+        LW.Wait(
+            "check", "P", 10.0, ("src/utils/h.py", "conf/app.yml"), (("alpha", "V"), ("beta", "V"))
+        ),
+        LW.Wait("docs", "V", 20.0, ("docs/**",), (("docs", "P"),)),
+    ]
+    (c,) = LW.find(waits, held)
+    assert c.victim == "V" and set(c.release) == {"src/utils/**", "conf/*.yml"}
+    assert "release alpha" in c.remedy and "release beta" in c.remedy

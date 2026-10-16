@@ -16,7 +16,7 @@ lease the globs the cycle's other waiter asked for. Nothing is taken from anyone
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import pairwise
 from typing import Any
 
@@ -56,6 +56,8 @@ class Link:
     blocker: str
     files: tuple[str, ...]
     since: float
+    #: every lease of ``holder`` in the way of this wait (``blocker`` is the first)
+    blockers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class Cycle:
                     "item": k.item,
                     "holder": k.holder,
                     "blocker": k.blocker,
+                    "blockers": list(k.blockers),
                     "files": list(k.files),
                     "since": k.since,
                 }
@@ -111,36 +114,52 @@ def _contested(lease: Held | None, asked: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(sorted({g for g in lease.globs if any(overlap(g, a) for a in asked)}))
 
 
-def _remedy(victim: Link, prev: Link, wanted: tuple[str, ...], held: Held | None) -> tuple:
-    """(release, keep, text) for ``victim``, who must give up ``wanted``: the globs of the
-    lease ``prev`` (the waiter for the victim's lease) is blocked on."""
+def _remedy(victim: Link, prev: Link, drops: list[tuple[Held, tuple[str, ...]]]) -> tuple:
+    """(release, keep, text) for ``victim``: ``drops`` are its leases ``prev`` (the waiter
+    for the victim's lease) is blocked on, with the globs of each to give up."""
     then = (
-        f"then {prev.agent} retries on {prev.item}, and {victim.agent} queues behind it "
-        f"(`ddflow wait --item {victim.blocker}`)"
+        f"then {prev.agent} retries on {prev.item}, and {victim.agent} waits for "
+        f"{victim.holder}'s lease (`ddflow wait --item {victim.blocker}`)"
     )
-    if held is None or not wanted:
+    if not drops:
         return (), (), f"{victim.agent} should stop waiting and report to the coordinator; {then}."
-    keep = tuple(g for g in held.globs if g not in wanted)
-    how = (
-        f"`ddflow update {held.item} --globs {','.join(keep)}`"
-        if keep
-        else f"`ddflow release {held.item}`"
+    cmds, wanted = [], []
+    for held, w in drops:
+        keep = [g for g in held.globs if g not in w]
+        cmds.append(
+            f"`ddflow update {held.item} --globs {','.join(keep)}`"
+            if keep
+            else f"`ddflow release {held.item}`"
+        )
+        wanted += w
+    keep0 = tuple(g for g in drops[0][0].globs if g not in drops[0][1])
+    return (
+        tuple(wanted),
+        keep0,
+        f"{victim.agent} yields {', '.join(wanted)}: {'; '.join(cmds)}; {then}.",
     )
-    return wanted, keep, f"{victim.agent} yields {', '.join(wanted)}: {how}; {then}."
 
 
 def _edges(waits: list[Wait], held: dict[str, Held]) -> dict[str, dict[str, Link]]:
-    """agent -> blocking agent -> the oldest Link by which it waits there."""
+    """agent -> blocking agent -> the oldest wait by which it waits there, with every lease
+    of that holder in its way."""
     out: dict[str, dict[str, Link]] = {}
     for w in waits:
         for blocker, holder in w.on:
             lz = held.get(blocker)
             if lz is None or lz.holder != holder:
                 continue  # let go (or taken by another) since the record was made
-            link = Link(w.agent, w.item, holder, blocker, _contested(lz, w.globs), w.since)
+            files = _contested(lz, w.globs)
             row = out.setdefault(w.agent, {})
-            if holder not in row or link.since < row[holder].since:
-                row[holder] = link
+            old = row.get(holder)
+            if old is not None and old.item == w.item:
+                row[holder] = replace(
+                    old,
+                    blockers=(*old.blockers, blocker),
+                    files=tuple(sorted({*old.files, *files})),
+                )
+            elif old is None or w.since < old.since:
+                row[holder] = Link(w.agent, w.item, holder, blocker, files, w.since, (blocker,))
     return out
 
 
@@ -150,16 +169,17 @@ def _cycle(links: list[Link], waits: list[Wait], leases: list[Held]) -> Cycle:
     vi = max(range(len(links)), key=lambda i: (links[i].since, links[i].agent))
     victim = links[vi]
     prev = links[vi - 1]  # whoever waits for the victim's lease, and the lease it waits on
-    own = next((lz for lz in leases if lz.item == prev.blocker), None)
-    wanted = _contested(own, _asked(waits, prev))
-    release, keep, text = _remedy(victim, prev, wanted, own)
+    asked = _asked(waits, prev)
+    owns = [lz for lz in leases if lz.item in prev.blockers]
+    drops = [(lz, w) for lz in owns if (w := _contested(lz, asked))]
+    release, keep, text = _remedy(victim, prev, drops)
     return Cycle(
         agents=tuple(lk.agent for lk in links),
         items=tuple(dict.fromkeys(i for lk in links for i in (lk.item, lk.blocker))),
         files=tuple(sorted({f for lk in links for f in lk.files})),
         links=tuple(links),
         victim=victim.agent,
-        victim_item=own.item if own else victim.item,
+        victim_item=drops[0][0].item if drops else victim.item,
         release=release,
         keep=keep,
         remedy=text,
