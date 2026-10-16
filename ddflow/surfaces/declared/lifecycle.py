@@ -113,9 +113,9 @@ COMMANDS: tuple[Command, ...] = (
         summary="lease an item + create its worktree (exit 3 = refused)",
         tool="ddflow_claim",
         description="Lease an item and create its isolated git worktree. Refuses (exit 3) if "
-        "another agent holds it or holds an item whose file globs overlap, and names "
-        "what you could take instead. NEVER steals an expired lease: a crashed "
-        "agent's worktree often holds finished work.",
+        "another agent holds it or an overlapping item, and names what you could take "
+        "instead. NEVER steals an expired lease: a crashed agent's tree often holds "
+        "finished work.",
         call=lambda repo, a, agent, called_from=None: _api().claim(
             repo,
             a["id"],
@@ -161,7 +161,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Override a refusal. Legitimate only to retry after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or live lease is how two agents write one file; recorded either way.",
+                help="Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded.",
                 cli_help="",
             ),
             Param(
@@ -185,8 +185,8 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "break",
                 type="boolean",
-                help="Break a lease on files you need that is CONTENDED and has shown no progress (no commit, gate outcome, note or changed file; heartbeats do not count) for [lease].hold_max_s. The holder keeps its branch and worktree and is told. Refused when the lease is not yet breakable. Needed only when [lease].break_on_timeout is off.",
-                cli_help="break a contended lease that shows no progress for [lease].hold_max_s (its work is kept)",
+                help="Break a contended, idle lease (work kept).",
+                cli_help="",
             ),
         ),
         tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "break", "force"),

@@ -418,7 +418,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
         )
 
 
-def _break_idle(  # noqa: PLR0913 -- the claim's own view of the clash
+def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     log: EventLog,
     cfg: Config,
     state: State,
@@ -444,6 +444,13 @@ def _break_idle(  # noqa: PLR0913 -- the claim's own view of the clash
         other_id, lease, pair = clash
         v = LB.judge(cfg, events, other_id, lease, [it.id], now, act)
         if v is None or not v.breakable:
+            if asked:
+                raise LeaseError(
+                    f"{it.id} writes {pair[0]!r} held by {lease.holder} on {other_id}"
+                    + LB.break_hint(cfg),
+                    holder=lease.holder,
+                    item=it.id,
+                )
             return clash
         log.append("lease.expired", other_id, LB.breaking_record(lease, it.id, holder, pair, v))
         _remote_drop(log, other_id, lease.holder)
