@@ -2125,6 +2125,12 @@
           agent, item, title, body, globs, needs, base, lease_s, heartbeat_s,
           decisions_text, lessons_text, note, extra. `ddflow prompts eject
           agent_brief` writes an editable copy.
+      prompts.agent_report = ''   [default]
+          Path to the completion-report template `ddflow report ITEM` renders:
+          sections split by `<!-- section: NAME -->` lines. Variables: item, title,
+          agent, state, landing, tests, gates, by_hand, overrides, filed, follow_ups,
+          not_done (each already text). `ddflow prompts eject agent_report` writes an
+          editable copy.
       export.documents = []   [default]
           The documents `ddflow export --all` writes and keeps (roadmap, bugs, status,
           worklog, sessions, decisions, rules, changelog). EMPTY by default: nothing
