@@ -45,6 +45,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core import clock
+from ..core.admission import new_file_globs
 from ..core.bookkeeping import SELF_MANAGED
 from ..core.flow import env_chain
 from ..core.globs import inside as path_in_glob
@@ -1362,6 +1363,20 @@ def _split_leases(
     return mine, others, holds_any
 
 
+def _without_new_files(repo: Path, cfg: Config, uncovered: list[str], holds_any: bool) -> list[str]:
+    """``uncovered`` less the staged NEW files `[lease] new_file_globs` names: a fragment
+    named after its own knob is nobody else's (B92e13a521f). An edit stays uncovered."""
+    if not holds_any:
+        return uncovered
+    globs = new_file_globs(cfg)
+    cand = [p for p in uncovered if any(path_in_glob(p, g) for g in globs)]
+    if not cand:
+        return uncovered
+    added = CH.changed_paths(_index_tree(repo), include=("staged",), renames=True, diff_filter="A")
+    fresh = set(added or ())
+    return [p for p in uncovered if p not in cand or p not in fresh]
+
+
 def _uncovered_paths(paths: list[str], mine: list[str], shared: list[str]) -> list[str]:
     """The staged paths neither shared nor inside a glob I hold."""
     return [
@@ -1514,6 +1529,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
+    uncovered = _without_new_files(repo, cfg, uncovered, holds_any)
     if not uncovered:
         return Verdict(OK, "")
 

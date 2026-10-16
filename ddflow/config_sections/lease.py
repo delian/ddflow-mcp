@@ -82,6 +82,10 @@ class LeaseConfig:
         factory=list,
         doc='Files EVERY item edits that ddflow must not merge for you -- generated files (a regenerated config, a lockfile): ["configs/default.toml"]. A path inside one of these is exempt from lease-overlap checks (claim, update, next, wait) and counts as covered for any agent holding a live lease at commit time. ddflow does NOT write a merge driver for them: union-merging a generated file interleaves it. Regenerate it after merging, or declare a driver yourself in .gitattributes; doctor notes a shared glob that has none. For append-only files (a changelog) use append_only_globs instead.',
     )
+    new_file_globs: list[str] = knob(
+        factory=lambda: ["ddflow/templates/upgrade/unreleased/*.toml"],
+        doc="Files each item ADDS as a new file named after its own work -- an upgrade-manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per knob. A NEW file matching one of these needs no lease of its own beyond holding some live lease (and a claim glob inside one overlaps nothing), so two tasks adding different knobs never collide on the directory. An EDIT, rename or delete of an existing file still needs a lease that covers it: another agent's fragment stays theirs. Set [] to require the directory in the task globs again.",
+    )
     append_only_globs: list[str] = knob(
         factory=list,
         doc='Files every item APPENDS to -- a changelog, a research log: ["docs/CHANGELOG.md"]. Shared like shared_globs (no lease-overlap check; covered for any live lease holder), and ddflow WRITES "<glob> merge=union" to .gitattributes for each one, so two items\' added lines both survive the merge. Written when this is set through `ddflow config --set/--append-toml` (or ddflow_configure), and re-synced by `ddflow init`/`adopt` after a hand edit; .gitattributes is tracked, so commit it with the config. Only globs in the COMMITTED config get a line: one set with --local is this machine\'s and writes no rule for every clone. doctor reports a missing line.',
