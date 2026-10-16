@@ -81,13 +81,9 @@ def test_the_knob_is_overridable(repo, cfg, monkeypatch):
     assert E.check_commit(repo, cfg, agent="ag-a")[0] == 1
 
 
-def test_claim_globs_for_different_fragments_do_not_overlap(log, cfg):
+def test_a_lease_on_an_existing_fragment_stays_exclusive(log, cfg):
     log.append("task.added", "A", {"globs": [f"{FRAG}/knob_added.s.one.toml"]})
-    log.append("task.added", "B", {"globs": [f"{FRAG}/knob_added.*.toml"]})
+    log.append("task.added", "B", {"globs": [f"{FRAG}/knob_added.s.one.toml"]})
     state = fold(log.read_all())
     a, b = state.items["A"], state.items["B"]
-    assert (
-        admission.glob_conflict(state, cfg, a, list(a.globs), against="offered", others=[b]) is None
-    )
-    cfg.lease.new_file_globs = []
     assert admission.glob_conflict(state, cfg, a, list(a.globs), against="offered", others=[b])

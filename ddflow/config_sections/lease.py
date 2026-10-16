@@ -84,7 +84,7 @@ class LeaseConfig:
     )
     new_file_globs: list[str] = knob(
         factory=lambda: ["ddflow/templates/upgrade/unreleased/*.toml"],
-        doc="Files each item ADDS as a new file named after its own work -- an upgrade-manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per knob. A NEW file matching one of these needs no lease of its own beyond holding some live lease (and a claim glob inside one overlaps nothing), so two tasks adding different knobs never collide on the directory. An EDIT, rename or delete of an existing file still needs a lease that covers it: another agent's fragment stays theirs. Set [] to require the directory in the task globs again.",
+        doc="Files each item ADDS as a new file named after its own work -- an upgrade-manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per knob. A NEW file matching one of these needs no glob of its own beyond holding some live lease (the commit hook covers it; claim globs are unaffected, so a lease you do take stays exclusive), so two tasks adding different knobs never collide on the directory. An EDIT, rename or delete of an existing file still needs a lease that covers it: another agent's fragment stays theirs. Set [] to require the directory in the task globs again.",
     )
     append_only_globs: list[str] = knob(
         factory=list,
