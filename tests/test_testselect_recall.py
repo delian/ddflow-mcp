@@ -89,6 +89,9 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
         if new.full:
             return len(co), len(co), []
         got = {t.path for t in new.tests}
+        budget = TSC.limits(Config())["max_files"]
+        floor = sum(1 for t in new.tests if t.rank == T.RANK_CHANGED)
+        assert len(got) <= max(budget, floor), f"{sha[:8]}: {len(got)} tests, budget {budget}"
         missed = [c for c in co if c not in got]
         if not missed:
             return len(co), len(co), []
