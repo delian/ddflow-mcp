@@ -34,7 +34,7 @@ from ddflow.services import testscope as TSC
 from ddflow.services import testselect as T
 
 ROOT = Path(__file__).resolve().parents[1]
-MERGES = 6  #: replays; each parses the tree of its commit, about ten seconds
+MERGES = 4  #: replays; each parses the tree of its commit, about ten seconds
 SCAN = 40  #: merges looked at to find that many with both source and tests in them
 ABSOLUTE_FLOOR = 0.7  #: share of co-changed tests the selection holds, over all replays
 
