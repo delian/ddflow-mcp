@@ -19,7 +19,7 @@ COMMANDS: tuple[Command, ...] = (
         reason=(
             "tools/list is at its byte budget: over MCP the same report is ddflow_show with report=true"
         ),
-        call=lambda repo, a, agent: _api().report(
+        call=lambda repo, a, agent: _api().item_report(
             repo, item=a["item"], by_agent=a.get("by_agent") or "", agent=agent
         ),
         payload=(

@@ -9,9 +9,6 @@ from typing import Any
 from . import agent_brief as AB
 from . import prompts as P
 
-#: Test files listed before "and N more".
-MAX_TEST_FILES = 12
-
 
 def _bullets(lines: list[str]) -> str:
     return "\n".join(f"- {x}" for x in lines) if lines else "none"
@@ -41,7 +38,7 @@ def _gate_line(g: dict[str, Any]) -> str:
     return line
 
 
-def _tests(d: dict[str, Any]) -> str:
+def _tests(d: dict[str, Any], shown_files: int) -> str:
     lines = []
     for b in d["regression"]["bugs"]:
         status = b["verified"] or "no verification recorded"
@@ -50,13 +47,13 @@ def _tests(d: dict[str, Any]) -> str:
         lines.append(f"{b['bug']}: {tests} — complete verified it: {status}{extra}")
     files = d["regression"]["test_files"]
     if files:
-        shown = ", ".join(files[:MAX_TEST_FILES])
-        more = f" and {len(files) - MAX_TEST_FILES} more" if len(files) > MAX_TEST_FILES else ""
+        shown = ", ".join(files[:shown_files])
+        more = f" and {len(files) - shown_files} more" if len(files) > shown_files else ""
         lines.append(f"test files in the change: {shown}{more}")
     return _bullets(lines)
 
 
-def variables(d: dict[str, Any]) -> dict[str, str]:
+def variables(d: dict[str, Any], test_files: int = 12) -> dict[str, str]:
     """The template variables of a collected report, all strings."""
     ld, it = d["landing"], d["item"]
     more = ld["commits_total"] - len(ld["commits"])
@@ -86,7 +83,7 @@ def variables(d: dict[str, Any]) -> dict[str, str]:
         "agent": it["agent"] or "unknown",
         "state": it["state"],
         "landing": landing,
-        "tests": _tests(d),
+        "tests": _tests(d, test_files),
         "gates": _bullets([_gate_line(g) for g in d["gates"]]),
         "by_hand": _bullets(hand),
         "overrides": _bullets(d["overrides"]),
@@ -96,8 +93,8 @@ def variables(d: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def render(tmpl, d: dict[str, Any]) -> str:
+def render(tmpl, d: dict[str, Any], test_files: int = 12) -> str:
     """The report: the template's sections in order, each rendered; none is dropped."""
-    v = variables(d)
+    v = variables(d, test_files)
     parts = [P.render(body, **v).strip() for _name, body in AB.split(tmpl.text)]
     return "\n\n".join(p for p in parts if p) + "\n"

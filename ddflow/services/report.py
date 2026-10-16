@@ -17,9 +17,6 @@ from . import gates as G
 from . import ledger as LG
 from . import report_gates as RG
 
-#: Commits listed for the landing; the rest is a count.
-MAX_COMMITS = 20
-
 
 def _bug_tests(events, st: State, item_id: str) -> list[dict[str, Any]]:
     """The bugs this item fixed, with their regression tests and what `complete`/`bug fixed`
@@ -112,7 +109,7 @@ def _filed(events, st: State, item_id: str, who: str) -> dict[str, list[dict[str
     }
 
 
-def _landing(repo, it, led: dict[str, Any], gates: list[dict[str, Any]]) -> dict[str, Any]:
+def _landing(repo, cfg, it, led: dict[str, Any], gates: list[dict[str, Any]]) -> dict[str, Any]:
     merge = next((g for g in gates if g["gate"] == "merge"), {})
     head = merge.get("branch_head", "")
     commits: list[str] = []
@@ -124,7 +121,7 @@ def _landing(repo, it, led: dict[str, Any], gates: list[dict[str, Any]]) -> dict
         "branch": it.branch,
         "branch_head": head,
         "base": it.base,
-        "commits": commits[:MAX_COMMITS],
+        "commits": commits[: cfg.session.report_commits],
         "commits_total": len(commits),
         "completed_at": led.get("completed_at", "") if led else it.completed_at,
         "completed_by": led.get("completed_by", "") if led else "",
@@ -153,7 +150,7 @@ def collect(repo, events, st: State, cfg, item_id: str, agent: str = "") -> dict
     follow += [f"{t['id']} (task, open)" for t in filed["tasks"] if t["open"]]
     return {
         "item": {"id": it.id, "title": it.title, "kind": it.kind, "state": it.state, "agent": who},
-        "landing": _landing(repo, it, led, rows),
+        "landing": _landing(repo, cfg, it, led, rows),
         "regression": {"bugs": tests, "test_files": list(led.get("done", {}).get("tests", []))},
         "gates": rows,
         "overrides": overrides,

@@ -11,7 +11,7 @@ from ..services import report_render as RT
 from ._base import _load
 
 
-def report(repo: Path, *, item: str, by_agent: str = "", agent: str = "") -> O.Outcome:
+def item_report(repo: Path, *, item: str, by_agent: str = "", agent: str = "") -> O.Outcome:
     """The report of ``item``: landing, regression tests, per-gate outcomes, overrides, what was
     filed, what is open and what was not done. ``by_agent`` narrows what was filed to that
     agent. Exit 1 for an unknown item; read-only."""
@@ -20,7 +20,11 @@ def report(repo: Path, *, item: str, by_agent: str = "", agent: str = "") -> O.O
     if data is None:
         return O.failed("report", f"no item {item!r}: `ddflow list` shows the ids", text="")
     try:
-        text = RT.render(P.resolve("agent_report", repo, P.overrides_from(cfg)), data)
+        text = RT.render(
+            P.resolve("agent_report", repo, P.overrides_from(cfg)),
+            data,
+            cfg.session.report_test_files,
+        )
     except P.TemplateError as exc:
         return O.failed("report", str(exc), text="")
     return O.ok("report", text=text, **data)
@@ -31,7 +35,7 @@ def show_report(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     report=true`` returns over MCP, where `report` has no tool of its own. The text leads and
     the data nests under ``report``, so the ``show`` bound (`mcp_bound.bound_show`, which
     clips anything carrying ``gates`` or ``state`` at its top level) leaves it whole."""
-    out = report(repo, item=item, agent=agent)
+    out = item_report(repo, item=item, agent=agent)
     if out.exit:
         return out
     data = {k: v for k, v in out.data.items() if k != "text"}
