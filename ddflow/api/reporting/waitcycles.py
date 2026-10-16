@@ -29,6 +29,6 @@ def wait_findings(cycles: list[LW.Cycle], cfg) -> list[str]:
     """The cycles as `doctor` problems: the first `[loops].wait_cycle_shown` in full."""
     shown = cfg.loops.wait_cycle_shown
     out = [c.render() for c in cycles[:shown]]
-    if len(cycles) > shown:
+    if shown and len(cycles) > shown:
         out.append(f"{len(cycles) - shown} more lease deadlock(s)")
     return out
