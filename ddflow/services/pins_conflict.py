@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..infra.fsio import replace_text
+
 _BEGIN = re.compile(r"<!-- ddflow:begin (\S+)")
 _END = re.compile(r"<!-- ddflow:end (\S+) -->")
 
@@ -142,4 +144,4 @@ def apply(settled: list[Settled]) -> None:
     """Write the settled files."""
     for s in settled:
         if s.file is not None and s.text is not None:
-            s.file.write_text(s.text, "utf-8")
+            replace_text(s.file, s.text)
