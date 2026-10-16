@@ -233,15 +233,13 @@ def select(
     _by_name(changed, tests, pick)
     pick.many(_data_readers(tree, changed, tests), RANK_DECLARED)
     pick.many(governed(tree, changed, tests), RANK_DECLARED)
-    texts = {t: _read(tree / t) for t in tests}
     if idents is None:
         idents = TI.changed_identifiers(tree, base, [c for c in changed if c in py])
-    pick.many(TI.spelling_tests(idents, texts, name_max_tests), RANK_DECLARED)
-    if membership is None:
-        membership = _membership(tree, base)
-    pick.many(
-        TI.listing_tests(TI.listed_packages(membership), texts, name_max_tests), RANK_DECLARED
-    )
+    packages = TI.listed_packages(_membership(tree, base) if membership is None else membership)
+    if idents or packages:  # no changed name or listing, nothing to read the tests for
+        texts = {t: _read(tree / t) for t in tests}
+        pick.many(TI.spelling_tests(idents, texts, name_max_tests), RANK_DECLARED)
+        pick.many(TI.listing_tests(packages, texts, name_max_tests), RANK_DECLARED)
     _bounded(sel, pick, max_files)
     return sel
 

@@ -262,3 +262,13 @@ def test_a_new_module_in_this_repositorys_split_packages_selects_the_split_guard
         sel = T.select(root, "main", changed=[new], membership=[new], idents={})
         assert sel is not None
         assert "tests/test_module_splits.py" in {t.path for t in sel.tests}, new
+
+
+def test_a_renamed_module_counts_as_a_removal_and_an_addition(listed):
+    """Git's rename detection must not hide the change of what the package lists."""
+    _git(listed, "checkout", "-qb", "work")
+    _git(listed, "mv", "pkg/zoo/old.py", "pkg/zoo/renamed.py")
+    _git(listed, "commit", "-qm", "rename a module")
+    sel = T.select(listed, "main")
+    assert sel is not None
+    assert "tests/test_layout_of_zoo.py" in {t.path for t in sel.tests}
