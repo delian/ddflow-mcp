@@ -22,13 +22,13 @@ _REVIEWER_KEYS = ("model", "family", "reviewer", "reviewer_digest")
 def _carry_reviewer(prior: dict, evidence: dict) -> None:
     """A hand record of a review gate keeps the reviewer of the round it settles (bug
     Bf065905087): re-recording `passed` after triage must not make the agent the reviewer
-    and break the independence check. An explicit `model` wins, and then no part of the
-    prior reviewer is kept (a stale family would override it). The reviewed sha is kept
-    unless restated."""
+    and break the independence check. The identity moves as a unit: stating any part of
+    it (an explicit `model`) keeps no part of the prior one, or a stale family would
+    override it. The reviewed sha is kept unless restated."""
     carried = []
-    if prior.get("model") and "model" not in evidence:
+    if not any(k in evidence for k in _REVIEWER_KEYS):
         for k in _REVIEWER_KEYS:
-            if k in prior and k not in evidence:
+            if prior.get(k):
                 evidence[k] = prior[k]
                 carried.append(k)
     if prior.get("reviewed_sha") and "reviewed_sha" not in evidence:

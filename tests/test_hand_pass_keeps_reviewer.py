@@ -56,3 +56,16 @@ def test_independence_is_satisfied_after_a_hand_pass():
     st, _rec = _fold(("failed", _ROUND), ("passed", {"note": "triaged"}))
     ok, why = RV.reviewer_independence(st, Config(), "T1", "claude-opus-5")
     assert ok, why
+
+
+def test_a_restated_part_of_the_identity_keeps_none_of_the_prior():
+    _st, rec = _fold(("failed", _ROUND), ("passed", {"family": "openai"}))
+    assert rec.evidence["family"] == "openai"
+    assert "model" not in rec.evidence and "reviewer" not in rec.evidence
+
+
+def test_identity_without_a_model_key_is_still_carried():
+    prior = {"family": "deepseek", "reviewer": "lan-deepseek", "review_kind": "full"}
+    _st, rec = _fold(("failed", prior), ("passed", {"note": "triaged"}))
+    assert rec.evidence["reviewer"] == "lan-deepseek"
+    assert rec.evidence["family"] == "deepseek"
