@@ -253,16 +253,17 @@ def _wait_globs(globs, item: str) -> tuple[list[str] | None, str]:
 
 def _judged(st, item: str, want) -> dict[str, Any]:
     """What a READY on ``item`` was judged on, when the caller named no globs: the item's
-    declared ones. A claim naming others is judged again, so the verdict says so."""
+    declared ones; with none declared the verdict is empty, and says so."""
     it = st.items.get(item) if item else None
     if it is None or want:
         return {}
-    return {
-        "judged_globs": list(it.globs),
-        "judged_note": f" That is judged on {item}'s declared globs"
-        + (f" ({', '.join(it.globs)})" if it.globs else " (none)")
-        + "; to claim with other --globs, wait with the same --globs.",
-    }
+    note = (
+        f" {item} declares no globs, so nothing was checked against other leases: to claim "
+        f"with --globs, wait with the same --globs."
+        if not it.globs
+        else ""
+    )
+    return {"judged_globs": list(it.globs), "judged_note": note}
 
 
 def wait(
