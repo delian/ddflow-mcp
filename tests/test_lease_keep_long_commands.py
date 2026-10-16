@@ -107,3 +107,12 @@ def test_the_throttle_survives_a_backward_wall_clock_step(monkeypatch):
     monkeypatch.setattr(time, "monotonic", lambda: mono() + 20)  # 20 s really passed
     tick()
     assert calls == [1]
+
+
+def test_the_throttle_fires_after_a_suspend_the_monotonic_clock_slept_through(monkeypatch):
+    calls: list[int] = []
+    tick = LK.throttled(lambda: calls.append(1), time.time(), 10, 1.0)
+    real = time.time
+    monkeypatch.setattr(time, "time", lambda: real() + 1600)  # wall clock: 27 min passed
+    tick()  # the monotonic clock says only milliseconds did
+    assert calls == [1]
