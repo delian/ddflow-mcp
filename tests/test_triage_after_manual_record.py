@@ -33,6 +33,15 @@ def test_triage_still_finds_the_findings_after_a_manual_gate_record(repo, tmp_pa
     res = _triage(repo, 2)
     assert res.exit == 0, res.reason
     counts = G.triage_counts(_state(repo), "critic")
-    assert counts == {"findings": 2, "refuted": 1, "confirmed": 0, "untriaged": 1}
+    # the hand PASS is the later outcome: it settles the one finding nobody triaged (B29667ba4b4)
+    assert counts == {
+        "findings": 2,
+        "refuted": 1,
+        "confirmed": 0,
+        "untriaged": 0,
+        "settled_by_pass": 1,
+    }
     _code, status, _err = run_cli(repo, "gate", "status", "T1")
-    assert "2 finding(s): 1 refuted, 0 confirmed, 1 untriaged" in status, status
+    assert (
+        "2 finding(s): 1 refuted, 0 confirmed, 0 untriaged, 1 settled by the later pass" in status
+    ), status
