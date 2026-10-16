@@ -197,7 +197,8 @@ def git_state(where: Path | str) -> dict[str, str] | None:
     Only what belongs to THIS tree. The stash list is shared by every worktree, so a
     sibling lane's `git stash` moves it mid-review and is no reviewer's doing
     (B708761957b); a reviewer's `git stash apply|pop` or `stash push` still shows in the
-    working tree and index, which is where it does its harm. Each part is a digest, so
+    working tree and index, which is where it does its harm. Accepted gap: a bare
+    `stash drop|clear`, or a pop followed by a reset, leaves nothing here to see. Each part is a digest, so
     the evidence stays small.
     None when git could not answer: "could not tell" is not "unchanged"."""
     parts = {
