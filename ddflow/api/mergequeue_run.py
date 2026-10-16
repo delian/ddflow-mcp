@@ -145,8 +145,10 @@ def _land(repo: Path, e: MQ.Entry, *, unit_tests: bool, timeout_s: int, agent: s
     return MQ.MERGED, "", str(out.data.get("sha", ""))
 
 
-def _one(repo: Path, e: MQ.Entry, **kw) -> dict:
-    MQ.take(repo, e)
+def _one(repo: Path, e: MQ.Entry, **kw) -> dict | None:
+    """Integrate one entry; None when it was removed from the line after it was picked."""
+    if (e := MQ.take(repo, e)) is None:
+        return None
     try:
         state, reason, sha = _land(repo, e, **kw)
     except Exception as exc:  # one entry's crash parks it; the line goes on
@@ -193,8 +195,10 @@ def queue_run(
         MQ.requeue_orphans(repo)
         done: list[dict] = []
         while len(done) < batch and (e := MQ.head(repo)) is not None:
-            done.append(_one(repo, e, unit_tests=run_tests, timeout_s=limit, agent=agent,
-                             where=(called_from, shell_cwd)))  # fmt: skip
+            row = _one(repo, e, unit_tests=run_tests, timeout_s=limit, agent=agent,
+                       where=(called_from, shell_cwd))  # fmt: skip
+            if row is not None:
+                done.append(row)
         if not done:
             return O.nothing("queue.run", "the merge queue is empty", locked=False, processed=[])
     merged = [d for d in done if d["state"] == MQ.MERGED]

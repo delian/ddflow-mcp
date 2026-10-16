@@ -105,15 +105,20 @@ def get(repo: Path, item: str) -> Entry | None:
     return mine[-1] if mine else None
 
 
+def _entries_locked(repo: Path, wait_s: float = 10.0):
+    """The short lock that orders adding, taking and removing entries."""
+    d = _dir(repo)
+    d.mkdir(parents=True, exist_ok=True)
+    return fsio.file_lock(d / "add.lock", wait_s)
+
+
 def add(
     repo: Path, item: str, *, agent: str, keep_history: int, lock_wait_s: float = 10.0
 ) -> tuple[Entry, bool]:
     """(the entry, whether it was added). An item already waiting keeps its place; a parked
     or merged one is replaced by a new entry at the back. ``lock_wait_s`` bounds the wait on the
     numbering lock, held only while a directory is read, so only a stuck process reaches it."""
-    d = _dir(repo)
-    d.mkdir(parents=True, exist_ok=True)
-    with fsio.file_lock(d / "add.lock", lock_wait_s):
+    with _entries_locked(repo, lock_wait_s):
         every = entries(repo)
         waiting = next((e for e in every if e.item == item and e.state in (QUEUED, RUNNING)), None)
         if waiting is not None:
@@ -138,12 +143,15 @@ def save(repo: Path, e: Entry) -> None:
 
 
 def remove(repo: Path, item: str) -> Entry | None:
-    """Drop ``item``'s entry (any state but running); the entry removed, or None."""
-    e = get(repo, item)
-    if e is None or e.state == RUNNING:
-        return None
-    _path(repo, e.seq).unlink(missing_ok=True)
-    return e
+    """Drop ``item``'s entry (any state but running); the entry removed, or None. Under the
+    same lock as `take`, so an entry is either removed before the integrator takes it or
+    refused because it was taken -- never both."""
+    with _entries_locked(repo):
+        e = get(repo, item)
+        if e is None or e.state == RUNNING:
+            return None
+        _path(repo, e.seq).unlink(missing_ok=True)
+        return e
 
 
 def head(repo: Path) -> Entry | None:
@@ -151,11 +159,17 @@ def head(repo: Path) -> Entry | None:
     return next((e for e in entries(repo) if e.state == QUEUED), None)
 
 
-def take(repo: Path, e: Entry) -> Entry:
-    e.state, e.started_at, e.finished_at, e.reason = RUNNING, time.time(), 0.0, ""
-    e.attempts += 1
-    _write(repo, e)
-    return e
+def take(repo: Path, e: Entry) -> Entry | None:
+    """Mark ``e`` running, if it is still waiting: None when it was removed (or taken)
+    since the integrator looked at the line."""
+    with _entries_locked(repo):
+        now = _read(_path(repo, e.seq))
+        if now is None or now.state != QUEUED:
+            return None
+        now.state, now.started_at, now.finished_at, now.reason = RUNNING, time.time(), 0.0, ""
+        now.attempts += 1
+        _write(repo, now)
+        return now
 
 
 def finish(repo: Path, e: Entry, state: str, *, reason: str = "", sha: str = "") -> Entry:
