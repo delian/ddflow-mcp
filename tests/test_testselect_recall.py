@@ -39,16 +39,22 @@ SCAN = 40  #: merges looked at to find that many with both source and tests in t
 ABSOLUTE_FLOOR = 0.7  #: share of co-changed tests the selection holds, over all replays
 
 
+def merge_log(root: Path) -> list[str]:
+    """The ``merge <item>: ...`` commits ddflow wrote, newest first, reachable by ANY path.
+    Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
+    parent, so a first-parent walk saw an older window than main does and the replay failed
+    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161)."""
+    log = git_proc(root, "log", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H")
+    return log.stdout.split() if log.returncode == 0 else []
+
+
 def _merges() -> list[str]:
     if os.environ.get("DDFLOW_SKIP_HISTORY_REPLAY"):
         pytest.skip("DDFLOW_SKIP_HISTORY_REPLAY is set")
     probe = git_proc(ROOT, "rev-parse", "--is-shallow-repository")
     if probe.returncode != 0 or probe.stdout.strip() != "false":
         pytest.skip("no full git history here")
-    log = git_proc(
-        ROOT, "log", "--first-parent", "--merges", "--grep=^merge ", "-n", str(SCAN), "--format=%H"
-    )
-    shas = log.stdout.split() if log.returncode == 0 else []
+    shas = merge_log(ROOT)
     if len(shas) < 3:
         pytest.skip("fewer than three merges in this history")
     return shas
