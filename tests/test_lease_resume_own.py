@@ -7,9 +7,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
 from test_lease_reacquire_overlap import _lapsed_then_taken
 
-from conftest import run_cli
 from ddflow.api import lifecycle as LC
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -68,4 +68,3 @@ def test_a_marked_expired_own_lease_is_revived_by_heartbeat(repo):
     _expired_marked(repo)
     out = LC.heartbeat(repo, "T1", agent="first")
     assert out.data.get("renewed"), out.reason
-
