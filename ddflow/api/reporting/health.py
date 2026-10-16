@@ -30,8 +30,8 @@ from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
-from ...services import pins_merge as PM
 from ...services import logblobs as LB
+from ...services import pins_merge as PM
 from ...services import rates as RT
 from ...services import repairs as RP
 from ...services import sessions as SS

@@ -66,7 +66,7 @@ def _install(repo: Path) -> None:
 
 
 def test_a_plain_worktree_merge_conflicts_on_the_pin_files(tmp_path):
-    repo, wt = _history(tmp_path)
+    _repo, wt = _history(tmp_path)
     r = _git(wt, "merge", "main", "-m", "m")
     assert r.returncode != 0
     assert "CONFLICT" in r.stdout
@@ -75,7 +75,7 @@ def test_a_plain_worktree_merge_conflicts_on_the_pin_files(tmp_path):
 def test_a_worktree_merge_of_pin_files_uses_the_driver(tmp_path):
     """README.md (generated block plus prose) and the transcript, as `git merge main` in a
     claimed worktree sees them: no per-worktree setup, the repository's config applies."""
-    repo, wt = _history(tmp_path, installed=True)
+    _repo, wt = _history(tmp_path, installed=True)
     r = _git(wt, "merge", "main", "-m", "m")
     assert r.returncode == 0, r.stdout + r.stderr
     readme = (wt / "README.md").read_text()
@@ -97,7 +97,7 @@ def test_a_tree_older_than_the_tracked_attributes_is_given_them_by_a_claim(tmp_p
 
 
 def test_a_file_with_another_merge_driver_is_left_alone(tmp_path):
-    repo, wt = _history(tmp_path)
+    repo, _wt = _history(tmp_path)
     (repo / ".gitattributes").write_text("README.md merge=ours\n")
     cfg = Config()
     PM.ensure_driver(repo, cfg)
@@ -106,16 +106,23 @@ def test_a_file_with_another_merge_driver_is_left_alone(tmp_path):
     assert not any("transcript.json" in g for g in gaps)  # given the driver, README.md was not
 
 
-def test_a_wrong_driver_command_is_a_gap_and_is_corrected(tmp_path):
+def test_a_foreign_driver_command_is_reported_and_left_alone(tmp_path):
     repo, wt = _history(tmp_path)
     _install(repo)
-    _git(repo, "config", "--local", "merge.pinsregen.driver", "/gone/bin/other %A")
-    assert any("not set" in g for g in PM.driver_gaps(wt, Config()))
-    assert PM.ensure_driver(wt, Config())
+    _git(repo, "config", "--local", "merge.pinsregen.driver", "/opt/own/wrapper %A")
+    assert any("another command" in g for g in PM.driver_gaps(wt, Config()))
+    PM.ensure_driver(wt, Config())
+    assert (
+        _git(repo, "config", "--get", "merge.pinsregen.driver").stdout.strip()
+        == "/opt/own/wrapper %A"
+    )
+    PM.install(repo, Config(), line=_line)  # the explicit install is what replaces it
     assert PM.driver_gaps(wt, Config()) == []
 
 
-def test_a_directory_pin_with_a_file_of_another_driver_is_left_alone(tmp_path):
+def test_a_directory_pin_with_a_file_of_another_driver_keeps_that_file_and_covers_the_rest(
+    tmp_path,
+):
     repo = tmp_path / "r"
     (repo / "docs" / "pins").mkdir(parents=True)
     _git(repo, "init", "-q")
@@ -129,12 +136,13 @@ def test_a_directory_pin_with_a_file_of_another_driver_is_left_alone(tmp_path):
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "x")
     PM.ensure_driver(repo, Config())
-    assert any("(union)" in g for g in PM.driver_gaps(repo, Config()))
-    assert (
-        "docs/pins" not in (repo / ".git" / "info" / "attributes").read_text()
-        if (repo / ".git" / "info" / "attributes").exists()
-        else True
-    )
+    attr = _git(
+        repo, "check-attr", "merge", "--", "docs/pins/notes.md", "docs/pins/other.md"
+    ).stdout
+    assert "notes.md: merge: union" in attr and "other.md: merge: pinsregen" in attr
+    assert any(
+        "union" in g for g in PM.driver_gaps(repo, Config())
+    )  # the new-file case stays named
 
 
 def test_a_pin_file_with_a_space_in_its_name_is_recognised(tmp_path):
@@ -162,10 +170,10 @@ def test_the_config_a_claim_sets_serves_a_tree_whose_attributes_are_tracked(tmp_
 
 @pytest.mark.parametrize("attrs", ["", "README.md merge=text\n"])
 def test_the_gaps_name_the_files_git_would_not_merge_with_the_driver(tmp_path, attrs):
-    repo, wt = _history(tmp_path)
+    repo, _wt = _history(tmp_path)
     (repo / ".gitattributes").write_text(attrs)
     gaps = PM.driver_gaps(repo, Config())
-    assert any("README.md" in g and "transcript.json" in g for g in gaps)
+    assert any("README.md" in g for g in gaps) and any("transcript.json" in g for g in gaps)
     _install(repo)
     assert PM.driver_gaps(repo, Config()) == []
 
@@ -185,8 +193,9 @@ def _claimed_repo(repo: Path):
 def test_a_claim_gives_its_worktree_the_driver_and_doctor_names_the_gap(repo):
     import json
 
-    import ddflow.api.lifecycle as A
     from conftest import run_cli
+
+    import ddflow.api.lifecycle as A
 
     _claimed_repo(repo)
     _code, out, _ = run_cli(repo, "--json", "doctor")
