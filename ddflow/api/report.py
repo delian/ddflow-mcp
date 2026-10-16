@@ -7,7 +7,7 @@ from pathlib import Path
 from ..core import outcome as O
 from ..services import prompts as P
 from ..services import report as R
-from ..services import report_text as RT
+from ..services import report_render as RT
 from ._base import _load
 
 

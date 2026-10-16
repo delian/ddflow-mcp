@@ -18,7 +18,7 @@ from conftest import pass_pipeline, run_cli
 from helpers import git as _git
 
 from ddflow.services import agent_brief as AB
-from ddflow.services import report_text as RT
+from ddflow.services import report_render as RT
 
 TEST_FILE = "def test_a():\n    pass\n"
 
