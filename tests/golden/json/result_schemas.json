@@ -37,8 +37,7 @@
    "here",
    "port",
    "port_advice",
-   "broke",
-   "glob_warnings"
+   "broke"
   ],
   "output_schema": {
    "type": "object",
@@ -56,11 +55,11 @@
     "port": {},
     "port_advice": {},
     "broke": {},
-    "glob_warnings": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -91,6 +90,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -135,6 +135,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -163,6 +164,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -193,6 +195,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -219,6 +222,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -267,6 +271,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -311,6 +316,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -511,6 +517,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -537,6 +544,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -569,6 +577,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -601,6 +610,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -639,6 +649,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -671,6 +682,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -748,6 +760,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -818,6 +831,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -848,6 +862,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -904,6 +919,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -942,6 +958,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -968,6 +985,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1025,6 +1043,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1053,6 +1072,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1113,6 +1133,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1141,6 +1162,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1169,6 +1191,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1211,6 +1234,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1271,6 +1295,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1315,6 +1340,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1349,6 +1375,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1375,6 +1402,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1405,6 +1433,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1435,6 +1464,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1467,6 +1497,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1493,6 +1524,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1517,6 +1549,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1562,6 +1595,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1681,6 +1715,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1787,6 +1822,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1819,6 +1855,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1845,6 +1882,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1885,6 +1923,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1927,6 +1966,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1957,6 +1997,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1995,6 +2036,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2021,6 +2063,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2047,6 +2090,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2071,6 +2115,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2105,6 +2150,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2133,6 +2179,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2157,6 +2204,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2195,6 +2243,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2221,6 +2270,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2249,6 +2299,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2281,6 +2332,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2305,6 +2357,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2335,6 +2388,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2375,6 +2429,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2413,6 +2468,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2447,6 +2503,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2477,6 +2534,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -2519,6 +2577,7 @@
     "ci": {},
     "progress": {},
     "guidance": {},
+    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
