@@ -75,6 +75,8 @@ def _tests_text(out, a) -> str:
         lines.append(f"\nThe unit_tests gate runs only the selected tests ({g['why']}):")
         lines += [f"  {t['path']}  -- {t['reason']}" for t in g["tests"]]
         lines.append(f"  {g['command']}")
+    elif g.get("scope") == "covered":
+        lines.append(f"\nThe unit_tests gate runs nothing: {g['why']}")
     elif g:
         lines.append(f"\nThe unit_tests gate runs the whole suite: {g['why']}\n  {d['full_suite']}")
     elif d["full_suite"]:
