@@ -192,11 +192,14 @@ _OURS = STATE_EXCLUDE
 
 def git_state(where: Path | str) -> dict[str, str] | None:
     """What a reviewer tool must leave as it found it: HEAD, the index and working
-    tree, and the stash list (bug B5ce30dd94d).
+    tree of ``where`` (bug B5ce30dd94d).
 
-    The stash list is shared by every worktree of the repository, so a reviewer that
-    runs ``git stash apply|pop`` rewrites the working tree of whoever ran it and
-    consumes another lane's work. Each part is a digest, so the evidence stays small.
+    Only what belongs to THIS tree. The stash list is shared by every worktree, so a
+    sibling lane's `git stash` moves it mid-review and is no reviewer's doing
+    (B708761957b); a reviewer's `git stash apply|pop` or `stash push` still shows in the
+    working tree and index, which is where it does its harm. Accepted gap: a bare
+    `stash drop|clear`, or a pop followed by a reset, leaves nothing here to see. Each part is a digest, so
+    the evidence stays small.
     None when git could not answer: "could not tell" is not "unchanged"."""
     parts = {
         "head": ("rev-parse", "HEAD"),
@@ -205,7 +208,6 @@ def git_state(where: Path | str) -> dict[str, str] | None:
         "ref": ("rev-parse", "--symbolic-full-name", "HEAD"),
         "status": ("status", "--porcelain=v2", "--untracked-files=all", "--", ".", *_OURS),
         "diff": ("diff", "HEAD", "--binary", "--", ".", *_OURS),
-        "stash": ("stash", "list", "--format=%H %gs"),
     }
     # From the repository top, whatever directory the reviewer was started in: a pathspec
     # of `.` would narrow every query to that directory.
@@ -285,7 +287,7 @@ def git_state_change(before: dict[str, str] | None, after: dict[str, str] | None
             return ""
     return (
         f"the reviewer tool changed git state ({changed}) -- a review must leave HEAD, "
-        f"the index, the working tree and the stash list as it found them (e.g. `git stash "
+        f"the index and the working tree as it found them (e.g. `git stash "
         f"apply` or `pop`). This is NOT a clean review; nothing was restored, so check "
         f"the tree and `git stash list` before going on, and run the reviewer against a "
         f"clean throwaway worktree of the reviewed sha."
@@ -297,7 +299,7 @@ def run_watching_git(
 ) -> tuple[str, dict[str, Any]]:
     """``run()`` -- a command gate's execution -- with a reviewer gate's git state checked
     around it. A reviewer tool (roborev, kilo) that moved HEAD, the index, the working
-    tree or the stash list reviewed nothing trustworthy: the gate is ``unavailable`` and
+    tree reviewed nothing trustworthy: the gate is ``unavailable`` and
     the evidence says what moved. Nothing is restored -- ddflow cannot prove which change
     was the tool's. Any other gate is run as it is (a test suite may write the tree)."""
     watch = is_reviewer_gate(gdef.id, gdef) and gdef.is_command_gate and cwd.exists()

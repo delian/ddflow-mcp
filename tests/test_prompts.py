@@ -138,7 +138,7 @@ def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
 
     seen: list[str] = []
 
-    def fake_chat(rev, system, user, timeout_s):
+    def fake_chat(rev, system, user, timeout_s, tree=None):
         seen.append(user)
         return "STATUS: NO FINDINGS", ""
 
