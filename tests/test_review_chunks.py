@@ -416,6 +416,7 @@ def test_renewals_are_never_further_apart_than_the_heartbeat(monkeypatch):
     renewed: list[float] = []
     now = [1000.0]
     monkeypatch.setattr("time.time", lambda: now[0])
+    monkeypatch.setattr("time.monotonic", lambda: now[0])
     monkeypatch.setattr(api, "_lease_keeper", lambda *_a: lambda: renewed.append(now[0]))
     for heartbeat in (60, 90, 150, 300, 301):
         renewed.clear()

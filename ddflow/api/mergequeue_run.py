@@ -16,13 +16,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core import outcome as O
-from ..infra import fsio
 from ..infra import git as G
 from ..infra import worktree as W
 from ..services import flow as FS
 from ..services import gates as GS
 from ..services import mergequeue as MQ
 from ..services import pins as PN
+from ..services import pins_text as PT
 from ._base import _load
 from .cirun import run as ci_run
 from .gates import run as run_gate
@@ -41,23 +41,20 @@ def _is_pin(path: str, files: list[str]) -> bool:
     return any(path == f.rstrip("/") or path.startswith(f.rstrip("/") + "/") for f in files)
 
 
-def _keep_ours_in_hunks(tree: Path, path: str) -> bool:
-    """Resolve a conflicted pin file by taking OUR side of the hunks that conflict and keeping
-    every other change of both sides (`git merge-file --ours`), then stage it. Not our side of
-    the whole file: a pin file can hold prose too (a README with a generated table), and the
-    other side's edit of prose elsewhere in it must survive. The conflicting hunks are taken to
-    be the generated ones, which the recipe re-records next; a prose edit that overlaps a
-    generated hunk is the one thing this loses. False when git cannot (a delete against an
-    edit)."""
-    with fsio.scratch_dir("ddflow-mq.") as d:
-        for name, stage in (("ours", 2), ("base", 1), ("theirs", 3)):
-            blob = G.run(tree, "show", f":{stage}:{path}", binary=True)
-            if not blob.ok and stage != 1:  # no base: both sides added the file
-                return False
-            (d / name).write_bytes(blob.out_bytes or b"")
-        if not G.run(d, "merge-file", "--ours", "ours", "base", "theirs").ok:
+def _merge_pin_text(tree: Path, path: str) -> bool:
+    """Resolve a conflicted pin file the way the git merge driver does (`services.pins_text`):
+    prose of both sides merged, our side of the generated regions, then stage it. False when
+    prose both sides edited conflicts, or git cannot (a delete against an edit)."""
+    blobs = []
+    for stage in (2, 1, 3):  # ours, base, theirs
+        blob = G.run(tree, "show", f":{stage}:{path}", binary=True)
+        if not blob.ok and stage != 1:  # no base: both sides added the file
             return False
-        (Path(tree) / path).write_bytes((d / "ours").read_bytes())
+        blobs.append(blob.out_bytes or b"")
+    result, conflicted = PT.merge_pin_text(*blobs)
+    if conflicted:
+        return False
+    (Path(tree) / path).write_bytes(result)
     return G.run(tree, "add", "--", path).ok
 
 
@@ -74,7 +71,7 @@ def _bring_in_base(repo: Path, cfg, wt: W.Worktree) -> str:
     conflicts = G.unmerged(wt.path) or []
     pins = PN.pin_files(wt.path, cfg)
     if conflicts and all(_is_pin(c, pins) for c in conflicts):
-        if all(_keep_ours_in_hunks(wt.path, c) for c in conflicts):
+        if all(_merge_pin_text(wt.path, c) for c in conflicts):
             if G.run(wt.path, *ident, "commit", "--no-edit").ok:
                 return ""
     G.run(wt.path, "merge", "--abort")

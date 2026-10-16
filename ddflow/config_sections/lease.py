@@ -22,6 +22,10 @@ class LeaseConfig:
         300,
         doc="How often a live agent renews its lease. Must be comfortably below ttl_s (a 6x margin is the default) or a slow turn looks like a crash.",
     )
+    renew_long_commands: bool = knob(
+        True,
+        doc="A long command (`gate run`, `review`, `ci run`, `pins regenerate`) renews the caller's own lease every heartbeat_s while it runs, on the thread running it, so a 20-minute run does not lapse a 30-minute lease. The renewal is liveness only: it is lease bookkeeping and never counts as progress, so an idle holder still reads as idle to progress-based breaking (D-lease-hold-limit). Off: nothing renews during a command and the agent heartbeats itself.",
+    )
     renew_log_min_s: int = knob(
         120,
         doc="A heartbeat is written to the log only when the lease's last written renewal is at least this many seconds old; closer ones are acknowledged and not recorded, so a busy agent's hooks do not fill the log (lease renewals were 43% of a real log's events). A claim, a re-claim and any renewal that changes the worktree, branch, globs or resources are always written. Cost: another clone sees this lease's expiry up to this much earlier than the holder's last heartbeat implies, so the window in force is never wider than heartbeat_s or grace_s (the slack the lease already allows): raising this alone changes nothing. 0 writes every heartbeat.",
