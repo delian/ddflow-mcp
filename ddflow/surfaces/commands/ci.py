@@ -7,7 +7,6 @@ import sys
 from ...api import ci as A
 from ...api import cirun as AR
 from ...api import surf_setup as SS
-from ...services import ci_scope as CS
 from ..context import Ctx
 from ..render import emit_json
 
@@ -59,8 +58,8 @@ def cmd_ci(a, c: Ctx) -> int:
             f"  [{'ok  ' if ch['ok'] else 'FAIL'}] {ch['id']}"
             + (f"  {ch['detail']}" if ch["detail"] else "")
         )
-    if d.get("scope"):
-        print(CS.marker_line(d["scope"]))
+    if d.get("scope_line"):
+        print(d["scope_line"])  # the scope, for the ci gate that records it from the output
     if out.exit == 0:
         print("ci: passed")
         return 0
