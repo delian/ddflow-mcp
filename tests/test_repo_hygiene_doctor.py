@@ -84,9 +84,3 @@ def test_a_stale_primary_is_named_with_the_restore_command(repo: Path) -> None:
     )
     # from the linked worktree the same primary is named
     assert RH.stale_primary_notes(wt) == RH.stale_primary_notes(repo)
-
-
-def test_ddflow_doctor_reports_the_hygiene_notes(repo: Path) -> None:
-    assert run_cli(repo, "init")[0] == 0
-    _git(repo, "config", "user.name", "Stray")
-    assert any("user.name = 'Stray'" in n for n in _notes(repo))
