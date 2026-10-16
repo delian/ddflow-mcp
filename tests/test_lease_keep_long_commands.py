@@ -96,3 +96,14 @@ def test_pins_regenerate_renews_the_callers_lease_while_a_recipe_runs(repo, monk
     assert out.exit == 0, out.reason
     after = sum(1 for e in EventLog(repo, "me").read_all() if e.kind == "lease.renewed")
     assert after - before >= 2, (before, after)
+
+
+def test_the_throttle_survives_a_backward_wall_clock_step(monkeypatch):
+    calls: list[int] = []
+    tick = LK.throttled(lambda: calls.append(1), time.time(), 10, 1.0)
+    real = time.time
+    monkeypatch.setattr(time, "time", lambda: real() - 3600)  # the clock stepped back
+    mono = time.monotonic
+    monkeypatch.setattr(time, "monotonic", lambda: mono() + 20)  # 20 s really passed
+    tick()
+    assert calls == [1]

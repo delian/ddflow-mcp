@@ -44,11 +44,13 @@ def throttled(
     """``renew`` at the last tick before ``heartbeat_s`` has passed since the last renewal,
     so two renewals are never further apart than ``heartbeat_s``."""
     due = max(0.0, max(1, heartbeat_s) - tick_s)
-    last = [renewed_at or time.time()]
+    # The lease's own renewal is wall-clock; from here the interval is measured on the
+    # monotonic clock, so a clock step (NTP, resume) never stalls the renewals.
+    last = [time.monotonic() - max(0.0, time.time() - (renewed_at or time.time()))]
 
     def tick() -> None:
-        if time.time() - last[0] >= due:
-            last[0] = time.time()
+        if time.monotonic() - last[0] >= due:
+            last[0] = time.monotonic()
             renew()
 
     return tick
