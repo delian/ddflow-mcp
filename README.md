@@ -507,6 +507,12 @@ You get everything except the judgement. Command gates run themselves; agent gat
 for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
+**Merge queue.** Where several agents land work at once, `ddflow queue add <id>` enqueues an item,
+`ddflow queue run` (any agent may) integrates the head of the queue — one entry's ci at a time,
+`--max-batch N` entries per run, `--unit-tests` / `--no-unit-tests` to run or skip each entry's
+`unit_tests` gate on the merged result — `ddflow queue status` (the default) prints the line, and
+`ddflow queue remove <id>` drops an entry. Defaults live in `[merge_queue]`.
+
 **Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
 `ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on
 `ddflow_complete` / `ddflow_bug_fixed`) records one line for the project's changelog on the
