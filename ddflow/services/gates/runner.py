@@ -73,6 +73,7 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
         return {
             "reason": p.reason,
             "command": gdef.command,
+            "timed_out": True,
             "elapsed_s": round(p.elapsed_s, 1),
         }
     if p.kind == cmdrunner.NOT_FOUND:
