@@ -261,3 +261,13 @@ def test_generated_regions_are_regenerated_not_blended(mixed: Path):
     text = (mixed / "doc.md").read_text()
     assert "- a\n- b\n- c\n" in text and "Second." in text
     assert git(mixed, "status", "--porcelain").strip() == ""
+
+
+def test_text_that_is_not_utf8_still_merges_and_conflicts_are_kept():
+    from ddflow.services.pins_text import merge_pin_text
+
+    base = b"one\ntwo\n\xe9\nthree\n"
+    out, bad = merge_pin_text(base.replace(b"one", b"ONE"), base, base.replace(b"three", b"3"))
+    assert out == b"ONE\ntwo\n\xe9\n3\n" and not bad
+    out, bad = merge_pin_text(base.replace(b"two", b"a"), base, base.replace(b"two", b"b"))
+    assert bad and b"<<<<<<<" in out

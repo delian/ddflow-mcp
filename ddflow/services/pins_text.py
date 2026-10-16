@@ -45,11 +45,12 @@ def _merge_file(files: tuple[bytes, bytes, bytes], *flags: str) -> tuple[int, by
 def merge_pin_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, bool]:
     """(result, conflicted): the pin file's three versions merged. ``conflicted`` is true when
     the result holds conflict markers because of prose both sides edited; content git cannot
-    merge at all keeps our side."""
+    merge at all (binary) keeps our side."""
     try:
         o, b, t = (x.decode("utf-8") for x in (ours, base, theirs))
-    except UnicodeDecodeError:
-        return ours, False
+    except UnicodeDecodeError:  # no blocks can be told apart: merge the bytes, conflicts stay
+        code, out = _merge_file((ours, base, theirs))
+        return (ours, False) if code < 0 else (out, code > 0)
     if not (_blocks(o) or _blocks(b) or _blocks(t)):
         code, out = _merge_file((ours, base, theirs), "--ours")
         return (ours, False) if code < 0 else (out, False)
