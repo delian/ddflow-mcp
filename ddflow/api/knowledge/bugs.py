@@ -351,7 +351,13 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
                     tasks[b.id] = _fix_task_id(st, cfg, b.id, b.item)
                 continue
             fix = _file_fix_task(
-                log, cfg, st, b.id, title=b.title, summary=b.summary, item=b.item,
+                log,
+                cfg,
+                st,
+                b.id,
+                title=b.title,
+                summary=b.summary,
+                item=b.item,
                 globs=",".join(b.globs),
             )
             # A partial `bug.found` carries the link: the fold merges and never blanks
