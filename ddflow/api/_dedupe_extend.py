@@ -12,11 +12,24 @@ if TYPE_CHECKING:
     from ._dedupe import Checked
 
 
+def _table(st, kind: str):
+    """The state table holding records of a kind that carries globs; None for the rest."""
+    return {
+        "decision": st.decisions,
+        "lesson": st.lessons,
+        "task": st.items,
+        "phase": st.items,
+    }.get(kind)
+
+
 def _new_globs(st, target: str, kind: str, globs: list[str]) -> list[str]:
-    """The ``globs`` the extended record does not carry yet, in the order given."""
-    table = {"decision": st.decisions, "lesson": st.lessons}.get(kind, st.items)
-    rec = table.get(target)
-    have = set(getattr(rec, "globs", None) or [])
+    """The ``globs`` the extended record does not carry yet, in the order given. A lesson
+    takes them only when it already declares a pattern: its globs scope that inventory."""
+    table = _table(st, kind)
+    rec = table.get(target) if table is not None else None
+    if rec is None or (kind == "lesson" and not rec.pattern):
+        return []
+    have = set(rec.globs or [])
     return [g for g in dict.fromkeys(globs) if g not in have]
 
 
@@ -27,14 +40,11 @@ def extend(
     outcome names the record that received it. The original text is never touched.
 
     ``globs`` given with the add are not text: they are UNIONED into the extended
-    decision / task / phase (``globs_added`` names what was new), never dropped."""
+    decision / task / phase / lesson that carries globs (``globs_added`` names what was
+    new)."""
     ex = chk.extension
     assert ex is not None
-    added = (
-        _new_globs(st, ex["target"], ex["kind"], globs)
-        if globs and st is not None and ex["kind"] in ("decision", "task", "phase", "lesson")
-        else []
-    )
+    added = _new_globs(st, ex["target"], ex["kind"], globs) if globs and st is not None else []
     log.append(
         "record.extended",
         ex["target"],
