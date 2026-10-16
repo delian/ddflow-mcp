@@ -54,6 +54,25 @@ def test_bug_invalid_leaves_another_agents_fix_task_and_names_the_holder(repo):
     assert task.state != ABANDONED and task.lease and task.lease.holder.startswith("fixer")
 
 
+def test_bug_invalid_without_a_fix_task_still_closes(repo):
+    """Review of B8f9668d27d: the new reply fields exist when there is no fix task."""
+    seed(repo)
+    K.bug_found(repo, summary="x", item="T1", id="Bn", agent="a", no_task=True)
+    out = K.bug_invalid(repo, "Bn", reason="by design", agent="a")
+    assert out.exit == 0, out.reason
+    assert out.data["fix_task_abandoned"] == "" and out.data["fix_task_holder"] == ""
+
+
+def test_bug_invalid_reports_the_worktree_it_leaves(repo):
+    seed(repo)
+    K.bug_found(repo, summary="x", item="T1", id="Bw", agent="a")
+    code, _, err = run_cli(repo, "claim", "fix-Bw", agent="a")
+    assert code == 0, err
+    out = K.bug_invalid(repo, "Bw", reason="by design", agent="a")
+    assert out.data["fix_task_abandoned"] == "fix-Bw"
+    assert "kept" in out.data["fix_task_tree"] and "cleanup" in out.data["fix_task_tree"]
+
+
 def _events(repo, item, kind):
     from ddflow.infra.log import EventLog
 

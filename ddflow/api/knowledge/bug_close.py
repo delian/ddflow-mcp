@@ -9,9 +9,8 @@ import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import ABANDONED, OPEN, fold
+from ...core.model import ABANDONED, OPEN, RUNNING, fold
 from ...infra import worktree as W
-from ...services import cleanup as CL
 from ...services import gates as G
 from ...services import leases as L
 from .._base import _load
@@ -205,7 +204,7 @@ def bug_invalid(
     test node id, which is resolved statically as `--regression-test` is (exit 1 when it
     names nothing).
     """
-    log, cfg, st = _load(repo, agent)
+    log, _cfg, st = _load(repo, agent)
     if not reason.strip():
         return O.refused(
             "bug.invalid",
@@ -248,14 +247,14 @@ def bug_invalid(
         removed, kept = _drop_fix_task(log, fresh, rec, reason=reason)
         task = fresh.items.get(rec.fix_task) if rec.fix_task else None
         holder = task.lease.holder if kept == "held" and task and task.lease else ""
-    # A task ended from the caller's own lease was ABANDONED, not removed: say so, and take
-    # its clean worktree away as `abandon` does (B8f9668d27d).
+    # A task ended from the caller's own lease was ABANDONED, not removed (B8f9668d27d). Its
+    # worktree is NOT disposed here: this call cannot see where the caller's shell stands
+    # (over MCP the process cwd is the server's), so the tree stays for `ddflow cleanup`.
     abandoned = removed if removed and _ended_by_abandon(log, removed) else ""
     tree = ""
     if abandoned:
-        done = fold(log.read_all(), strict=False).items.get(abandoned)
-        gone, why = CL.dispose_finished(repo, cfg, log, done, callers=(Path.cwd(),))
-        tree = "worktree removed" if gone else why
+        wt = fold(log.read_all(), strict=False).items[abandoned].worktree
+        tree = f"worktree {wt} kept; `ddflow cleanup --apply` removes it" if wt else ""
     return O.ok(
         "bug.invalid",
         id=bug,
@@ -301,7 +300,9 @@ def _drop_fix_task(log, st, rec, *, reason: str = "") -> tuple[str, str]:
 
 def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
-    still OPEN, nobody holds it, no other open bug names it, nothing is filed under it and
+    still OPEN -- or RUNNING under the CALLER's own lease, which is then abandoned and
+    released rather than removed (B8f9668d27d); a task held by anyone else stays -- no other
+    open bug names it, nothing is filed under it and
     nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
     one. Returns ``(removed id, "")`` or ``("", why kept)``, the reason a key of
     `STILL_QUEUED` or `NOTHING_TO_REMOVE` (asserted, so a new reason cannot reach the
@@ -319,7 +320,7 @@ def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, st
     mine = bool(t.lease) and t.lease.holder == log.agent_id
     if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
         return "", "held"
-    if t.state != OPEN and not mine:
+    if t.state != OPEN and not (mine and t.state == RUNNING):
         return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"
