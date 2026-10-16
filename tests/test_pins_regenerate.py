@@ -271,3 +271,11 @@ def test_text_that_is_not_utf8_still_merges_and_conflicts_are_kept():
     assert out == b"ONE\ntwo\n\xe9\n3\n" and not bad
     out, bad = merge_pin_text(base.replace(b"two", b"a"), base, base.replace(b"two", b"b"))
     assert bad and b"<<<<<<<" in out
+
+
+def test_binary_pin_content_keeps_our_side_without_a_conflict():
+    from ddflow.services.pins_text import merge_pin_text
+
+    base = b"a\x00\xff\nline2\n"
+    out, bad = merge_pin_text(base.replace(b"a", b"A"), base, base.replace(b"line2", b"B"))
+    assert out == base.replace(b"a", b"A") and not bad

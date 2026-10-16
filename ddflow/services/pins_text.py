@@ -38,8 +38,11 @@ def _merge_file(files: tuple[bytes, bytes, bytes], *flags: str) -> tuple[int, by
         for name, data in zip(("ours", "base", "theirs"), files, strict=True):
             (d / name).write_bytes(data)
         r = G.run(d, "merge-file", "-q", *flags, "ours", "base", "theirs")
-        code = -1 if r.err or r.code < 0 else r.code  # an error says why on stderr
-        return code, (d / "ours").read_bytes()
+        merged = (d / "ours").read_bytes()
+        # A failure to merge (binary) exits 255, which no count of conflicts is: the count is
+        # believed only when the conflict markers are there.
+        code = r.code if r.code == 0 or (r.code > 0 and b"\n=======\n" in merged) else -1
+        return (-1 if r.err else code), merged
 
 
 def merge_pin_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, bool]:
