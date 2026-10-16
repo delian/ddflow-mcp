@@ -56,6 +56,13 @@ def run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
     return subprocess.run(*args, **kwargs)
 
 
+def replace_process(path: str, argv: list[str], env: dict[str, str]) -> None:
+    """Replace this process with ``path`` (same pid, same stdio), `os.execve`. Returns only by
+    raising `OSError`: the one `exec` in the package, here so the stdin-guard ratchet has one
+    place to look. Flush what the caller owns first; nothing runs after this succeeds."""
+    os.execve(path, argv, env)
+
+
 def popen(*args: Any, **kwargs: Any) -> subprocess.Popen:
     """`subprocess.Popen` with the same default."""
     kwargs.setdefault("stdin", subprocess.DEVNULL)

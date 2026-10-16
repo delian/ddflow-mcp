@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.on_upgrade"
+new = '"notify"'
+why = "What a running MCP server does after ddflow is upgraded under it: notify (default; a skew refusal becomes a restart instruction), reexec (replace itself with the installed code on the same stdio) or off."
+impact = "additive"
