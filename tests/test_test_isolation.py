@@ -137,15 +137,18 @@ def test_the_guard_sees_a_fixture_commit_on_the_branch_even_when_config_is_untou
     assert ISO.stray_commits(base) == []
     (repo / "work.txt").write_text("legit\n")
     _git("add", "work.txt", cwd=repo)
-    _git("commit", "-qm", "a real change", cwd=repo)
+    _git("-c", "user.email=op@example.org", "commit", "-qm", "a real change", cwd=repo)
     assert ISO.stray_commits(base) == []
     (repo / "README.md").write_text("# proj\nstray\n")
     _git("-c", "user.name=X", "-c", "user.email=x@x", "commit", "-qam", "init", cwd=repo)
     [stray] = ISO.stray_commits(base)
     assert stray.endswith(" init")
+    (repo / "README.md").write_text("# proj\nunnamed\n")  # the suite's identity, any subject
+    _git("commit", "-qam", "add fixture", cwd=repo)
+    assert len(ISO.stray_commits(base)) == 2
     assert any("fixture commits" in c for c in ISO._changes({"head": base}, {"head": ISO._head()}))
     _git("reset", "-q", "--hard", base, cwd=repo)
-    _git("commit", "-q", "--allow-empty", "-m", "elsewhere", cwd=repo)
-    _git("reset", "-q", "--hard", "HEAD~1", cwd=repo)
-    _git("commit", "-q", "--allow-empty", "-m", "rewritten", cwd=repo)
-    assert ISO.stray_commits(base) == []  # still a descendant
+    _git(
+        "commit", "-q", "--allow-empty", "-m", "other", "--author", "Op <op@example.org>", cwd=repo
+    )
+    assert len(ISO.stray_commits(base)) == 0

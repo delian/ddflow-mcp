@@ -70,7 +70,12 @@ def test_a_stale_primary_is_named_with_the_restore_command(repo: Path) -> None:
     wt = repo.parent / "wt"
     (wt / "code.py").write_text("new\n")
     _git(wt, "commit", "-qam", "change")
-    _git(repo, "update-ref", "refs/heads/main", "feat")  # main moved, the primary did not follow
+    _git(
+        repo,
+        "update-ref",
+        f"refs/heads/{_git(repo, 'symbolic-ref', '--short', 'HEAD').strip()}",
+        "feat",
+    )  # main moved, the primary did not follow
     assert (repo / "code.py").read_text() == "old\n"
     [note] = RH.doctor_notes(repo)
     assert "code.py" in note and "stale primary" in note

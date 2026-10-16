@@ -26,17 +26,20 @@ BOOKKEEPING_EXCLUDE = f":(exclude){STATE_DIR}"
 SHOWN = 5
 
 
-def _get(repo: Path, *args: str) -> str:
+def _get(repo: Path, *args: str) -> str | None:
+    """The value; "" when the key is unset (git exits 1); None when git could not answer."""
     r = G.run(repo, "config", *args, timeout=G.PROBE_TIMEOUT)
-    return r.out.strip() if r.ok else ""
+    if r.ok:
+        return r.out.strip()
+    return "" if r.code == 1 else None
 
 
-def _global(repo: Path, key: str) -> str:
+def _global(repo: Path, key: str) -> str | None:
     return _get(repo, "--global", "--get", key)
 
 
 def _local(repo: Path, key: str) -> str:
-    return _get(repo, "--local", "--get", key)
+    return _get(repo, "--local", "--get", key) or ""
 
 
 def _primary(repo: Path) -> Path | None:
@@ -56,6 +59,8 @@ def identity_notes(repo: Path) -> list[str]:
         if not local:
             continue
         shared = _global(repo, f"user.{key}")
+        if shared is None:
+            continue  # git could not read the global config: no claim
         if local != shared:
             out.append(
                 f"the repository config sets user.{key} = {local!r}"
