@@ -272,11 +272,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -665,11 +665,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1586,11 +1586,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1796,11 +1796,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -2053,11 +2053,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -2102,7 +2102,7 @@
     'ddflow_pins': '''
       {
        "name": "ddflow_pins",
-       "description": "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1).",
+       "description": "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -2370,6 +2370,42 @@
        }
       }
     ''',
+    'ddflow_queue': '''
+      {
+       "name": "ddflow_queue",
+       "description": "Merge queue. add: line up an item (gates done but ci/merge). run: the integrator (any agent, one at a time, else exit 2): per entry merges base, regenerates pins, runs ci once, lands it; failures park. status. remove.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "action": {
+          "type": "string",
+          "description": "add|run|status (default)|remove."
+         },
+         "id": {
+          "type": "string",
+          "description": "Item (add, remove)."
+         },
+         "max_batch": {
+          "type": "integer",
+          "description": "run: max entries."
+         },
+         "unit_tests": {
+          "type": "boolean",
+          "description": "Also run unit_tests."
+         },
+         "timeout": {
+          "type": "integer",
+          "description": "run: ci seconds."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_rebuild': '''
       {
        "name": "ddflow_rebuild",
@@ -2604,11 +2640,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -3351,11 +3387,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -3949,6 +3985,7 @@
     'ddflow_promote_deployed',
     'ddflow_promote_status',
     'ddflow_prompts',
+    'ddflow_queue',
     'ddflow_rebuild',
     'ddflow_recall',
     'ddflow_recover',

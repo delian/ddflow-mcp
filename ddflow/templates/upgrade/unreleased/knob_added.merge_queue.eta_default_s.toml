@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge_queue.eta_default_s"
+new = '900'
+why = "Seconds `ddflow queue status` assumes one entry takes until some have been integrated (default 900)."
+impact = "additive"

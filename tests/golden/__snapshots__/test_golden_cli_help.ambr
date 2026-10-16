@@ -1605,6 +1605,26 @@
   
   '''
 # ---
+# name: test_help[ddflow queue]
+  '''
+  usage: ddflow queue [-h] [--max-batch MAX_BATCH] [--unit-tests] [--no-unit-tests] [--timeout TIMEOUT] [{add,run,status,remove}] [id]
+  
+  positional arguments:
+    {add,run,status,remove}
+                          add ITEM: enqueue it; run: integrate the head (any agent may); status
+                          (default): the line; remove ITEM: drop an entry
+    id                    the item (add, remove)
+  
+  options:
+    -h, --help            show this help message and exit
+    --max-batch MAX_BATCH
+                          run: integrate at most this many entries (default [merge_queue].max_batch)
+    --unit-tests          run/add: also run each entry's unit_tests gate on the merged result
+    --no-unit-tests       run/add: do not run unit_tests (overrides [merge_queue].run_unit_tests)
+    --timeout TIMEOUT     run: seconds one entry's ci may run (default [merge_queue].timeout_s)
+  
+  '''
+# ---
 # name: test_help[ddflow rebuild]
   '''
   usage: ddflow rebuild [-h]
@@ -2513,13 +2533,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
+    {init,phase,task,split,resolve,update,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,prompts,hooks,mcp,search,list}
       init                create .ddflow/ in this repository
       phase               add, list or close a phase
       task                add a task
@@ -2583,6 +2603,8 @@
       cadence             which periodic passes are due (exit 2 = none)
       pins                which text of an instruction file a test pins; or `pins regenerate` re-
                           records stale pin files
+      queue               the merge queue: add an item, run the integrator, show the line, remove an
+                          entry
       tests               the tests your change reaches, and a parallel command to run them (exit 2
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
@@ -2736,6 +2758,7 @@
     'ddflow prompts get',
     'ddflow prompts list',
     'ddflow prompts show',
+    'ddflow queue',
     'ddflow rebuild',
     'ddflow recall',
     'ddflow recover',

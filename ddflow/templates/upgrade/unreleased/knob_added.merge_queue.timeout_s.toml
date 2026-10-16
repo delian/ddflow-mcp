@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge_queue.timeout_s"
+new = '0'
+why = "Seconds the merge queue's integrator lets one entry's ci run (default 0: use [ci].timeout_s)."
+impact = "additive"
