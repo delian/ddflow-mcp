@@ -39,7 +39,12 @@ class McpConfig:
 
     on_upgrade: str = knob(
         "notify",
-        doc="What a running MCP server does once ddflow was upgraded under it (the installed package, or this project's log, is newer than the code the server imported). `notify` (default): a write the old code would refuse on version skew is answered with the one fix instead (reconnect the MCP server), flagged `restart_required` in the result meta, and every other call carries a one-line note; reads keep working. `reexec`: after answering the current call, once no other request is in flight or waiting, the server replaces itself with the installed code on the same stdio (same protocol, client and declared identity), so the next call just works; with no newer installed package (a restart would change nothing) it behaves as `notify`. `off`: no check, the skew refusal is shown as it is. Checked on a call at most once a minute, and on every skew refusal. Unlike `tools`, read per call, so a change applies to a running server.",
+        doc="What a running MCP server does once ddflow was upgraded under it (the installed package, or this project's log, is newer than the code the server imported). `notify` (default): a write the old code would refuse on version skew is answered with the one fix instead (reconnect the MCP server), flagged `restart_required` in the result meta, and every other call carries a one-line note; reads keep working. `reexec`: after answering the current call, once no other request is in flight or waiting, the server replaces itself with the installed code on the same stdio (same protocol, client and declared identity), so the next call just works; with no newer installed package (a restart would change nothing) it behaves as `notify`. `off`: no check, the skew refusal is shown as it is. Checked on a call at most once per `stale_check_every_s`, and on every skew refusal. Unlike `tools`, read per call, so a change applies to a running server.",
         choices=MCP_ON_UPGRADE,
         strictest=("notify", "no restart of the process; the agent is told what to do"),
+    )
+
+    stale_check_every_s: float = knob(
+        60.0,
+        doc="Seconds between a running MCP server's looks at the installed package and the project log's version stamps (`on_upgrade`), on the calls that succeed: each look reads the installed version from disk and folds the log, so it is bounded, not per call. A skew refusal always looks at once. 0 looks on every call.",
     )
