@@ -528,7 +528,7 @@ def _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced):
     if gdef.id != "unit_tests":
         return None, gdef, None
     scope = TSC.unit_tests_scope(cfg, st, it, gdef.command, cwd)
-    if scope.scope == "covered":
+    if scope.scope == "covered" and not forced:  # forcing a gate asks for it to run
         return scope, gdef, _covered_by_ci(log, cfg, repo, it, gdef.id, cwd, scope, gates, forced)
     return scope, replace(gdef, command=scope.command) if scope.command else gdef, None
 

@@ -18,7 +18,7 @@ from pathlib import Path
 from ..config import Config
 from ..core.bookkeeping import is_state
 from .testscope import limits
-from .testselect import changed_files, run_command, select
+from .testselect import changed_files, is_test_file, run_command, select
 
 #: The hook ids a selected run skips; the selected tests replace them.
 TESTS_HOOKS = "tests,scenarios"
@@ -95,6 +95,10 @@ def _infrastructure(changed: list[str]) -> str:
         if is_state(c):
             continue
         name = c.rsplit("/", 1)[-1]
+        if name == "conftest.py" or (
+            c.startswith("tests/") and name.endswith(".py") and not is_test_file(c)
+        ):
+            return f"{c} is test infrastructure"
         if c in INFRASTRUCTURE or name in INFRASTRUCTURE:
             return f"{c} configures the suite"
         suffix = "." + name.rsplit(".", 1)[-1] if "." in name else ""

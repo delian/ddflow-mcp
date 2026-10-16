@@ -206,9 +206,16 @@ def run(
                 command=cmd,
                 sha=sha,
                 reason=f"{p.reason}: raise [ci].timeout_s",
+                scope=scope.evidence(sha) if scope is not None else {},
             )
         if p.kind == COULD_NOT_RUN:
-            return Result("unavailable", command=cmd, sha=sha, reason=p.reason)
+            return Result(
+                "unavailable",
+                command=cmd,
+                sha=sha,
+                reason=p.reason,
+                scope=scope.evidence(sha) if scope is not None else {},
+            )
     return _result(p, out_prefix, cmd, sha, base, scope)
 
 
@@ -220,9 +227,9 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
     p = CommandRunner().run(
-        Declared(f"SKIP={scope.skip} {cmd}" if selected else cmd, "[ci].command"),
+        Declared(cmd, "[ci].command"),
         cwd=tree,
-        env=child_env(cfg, ci=True),
+        env={**child_env(cfg, ci=True), **({"SKIP": scope.skip} if selected else {})},
         timeout_s=budget,
         check_installed=False,  # checked before the scratch worktree was made
     )
@@ -233,7 +240,7 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
         Declared(scope.command, "the pre-commit `tests` hook"),
         cwd=tree,
         env=child_env(cfg, ci=True),
-        timeout_s=budget,
+        timeout_s=max(1, budget - int(p.elapsed_s)),  # one budget for the whole run
         check_installed=False,
     ), prefix
 

@@ -233,3 +233,28 @@ def test_the_item_ci_gate_records_scope_selected_count_and_cut_set(project, stub
     full = A.run(project, ref="T1", full=True)
     _, out, _ = run_cli(project, "--json", "show", "T1")
     assert json.loads(out)["gates"]["ci"]["evidence"]["ci_scope"]["scope"] == "full", full.data
+
+
+def test_a_conftest_or_test_helper_change_runs_the_whole_suite(project, stubs):
+    _branch(project, {"tests/helpers.py": "X = 1\n"})
+    helper = CI.run(project, Config.load(project), base="main", for_item=True)
+    assert helper.scope["scope"] == "full" and "test infrastructure" in helper.scope["why"]
+    _git(project, "switch", "-q", "main")
+    _git(project, "branch", "-q", "-D", "work")
+    _branch(project, {"tests/conftest.py": "Y = 1\n"})
+    conf = CI.run(project, Config.load(project), base="main", for_item=True)
+    assert conf.scope["scope"] == "full" and not _calls(stubs, "pytest")
+
+
+def test_a_forced_unit_tests_gate_runs_instead_of_being_covered(monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import gates as AG
+
+    covered = NS(scope="covered", command="", covered_by="ci selected run abc")
+    monkeypatch.setattr(AG.TSC, "unit_tests_scope", lambda *a: covered)
+    monkeypatch.setattr(AG, "_covered_by_ci", lambda *a: "RECORDED")
+    gdef = NS(id="unit_tests", command="pytest")
+    args = (None, None, None, None, None, gdef, None, None)
+    assert AG._scoped(*args, False)[2] == "RECORDED"
+    assert AG._scoped(*args, True)[2] is None
