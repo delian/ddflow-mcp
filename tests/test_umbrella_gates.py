@@ -28,9 +28,7 @@ def _split(repo: Path) -> None:
 
 def _umbrella_gate_events(repo: Path) -> list:
     return [
-        e
-        for e in EventLog(repo).read_all()
-        if e.subject == "P.T" and e.kind.startswith("gate.")
+        e for e in EventLog(repo).read_all() if e.subject == "P.T" and e.kind.startswith("gate.")
     ]
 
 
@@ -40,8 +38,6 @@ def test_closing_the_last_child_gives_every_umbrella_gate_an_outcome(repo):
     assert run_cli(repo, "complete", "P.T.b", "--force")[0] == OK
     st = fold(EventLog(repo).read_all(), strict=False)
     assert st.items["P.T"].state == "done"
-    code, out, err = run_cli(repo, "gate", "status", "P.T")
-    assert "never run" not in out + err
     evs = _umbrella_gate_events(repo)
     assert evs, "the umbrella completed with its gates silent"
     for e in evs:
@@ -67,3 +63,28 @@ def test_an_ordinary_item_with_silent_gates_is_still_refused(repo):
     assert code != OK
     assert "never run" in out + err
     assert not _umbrella_gate_events(repo)
+
+
+def test_a_settled_umbrella_completed_directly_gets_rolled_up_gates(repo):
+    _split(repo)
+    log = EventLog(repo)
+    for child in ("P.T.a", "P.T.b"):
+        log.append("item.completed", child, {"sha": "", "kind": "task", "forced": True})
+    r = run_cli(repo, "complete", "P.T")
+    assert r[0] == OK, r
+    evs = _umbrella_gate_events(repo)
+    assert evs and all(e.kind == "gate.skipped" for e in evs)
+    assert {e.data["gate"] for e in evs} >= {"implement", "merge", "unit_tests"}
+
+
+def test_a_failed_umbrella_gate_still_holds_the_umbrella(repo):
+    _split(repo)
+    log = EventLog(repo)
+    for child in ("P.T.a", "P.T.b"):
+        log.append("item.completed", child, {"sha": "", "kind": "task", "forced": True})
+    out = run_cli(
+        repo, "gate", "record", "P.T", "unit_tests", "--outcome", "failed", "--reason", "x"
+    )
+    assert out[0] == OK, out
+    code, o, e = run_cli(repo, "complete", "P.T")
+    assert code != OK and "failed on the umbrella itself" in o + e

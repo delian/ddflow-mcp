@@ -14,10 +14,10 @@ from ..config import Config
 from ..core.model import State
 from ..infra.log import EventLog
 from . import gates as G
-from .completion import OPEN_BUG_BLOCKER
 
-#: The blockers an umbrella keeps: its open bug, a gate no one recorded, a person's gate.
-KEPT = (OPEN_BUG_BLOCKER, "gate(s) never run", "awaiting a person")
+#: The blockers an umbrella sheds: it has no diff, so a rolled-up skip of implement/merge is
+#: final, and no reviewer of its own exists for independence to be judged against.
+SHED = ("required gate(s) not passed", "reviewer independence not satisfied")
 
 
 def roll_up(
@@ -46,3 +46,19 @@ def roll_up(
             continue
         done.append(gate)
     return done
+
+
+def blockers(st: State, cfg: Config, repo: Path, umbrella: str, found: list[str]) -> list[str]:
+    """``found`` less the blockers it sheds, plus one naming any gate that
+    holds a failed or partial outcome: a rolled-up skip is not a pass, but a recorded
+    failure is not an absence of work to judge either."""
+    kept = [b for b in found if not b.startswith(SHED)]
+    it = st.items[umbrella]
+    bad = [
+        g
+        for g in G.status(st, cfg, umbrella, G.load_gates(repo, cfg)).pipeline
+        if it.gate_outcome(g) in ("failed", "partial")
+    ]
+    if bad:
+        kept.append(f"gate(s) {', '.join(bad)} failed on the umbrella itself")
+    return kept
