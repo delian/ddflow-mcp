@@ -69,3 +69,9 @@ def test_identity_without_a_model_key_is_still_carried():
     _st, rec = _fold(("failed", prior), ("passed", {"note": "triaged"}))
     assert rec.evidence["reviewer"] == "lan-deepseek"
     assert rec.evidence["family"] == "deepseek"
+
+
+def test_an_empty_placeholder_is_not_a_restatement():
+    _st, rec = _fold(("failed", _ROUND), ("passed", {"model": "", "reviewer": None}))
+    assert rec.evidence["model"] == "deepseek-v3"
+    assert rec.evidence["reviewer"] == "lan-deepseek"
