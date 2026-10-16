@@ -26,6 +26,7 @@ def _text(out, a) -> str:
     else:
         lines = [f"{d['source']}: {len(d['findings'])} finding(s)"]
         lines += [f"  {f['kind']}  {' '.join(f['ids'])}: {f['detail']}" for f in d["findings"]]
+    lines += [f"  warning  {w['id']}: {w['detail']}" for w in d.get("warnings", [])]
     if d["waves"]:
         lines.append("waves:")
         lines += [f"  wave {w}: {iid}" for iid, w in d["waves"].items()]
@@ -47,7 +48,7 @@ COMMANDS: tuple[Command, ...] = (
             "list to read -- not a tool an agent calls mid-task."
         ),
         call=lambda repo, a, agent: _api().plan_check(repo, a["source"]),
-        payload=("source", "clean", "findings", "waves", "items"),
+        payload=("source", "clean", "findings", "waves", "items", "warnings"),
         render=_text,
         cli=_SHOWN,
         params=(
