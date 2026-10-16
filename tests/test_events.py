@@ -71,39 +71,60 @@ def test_torn_line_is_skipped_not_fatal(log):
     assert any("torn append" in p for p in log.verify())
 
 
+_STARTED = None  # set in each pool worker: how many writers have begun
+
+
+def _init_worker(counter):
+    global _STARTED
+    _STARTED = counter
+
+
 def _writer(args):
     root, name, n, lock_s = args
     lg = EventLog(Path(root), name, lock_timeout_s=lock_s)
+    if _STARTED is not None:
+        with _STARTED.get_lock():
+            _STARTED.value += 1
     for i in range(n):
         lg.append("session.note", f"{name}-{i}", {"text": str(i)})
     return n
 
 
-def _hold_lock(repo, started, hold_s):
+def _hold_lock(repo, taken, release):
     """A process that owns the append lock until told to let go: the slow path, on demand."""
     from ddflow.infra import fsio
 
-    with fsio.file_lock(EventLog(repo, "holder").lock_path, 30):
-        started.set()
-        time.sleep(hold_s)  # the lock is held for a fixed time: that IS the slow path
+    with fsio.file_lock(EventLog(repo, "holder").lock_path, scaled(30)):
+        taken.set()
+        release.wait(scaled(60))
 
 
 def _lose_nothing(repo, lock_s: float, held_for_s: float = 0.0):
     """8 processes append 15 events each. With ``held_for_s`` the lock is first taken by
-    another process for that long, so every writer waits on it the way it would on a loaded
-    machine; ``lock_s`` is the wait each writer will accept."""
+    another process and kept until every writer has started and then ``held_for_s`` longer,
+    so each writer really waits on it, as on a loaded machine; ``lock_s`` is the wait each
+    writer will accept."""
     n_proc, per = 8, 15
     ctx = mp.get_context()
-    started = ctx.Event()
+    taken, release, counter = ctx.Event(), ctx.Event(), ctx.Value("i", 0)
     holder = None
     if held_for_s:
-        holder = ctx.Process(target=_hold_lock, args=(repo, started, held_for_s))
+        holder = ctx.Process(target=_hold_lock, args=(repo, taken, release))
         holder.start()
-        assert started.wait(30), "the holder never took the lock"
-    with mp.Pool(n_proc) as pool:
-        pool.map(_writer, [(str(repo), f"w{i}", per, lock_s) for i in range(n_proc)])
-    if holder:
-        holder.join(30)
+        assert taken.wait(scaled(30)), "the holder never took the lock"
+    jobs = [(str(repo), f"w{i}", per, lock_s) for i in range(n_proc)]
+    try:
+        with mp.Pool(n_proc, initializer=_init_worker, initargs=(counter,)) as pool:
+            pending = pool.map_async(_writer, jobs)
+            if holder:
+                _wait.wait_until(lambda: counter.value >= n_proc, 30, what="all writers started")
+                time.sleep(held_for_s)  # every writer is now past its start, waiting or about to
+                release.set()
+            pending.get(scaled(120))
+    finally:
+        release.set()
+        if holder:
+            holder.join(scaled(30))
     notes = [e for e in EventLog(repo, "reader").read_all() if e.kind == "session.note"]
     assert len(notes) == n_proc * per, "an append was lost under concurrency"
     lamports = [e.lamport for e in notes]
@@ -119,8 +140,8 @@ def test_concurrent_writers_lose_nothing(repo):
 
 def test_a_slow_lock_wait_is_not_a_failed_append(repo, monkeypatch):
     """The same run forced onto the slow path: the lock is busy for 2 s while each writer
-    accepts a wait of scaled(0.5). Unscaled (the old fixed timeout) it times out."""
-    monkeypatch.setattr(_wait, "slow_factor", lambda: 8.0)
+    accepts a wait of scaled(0.5) (80 s here). Unscaled (the old fixed timeout) it times out."""
+    monkeypatch.setattr(_wait, "slow_factor", lambda: 40.0)
     _lose_nothing(repo, scaled(0.5), held_for_s=2.0)
 
 
