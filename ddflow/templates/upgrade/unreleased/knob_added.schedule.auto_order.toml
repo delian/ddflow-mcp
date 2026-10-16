@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "schedule.auto_order"
+new = "\"propose\""
+why = "What ddflow does about an undeclared lease deadlock: off, propose the needs edge that breaks it, or apply it."
+impact = "additive"
