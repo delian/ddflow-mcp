@@ -301,7 +301,7 @@ def triage(
         return bad(
             f"the findings of {item}.{gate} are {found}: they cannot be triaged until the blob is restored"
         )
-    if not found or not all(f.get("digest") for f in found):
+    if not GD.is_triageable(found):
         return bad(
             f"{item}.{gate} has no `ddflow review` with numbered findings on record "
             f"(a hand-recorded gate, a clean review, or one from before triage)"
