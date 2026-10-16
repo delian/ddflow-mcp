@@ -777,11 +777,12 @@ def _chat_command(
     env = {**os.environ, **rev.env}
     # A reviewer must leave the tree under review as it found it (B5ce30dd94d). That is
     # `tree` -- not this process's cwd, which may be any checkout where a sibling lane
-    # commits (B708761957b); with none given, the cwd the tool is started in.
+    # commits (B708761957b); with none given, the cwd; the tool runs in the tree it is watched in.
     state_before = git_state(tree or os.getcwd())
     started = _RUNNER.start(
         Declared(cmd, f"reviewer {rev.name!r} command"),
         env=env,
+        cwd=tree,
         stdin=P.PIPE,
     )
     if started.unavailable is not None:

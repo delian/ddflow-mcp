@@ -61,9 +61,17 @@ def test_activity_in_the_cwd_checkout_is_not_the_reviewed_trees(tmp_path, monkey
     elsewhere = _repo(tmp_path / "elsewhere")
     tree = _repo(tmp_path / "tree")
     monkeypatch.chdir(elsewhere)
-    cmd = "echo z >> f.txt; git commit -qam moved; echo LGTM"
+    cmd = f"echo z >> {elsewhere}/f.txt; git -C {elsewhere} commit -qam moved; echo LGTM"
     out, err = R._chat(_rev(cmd), "sys", "user", 30, tree=tree)
     assert (out, err) == ("LGTM", ""), err
+
+
+def test_the_tool_runs_in_the_tree_it_is_watched_in(tmp_path, monkeypatch):
+    elsewhere = _repo(tmp_path / "elsewhere")
+    tree = _repo(tmp_path / "tree")
+    monkeypatch.chdir(elsewhere)
+    out, err = R._chat(_rev("pwd"), "sys", "user", 30, tree=tree)
+    assert Path(out).resolve() == tree.resolve(), err
 
 
 def test_a_reviewer_that_edits_the_reviewed_tree_still_did_not_review(tmp_path, monkeypatch):
