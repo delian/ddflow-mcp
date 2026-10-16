@@ -16,6 +16,7 @@ import sys
 # The SUBMODULE. `from ...api import review` would bind the re-exported function; this
 # form reads `ddflow.api.review` out of sys.modules and cannot be shadowed.
 import ddflow.api.review as A
+import ddflow.api.review_findings as RS
 
 from ...api import surf_setup as SS
 from ...api._base import _load
@@ -55,6 +56,19 @@ def _triage_verb(a, c: Ctx, ids: list[str]) -> int:
     return _triage(a, c, ids[1])
 
 
+def _show_verb(a, c: Ctx, ids: list[str]) -> int:
+    """`review show <id> [--gate G]`: the recorded round's numbered findings."""
+    if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
+        print("usage: ddflow review show <id> [--gate G]", file=sys.stderr)
+        return FAIL
+    out = RS.show(c.repo, ids[1], gate=a.gate or "", agent=c.requested_agent)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    c.out(out.data["text"], {"id": out.data["id"], "findings": out.data["findings"]})
+    return OK
+
+
 def _stray_triage_flags(a, ids: list[str]) -> str:
     """The message for triage flags given without the verb, or "".
 
@@ -87,6 +101,8 @@ def cmd_review(a, c: Ctx) -> int:
     ids = list(a.id or [])
     if ids[:1] == ["triage"]:
         return _triage_verb(a, c, ids)
+    if ids[:1] == ["show"]:
+        return _show_verb(a, c, ids)
     if message := _stray_triage_flags(a, ids):
         print(message, file=sys.stderr)
         return FAIL
