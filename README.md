@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=1f4d8a808a46 -->
+<!-- ddflow:begin README/toc sha=0fdf370c61b2 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -271,7 +271,6 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
   - [Companion tools](#companion-tools)
 - [Pin files regenerate; they are never hand-merged](#pin-files-regenerate-they-are-never-hand-merged)
-- [The merge queue: one integrator lands the line](#the-merge-queue-one-integrator-lands-the-line)
 - [Finding a test polluter](#finding-a-test-polluter)
 - [Wiring it into your agent](#wiring-it-into-your-agent)
   - [One set of rules, every agent](#one-set-of-rules-every-agent)
@@ -990,7 +989,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 279 knobs.
+cadences, and the rest of the 281 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1673,31 +1672,6 @@ as data in `.ddflow/pins.toml` (`[pins].recipes_file`), one `[[pin]]` per kind w
 regenerates the stale pins and folds them into the merge commit (`[pins].after_merge` =
 `amend`, `leave` or `off`). List the pin files in `[lease].shared_globs` so a lease on them is
 not exclusive. A recipe never runs under xdist.
-
-## The merge queue: one integrator lands the line
-
-Landing is the part that serialises a wave: every agent that merged re-merged main and
-re-ran a long ci, and the pin files conflicted each time. With the queue an agent whose item
-is finished (every gate but `ci` and `merge` already carrying an outcome) does not land it:
-
-    ddflow queue add <id>               # returns at once: keep working
-    ddflow queue run                    # the integrator; any agent, a scheduled job or the operator
-    ddflow queue status                 # order, state, reason and ETA of every entry
-    ddflow queue remove <id>            # drop an entry (a parked one, or one still waiting)
-
-`queue run` takes the entries in the order they were added. For each it merges the base into the
-item's branch, re-records the pin files by their recipes (a conflict in a pin file alone is
-not a conflict), runs the ci gate once on that merged result and lands the branch with the
-ordinary merge; `ddflow complete` is still the item's own. One integrator runs at a time (a
-second `queue run` exits 2 and says who holds it; a crashed one releases the lock with its
-process). An entry that cannot land -- a conflict outside the pin files, a failing ci, a gate
-that has since failed -- is parked with the reason and the next entry is taken. A queued merge
-is never a way round a gate: an entry whose other gates lack an outcome is refused at
-`queue add` and parked, unrun, by the integrator. The queue is kept in
-`.ddflow/local/mergequeue/` (this checkout's, not committed). `[merge_queue]` sets the defaults
-(`max_batch`, `run_unit_tests`, `timeout_s`, the ETA estimate); `queue run --max-batch N
---unit-tests|--no-unit-tests --timeout S` and the same arguments of `ddflow_queue` override them
-for one run.
 
 ## Finding a test polluter
 
@@ -5169,7 +5143,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 279): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 281): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5596,7 +5570,6 @@ ddflow tests [--item <id>]      tests the change reaches + a parallel command  (
 ddflow merge <id>               merge from the primary checkout, no checkout
 ddflow merge <id> --allow-empty land a branch with nothing ahead of its target (refused otherwise)
 ddflow merge <id> --branch <b>  an item claimed --no-worktree: land <b> (default: your tree's branch)
-ddflow queue add|run|status|remove [<id>]  the merge queue: line up a finished item; the integrator lands the line in order (run: --max-batch, --unit-tests, --timeout; 2 = empty or another integrator running)
                                 ([flow].integration=pr: push + open/update a PR instead)
 ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
 ddflow pr status               every item's request, from the log (no forge call)
@@ -5684,7 +5657,7 @@ declared once and persists — see
 
 ## Configuration
 
-279 knobs across 34 sections, every one documented in place and listed, with its default
+281 knobs across 34 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5751,8 +5724,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b53a7ecc3430 -->
-<details><summary>All 279 knobs across 34 sections</summary>
+<!-- ddflow:begin README/knobs sha=b53b06490a7e -->
+<details><summary>All 281 knobs across 34 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5836,6 +5809,8 @@ long default is left to `ddflow config --explain`.
 | `lessons.require_regression_test` | `true` |  |
 | `lessons.reflect_after_items` | `3` |  |
 | `lessons.test_file_globs` | (long: see `ddflow config --explain`) |  |
+| `lessons.verify_output_lines` | `12` |  |
+| `lessons.verify_load_ratio` | `1.0` |  |
 | `session.log_prompts` | `true` |  |
 | `session.redact_patterns` | (long: see `ddflow config --explain`) |  |
 | `session.redact_extra` | `[]` |  |

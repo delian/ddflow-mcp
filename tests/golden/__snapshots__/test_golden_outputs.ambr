@@ -857,6 +857,14 @@
           these, the regression check cannot expect the test to fail on a pre-fix tree
           (the fix is in the test file itself): it runs the base's own test files, or
           applies the mutation given with the close (verified-by-mutation).
+      lessons.verify_output_lines = 12   [default]
+          How many of the last output lines a regression-test run that did not pass
+          shows, in the refusal and in the recorded evidence. 0 omits them.
+      lessons.verify_load_ratio = 1.0   [default]
+          Load average per CPU above which a regression-test run that did not pass is
+          flagged as run under load: a slow test can miss its own timeout there, so
+          the refusal says to re-run when the machine is quieter before reading it as
+          a verdict.
       session.log_prompts = True   [default]
           Record every operator prompt verbatim as an event. This is what makes
           'rebuild the project from the logs alone' possible; turning it off forfeits
