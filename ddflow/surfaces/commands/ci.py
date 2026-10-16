@@ -37,8 +37,14 @@ def cmd_ci(a, c: Ctx) -> int:
         return out.exit
     # The default is the HEAD of the tree the command runs in: as a gate it runs in the
     # item's worktree, while c.repo is the primary checkout (whose HEAD is main).
-    ref = a.ref or SS.head_here_or_repo(c.repo)
-    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=c.called_from)
+    # A tree another identity works in (a subagent in its parent's) is not the caller's:
+    # `called_from` is then the primary (B0c245a07a1). An explicit --repo makes it the
+    # primary too, so the shell's directory still decides when it is the caller's own tree.
+    where = SS.caller_tree(
+        c.repo, c.called_from, bool(c.tree_owner), c.log.agent_id, c.log.read_all()
+    )
+    ref = a.ref or SS.head_here_or_repo(c.repo, where)
+    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=where)
     if c.json:
         emit_json(out.body(""))
         return out.exit
