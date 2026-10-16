@@ -72,7 +72,7 @@ def _checkout(sha: str):
     try:
         with tarfile.open(fileobj=io.BytesIO(data.stdout)) as tar:
             tar.extractall(raw, filter="data")
-        yield raw, git_raw(ROOT, "ls-tree", "-r", "--name-only", sha).split()
+        yield raw, git_raw(ROOT, "ls-tree", "-r", "--name-only", sha).splitlines()
     finally:
         shutil.rmtree(raw, ignore_errors=True)
 
