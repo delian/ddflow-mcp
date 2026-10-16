@@ -28,6 +28,7 @@ from .bug_close import (  # noqa: F401
     bug_invalid,
     could_not_run_text,
 )
+from .bug_repro import repro_lead  # noqa: F401
 from .bugs import (  # noqa: F401
     BUG_REPORT_COMMAND,
     BUG_SCOPES,
