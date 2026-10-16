@@ -268,11 +268,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -657,11 +657,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1578,11 +1578,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1788,11 +1788,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1865,7 +1865,7 @@
     'ddflow_merge': '''
       {
        "name": "ddflow_merge",
-       "description": "Land an item's branch without ever switching a checkout's branch. With [flow].integration = 'pr' it pushes and opens (or updates) a pull request instead, releases your lease and parks the item in REVIEW — take the next item; `ddflow_pr_sync` completes it once a person merges it.",
+       "description": "Land an item's branch without switching any checkout's branch. With [flow].integration = 'pr' it opens (or updates) a pull request, releases your lease and parks the item in REVIEW; `ddflow_pr_sync` completes it after a person merges.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1881,21 +1881,25 @@
           "type": "boolean",
           "description": "Keep the worktree after merging, for inspection."
          },
+         "queue": {
+          "type": "boolean",
+          "description": "Queue it for the integrator (`ddflow_queue`) instead of landing it now."
+         },
          "model": {
           "type": "string",
-          "description": "The AUTHOR's model. In PR mode the item completes later, at `ddflow_pr_sync`, and the reviewer-independence check needs it then."
+          "description": "The AUTHOR's model; PR mode completes later at `ddflow_pr_sync`, which needs it."
          },
          "allow_dirty": {
           "type": "boolean",
-          "description": "Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output."
+          "description": "Merge although the worktree is dirty; the changes are NOT included. Only once you have seen what is dirty."
          },
          "allow_empty": {
           "type": "boolean",
-          "description": "Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree)."
+          "description": "Land a branch with nothing ahead of its target (refused by default: wrong tree? rebind with ddflow_update worktree)."
          },
          "branch": {
           "type": "string",
-          "description": "For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs."
+          "description": "For a no_worktree item: the branch to land (default: the one checked out here); paths outside its globs come back as outside_globs."
          },
          "as_agent": {
           "type": "string",
@@ -2045,11 +2049,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -2094,7 +2098,7 @@
     'ddflow_pins': '''
       {
        "name": "ddflow_pins",
-       "description": "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1).",
+       "description": "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -2362,6 +2366,42 @@
        }
       }
     ''',
+    'ddflow_queue': '''
+      {
+       "name": "ddflow_queue",
+       "description": "Merge queue. add: line up a finished item (all gates but ci/merge done). run: the integrator (any agent; one at a time, else exit 2): per entry merges base, regenerates pins, runs ci once, lands it; failures are parked. status: order and ETA. remove.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "action": {
+          "type": "string",
+          "description": "add | run | status (default) | remove."
+         },
+         "id": {
+          "type": "string",
+          "description": "Item (add, remove)."
+         },
+         "max_batch": {
+          "type": "integer",
+          "description": "run: max entries."
+         },
+         "unit_tests": {
+          "type": "boolean",
+          "description": "Also run unit_tests on the merged result."
+         },
+         "timeout": {
+          "type": "integer",
+          "description": "run: ci seconds per entry."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_rebuild': '''
       {
        "name": "ddflow_rebuild",
@@ -2596,11 +2636,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -3343,11 +3383,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -3941,6 +3981,7 @@
     'ddflow_promote_deployed',
     'ddflow_promote_status',
     'ddflow_prompts',
+    'ddflow_queue',
     'ddflow_rebuild',
     'ddflow_recall',
     'ddflow_recover',

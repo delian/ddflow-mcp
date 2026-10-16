@@ -134,6 +134,8 @@ from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
 from .lifecycle import wait as wait_item
+from .mergequeue_add import queue_add, queue_remove, queue_status
+from .mergequeue_run import queue_run
 from .metrics import run_metrics
 from .onboard import onboard as onboard_run
 from .operations import (
@@ -308,6 +310,10 @@ __all__ = [
     "promote_deployed",
     "promote_status",
     "prompts",
+    "queue_add",
+    "queue_remove",
+    "queue_run",
+    "queue_status",
     "rebuild",
     "recall",
     "recover",
