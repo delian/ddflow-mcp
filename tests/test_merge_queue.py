@@ -187,9 +187,11 @@ GEN = """\
 import sys
 from pathlib import Path
 
+HEAD = "<!-- gen -->\\n"
 knobs = sorted(p.read_text().strip() for p in Path("knobs").glob("*.txt"))
-want = f"{len(knobs)} knobs\\n" + "".join(f"- {k}\\n" for k in knobs)
 pin = Path("pin.txt")
+prose = pin.read_text().split(HEAD)[0] if pin.exists() else "# pins\\n\\n\\n\\n"
+want = prose + HEAD + f"{len(knobs)} knobs\\n" + "".join(f"- {k}\\n" for k in knobs)
 if "--check" in sys.argv:
     sys.exit(0 if pin.exists() and pin.read_text() == want else 1)
 pin.write_text(want)
@@ -245,7 +247,7 @@ def proj(repo: Path, monkeypatch) -> Path:
     return repo
 
 
-def _finish(proj: Path, item: str, text: str = "") -> Path:
+def _finish(proj: Path, item: str, text: str = "", note: str = "") -> Path:
     """Claim ``item`` as its own agent, add a knob and re-record the pin in its tree, commit,
     and satisfy every gate but the two the integrator produces."""
     name = item.lower()
@@ -254,6 +256,9 @@ def _finish(proj: Path, item: str, text: str = "") -> Path:
     assert code == 0, out + err
     tree = Path(json.loads(out)["worktree"])
     (tree / "knobs" / f"{name}.txt").write_text(text or f"{name}\n")
+    if note:  # prose in the pin file, beside the generated part
+        pin = tree / "pin.txt"
+        pin.write_text(pin.read_text().replace("# pins\n", f"# pins\n{note}\n", 1))
     subprocess.run([sys.executable, "gen.py"], cwd=tree, check=True)
     _git(tree, "add", "-A")
     _git(tree, "commit", "-qm", f"add knob {name}")
@@ -284,8 +289,8 @@ def _landed(proj: Path) -> list[str]:
 
 def test_three_items_that_each_add_a_knob_land_in_queue_order_with_green_pins(proj):
     for item in ("T1", "T2", "T3"):
-        _finish(proj, item)
-    for item in ("T2", "T3", "T1"):  # the order they are queued, not the order they were made
+        _finish(proj, item, note="t1 wrote this" if item == "T1" else "")
+    for item in ("T1", "T3", "T2"):  # the order they are queued, not the order they were made
         code, out, err = _queue(proj, item)
         assert code == 0, out + err
     assert _git(proj, "log", "-1", "--format=%s").strip() == "ddflow"  # nothing landed yet
@@ -293,8 +298,11 @@ def test_three_items_that_each_add_a_knob_land_in_queue_order_with_green_pins(pr
 
     code, out, err = run_cli(proj, "queue", "run", agent="integrator")
     assert code == 0, out + err
-    assert _landed(proj) == ["T2", "T3", "T1"]
-    assert (proj / "pin.txt").read_text() == "4 knobs\n- a\n- t1\n- t2\n- t3\n"
+    assert _landed(proj) == ["T1", "T3", "T2"]
+    # the generated part is re-recorded, and T1's prose beside it survived the later merges
+    assert (proj / "pin.txt").read_text() == (
+        "# pins\nt1 wrote this\n\n\n\n<!-- gen -->\n4 knobs\n- a\n- t1\n- t2\n- t3\n"
+    )
     assert subprocess.run([sys.executable, "gen.py", "--check"], cwd=proj).returncode == 0
     assert _git(proj, "status", "--porcelain", "--untracked-files=no").strip() == ""
     assert {r["state"] for r in _status(proj).values()} == {"merged"}
