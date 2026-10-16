@@ -163,3 +163,36 @@ def test_cli_flags_and_claiming_the_fix_task_prints_the_bundle(proj):
     code, out, err = run_cli(proj, "claim", "fix-BX1", agent="a1")
     assert code == 0, err
     assert "Repro bundle of bug BX1" in out
+
+
+def test_an_unknown_mode_is_refused_not_degraded_to_basic(proj):
+    from ddflow.config import Config
+
+    log = EventLog(proj, "a1")
+    with pytest.raises(ValueError, match="ful"):
+        RB.build(proj, Config.load(proj), state(proj), log.read_all(), bug="B1", mode="ful")
+    out = RB.attach(proj, Config.load(proj), state(proj), log, "B1", capture="ful")
+    assert "unavailable" in out["repro"] and "ref" not in out["repro"]
+
+
+def test_a_basic_bundle_does_not_point_at_a_section_it_lacks(proj):
+    _, bug = _file(proj, repro_capture="basic")
+    got = _bundle(proj, bug)
+    assert "recent_events" not in got and "recent_events" not in got["commands"]["unavailable"]
+    _, bug = _file(proj, repro_capture="full")
+    assert "recent_events" in _bundle(proj, bug)
+
+
+def test_a_test_id_that_looks_like_an_option_is_not_one(proj):
+    _, bug = _file(proj, test="--co")
+    got = _bundle(proj, bug)["test"]
+    assert got["exit_code"] != 0 and "not found" in got["tail"]  # a missing path, not a pass
+
+
+def test_a_cwd_outside_the_project_is_not_recorded_whole(proj, tmp_path, monkeypatch):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    _, bug = _file(proj)
+    cwd = _bundle(proj, bug)["tree"]["cwd"]
+    assert cwd == "<outside the project>/elsewhere" and str(tmp_path) not in cwd

@@ -44,12 +44,12 @@ def tail(text: str, nbytes: int) -> str:
 
 
 def _rel(path: str, repo: Path) -> str:
-    """``path`` relative to the project when it lies inside it (a path says where; the
-    machine's home directory says nothing a reader needs)."""
+    """``path`` relative to the project when it lies inside it; else only its last part (a
+    path says where; the machine's own directories say nothing a reader needs)."""
     try:
         return str(Path(path).resolve().relative_to(Path(repo).resolve())) or "."
     except (ValueError, OSError):
-        return path
+        return f"<outside the project>/{Path(path).name}"
 
 
 def tree(repo: Path) -> dict[str, Any]:
@@ -181,9 +181,11 @@ def recent_events(events: list[Any], agent: str, n: int) -> list[dict[str, str]]
 
 def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str, Any]:
     """Run pytest on ``test_id`` once and keep the head (plugins, seed) and the output tail."""
-    argv = [sys.executable, "-m", "pytest", "--tb=short", "-p", "no:cacheprovider", test_id]
+    # `--` ends pytest's options: an id that starts with a dash is a path to look for, never
+    # an option (`--co` would "pass" without running anything, `-p mod` would import `mod`).
+    argv = [sys.executable, "-m", "pytest", "--tb=short", "-p", "no:cacheprovider", "--", test_id]
     got = P.capture(argv, timeout=timeout_s, cwd=str(repo))
-    out: dict[str, Any] = {"id": test_id, "command": "pytest " + test_id}
+    out: dict[str, Any] = {"id": test_id, "command": "pytest --tb=short -- " + test_id}
     if got.error is not None:
         out["unavailable"] = f"pytest did not run to an exit status: {got.error}"
         return out
