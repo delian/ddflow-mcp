@@ -95,8 +95,9 @@ def _backdate(repo, item: str, seconds: float) -> None:
                     e["data"]["at"] -= seconds
                 e["ts"] = clock.iso_at(clock.epoch(e["ts"]) - seconds)
                 hit = True
-                line = json.dumps(e, separators=(",", ":"))
-            out.append(line)
+                out.append(json.dumps(e, separators=(",", ":")))
+            else:
+                out.append(line)
         if hit:
             f.write_text("\n".join(out) + "\n")
 
