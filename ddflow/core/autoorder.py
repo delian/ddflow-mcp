@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from .graph import closure
-from .records import ABANDONED, DONE
 
 OPT_OUT = "no-auto-order"
 DECIDE_TAGS = frozenset({"decide", "decision"})
@@ -31,7 +30,7 @@ class Cand:
     """What the ordering needs to know of one item."""
 
     id: str
-    state: str = "open"
+    terminal: bool = False  # done or abandoned
     kind: str = "task"
     tags: tuple[str, ...] = ()
     needs: tuple[str, ...] = ()
@@ -70,8 +69,8 @@ def eligible(c: Cand | None) -> str:
         return "unknown item"
     if c.kind != "task":
         return "not a task"
-    if c.state in (DONE, ABANDONED):
-        return f"{c.state}"
+    if c.terminal:
+        return "settled"
     if OPT_OUT in c.tags:
         return f"tagged {OPT_OUT}"
     if DECIDE_TAGS & set(c.tags):

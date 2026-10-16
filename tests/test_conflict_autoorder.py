@@ -137,8 +137,7 @@ def _cycle(victim_item="T2"):
 
 def test_settled_decide_and_opted_out_items_are_untouched():
     for bad in (
-        AO.Cand("T1", state="done"),
-        AO.Cand("T1", state="abandoned"),
+        AO.Cand("T1", terminal=True),
         AO.Cand("T1", tags=("decide",)),
         AO.Cand("T1", tags=("no-auto-order",)),
     ):
@@ -180,6 +179,6 @@ def test_a_link_blocked_by_two_leases_falls_back_to_the_eligible_one():
         "victim_item": "T9",
         "links": [{"item": "T1", "blocker": "T2", "blockers": ["T2", "T3"]}],
     }
-    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", state="done"), "T3": AO.Cand("T3")}
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", terminal=True), "T3": AO.Cand("T3")}
     (e,), _ = AO.propose([cyc], items)
     assert (e.later, e.earlier) == ("T1", "T3")
