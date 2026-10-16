@@ -107,7 +107,7 @@ def _ci_detail(repo: Path, e: MQ.Entry, out: O.Outcome, log: Path) -> dict:
     d = out.data
     names = [c["id"] for c in d.get("checks", []) if not c.get("ok")]
     names += [t for t in d.get("failed_tests", []) if t not in names]
-    tail = "\n".join((d.get("output_tail") or "").rstrip().splitlines()[-FL.TAIL_LINES:])
+    tail = "\n".join((d.get("output_tail") or "").rstrip().splitlines()[-FL.TAIL_LINES :])
     return {
         "failed": names,
         "tail": tail,
