@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import _wait
 from _wait import scaled
+
 from ddflow.infra.log import Event, EventLog, canonical
 
 
@@ -71,20 +72,19 @@ def test_torn_line_is_skipped_not_fatal(log):
     assert any("torn append" in p for p in log.verify())
 
 
-_STARTED = None  # set in each pool worker: how many writers have begun
+_SHARED: dict = {}  # filled in each pool worker: the count of writers that have begun
 
 
 def _init_worker(counter):
-    global _STARTED
-    _STARTED = counter
+    _SHARED["started"] = counter
 
 
 def _writer(args):
     root, name, n, lock_s = args
     lg = EventLog(Path(root), name, lock_timeout_s=lock_s)
-    if _STARTED is not None:
-        with _STARTED.get_lock():
-            _STARTED.value += 1
+    if (started := _SHARED.get("started")) is not None:
+        with started.get_lock():
+            started.value += 1
     for i in range(n):
         lg.append("session.note", f"{name}-{i}", {"text": str(i)})
     return n
