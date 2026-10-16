@@ -55,12 +55,12 @@ class LeaseConfig:
     )
     hold_max_s: int = knob(
         3600,
-        doc="A CONTENDED lease with no progress for this many seconds (see idle_max_s) is BREAKABLE (D-lease-hold-limit): the waiter's claim goes through, recorded as a lease.expired event naming who broke it, why and how long it had been idle, and both agents are told. The holder keeps its branch and worktree. An uncontended lease is never broken, however old; a lease that shows progress never is. 0 = never (the old behaviour).",
+        doc="A CONTENDED lease with no progress for this many seconds (see idle_max_s) is BREAKABLE (D-lease-hold-limit): the waiter's claim goes through, recorded as a lease.expired event naming who broke it, why and how long it had been idle, and both agents are told. The holder's branch, worktree and recorded gates are kept for it to be restored (DX-park-and-resume). An uncontended lease is never broken, however old; a lease that shows progress never is. 0 = never (the old behaviour).",
         check=int_at_least(0),
     )
     break_on_timeout: bool = knob(
-        True,
-        doc="A claim that meets a breakable lease breaks it by itself. Off: the claimant must say so (`ddflow claim --break`), so a person or coordinator decides each break.",
+        False,
+        doc="A claim that meets a breakable lease breaks it by itself. Off (default): the waiter must say so (`ddflow claim --break`), so breaking another agent's lease is always a deliberate, attributed act. On: any plain claim of a contended, idle lease breaks it.",
     )
     #: report | auto
     reclaim_policy: str = knob(

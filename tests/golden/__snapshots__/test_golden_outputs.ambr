@@ -446,13 +446,15 @@
           A CONTENDED lease with no progress for this many seconds (see idle_max_s) is
           BREAKABLE (D-lease-hold-limit): the waiter's claim goes through, recorded as
           a lease.expired event naming who broke it, why and how long it had been
-          idle, and both agents are told. The holder keeps its branch and worktree. An
-          uncontended lease is never broken, however old; a lease that shows progress
-          never is. 0 = never (the old behaviour).
-      lease.break_on_timeout = True   [default]
-          A claim that meets a breakable lease breaks it by itself. Off: the claimant
-          must say so (`ddflow claim --break`), so a person or coordinator decides
-          each break.
+          idle, and both agents are told. The holder's branch, worktree and recorded
+          gates are kept for it to be restored (DX-park-and-resume). An uncontended
+          lease is never broken, however old; a lease that shows progress never is. 0
+          = never (the old behaviour).
+      lease.break_on_timeout = False   [default]
+          A claim that meets a breakable lease breaks it by itself. Off (default): the
+          waiter must say so (`ddflow claim --break`), so breaking another agent's
+          lease is always a deliberate, attributed act. On: any plain claim of a
+          contended, idle lease breaks it.
       lease.reclaim_policy = 'report'   [default]
           'report' (default) never steals an expired lease — it names the worktree so
           a human can rescue in-flight work. 'auto' reclaims it. 'report' exists

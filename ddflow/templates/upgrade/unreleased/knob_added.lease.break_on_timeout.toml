@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "lease.break_on_timeout"
-new = "true"
-why = "Whether a claim that meets a breakable lease breaks it by itself; off, the claimant must pass --break."
+new = "false"
+why = "Whether a plain claim that meets a breakable lease breaks it by itself; off (default), the waiter must pass --break."
 impact = "additive"
