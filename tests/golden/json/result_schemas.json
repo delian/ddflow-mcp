@@ -2433,6 +2433,42 @@
   },
   "array_schema": null
  },
+ "ddflow_health": {
+  "command": "health",
+  "schema": "health@1",
+  "shape": "object",
+  "payload": [
+   "mode",
+   "ran",
+   "now",
+   "findings",
+   "moves",
+   "count",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "health@1"
+    },
+    "mode": {},
+    "ran": {},
+    "now": {},
+    "findings": {},
+    "moves": {},
+    "count": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_phase_close": {
   "command": "phase_close",
   "schema": "phase_close@1",
