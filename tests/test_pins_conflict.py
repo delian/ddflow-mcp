@@ -132,3 +132,13 @@ def test_a_real_merge_conflict_in_the_generated_block_is_cleared(tmp_path):
     assert (repo / "README.md").read_text() == "intro\n" + _block("good") + "outro\n"
     git("add", "README.md")
     assert git("commit", "-qm", "merge").returncode == 0
+
+
+def test_nested_or_unclosed_markers_leave_the_file_to_a_person(tmp_path):
+    nested = "<<<<<<< HEAD\nours\n" + _conflict("x\n", "y\n") + "=======\ntheirs\n>>>>>>> main\n"
+    res = PC.settle("t.json", nested)
+    assert res.text is None and res.refused == [1, 10]
+    repo = _repo(tmp_path, "intro\n" + _conflict(_block("a"), _block("b")) + "<<<<<<< HEAD\nx\n")
+    before = (repo / "README.md").read_text()
+    assert "line 6" in PN.regenerate(repo, Config()).problem
+    assert (repo / "README.md").read_text() == before
