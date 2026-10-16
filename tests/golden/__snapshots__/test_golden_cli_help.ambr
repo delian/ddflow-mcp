@@ -1806,6 +1806,7 @@
                     a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage
     ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...
                                               record what became of one finding
+    ddflow review show <id> [--gate G]        list the recorded round's numbered findings
   --finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the
   `triage` verb: without it they are refused, never run as a review.
   
