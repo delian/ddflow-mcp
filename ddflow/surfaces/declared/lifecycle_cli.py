@@ -15,6 +15,7 @@ from ...core import clock
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
 from ...core.progress import new_reports_line
 from ...core.tier import tier_of
+from ..tools._common import _api
 
 #: How many offending files a refusal lists before summarising the rest. Enough to see
 #: whether they are build artefacts or real source -- which is the judgement the operator
@@ -247,7 +248,8 @@ def claim_body(out, a) -> Any:
 
 
 def claim_text(out, a, ctx) -> str:
-    d = out.data
+    # a claim of a bug's fix task starts from how the bug was seen (DX-bug-repro-bundle)
+    d = _api().knowledge.repro_lead(ctx.repo, out, ctx.log.read_all(), a["id"]).data
     msg = f"claimed {a['id']} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
     for b in d.get("broke") or []:
         msg += (
