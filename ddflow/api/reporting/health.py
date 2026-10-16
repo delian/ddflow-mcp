@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...core import leasewait as LW
 from ...core import outcome as O
 from ...core import progress as PR
 from ...core.events import is_older
@@ -39,6 +41,7 @@ from ...services import shared_files as SF
 from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
+from ...services import waiting as WT
 from ...services import workflow as WF
 from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
 from ...services.completion import verdict
@@ -289,6 +292,22 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
+def wait_cycles(st, cfg, now: float) -> list[LW.Cycle]:
+    """Cycles in the wait-for graph of the standing `lease.waiting` records (empty when
+    `[loops].wait_cycle` is off)."""
+    if not cfg.loops.wait_cycle:
+        return []
+    waits = [
+        LW.Wait(
+            w.item, w.holder, w.since, tuple(w.globs), tuple((o["item"], o["holder"]) for o in w.on)
+        )
+        for w in WT.waiters(st, cfg, now)
+    ]
+    live = st.active_leases(now, cfg.lease.grace_s)
+    held = [LW.Held(i, lz.holder, tuple(lz.globs)) for i, lz in live.items()]
+    return LW.find(waits, held)
+
+
 def doctor(
     repo: Path,
     *,
@@ -451,6 +470,11 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
+    cycles = wait_cycles(st, cfg, time.time())
+    shown = cfg.loops.wait_cycle_shown
+    problems += [c.render() for c in cycles[:shown]]
+    if len(cycles) > shown:
+        problems.append(f"{len(cycles) - shown} more lease deadlock(s); see data.wait_cycles")
 
     data: dict[str, Any] = {
         "problems": problems,
@@ -461,6 +485,7 @@ def doctor(
         "repo": str(repo),
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
+        "wait_cycles": [c.as_dict() for c in cycles],
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)
