@@ -11,8 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import Config
-from ..core.model import State
+from ..core.model import State, fold
 from ..infra.log import EventLog
+from . import completion as CM
 from . import gates as G
 
 #: The blockers an umbrella sheds: it has no diff, so a rolled-up skip of implement/merge is
@@ -62,3 +63,15 @@ def blockers(st: State, cfg: Config, repo: Path, umbrella: str, found: list[str]
     if bad:
         kept.append(f"gate(s) {', '.join(bad)} failed on the umbrella itself")
     return kept
+
+
+def verdict(
+    st: State, cfg: Config, item: str, *, repo: Path, model: str, log: EventLog, kids: list[str]
+):
+    """`completion.verdict` for a settled umbrella: its gates rolled up first, then judged
+    with the blockers a no-diff item cannot meet shed (B651a63e574)."""
+    roll_up(log, cfg, repo, st, item, kids)
+    st = fold(log.read_all(), strict=False)
+    v = CM.verdict(st, cfg, item, repo=repo, model=model)
+    v.blockers = blockers(st, cfg, repo, item, v.blockers)
+    return v
