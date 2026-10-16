@@ -13,8 +13,6 @@ from .gates.reviewers import family_of
 #: Evidence keys that show a tool or a reviewer produced the outcome. A gate with none of them
 #: was recorded by hand (`gate record ... --evidence`) and its note is all there is.
 TOOL_KEYS = ("command", "reviewer", "covered_by", "roborev", "branch_head", "ci_scope", "scope")
-NOTE_CHARS = 240
-WHY_CHARS = 110
 
 
 def _family(ev: dict[str, Any], cfg) -> str:
@@ -30,13 +28,13 @@ def _row(gate: str, rec, cfg) -> dict[str, Any]:
         "gate": gate,
         "outcome": rec.outcome,
         "by": rec.by,
-        "reason": (rec.reason or "")[:NOTE_CHARS],
+        "reason": (rec.reason or "")[: cfg.session.report_note_chars],
         "model": str(ev.get("model") or ""),
         "family": _family(ev, cfg),
         "reviewer": str(ev.get("reviewer") or ""),
         "tree": str(ev.get("tree_sha") or "")[:14],
         "by_hand": hand,
-        "note": str(ev.get("note") or "")[:NOTE_CHARS] if hand else "",
+        "note": str(ev.get("note") or "")[: cfg.session.report_note_chars] if hand else "",
         "branch_head": str(ev.get("branch_head") or ""),
         "rounds": ev.get("rounds") or 0,
         "findings": ev.get("findings"),
@@ -70,7 +68,9 @@ def earlier_tree(st, cfg, item_id: str, repo: Path, landed: str) -> dict[str, st
     except Exception:
         return {}
     return {
-        n.gate: (("could not be checked: " if n.unverified else "") + n.why)[:WHY_CHARS]
+        n.gate: (("could not be checked: " if n.unverified else "") + n.why)[
+            : cfg.session.report_note_chars
+        ]
         for n in notes
     }
 

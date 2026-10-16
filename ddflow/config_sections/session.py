@@ -104,6 +104,18 @@ class SessionConfig:
         6,
         doc="How many of the decisions that govern the item's files the launch brief quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.",
     )
+    report_commits: int = knob(
+        20,
+        doc="How many commit shas `ddflow report ITEM` lists for the landing before it says how many more there were.",
+    )
+    report_note_chars: int = knob(
+        200,
+        doc="Characters `ddflow report ITEM` keeps of a gate's reason, of the evidence text of a gate recorded by hand and of an earlier-tree note.",
+    )
+    report_test_files: int = knob(
+        12,
+        doc="How many changed test files `ddflow report ITEM` names before it says how many more there were.",
+    )
     agent_brief_lessons: int = knob(
         3,
         doc="How many task-relevant lessons the launch brief carries.",
