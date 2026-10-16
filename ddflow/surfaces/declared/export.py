@@ -407,7 +407,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("ci",),
         tool="ddflow_ci",
         summary="the CI parity gate: run the pre-push checks on the merge result",
-        description="CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status).",
+        description="CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status).",
         params=(
             Param(
                 "verb",
@@ -438,7 +438,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "full",
-                help="Run the whole test suite, not only the tests the change reaches (run).",
+                help="Whole suite (run).",
                 type="boolean",
                 cli_help="run: the whole test suite, not only the tests the change reaches",
             ),
