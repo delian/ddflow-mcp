@@ -5723,7 +5723,6 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<<<<<<< HEAD
 <!-- ddflow:begin README/knobs sha=0a16cc46a568 -->
 <details><summary>All 271 knobs across 33 sections</summary>
 
