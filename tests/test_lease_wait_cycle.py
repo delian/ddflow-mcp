@@ -153,3 +153,12 @@ def test_a_waiter_blocked_by_two_leases_of_one_holder_gets_both_released():
     (c,) = LW.find(waits, held)
     assert c.victim == "V" and set(c.release) == {"src/utils/**", "conf/*.yml"}
     assert "release alpha" in c.remedy and "release beta" in c.remedy
+
+
+def test_a_record_naming_a_holder_that_let_go_is_no_edge():
+    held = [LW.Held("T1", "A", ("a",)), LW.Held("T2", "C", ("b",))]  # T2 was taken by C
+    waits = [
+        LW.Wait("T1", "A", 1.0, ("b",), (("T2", "B"),)),
+        LW.Wait("T2", "B", 2.0, ("a",), (("T1", "A"),)),
+    ]
+    assert LW.find(waits, held) == []
