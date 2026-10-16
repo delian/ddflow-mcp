@@ -217,7 +217,7 @@ class SuggestingParser(argparse.ArgumentParser):
     def parse_known_args(self, args=None, namespace=None):
         # Kept for `error`: it reads the words that were really parsed, not `sys.argv`.
         self._argv = list(sys.argv[1:] if args is None else args)
-        return super().parse_known_args(args, namespace)
+        return super().parse_known_args(None if args is None else self._argv, namespace)
 
     def _get_values(self, action: argparse.Action, arg_strings: list[str]) -> Any:
         # Before Python 3.13 argparse strips a `--` only for ordinary positionals: the
