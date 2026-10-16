@@ -72,11 +72,16 @@ def test_an_uncontended_lease_is_never_judged_however_old():
     assert LB.judge(_cfg(), _beats(3), "T1", _lease(NOW - 10**6), [], NOW, _none) is None
 
 
+def test_a_hold_limit_below_the_idle_limit_still_asks_before_it_breaks():
+    v = LB.judge(_cfg(idle=900, hold=600), [], "T1", _lease(NOW - 700), ["T2"], NOW, _none)
+    assert v and v.yield_requested and v.breakable  # breakable always implies asked
+
+
 def test_zero_limits_are_the_old_behaviour():
     assert LB.judge(_cfg(0, 0), [], "T1", _lease(NOW - 10**6), ["T2"], NOW, _none) is None
 
 
-def _setup(repo, hold: int = 1) -> None:
+def _setup(repo, hold: int = 3) -> None:
     assert run_cli(repo, "init", agent=A)[0] == 0
     run_cli(repo, "config", "lease.hold_max_s", str(hold), agent=A)
     run_cli(repo, "config", "lease.idle_max_s", "1", agent=A)
@@ -95,7 +100,7 @@ def _state(repo):
 def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
     _setup(repo)
     assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3  # fresh
-    time.sleep(1.3)
+    time.sleep(3.3)
     run_cli(repo, "heartbeat", "T1", agent=A)  # alive, no work
     code, out, _err = run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)
     assert code == 0 and "BROKE T1" in out  # the claimant is told
@@ -122,7 +127,7 @@ def test_a_progressing_holder_keeps_its_lease_against_a_claim(repo):
 
 def test_break_flag_is_required_unless_break_on_timeout_is_on(repo):
     _setup(repo)
-    time.sleep(1.3)
+    time.sleep(3.3)
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # the default: deliberate
     run_cli(repo, "config", "lease.break_on_timeout", "true", agent=A)
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 0  # on: a plain claim breaks
@@ -131,7 +136,7 @@ def test_break_flag_is_required_unless_break_on_timeout_is_on(repo):
 def test_an_uncontended_old_lease_survives_an_unrelated_claim(repo):
     _setup(repo)
     run_cli(repo, "task", "add", "T3", "--title", "T3", "--globs", "src/c.py", agent=A)
-    time.sleep(1.3)
+    time.sleep(3.3)
     assert run_cli(repo, "claim", "T3", "--no-worktree", "--break", agent=B)[0] == 0
     assert not _state(repo).items["T1"].lease.expired_at
 
@@ -139,7 +144,7 @@ def test_an_uncontended_old_lease_survives_an_unrelated_claim(repo):
 def test_the_holder_is_asked_to_yield_before_anything_is_broken(repo):
     _setup(repo, hold=100)  # idle_max_s 1: asked after a second, broken only after 100
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # records the wait
-    time.sleep(1.3)
+    time.sleep(3.3)
     code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)
     assert code == 0 and "YIELD REQUESTED" in out + err and "T2" in out + err
     code, out, _err = run_cli(repo, "brief", agent=A)
