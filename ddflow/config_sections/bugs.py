@@ -70,7 +70,7 @@ class BugsConfig:
             "CI_*",
             "GITHUB_*",
             "PYTEST_*",
-            "CLAUDECODE",
+            "CLAUDE*",
             "*GATE*",
         ],
         doc="Environment variable name patterns (fnmatch) whose values a reproduction bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN, SECRET, PASSWORD, ...) is recorded as set, never with its value.",

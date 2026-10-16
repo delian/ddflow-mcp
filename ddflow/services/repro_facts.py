@@ -15,8 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .. import __version__
 from ..config import Config
+from ..core import version as V
 from ..core.model import State
 from ..infra import git as G
 from ..infra import proc as P
@@ -58,7 +58,7 @@ def tree(repo: Path) -> dict[str, Any]:
         cwd = str(Path.cwd())
     except OSError:
         cwd = ""
-    out: dict[str, Any] = {"ddflow_version": __version__, "python": sys.version.split()[0]}
+    out: dict[str, Any] = {"ddflow_version": V.running(), "python": sys.version.split()[0]}
     here = cwd or str(repo)
     sha = G.run(here, "rev-parse", "HEAD")
     top = G.run(here, "rev-parse", "--show-toplevel")
@@ -145,7 +145,6 @@ def item_state(st: State, item: str, now: float) -> dict[str, Any]:
             "remaining_s": round(it.lease.remaining_s(now)),
             "globs": list(it.lease.globs),
             "worktree": it.lease.worktree,
-            "expired_at": it.lease.expired_at,
         }
     gates = {}
     for name, rec in it.gates.items():
@@ -184,7 +183,11 @@ def test_run(repo: Path, test_id: str, nbytes: int, timeout_s: int) -> dict[str,
     # `--` ends pytest's options: an id that starts with a dash is a path to look for, never
     # an option (`--co` would "pass" without running anything, `-p mod` would import `mod`).
     argv = [sys.executable, "-m", "pytest", "--tb=short", "-p", "no:cacheprovider", "--", test_id]
-    got = P.capture(argv, timeout=timeout_s, cwd=str(repo))
+    try:  # the tree the bug was seen in, which a linked worktree makes unlike the project root
+        where = str(Path.cwd())
+    except OSError:
+        where = str(repo)
+    got = P.capture(argv, timeout=timeout_s, cwd=where)
     out: dict[str, Any] = {"id": test_id, "command": "pytest --tb=short -- " + test_id}
     if got.error is not None:
         out["unavailable"] = f"pytest did not run to an exit status: {got.error}"

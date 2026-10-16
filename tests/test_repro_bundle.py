@@ -155,7 +155,7 @@ def test_cli_flags_and_claiming_the_fix_task_prints_the_bundle(proj):
         "--repro-cmd", "ddflow nope", "--repro-capture", "basic", agent="a1",
     )  # fmt: skip
     assert code == 0, err
-    assert "repro bundle stored (basic" in out
+    assert "repro bundle stored (basic)" in out
     code, out, err = run_cli(proj, "show", "BX1")
     assert code == 0 and "repro bundle (basic" in out and "re-run: ddflow nope" in out
     code, out, _ = run_cli(proj, "--json", "show", "BX1")
@@ -196,3 +196,13 @@ def test_a_cwd_outside_the_project_is_not_recorded_whole(proj, tmp_path, monkeyp
     _, bug = _file(proj)
     cwd = _bundle(proj, bug)["tree"]["cwd"]
     assert cwd == "<outside the project>/elsewhere" and str(tmp_path) not in cwd
+
+
+def test_the_test_runs_where_the_bug_was_seen_not_at_the_project_root(proj, tmp_path, monkeypatch):
+    here = tmp_path / "tree"
+    here.mkdir()
+    (here / "test_here.py").write_text("def test_here():\n    assert True\n")
+    monkeypatch.chdir(here)
+    _, bug = _file(proj, test="test_here.py::test_here")  # exists only in the cwd, not in proj
+    got = _bundle(proj, bug)["test"]
+    assert got["exit_code"] == 0 and "1 passed" in got["tail"]
