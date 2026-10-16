@@ -112,3 +112,12 @@ def test_claim_over_mcp_carries_glob_warnings_only_when_there_are_some(proj):
     run_cli(proj, "task", "add", "T2", "--globs", "src/brand_new.py")
     assert "src/real.py" in " ".join(claim("T1")["glob_warnings"])
     assert "glob_warnings" not in claim("T2")
+
+
+def test_a_tracked_file_with_a_space_is_a_nearest_path(proj):
+    (proj / "src" / "my file.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=proj, check=True)
+    subprocess.run(["git", "commit", "-qm", "space"], cwd=proj, check=True)
+    run_cli(proj, "task", "add", "T1", "--globs", "sorc/my file.py")
+    code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
+    assert code == 0 and "src/my file.py" in out

@@ -69,8 +69,7 @@ def _tracked(repo: Path) -> list[str]:
     Empty when git cannot list them: the check then simply does not make that comparison,
     and says so in nothing -- a plan is not refused because a listing failed.
     """
-    done = G.run(repo, "ls-files")
-    return done.text().split() if done.ok else []
+    return G.files(repo, "tracked") or []
 
 
 def plan_check(repo: Path, source: str) -> O.Outcome:
