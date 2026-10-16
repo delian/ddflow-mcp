@@ -456,9 +456,11 @@ def cmd_hooks(a, c: Ctx) -> int:
             harness=harness,
             stdin=_hook_stdin(),
         )
-        if out.data["stdout"]:
+        if c.json:
+            c.out("", {"stdout": out.data["stdout"], "note": out.data["note"]})
+        elif out.data["stdout"]:
             print(out.data["stdout"])
-        if out.data["note"]:
+        if out.data["note"] and not c.json:
             print(out.data["note"], file=sys.stderr)
         return OK
     harness = getattr(a, "harness", "") or ""
@@ -543,10 +545,13 @@ def cmd_adopt(a, c: Ctx) -> int:
     # only the report is left. `_report_init` lives HERE, not in `cli`, because reaching
     # back up into the surface this module was extracted out of would recreate the
     # module-level cycle `test_no_mutually_importing_pair_has_a_module_level_edge` forbids.
-    _report_init(c, Path(out.data.get("tree") or c.repo))
+    init = _report_init(c, Path(out.data.get("tree") or c.repo), quiet=c.json)
     c.out(
         out.data["text"],
-        out.body(("actions", "agents", "companions_ready", "companions_absent")),
+        {
+            **out.body(("actions", "agents", "companions_ready", "companions_absent")),
+            **(init or {}),
+        },
     )
     if (
         out.exit != OK
@@ -565,7 +570,7 @@ def cmd_init(a, c: Ctx) -> int:
     return _report_init(c, Path(out.data["tree"]))
 
 
-def _report_init(c: Ctx, tree: Path | None = None) -> int:
+def _report_init(c: Ctx, tree: Path | None = None, *, quiet: bool = False) -> int | dict:
     """What `init` and `adopt` print after the init files exist: where, and what to commit.
 
     Presentation only. The files themselves are written below the surfaces
@@ -617,10 +622,13 @@ def _report_init(c: Ctx, tree: Path | None = None) -> int:
                 "leaving your own prose alone."
             )
         )
-    c.out(
+    text = (
         f"Initialised ddflow in {d}\n"
         f"  config: {cfgp}\n"
-        f"  Next: `ddflow phase add P1 --title 'First phase'`" + commit_hint + rules_hint,
-        {"root": str(d), "config": str(cfgp), "rules_drift": [r.state for r in drift]},
+        f"  Next: `ddflow phase add P1 --title 'First phase'`" + commit_hint + rules_hint
     )
+    body = {"root": str(d), "config": str(cfgp), "rules_drift": [r.state for r in drift]}
+    if quiet:  # `adopt --json`: the caller folds this into its one document
+        return {**body, "report": text}
+    c.out(text, body)
     return OK

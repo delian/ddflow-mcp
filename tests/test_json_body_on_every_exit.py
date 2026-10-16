@@ -23,17 +23,6 @@ from ddflow.surfaces.cli import build_parser
 
 #: Commands that serve or wait forever, or run an external tool for minutes: not a refusal path.
 LONG_RUNNING = {("mcp",), ("wait",), ("ci",), ("tests",), ("gate", "run")}
-#: Commands whose --json still prints text (or two documents, `adopt`): a separate gap, listed
-#: so the sweep stays green on it and fails on any NEW command that prints no JSON.
-TEXT_ONLY = {
-    ("replay",),
-    ("reviewers", "detect"),
-    ("reviewers", "list"),
-    ("reviewers", "presets"),
-    ("reviewers", "test"),
-    ("adopt",),
-    ("hooks", "session-start"),
-}
 BOGUS = "NOPE-bogus"
 TIMEOUT = 60
 
@@ -66,11 +55,7 @@ def _argv(path, p):
     return out
 
 
-LEAVES = [
-    (path, _argv(path, p))
-    for path, p in _leaves(build_parser())
-    if path not in LONG_RUNNING | TEXT_ONLY
-]
+LEAVES = [(path, _argv(path, p)) for path, p in _leaves(build_parser()) if path not in LONG_RUNNING]
 
 
 def _run(repo, argv):
@@ -137,9 +122,32 @@ def test_the_remembered_streams_is_still_the_real_stream():
 
 
 def test_no_fallback_body_after_a_command_that_printed_text(repo):
-    """A text-only command keeps its stdout whole: the fallback body is appended only when
-    nothing reached stdout, so text is never followed by a second document."""
+    """A command's stdout is one document: the fallback body is appended only when nothing
+    reached stdout, so a body is never followed by a second one."""
     run_cli(repo, "init")
     code, out, _err = run_cli(repo, "--json", "reviewers", "list")
     assert code == 2
-    assert out.startswith("No reviewers configured") and '"refusal"' not in out
+    assert json.loads(out)["message"].startswith("No reviewers configured")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("reviewers", "presets"),
+        ("reviewers", "list"),
+        ("reviewers", "detect"),
+        ("reviewers", "test", "nope"),
+        ("replay",),
+        ("hooks", "session-start"),
+        ("adopt", "--agents", "claude"),
+    ],
+)
+def test_text_commands_print_exactly_one_json_document(repo, argv):
+    """Bug B23076098cb: `adopt` printed two documents, and `reviewers`, `replay` and
+    `hooks session-start` printed text under --json."""
+    run_cli(repo, "init")
+    _code, out, _err = run_cli(repo, "--json", *argv)
+    body = json.loads(out)  # raises on text, on two documents, or on nothing
+    # The command's own payload, not the generic fallback body the CLI adds when a run
+    # printed nothing: the fallback is `{"refusal": ...}` alone.
+    assert set(body) - {"schema", "refusal"}, body
