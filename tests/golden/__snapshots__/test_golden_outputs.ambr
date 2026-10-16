@@ -464,6 +464,11 @@
           steals a lease, so a crashed agent's work survives); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
+      lease.resume_own = True   [default]
+          The agent whose lease LAPSED resumes it with a plain `ddflow claim` (no
+          --force), with its full glob set, when no live lease overlaps those files;
+          files taken meanwhile are named and refuse the claim. Another agent's lapsed
+          lease is still `recover`'s. Off: the holder needs --force too, as before.
       lease.shared_globs = []   [default]
           Files EVERY item edits that ddflow must not merge for you -- generated files
           (a regenerated config, a lockfile): ["configs/default.toml"]. A path inside
