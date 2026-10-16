@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "plan.warn_missing_globs"
+new = "true"
+why = "claim and plan check warn about a task whose literal globs name files and directories that do not exist, with the nearest existing paths."
+impact = "additive"

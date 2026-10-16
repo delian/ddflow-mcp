@@ -37,7 +37,8 @@
    "here",
    "port",
    "port_advice",
-   "broke"
+   "broke",
+   "glob_warnings"
   ],
   "output_schema": {
    "type": "object",
@@ -55,6 +56,7 @@
     "port": {},
     "port_advice": {},
     "broke": {},
+    "glob_warnings": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
