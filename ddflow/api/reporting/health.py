@@ -30,6 +30,7 @@ from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
+from ...services import pins_merge as PM
 from ...services import logblobs as LB
 from ...services import rates as RT
 from ...services import repairs as RP
@@ -248,6 +249,17 @@ def _driver_drift_notes(repo: Path) -> list[str]:
     ]
 
 
+def _pin_driver_notes(repo: Path, cfg: Config) -> list[str]:
+    """A note when `git merge` would not use the pin-file merge driver, with the remedy."""
+    gaps = PM.driver_gaps(repo, cfg)
+    if not gaps:
+        return []
+    return [
+        "pin files will conflict on a merge: " + "; ".join(gaps)
+        + " — `ddflow pins regenerate --install` sets the driver up (a claim re-sets the git config)"
+    ]
+
+
 def _orphan_notes(events: list) -> list[str]:
 
     lost = len(SS.unadopted_orphans(events))
@@ -432,6 +444,7 @@ def doctor(
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo)
+    notes += _pin_driver_notes(repo, cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 

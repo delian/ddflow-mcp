@@ -91,6 +91,86 @@ def after_merge(repo: Path, cfg: Config) -> str:
     return f"pins regenerated, not committed: {', '.join(done)}; commit them"
 
 
+def _set_driver_config(repo: Path, line=None) -> list[str]:
+    """Set the driver's `git config` keys where they are missing or differ; the actions.
+
+    The keys go in the repository's own config, which a linked worktree shares with the
+    primary checkout: setting them from any tree makes every tree use the driver."""
+    driver = (line or command_line)("pins merge-driver", extra="%A %O %B")
+    done: list[str] = []
+    for key, val in (
+        (f"merge.{DRIVER}.name", "ddflow pin file: merge the prose, regenerate after the merge"),
+        (f"merge.{DRIVER}.driver", driver),
+    ):
+        cur = G.run(repo, "config", "--local", "--get", key)
+        if cur.out.strip() != val:
+            G.run(repo, "config", "--local", key, val)
+            done.append(f"set git config {key}")
+    return done
+
+
+def _wanted(repo: Path, cfg: Config) -> list[str]:
+    """The pin files a merge driver is meant to cover (none when it would not be safe)."""
+    return [] if cfg.pins.after_merge == "off" else pin_files(repo, cfg)
+
+
+def _attr_line(repo: Path, f: str) -> str:
+    return f"{f.rstrip('/')}{'/**' if f.endswith('/') or (Path(repo) / f).is_dir() else ''} merge={DRIVER}"
+
+
+def _unbound(repo: Path, files: list[str]) -> list[str]:
+    """The pin files git would NOT merge with the driver in this tree: asked of git itself,
+    whatever `.gitattributes`, `info/attributes` or a worktree config say."""
+    probe = {f: _attr_line(repo, f).split(" ")[0].replace("/**", "/x") for f in files}
+    got = G.run(repo, "check-attr", "merge", "--", *probe.values())
+    seen = {}
+    for row in got.out.splitlines():
+        head, _, val = row.rpartition(": ")
+        seen[head.rpartition(": ")[0]] = val
+    return [f for f, q in probe.items() if seen.get(q) != DRIVER]
+
+
+def ensure_driver(repo: Path, cfg: Config) -> list[str]:
+    """Make `git merge` in this tree use the driver (a claim calls it for the tree it binds).
+
+    The git config goes in the repository's, which every linked worktree shares. The
+    attributes of a tree that predates the tracked `.gitattributes` lines go in
+    `info/attributes`, also shared: a merge reads the tree's attributes, not the incoming ones,
+    so the first merge of main would otherwise conflict. A tracked line that names another
+    merge strategy for the file still wins; `driver_gaps` (doctor) says so. The actions."""
+    files = _wanted(repo, cfg)
+    if not files:
+        return []
+    acts = []
+    if not G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip():
+        acts += _set_driver_config(repo)
+    off = _unbound(repo, files)
+    path = G.run(repo, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
+    if off and path.ok and path.out.strip():
+        f = Path(path.out.strip())
+        text = f.read_text("utf-8") if f.exists() else ""
+        add = [a for a in (_attr_line(repo, x) for x in off) if a not in text.splitlines()]
+        if add:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            replace_text(f, text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(add) + "\n")
+            acts.append(f"added {len(add)} merge={DRIVER} line(s) to {f}")
+    return acts
+
+
+def driver_gaps(repo: Path, cfg: Config) -> list[str]:
+    """What keeps `git merge` in THIS tree from using the driver on a pin file, as sentences."""
+    files = _wanted(repo, cfg)
+    if not files:
+        return []
+    gaps: list[str] = []
+    if not G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip():
+        gaps.append(f"git config merge.{DRIVER}.driver is not set")
+    off = _unbound(repo, files)
+    if off:
+        gaps.append("no merge=" + DRIVER + " attribute for " + ", ".join(off))
+    return gaps
+
+
 def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
     line = line or command_line
@@ -103,24 +183,13 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     attrs = Path(repo) / ".gitattributes"
     text = attrs.read_text("utf-8") if attrs.exists() else ""
     have = set(text.splitlines())
-    add = [
-        f"{f.rstrip('/')}{'/**' if f.endswith('/') or (Path(repo) / f).is_dir() else ''} merge={DRIVER}"
-        for f in files
-    ]
+    add = [_attr_line(repo, f) for f in files]
     new = [a for a in add if a not in have]
     if new:
         body = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(new) + "\n"
         replace_text(attrs, body)
         actions += [f"added '{a}' to .gitattributes" for a in new]
-    driver = line("pins merge-driver", extra="%A %O %B")
-    for key, val in (
-        (f"merge.{DRIVER}.name", "ddflow pin file: merge the prose, regenerate after the merge"),
-        (f"merge.{DRIVER}.driver", driver),
-    ):
-        cur = G.run(repo, "config", "--local", "--get", key)
-        if cur.out.strip() != val:
-            G.run(repo, "config", "--local", key, val)
-            actions.append(f"set git config {key}")
+    actions += _set_driver_config(repo, line)
     hook = hooks_dir(repo) / "post-merge"
     body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
     if not hook.exists() or HOOK_MARK in hook.read_text("utf-8", errors="replace"):
