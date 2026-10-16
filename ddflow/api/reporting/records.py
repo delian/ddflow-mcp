@@ -13,6 +13,7 @@ from ...core.records import contested_summary, record_pools
 from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
+from ...services import reprobundle as RB
 from ...services.completion import changed_paths
 from .._base import _load
 
@@ -134,7 +135,7 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     defs = G.load_gates(repo, cfg)
     it = st.items.get(item)
     if it is None and item in st.bugs:
-        return _show_bug(st, st.bugs[item])
+        return _show_bug(st, st.bugs[item], repo)
     if it is None or it.removed:
         if it is not None:
             return O.failed(
@@ -163,7 +164,7 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     )
 
 
-def _show_bug(st, bug) -> O.Outcome:
+def _show_bug(st, bug, repo=None) -> O.Outcome:
     """A bug id handed to `show` (B-show-bug-id): its record, its state, and the items
     that fix it -- those whose title or body say "fixes bug X" (or "fixes bugs A, X",
     "Fixing X"), the claim every fix task carries; any other mention is listed apart. The wire body (`item`, as for an item) is the record itself."""
@@ -193,6 +194,7 @@ def _show_bug(st, bug) -> O.Outcome:
         "fixing": fixing,
         "mentioned_by": mentions,
         **addenda(st, bug.id),
+        **RB.shown(repo, bug.repro),
     }
     return O.ok("show", id=bug.id, item=record, _render={"bug": record})
 

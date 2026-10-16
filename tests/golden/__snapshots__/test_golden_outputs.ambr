@@ -1105,6 +1105,41 @@
           The standing phase (default `bugs`) a fix task is filed under when the bug
           names no item, or names one whose phase is already finished. Made on first
           use, with the title `Bugs`.
+      bugs.repro_capture = 'full'   [default]
+          How much of a reproduction bundle `bug found` stores with the bug (default
+          `full`): `off` stores nothing; `basic` the ddflow version, git shas, branch
+          and tree, the agent identity and how it was derived, the DDFLOW_*/CI/gate
+          environment variables (secrets redacted) and the config keys that differ
+          from the defaults with the layer each came from; `full` also the item with
+          its lease and gate records, the machine's load and free disk, the agent's
+          recent events and, with `--test ID`, the pytest output tail. `--repro-
+          capture` overrides it for one bug. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'off', the strictest
+          (stores nothing, so nothing unredacted can be kept); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      bugs.repro_max_bytes = 65536   [default]
+          The largest reproduction bundle stored, in bytes (default 65536). Over it,
+          the biggest parts are cut down (output tails first) and the bundle says it
+          was truncated.
+      bugs.repro_tail_bytes = 4096   [default]
+          How many trailing bytes of a command's or a test run's output a reproduction
+          bundle keeps (default 4096).
+      bugs.repro_events = 10   [default]
+          How many of the filing agent's latest log events a `full` reproduction
+          bundle lists (default 10). ddflow keeps no log of the commands an agent ran,
+          so these stand in for the last commands (0 lists none).
+      bugs.repro_test_timeout_s = 300   [default]
+          Seconds `bug found --test ID` lets pytest run to capture its output tail
+          (default 300); a run cut short is recorded as such.
+      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDE*', '*GATE*']   [default]
+          Environment variable name patterns (fnmatch) whose values a reproduction
+          bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and
+          the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN,
+          SECRET, PASSWORD, ...) is recorded as set, never with its value.
+      bugs.repro_redact_extra = []   [default]
+          More redaction regexes applied to a reproduction bundle, IN ADDITION to
+          `[session] redact_patterns` and `redact_extra`.
       importer.max_tasks = 200   [default]
           Refuse to propose more tasks than this in one import. An import writes
           events into a log that is committed to git, and five thousand of them is not
