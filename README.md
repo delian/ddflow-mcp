@@ -5723,7 +5723,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ac34d89850d8 -->
+<!-- ddflow:begin README/knobs sha=1ba5f115cda9 -->
 <details><summary>All 266 knobs across 33 sections</summary>
 
 | Knob | Default | Values |
@@ -5738,7 +5738,7 @@ long default is left to `ddflow config --explain`.
 | `lease.wait_queue` | `false` |  |
 | `lease.idle_max_s` | `900` |  |
 | `lease.hold_max_s` | `3600` |  |
-| `lease.break_on_timeout` | `true` |  |
+| `lease.break_on_timeout` | `false` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
 | `lease.shared_globs` | `[]` |  |
 | `lease.append_only_globs` | `[]` |  |

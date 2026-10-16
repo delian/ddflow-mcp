@@ -94,10 +94,10 @@ def _state(repo):
 
 def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
     _setup(repo)
-    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # fresh: refused
+    assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3  # fresh
     time.sleep(1.3)
     run_cli(repo, "heartbeat", "T1", agent=A)  # alive, no work
-    code, out, _err = run_cli(repo, "claim", "T2", "--no-worktree", agent=B)
+    code, out, _err = run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)
     assert code == 0 and "BROKE T1" in out  # the claimant is told
     st = _state(repo)
     assert st.items["T2"].lease.holder == B
@@ -120,19 +120,19 @@ def test_a_progressing_holder_keeps_its_lease_against_a_claim(repo):
     assert not _state(repo).items["T1"].lease.expired_at
 
 
-def test_break_flag_is_required_when_break_on_timeout_is_off(repo):
+def test_break_flag_is_required_unless_break_on_timeout_is_on(repo):
     _setup(repo)
-    run_cli(repo, "config", "lease.break_on_timeout", "false", agent=A)
     time.sleep(1.3)
-    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3
-    assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 0
+    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # the default: deliberate
+    run_cli(repo, "config", "lease.break_on_timeout", "true", agent=A)
+    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 0  # on: a plain claim breaks
 
 
 def test_an_uncontended_old_lease_survives_an_unrelated_claim(repo):
     _setup(repo)
     run_cli(repo, "task", "add", "T3", "--title", "T3", "--globs", "src/c.py", agent=A)
     time.sleep(1.3)
-    assert run_cli(repo, "claim", "T3", "--no-worktree", agent=B)[0] == 0
+    assert run_cli(repo, "claim", "T3", "--no-worktree", "--break", agent=B)[0] == 0
     assert not _state(repo).items["T1"].lease.expired_at
 
 
@@ -153,7 +153,7 @@ def test_a_claim_that_cannot_break_everything_breaks_nothing(repo):
     run_cli(repo, "task", "add", "T3", "--title", "T3", "--globs", "src/b.py", agent=A)
     assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 0
     run_cli(repo, "update", "T2", "--globs", "src/a.py,src/b.py", agent=A)
-    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3
+    assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3
     assert not _state(repo).items["T1"].lease.expired_at  # no half-broken claim
 
 
