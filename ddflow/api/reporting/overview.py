@@ -21,6 +21,8 @@ from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..lifecycle.planning import plan_for
+from .healthnotes import lines as health_lines
+from .waitcycles import wait_cycles
 
 
 def loops(repo: Path) -> O.Outcome:
@@ -204,6 +206,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     waits = WG.rows(st, cfg, time.time())
     if waits:
         data["waiting"] = waits  # who is refused which files, and by whom (no polling)
+    health = health_lines(log, st, cfg, repo, wait_cycles(st, cfg))
+    if health:
+        data["health"] = health  # stalled / locked / runaway lanes (`ddflow health`)
     if taken:
         data["taken_over"] = [
             {"id": i, "holder": holder, "taken_over_by": by}
@@ -244,6 +249,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "taken_over": {i: by for i, (_holder, by) in taken.items()},
         "contested": contested,
         "waiting": [WG.line(w) for w in waits],
+        "health": health,
         "recoverable": rec,
         "findings": findings,
         "hours": hours,

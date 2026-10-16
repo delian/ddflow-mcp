@@ -56,6 +56,7 @@ from ..knowledge.pairs import _sweep_records
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
+from .healthnotes import lines as health_lines
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
 from .waitcycles import wait_cycles, wait_findings, wait_order
@@ -452,6 +453,7 @@ def doctor(
     notes += _dupe_note(st, cfg)
     problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes)
+    notes += health_lines(log, st, cfg, repo, cycles)
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
