@@ -1300,6 +1300,19 @@
           (every path the merge stages is judged); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
+      enforce.lapsed_lease = 'accept'   [default]
+          What the pre-commit hook does with a commit its own item's lease covers but
+          which LAPSED (no heartbeat within the TTL and grace) and which nobody has
+          taken over. 'accept' (default) lets the commit stand, with a note naming the
+          heartbeat that renews it, for the holder and for whoever commits in the
+          item's own worktree (a claim made under an explicit --agent name is not the
+          identity the hook derives from the tree); 'holder' accepts only the holder's
+          own declared name; 'refuse' treats the lapse as no lease. A lapsed lease
+          whose paths another agent now holds live is never accepted. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'refuse', the strictest (a lapsed lease covers nothing); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       enforce.environment_commits = 'block'   [default]
           What the pre-commit hook does with a commit made directly on a branch listed
           in [flow].environments (GitLab flow's upstream-first): 'block' (default)
