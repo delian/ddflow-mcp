@@ -101,7 +101,9 @@ def stale_primary_notes(repo: Path) -> list[str]:
     names = [n for n in r.out.splitlines() if n] if r.ok else []
     if not names:
         return []
-    shown = ", ".join(names[:SHOWN]) + (f" (+{len(names) - SHOWN} more)" if len(names) > SHOWN else "")
+    shown = ", ".join(names[:SHOWN]) + (
+        f" (+{len(names) - SHOWN} more)" if len(names) > SHOWN else ""
+    )
     return [
         f"the primary {primary} has {len(names)} staged path(s) that differ from its HEAD "
         f"({shown}): after a merge from a worktree this is a stale primary (HEAD moved, the "

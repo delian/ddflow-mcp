@@ -97,10 +97,32 @@ def _config_snapshot() -> dict[str, object]:
     return {"config": kept, "bare": bare}
 
 
+#: The subjects of the commits the suite's own fixtures make ("init" by the author the
+#: fixtures configure): finding one on the real repository's branch is the leak itself.
+STRAY_SUBJECTS = ("init", "Test init")
+
+
+def _head() -> str:
+    return _git("rev-parse", "-q", "--verify", "HEAD").stdout.strip()
+
+
+def stray_commits(since: str) -> list[str]:
+    """Fixture-made commits on the real repository's HEAD since ``since`` (a commit id), and a
+    line saying so when ``since`` is no longer an ancestor of HEAD (the branch was rewritten)."""
+    head = _head()
+    if not since or not head or head == since:
+        return []
+    if _git("merge-base", "--is-ancestor", since, head).returncode != 0:
+        return [f"HEAD {since[:8]} is no longer an ancestor of {head[:8]} (branch rewritten)"]
+    rows = _git("log", "--format=%h %s", f"{since}..{head}").stdout.splitlines()
+    return [r for r in rows if r.split(" ", 1)[-1] in STRAY_SUBJECTS]
+
+
 def snapshot(*, status: bool = True) -> dict[str, object]:
-    """The real repository's local config, ``core.bare`` and tracked-file status (less
+    """The real repository's local config, ``core.bare``, HEAD and tracked-file status (less
     ``.ddflow``, which ddflow itself keeps writing)."""
     snap = _config_snapshot()
+    snap["head"] = _head()
     if status:
         r = _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude).ddflow")
         snap["status"] = sorted(r.stdout.splitlines()) if r.returncode == 0 else None
@@ -109,8 +131,10 @@ def snapshot(*, status: bool = True) -> dict[str, object]:
 
 def _changes(before: dict[str, object], after: dict[str, object]) -> list[str]:
     out = []
+    if before.get("head") and (stray := stray_commits(str(before["head"]))):
+        out.append(f"fixture commits on the real branch: {stray}")
     for key in sorted(after):
-        if key in before and before[key] != after[key]:
+        if key != "head" and key in before and before[key] != after[key]:
             old, new = before[key] or [], after[key] or []
             gone = [x for x in old if x not in new]  # type: ignore[union-attr]
             came = [x for x in new if x not in old]  # type: ignore[union-attr]
