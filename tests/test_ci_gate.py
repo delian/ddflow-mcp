@@ -301,3 +301,44 @@ def test_the_tool_from_a_worktree_with_no_ref_checks_that_trees_head(repo, monke
     _commit(tree, {"w.txt": "w\n"}, "work")
     res = A.ci_tool(repo, action="run", called_from=tree)
     assert res.data["sha"] == _git(tree, "rev-parse", "HEAD").strip()
+
+
+def _cli_in(tree, repo, *argv, agent=""):
+    cmd = [sys.executable, "-m", "ddflow", *(["--repo", str(repo)] if repo else [])]
+    cmd += ["--agent", agent] if agent else []
+    return subprocess.run(
+        [*cmd, "--json", "ci", "run", *argv], cwd=tree, capture_output=True, text=True,
+        check=False, env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+    )  # fmt: skip
+
+
+def test_ci_run_in_a_foreign_worktree_checks_the_primarys_head(repo, monkeypatch):
+    """Bug B0c245a07a1: a subagent in its parent's worktree checked the parent's commit."""
+    from ddflow.infra import worktree as W
+    from ddflow.infra.log import EventLog
+
+    _item_with_ci(repo, monkeypatch)
+    _, out, _ = run_cli(repo, "--json", "show", "T1")
+    tree = Path(json.loads(out)["worktree"])
+    tree = tree if tree.is_absolute() else repo / tree
+    _commit(tree, {"w.txt": "w\n"}, "parent work")
+    EventLog(repo, "parent").append(
+        "worktree.adopted", "T1", {"path": W.store_path(repo, tree), "branch": "x", "base": ""}
+    )
+    primary = _git(repo, "rev-parse", "HEAD").strip()
+    for with_repo in (True, False):
+        proc = _cli_in(tree, repo if with_repo else None, agent="sub")
+        body = json.loads(proc.stdout)
+        assert body["sha"] == primary, (with_repo, proc.stdout, proc.stderr)
+        assert "recorded" not in body
+
+
+def test_ci_run_with_repo_from_a_worktree_still_checks_that_trees_head(repo, monkeypatch):
+    _item_with_ci(repo, monkeypatch)
+    _, out, _ = run_cli(repo, "--json", "show", "T1")
+    tree = Path(json.loads(out)["worktree"])
+    tree = tree if tree.is_absolute() else repo / tree
+    _commit(tree, {"w.txt": "w\n"}, "work")
+    body = json.loads(_cli_in(tree, repo).stdout)
+    assert body["sha"] == _git(tree, "rev-parse", "HEAD").strip()
+    assert body["recorded"]["item"] == "T1"
