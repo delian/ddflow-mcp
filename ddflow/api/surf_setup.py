@@ -16,6 +16,7 @@ from ..services import importer as IM
 from ..services import review as R
 from ..services import reviewer_trust as RT
 from ..services.adopt import rules_status
+from ..services.tree_owner import foreign_tree_owner
 
 REVIEWED = R.REVIEWED
 ReviewerRefused = RT.ReviewerRefused
@@ -27,15 +28,34 @@ def tree_is_dirty(tree: Path, rel: str) -> bool:
     return W.status(tree, rel) != []
 
 
-def head_here_or_repo(repo: Path) -> str:
-    """HEAD of the current directory when it is a worktree of THIS repository, else HEAD."""
-    here = Path.cwd()
+def _same_repo(here: Path, repo: Path) -> bool:
+    """Whether ``here`` is a tree of the clone ``repo`` belongs to."""
     common = [
         W.git(p, "rev-parse", "--path-format=absolute", "--git-common-dir") for p in (here, repo)
     ]
-    if all(r.ok for r in common) and Path(common[0].out).resolve() == Path(common[1].out).resolve():
-        return W.rev(here, "HEAD") or "HEAD"
-    return "HEAD"
+    return (
+        all(r.ok for r in common) and Path(common[0].out).resolve() == Path(common[1].out).resolve()
+    )
+
+
+def head_here_or_repo(repo: Path, where: Path | None = None) -> str:
+    """HEAD of ``where`` (default: the current directory) when it is a worktree of THIS
+    repository, else the repository's HEAD."""
+    here = where if where is not None else Path.cwd()
+    return (W.rev(here, "HEAD") or "HEAD") if _same_repo(here, repo) else "HEAD"
+
+
+def caller_tree(repo: Path, called_from: Path, foreign: bool, agent: str, events: Any) -> Path:
+    """The tree a command's default ref is read from: ``called_from`` when it is a linked
+    worktree or another identity's tree was swapped for the primary (``foreign``); else the
+    shell's directory when that is a tree of ``repo`` and the caller's own (an explicit
+    --repo makes ``called_from`` the primary, whatever the shell stands in)."""
+    if foreign or W.current(called_from) is not None:
+        return called_from
+    here = Path.cwd()
+    if not _same_repo(here, repo):
+        return called_from
+    return called_from if foreign_tree_owner(repo, here, agent, events) else here
 
 
 def rules_needing_attention(tree: Path) -> list[Any]:
