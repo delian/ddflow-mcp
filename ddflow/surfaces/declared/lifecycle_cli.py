@@ -406,6 +406,8 @@ def merge_reason(out) -> str:
 
 
 def merge_body(out, a) -> Any:
+    if out.data.get("queued") is not None:
+        return out.body(("id", "queued", "added", "state", "position", "eta_s"))
     local = (
         () if out.data.get("pr") else tuple(k for k in ("export_refresh", "ci") if k in out.data)
     )
@@ -413,7 +415,7 @@ def merge_body(out, a) -> Any:
 
 
 def merge_notes(out, a, ctx) -> Iterator[str]:
-    if out.exit != OK:
+    if out.exit != OK or out.data.get("queued") is not None:
         return
     d = out.data
     if d.get("pr"):
@@ -458,6 +460,8 @@ def merge_notes(out, a, ctx) -> Iterator[str]:
 
 def merge_text(out, a) -> str:
     d = out.data
+    if d.get("queued") is not None:
+        return d["text"]
     if d.get("pr"):
         stacked = f", stacked on {d['stacked_on']}" if d["stacked_on"] else ""
         return (
