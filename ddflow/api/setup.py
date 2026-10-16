@@ -736,6 +736,15 @@ def stale_server_note(repo: Path, *, agent: str = "") -> str:
     return UN.stale_server_note(st, installed=UN.installed_version())
 
 
+def stale_server_facts(repo: Path, *, agent: str = "") -> dict[str, Any] | None:
+    """The facts behind `stale_server_note` (running, newest, where, reexec), or None when the
+    running ddflow is current or the project is not adopted."""
+    if not (repo / ".ddflow").is_dir():
+        return None
+    _log, _cfg, st = _load(repo, agent)
+    return UN.stale_facts(st, installed=UN.installed_version())
+
+
 def _companion_lines(repo: Path) -> list[str]:
     """The brief's "Companions not wired up" section, for an agent on the hook path that
     never saw the MCP handshake. Same actionable set as the handshake, and like it
