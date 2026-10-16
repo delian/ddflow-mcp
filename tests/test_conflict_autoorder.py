@@ -171,3 +171,15 @@ def test_a_link_with_only_a_blockers_list_does_not_crash():
     items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2")}
     (e,), _ = AO.propose([cyc], items)
     assert (e.later, e.earlier) == ("T2", "T1")
+
+
+def test_a_link_blocked_by_two_leases_falls_back_to_the_eligible_one():
+    cyc = {
+        "agents": ["a", "b"],
+        "files": [],
+        "victim_item": "T9",
+        "links": [{"item": "T1", "blocker": "T2", "blockers": ["T2", "T3"]}],
+    }
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", state="done"), "T3": AO.Cand("T3")}
+    (e,), _ = AO.propose([cyc], items)
+    assert (e.later, e.earlier) == ("T1", "T3")
