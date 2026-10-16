@@ -57,14 +57,14 @@ def split(text: str) -> list[tuple[str, str]]:
 
 
 def _listing(title: str, lead: str, lines: list[str], cut: str) -> str:
-    if not lines:
-        return ""
+    if not lines:  # cut to nothing: the pointer stays, so the reader knows records bind
+        return f"## {title}\n\n{cut}" if cut else ""
     out = [f"## {title}", "", lead, "", *lines]
     return "\n".join(out + (["", cut] if cut else []))
 
 
 def _variables(f: Facts, n_dec: int, n_les: int) -> dict[str, object]:
-    cut = f"_{f.decisions_all - n_dec} more: `ddflow decision applicable {f.item}`._"
+    cut = f"_{f.decisions_all - n_dec} more not shown: `ddflow decision applicable {f.item}`._"
     return {
         "agent": f.agent,
         "item": f.item,
