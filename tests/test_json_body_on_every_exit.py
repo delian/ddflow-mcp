@@ -151,4 +151,7 @@ def test_text_commands_print_exactly_one_json_document(repo, argv):
     `hooks session-start` printed text under --json."""
     run_cli(repo, "init")
     _code, out, _err = run_cli(repo, "--json", *argv)
-    json.loads(out)  # raises on text, on two documents, or on nothing
+    body = json.loads(out)  # raises on text, on two documents, or on nothing
+    # The command's own payload, not the generic fallback body the CLI adds when a run
+    # printed nothing: the fallback is `{"refusal": ...}` alone.
+    assert set(body) - {"schema", "refusal"}, body
