@@ -16,7 +16,7 @@ class HealthConfig:
 
     mode: str = knob(
         "propose",
-        doc="What the watchdog does about a lane it finds unhealthy: 'off' inspects nothing in the periodic pass; 'propose' (default) reports each finding with the exact command that corrects it; 'apply' also performs the corrections that lose nothing -- it breaks a stalled lease another agent is waiting for (the same logged break as `claim --break`, the holder's branch and worktree kept), adds the auto-order `needs` edges that end a lease deadlock, and records a crashed lane's lease as expired so `ddflow recover` and any claim can pick its work up. It never kills a process and never deletes a worktree, a branch or a commit.",
+        doc="What the watchdog does about a lane it finds unhealthy: 'off' inspects nothing in the periodic pass; 'propose' (default) reports each finding with the exact command that corrects it; 'apply' also performs the corrections that lose nothing -- it breaks a stalled lease another agent is waiting for (the same logged break as `claim --break`, the holder's branch and worktree kept), adds the auto-order `needs` edges that end a lease deadlock (this mode decides for the pass, whatever [schedule].auto_order says), and records a crashed lane's lease as expired so `ddflow recover` and any claim can pick its work up. It never kills a process and never deletes a worktree, a branch or a commit.",
         choices=("off", "propose", "apply"),
         strictest=("propose", "a finding is reported, never acted on, by a typo"),
     )

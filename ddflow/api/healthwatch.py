@@ -18,16 +18,6 @@ from ._base import _load
 from .reporting.waitcycles import wait_cycles
 
 
-def summary(findings: list[Any]) -> str:
-    """One line for `status`/`brief`: '' when nothing is wrong."""
-    if not findings:
-        return ""
-    by: dict[str, int] = {}
-    for f in findings:
-        by[f.kind] = by.get(f.kind, 0) + 1
-    return "health: " + ", ".join(f"{n} {k}" for k, n in sorted(by.items()))
-
-
 def findings_for(log, st, cfg, repo: Path, now: float | None = None, activity=None):
     """(findings, cycles) as of ``now`` -- what `doctor` and `status` read."""
     at = time.time() if now is None else now
