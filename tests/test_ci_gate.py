@@ -14,7 +14,7 @@ from conftest import run_cli
 from helpers import commit as _commit
 from helpers import git as _git
 
-from ddflow.api import ci as A
+from ddflow.api import cirun as A
 from ddflow.config import Config
 from ddflow.services import ci as CI
 
@@ -237,3 +237,67 @@ def test_a_default_base_that_exists_only_as_a_remote_ref_is_still_merged(
     monkeypatch.setattr(W, "default_branch", lambda _repo: "trunk")
     r = CI.run(repo, Config.load(repo))
     assert r.merged_with == "origin/trunk" and r.ok
+
+
+def _item_with_ci(repo, monkeypatch):
+    monkeypatch.delenv(A.IN_GATE_ENV, raising=False)  # this suite may itself run inside a gate
+    _project(repo)
+    (repo / ".ddflow" / "config.toml").write_text(
+        '[ci]\ncommand = "true"\n[gates]\ntask_pipeline = ["implement", "ci", "merge"]\n'
+    )
+    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
+    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "src/x.py")
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == 0, out + err
+
+
+def _ci_gate(repo):
+    _code, out, _ = run_cli(repo, "--json", "show", "T1")
+    return json.loads(out)["gates"].get("ci", {})
+
+
+def test_ci_run_records_the_ci_gate_with_the_commit_it_ran_against(repo, monkeypatch):
+    """Bug Bec9936dc6b: `ddflow ci run` printed 'ci: passed' and recorded nothing."""
+    _item_with_ci(repo, monkeypatch)
+    res = A.run(repo, ref="T1")
+    assert res.exit == 0 and res.data["recorded"]["ok"], res.data
+    gate = _ci_gate(repo)
+    assert gate["outcome"] == "passed", gate
+    assert res.data["sha"][:12] in json.dumps(gate)
+
+
+def test_a_nested_ci_run_inside_the_ci_gate_does_not_record_twice(repo, monkeypatch):
+    _item_with_ci(repo, monkeypatch)
+    monkeypatch.setenv(A.IN_GATE_ENV, "ci")
+    res = A.run(repo, ref="T1")
+    assert res.exit == 0 and "recorded" not in res.data
+    assert not _ci_gate(repo).get("outcome")
+
+
+def test_ci_run_from_the_items_worktree_records_its_ci_gate(repo, monkeypatch):
+    """The reported case: no item id, just `ddflow ci run` standing in the item's worktree."""
+    _item_with_ci(repo, monkeypatch)
+    _, out, _ = run_cli(repo, "--json", "show", "T1")
+    tree = Path(json.loads(out)["worktree"])
+    tree = tree if tree.is_absolute() else repo / tree
+    head = _git(tree, "rev-parse", "HEAD").strip()
+    res = A.run(repo, ref=head, called_from=tree)
+    assert res.exit == 0 and res.data["recorded"]["item"] == "T1", res.data
+    assert _ci_gate(repo)["outcome"] == "passed"
+
+
+def test_a_run_inside_another_gate_still_records_the_ci_gate(repo, monkeypatch):
+    """Only the ci gate records its own outcome; a suite run by unit_tests must not be muted."""
+    _item_with_ci(repo, monkeypatch)
+    monkeypatch.setenv(A.IN_GATE_ENV, "unit_tests")
+    assert A.run(repo, ref="T1").data["recorded"]["ok"]
+
+
+def test_the_tool_from_a_worktree_with_no_ref_checks_that_trees_head(repo, monkeypatch):
+    _item_with_ci(repo, monkeypatch)
+    _, out, _ = run_cli(repo, "--json", "show", "T1")
+    tree = Path(json.loads(out)["worktree"])
+    tree = tree if tree.is_absolute() else repo / tree
+    _commit(tree, {"w.txt": "w\n"}, "work")
+    res = A.ci_tool(repo, action="run", called_from=tree)
+    assert res.data["sha"] == _git(tree, "rev-parse", "HEAD").strip()
