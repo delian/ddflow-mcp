@@ -106,3 +106,13 @@ def test_a_fix_round_does_not_spend_the_budget(repo, tmp_path):
     # still one full round used, so a plain full re-review stays refused
     _commit(repo, "z.py", "z = 1\n")
     assert _review(repo).exit == 3
+
+
+def test_extensionless_files_and_dash_content_lines():
+    diff = (
+        "--- a/Makefile\n+++ b/Makefile\n@@ -9,3 +9,3 @@\n k\n-all:\n+all2:\n z\n"
+        "--- a/p.py\n+++ b/p.py\n@@ -1,3 +1,3 @@\n a\n--- old\n+++ new\n b\n"
+    )
+    ch = SS.changed_old_lines(diff)
+    assert SS.is_superseded("Makefile:10", ch) and not SS.is_superseded("Makefile:9", ch)
+    assert SS.is_superseded("p.py:2", ch)

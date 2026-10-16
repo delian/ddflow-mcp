@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import re
 
-_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
+_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 _FILE = re.compile(r"^--- (?:a/)?(.+?)\s*$")
-_LOC = re.compile(r"([\w./+@-]+\.\w+)(?::(\d+)(?:\s*[-\u2013]\s*(\d+))?)?")
+_LOC = re.compile(r"([\w./+@-]+)(?::(\d+)(?:\s*[-\u2013]\s*(\d+))?)?")
 
 
 def changed_old_lines(diff: str) -> dict[str, list[tuple[int, int]]]:
@@ -18,25 +18,33 @@ def changed_old_lines(diff: str) -> dict[str, list[tuple[int, int]]]:
     lines are not changes; a pure insertion rewrites no existing line, so marks none)."""
     out: dict[str, list[tuple[int, int]]] = {}
     path = ""
-    pos = 0
+    pos = old_left = new_left = 0
     rows = diff.splitlines()
     for i, line in enumerate(rows):
+        if old_left or new_left:  # inside a hunk: `-- x` / `++ y` are content, not headers
+            if line.startswith("-"):
+                out[path].append((pos, pos))
+                pos += 1
+                old_left -= 1
+            elif line.startswith("+"):
+                new_left -= 1
+            elif line.startswith(" "):
+                pos += 1
+                old_left -= 1
+                new_left -= 1
+            continue
         nxt = rows[i + 1] if i + 1 < len(rows) else ""
         if line.startswith("--- ") and nxt.startswith("+++ "):
             m = _FILE.match(line)
             path = "" if line.startswith("--- /dev/null") or not m else m.group(1)
-            pos = 0
             if path:
                 out.setdefault(path, [])
             continue
         h = _HUNK.match(line)
-        if h:
+        if h and path:
             pos = int(h.group(1))
-        elif pos and path and line.startswith("-"):
-            out[path].append((pos, pos))
-            pos += 1
-        elif pos and path and line.startswith(" "):
-            pos += 1
+            old_left = int(h.group(2) if h.group(2) is not None else 1)
+            new_left = int(h.group(3) if h.group(3) is not None else 1)
     return out
 
 
