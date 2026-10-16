@@ -186,6 +186,7 @@ def test_the_report_is_reachable_over_mcp_as_show_with_report(done):
     )
     body = json.dumps(reply["result"])
     assert "Recorded by hand" in body and "rubber_duck" in body
+    assert "truncated" not in body, "the show bound must leave the report whole"
 
 
 def test_landing_without_listed_commits_prints_no_dangling_count():
@@ -200,3 +201,8 @@ def test_landing_without_listed_commits_prints_no_dangling_count():
         "follow_ups": [], "not_done": [],
     }  # fmt: skip
     assert "(+3 more)" not in RT.variables(d)["landing"]
+
+
+def test_show_has_no_dead_report_flag_on_the_cli(done):
+    """`ddflow show --report` would parse and be ignored: the CLI has `ddflow report`."""
+    assert run_cli(done, "show", "T1", "--report")[0] != 0

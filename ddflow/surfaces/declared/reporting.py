@@ -201,7 +201,11 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
             ),
             Param(
-                "report", type="boolean", help="Its completion report.", cli_help="", default=False
+                "report",
+                type="boolean",
+                help="Its completion report.",
+                default=False,
+                mcp_only=True,
             ),
         ),
         call=lambda repo, a, agent: (
