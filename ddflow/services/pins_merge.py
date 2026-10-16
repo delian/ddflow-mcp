@@ -14,6 +14,7 @@ from pathlib import Path
 from ..config import Config
 from ..infra import git as G
 from ..infra.fsio import atomic_write, replace_text
+from . import shared_files as SF
 from .enforce import command_line, hooks_dir
 from .pins import pin_files, regenerate
 from .pins_text import merge_into
@@ -91,6 +92,134 @@ def after_merge(repo: Path, cfg: Config) -> str:
     return f"pins regenerated, not committed: {', '.join(done)}; commit them"
 
 
+def _set_driver_config(repo: Path, line=None) -> list[str]:
+    """Set the driver's `git config` keys where they are missing or differ; the actions.
+
+    The keys go in the repository's own config, which a linked worktree shares with the
+    primary checkout: setting them from any tree makes every tree use the driver."""
+    driver = (line or command_line)("pins merge-driver", extra="%A %O %B")
+    done: list[str] = []
+    for key, val in (
+        (f"merge.{DRIVER}.name", "ddflow pin file: merge the prose, regenerate after the merge"),
+        (f"merge.{DRIVER}.driver", driver),
+    ):
+        cur = G.run(repo, "config", "--local", "--get", key)
+        if cur.out.strip() != val:
+            G.run(repo, "config", "--local", key, val)
+            done.append(f"set git config {key}")
+    return done
+
+
+def _wanted(repo: Path, cfg: Config) -> list[str]:
+    """The pin files a merge driver is meant to cover (none when it would not be safe)."""
+    return [] if cfg.pins.after_merge == "off" else pin_files(repo, cfg)
+
+
+#: Merge attributes that are no choice of a person's: unset, or git's own textual default.
+_SOFT = ("unspecified", "text")
+#: The name a file a directory pin might gain is asked about as (no tracked file has it).
+_NEW = "/.ddflow-new-file"
+
+
+def _driver_state(repo: Path) -> str:
+    """ "ours" (a `pins merge-driver` command, from any launcher: the line falls back by itself),
+    "foreign" (a command a person set; never overwritten here) or "missing"."""
+    cur = G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip()
+    return "ours" if "pins merge-driver" in cur else ("foreign" if cur else "missing")
+
+
+def _attr_line(repo: Path, f: str) -> str:
+    pat = f.rstrip("/") + ("/**" if f.endswith("/") or (Path(repo) / f).is_dir() else "")
+    return f'"{pat}" merge={DRIVER}' if " " in pat else f"{pat} merge={DRIVER}"
+
+
+def _off(repo: Path, files: list[str]) -> dict[str, dict[str, str]]:
+    """Per pin file, the paths git would NOT merge with the driver in this tree and the merge
+    attribute each has: asked of git itself (`shared_files.drivers`), whatever `.gitattributes`,
+    `info/attributes` or a worktree config say. A directory is asked about every tracked file in
+    it, and about a file it might gain."""
+    out: dict[str, dict[str, str]] = {}
+    for f in files:
+        base = f.rstrip("/")
+        if f.endswith("/") or (Path(repo) / f).is_dir():
+            now = {**SF.drivers(repo, base + "/**"), **SF.drivers(repo, base + _NEW)}
+        else:
+            now = SF.drivers(repo, base)
+        bad = {q: v or "unspecified" for q, v in now.items() if v != DRIVER}
+        if bad:
+            out[f] = bad
+    return out
+
+
+def _lines_for(repo: Path, f: str, bad: dict[str, str]) -> list[str]:
+    """The `info/attributes` lines that give the driver to what of ``f`` has no choice of a
+    person's: the entry itself, or (a directory with a file another driver was given) each
+    such file alone."""
+    if all(v in _SOFT for v in bad.values()):
+        return [_attr_line(repo, f)]
+    return [_attr_line(repo, q) for q, v in bad.items() if v in _SOFT and q != f.rstrip("/") + _NEW]
+
+
+def ensure_driver(repo: Path, cfg: Config) -> list[str]:
+    """Make `git merge` in this tree use the driver (a claim calls it for the tree it binds).
+
+    The git config goes in the repository's, which every linked worktree shares. The
+    attributes of a tree that predates the tracked `.gitattributes` lines go in
+    `info/attributes`, also shared and read before the tracked file: a merge reads the tree's
+    attributes, not the incoming ones, so the first merge of main would otherwise conflict.
+    A file a person gave another merge driver, and a driver command a person set, are left
+    alone (`driver_gaps` says so). The actions."""
+    files = _wanted(repo, cfg)
+    if not files:
+        return []
+    acts = _set_driver_config(repo) if _driver_state(repo) == "missing" else []
+    want = [x for f, bad in _off(repo, files).items() for x in _lines_for(repo, f, bad)]
+    path = G.run(repo, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
+    if want and path.ok and path.out.strip():
+        f = Path(path.out.strip())
+        text = f.read_text("utf-8") if f.exists() else ""
+        add = [a for a in want if a not in text.splitlines()]
+        if add:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            tail = "" if not text or text.endswith("\n") else "\n"
+            replace_text(f, text + tail + "\n".join(add) + "\n")
+            acts.append(f"added {len(add)} merge={DRIVER} line(s) to {f}")
+    return acts
+
+
+def driver_gaps(repo: Path, cfg: Config) -> list[str]:
+    """What keeps `git merge` in THIS tree from using the driver on a pin file, as sentences."""
+    files = _wanted(repo, cfg)
+    if not files:
+        return []
+    gaps: list[str] = []
+    state = _driver_state(repo)
+    if state != "ours":
+        gaps.append(
+            f"git config merge.{DRIVER}.driver is "
+            + (
+                "not set"
+                if state == "missing"
+                else "another command than `ddflow pins merge-driver`"
+            )
+        )
+    for f, bad in _off(repo, files).items():
+        vals = sorted(set(bad.values()))
+        gaps.append(f"no merge={DRIVER} attribute for {f} ({', '.join(vals)})")
+    return gaps
+
+
+def driver_notes(repo: Path, cfg: Config) -> list[str]:
+    """`doctor`'s note when `git merge` would not use the driver on a pin file, with the remedy."""
+    gaps = driver_gaps(repo, cfg)
+    if not gaps:
+        return []
+    return [
+        "pin files will conflict on a merge: " + "; ".join(gaps) + " -- `ddflow pins regenerate"
+        " --install` sets the driver up (a claim sets a missing git config; `--install` also replaces another command)"
+    ]
+
+
 def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
     line = line or command_line
@@ -103,24 +232,13 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
     attrs = Path(repo) / ".gitattributes"
     text = attrs.read_text("utf-8") if attrs.exists() else ""
     have = set(text.splitlines())
-    add = [
-        f"{f.rstrip('/')}{'/**' if f.endswith('/') or (Path(repo) / f).is_dir() else ''} merge={DRIVER}"
-        for f in files
-    ]
+    add = [_attr_line(repo, f) for f in files]
     new = [a for a in add if a not in have]
     if new:
         body = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(new) + "\n"
         replace_text(attrs, body)
         actions += [f"added '{a}' to .gitattributes" for a in new]
-    driver = line("pins merge-driver", extra="%A %O %B")
-    for key, val in (
-        (f"merge.{DRIVER}.name", "ddflow pin file: merge the prose, regenerate after the merge"),
-        (f"merge.{DRIVER}.driver", driver),
-    ):
-        cur = G.run(repo, "config", "--local", "--get", key)
-        if cur.out.strip() != val:
-            G.run(repo, "config", "--local", key, val)
-            actions.append(f"set git config {key}")
+    actions += _set_driver_config(repo, line)
     hook = hooks_dir(repo) / "post-merge"
     body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
     if not hook.exists() or HOOK_MARK in hook.read_text("utf-8", errors="replace"):
