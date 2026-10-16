@@ -240,7 +240,7 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
         Declared(scope.command, "the pre-commit `tests` hook"),
         cwd=tree,
         env=child_env(cfg, ci=True),
-        timeout_s=max(1, budget - int(p.elapsed_s)),  # one budget for the whole run
+        timeout_s=max(budget // 2, budget - int(p.elapsed_s)),  # the hooks skip the suite: short
         check_installed=False,
     ), prefix
 
