@@ -110,6 +110,11 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         return O.ok("cadence.ran", cadence=ran, due=[])
 
     due = due_cadences(repo, cfg, st, calendar=calendar)
+    for (
+        d
+    ) in due:  # D-test-economy-r2: an item's gates run the affected tests, so this is the full run
+        if d["cadence"] == "integration_tests":
+            d["runs"] = "the full test suite (`ddflow ci run --full`)"
     data: dict[str, Any] = {"due": due, "tasks_done": done_tasks, "phases_done": done_phases}
     if not due:
         return O.nothing(

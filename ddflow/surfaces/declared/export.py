@@ -75,6 +75,8 @@ def _tests_text(out, a) -> str:
         lines.append(f"\nThe unit_tests gate runs only the selected tests ({g['why']}):")
         lines += [f"  {t['path']}  -- {t['reason']}" for t in g["tests"]]
         lines.append(f"  {g['command']}")
+    elif g.get("scope") == "covered":
+        lines.append(f"\nThe unit_tests gate runs nothing: {g['why']}")
     elif g:
         lines.append(f"\nThe unit_tests gate runs the whole suite: {g['why']}\n  {d['full_suite']}")
     elif d["full_suite"]:
@@ -407,7 +409,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("ci",),
         tool="ddflow_ci",
         summary="the CI parity gate: run the pre-push checks on the merge result",
-        description="CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status).",
+        description="CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status).",
         params=(
             Param(
                 "verb",
@@ -437,6 +439,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="run: use this instead of [ci].command",
             ),
             Param(
+                "full",
+                help="Whole suite (run).",
+                type="boolean",
+                cli_help="run: the whole test suite, not only the tests the change reaches",
+            ),
+            Param(
                 "stage",
                 cli_only=True,
                 default="pre-push",
@@ -458,7 +466,7 @@ COMMANDS: tuple[Command, ...] = (
             Param("sha", cli_only=True, default="", cli_help="record: the commit that was checked"),
             Param("action", help="run | status (default).", mcp_only=True),
         ),
-        tool_order=("action", "ref", "base", "command"),
+        tool_order=("action", "ref", "base", "command", "full"),
         flag_exempt={
             "--stage": "`ci record` is for the pre-push hook script, which has a shell and no MCP session",
             "--result": "`ci record`: see --stage",
@@ -472,6 +480,7 @@ COMMANDS: tuple[Command, ...] = (
             ref=a.get("ref", "HEAD") or "HEAD",
             base=a.get("base", "") or "",
             command=a.get("command", "") or "",
+            full=bool(a.get("full")),
             agent=agent,
         ),
         payload="",
