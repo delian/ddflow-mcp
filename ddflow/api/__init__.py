@@ -164,8 +164,8 @@ from .reporting import (
 )
 from .review import review as run_review
 from .review import reviewers_detect, reviewers_list
-from .review import triage as review_triage
 from .review_findings import show as review_show
+from .review_settle import triage as review_triage
 from .rules import (
     Rule,
     RuleDedupAnswer,
