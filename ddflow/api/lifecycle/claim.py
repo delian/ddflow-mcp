@@ -20,7 +20,7 @@ from ...services import flow as FS
 from ...services import leases as L
 from ...services import ports as PT
 from ...services import waiting as WG
-from ...services.completion import bug_globs_of
+from ...services.bug_globs import bug_globs_of
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
