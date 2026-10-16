@@ -102,9 +102,9 @@ from .mutation import (  # noqa: F401
 )
 from .outcomes import (  # noqa: F401
     GateStatus,
-    is_triageable,
     StaleNote,
     approve,
+    is_triageable,
     local_command_notes,
     on_refutation,
     record,
