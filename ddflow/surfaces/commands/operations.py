@@ -233,6 +233,7 @@ def _pins_regenerate(a, c: Ctx) -> int:
         after_merge=a.after_merge,
         verb=a.document,
         target=a.target or "",
+        agent=c.requested_agent,
     )
     if c.json:
         emit_json(out.body())

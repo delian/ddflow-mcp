@@ -23,8 +23,11 @@ two branches that each changed a pin merge into green pins with no manual step.
 from __future__ import annotations
 
 import os
+import shlex
+import subprocess
 import sys
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,14 +108,36 @@ def load_recipes(repo: Path, cfg: Config) -> list[Recipe]:
     return out
 
 
-def _run(repo: Path, argv: tuple[str, ...], r: Recipe, timeout: int, *, write: bool) -> P.Captured:
+#: (a callback, its interval in seconds): called while a recipe command runs.
+Tick = tuple[Callable[[], None], float]
+
+
+def _run(
+    repo: Path,
+    argv: tuple[str, ...],
+    r: Recipe,
+    timeout: int,
+    *,
+    write: bool,
+    tick: Tick | None = None,
+) -> P.Captured:
     """One recipe command; the recipe's ``env`` reaches only ``regen``, so a check can never
     re-record what it is checking."""
     env = {**os.environ, **(dict(r.env) if write else {})}
     if not write:
         env.pop("DDFLOW_UPDATE_GOLDEN", None)
     env.pop("PYTEST_XDIST_WORKER", None)
-    return P.capture(list(argv), timeout=timeout, cwd=repo, env=env)
+    if tick is None:
+        return P.capture(list(argv), timeout=timeout, cwd=repo, env=env)
+    # A long recipe command renews its caller's lease between polls, on this thread.
+    res = P.run_shell(
+        shlex.join(argv), timeout_s=timeout, cwd=repo, env=env, on_tick=tick[0], tick_s=tick[1]
+    )
+    if res.timed_out:
+        return P.Captured(error=subprocess.TimeoutExpired(list(argv), timeout))
+    if res.could_not_run:
+        return P.Captured(error=OSError(res.err))
+    return P.Captured(res.code, res.out, res.err)
 
 
 def _tail(c: P.Captured) -> str:
@@ -127,6 +152,7 @@ def regenerate(
     only: str = "",
     check: bool = False,
     recipes: list[Recipe] | None = None,
+    tick: Tick | None = None,
 ) -> Report:
     """Check every pin (or `only`), and unless `check`, re-record the stale ones."""
     rep = Report()
@@ -152,18 +178,18 @@ def regenerate(
     for r in chosen:
         st = PinState(r.name, r.files)
         rep.pins.append(st)
-        first = _run(repo, r.check, r, limit, write=False)
+        first = _run(repo, r.check, r, limit, write=False, tick=tick)
         if first.error is None and first.returncode == 0:
             continue
         st.stale = True
         st.output = _tail(first)
         if check:
             continue
-        done = _run(repo, r.regen, r, limit, write=True)
+        done = _run(repo, r.regen, r, limit, write=True, tick=tick)
         if done.error is not None or done.returncode != 0:
             st.error = f"regeneration failed: {_tail(done)}"
             continue
-        again = _run(repo, r.check, r, limit, write=False)
+        again = _run(repo, r.check, r, limit, write=False, tick=tick)
         if again.error is not None or again.returncode != 0:
             st.error = f"still stale after regeneration: {_tail(again)}"
             continue
