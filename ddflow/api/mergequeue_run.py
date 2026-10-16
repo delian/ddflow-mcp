@@ -100,12 +100,29 @@ def _regenerate_pins(repo: Path, cfg, wt: W.Worktree) -> str:
     return "" if made.ok else f"could not commit the regenerated pins: {made.err or made.out}"
 
 
-def _run_checks(repo: Path, cfg, it, *, unit_tests: bool, timeout_s: int, agent: str) -> str:
+TAIL_LINES = 15
+
+
+def _ci_detail(repo: Path, e: MQ.Entry, out: O.Outcome, log: Path) -> dict:
+    """What a parked entry keeps of a failed ci: the failing hooks and tests by name, the
+    last lines of the output, and the log file with all of it."""
+    d = out.data
+    names = [c["id"] for c in d.get("checks", []) if not c.get("ok")]
+    names += [t for t in d.get("failed_tests", []) if t not in names]
+    tail = "\n".join((d.get("output_tail") or "").rstrip().splitlines()[-TAIL_LINES:])
+    return {"failed": names, "tail": tail, "log": str(log.relative_to(repo)) if log.exists() else ""}
+
+
+def _run_checks(
+    repo: Path, cfg, it, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s: int, agent: str
+) -> str:
     """The checks the integrator runs once on the merged result: ci, and unit_tests when
-    asked. "" when they pass, else why the entry is parked."""
+    asked. "" when they pass, else why the entry is parked (``detail`` then holds what failed)."""
     if "ci" in GS.pipeline_for(it, cfg):
-        out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s)
+        log = MQ.log_path(repo, e)
+        out = ci_run(repo, ref=it.id, agent=agent, timeout_s=timeout_s, log_to=log)
         if out.exit != O.OK:
+            detail.update(_ci_detail(repo, e, out, log))
             return f"ci {out.data.get('status', 'did not pass')}: {out.reason}"
     if unit_tests and "unit_tests" in GS.pipeline_for(it, cfg):
         out = run_gate(repo, it.id, "unit_tests", agent=agent)
@@ -114,8 +131,10 @@ def _run_checks(repo: Path, cfg, it, *, unit_tests: bool, timeout_s: int, agent:
     return ""
 
 
-def _land(repo: Path, e: MQ.Entry, *, unit_tests: bool, timeout_s: int, agent: str, where):
-    """(state, reason, sha) of one entry: the whole of its integration."""
+def _land(repo: Path, e: MQ.Entry, detail: dict, *, unit_tests: bool, timeout_s: int,
+          agent: str, where):  # fmt: skip
+    """(state, reason, sha) of one entry: the whole of its integration. ``detail`` receives
+    what failed (see `_ci_detail`) when it is parked by a check."""
     _log, cfg, st = _load(repo, agent)
     it = st.items.get(e.item)
     if why := refusal(repo, cfg, st, it, unit_tests=unit_tests):
@@ -129,7 +148,9 @@ def _land(repo: Path, e: MQ.Entry, *, unit_tests: bool, timeout_s: int, agent: s
     for step in (_bring_in_base, _regenerate_pins):
         if why := step(repo, cfg, wt):
             return MQ.PARKED, why, ""
-    if why := _run_checks(repo, cfg, it, unit_tests=unit_tests, timeout_s=timeout_s, agent=agent):
+    if why := _run_checks(
+        repo, cfg, it, e, detail, unit_tests=unit_tests, timeout_s=timeout_s, agent=agent
+    ):
         return MQ.PARKED, why, ""
     out = land(
         repo, it.id, message=f"merge {it.id}: {it.title}", agent=agent,
@@ -148,17 +169,21 @@ def _one(repo: Path, e: MQ.Entry, **kw) -> dict | None:
     """Integrate one entry; None when it was removed from the line after it was picked."""
     if (e := MQ.take(repo, e)) is None:
         return None
+    detail: dict = {}
     try:
-        state, reason, sha = _land(repo, e, **kw)
+        state, reason, sha = _land(repo, e, detail, **kw)
     except Exception as exc:  # one entry's crash parks it; the line goes on
         state, reason, sha = MQ.PARKED, f"the integrator failed on it: {exc!r}", ""
-    MQ.finish(repo, e, state, reason=reason, sha=sha)
+    MQ.finish(repo, e, state, reason=reason, sha=sha, detail=detail)
     return {
         "item": e.item,
         "state": state,
         "reason": reason,
         "sha": sha,
         "took_s": round(e.duration_s, 1),
+        "failed": e.failed,
+        "tail": e.tail,
+        "log": e.log,
     }
 
 
