@@ -144,6 +144,7 @@ COMMANDS: tuple[Command, ...] = (
             "port",
             "port_advice",
             "broke",
+            "glob_warnings",
         ),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
