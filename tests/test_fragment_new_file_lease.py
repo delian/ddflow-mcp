@@ -87,3 +87,15 @@ def test_a_lease_on_an_existing_fragment_stays_exclusive(log, cfg):
     state = fold(log.read_all())
     a, b = state.items["A"], state.items["B"]
     assert admission.glob_conflict(state, cfg, a, list(a.globs), against="offered", others=[b])
+
+
+def test_a_new_fragment_another_agent_holds_is_refused(repo, cfg, monkeypatch):
+    assert run_cli(repo, "init")[0] == 0
+    cfg.enforce.commit_without_lease = "block"
+    frag = f"{FRAG}/knob_added.s.one.toml"
+    a = _task(repo, cfg, "TA", "ag-a", "src/a/*")
+    _task(repo, cfg, "TB", "ag-b", frag)
+    _stage(a, frag, "x = 1\n")
+    monkeypatch.chdir(a)
+    code, msg = E.check_commit(repo, cfg, agent="ag-a")
+    assert code == 1 and "held by" in msg, msg

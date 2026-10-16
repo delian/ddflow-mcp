@@ -396,7 +396,7 @@ def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
     return {"outside_globs": outside, "outside_globs_unknown": False}
 
 
-def _outside_globs(repo: Path, it, target: str, branch: str, cfg=None) -> list[str] | None:
+def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] | None:
     """Paths the landing changes that the item never declared; None when git could not list
     them -- "could not tell", never "none" (B4e42502034).
 
@@ -413,7 +413,7 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg=None) -> list[s
         return None
     # A new file matching `[lease] new_file_globs` (a manifest fragment) is its author's own.
     fresh: set[str] = set()
-    ng = new_file_globs(cfg) if cfg is not None else []
+    ng = new_file_globs(cfg)
     if ng and any(path_in_glob(p, g) for p in changed for g in ng):
         added = CH.changed_paths(repo, target, tip=branch, include=("committed",), diff_filter="A")
         if added is None:

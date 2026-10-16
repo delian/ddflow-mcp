@@ -1363,13 +1363,20 @@ def _split_leases(
     return mine, others, holds_any
 
 
-def _without_new_files(repo: Path, cfg: Config, uncovered: list[str], holds_any: bool) -> list[str]:
+def _without_new_files(
+    repo: Path, cfg: Config, uncovered: list[str], holds_any: bool, others: dict[str, str]
+) -> list[str]:
     """``uncovered`` less the staged NEW files `[lease] new_file_globs` names: a fragment
-    named after its own knob is nobody else's (B92e13a521f). An edit stays uncovered."""
+    named after its own knob is nobody else's (B92e13a521f). An edit stays uncovered, and so
+    does a path another agent's live lease names."""
     if not holds_any:
         return uncovered
     globs = new_file_globs(cfg)
-    cand = [p for p in uncovered if any(path_in_glob(p, g) for g in globs)]
+    cand = [
+        p
+        for p in uncovered
+        if any(path_in_glob(p, g) for g in globs) and not any(path_in_glob(p, o) for o in others)
+    ]
     if not cand:
         return uncovered
     added = CH.changed_paths(_index_tree(repo), include=("staged",), renames=True, diff_filter="A")
@@ -1529,7 +1536,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
     shared = shared_globs(cfg) if holds_any else []
     uncovered = _uncovered_paths(paths, mine, shared)
-    uncovered = _without_new_files(repo, cfg, uncovered, holds_any)
+    uncovered = _without_new_files(repo, cfg, uncovered, holds_any, others)
     if not uncovered:
         return Verdict(OK, "")
 
