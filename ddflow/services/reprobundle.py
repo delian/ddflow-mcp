@@ -46,6 +46,8 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
     """The bundle for ``bug`` at ``mode`` (default `[bugs] repro_capture`), redacted and
     capped, or None when the mode is `off`."""
     mode = mode or cfg.bugs.repro_capture
+    if mode not in MODES:
+        raise ValueError(f"repro_capture {mode!r} is not one of {MODES}")
     if mode == "off":
         return None
     b = cfg.bugs
@@ -60,8 +62,7 @@ def build(  # noqa: PLR0913 -- one keyword per thing the bundle is told
         "config_deltas": F.config_deltas(cfg),
         "commands": {
             "unavailable": "ddflow keeps no log of the commands a session ran (no session or "
-            "hook command log exists); the agent's latest log events are listed under "
-            "recent_events instead"
+            "hook command log exists)" + ("; see recent_events" if mode == "full" else "")
         },
     }
     if repro_cmd:
