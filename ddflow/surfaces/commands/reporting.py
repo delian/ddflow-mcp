@@ -321,6 +321,8 @@ def _bug_lines(b: dict) -> str:
     if b["lesson"]:
         lines.append(f"  lesson {b['lesson']}")
     lines += ["", b["summary"]]
+    if b.get("repro_text"):
+        lines += ["", b["repro_text"]]
     lines += addenda_lines(b)
     return "\n".join(lines)
 

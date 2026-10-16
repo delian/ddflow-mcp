@@ -1913,6 +1913,7 @@
         "upstream_delivery": "",
         "upstream_sent_at": "",
         "upstream_digest": "",
+        "repro": {},
         "reopened_at": "",
         "reopen_reason": "",
         "kind": "bug",
