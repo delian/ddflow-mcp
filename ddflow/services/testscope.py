@@ -175,16 +175,7 @@ def _selected(
     picked = {s.path for s in sel.tests}
     # Only what pytest runs: a `scripts/check.sh` regression check is run by no command
     # built here, and listing it would claim a test that never ran.
-    regression = sorted(
-        {
-            t
-            for b in it.fixes
-            if (bug := st.bugs.get(b)) is not None
-            for t in bug.regression_tests
-            if t.endswith(".py") or "::" in t
-        }
-        - picked
-    )
+    regression = sorted(_regression(st, it) - picked)
     tests = [
         *sel.tests,
         *(Selected(t, "a regression test of the bug it fixes") for t in regression),
