@@ -60,6 +60,7 @@ def test_a_lapsed_lease_bound_to_this_tree_is_named_with_the_heartbeat_remedy(
     repo, cfg, monkeypatch
 ):
     tree = _setup(repo, cfg)
+    cfg.enforce.lapsed_lease = "refuse"
     _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
     monkeypatch.chdir(tree)
     code, msg = E.check_commit(repo, cfg, agent="derived-from-the-tree")
@@ -73,6 +74,7 @@ def test_a_lapsed_lease_bound_to_this_tree_is_named_with_the_heartbeat_remedy(
 def test_a_lapsed_lease_is_still_refused_under_block(repo, cfg, monkeypatch):
     tree = _setup(repo, cfg)
     cfg.enforce.commit_without_lease = "block"
+    cfg.enforce.lapsed_lease = "refuse"
     _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
     monkeypatch.chdir(tree)
     code, msg = E.check_commit(repo, cfg, agent="derived-from-the-tree")
@@ -162,6 +164,7 @@ def test_a_lapsed_lease_matched_by_tree_alone_offers_takeover_too(repo, cfg, mon
     work over, not its holder: the heartbeat is offered to the holder by name, and the
     takeover alongside it -- never the bare presumption that this is the holder."""
     tree = _setup(repo, cfg)
+    cfg.enforce.lapsed_lease = "refuse"
     _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
     monkeypatch.chdir(tree)
     _code, msg = E.check_commit(repo, cfg, agent="stranger")
