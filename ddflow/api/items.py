@@ -375,7 +375,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
         if chk.refusal is not None:
             return chk.refusal
         if chk.extension:
-            return DD.extend(log, cfg, chk, "phase.added")
+            return DD.extend(log, cfg, chk, "phase.added", st=st, globs=GS.parse(globs))
         log.append(
             "phase.added",
             item,
@@ -537,7 +537,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         if chk.refusal is not None:
             return chk.refusal
         if chk.extension:
-            return DD.extend(log, cfg, chk, "task.added")
+            return DD.extend(log, cfg, chk, "task.added", st=st, globs=GS.parse(globs))
         plan = None
         adopted: list[str] = []
         if len(set(wanted)) > 1:

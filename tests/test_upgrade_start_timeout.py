@@ -11,7 +11,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import _wait
 import pytest
+from _wait import scaled, wait_until
 from test_upgrade_on_start import _load, _seed_old
 
 from ddflow.services import upgrade_plan as UP
@@ -44,13 +46,8 @@ def _timed_out(old: Path, monkeypatch: pytest.MonkeyPatch, delay: float = 1.0) -
     return US.start(old, log, cfg, st, surf="mcp", environ=CHECK)
 
 
-def _wait_for(done, seconds: float = 10.0) -> None:
-    end = time.monotonic() + seconds
-    while time.monotonic() < end:
-        if done():
-            return
-        time.sleep(0.05)
-    raise AssertionError("the background check never finished")
+def _wait_for(done) -> None:
+    wait_until(done, 10, what="the background check finishing")
 
 
 def test_a_timed_out_check_is_a_note_that_asks_the_operator(old, monkeypatch) -> None:
@@ -180,12 +177,31 @@ def test_a_kept_proposal_does_not_depend_on_who_connected(old, monkeypatch) -> N
     assert rep["text"] == kept and "agent-a" not in kept and "agent-b" not in kept
 
 
-def test_a_container_start_that_applied_something_is_never_kept(old) -> None:
+def _container_start(old: Path, timeout_s: float) -> dict:
     log, cfg, st = _load(old, "starter")
-    rep = US.start(old, log, cfg, st, agent="starter", surf="container", environ={})
-    assert rep["status"] == US.APPLIED
+    cfg.upgrade.start_timeout_s = timeout_s
+    return US.start(old, log, cfg, st, agent="starter", surf="container", environ={})
+
+
+def _assert_applied_and_not_kept(old: Path, rep: dict) -> None:
+    assert rep["status"] == US.APPLIED, rep["text"]
     assert US._read(old).get("complete") is False
     assert US._cached(old, US._key(US.running_version(), "", "safe", "container", True)) is None
+
+
+def test_a_container_start_that_applied_something_is_never_kept(old) -> None:
+    """The deadline is not what this test is about, so it is generous: under load average
+    300-600 the default ran out before the apply finished and the status read 'timeout'
+    (B53b653895f)."""
+    _assert_applied_and_not_kept(old, _container_start(old, scaled(10)))
+
+
+def test_a_slow_apply_still_reads_as_applied_when_the_deadline_scales(old, monkeypatch) -> None:
+    """The slow path forced: the plan takes 1 s while the deadline is scaled(0.3) (0.3 x 4 x 16 s) on
+    a saturated host. A fixed 0.3 s deadline (the old shape) reads 'timeout'."""
+    _slow_plan(monkeypatch, 1.0)
+    _wait.pretend_saturated(monkeypatch)
+    _assert_applied_and_not_kept(old, _container_start(old, scaled(0.3)))
 
 
 def test_a_failure_report_does_not_replace_a_kept_answer(old, monkeypatch) -> None:
