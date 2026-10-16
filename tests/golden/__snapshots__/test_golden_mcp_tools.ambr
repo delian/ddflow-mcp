@@ -172,7 +172,7 @@
     'ddflow_bug_fixed': '''
       {
        "name": "ddflow_bug_fixed",
-       "description": "Close a bug. Requires the name of the regression test that would catch it again — write the test, watch it FAIL against the unfixed code, then close.",
+       "description": "Close a bug. Requires the regression test that would catch it again: write it, watch it FAIL against the unfixed code, then close.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -182,11 +182,11 @@
          },
          "regression_test": {
           "type": "string",
-          "description": "Test that now guards this. Several: separate them with ',' or ';', or pass regression_tests."
+          "description": "Test that now guards this. Several: separate with ',' or ';'."
          },
          "regression_tests": {
           "type": "array",
-          "description": "The tests that now guard this, one per element -- the list form of regression_test. One of the two is required.",
+          "description": "The tests guarding this, one per element: the list form of regression_test.",
           "items": {
            "type": "string"
           }
@@ -197,11 +197,11 @@
          },
          "lesson_rule": {
           "type": "string",
-          "description": "The lesson in full — the transferable rule, not the incident. A future agent on a different task has to be able to apply it."
+          "description": "The lesson in full: the transferable rule, not the incident."
          },
          "lesson": {
           "type": "string",
-          "description": "Id of an EXISTING lesson this bug belongs to."
+          "description": "Id of an existing lesson this bug belongs to."
          },
          "changelog": {
           "type": "string",
@@ -209,11 +209,15 @@
          },
          "skip_regression_verify": {
           "type": "boolean",
-          "description": "Do NOT run the named test on the pre-fix tree (default false: it is run and must FAIL there, PASS with the fix). Needs verify_reason."
+          "description": "Skip the pre-fix check (the test must FAIL pre-fix, PASS fixed). Needs verify_reason."
          },
          "verify_reason": {
           "type": "string",
-          "description": "Why the pre-fix regression check is skipped (recorded). Required when skip_regression_verify is true."
+          "description": "Why the pre-fix check is skipped (recorded); required with skip_regression_verify."
+         },
+         "mutation": {
+          "type": "string",
+          "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
          },
          "as_agent": {
           "type": "string",
@@ -268,11 +272,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -520,7 +524,7 @@
     'ddflow_complete': '''
       {
        "name": "ddflow_complete",
-       "description": "Finish an item. Refuses (exit 3) when a required gate has not passed, when a phase still has open tasks, or when no reviewer came from a different model family than the author. Pass your own model as 'model'.",
+       "description": "Finish an item. Refuses (exit 3) when a required gate has not passed, a phase has open tasks, or no reviewer came from a different model family than the author. Pass your own 'model'.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -542,11 +546,15 @@
          },
          "regression_test": {
           "type": "string",
-          "description": "For a fix task: the test that now guards its bug(s); closes them."
+          "description": "Fix task: the test guarding its bug(s); closes them."
+         },
+         "mutation": {
+          "type": "string",
+          "description": "Test-only fix: JSON {\"file\",\"old\",\"new\"} disabling it; the test must FAIL."
          },
          "force": {
           "type": "boolean",
-          "description": "Complete over unmet conditions; each is recorded as overridden, forever. Prefer `ddflow_gate_skip` with a reason: it drops one named step."
+          "description": "Complete over unmet conditions, each recorded as overridden forever. Prefer `ddflow_gate_skip` with a reason."
          },
          "as_agent": {
           "type": "string",
@@ -657,11 +665,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1578,11 +1586,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -1788,11 +1796,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -2045,11 +2053,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -2094,7 +2102,7 @@
     'ddflow_pins': '''
       {
        "name": "ddflow_pins",
-       "description": "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by the recipes in [pins].recipes_file (--check lists them, exit 1).",
+       "description": "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -2362,6 +2370,42 @@
        }
       }
     ''',
+    'ddflow_queue': '''
+      {
+       "name": "ddflow_queue",
+       "description": "Merge queue. add: line up an item (gates done but ci/merge). run: the integrator (any agent, one at a time, else exit 2): per entry merges base, regenerates pins, runs ci once, lands it; failures park. status. remove.",
+       "inputSchema": {
+        "type": "object",
+        "properties": {
+         "action": {
+          "type": "string",
+          "description": "add|run|status (default)|remove."
+         },
+         "id": {
+          "type": "string",
+          "description": "Item (add, remove)."
+         },
+         "max_batch": {
+          "type": "integer",
+          "description": "run: max entries."
+         },
+         "unit_tests": {
+          "type": "boolean",
+          "description": "Also run unit_tests."
+         },
+         "timeout": {
+          "type": "integer",
+          "description": "run: ci seconds."
+         },
+         "as_agent": {
+          "type": "string",
+          "description": "A subagent's own name, this call only."
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+    ''',
     'ddflow_rebuild': '''
       {
        "name": "ddflow_rebuild",
@@ -2596,11 +2640,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -3343,11 +3387,11 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID (the refusal lists candidates and options). Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID. Omit at first."
          },
          "check_only": {
           "type": "boolean",
-          "description": "Dry run: write nothing, return the `candidates` this add would be refused for."
+          "description": "Dry run: write nothing, return the `candidates`."
          },
          "as_agent": {
           "type": "string",
@@ -3941,6 +3985,7 @@
     'ddflow_promote_deployed',
     'ddflow_promote_status',
     'ddflow_prompts',
+    'ddflow_queue',
     'ddflow_rebuild',
     'ddflow_recall',
     'ddflow_recover',

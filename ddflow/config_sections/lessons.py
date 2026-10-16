@@ -49,3 +49,7 @@ class LessonsConfig:
         3,
         doc="How many items may finish with NO lesson ever recorded before ddflow says so. One task finishing without a lesson is normal and reporting it would be noise; several in a row is the pattern the rule exists for. 0 disables the check.",
     )
+    test_file_globs: list[str] = knob(
+        factory=lambda: ["tests/**", "test/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"],
+        doc="Path globs naming TEST files. When a bug's fix changes only files matching these, the regression check cannot expect the test to fail on a pre-fix tree (the fix is in the test file itself): it runs the base's own test files, or applies the mutation given with the close (verified-by-mutation).",
+    )
