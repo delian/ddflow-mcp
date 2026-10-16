@@ -126,7 +126,12 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("bug", "found"),
         tool="ddflow_bug_found",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
+        flag_exempt={
+            **ANSWER_FLAG_EXEMPT,
+            "--test": "CLI only: the tools list has no room (DX-bug-repro-gate-and-mcp)",
+            "--repro-cmd": "CLI only: the tools list has no room (DX-bug-repro-gate-and-mcp)",
+            "--repro-capture": "CLI only; over MCP set [bugs] repro_capture with ddflow_configure",
+        },
         description="Report a bug the moment you find it, BEFORE fixing it. Recording it first "
         "makes the fix accountable: `ddflow_bug_fixed` refuses to close one without "
         "a regression test. A hunt that records nothing looks like one that found nothing.",
@@ -179,6 +184,24 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="File no fix task (fixed in the same commit).",
                 cli_help="file no fix task: the bug is fixed in the commit that found it",
+            ),
+            Param(
+                "repro_cmd",
+                cli_only=True,
+                cli_help="the command that shows the bug, kept in the repro bundle (never run)",
+                default="",
+            ),
+            Param(
+                "test",
+                cli_only=True,
+                cli_help="a pytest id: run once, its output tail goes in the repro bundle",
+                default="",
+            ),
+            Param(
+                "repro_capture",
+                cli_only=True,
+                cli_help="off | basic | full: how much repro bundle to store (default [bugs] repro_capture)",
+                default="",
             ),
             *ANSWER_PARAMS,
         ),

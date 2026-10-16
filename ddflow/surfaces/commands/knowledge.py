@@ -24,6 +24,7 @@ from ..declared.records import BUG_INVALID_FIELDS
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
 from ..render import emit_json, id_cell
+from .bug_found import _bug_found
 
 
 def cmd_lesson(a, c: Ctx) -> int:
@@ -267,43 +268,6 @@ def cmd_research(a, c: Ctx) -> int:
     c.out(
         f"research {out.data['id']} recorded ({out.data['verdict']})",
         out.body(("id", "verdict")),
-    )
-    return OK
-
-
-def _bug_found(a, c: Ctx) -> int:
-    out = D.run(
-        a,
-        c,
-        lambda answer: A.bug_found(
-            c.repo,
-            summary=a.summary,
-            item=a.item or "",
-            id=a.id or "",
-            title=a.title,
-            severity=a.severity,
-            scope=a.scope,
-            globs=a.globs,
-            no_task=a.no_task,
-            answer=answer,
-            agent=c.requested_agent,
-        ),
-    )
-    done = D.finish(a, c, out)
-    if done is not None:
-        return done
-    closed = out.data.get("resolution", "")
-    note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
-    offer = out.data.get("offer", "")
-    fix = out.data.get("fix_task", "")
-    task = ""
-    if fix and out.data.get("fix_task_filed"):
-        task = f"\nfix task {fix} filed in the queue (claim it to fix; `complete {fix} --regression-test <test>` closes the bug)"
-    elif fix:
-        task = f"\nfix task: {fix}"
-    c.out(
-        f"bug {out.data['id']} recorded{note}{task}" + (f"\n{offer}" if offer else ""),
-        out.body(("id", "offer", "fix_task", "fix_task_filed")),
     )
     return OK
 

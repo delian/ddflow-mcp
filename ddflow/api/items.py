@@ -40,6 +40,10 @@ class ItemEdit:
     body: str | None = None
     needs: list[str] | None = None
     globs: list[str] | None = None
+    #: Globs added to / taken from the item's current ones (or from ``globs`` when that is
+    #: given too), so widening a lease never repeats the whole list (`--add-globs`).
+    add_globs: list[str] | None = None
+    remove_globs: list[str] | None = None
     tags: list[str] | None = None
     priority: int | None = None
     line: str | None = None
@@ -72,6 +76,9 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
+    unchanged = _adjust_globs(it, edit, fields)
+    if unchanged:
+        return O.nothing("item.updated", unchanged, id=item)
     bad = GS.problem(fields.get("globs", []))
     if bad:
         return O.failed("item.updated", f"{item}: {bad}", id=item)
@@ -85,6 +92,29 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     if edit.worktree is not None:
         return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree, edit.queue)
     return _record_update(log, cfg, it, fields, queue=edit.queue)
+
+
+def _held_globs(it) -> list[str]:
+    """The globs an item holds: its own and its lease's, without repeats."""
+    return list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
+
+
+def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
+    """Fold ``--add-globs`` / ``--remove-globs`` into ``fields["globs"]``: onto ``--globs``
+    when that was given, else onto the item's held globs (its own and its lease's).
+    Returns why there is nothing to change when that is all the edit was, else ""."""
+    if edit.add_globs is None and edit.remove_globs is None:
+        return ""
+    held = fields.get("globs")
+    if held is None:
+        held = _held_globs(it)
+    fields["globs"] = GS.adjust(held, edit.add_globs, edit.remove_globs)
+    if fields["globs"] == held and edit.globs is None and len(fields) == 1:
+        return (
+            f"nothing to change: --add-globs are all held already and --remove-globs name "
+            f"none of {', '.join(held) or '(no globs)'}."
+        )
+    return ""
 
 
 def _update_and_rebind(
@@ -267,8 +297,7 @@ def _dropped(it, globs: list[str] | None) -> list[str]:
     """
     if globs is None:
         return []
-    before = [*it.globs, *(it.lease.globs if it.lease else [])]
-    return [g for g in dict.fromkeys(before) if g not in globs]
+    return [g for g in _held_globs(it) if g not in globs]
 
 
 #: Splitting into one piece is a rename, not a split.
