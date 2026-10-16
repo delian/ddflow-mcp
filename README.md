@@ -5619,6 +5619,7 @@ ddflow session list|show <id>            read sessions back (newest first; --sta
 ddflow search "<text>" [--exact|--regex]  search every record, session, prompt and the log (2 = no match)
 ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
+ddflow queue [add|run|status|remove] [<id>]  the merge queue: enqueue a finished item; one integrator merges in order
 ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
 ddflow cleanup [--apply]        classify ddflow worktrees/branches; --apply lands the safe ones
 ddflow pins <file>              which text of an instruction file a test pins, before you compress it
