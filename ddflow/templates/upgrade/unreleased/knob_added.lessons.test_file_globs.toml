@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "lessons.test_file_globs"
-new = '["tests/**", "test/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]'
+new = '["**/tests/**", "**/test/**", "**/spec/**", "**/specs/**", "**/__tests__/**", "**/test_*.py", "**/*_test.py", "**/conftest.py", "**/*.test.[jt]s", "**/*.test.[jt]sx", "**/*.test.[mc]js", "**/*.spec.[jt]s", "**/*.spec.[jt]sx", "**/*.spec.[mc]js", "**/*_test.go", "**/*_spec.rb", "**/*_test.rb", "**/test_*.rb"]'
 why = "Globs naming test files, so a bug whose fix is confined to them is verified against the old test files or a recorded mutation."
 impact = "additive"
