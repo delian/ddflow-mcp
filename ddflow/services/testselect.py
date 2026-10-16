@@ -92,7 +92,7 @@ def _named(stem: str, test_name: str) -> bool:
 
 
 #: How near a test is to the change, nearest first; the budget cuts from the far end.
-RANK_CHANGED, RANK_DECLARED, RANK_DIRECT, RANK_NEAR = 0, 1, 2, 3
+RANK_CHANGED, RANK_DECLARED, RANK_DIRECT, RANK_TWO_HOP = 0, 1, 2, 3
 
 
 @dataclass(frozen=True)
@@ -224,7 +224,7 @@ def select(
         sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
     for t, (why, hops) in walked.files.items():
         if t in tests:
-            pick(t, why, RANK_DIRECT if hops == 1 else RANK_NEAR)
+            pick(t, why, RANK_DIRECT if hops == 1 else RANK_TWO_HOP)
 
     _by_name(changed, tests, pick)
     pick.many(_data_readers(tree, changed, tests), RANK_DECLARED)

@@ -47,11 +47,11 @@ _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.M)
 
 def _touched_lines(diff: str) -> set[int]:
     """New-side line numbers a unified diff (``-U0``) adds or edits; a pure removal marks the
-    line it left behind."""
+    line before it and the line it left behind (git numbers the point after line N)."""
     out: set[int] = set()
     for m in _HUNK.finditer(diff):
         start, count = int(m.group(1)), int(m.group(2) if m.group(2) is not None else 1)
-        out.update(range(start, start + max(count, 1)))
+        out.update(range(start, start + count) if count else (start, start + 1))
     return out
 
 
