@@ -244,3 +244,17 @@ def test_a_test_the_base_re_exports_is_seen_as_existing_there(repo):
     )
     assert status == "verified", (status, ev)
     assert ev["verified_by"] == "pre-fix-test-files" and ev["restored_outcome"] == "failed", ev
+
+
+def test_a_collect_probe_that_does_not_answer_falls_back_to_the_text_scan(tmp_path):
+    """pytest reports a test in a file it cannot import as 'not found', and a timeout or a
+    missing runner says nothing: only an exit 0 is trusted, the scan decides otherwise."""
+    from ddflow.services.gates.regression_collect import tree_provides
+
+    (tmp_path / "test_h.py").write_text("def test_h():\n    pass\n# test_g is only a comment\n")
+    ids = ["test_h.py::test_h"]
+    assert tree_provides(lambda *_: "false", "", tmp_path, ids) is True
+    assert tree_provides(lambda *_: "", "", tmp_path, ids) is True
+    assert tree_provides(lambda *_: "false", "", tmp_path, ["test_h.py::test_g"]) is False
+    assert tree_provides(lambda *_: "true", "", tmp_path, ["test_h.py::test_g"]) is True  # exit 0
+    assert tree_provides(lambda *_: "true", "", tmp_path, ["gone.py::test_h"]) is False
