@@ -33,6 +33,7 @@ from ..core import textsim
 from ..infra.store import Store, similar_records
 from ..services import searchcore as SC
 from ..services import similar as sim
+from ._dedupe_extend import extend  # noqa: F401  (re-exported: DD.extend)
 from ._dedupe_reason import reason as _reason
 
 #: What an add can be answered with. ``new``: not a duplicate, record it. The others point
@@ -445,35 +446,6 @@ def _point(
             "holder": it.lease.holder if live and it and it.lease else "",
         }
     return out
-
-
-def extend(log, cfg: Config, chk: Checked, event_kind: str) -> O.Outcome:
-    """Append the text to the record it was answered onto. No new id is made; the
-    outcome names the record that received it. The original text is never touched."""
-    ex = chk.extension
-    assert ex is not None
-    log.append(
-        "record.extended",
-        ex["target"],
-        {
-            "text": ex["text"],
-            "who": cfg.agent.id,
-            "score": ex["score"],
-            "relation": ex["relation"],
-            "auto": ex["auto"],
-            "dedupe": ex["dedupe"],
-        },
-    )
-    return O.ok(
-        event_kind,
-        id=ex["target"],
-        extended=ex["target"],
-        extended_kind=ex["kind"],
-        relation=ex["relation"],
-        score=ex["score"],
-        auto=ex["auto"],
-        candidates=chk.shown,
-    )
 
 
 def after_add(log, cfg: Config, rid: str, chk: Checked) -> None:
