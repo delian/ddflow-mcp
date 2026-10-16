@@ -244,7 +244,8 @@ CLAIM_BODY = (
 
 def claim_body(out, a) -> Any:
     # `guidance` only when something governs the item: the body is what it was otherwise.
-    return out.body(CLAIM_BODY + (("guidance",) if out.data.get("guidance") else ()))
+    extra = tuple(k for k in ("guidance", "glob_warnings") if out.data.get(k))
+    return out.body(CLAIM_BODY + extra)
 
 
 def claim_text(out, a, ctx) -> str:
@@ -294,6 +295,7 @@ def claim_text(out, a, ctx) -> str:
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
+    msg += "".join(f"\n  warning:  {w}" for w in d.get("glob_warnings", []))
     if not d["globs"]:
         msg += (
             f"\n  The commit hook refuses files no glob covers; to cover yours: "
