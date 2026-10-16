@@ -4,13 +4,11 @@ tree, a primary whose index no longer matches its HEAD. Each note carries the re
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from conftest import run_cli
 from ddflow.services import repo_hygiene as RH
 
 
@@ -26,12 +24,6 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
     ).stdout
-
-
-def _notes(repo: Path) -> list[str]:
-    code, out, err = run_cli(repo, "--json", "doctor")
-    assert code in (0, 1), out + err
-    return json.loads(out)["notes"]
 
 
 def test_a_clean_repository_has_no_hygiene_note(repo: Path) -> None:
