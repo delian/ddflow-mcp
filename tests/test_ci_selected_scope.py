@@ -258,3 +258,14 @@ def test_a_forced_unit_tests_gate_runs_instead_of_being_covered(monkeypatch):
     args = (None, None, None, None, None, gdef, None, None)
     assert AG._scoped(*args, False)[2] == "RECORDED"
     assert AG._scoped(*args, True)[2] is None
+
+
+def test_a_missing_test_runner_is_unavailable_not_a_failed_run(project, stubs):
+    _write(
+        project,
+        {".pre-commit-config.yaml": HOOKS.replace("pytest tests/", "no-such-runner pytest tests/")},
+    )
+    _branch(project, {"pkg/mod.py": "A = 2\n"})
+    res = CI.run(project, Config.load(project), base="main", for_item=True)
+    assert res.status == "unavailable", res.reason
+    assert res.scope["scope"] == "selected"

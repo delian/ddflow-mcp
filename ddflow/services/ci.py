@@ -25,7 +25,7 @@ from ..core.digest import content_digest
 from ..core.slug import ascii_slug
 from ..infra import worktree as W
 from . import ci_scope as CS
-from .cmdrunner import COULD_NOT_RUN, TIMEOUT, CommandRunner, Declared, executable_missing
+from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
 from .gateenv import child_env
 
@@ -208,7 +208,7 @@ def run(
                 reason=f"{p.reason}: raise [ci].timeout_s",
                 scope=scope.evidence(sha) if scope is not None else {},
             )
-        if p.kind == COULD_NOT_RUN:
+        if not p.ran:  # the runner is missing, the slots are taken, the process did not start
             return Result(
                 "unavailable",
                 command=cmd,
@@ -240,8 +240,8 @@ def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
         Declared(scope.command, "the pre-commit `tests` hook"),
         cwd=tree,
         env=child_env(cfg, ci=True),
-        timeout_s=max(budget // 2, budget - int(p.elapsed_s)),  # the hooks skip the suite: short
-        check_installed=False,
+        timeout_s=max(min(budget, 60), budget - int(p.elapsed_s)),  # what is left, 60 s at least
+        check_installed=True,  # a missing runner is unavailable, not a failed test
     ), prefix
 
 
@@ -267,7 +267,7 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
 
 
 #: Hooks `[ci].on_merge = "fast"` leaves out of the default pre-commit command: the suites.
-FAST_SKIP = "tests,scenarios"
+FAST_SKIP = CS.TESTS_HOOKS
 ON_MERGE_MODES = CI_ON_MERGE_MODES  # declared beside the knob, where `Config.check` holds it
 
 
