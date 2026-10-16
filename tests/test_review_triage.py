@@ -310,3 +310,15 @@ def test_triage_finding_by_digest_prefix_and_clear_errors(repo, tmp_path):
     assert "digest" in bad.reason and "#1" in bad.reason and digests[0] in bad.reason
     short = api.triage(repo, "T1", gate="critic", finding="2f40", verdict="refuted", probe="x")
     assert short.exit == FAIL and "at least 6" in short.reason
+
+
+def test_finding_ref_odd_inputs_never_raise():
+    """Review of B8b2e487a13: a superscript digit must refuse, an all-decimal digest
+    prefix must still resolve as the digest (a number is never 6 digits long here)."""
+    from ddflow.api.review_finding_ref import resolve
+
+    found = [{"digest": "12345678abcdef00", "title": "a"}, {"digest": "9f00000000000000"}]
+    assert resolve("²", found, "T.critic")[0] == 0
+    assert resolve("123456", found, "T.critic") == (1, "")
+    assert resolve("#2", found, "T.critic") == (2, "")
+    assert resolve("9F0000", found, "T.critic") == (2, "")
