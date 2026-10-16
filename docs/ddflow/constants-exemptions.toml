@@ -103,7 +103,6 @@
 "ddflow/services/sessions.py:HOOK_START_MAX_S" = "sessions.hook_start_max_s"
 "ddflow/services/skills.py:MAX_FILES" = "skills.max_files"
 "ddflow/services/skills.py:BODY_HEAD_CHARS" = "skills.body_head_chars"
-"ddflow/services/testselect.py:MAX_HOPS" = "testselect.max_hops"
 "ddflow/services/ticks.py:PASS_BUDGET_S" = "ticks.pass_budget_s"
 "ddflow/services/upgrade_dryrun.py:TIMEOUT_S" = "upgrade_dryrun.timeout_s"
 "ddflow/services/upgrade_dryrun.py:START_TIMEOUT_S" = "upgrade_dryrun.start_timeout_s"
@@ -138,6 +137,7 @@
 "ddflow/services/flowstate.py:KEEP_S" = "flowstate.keep_s"
 
 [exempt]
+"ddflow/api/review_finding_ref.py:MIN_PREFIX" = "length floor of a digest prefix a user types (a format fact of the printed digests), not a preference"
 "ddflow/api/items.py:MIN_SPLIT_PARTS" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/api/items.py:_MIN_EVENT_PREFIX" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
 "ddflow/api/knowledge/pairs.py:_MIN_PAIR" = "syntax arity of a parsed form (how many parts a split has), a format fact, not a preference"
@@ -180,6 +180,7 @@
 "ddflow/services/searchcore/regexsafe.py:MAX_OPEN_REPEATS" = "safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose"
 "ddflow/services/searchcore/regexsafe.py:MAX_BRANCH_REPS" = "safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose"
 "ddflow/services/testselect.py:_MIN_STEM" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
+"ddflow/services/testidents.py:_MIN_LEN" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
 "ddflow/services/ticks.py:LOCK_WAIT_S" = "internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting"
 "ddflow/services/upgrade_dryrun.py:MAX_COMMANDS" = "safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose"
 "ddflow/services/upgrade_dryrun.py:FORCED_TIMEOUT_S" = "internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting"

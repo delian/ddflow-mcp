@@ -6,7 +6,10 @@ import ast
 import re
 from pathlib import Path
 
+from ...config import Config
 from ...infra import worktree as W
+from ...services import gates as G
+from ...services import testselect as TS
 
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
@@ -14,7 +17,7 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
 
     A node id (`path.py::name[...]`, `path.py::Class::name`) is looked up in EVERY
     worktree, because a bug is closed from the fix branch before its test reaches the
-    base. Only names are checked, statically: whether the test FAILS without the fix is
+    base. Names are checked statically, then (for a test the AST cannot see) by `pytest --collect-only`: whether the test FAILS without the fix is
     B-bugfix-verified's job. Anything that is not a Python node id -- a spec, a shell
     command -- cannot be resolved here and is returned as unchecked, not refused.
     """
@@ -37,13 +40,33 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
         # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
         # resolved `t` and accepted the unchecked rest (B227585c781).
-        if (
-            "" in wanted
-            or _looks_like_several(entry)
-            or not any(_defines(_inside(tree, path), wanted) for tree in trees)
+        if "" in wanted or _looks_like_several(entry):
+            missing.append(entry)
+        elif not any(_defines(_inside(tree, path), wanted) for tree in trees) and not (
+            _collected(repo, trees, entry, path)
         ):
             missing.append(entry)
     return missing, unchecked
+
+
+def _collected(repo: Path, trees: list[Path], entry: str, path: str) -> bool:
+    """Does pytest itself collect ``entry`` in any tree? The AST sees only names the file
+    defines; a test the module imports or generates is invisible to it (bug Ba6c8cdeda4).
+    The one mechanism the restored-test check uses (`gates.tree_provides`, B9f3ae012b9)."""
+    cfg = Config.load(repo)
+    defn = G.load_gates(repo, cfg).get("unit_tests")
+    configured = defn.command if defn else ""
+    for tree in trees:
+        # The same containment as the static scan: an absolute or `..` path is no test of
+        # this repository, however pytest would collect it (B-bfu-abs-path).
+        inside = _inside(tree, path)
+        if (
+            inside is not None
+            and inside.is_file()
+            and G.tree_provides(TS.run_command, configured, tree, [entry], scan=False)
+        ):
+            return True
+    return False
 
 
 #: A parametrize id: `[` to the nearest `]` that ends a name -- before `::` or the end
@@ -180,6 +203,8 @@ def _defines(source: Path | None, names: list[str]) -> bool:
             for n in names
         )
     module = _definitions(scope)
+    if len(names) == 1 and names[0] in _imported_names(scope):
+        return True  # re-exported: `from helper import test_x` (bug Ba6c8cdeda4)
     node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef | None = None
     for depth, name in enumerate(names):
         found = (
@@ -195,6 +220,15 @@ def _defines(source: Path | None, names: list[str]) -> bool:
         if depth < len(names) - 1 and not isinstance(node, ast.ClassDef):
             return False  # pytest collects from classes only, never a function body
     return True
+
+
+def _imported_names(body: list[ast.stmt]) -> set[str]:
+    """Names a module binds by import at its top level (`import a.b as c`, `from m import n`)."""
+    out: set[str] = set()
+    for node in body:
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            out |= {(a.asname or a.name).split(".")[0] for a in node.names}
+    return out
 
 
 def _member(

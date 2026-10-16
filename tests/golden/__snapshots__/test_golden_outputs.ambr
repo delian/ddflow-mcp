@@ -824,6 +824,28 @@
           runs only the selected tests under `gates.unit_tests_scope = "selected"`. A
           bug-fix task is selected whatever its size. 0 = no task is small (bug fixes
           still are).
+      gates.unit_tests_max_files = 100   [default]
+          The most test files a selected unit_tests run (and `ddflow tests --item`)
+          takes (default 100; 0 = no bound). Past it the farthest tests are cut --
+          two-hop importers first, then direct importers, never a test the change
+          itself touches -- and the cut set is recorded in the gate evidence. The
+          whole suite still runs in the merge queue, on the integration cadence and at
+          phase end (D-test-economy-r2).
+      gates.unit_tests_hub_importers = 100   [default]
+          A module imported by this many files or more (default 100; 0 = no hubs) is a
+          HUB: the selection's import walk does not continue through it (a test that
+          only reaches the change by importing a hub is not selected), and a change to
+          a hub itself runs the whole suite, since it reaches everything. Raise it to
+          select more, lower it to select less.
+      gates.unit_tests_max_hops = 2   [default]
+          How far along the import graph a test still counts as reaching a change
+          (default 2): it imports the changed module (1), or imports a module that
+          does (2). Unbounded, the layer that imports everything makes every test
+          reach every module.
+      gates.unit_tests_name_max_tests = 30   [default]
+          A distinctive identifier the change defines, edits or removes selects the
+          tests that spell it, unless more than this many tests do (default 30): then
+          it is a word, not a name.
       gates.scrub_env = ['DDFLOW_AGENT', 'DDFLOW_SESSION_ID', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID']   [default]
           Environment variables removed from the environment a gate command and the CI
           command run with. Default: the identity variables ddflow reads
