@@ -271,8 +271,24 @@ def test_a_real_server_replaces_itself_on_the_same_stdio(tmp_path: Path, stale: 
             if b"-m" in cmdline.read_bytes().split(b"\0"):
                 break
             time.sleep(0.1)
+        else:
+            pytest.fail("the server never replaced itself")
         second = ask({**call, "id": 3})["result"]["content"]
         assert [c for c in second if "restart the server" in c["text"]], second
     finally:
         proc.stdin.close()
         proc.wait(timeout=30)
+
+
+def test_the_check_interval_is_a_knob(stale: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Within the interval a second look is skipped (the cost is bounded); at 0 every call looks."""
+    monkeypatch.setenv("DDFLOW_MCP_ON_UPGRADE", "reexec")
+    srv = Server(stale)
+    _call(srv, "ddflow_status")
+    assert srv.reexec_pending is True
+    srv.reexec_pending = False
+    _call(srv, "ddflow_status")
+    assert srv.reexec_pending is False, "looked again within stale_check_every_s"
+    monkeypatch.setenv("DDFLOW_MCP_STALE_CHECK_EVERY_S", "0")
+    _call(srv, "ddflow_status")
+    assert srv.reexec_pending is True

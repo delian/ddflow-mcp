@@ -6,7 +6,9 @@ a sibling session) already moved on. `[mcp].on_upgrade` says what it does about 
 
 * ``notify`` (default): a skew refusal that staleness explains is answered with the one fix
   (reconnect the server) instead of "upgrade ddflow" -- the user already did -- and every other
-  call carries a one-line note, once. Reads keep working throughout.
+  call carries a one-line note, once. Both need a NEWER INSTALLED package: when only the log is
+  ahead, restarting would run the same code, so the refusal stays the plain skew refusal and
+  no note is made. Reads keep working throughout.
 * ``reexec``: after answering the current call, once nothing else is in flight or waiting on
   stdin, the process replaces itself with the installed code on the same stdio, carrying the
   connection's protocol, client and declared identity. Only when the installed package is newer
@@ -35,8 +37,6 @@ from .tools._common import _api
 ON_UPGRADE = ("notify", "reexec", "off")
 #: Carries the connection from the old process to the new one across the exec.
 HANDOFF_ENV = "DDFLOW_MCP_HANDOFF"
-#: How often a running server looks at the installed package and the log's stamps.
-CHECK_EVERY_S = 60.0
 
 RESTART_STEPS = (
     "To fix it, restart the MCP server: reconnect it in your client (Claude Code: /mcp, pick "
@@ -46,13 +46,18 @@ RESTART_STEPS = (
 )
 
 
-def policy(repo: Path) -> str:
-    """`[mcp].on_upgrade`, read per call; an unknown value or unreadable config is notify."""
+def settings(repo: Path, fallback_every_s: float = 60.0) -> tuple[str, float]:
+    """`[mcp].on_upgrade` and `[mcp].stale_check_every_s`, read per call; an unknown policy or
+    an unreadable config is notify at the caller's fallback interval."""
     try:
-        value = Config.load(repo).mcp.on_upgrade
+        mcp = Config.load(repo).mcp
     except Exception:
-        return "notify"
-    return value if value in ON_UPGRADE else "notify"
+        return "notify", fallback_every_s
+    return (mcp.on_upgrade if mcp.on_upgrade in ON_UPGRADE else "notify"), mcp.stale_check_every_s
+
+
+def policy(repo: Path) -> str:
+    return settings(repo)[0]
 
 
 def facts(srv) -> dict[str, Any] | None:
@@ -104,17 +109,18 @@ def refusal(srv, exc: Exception) -> dict[str, Any] | None:
     return {"content": [{"type": "text", "text": body}], "isError": False, "_meta": meta}
 
 
-def footer(srv) -> str:
-    """The once-a-minute check after a successful call: ``notify`` returns the note (once),
-    ``reexec`` flags the server to replace itself (and says nothing), ``off`` does nothing."""
+def footer(srv, fallback_every_s: float = 60.0) -> str:
+    """The periodic check (`[mcp].stale_check_every_s`) after a successful call, only when a
+    newer package is installed: ``notify`` returns the note (once), ``reexec`` flags the server
+    to replace itself (and says nothing), ``off`` does nothing."""
     if srv._stale_said or srv.reexec_pending:
         return ""
+    mode, every = settings(srv.repo, fallback_every_s)
     now = time.monotonic()  # not the wall clock: a clock stepped back must not mute the note
-    if now - srv._stale_checked_at < CHECK_EVERY_S:
+    if now - srv._stale_checked_at < every:
         return ""
     srv._stale_checked_at = now
     try:
-        mode = policy(srv.repo)
         f = facts(srv) if mode != "off" else None
         if f is None or not f["reexec"]:
             return ""  # nothing newer is installed: "restart" would be a dead end

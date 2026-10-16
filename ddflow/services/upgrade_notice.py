@@ -187,10 +187,10 @@ def stale_facts(st: State, running: str = "", installed: str = "") -> dict[str, 
 
 
 def stale_server_note(st: State, running: str = "", installed: str = "") -> str:
-    """``restart the server`` when this process runs older code than the installed package or
-    the log's highest stamp, else "". Pure over its arguments (the caller reads them)."""
+    """``restart the server`` when a newer ddflow than this process runs is INSTALLED (so a
+    restart would run it), else "". Pure over its arguments (the caller reads them)."""
     facts = stale_facts(st, running, installed)
-    if facts is None:
+    if facts is None or not facts["reexec"]:
         return ""
     return (
         f"note: this ddflow MCP server is running {facts['running']}, but {facts['where']} is "

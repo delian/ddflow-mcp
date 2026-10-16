@@ -932,7 +932,7 @@ class Server:
             out["content"].append({"type": "text", "text": deprecation_note(name, call.retired)})
         for alias in self._notices.fresh(call.used):
             out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
-        for note in (_obligation_footer(self), _upgrade.footer(self)):
+        for note in (_obligation_footer(self), _upgrade.footer(self, _STALE_CHECK_EVERY_S)):
             if note:
                 out["content"].append({"type": "text", "text": note})
         return _ok(mid, out)
@@ -1045,6 +1045,10 @@ def _modern_identify_note(agent: str) -> str:
         f"({AS_AGENT} wins when both are given). A request that names nobody is "
         f"attributed to the tree-derived default. This request: {who!r}."
     )
+
+
+#: The look interval when `[mcp].stale_check_every_s` cannot be read (the knob's default).
+_STALE_CHECK_EVERY_S = 60.0
 
 
 def _obligation_footer(server) -> str:
