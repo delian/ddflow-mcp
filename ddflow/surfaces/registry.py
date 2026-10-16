@@ -21,11 +21,13 @@ import dataclasses
 import difflib
 import io
 import re
+import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..config_sections._compat import MIN_REMOVED_IN, check_rename
+from .argtypes import glob_list_hint
 
 #: The per-CALL identity override every tool but `ddflow_identify` accepts (see mcp.py).
 AS_AGENT = "as_agent"
@@ -234,7 +236,7 @@ class SuggestingParser(argparse.ArgumentParser):
                 m := re.match(rf"argument {re.escape(a.dest)}: invalid choice: '([^']*)'", message)
             ):
                 message += _did_you_mean(m.group(1), list(a.choices))
-        super().error(message)
+        super().error(glob_list_hint(message, sys.argv[1:]))
 
 
 def used_aliases(
