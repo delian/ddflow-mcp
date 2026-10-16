@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from ..core import outcome as O
+from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
 from ._base import _load
@@ -70,12 +71,14 @@ def run(
     agent: str = "",
     called_from: Path | None = None,
     timeout_s: int = 0,
+    log_to: Path | None = None,
 ) -> O.Outcome:
     """Run the CI command on `ref` merged with `base`. 0 passed, 1 failed, 2 could not run.
 
     Run for an item (its id as the ref, or from the worktree of a live item) it records the
     item's `ci` gate with the commit it ran against, as `gate run <id> ci` does -- unless it
-    is being run BY that gate, which records the outcome itself."""
+    is being run BY that gate, which records the outcome itself. ``log_to`` receives the whole
+    output of the command (the integrator keeps it for a parked entry)."""
     _log, cfg, st = _load(repo, agent)
     if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
         ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
@@ -84,6 +87,9 @@ def run(
         ref = st.items[ref].branch
     res = CI.run(repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s)
     data = res.as_data()
+    if log_to is not None and not res.ok:  # a pass keeps no log
+        log_to.parent.mkdir(parents=True, exist_ok=True)
+        fsio.atomic_write(log_to, res.output, fsync=False)  # empty too: a log that says so
     if item and not command and os.environ.get(IN_GATE_ENV) != "ci":
         why = _record_gate(repo, item, res, agent, called_from)
         data["recorded"] = {

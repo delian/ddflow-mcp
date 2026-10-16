@@ -215,3 +215,46 @@ def test_the_mcp_mutation_is_one_json_parameter_read_like_the_flags():
     assert mutation_of({}) is None
     for junk in ("not json", "[1, 2]", "5", "null", '"hi"'):
         assert mutation_of({"mutation": junk}) == {"file": "", "old": "", "new": ""}, junk
+
+
+def test_a_test_the_base_re_exports_is_seen_as_existing_there(repo):
+    """The base's tests/test_v.py has no `def test_v` of its own: it imports it. A text scan
+    read that as absent and skipped the restored-test-files check (bug B9f3ae012b9)."""
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "gate.unit_tests.command", f"{sys.executable} -m pytest -q")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "helper.py").write_text(BROKEN)
+    (repo / "tests" / "test_v.py").write_text("from helper import test_v  # noqa: F401\n")
+    _commit(repo, "the test as it was")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "the shared fixture is wrong")
+    code, _out, err = run_cli(repo, "claim", "fix-B1")
+    assert code == OK, err
+    wt = _worktree(repo, "fix-B1")
+    (wt / "tests" / "test_v.py").write_text(
+        "import helper\n\nhelper.VALUE = 2\nfrom helper import test_v  # noqa: F401\n"
+    )
+    _commit(wt, "fix the fixture where the test is collected")
+    # The gate itself, not `bug fixed`: its static name check (`_unresolved_tests`) does not
+    # see a re-export either, a separate defect filed on its own.
+    from ddflow.config import Config
+    from ddflow.services import gates as G
+
+    status, ev = G.verify_regression_test(
+        repo, Config.load(repo), tree=wt, base="main", tests=["tests/test_v.py::test_v"]
+    )
+    assert status == "verified", (status, ev)
+    assert ev["verified_by"] == "pre-fix-test-files" and ev["restored_outcome"] == "failed", ev
+
+
+def test_a_collect_probe_that_does_not_answer_falls_back_to_the_text_scan(tmp_path):
+    """pytest reports a test in a file it cannot import as 'not found', and a timeout or a
+    missing runner says nothing: only an exit 0 is trusted, the scan decides otherwise."""
+    from ddflow.services.gates.regression_collect import tree_provides
+
+    (tmp_path / "test_h.py").write_text("def test_h():\n    pass\n# test_g is only a comment\n")
+    ids = ["test_h.py::test_h"]
+    assert tree_provides(lambda *_: "false", "", tmp_path, ids) is True
+    assert tree_provides(lambda *_: "", "", tmp_path, ids) is True
+    assert tree_provides(lambda *_: "false", "", tmp_path, ["test_h.py::test_g"]) is False
+    assert tree_provides(lambda *_: "true", "", tmp_path, ["test_h.py::test_g"]) is True  # exit 0
+    assert tree_provides(lambda *_: "true", "", tmp_path, ["gone.py::test_h"]) is False
