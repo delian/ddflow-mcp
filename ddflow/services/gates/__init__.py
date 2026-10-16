@@ -118,6 +118,7 @@ from .outcomes import (  # noqa: F401
     triage_line,
     untriaged_note,
 )
+from .regression_diag import describe_run, load_snapshot  # noqa: F401
 from .regression_testfix import (  # noqa: F401
     VERIFIED_BY_MUTATION,
     Tools,
