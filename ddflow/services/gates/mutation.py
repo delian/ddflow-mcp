@@ -13,6 +13,7 @@ from ...core.model import Item, State
 from ...infra import fsio
 from ...infra import worktree as W
 from .defs import GateDef, load_gates
+from .regression_diag import describe_run
 from .regression_testfix import (
     REGRESSION_COULD_NOT_RUN,
     REGRESSION_FAILS_ON_FIX,
@@ -324,10 +325,12 @@ def verify_regression_test(
     run = GateDef(id="regression_check", title="regression test", command=command)
     fix_outcome, fix_ev = run_command_gate(run, tree)
     if fix_outcome == "unavailable":
+        why, extra = describe_run(fix_outcome, fix_ev, cfg, where="the fixed tree")
         return REGRESSION_COULD_NOT_RUN, {
             "command": command,
             "tree": str(tree),
-            "reason": f"the fixed tree could not run the test: {fix_ev.get('reason', '')}",
+            "reason": why,
+            **{f"fix_{k}": v for k, v in extra.items()},
         }
     evidence: dict[str, Any] = {
         "command": command,
@@ -336,9 +339,11 @@ def verify_regression_test(
         "fix_outcome": fix_outcome,
     }
     if fix_outcome != "passed":
+        why, extra = describe_run(fix_outcome, fix_ev, cfg, where="the fixed tree")
         return REGRESSION_FAILS_ON_FIX, {
             **evidence,
-            "reason": f"the named test does not pass on the fixed tree ({fix_outcome})",
+            "reason": why,
+            **{f"fix_{k}": v for k, v in extra.items()},
         }
 
     try:
@@ -380,7 +385,7 @@ def verify_regression_test(
     if pre_outcome == "unavailable":
         return REGRESSION_COULD_NOT_RUN, {
             **evidence,
-            "reason": f"the pre-fix tree could not run the test: {pre_ev.get('reason', '')}",
+            "reason": describe_run(pre_outcome, pre_ev, cfg, where="the pre-fix tree")[0],
         }
     if pre_outcome == "passed":
         testfix = verify_test_only_fix(
