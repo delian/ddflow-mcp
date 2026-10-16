@@ -99,7 +99,7 @@
   usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
   
   positional arguments:
-    target                with --for-agent: the item id
+    target                the item id (as --item; required with --for-agent)
   
   options:
     -h, --help            show this help message and exit
