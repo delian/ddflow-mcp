@@ -1907,6 +1907,7 @@
         "severity": "",
         "scope": "project",
         "fix_task": "",
+        "globs": [],
         "upstream_url": "",
         "upstream_number": "",
         "upstream_delivery": "",
