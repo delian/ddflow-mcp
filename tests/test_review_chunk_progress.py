@@ -32,7 +32,9 @@ def _first_chunk_order(lines: list[str]) -> tuple[int | None, int | None]:
     """The index in ``lines`` of the quick chunk's and of the slow chunk's settled line."""
 
     def at(name: str) -> int | None:
-        return next((i for i, line in enumerate(lines) if "chunk" in line and name in line), None)
+        return next(
+            (i for i, line in enumerate(lines) if "chunk" in line and f"({name})" in line), None
+        )
 
     return at("a.py"), at("b.py")
 

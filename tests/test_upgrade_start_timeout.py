@@ -197,10 +197,10 @@ def test_a_container_start_that_applied_something_is_never_kept(old) -> None:
 
 
 def test_a_slow_apply_still_reads_as_applied_when_the_deadline_scales(old, monkeypatch) -> None:
-    """The slow path forced: the plan takes 1 s while the deadline is scaled(0.3) on a
-    saturated host. A fixed 0.3 s deadline (the old shape) reads 'timeout'."""
+    """The slow path forced: the plan takes 1 s while the deadline is scaled(0.3) (0.3 x 4 x 16 s) on
+    a saturated host. A fixed 0.3 s deadline (the old shape) reads 'timeout'."""
     _slow_plan(monkeypatch, 1.0)
-    monkeypatch.setattr(_wait.os, "getloadavg", lambda: (1000.0, 0.0, 0.0))
+    _wait.pretend_saturated(monkeypatch)
     _assert_applied_and_not_kept(old, _container_start(old, scaled(0.3)))
 
 
