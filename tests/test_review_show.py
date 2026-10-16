@@ -108,3 +108,31 @@ def test_triage_tool_with_a_finding_but_no_probe_is_still_refused(repo, tmp_path
     call = {"name": "ddflow_review_triage", "arguments": {"id": "T1", "finding": 1}}
     reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call})
     assert reply["result"].get("isError") and "probe" in str(reply), reply
+
+
+def test_one_gates_lost_blob_does_not_hide_the_others(repo, tmp_path, monkeypatch):
+    from ddflow.api import review_findings as RF
+    from ddflow.core import blobref as B
+
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    real = RF.LB.full
+
+    def full(ev):
+        got = dict(real(ev))
+        if got.get("chunk_findings") and ev.get("lost"):
+            got["chunk_findings"] = B.Unavailable("abc", "was pruned")
+        return got
+
+    # a second gate on the same item whose blob is gone, the critic's intact
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    st = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    ev = {**dict(st.gates["critic"].evidence), "lost": True}
+    EventLog(repo).append("gate.failed", "T1", {"gate": "rubber_duck", "evidence": ev})
+    monkeypatch.setattr(RF.LB, "full", full)
+    out = api.review_show(repo, "T1")
+    assert out.exit == OK, out.reason
+    assert "critic" in out.data["findings"] and "rubber_duck" in out.data["unreadable"]
+    assert "blob must be restored" in out.data["text"]

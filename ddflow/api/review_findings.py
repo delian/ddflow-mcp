@@ -87,10 +87,26 @@ def show(repo: Path, item: str, *, gate: str = "", agent: str = "") -> O.Outcome
     if not gates:
         return bad(f"{item} has no `ddflow review` with numbered findings on any gate")
     listing: dict[str, list[dict[str, Any]]] = {}
+    unreadable: dict[str, str] = {}
     for g in gates:
         rows = _rows(it, g)
         if isinstance(rows, str):
-            return bad(rows)
+            if gate:  # asked for by name: the answer is the reason
+                return bad(rows)
+            unreadable[g] = rows  # one gate's lost blob must not hide the others
+            continue
         listing[g] = rows
-    text = "\n".join(_text(item, g, rows) for g, rows in listing.items())
-    return O.ok("review.show", id=item, gate=gate or ",".join(gates), findings=listing, text=text)
+    text = "\n".join(
+        [_text(item, g, rows) for g, rows in listing.items()]
+        + [f"{g}: {why}" for g, why in unreadable.items()]
+    )
+    if not listing:
+        return bad(text)
+    return O.ok(
+        "review.show",
+        id=item,
+        gate=gate or ",".join(gates),
+        findings=listing,
+        unreadable=unreadable,
+        text=text,
+    )
