@@ -9,7 +9,7 @@ import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import ABANDONED, OPEN, RUNNING, fold
+from ...core.model import ABANDONED, DONE, OPEN, fold
 from ...infra import worktree as W
 from ...services import gates as G
 from ...services import leases as L
@@ -254,7 +254,11 @@ def bug_invalid(
     tree = ""
     if abandoned:
         wt = fold(log.read_all(), strict=False).items[abandoned].worktree
-        tree = f"worktree {wt} kept; `ddflow cleanup --apply` removes it" if wt else ""
+        tree = (
+            f"worktree {wt} kept; `ddflow cleanup` reports it and removes it once clean"
+            if wt
+            else ""
+        )
     return O.ok(
         "bug.invalid",
         id=bug,
@@ -320,7 +324,7 @@ def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, st
     mine = bool(t.lease) and t.lease.holder == log.agent_id
     if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
         return "", "held"
-    if t.state != OPEN and not (mine and t.state == RUNNING):
+    if t.state in (DONE, ABANDONED) or (t.state != OPEN and not mine):
         return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"
