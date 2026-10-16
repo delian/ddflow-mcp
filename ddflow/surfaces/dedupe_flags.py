@@ -142,6 +142,19 @@ def commands(argv: list[str], rows: list[dict[str, Any]]) -> list[str]:
     return ["ddflow " + shlex.join([*head, *answer, *tail]) for answer in answers]
 
 
+def _extended_line(data: dict) -> str:
+    """The report of an add that went onto an existing record, globs included."""
+    msg = (
+        f"added to {data['extended']} ({data['extended_kind']}, {data['relation']}): "
+        f"no new record was made"
+    )
+    if data.get("globs_added"):
+        msg += f"; globs added to it: {', '.join(data['globs_added'])}"
+    if data.get("globs_ignored"):
+        msg += f"; globs NOT applied (it takes none): {', '.join(data['globs_ignored'])}"
+    return msg
+
+
 def settle(a, c, out: Outcome) -> int | None:
     """Print what the check decided and return the exit code; ``None`` when the add
     went its ordinary way and the command should report it as before."""
@@ -199,12 +212,7 @@ def settle(a, c, out: Outcome) -> int | None:
         print("It reads like:", file=sys.stderr)
         print("\n".join(candidate_lines(data["candidates"])), file=sys.stderr)
     if data.get("extended") and not out.exit:
-        msg = (
-            f"added to {data['extended']} ({data['extended_kind']}, {data['relation']}): "
-            f"no new record was made"
-        )
-        if data.get("globs_added"):
-            msg += f"; globs added to it: {', '.join(data['globs_added'])}"
+        msg = _extended_line(data)
         c.out(msg, out.body())
         return 0
     return None

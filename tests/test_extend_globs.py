@@ -139,4 +139,5 @@ def test_a_patternless_lesson_takes_no_globs(repo):
     )  # fmt: skip
     out = A.lesson_add(repo, second, agent="a")
     assert out.exit == 0 and out.data["globs_added"] == []
+    assert out.data["globs_ignored"] == ["src/b.py"]
     assert state(repo).lessons["L-old"].globs == []
