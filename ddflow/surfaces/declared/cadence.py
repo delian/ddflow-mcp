@@ -72,10 +72,10 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "target",
                 positional=True,
-                nargs="?",
+                nargs="*",
                 default="",
                 cli_only=True,
-                cli_help="merge-driver (git runs it): the file holding our side",
+                cli_help="merge-driver (git runs it): the files holding our side, the common ancestor and the other side",
             ),
             Param(
                 "check",
