@@ -100,7 +100,7 @@ def test_an_unknown_section_name_is_refused_by_config(proj):
     assert run_cli(proj, "config", "session.agent_brief_off", "nonsense")[0] != 0
 
 
-def test_the_ceiling_cuts_decisions_first_and_never_the_rules(proj):
+def test_the_ceiling_cuts_the_item_part_down_to_a_pointer_and_never_the_rules(proj):
     run_cli(
         proj,
         "decision",
