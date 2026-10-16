@@ -213,4 +213,5 @@ def test_the_mcp_mutation_is_one_json_parameter_read_like_the_flags():
         == want
     )
     assert mutation_of({}) is None
-    assert mutation_of({"mutation": "not json"})["old"] == "", "refused downstream"
+    for junk in ("not json", "[1, 2]", "5", "null", '"hi"'):
+        assert mutation_of({"mutation": junk}) == {"file": "", "old": "", "new": ""}, junk

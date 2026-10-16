@@ -11,7 +11,7 @@ from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
-from .mutation_params import MUTATION_ORDER, MUTATION_PARAMS, mutation_of
+from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
 #: The body of `bug invalid`, on both surfaces (`ddflow bug invalid --json` and the tool).
 BUG_INVALID_FIELDS = (
@@ -202,6 +202,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("bug", "fixed"),
         tool="ddflow_bug_fixed",
+        flag_exempt=MUTATION_FLAG_EXEMPT,
         description="Close a bug. Requires the regression test that would catch it again: "
         "write it, watch it FAIL against the unfixed code, then close.",
         call=lambda repo, a, agent: _api().bug_fixed(
