@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lessons.test_file_globs"
+new = '["tests/**", "test/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]'
+why = "Globs naming test files, so a bug whose fix is confined to them is verified against the old test files or a recorded mutation."
+impact = "additive"
