@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import secrets
 import threading
-import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -31,6 +30,7 @@ from ..core.slug import safe_filename
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as GD
+from ..services import leasekeep as LK
 from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
@@ -218,15 +218,7 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
     renew = _lease_keeper(log, cfg, it) if it else None
     if renew is None:
         return None
-    due = max(0.0, max(1, cfg.lease.heartbeat_s) - tick_s)
-    last = [it.lease.renewed_at or time.time()]
-
-    def tick() -> None:
-        if time.time() - last[0] >= due:
-            last[0] = time.time()
-            renew()
-
-    return tick
+    return LK.throttled(renew, it.lease.renewed_at, cfg.lease.heartbeat_s, tick_s)
 
 
 def _say_result(say: Callable[[str], None], res) -> None:

@@ -35,7 +35,7 @@ from ..core.plain import plain
 from ..infra import worktree as W
 from ..services import flakes as FK
 from ..services import gates as G
-from ..services import leases as L
+from ..services import leasekeep as LK
 from ..services import prompts as P
 from ..services import roborev as RR
 from ..services import testselect as TS
@@ -239,21 +239,10 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     A full test suite outlives a lease (25 minutes against 1800 s on the project this
     was built beside), and over MCP the caller cannot heartbeat while it is blocked in
     the call. Called between polls of the running command, on this thread -- see
-    `runner.run_command_gate` for why not a background thread. A failed renewal must not kill
-    the gate, so it is swallowed; the lease then expires as it would have anyway.
+    `runner.run_command_gate` for why not a background thread. See `services.leasekeep`.
     """
 
-    if not (it.lease and it.lease.holder == log.agent_id):
-        return None
-    holder = it.lease.holder
-
-    def renew() -> None:
-        try:
-            L.renew(log, it.id, holder)
-        except Exception:
-            pass
-
-    return renew
+    return LK.keeper(log, cfg, it)
 
 
 def item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
