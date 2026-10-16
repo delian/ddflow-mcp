@@ -159,3 +159,15 @@ def test_an_edge_that_would_close_a_needs_cycle_is_refused():
 def test_already_ordered_pair_proposes_nothing():
     items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", needs=("T1",))}
     assert AO.propose([_cycle()], items) == ([], [])
+
+
+def test_a_link_with_only_a_blockers_list_does_not_crash():
+    cyc = {
+        "agents": ["a"],
+        "files": [],
+        "victim_item": "T2",
+        "links": [{"item": "T1", "blockers": ["T2"]}],
+    }
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2")}
+    (e,), _ = AO.propose([cyc], items)
+    assert (e.later, e.earlier) == ("T2", "T1")
