@@ -124,7 +124,7 @@
     'ddflow_brief': '''
       {
        "name": "ddflow_brief",
-       "description": "START HERE every session. Returns a budgeted pack: work recoverable after a crash, the current item, what is ready to start now, why everything else is blocked, and the past lessons ranked as relevant to this task. Use this INSTEAD of reading the project's lesson or rule files — it is the same information retrieved for the task at hand, at a fraction of the tokens.",
+       "description": "START HERE every session. Returns a budgeted pack: work recoverable after a crash, the current item, what is ready to start now, why everything else is blocked, and the past lessons ranked as relevant to this task. Use this INSTEAD of reading the project's lesson or rule files: the same information, ranked for the task at hand, at a fraction of the tokens.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -138,7 +138,11 @@
          },
          "check_recovery": {
           "type": "boolean",
-          "description": "Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new."
+          "description": "Scan for crashed agents' worktrees and lead with them: know it BEFORE new work."
+         },
+         "for_agent": {
+          "type": "string",
+          "description": "Render this subagent's launch brief for item."
          },
          "as_agent": {
           "type": "string",

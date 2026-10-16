@@ -101,6 +101,9 @@ COMMANDS: tuple[Command, ...] = (
             call_kwargs=L.merge_kwargs,
         ),
         wants_called_from=True,
+        flag_exempt={
+            "--note": "with --for-agent, a coordinator's note: CLI only (tools/list bytes)"
+        },
         params=(
             Param(
                 "item", help="Focus on this phase or task id (optional).", cli_help="", default=""
