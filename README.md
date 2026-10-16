@@ -989,7 +989,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 275 knobs.
+cadences, and the rest of the 281 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5143,7 +5143,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 275): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 281): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5401,8 +5401,8 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=7bb94c0aeac8 -->
-<details><summary>All 116 MCP tools: 32 in the `core` tier, 47 more in `standard`, 37 more in `all`</summary>
+<!-- ddflow:begin README/tools sha=d6fa39acbd0c -->
+<details><summary>All 117 MCP tools: 32 in the `core` tier, 48 more in `standard`, 37 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5460,7 +5460,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Gates and review | `ddflow_gate_skip` | core | Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. |
 | Gates and review | `ddflow_gate_status` | core | Where an item stands in its quality pipeline, which gate is next, and the instruction for that gate. |
 | Gates and review | `ddflow_gate_verify` | core | Break what a gate guards and require it to NOTICE: applies each mutation registered on the gate, runs it… |
-| Gates and review | `ddflow_pins` | all | BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt… |
+| Gates and review | `ddflow_pins` | all | BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its… |
 | Gates and review | `ddflow_review` | core | Run the configured cross-family reviewer over an item's diff and record the result: the critic gate… |
 | Gates and review | `ddflow_review_triage` | standard | Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that… |
 | Gates and review | `ddflow_reviewers_detect` | all | Probe well-known local ports for an OpenAI-compatible model server (ollama, vLLM, LM Studio, llama.cpp… |
@@ -5474,6 +5474,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Landing it | `ddflow_promote_add` | all | File a PROMOTION to an environment branch ([flow].environments): a task that merges the branch immediately… |
 | Landing it | `ddflow_promote_deployed` | all | Record the sha a deploy put LIVE in an environment (from the deploy hook); promote_status then shows what… |
 | Landing it | `ddflow_promote_status` | all | Each environment: head, commits behind its upstream, open promotion, auto_promote, and the live (deployed)… |
+| Landing it | `ddflow_queue` | standard | Merge queue. |
 | Landing it | `ddflow_version_cut` | all | Tag the next version. |
 | Landing it | `ddflow_version_show` | standard | The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the release branch), the next one, the… |
 | What the project remembers | `ddflow_bug_file_tasks` | all | File a fix task for every open bug that has none (one-shot after an upgrade; `ddflow_bug_found` files one… |
@@ -5656,7 +5657,7 @@ declared once and persists — see
 
 ## Configuration
 
-275 knobs across 33 sections, every one documented in place and listed, with its default
+281 knobs across 34 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5723,8 +5724,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=03c28bfe0e5d -->
-<details><summary>All 275 knobs across 33 sections</summary>
+<!-- ddflow:begin README/knobs sha=b53b06490a7e -->
+<details><summary>All 281 knobs across 34 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5942,6 +5943,12 @@ long default is left to `ddflow config --explain`.
 | `pins.recipes_file` | `".ddflow/pins.toml"` |  |
 | `pins.timeout_s` | `900` |  |
 | `pins.after_merge` | `"amend"` | `amend` \| `leave` \| `off` |
+| `merge_queue.max_batch` | `5` |  |
+| `merge_queue.run_unit_tests` | `false` |  |
+| `merge_queue.timeout_s` | `0` |  |
+| `merge_queue.eta_default_s` | `900` |  |
+| `merge_queue.eta_history` | `5` |  |
+| `merge_queue.keep_history` | `50` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"all"` | `core` \| `standard` \| `all` |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |

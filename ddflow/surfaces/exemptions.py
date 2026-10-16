@@ -26,6 +26,7 @@ from .declared.knowledge import COMMANDS as _KNOWLEDGE
 from .declared.lanes import COMMANDS as _LANES
 from .declared.lifecycle import COMMANDS as _LIFECYCLE
 from .declared.memory import COMMANDS as _MEMORY
+from .declared.mergequeue import COMMANDS as _MERGEQUEUE
 from .declared.metrics import COMMANDS as _METRICS
 from .declared.plan import COMMANDS as _PLAN
 from .declared.queue import COMMANDS as _QUEUE
@@ -80,6 +81,7 @@ DECLARATIONS: tuple[Command, ...] = (
     *_REPORTING,
     *_EXPORT,
     *_CADENCE,
+    *_MERGEQUEUE,
     *_MEMORY,
     *_PLAN,
     *_FLOW,
