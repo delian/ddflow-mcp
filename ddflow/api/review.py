@@ -269,7 +269,10 @@ def triage(
     if it is None:
         return bad(f"no such item {item!r}")
     if verdict not in ("refuted", "confirmed"):
-        return bad("say which: --refuted (the probe shows the finding false) or --confirmed")
+        return bad(
+            "say which: --refuted (the probe shows the finding false) or --confirmed "
+            f"(`ddflow review show {item}` lists the findings with their numbers)"
+        )
     if not probe.strip():
         return bad(
             "--probe is required: for --refuted the run that shows the finding false, for "
