@@ -175,7 +175,7 @@ def _cycle(links: list[Link], waits: list[Wait], leases: list[Held]) -> Cycle:
     release, keep, text = _remedy(victim, prev, drops)
     return Cycle(
         agents=tuple(lk.agent for lk in links),
-        items=tuple(dict.fromkeys(i for lk in links for i in (lk.item, lk.blocker))),
+        items=tuple(dict.fromkeys(i for lk in links for i in (lk.item, *lk.blockers))),
         files=tuple(sorted({f for lk in links for f in lk.files})),
         links=tuple(links),
         victim=victim.agent,
