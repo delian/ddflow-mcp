@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.resume_own"
+new = "true"
+why = "Whether the agent whose lease lapsed resumes it with a plain claim, full glob set, when no live lease overlaps; off, it needs --force as before."
+impact = "additive"
