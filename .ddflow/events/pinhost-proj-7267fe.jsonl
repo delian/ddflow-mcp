@@ -1,0 +1,3 @@
+{"agent":"pinhost-proj-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.4"},"id":"ec1fd1a08bb6af47d7838ea1d","kind":"ddflow.seen","lamport":70614,"schema":1,"subject":"ddflow","ts":"2026-10-16T19:15:56.920830Z"}
+{"agent":"pinhost-proj-7267fe","data":{"checks":[],"ok":true,"sha":"","stage":"gate","status":"passed"},"id":"e4c236a9ae54673248420dec2","kind":"ci.result","lamport":70615,"schema":1,"subject":"ci","ts":"2026-10-16T19:15:57.066553Z"}
+{"agent":"pinhost-proj-7267fe","data":{"checks":[],"ok":false,"sha":"","stage":"merge","status":"failed"},"id":"edd16cc010121328d7e73c2ec","kind":"ci.result","lamport":70616,"schema":1,"subject":"ci","ts":"2026-10-16T19:15:59.455812Z"}

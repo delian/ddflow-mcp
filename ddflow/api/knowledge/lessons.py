@@ -110,7 +110,7 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     if chk.refusal is not None:
         return chk.refusal
     if chk.extension:
-        return DD.extend(log, cfg, chk, "lesson.recorded")
+        return DD.extend(log, cfg, chk, "lesson.recorded", st=st, globs=csv_list(draft.globs))
     with log.transaction():
         minted = IDS.confirm(
             cfg, "lesson", minted, used=IDS.used_now(log), hash_parts=(draft.title, draft.rule)
