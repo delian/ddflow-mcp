@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.stale_check_every_s"
+new = "60.0"
+why = "Seconds between a running MCP server's looks at the installed package and the log's version stamps (mcp.on_upgrade); was a fixed minute."
+impact = "additive"

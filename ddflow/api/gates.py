@@ -38,6 +38,7 @@ from ..services import gates as G
 from ..services import leasekeep as LK
 from ..services import prompts as P
 from ..services import roborev as RR
+from ..services import testscope as TSC
 from ..services import testselect as TS
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
@@ -480,7 +481,7 @@ def run(
     repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
     if repeated is not None:
         return repeated
-    scope = TS.unit_tests_scope(cfg, st, it, gdef.command, cwd) if gate == "unit_tests" else None
+    scope = TSC.unit_tests_scope(cfg, st, it, gdef.command, cwd) if gate == "unit_tests" else None
     if scope is not None and scope.command:
         gdef = replace(gdef, command=scope.command)
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})

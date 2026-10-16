@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.unit_tests_name_max_tests"
+new = "30"
+why = "A changed identifier spelt by more tests than this selects none of them."
+impact = "additive"
