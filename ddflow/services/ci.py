@@ -24,7 +24,8 @@ from ..core import ids as IDS
 from ..core.digest import content_digest
 from ..core.slug import ascii_slug
 from ..infra import worktree as W
-from .cmdrunner import COULD_NOT_RUN, TIMEOUT, CommandRunner, Declared, executable_missing
+from . import ci_scope as CS
+from .cmdrunner import TIMEOUT, CommandRunner, Declared, executable_missing
 from .flakes import failure_evidence, failure_text
 from .gateenv import child_env
 
@@ -54,6 +55,8 @@ class Result:
     output: str = ""
     #: failing test ids (and their reasons / failure tails) read from ALL of the output
     failures: dict = field(default_factory=dict)
+    #: which tests ran (`ci_scope.Plan.evidence`); empty when the command ran as written
+    scope: dict = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -72,6 +75,7 @@ class Result:
             "why": self.reason,
             "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail} for c in self.checks],
             "output_tail": self.output_tail,
+            **({"scope": self.scope} if self.scope else {}),
             **self.failures,
             **({"failure_text": failure_text(self.failures)} if self.failures else {}),
         }
@@ -160,9 +164,15 @@ def run(
     base: str = "",
     command: str = "",
     timeout_s: int = 0,
+    for_item: bool = False,
+    full: bool = False,
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
-    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive."""
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive.
+
+    ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
+    "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
+    (`ci run --full`, the merge queue's batch) always runs the whole suite."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -184,26 +194,62 @@ def run(
         if tree is None:
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
-        # The operator's own [ci].command, run as they wrote it; on timeout its whole
-        # process group dies, not just the shell (Bed0f5b6d99).
-        p = CommandRunner().run(
-            Declared(cmd, "[ci].command"),
-            cwd=tree,
-            env=child_env(cfg, ci=True),
-            timeout_s=timeout_s if timeout_s > 0 else cfg.ci.timeout_s,
-            check_installed=False,  # checked above, before the scratch worktree was made
-        )
+        budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
+        scope = None
+        if for_item and not command.strip():
+            asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
+            scope = CS.plan(cfg, tree, base, requested=asked)
+        p, out_prefix = _execute(cfg, tree, cmd, scope, budget)
         if p.kind == TIMEOUT:
             return Result(
                 "unavailable",
                 command=cmd,
                 sha=sha,
                 reason=f"{p.reason}: raise [ci].timeout_s",
+                scope=scope.evidence(sha) if scope is not None else {},
             )
-        if p.kind == COULD_NOT_RUN:
-            return Result("unavailable", command=cmd, sha=sha, reason=p.reason)
-    out = p.output  # a shell "not found" exit is the command's verdict here: it ran and failed
+        if not p.ran:  # the runner is missing, the slots are taken, the process did not start
+            return Result(
+                "unavailable",
+                command=cmd,
+                sha=sha,
+                reason=p.reason,
+                scope=scope.evidence(sha) if scope is not None else {},
+            )
+    return _result(p, out_prefix, cmd, sha, base, scope)
+
+
+def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
+    """(the run that decided the verdict, the output of the run before it): the command as
+    written, or -- for a selected scope -- the hooks without the suite, then the selected
+    tests on the same tree."""
+    selected = scope is not None and scope.scope == "selected"
+    # The operator's own [ci].command, run as they wrote it; on timeout its whole
+    # process group dies, not just the shell (Bed0f5b6d99).
+    p = CommandRunner().run(
+        Declared(cmd, "[ci].command"),
+        cwd=tree,
+        env={**child_env(cfg, ci=True), **({"SKIP": scope.skip} if selected else {})},
+        timeout_s=budget,
+        check_installed=False,  # checked before the scratch worktree was made
+    )
+    if not (selected and p.ran and p.code == 0):
+        return p, ""
+    prefix = p.output + f"\n$ {scope.command}\n"
+    return CommandRunner().run(
+        Declared(scope.command, "the pre-commit `tests` hook"),
+        cwd=tree,
+        env=child_env(cfg, ci=True),
+        timeout_s=max(min(budget, 60), budget - int(p.elapsed_s)),  # what is left, 60 s at least
+        check_installed=True,  # a missing runner is unavailable, not a failed test
+    ), prefix
+
+
+def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
+    out = out_prefix + p.output  # a shell "not found" exit is the command's verdict: it ran
     checks = parse_checks(out)
+    if out_prefix:  # the hooks passed and the selected tests ran after them
+        checks.append(Check(f"selected tests ({len(scope.tests)} files)", p.code == 0))
     if p.code != 0 and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
     return Result(
@@ -216,11 +262,12 @@ def run(
         output_tail=out[-TAIL_CHARS:],
         output=out,
         failures=failure_evidence(out) if p.code != 0 else {},
+        scope=scope.evidence(sha) if scope is not None else {},
     )
 
 
 #: Hooks `[ci].on_merge = "fast"` leaves out of the default pre-commit command: the suites.
-FAST_SKIP = "tests,scenarios"
+FAST_SKIP = CS.TESTS_HOOKS
 ON_MERGE_MODES = CI_ON_MERGE_MODES  # declared beside the knob, where `Config.check` holds it
 
 

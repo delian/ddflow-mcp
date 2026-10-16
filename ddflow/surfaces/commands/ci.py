@@ -44,7 +44,8 @@ def cmd_ci(a, c: Ctx) -> int:
         c.repo, c.called_from, bool(c.tree_owner), c.log.agent_id, c.log.read_all()
     )
     ref = a.ref or SS.head_here_or_repo(c.repo, where)
-    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=where)
+    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=where,
+                 full=bool(getattr(a, "full", False)))  # fmt: skip
     if c.json:
         emit_json(out.body(""))
         return out.exit
@@ -57,6 +58,8 @@ def cmd_ci(a, c: Ctx) -> int:
             f"  [{'ok  ' if ch['ok'] else 'FAIL'}] {ch['id']}"
             + (f"  {ch['detail']}" if ch["detail"] else "")
         )
+    if d.get("scope_line"):
+        print(d["scope_line"])  # the scope, for the ci gate that records it from the output
     if out.exit == 0:
         print("ci: passed")
         return 0

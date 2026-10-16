@@ -41,6 +41,7 @@ from .config_sections.cadence import (
 )
 from .config_sections.ci import (  # noqa: F401 -- CI_ON_MERGE_MODES: services/ci imports it here
     CI_ON_MERGE_MODES,
+    CI_TESTS_SCOPES,
     CiConfig,
 )
 from .config_sections.companions import (
