@@ -1,0 +1,4 @@
+{"agent":"coordinator","data":{"format_level":1,"install":"source-tree","version":"0.2.3"},"id":"e72dfb5509b156cd6d7fbd2dc","kind":"ddflow.seen","lamport":67255,"schema":1,"subject":"ddflow","ts":"2026-10-16T10:20:33.683561Z"}
+{"agent":"coordinator","data":{"tags":["wave:0"]},"id":"e74c28ce3bf31db91b47e5a53","kind":"task.updated","lamport":67256,"schema":1,"subject":".1-emitter","ts":"2026-10-16T10:20:33.811814Z"}
+{"agent":"coordinator","data":{"tags":["wave:0"]},"id":"ea0a367848bfc10dd77c14083","kind":"task.updated","lamport":67257,"schema":1,"subject":".2-registry","ts":"2026-10-16T10:20:34.107605Z"}
+{"agent":"coordinator","data":{"tags":["wave:0"]},"id":"e0c067bf66e0143ab2535aa56","kind":"task.updated","lamport":67258,"schema":1,"subject":".3-tag","ts":"2026-10-16T10:20:34.258753Z"}
