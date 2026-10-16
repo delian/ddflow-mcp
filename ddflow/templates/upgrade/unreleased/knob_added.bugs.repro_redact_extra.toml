@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "bugs.repro_redact_extra"
+new = '[]'
+why = "More redaction regexes applied to a reproduction bundle."
+impact = "additive"

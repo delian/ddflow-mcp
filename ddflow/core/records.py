@@ -513,6 +513,8 @@ class Bug:
     upstream_delivery: str = ""
     upstream_sent_at: str = ""
     upstream_digest: str = ""
+    #: `bug.found` `repro`: the link to the reproduction bundle ({ref, bytes, mode, truncated}).
+    repro: dict[str, Any] = field(default_factory=dict)
     #: `bug.reopened`: the last time a closure was undone, and why (B7bdcc6b212).
     reopened_at: str = ""
     reopen_reason: str = ""

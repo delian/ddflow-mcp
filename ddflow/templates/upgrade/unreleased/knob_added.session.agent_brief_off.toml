@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "session.agent_brief_off"
+new = "[]"
+why = "Sections of the subagent launch brief a project leaves out."
+impact = "additive"

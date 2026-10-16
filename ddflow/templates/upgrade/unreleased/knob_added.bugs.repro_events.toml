@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "bugs.repro_events"
+new = '10'
+why = "How many of the filing agent's latest log events a full reproduction bundle lists."
+impact = "additive"

@@ -33,6 +33,7 @@ from pathlib import Path
 from ..config import Config
 from ..infra import proc as P
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
+from .gateenv import REPO_VARS
 
 
 @dataclass(frozen=True)
@@ -123,7 +124,10 @@ def _run(
 ) -> P.Captured:
     """One recipe command; the recipe's ``env`` reaches only ``regen``, so a check can never
     re-record what it is checking."""
-    env = {**os.environ, **(dict(r.env) if write else {})}
+    # Not the caller's git repository: run by the post-merge hook this inherits GIT_DIR and
+    # GIT_INDEX_FILE, and the tests it runs then commit "init" to the worktree (B683c75d7b3).
+    env = {k: v for k, v in os.environ.items() if k not in REPO_VARS}
+    env.update(dict(r.env) if write else {})
     if not write:
         env.pop("DDFLOW_UPDATE_GOLDEN", None)
     env.pop("PYTEST_XDIST_WORKER", None)
