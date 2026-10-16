@@ -372,7 +372,9 @@ def _verify_regression(
     if tree is None:
         return "could-not-run", {
             "reason": "the bug's fix task is not working in a worktree, so there is no "
-            "pre-fix source to compare the test against"
+            "pre-fix source to compare the test against",
+            "remedy": "claim the bug's fix task (its worktree is the pre-fix source), or close "
+            "after it has merged and run `complete --regression-test`",
         }
     base = fx.base or cfg.worktree.base_ref or ""
     if not base:
@@ -381,11 +383,27 @@ def _verify_regression(
         except W.GitError:
             base = ""
     if not base:
-        return "could-not-run", {"reason": "no base ref to build the pre-fix tree from"}
+        return "could-not-run", {
+            "reason": "no base ref to build the pre-fix tree from",
+            "remedy": "set worktree.base_ref (`ddflow config --set worktree.base_ref <branch>`)",
+        }
     status, ev = G.verify_regression_test(
         repo, cfg, tree=tree, base=base, tests=module_tests, mutation=mutation
     )
     return _regression_status(status, ev, G)
+
+
+_REMEDY = (
+    "re-run when the machine is quieter, or check the unit_tests command, the fix task's "
+    "worktree and the base ref; `--skip-regression-verify --verify-reason` records an override"
+)
+
+
+def could_not_run_text(ev: dict[str, Any]) -> str:
+    """The reason (and remedy) a could-not-run check carries, as one line for the CLI."""
+    reason = str(ev.get("reason") or "").strip()
+    remedy = str(ev.get("remedy") or "").strip()
+    return reason + (f" -- to fix: {remedy}" if remedy else "")
 
 
 def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, dict[str, Any]]:
@@ -403,5 +421,7 @@ def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, di
     if status == G.REGRESSION_FAILS_ON_FIX:
         return "failed-on-fix", ev
     if status == G.REGRESSION_COULD_NOT_RUN:
-        return "could-not-run", ev
+        # Never silent: every could-not-run names its reason, and what would let it run.
+        reason = str(ev.get("reason") or "").strip() or "the check ended without a reason"
+        return "could-not-run", {**ev, "reason": reason, "remedy": ev.get("remedy") or _REMEDY}
     return "could-not-run", {**ev, "reason": f"unrecognized verification status {status!r}"}

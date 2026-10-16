@@ -218,7 +218,13 @@ COMMANDS: tuple[Command, ...] = (
             mutation=mutation_of(a),
             agent=agent,
         ),
-        payload=("id", "regression_verified", "lesson_captured", "lesson_capture"),
+        payload=(
+            "id",
+            "regression_verified",
+            "regression_verify",
+            "lesson_captured",
+            "lesson_capture",
+        ),
         params=(
             Param("id", help="Bug id.", cli_help="", positional=True),
             Param(
