@@ -5,6 +5,7 @@ from pathlib import Path
 
 import _gitquiet
 import pytest
+from _wait import slow_factor
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Launch lines -- the MCP entries and hooks tests install -- point at THIS tree. From a
@@ -76,13 +77,25 @@ def log(repo: Path) -> EventLog:
     return EventLog(repo, "agent-test")
 
 
+#: The quiet-machine ceiling of one CLI call; `run_cli` multiplies it by `_wait.slow_factor()`.
+RUN_CLI_TIMEOUT_S = 300
+
+
 def run_cli(repo: Path, *argv: str, agent: str = "") -> tuple[int, str, str]:
     """Invoke the CLI as a real subprocess, as an agent would."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
     args = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
     if agent:
         args += ["--agent", agent]
-    p = subprocess.run([*args, *argv], capture_output=True, text=True, env=env, timeout=300)
+    # The ceiling for a hang, not a measurement: a CLI start under the load of many agents'
+    # ci runs takes minutes (Bfaef48ced6), so it grows with the load (tests/_wait.py).
+    limit = RUN_CLI_TIMEOUT_S * slow_factor()
+    try:
+        p = subprocess.run([*args, *argv], capture_output=True, text=True, env=env, timeout=limit)
+    except subprocess.TimeoutExpired as exc:  # say WHICH command, not a bare traceback
+        raise AssertionError(
+            f"`ddflow {' '.join(argv)}` did not finish within {limit:.0f}s"
+        ) from exc
     return p.returncode, p.stdout, p.stderr
 
 
