@@ -1,2 +1,6 @@
 .ddflow/events/*.jsonl merge=union
 README.md merge=text
+README.md merge=pinsregen
+tests/golden/__snapshots__/** merge=pinsregen
+tests/golden/json/result_schemas.json merge=pinsregen
+tests/test_uc_surf_setup_ops_transcript.json merge=pinsregen
