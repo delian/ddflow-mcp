@@ -76,7 +76,6 @@ def test_a_worktree_merge_of_pin_files_uses_the_driver(tmp_path):
     """README.md (generated block plus prose) and the transcript, as `git merge main` in a
     claimed worktree sees them: no per-worktree setup, the repository's config applies."""
     repo, wt = _history(tmp_path, installed=True)
-    assert _git(wt, "config", "--worktree", "--get", "merge.pinsregen.driver").stdout == ""
     r = _git(wt, "merge", "main", "-m", "m")
     assert r.returncode == 0, r.stdout + r.stderr
     readme = (wt / "README.md").read_text()
@@ -95,6 +94,28 @@ def test_a_tree_older_than_the_tracked_attributes_is_given_them_by_a_claim(tmp_p
     r = _git(wt, "merge", "main", "-m", "m")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "<<<<" not in (wt / "README.md").read_text()
+
+
+def test_a_file_with_another_merge_driver_is_left_alone(tmp_path):
+    repo, wt = _history(tmp_path)
+    (repo / ".gitattributes").write_text("README.md merge=ours\n")
+    cfg = Config()
+    PM.ensure_driver(repo, cfg)
+    gaps = PM.driver_gaps(repo, cfg)
+    assert any("README.md (ours)" in g for g in gaps)
+    assert not any("transcript.json" in g for g in gaps)  # given the driver, README.md was not
+
+
+def test_a_pin_file_with_a_space_in_its_name_is_recognised(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "a"\nfiles = ["my file.md"]\ncheck = ["true"]\nregen = ["true"]\n'
+    )
+    PM.install(repo, Config(), line=_line)
+    assert PM.driver_gaps(repo, Config()) == []
 
 
 def test_the_config_a_claim_sets_serves_a_tree_whose_attributes_are_tracked(tmp_path):

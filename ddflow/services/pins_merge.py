@@ -115,19 +115,24 @@ def _wanted(repo: Path, cfg: Config) -> list[str]:
 
 
 def _attr_line(repo: Path, f: str) -> str:
-    return f"{f.rstrip('/')}{'/**' if f.endswith('/') or (Path(repo) / f).is_dir() else ''} merge={DRIVER}"
+    pat = f.rstrip("/") + ("/**" if f.endswith("/") or (Path(repo) / f).is_dir() else "")
+    return f'"{pat}" merge={DRIVER}' if " " in pat else f"{pat} merge={DRIVER}"
 
 
-def _unbound(repo: Path, files: list[str]) -> list[str]:
-    """The pin files git would NOT merge with the driver in this tree: asked of git itself,
-    whatever `.gitattributes`, `info/attributes` or a worktree config say."""
-    probe = {f: _attr_line(repo, f).split(" ")[0].replace("/**", "/x") for f in files}
+def _unbound(repo: Path, files: list[str]) -> dict[str, str]:
+    """The pin files git would NOT merge with the driver in this tree, with the merge attribute
+    each has now: asked of git itself, whatever `.gitattributes`, `info/attributes` or a
+    worktree config say."""
+    probe = {
+        f: f.rstrip("/") + ("/x" if f.endswith("/") or (Path(repo) / f).is_dir() else "")
+        for f in files
+    }
     got = G.run(repo, "check-attr", "merge", "--", *probe.values())
     seen = {}
     for row in got.out.splitlines():
         head, _, val = row.rpartition(": ")
         seen[head.rpartition(": ")[0]] = val
-    return [f for f, q in probe.items() if seen.get(q) != DRIVER]
+    return {f: seen.get(q, "unspecified") for f, q in probe.items() if seen.get(q) != DRIVER}
 
 
 def ensure_driver(repo: Path, cfg: Config) -> list[str]:
@@ -135,16 +140,16 @@ def ensure_driver(repo: Path, cfg: Config) -> list[str]:
 
     The git config goes in the repository's, which every linked worktree shares. The
     attributes of a tree that predates the tracked `.gitattributes` lines go in
-    `info/attributes`, also shared: a merge reads the tree's attributes, not the incoming ones,
-    so the first merge of main would otherwise conflict. A tracked line that names another
-    merge strategy for the file still wins; `driver_gaps` (doctor) says so. The actions."""
+    `info/attributes`, also shared and read before the tracked file: a merge reads the tree's
+    attributes, not the incoming ones, so the first merge of main would otherwise conflict.
+    A file a person gave another merge driver is left alone (`driver_gaps` says so). The actions."""
     files = _wanted(repo, cfg)
     if not files:
         return []
     acts = []
     if not G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip():
         acts += _set_driver_config(repo)
-    off = _unbound(repo, files)
+    off = [f for f, now in _unbound(repo, files).items() if now in ("unspecified", "text")]
     path = G.run(repo, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
     if off and path.ok and path.out.strip():
         f = Path(path.out.strip())
@@ -152,7 +157,8 @@ def ensure_driver(repo: Path, cfg: Config) -> list[str]:
         add = [a for a in (_attr_line(repo, x) for x in off) if a not in text.splitlines()]
         if add:
             f.parent.mkdir(parents=True, exist_ok=True)
-            replace_text(f, text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(add) + "\n")
+            tail = "" if not text or text.endswith("\n") else "\n"
+            replace_text(f, text + tail + "\n".join(add) + "\n")
             acts.append(f"added {len(add)} merge={DRIVER} line(s) to {f}")
     return acts
 
@@ -167,7 +173,12 @@ def driver_gaps(repo: Path, cfg: Config) -> list[str]:
         gaps.append(f"git config merge.{DRIVER}.driver is not set")
     off = _unbound(repo, files)
     if off:
-        gaps.append("no merge=" + DRIVER + " attribute for " + ", ".join(off))
+        gaps.append(
+            "no merge="
+            + DRIVER
+            + " attribute for "
+            + ", ".join(f"{f} ({now})" for f, now in off.items())
+        )
     return gaps
 
 
