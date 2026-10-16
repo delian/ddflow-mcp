@@ -87,3 +87,15 @@ def test_a_reviewer_that_commits_in_the_reviewed_tree_still_did_not_review(tmp_p
     cmd = "echo c >> f.txt; git commit -qam tool; echo LGTM"
     out, err = R._chat(_rev(cmd), "sys", "user", 30, tree=wt)
     assert out == "" and "git state" in err
+
+
+def test_known_gap_a_stash_drop_alone_is_not_seen(tmp_path):
+    """Accepted (B708761957b): the stash list is shared by every worktree, so it cannot be
+    watched without calling a sibling lane's stash the reviewer's. `stash apply|pop|push`
+    still change the tree or index; a bare drop/clear touches neither and goes unseen."""
+    repo = _repo(tmp_path / "r")
+    (repo / "f.txt").write_text("wip\n")
+    _git(repo, "stash", "push", "-q")
+    before = git_state(repo)
+    _git(repo, "stash", "drop", "-q")
+    assert git_state(repo) == before
