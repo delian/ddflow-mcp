@@ -110,7 +110,10 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     if chk.refusal is not None:
         return chk.refusal
     if chk.extension:
-        return DD.extend(log, cfg, chk, "lesson.recorded")
+        # A lesson's globs scope its pattern inventory, so they go onto the extended lesson
+        # only when this add had a pattern (a fresh add records them under the same rule).
+        globs = csv_list(draft.globs) if draft.pattern else []
+        return DD.extend(log, cfg, chk, "lesson.recorded", st=st, globs=globs)
     with log.transaction():
         minted = IDS.confirm(
             cfg, "lesson", minted, used=IDS.used_now(log), hash_parts=(draft.title, draft.rule)

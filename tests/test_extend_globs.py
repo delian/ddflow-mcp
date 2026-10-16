@@ -105,3 +105,18 @@ def test_item_extends_unions_the_globs(repo, kind):
     assert out.exit == 0 and out.data["extended"] == "T1", out
     assert out.data["globs_added"] == ["src/b.py"]
     assert state(repo).items["T1"].globs == ["src/a.py", "src/b.py"]
+
+
+def test_lesson_extends_unions_the_globs(repo):
+    from ddflow.api.knowledge.lessons import LessonDraft as LDraft
+
+    run_cli(repo, "init")
+    first = LDraft(id="L-old", title=FIRST, rule=FIRST, pattern="TODO", globs="src/a.py")
+    assert A.lesson_add(repo, first, agent="a").exit == 0
+    second = LDraft(
+        id="L-new", title=SECOND, rule=SECOND, pattern="TODO", globs="src/a.py,src/b.py",
+        answer=DD.Answer("extends", "L-old"),
+    )  # fmt: skip
+    out = A.lesson_add(repo, second, agent="a")
+    assert out.exit == 0 and out.data["extended"] == "L-old", out
+    assert state(repo).lessons["L-old"].globs == ["src/a.py", "src/b.py"]

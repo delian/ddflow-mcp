@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 def _new_globs(st, target: str, kind: str, globs: list[str]) -> list[str]:
     """The ``globs`` the extended record does not carry yet, in the order given."""
-    rec = st.decisions.get(target) if kind == "decision" else st.items.get(target)
+    table = {"decision": st.decisions, "lesson": st.lessons}.get(kind, st.items)
+    rec = table.get(target)
     have = set(getattr(rec, "globs", None) or [])
     return [g for g in dict.fromkeys(globs) if g not in have]
 
@@ -31,7 +32,7 @@ def extend(
     assert ex is not None
     added = (
         _new_globs(st, ex["target"], ex["kind"], globs)
-        if globs and st is not None and ex["kind"] in ("decision", "task", "phase")
+        if globs and st is not None and ex["kind"] in ("decision", "task", "phase", "lesson")
         else []
     )
     log.append(
