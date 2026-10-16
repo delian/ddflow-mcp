@@ -18,6 +18,7 @@ from pathlib import Path
 from ..core import outcome as O
 from ..infra import git as G
 from ..infra import worktree as W
+from ..services import flakes as FL
 from ..services import flow as FS
 from ..services import gates as GS
 from ..services import mergequeue as MQ
@@ -100,16 +101,13 @@ def _regenerate_pins(repo: Path, cfg, wt: W.Worktree) -> str:
     return "" if made.ok else f"could not commit the regenerated pins: {made.err or made.out}"
 
 
-TAIL_LINES = 15
-
-
 def _ci_detail(repo: Path, e: MQ.Entry, out: O.Outcome, log: Path) -> dict:
     """What a parked entry keeps of a failed ci: the failing hooks and tests by name, the
     last lines of the output, and the log file with all of it."""
     d = out.data
     names = [c["id"] for c in d.get("checks", []) if not c.get("ok")]
     names += [t for t in d.get("failed_tests", []) if t not in names]
-    tail = "\n".join((d.get("output_tail") or "").rstrip().splitlines()[-TAIL_LINES:])
+    tail = "\n".join((d.get("output_tail") or "").rstrip().splitlines()[-FL.TAIL_LINES:])
     return {
         "failed": names,
         "tail": tail,
