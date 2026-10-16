@@ -1533,6 +1533,14 @@
           Change it for the project (`ddflow config --set review.max_rounds 3`), for
           this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP
           with `ddflow_configure` (the operator is told when an agent does).
+      review.settle_all_refuted = True   [default]
+          Whether the `ddflow review triage` that gives the LAST open finding of a
+          failed review round its verdict, when every finding of the round was
+          refuted, records the gate passed on refutation (flagged, with each
+          refutation's probe as evidence) at once, instead of leaving it failed until
+          the round budget is spent -- which sent agents to re-record the gate passed
+          by hand. A round with a confirmed finding is never settled by triage alone.
+          false = the gate stays failed until the budget settles it.
       review.on_exceed = 'refuse'   [default]
           What a round beyond [review].max_rounds does: 'refuse' (default; exit 3,
           naming `review triage`, --force --reason and how to change the cap) or
