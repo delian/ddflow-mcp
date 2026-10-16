@@ -15,6 +15,7 @@ leaving only `--skip-regression-verify`. Two honest ways to show the test guards
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,9 @@ from .runner import run_command_gate
 
 #: The status a close made by a mutation records (`regression_verified`).
 VERIFIED_BY_MUTATION = "verified-by-mutation"
+
+#: pytest exit codes that mean it ran no test: usage error (4), nothing collected (5).
+_NOT_A_TEST_FAILURE = (4, 5)
 
 _KEEP = ("exit", "elapsed_s", "summary", "tail", "output_digest")
 
@@ -59,7 +63,12 @@ def _exists_at_base(ptree: Path, tests: list[str]) -> bool:
         if not src.is_file():
             return False
         name = rest.split("::")[-1].split("[")[0]
-        if name and name not in src.read_text("utf-8", errors="replace"):
+        # A definition, not a substring: a comment or a longer name must not count.
+        if name and not re.search(
+            rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(name)}\b",
+            src.read_text("utf-8", errors="replace"),
+            re.M,
+        ):
             return False
     return True
 
@@ -108,8 +117,14 @@ def verify_test_only_fix(
             else:
                 run = GateDef(id="regression_check", title="regression test", command=command)
                 outcome, rev = run_command_gate(run, ptree)
-                restored = outcome
-                if outcome == "failed":
+                restored = (
+                    f"unavailable ({rev.get('reason', 'no reason given')})"
+                    if outcome == "unavailable"
+                    else outcome
+                )
+                # Exit 4/5 is pytest finding nothing to run (usage error, no tests
+                # collected): not a failure OF THE TEST, so not evidence it fails.
+                if outcome == "failed" and rev.get("exit") not in _NOT_A_TEST_FAILURE:
                     return VERIFIED, {
                         **ev,
                         "verified_by": "pre-fix-test-files",

@@ -169,3 +169,14 @@ def test_a_restored_run_that_could_not_execute_is_not_reported_as_passing(repo, 
     assert out.exit == REFUSED, out
     assert "restored: unavailable" in out.reason, out.reason
     assert "passes with the pre-fix" not in out.reason
+
+
+def test_a_name_that_only_appears_as_a_substring_in_the_base_is_not_a_pre_fix_failure(repo):
+    # `test_h` occurs in a comment and in `test_h_other` at the base but is no test there.
+    base = "# test_h used to live here\n\n\ndef test_h_other():\n    assert True\n"
+    wt = _repo(repo, base, "test_h.py")
+    (wt / "tests" / "test_h.py").write_text(base + "\n\ndef test_h():\n    assert True\n")
+    _commit(wt, "add test_h")
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_h.py::test_h")
+    assert out.exit == REFUSED, out
+    assert "not in the base's test files" in out.reason, out.reason
