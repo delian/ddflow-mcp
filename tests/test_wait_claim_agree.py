@@ -48,10 +48,9 @@ def test_wait_is_not_ready_for_files_queued_behind_an_earlier_waiter(repo):
     assert out.data["waiting_on"] == ["Z"]
 
 
-def test_ready_says_which_globs_it_judged(repo):
+def test_wait_with_the_claim_globs_agrees_with_a_claim_that_names_them(repo):
     _proj(repo, ("X", "a.py"), ("Y", None))
     assert A.claim(repo, "X", no_worktree=True, agent=HOLDER).ok
-    out = A.wait(repo, item="Y", timeout_s=0, agent=WAITER)
-    assert out.data["woke"] is True and out.data["judged_globs"] == []
-    assert "--globs" in out.data["advice"]
-    assert A.wait(repo, item="Y", globs="a.py", timeout_s=0, agent=WAITER).data["woke"] is False
+    out = A.wait(repo, item="Y", globs="a.py", timeout_s=0, agent=WAITER)
+    assert out.data["woke"] is False
+    assert not A.claim(repo, "Y", no_worktree=True, agent=WAITER, globs="a.py").ok
