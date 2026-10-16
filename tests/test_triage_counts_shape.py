@@ -35,6 +35,11 @@ def test_other_shapes_are_not_triageable(found):
     assert G.triage_counts(_item(found), "critic") is None
 
 
+@pytest.mark.parametrize("digest", [["sha256:abc"], {"root": "sha256:abc"}, 7])
+def test_unhashable_or_non_string_digest_is_not_triageable(digest):
+    assert G.triage_counts(_item([{"digest": digest}]), "critic") is None
+
+
 def test_dict_findings_with_digests_still_count():
     got = G.triage_counts(_item([{"digest": "d1"}, {"digest": "d2"}]), "critic")
     assert got == {"findings": 2, "refuted": 0, "confirmed": 0, "untriaged": 2}
