@@ -1569,79 +1569,11 @@
   tuple(
     0,
     '''
-      # Reconstruction brief — proj
-      
-      This document was generated from ddflow's event log by `ddflow replay`. It is
-      the complete decision history of the project: every operator instruction, every
-      research verdict, every lesson, and the shape of the work queue.
-      
-      **How to use it.** Hand it to a coding agent with an empty repository and ask it
-      to work through the instructions in order. It will not reproduce the original
-      source byte-for-byte — model outputs are not deterministic — but it has every
-      input that produced the original, which no other artefact does.
-      
-      - Phases: 1
-      - Tasks: 3
-      - Lessons carried forward: 1
-      - Architectural decisions in force: 1
-      - Research notes: 1 (1 confirmed, 0 refuted)
-      
-      ## Architectural decisions in force
-      
-      These bind the rebuild. They are the part no other artefact records: source
-      code shows what was built and never why, nor what was rejected on the way.
-      
-      - **Hand-written parser** — Recursive descent, no generator
-        - governs: src/**
-      
-      ## Standing knowledge — read before starting
-      
-      These were learned the hard way during the original build. They are inputs,
-      not history: applying them is how the rebuild avoids repeating the mistakes.
-      
-      - **Pin the grammar before refactoring it** — Snapshot parser output first
-      
-      ## The instruction history
-      
-      ### 1. [PHASE] 2026-01-01T00:01:00Z — `P1`
-      
-      P1: Ship the parser
-      
-      Parse the config files.
-      
-      ### 2. [TASK] 2026-01-01T00:02:00Z — `T1`
-      
-      T1: Tokenizer (in P1; needs -; writes src/lex.py)
-      
-      ### 3. [TASK] 2026-01-01T00:03:00Z — `T2`
-      
-      T2: Grammar (in P1; needs T1; writes src/parse.py)
-      
-      ### 4. [TASK] 2026-01-01T00:04:00Z — `T3`
-      
-      T3: Error messages (in P1; needs T2; writes src/errors.py)
-      
-      ### 5. [LESSON] 2026-01-01T00:05:00Z
-      
-      Pin the grammar before refactoring it: Snapshot parser output first
-      
-      ### 6. [DECISION] 2026-01-01T00:06:00Z
-      
-      Hand-written parser
-      
-      Decision: Recursive descent, no generator
-      
-      Governs: src/**
-      
-      ### 7. [RESEARCH] 2026-01-01T00:09:00Z — `P1`
-      **Verdict: CONFIRMED**
-      
-      Is recursive descent fast enough? -> It parses 10k lines in under 50ms
-      
-      ### 8. [SHIPPED] 2026-01-01T00:10:00Z — `T1`
-      
-      T1
-      
+      {
+        "schema": "replay@1",
+        "text": "# Reconstruction brief \u2014 proj\n\nThis document was generated from ddflow's event log by `ddflow replay`. It is\nthe complete decision history of the project: every operator instruction, every\nresearch verdict, every lesson, and the shape of the work queue.\n\n**How to use it.** Hand it to a coding agent with an empty repository and ask it\nto work through the instructions in order. It will not reproduce the original\nsource byte-for-byte \u2014 model outputs are not deterministic \u2014 but it has every\ninput that produced the original, which no other artefact does.\n\n- Phases: 1\n- Tasks: 3\n- Lessons carried forward: 1\n- Architectural decisions in force: 1\n- Research notes: 1 (1 confirmed, 0 refuted)\n\n## Architectural decisions in force\n\nThese bind the rebuild. They are the part no other artefact records: source\ncode shows what was built and never why, nor what was rejected on the way.\n\n- **Hand-written parser** \u2014 Recursive descent, no generator\n  - governs: src/**\n\n## Standing knowledge \u2014 read before starting\n\nThese were learned the hard way during the original build. They are inputs,\nnot history: applying them is how the rebuild avoids repeating the mistakes.\n\n- **Pin the grammar before refactoring it** \u2014 Snapshot parser output first\n\n## The instruction history\n\n### 1. [PHASE] 2026-01-01T00:01:00Z \u2014 `P1`\n\nP1: Ship the parser\n\nParse the config files.\n\n### 2. [TASK] 2026-01-01T00:02:00Z \u2014 `T1`\n\nT1: Tokenizer (in P1; needs -; writes src/lex.py)\n\n### 3. [TASK] 2026-01-01T00:03:00Z \u2014 `T2`\n\nT2: Grammar (in P1; needs T1; writes src/parse.py)\n\n### 4. [TASK] 2026-01-01T00:04:00Z \u2014 `T3`\n\nT3: Error messages (in P1; needs T2; writes src/errors.py)\n\n### 5. [LESSON] 2026-01-01T00:05:00Z\n\nPin the grammar before refactoring it: Snapshot parser output first\n\n### 6. [DECISION] 2026-01-01T00:06:00Z\n\nHand-written parser\n\nDecision: Recursive descent, no generator\n\nGoverns: src/**\n\n### 7. [RESEARCH] 2026-01-01T00:09:00Z \u2014 `P1`\n**Verdict: CONFIRMED**\n\nIs recursive descent fast enough? -> It parses 10k lines in under 50ms\n\n### 8. [SHIPPED] 2026-01-01T00:10:00Z \u2014 `T1`\n\nT1\n",
+        "files": []
+      }
   
     ''',
     '',
@@ -1651,79 +1583,11 @@
   tuple(
     0,
     '''
-      # Reconstruction brief — proj
-      
-      This document was generated from ddflow's event log by `ddflow replay`. It is
-      the complete decision history of the project: every operator instruction, every
-      research verdict, every lesson, and the shape of the work queue.
-      
-      **How to use it.** Hand it to a coding agent with an empty repository and ask it
-      to work through the instructions in order. It will not reproduce the original
-      source byte-for-byte — model outputs are not deterministic — but it has every
-      input that produced the original, which no other artefact does.
-      
-      - Phases: 1
-      - Tasks: 3
-      - Lessons carried forward: 1
-      - Architectural decisions in force: 1
-      - Research notes: 1 (1 confirmed, 0 refuted)
-      
-      ## Architectural decisions in force
-      
-      These bind the rebuild. They are the part no other artefact records: source
-      code shows what was built and never why, nor what was rejected on the way.
-      
-      - **Hand-written parser** — Recursive descent, no generator
-        - governs: src/**
-      
-      ## Standing knowledge — read before starting
-      
-      These were learned the hard way during the original build. They are inputs,
-      not history: applying them is how the rebuild avoids repeating the mistakes.
-      
-      - **Pin the grammar before refactoring it** — Snapshot parser output first
-      
-      ## The instruction history
-      
-      ### 1. [PHASE] 2026-01-01T00:01:00Z — `P1`
-      
-      P1: Ship the parser
-      
-      Parse the config files.
-      
-      ### 2. [TASK] 2026-01-01T00:02:00Z — `T1`
-      
-      T1: Tokenizer (in P1; needs -; writes src/lex.py)
-      
-      ### 3. [TASK] 2026-01-01T00:03:00Z — `T2`
-      
-      T2: Grammar (in P1; needs T1; writes src/parse.py)
-      
-      ### 4. [TASK] 2026-01-01T00:04:00Z — `T3`
-      
-      T3: Error messages (in P1; needs T2; writes src/errors.py)
-      
-      ### 5. [LESSON] 2026-01-01T00:05:00Z
-      
-      Pin the grammar before refactoring it: Snapshot parser output first
-      
-      ### 6. [DECISION] 2026-01-01T00:06:00Z
-      
-      Hand-written parser
-      
-      Decision: Recursive descent, no generator
-      
-      Governs: src/**
-      
-      ### 7. [RESEARCH] 2026-01-01T00:09:00Z — `P1`
-      **Verdict: CONFIRMED**
-      
-      Is recursive descent fast enough? -> It parses 10k lines in under 50ms
-      
-      ### 8. [SHIPPED] 2026-01-01T00:10:00Z — `T1`
-      
-      T1
-      
+      {
+        "schema": "replay@1",
+        "text": "# Reconstruction brief \u2014 proj\n\nThis document was generated from ddflow's event log by `ddflow replay`. It is\nthe complete decision history of the project: every operator instruction, every\nresearch verdict, every lesson, and the shape of the work queue.\n\n**How to use it.** Hand it to a coding agent with an empty repository and ask it\nto work through the instructions in order. It will not reproduce the original\nsource byte-for-byte \u2014 model outputs are not deterministic \u2014 but it has every\ninput that produced the original, which no other artefact does.\n\n- Phases: 1\n- Tasks: 3\n- Lessons carried forward: 1\n- Architectural decisions in force: 1\n- Research notes: 1 (1 confirmed, 0 refuted)\n\n## Architectural decisions in force\n\nThese bind the rebuild. They are the part no other artefact records: source\ncode shows what was built and never why, nor what was rejected on the way.\n\n- **Hand-written parser** \u2014 Recursive descent, no generator\n  - governs: src/**\n\n## Standing knowledge \u2014 read before starting\n\nThese were learned the hard way during the original build. They are inputs,\nnot history: applying them is how the rebuild avoids repeating the mistakes.\n\n- **Pin the grammar before refactoring it** \u2014 Snapshot parser output first\n\n## The instruction history\n\n### 1. [PHASE] 2026-01-01T00:01:00Z \u2014 `P1`\n\nP1: Ship the parser\n\nParse the config files.\n\n### 2. [TASK] 2026-01-01T00:02:00Z \u2014 `T1`\n\nT1: Tokenizer (in P1; needs -; writes src/lex.py)\n\n### 3. [TASK] 2026-01-01T00:03:00Z \u2014 `T2`\n\nT2: Grammar (in P1; needs T1; writes src/parse.py)\n\n### 4. [TASK] 2026-01-01T00:04:00Z \u2014 `T3`\n\nT3: Error messages (in P1; needs T2; writes src/errors.py)\n\n### 5. [LESSON] 2026-01-01T00:05:00Z\n\nPin the grammar before refactoring it: Snapshot parser output first\n\n### 6. [DECISION] 2026-01-01T00:06:00Z\n\nHand-written parser\n\nDecision: Recursive descent, no generator\n\nGoverns: src/**\n\n### 7. [RESEARCH] 2026-01-01T00:09:00Z \u2014 `P1`\n**Verdict: CONFIRMED**\n\nIs recursive descent fast enough? -> It parses 10k lines in under 50ms\n\n### 8. [SHIPPED] 2026-01-01T00:10:00Z \u2014 `T1`\n\nT1\n",
+        "files": []
+      }
   
     ''',
     '',
