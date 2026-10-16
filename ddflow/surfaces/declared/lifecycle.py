@@ -74,25 +74,7 @@ COMMANDS: tuple[Command, ...] = (
         kind="brief",
         prose=True,
         prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
-        call=lambda repo, a, agent, called_from=None, shell_cwd=None: (
-            _api().agent_brief(
-                repo,
-                item=a.get("target") or a.get("item") or "",
-                for_agent=a["for_agent"],
-                note=a.get("note") or "",
-                agent=agent,
-            )
-            if a.get("for_agent")
-            else _api().brief(
-                repo,
-                item=a.get("item", "") or "",
-                phase=a.get("phase", "") or "",
-                check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
-                called_from=called_from,
-                shell_cwd=shell_cwd,
-                agent=agent,
-            )
-        ),
+        call=AB.call,
         payload="text",
         cli=CliPolicy(
             notes=L.brief_notes,

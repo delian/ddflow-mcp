@@ -955,11 +955,13 @@
       session.agent_brief_max_chars = 9000   [default]
           Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME
           ITEM` renders for a subagent. Over it, the lessons and then the decisions
-          are cut first (the standard rules never are); 0 means no ceiling.
+          are cut (down to a pointer); the standard sections are only ever left out by
+          `agent_brief_off`. 0 means no ceiling.
       session.agent_brief_off = []   [default]
           Sections of the launch brief to leave out: identity, item, decisions,
           lessons, start, tests, reviews, gates, finish, forbidden, filing, project,
-          report. For a project whose own instruction file already says it.
+          report. Turning one off removes that standing rule from every launch brief:
+          only for a project whose own instruction file already says it.
       session.agent_brief_decisions = 6   [default]
           How many of the decisions that govern the item's files the launch brief
           quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.

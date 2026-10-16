@@ -93,11 +93,11 @@ class SessionConfig:
     )
     agent_brief_max_chars: int = knob(
         9000,
-        doc="Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut first (the standard rules never are); 0 means no ceiling.",
+        doc="Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME ITEM` renders for a subagent. Over it, the lessons and then the decisions are cut (down to a pointer); the standard sections are only ever left out by `agent_brief_off`. 0 means no ceiling.",
     )
     agent_brief_off: list[str] = knob(
         factory=list,
-        doc="Sections of the launch brief to leave out: identity, item, decisions, lessons, start, tests, reviews, gates, finish, forbidden, filing, project, report. For a project whose own instruction file already says it.",
+        doc="Sections of the launch brief to leave out: identity, item, decisions, lessons, start, tests, reviews, gates, finish, forbidden, filing, project, report. Turning one off removes that standing rule from every launch brief: only for a project whose own instruction file already says it.",
         check=_check_brief_sections,
     )
     agent_brief_decisions: int = knob(

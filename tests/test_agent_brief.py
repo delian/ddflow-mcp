@@ -122,7 +122,10 @@ def test_the_ceiling_cuts_decisions_first_and_never_the_rules(proj):
     run_cli(proj, "config", "session.agent_brief_max_chars", "10")
     tiny = json.loads(run_cli(proj, "--json", "brief", "--for-agent", "a", "T1")[1])
     assert "pins regenerate" in tiny["brief"] and tiny["over"] is True
-    assert "decisions" not in tiny["sections"] and "lessons" not in tiny["sections"]
+    assert "lessons" not in tiny["sections"]
+    # cut to nothing, the pointer to the decisions that bind the item stays
+    assert "decision applicable T1" in tiny["sections"]["decisions"]
+    assert 'id="D-wide"' not in tiny["brief"]
 
 
 def test_the_ceiling_leaves_a_short_brief_whole(proj):
@@ -168,3 +171,14 @@ def test_mcp_serves_the_launch_brief(proj):
 def test_the_template_splits_into_the_declared_sections():
     text = (Path(AB.__file__).parents[1] / "templates" / "prompts" / "agent_brief.md").read_text()
     assert tuple(n for n, _ in AB.split(text)) == AGENT_BRIEF_SECTIONS
+
+
+def test_the_item_may_be_given_positionally_to_the_plain_brief_too(proj):
+    out = run_cli(proj, "brief", "T1")[1]
+    assert "Widen the widget" in out
+
+
+def test_flags_of_the_other_form_are_refused_not_ignored(proj):
+    assert run_cli(proj, "brief", "--note", "x")[0] == 1
+    assert run_cli(proj, "brief", "--for-agent", "a")[0] == 1
+    assert run_cli(proj, "brief", "--for-agent", "a", "T1", "--phase", "P1")[0] == 1
