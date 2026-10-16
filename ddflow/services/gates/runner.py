@@ -185,6 +185,7 @@ def run_command_gate(
             **child_env(
                 cfg if cfg is not None else Config.load(cwd)
             ),  # minus the caller's identity (`[gates].scrub_env`)
+            "DDFLOW_RUNNING_GATE": gdef.id,  # a nested `ddflow ci run` leaves recording to us
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONPYCACHEPREFIX": str(no_cache),
             **gdef.env,

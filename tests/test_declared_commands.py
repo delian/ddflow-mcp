@@ -188,6 +188,7 @@ def test_the_tools_that_need_to_know_where_the_caller_stands_still_say_so():
     assert asking == {
         "ddflow_abandon",
         "ddflow_brief",
+        "ddflow_ci",
         "ddflow_claim",
         "ddflow_complete",
         "ddflow_heartbeat",

@@ -42,7 +42,7 @@ from __future__ import annotations
 from ._base import _load
 from ._dedupe import Answer as DedupeAnswer
 from ._dedupe import check_add as dedupe_check_add
-from .ci import ci_tool
+from .cirun import ci_tool
 from .completion import completion_verdict
 from .decisions import (
     decision_add,
