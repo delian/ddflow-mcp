@@ -19,12 +19,15 @@ def changed_old_lines(diff: str) -> dict[str, list[tuple[int, int]]]:
     out: dict[str, list[tuple[int, int]]] = {}
     path = ""
     pos = 0
-    for line in diff.splitlines():
-        m = _FILE.match(line)
-        if m and not line.startswith("--- /dev/null"):
-            path = m.group(1)
-            out.setdefault(path, [])
+    rows = diff.splitlines()
+    for i, line in enumerate(rows):
+        nxt = rows[i + 1] if i + 1 < len(rows) else ""
+        if line.startswith("--- ") and nxt.startswith("+++ "):
+            m = _FILE.match(line)
+            path = "" if line.startswith("--- /dev/null") or not m else m.group(1)
             pos = 0
+            if path:
+                out.setdefault(path, [])
             continue
         h = _HUNK.match(line)
         if h:
@@ -38,8 +41,8 @@ def changed_old_lines(diff: str) -> dict[str, list[tuple[int, int]]]:
 
 
 def is_superseded(location: str, changed: dict[str, list[tuple[int, int]]]) -> bool:
-    """Does ``location`` (`path:line`, `path:a-b` or a bare path) sit on lines ``changed``
-    rewrote? A bare path counts when the file has a change; no path, never."""
+    """Does ``location`` (`path:line` or `path:a-b`) sit on lines ``changed`` rewrote? A
+    bare path or a symbol names no line, so it never counts: that finding is re-checked."""
     m = _LOC.search(location or "")
     if not m:
         return False
@@ -49,7 +52,7 @@ def is_superseded(location: str, changed: dict[str, list[tuple[int, int]]]) -> b
     if not ranges:
         return False
     if m.group(2) is None:
-        return True
+        return False
     lo = int(m.group(2))
     hi = int(m.group(3) or lo)
     return any(a <= hi and lo <= b for a, b in ranges)

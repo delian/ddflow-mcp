@@ -71,7 +71,9 @@ def test_old_side_ranges_and_locations():
     assert ch == {"x.py": [(3, 3), (4, 4)]}
     assert SS.is_superseded("x.py:4", ch) and not SS.is_superseded("x.py:2", ch)
     assert not SS.is_superseded("x.py:5", ch)
-    assert SS.is_superseded("x.py", ch) and not SS.is_superseded("y.py:3", ch)
+    added = "--- /dev/null\n+++ b/n.py\n@@ -0,0 +1,1 @@\n+q\n"
+    assert SS.changed_old_lines(diff + added) == ch
+    assert not SS.is_superseded("x.py", ch) and not SS.is_superseded("y.py:3", ch)
 
 
 def test_a_finding_on_rewritten_lines_is_superseded_not_reraised(repo, tmp_path):

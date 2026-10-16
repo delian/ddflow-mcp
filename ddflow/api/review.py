@@ -1110,7 +1110,7 @@ def _with_previous_findings(
         if f.get("digest") in supers:
             lines.append(
                 "   SUPERSEDED: the lines it cites were rewritten since the reviewed commit; "
-                "do NOT report it again -- judge the new code only"
+                "do NOT report this finding again; report only a NEW defect of the new code"
             )
             continue
         lines.append(
