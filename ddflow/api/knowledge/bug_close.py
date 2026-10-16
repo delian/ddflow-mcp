@@ -424,4 +424,8 @@ def _regression_status(status: str, ev: dict[str, Any], G: Any) -> tuple[str, di
         # Never silent: every could-not-run names its reason, and what would let it run.
         reason = str(ev.get("reason") or "").strip() or "the check ended without a reason"
         return "could-not-run", {**ev, "reason": reason, "remedy": ev.get("remedy") or _REMEDY}
-    return "could-not-run", {**ev, "reason": f"unrecognized verification status {status!r}"}
+    return "could-not-run", {
+        **ev,
+        "reason": f"unrecognized verification status {status!r}",
+        "remedy": ev.get("remedy") or _REMEDY,
+    }
