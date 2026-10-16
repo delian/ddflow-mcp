@@ -8,14 +8,15 @@ files."""
 
 from __future__ import annotations
 
+import json
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 from ddflow.config import Config
+from ddflow.core import clock
 from ddflow.core.events import Event
 from ddflow.core.model import Lease, fold
 from ddflow.infra.log import EventLog
@@ -42,8 +43,6 @@ def _beats(n: int) -> list[Event]:
 
 
 def clock_iso(t: float) -> str:
-    from ddflow.core import clock
-
     return clock.iso_at(t)
 
 
@@ -81,10 +80,32 @@ def test_zero_limits_are_the_old_behaviour():
     assert LB.judge(_cfg(0, 0), [], "T1", _lease(NOW - 10**6), ["T2"], NOW, _none) is None
 
 
-def _setup(repo, hold: int = 3) -> None:
+IDLE, AGO = 300, 1000  # wide window, elapsed time backdated (AGO < the 1800 s lease ttl)
+
+
+def _backdate(repo, item: str, seconds: float) -> None:
+    """Make ``item``'s lease look ``seconds`` older by rewriting the time the log records
+    for it (add, claim and start), so no test depends on how long a subprocess takes to start."""
+    for f in (repo / ".ddflow" / "events").glob("*.jsonl"):
+        out, hit = [], False
+        for line in f.read_text().splitlines():
+            e = json.loads(line)
+            if e.get("subject") == item and e.get("kind") != "lease.renewed":
+                if "at" in e["data"]:
+                    e["data"]["at"] -= seconds
+                e["ts"] = clock.iso_at(clock.epoch(e["ts"]) - seconds)
+                hit = True
+                out.append(json.dumps(e, separators=(",", ":")))
+            else:
+                out.append(line)
+        if hit:
+            f.write_text("\n".join(out) + "\n")
+
+
+def _setup(repo, hold: int = 3 * IDLE) -> None:
     assert run_cli(repo, "init", agent=A)[0] == 0
     run_cli(repo, "config", "lease.hold_max_s", str(hold), agent=A)
-    run_cli(repo, "config", "lease.idle_max_s", "1", agent=A)
+    run_cli(repo, "config", "lease.idle_max_s", str(IDLE), agent=A)
     for item in ("T1", "T2"):
         assert (
             run_cli(repo, "task", "add", item, "--title", item, "--globs", "src/a.py", agent=A)[0]
@@ -100,7 +121,7 @@ def _state(repo):
 def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
     _setup(repo)
     assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3  # fresh
-    time.sleep(3.3)
+    _backdate(repo, "T1", AGO)
     run_cli(repo, "heartbeat", "T1", agent=A)  # alive, no work
     code, out, _err = run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)
     assert code == 0 and "BROKE T1" in out  # the claimant is told
@@ -109,14 +130,23 @@ def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
     assert st.items["T1"].lease.expired_at  # kept, expired: its worktree/branch pointer survives
     broken = [e for e in EventLog(repo, "r").read_all() if e.data.get("broken_by")]
     assert len(broken) == 1 and broken[0].data["broken_for"] == "T2"
-    assert broken[0].data["broken_by"] == B and broken[0].data["idle_s"] >= 1
+    assert broken[0].data["broken_by"] == B and broken[0].data["idle_s"] >= IDLE
     code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)  # the holder is told
     assert code != 0 and "BROKEN" in out + err
 
 
+def test_a_slow_start_does_not_make_a_fresh_lease_breakable(repo):
+    _setup(repo)
+    _backdate(repo, "T1", 150)  # a loaded machine: minutes pass before the claim runs
+    assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3
+    assert not _state(repo).items["T1"].lease.expired_at
+    _backdate(repo, "T1", AGO)
+    assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 0
+
+
 def test_a_progressing_holder_keeps_its_lease_against_a_claim(repo):
-    _setup(repo, hold=4)
-    time.sleep(4.5)  # the lease is older than hold_max_s ...
+    _setup(repo)
+    _backdate(repo, "T1", AGO)  # the lease is older than hold_max_s ...
     EventLog(repo, A).append(
         "gate.passed", "T1", {"gate": "research"}
     )  # ... but real work just landed
@@ -127,7 +157,7 @@ def test_a_progressing_holder_keeps_its_lease_against_a_claim(repo):
 
 def test_break_flag_is_required_unless_break_on_timeout_is_on(repo):
     _setup(repo)
-    time.sleep(3.3)
+    _backdate(repo, "T1", AGO)
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # the default: deliberate
     run_cli(repo, "config", "lease.break_on_timeout", "true", agent=A)
     assert (
@@ -138,15 +168,15 @@ def test_break_flag_is_required_unless_break_on_timeout_is_on(repo):
 def test_an_uncontended_old_lease_survives_an_unrelated_claim(repo):
     _setup(repo)
     run_cli(repo, "task", "add", "T3", "--title", "T3", "--globs", "src/c.py", agent=A)
-    time.sleep(3.3)
+    _backdate(repo, "T1", AGO)
     assert run_cli(repo, "claim", "T3", "--no-worktree", "--break", agent=B)[0] == 0
     assert not _state(repo).items["T1"].lease.expired_at
 
 
 def test_the_holder_is_asked_to_yield_before_anything_is_broken(repo):
-    _setup(repo, hold=100)  # idle_max_s 1: asked after a second, broken only after 100
+    _setup(repo, hold=10 * AGO)  # asked after IDLE, broken only after 10 * AGO
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # records the wait
-    time.sleep(3.3)
+    _backdate(repo, "T1", AGO)
     code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)
     assert code == 0 and "YIELD REQUESTED" in out + err and "T2" in out + err
     code, out, _err = run_cli(repo, "brief", agent=A)
@@ -155,8 +185,8 @@ def test_the_holder_is_asked_to_yield_before_anything_is_broken(repo):
 
 
 def test_a_claim_that_cannot_break_everything_breaks_nothing(repo):
-    _setup(repo, hold=6)
-    time.sleep(6.3)  # T1 (src/a.py) is now idle; T3 below is fresh
+    _setup(repo)
+    _backdate(repo, "T1", AGO)  # T1 (src/a.py) is now idle; T3 below is fresh
     run_cli(repo, "task", "add", "T3", "--title", "T3", "--globs", "src/b.py", agent=A)
     assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 0
     run_cli(repo, "update", "T2", "--globs", "src/a.py,src/b.py", agent=A)
