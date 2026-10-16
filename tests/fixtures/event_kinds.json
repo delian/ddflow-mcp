@@ -93,6 +93,7 @@
     "item": ["str"],
     "key": ["str"],
     "related": ["str"],
+    "repro": ["dict"],
     "scope": ["str"],
     "score": ["float"],
     "severity": ["str"],

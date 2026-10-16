@@ -59,6 +59,9 @@ def referenced(events: Iterable[Event]) -> dict[str, list[str]]:
     """reference -> ids of the events that carry it."""
     out: dict[str, list[str]] = {}
     for e in events:
+        link = e.data.get("repro") if e.kind == "bug.found" else None
+        if isinstance(link, dict) and link.get("ref"):  # a bug's reproduction bundle
+            out.setdefault(str(link["ref"]), []).append(e.id)
         if e.kind in B.KINDS:
             for _key, ref in B.stubs(e.data.get("evidence")):
                 out.setdefault(ref, []).append(e.id)
