@@ -18,6 +18,7 @@ from ...infra.store import Store
 from ...services import choices as CHO
 from ...services import cleanup as CL
 from ...services import gates as G
+from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import searchcore as SC
 from ...services import shardmarks as SM
@@ -69,6 +70,20 @@ def _waits_block(st, cfg) -> str:
             "its files releases the globs others wait for, or reports a cycle."
         )
     )
+
+
+def _progress_block(log, cfg, st, held_ids: list[str]) -> str:
+    """Leases of this agent that others wait for and that show no progress, and leases of
+    this agent that were broken (`services.leasebreak`), "" when none."""
+    events = log.read_all()
+    now = time.time()
+    lines = [
+        f"- {LB.yield_text(v)}"
+        for v in LB.verdicts(st, cfg, events, now, LB.tree_activity(log.root))
+        if v.item in held_ids
+    ]
+    lines += [f"- {LB.notice_text(n)}" for n in LB.broken_notices(events, log.agent_id, st)]
+    return "\n\n## Yield requested\n\n" + "\n".join(lines) + "\n" if lines else ""
 
 
 def _contest_block(repo: Path, cfg, log, st) -> str:
@@ -308,6 +323,7 @@ def brief(
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
     text += _waits_block(st, cfg)
+    text += _progress_block(log, cfg, st, held_ids)
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
