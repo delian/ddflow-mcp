@@ -978,7 +978,7 @@ def _is_fix_round(cfg, it, a) -> bool:
     mine = it.triage.get(a["gate"], {})
     return all(
         f.get("digest") in a["supers"]
-        or mine.get(str(f.get("digest")), {}).get("verdict") == "confirmed"
+        or mine.get(str(f.get("digest")), {}).get("verdict") in _SETTLED
         for f in found
     )
 
@@ -1069,8 +1069,17 @@ _PREVIOUS_PROBE = 300
 
 
 def _with_previous_findings(
-    context: str, log, it, item: str, gate: str, say, *, kind: str, rerun: dict,
-    supers: set[str] = frozenset(), fix: bool = False,
+    context: str,
+    log,
+    it,
+    item: str,
+    gate: str,
+    say,
+    *,
+    kind: str,
+    rerun: dict,
+    supers: set[str] = frozenset(),
+    fix: bool = False,
 ) -> str:
     """``context`` plus the gate's previous findings and the author's triage of each, for a
     full re-review (decision D-gate-economy 3).
@@ -1792,8 +1801,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         context,
         [
             lambda c: _with_previous_findings(
-                    c, log, it, item, gate, say, kind=kind, rerun=prior, supers=supers, fix=fix
-                ),
+                c, log, it, item, gate, say, kind=kind, rerun=prior, supers=supers, fix=fix
+            ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
     )
