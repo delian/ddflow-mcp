@@ -227,11 +227,14 @@ def _tracked_tokens(repo) -> set[str] | None:
     return set(TOKEN.findall("\n".join(names)))
 
 
-def staged_diff(repo) -> str | None:
+def staged_diff(repo, paths: list[str] | None = None) -> str | None:
+    """The staged diff, or None when git could not give it. ``paths`` limits it to those
+    files (a merge commit answers only for what the branch changed)."""
     r = G.run(
         repo,
         *("-c", "core.quotepath=false", "diff", "--cached", "-U0", "-M", "--no-color"),
         *("--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"),
+        *(("--", *paths) if paths is not None else ()),
         binary=True,
         timeout=120,
     )
