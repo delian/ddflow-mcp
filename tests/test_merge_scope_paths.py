@@ -30,16 +30,19 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
+CFG = SimpleNamespace(lease=SimpleNamespace(new_file_globs=[]))
+
+
 def test_a_declared_non_ascii_path_is_in_scope(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     it = SimpleNamespace(globs=["old.py", "new.py", "naïve.py"])
-    assert _outside_globs(repo, it, "main", "work") == []
+    assert _outside_globs(repo, it, "main", "work", CFG) == []
 
 
 def test_the_old_path_of_a_rename_is_a_changed_path(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     it = SimpleNamespace(globs=["new.py", "naïve.py"])
-    assert _outside_globs(repo, it, "main", "work") == ["old.py"]
+    assert _outside_globs(repo, it, "main", "work", CFG) == ["old.py"]
 
 
 def test_a_listing_git_could_not_make_is_unknown_not_empty(tmp_path: Path) -> None:
@@ -48,7 +51,7 @@ def test_a_listing_git_could_not_make_is_unknown_not_empty(tmp_path: Path) -> No
 
     repo = _repo(tmp_path)
     it = SimpleNamespace(globs=["new.py"])
-    assert _outside_globs(repo, it, "no-such-base", "work") is None
+    assert _outside_globs(repo, it, "no-such-base", "work", CFG) is None
     assert _scope_fields(None, listed=True) == {"outside_globs": [], "outside_globs_unknown": True}
     assert _scope_fields([], listed=True) == {"outside_globs": [], "outside_globs_unknown": False}
 
