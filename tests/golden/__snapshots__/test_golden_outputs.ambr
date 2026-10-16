@@ -1382,6 +1382,14 @@
           excluded) with NO completion, gate pass or merge count as a stalled queue.
           Measured in events, not minutes, because an agent that is thinking produces
           no events and waiting is not looping.
+      loops.wait_cycle = True   [default]
+          Report a cycle of agents waiting on each other's leases (a lock deadlock) in
+          `doctor`, naming the agents, items and files and the waiter that has waited
+          least (the victim) and the globs it should drop. Off: waits are still
+          recorded, the cycle is not looked for.
+      loops.wait_cycle_shown = 5   [default]
+          How many wait cycles `doctor` prints in full; the rest are counted. 0 prints
+          none.
       loops.on_detect = 'warn'   [default]
           'warn' reports loops in `doctor` and `next` and lets work continue; 'block'
           additionally makes `ddflow claim` REFUSE an item that is already looping,
