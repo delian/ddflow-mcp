@@ -30,3 +30,10 @@ def test_a_fixed_estimate_is_the_eta(tmp_path):
     rows = _line(tmp_path, 3.0)
     assert rows["T2"]["eta_s"] == 3 and rows["T3"]["eta_s"] == 6
     assert _line(tmp_path, 3.2)["T2"]["eta_s"] == 4  # a fraction rounds up
+
+
+def test_an_overdue_running_entry_still_reads_at_least_a_second(tmp_path):
+    MQ.save(tmp_path, MQ.Entry(item="T1", seq=1, state=MQ.RUNNING, queued_at=NOW, started_at=NOW))
+    row = MQ.board(tmp_path, window=5, default_s=60, now=NOW + 500)[0]  # far past the estimate
+    assert row["eta_s"] == 1
+    assert MQ.board(tmp_path, window=5, default_s=0, now=NOW)[0]["eta_s"] == 1  # a zero default
