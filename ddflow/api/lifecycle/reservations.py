@@ -19,6 +19,7 @@ from ...core.schedule import (
     resource_shortfall,
 )
 from ...services import leases as L
+from ...services import waiting as WG
 from ...services import waits as WT
 
 
@@ -185,6 +186,20 @@ def _claim_blocker(
     short = _resource_blocker(cfg, it, live)
     if short is not None:
         return short
+    if fair:
+        # `claim` turns away files an earlier QUEUED waiter asked for first
+        # (`claim._refuse_if_queued`); a held item is only renewed, so it is not asked.
+        # Judged here too, or `wait` says READY for a claim that is then refused (B8843d3c7bd).
+        want = list(it.globs if globs is None else globs)
+        ahead = WG.queue_ahead(st, cfg, it.id, me, want, now)
+        if ahead is not None:
+            return Blocked(
+                it.id,
+                "conflict",
+                f"those files are queued behind {ahead.holder} ({ahead.item}), who asked "
+                f"for them first ([lease].wait_queue)",
+                [ahead.item],
+            )
     if fair and repo is not None:
         # Last: the files are free, and the question is only whether someone is in line.
         want = list(it.globs if globs is None else globs)
