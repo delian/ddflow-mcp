@@ -96,13 +96,20 @@
 # ---
 # name: test_help[ddflow brief]
   '''
-  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery]
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
+  
+  positional arguments:
+    target                with --for-agent: the item id
   
   options:
-    -h, --help        show this help message and exit
+    -h, --help            show this help message and exit
     --item ITEM
     --phase PHASE
     --check-recovery
+    --for-agent FOR_AGENT
+                          render the standard launch brief of subagent NAME for the item (`--item`
+                          or the positional id)
+    --note NOTE           with --for-agent: the coordinator's note for this item
   
   '''
 # ---

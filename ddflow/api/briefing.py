@@ -65,7 +65,6 @@ def agent_brief(
     try:
         tmpl = P.resolve("agent_brief", repo, P.overrides_from(cfg))
         decisions, total = _decision_lines(cfg, st, item)
-        s = cfg.session
         facts = AB.Facts(
             agent=for_agent,
             item=item,
@@ -77,15 +76,24 @@ def agent_brief(
             lease_s=cfg.lease.ttl_s,
             heartbeat_s=cfg.lease.heartbeat_s,
             note=note.strip(),
-            extra=s.agent_brief_extra.strip(),
+            extra=cfg.session.agent_brief_extra.strip(),
             decisions=decisions,
             decisions_all=total,
             lessons=_lesson_lines(
-                cfg, store, st, f"{it.title} {it.body} {' '.join(it.tags)}", s.agent_brief_lessons
+                cfg,
+                store,
+                st,
+                f"{it.title} {it.body} {' '.join(it.tags)}",
+                cfg.session.agent_brief_lessons,
             ),
         )
-        facts.decisions = decisions[: max(0, s.agent_brief_decisions)]
-        got = AB.render(tmpl, facts, off=s.agent_brief_off, max_chars=s.agent_brief_max_chars)
+        facts.decisions = decisions[: max(0, cfg.session.agent_brief_decisions)]
+        got = AB.render(
+            tmpl,
+            facts,
+            off=cfg.session.agent_brief_off,
+            max_chars=cfg.session.agent_brief_max_chars,
+        )
     except P.TemplateError as exc:
         return O.failed("brief", str(exc), text="")
     return O.ok(
