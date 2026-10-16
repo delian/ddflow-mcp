@@ -203,6 +203,8 @@ def settle(a, c, out: Outcome) -> int | None:
             f"added to {data['extended']} ({data['extended_kind']}, {data['relation']}): "
             f"no new record was made"
         )
+        if data.get("globs_added"):
+            msg += f"; globs added to it: {', '.join(data['globs_added'])}"
         c.out(msg, out.body())
         return 0
     return None

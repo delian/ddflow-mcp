@@ -74,6 +74,10 @@ def _h_record_extended(st: State, ev: Event) -> None:
         "at": ev.ts,
         "score": d.get("score"),
     }
+    added = [g for g in d.get("globs") or [] if isinstance(g, str)]
+    rec = st.decisions.get(ev.subject) or st.items.get(ev.subject)
+    if added and rec is not None:
+        rec.globs = list(dict.fromkeys([*rec.globs, *added]))
 
 
 def _h_link_recorded(st: State, ev: Event) -> None:
