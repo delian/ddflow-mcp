@@ -39,12 +39,12 @@ from ..services.enforce import SELF_MANAGED
 from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
 from ..views import human
-from . import review_supersede as SS
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import _lease_keeper, item_tree
 from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
+from .review_supersede import carry, round_evidence, superseded_digests
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -485,7 +485,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         if f.get("digest") not in have:
             kept.append(f)
             have[f.get("digest")] = len(kept)
-    gone = SS.carry(ev, prior)
+    gone = carry(ev, prior)
     ev["chunk_findings"] = kept
     ev["findings"] = len(kept)
     ev["titles"] = [f.get("title", "") for f in kept[:10]]
@@ -961,7 +961,7 @@ def _superseded(repo, cfg, it, a) -> tuple[set[str], set[str]]:
         diff = _delta_diff(repo, it, a["branch"], head, cfg.worktree.base_ref or "")
     except RuntimeError:
         return set(), old
-    return SS.superseded_digests(list(found), diff) - old, old
+    return superseded_digests(list(found), diff) - old, old
 
 
 def _is_fix_round(cfg, it, a) -> bool:
@@ -1779,7 +1779,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         repo, cfg, st, log, it, say, revs, locals_=sargs
     )
     supers, fix = sargs.get("supers") or set(), bool(sargs.get("fix"))
-    extra_evidence = SS.round_evidence(extra_evidence, supers, fix, _delta_rounds(it, gate), say)
+    extra_evidence = round_evidence(extra_evidence, supers, fix, _delta_rounds(it, gate), say)
     if why:
         return O.Outcome(
             kind="review",
