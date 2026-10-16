@@ -106,12 +106,24 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
         return None
     mine = it.triage.get(gate, {})
     verdicts = [mine.get(f["digest"], {}).get("verdict", "") for f in found]
-    return {
+    left = sum(1 for v in verdicts if v not in SETTLED_VERDICTS)
+    counts = {
         "findings": len(found),
         "refuted": verdicts.count("refuted"),
         "confirmed": verdicts.count("confirmed"),
-        "untriaged": sum(1 for v in verdicts if v not in SETTLED_VERDICTS),
+        "untriaged": left,
     }
+    if left and _passed_over_carried(rec):
+        # A hand PASS recorded after the review carries its findings along; the pass is
+        # the later outcome and settles them, so they are not "untriaged" (B29667ba4b4).
+        counts["untriaged"] = 0
+        counts["settled_by_pass"] = left
+    return counts
+
+
+def _passed_over_carried(rec) -> bool:
+    """A recorded PASS whose findings were carried from an earlier round (hand record)."""
+    return rec.outcome == "passed" and bool((rec.evidence or {}).get("findings_carried"))
 
 
 def untriaged_note(it, gate: str) -> str:
@@ -119,7 +131,8 @@ def untriaged_note(it, gate: str) -> str:
     warning for a hand record that is about to follow it, or "" (bug B754cfb0c96)."""
     rec = it.gates.get(gate)
     found = (rec.evidence or {}).get("chunk_findings") if rec else None
-    if not found or not triage_counts(it, gate):
+    counts = triage_counts(it, gate)
+    if not found or not counts or counts.get("settled_by_pass"):
         return ""
     mine = it.triage.get(gate, {})
     left = [
@@ -209,10 +222,13 @@ def refuted_line(row: dict[str, Any]) -> str:
 
 
 def triage_line(counts: dict[str, int]) -> str:
-    return (
+    line = (
         f"{counts['findings']} finding(s): {counts['refuted']} refuted, "
         f"{counts['confirmed']} confirmed, {counts['untriaged']} untriaged"
     )
+    if counts.get("settled_by_pass"):
+        line += f", {counts['settled_by_pass']} settled by the later pass"
+    return line
 
 
 def _with_outcome(rows: list[tuple[str, str]], *outcomes: str) -> list[str]:
