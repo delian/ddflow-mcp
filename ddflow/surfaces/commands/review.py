@@ -145,9 +145,9 @@ def _reviewers_presets(_a, c: Ctx) -> int:
         (name, spec["kind"], spec.get("base_url") or spec.get("command", ""))
         for name, spec in sorted(SS.reviewer_presets().items())
     ]
-    text = "\n".join(f"  {n:<12} {k:<9} {w}" for n, k, w in rows)
-    text += "\n\nAdd one with:  ddflow reviewers add --preset <name> [--model M]"
-    c.out(text, {"presets": [{"name": n, "kind": k, "where": w} for n, k, w in rows]})
+    hint = "Add one with:  ddflow reviewers add --preset <name> [--model M]"
+    text = "\n".join(f"  {n:<12} {k:<9} {w}" for n, k, w in rows) + f"\n\n{hint}"
+    c.out(text, {"hint": hint, "presets": [{"name": n, "kind": k, "where": w} for n, k, w in rows]})
     return OK
 
 
