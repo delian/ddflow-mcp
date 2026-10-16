@@ -26,6 +26,7 @@ import os
 import select
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -163,9 +164,9 @@ def called_from() -> Path | None:
     return Path(value) if value else None
 
 
-def execute(srv) -> None:
-    """Replace this process with the installed code, same stdio. Returns only when the exec
-    could not happen (the server then carries on, and says so on stderr)."""
+def execute(srv, replace: Callable[[str, list[str], dict[str, str]], None]) -> None:
+    """Replace this process with the installed code, same stdio, through ``replace`` (the
+    surface's `proc.replace_process`). Returns only when the exec could not happen (the server then carries on, and says so on stderr)."""
     state = {
         "from": running_version(),
         "protocol": srv.protocol,
@@ -179,7 +180,7 @@ def execute(srv) -> None:
     try:
         sys.stdout.flush()
         sys.stderr.flush()
-        os.execve(sys.executable, argv, env)
+        replace(sys.executable, argv, env)
     except OSError as exc:
         srv.reexec_pending = False
         print(f"ddflow-mcp: re-exec failed ({exc}); staying on the running code", file=sys.stderr)

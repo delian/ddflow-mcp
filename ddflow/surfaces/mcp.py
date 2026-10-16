@@ -1538,7 +1538,7 @@ def serve(
         if reply is not None:
             notify(reply)
         if srv.reexec_pending and _reexec_ready(inp, relays):
-            _upgrade.execute(srv)
+            _upgrade.execute(srv, PROC.replace_process)
     for relay in relays:
         relay.join()
 

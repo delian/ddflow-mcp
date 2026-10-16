@@ -136,7 +136,7 @@ def test_the_connection_survives_the_exec(stale: Path, monkeypatch: pytest.Monke
     monkeypatch.setattr(os, "execve", lambda path, argv, env: seen.update(argv=argv, env=env))
     srv = Server(stale, agent="dev")
     srv.protocol, srv.client_info = "2025-03-26", {"name": "harness"}
-    mcp_upgrade.execute(srv)
+    mcp_upgrade.execute(srv, mcp.PROC.replace_process)
     assert seen["argv"][1:3] == ["-m", "ddflow.surfaces.mcp"]
     monkeypatch.setenv(mcp_upgrade.HANDOFF_ENV, seen["env"][mcp_upgrade.HANDOFF_ENV])
     fresh = Server(stale)
@@ -178,7 +178,7 @@ def test_serve_only_replaces_itself_when_quiet(
     class Stop(Exception):
         pass
 
-    def fake(srv) -> None:
+    def fake(srv, replace=None) -> None:
         ran.append("exec")
         raise Stop
 
