@@ -50,3 +50,23 @@ def test_a_name_nothing_provides_is_still_refused(repo):
     _case(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_v.py::test_nope")
     assert out.exit != OK and "exist in no worktree" in out.reason, out
+
+
+def test_a_path_outside_the_repository_is_refused_even_though_pytest_would_collect_it(
+    repo, tmp_path
+):
+    _case(repo)
+    outside = tmp_path / "outside_test.py"
+    outside.write_text("def test_x():\n    assert True\n")
+    for ref in (f"{outside}::test_x", f"../{outside.name}::test_x"):
+        out = api.bug_fixed(repo, "B1", regression_test=ref)
+        assert out.exit != OK and "exist in no worktree" in out.reason, (ref, out)
+
+
+def test_an_imported_name_resolves_statically_without_a_runner(tmp_path):
+    from ddflow.api.knowledge.regression import _defines
+
+    f = tmp_path / "test_v.py"
+    f.write_text("from helper import test_v, other as test_w\nimport pkg.mod as test_m\n")
+    assert _defines(f, ["test_v"]) and _defines(f, ["test_w"]) and _defines(f, ["test_m"])
+    assert not _defines(f, ["test_nope"]) and not _defines(f, ["test_v", "test_x"])
