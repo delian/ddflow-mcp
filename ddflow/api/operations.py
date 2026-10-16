@@ -36,6 +36,7 @@ from ..services import flakes as FK
 from ..services import importer as IM
 from ..services import precommit as PC
 from ..services import prosepin as PP
+from ..services import testscope as TSC
 from ..services import testselect as TS
 from ..services.cadence import DueContext, due_all
 from ..services.gates import load_gates, parallel_test_advice
@@ -341,32 +342,17 @@ def relevant_tests(
         base = base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError as exc:
         return O.failed("tests", f"{tree} is not a git checkout: {exc}")
-    sel = TS.select(tree, base)
+    sel = TS.select(tree, base, **TSC.limits(cfg))
     if sel is None:
         return O.failed("tests", f"git could not say what changed in {tree} since {base}")
     gate = load_gates(repo, cfg).get("unit_tests")
     full = gate.command if gate else ""
     files = [t.path for t in sel.tests]
-    gate_scope: dict[str, Any] = {}
+    data = _selection_data(sel, tree, base, full, files)
     if item and gate is not None:
-        sc = TS.unit_tests_scope(cfg, st, st.items[item], full, tree)
-        gate_scope = {
-            "scope": sc.scope,
-            "why": sc.why,
-            "tests": [{"path": t.path, "reason": t.reason} for t in sc.tests],
-            "command": sc.command,
-        }
-    data: dict[str, Any] = {
-        "tree": str(tree),
-        "base": base,
-        "changed": sel.changed,
-        "tests": [{"path": t.path, "reason": t.reason} for t in sel.tests],
-        "command": TS.run_command(full, files, tree),
-        "full_suite": full,
-        "advice": parallel_test_advice(full, tree) if full else "",
-        "unparsed": sel.unparsed,
-        "unit_tests_gate": gate_scope,
-    }
+        data["unit_tests_gate"] = _scope_data(
+            TSC.unit_tests_scope(cfg, st, st.items[item], full, tree)
+        )
     if not files:
         return O.nothing(
             "tests",
@@ -375,6 +361,39 @@ def relevant_tests(
             **data,
         )
     return O.ok("tests", **data)
+
+
+def _rows(tests) -> list[dict[str, str]]:
+    return [{"path": t.path, "reason": t.reason} for t in tests]
+
+
+def _scope_data(sc: TSC.Scope) -> dict[str, Any]:
+    return {
+        "scope": sc.scope,
+        "why": sc.why,
+        "tests": _rows(sc.tests),
+        "command": sc.command,
+        "cut": _rows(sc.cut),
+        "cut_at_hubs": sc.cut_at,
+        "max_files": sc.max_files,
+    }
+
+
+def _selection_data(sel: TS.Selection, tree: Path, base: str, full: str, files: list[str]):
+    return {
+        "tree": str(tree),
+        "base": base,
+        "changed": sel.changed,
+        "tests": _rows(sel.tests),
+        "command": TS.run_command(full, files, tree),
+        "full_suite": full,
+        "advice": parallel_test_advice(full, tree) if full else "",
+        "unparsed": sel.unparsed,
+        "cut": _rows(sel.cut),
+        "cut_at_hubs": sel.cut_at,
+        "full_reason": sel.full,
+        "unit_tests_gate": {},
+    }
 
 
 def _caller_tree(repo: Path, where: Path | None) -> Path:
