@@ -30,8 +30,8 @@ def _held(repo: Path, agent: str = "me"):
 
 
 def test_a_pins_recipe_ticks_while_it_runs(repo, monkeypatch):
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     """Fails on the unfixed code: `regenerate` had no tick and ran its commands blind."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     seen: list[int] = []
     rec = PN.Recipe("p", ("x",), ("sleep", "2.4"), ("true",), ())
     rep = PN.regenerate(repo, Config.load(repo), recipes=[rec], tick=(lambda: seen.append(1), 1.0))
@@ -79,8 +79,8 @@ def test_a_renewing_long_command_is_not_progress(repo):
 
 
 def test_pins_regenerate_renews_the_callers_lease_while_a_recipe_runs(repo, monkeypatch):
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     """End to end: the API hands the recipe loop the caller's lease keeper."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     from ddflow.api import pin_files as PF
 
     log, cfg = _held(repo)
