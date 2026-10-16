@@ -3,7 +3,7 @@
 What an agent's last message used to retell in 400-700 words -- the shas, the regression tests
 and whether `complete` verified them, each gate's outcome and who reviewed, the gates recorded by
 hand, what ran on an earlier tree, the overrides, what was filed, what is still open and what was
-not done -- is all already in the log. This module reads it back as one fixed dict; `report_text`
+not done -- is all already in the log. This module reads it back as one fixed dict; `report_render`
 turns that into the text and the template (`agent_report.md`) lays it out. Nothing here writes.
 """
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.records import State
+from ..infra import worktree as W
 from . import gates as G
 from . import ledger as LG
 from . import report_gates as RG
@@ -119,8 +120,6 @@ def _landing(repo, it, led: dict[str, Any], gates: list[dict[str, Any]]) -> dict
     head = merge.get("branch_head", "")
     commits: list[str] = []
     if it.landed_before and head:
-        from ..infra import worktree as W
-
         r = W.git(repo, "log", "--format=%h", f"{it.landed_before}..{head}")
         commits = r.out.split() if r.ok else []
     return {
