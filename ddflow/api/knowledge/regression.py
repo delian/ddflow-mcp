@@ -6,7 +6,10 @@ import ast
 import re
 from pathlib import Path
 
+from ...config import Config
 from ...infra import worktree as W
+from ...services import gates as G
+from ...services import testselect as TS
 
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
@@ -50,10 +53,6 @@ def _collected(repo: Path, trees: list[Path], entry: str, path: str) -> bool:
     """Does pytest itself collect ``entry`` in any tree? The AST sees only names the file
     defines; a test the module imports or generates is invisible to it (bug Ba6c8cdeda4).
     The one mechanism the restored-test check uses (`gates.tree_provides`, B9f3ae012b9)."""
-    from ...config import Config
-    from ...services import gates as G
-    from ...services import testselect as TS
-
     cfg = Config.load(repo)
     defn = G.load_gates(repo, cfg).get("unit_tests")
     configured = defn.command if defn else ""
