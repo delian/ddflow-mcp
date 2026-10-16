@@ -21,7 +21,10 @@ BUG_INVALID_FIELDS = (
     "unchecked",
     "fix_task",
     "fix_task_removed",
+    "fix_task_abandoned",
     "fix_task_kept",
+    "fix_task_holder",
+    "fix_task_tree",
 )
 
 COMMANDS: tuple[Command, ...] = (
