@@ -70,7 +70,17 @@ def test_bug_invalid_reports_the_worktree_it_leaves(repo):
     assert code == 0, err
     out = K.bug_invalid(repo, "Bw", reason="by design", agent="a")
     assert out.data["fix_task_abandoned"] == "fix-Bw"
-    assert "kept" in out.data["fix_task_tree"] and "cleanup" in out.data["fix_task_tree"]
+    assert "kept" in out.data["fix_task_tree"] and "ddflow cleanup" in out.data["fix_task_tree"]
+
+
+def test_bug_invalid_ends_the_callers_blocked_fix_task_too(repo):
+    """Review of B8f9668d27d: `block` keeps the lease, so a blocked own task is still held."""
+    _filed_and_claimed(repo, "a")
+    code, _, err = run_cli(repo, "block", "fix-Bx", "--reason", "waiting", agent="a")
+    assert code == 0, err
+    out = K.bug_invalid(repo, "Bx", reason="by design", agent="a")
+    assert out.data["fix_task_abandoned"] == "fix-Bx", out.data
+    assert state(repo).items["fix-Bx"].state == ABANDONED
 
 
 def _events(repo, item, kind):
