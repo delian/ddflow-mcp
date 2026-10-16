@@ -33,7 +33,9 @@ def _scan(root: Path, tests: list[str]) -> bool:
     return True
 
 
-def tree_provides(command_for: Any, configured: str, root: Path, tests: list[str]) -> bool:
+def tree_provides(
+    command_for: Any, configured: str, root: Path, tests: list[str], *, scan: bool = True
+) -> bool:
     """Does ``root`` provide every named test?
 
     ``pytest --collect-only`` exit 0 says so: each id resolved to a test, a re-export
@@ -41,7 +43,8 @@ def tree_provides(command_for: Any, configured: str, root: Path, tests: list[str
     cannot be collected at all (an import the base cannot satisfy: pytest then reports the
     id "not found" too), OR it timed out or has no runner -- and the text scan decides. The
     scan only keeps the test in the restored check; a base file pytest cannot import still
-    ends there as "not run" (exit 4), exactly as before this probe existed."""
+    ends there as "not run" (exit 4), exactly as before this probe existed. ``scan=False``:
+    only pytest's own exit 0 counts (the static name check, which has its own strict scan)."""
     if any(not (root / s.partition("::")[0]).is_file() for s in tests):
         return False
     command = command_for(configured, tests, root)
@@ -53,4 +56,4 @@ def tree_provides(command_for: Any, configured: str, root: Path, tests: list[str
         )
         if run_command_gate(probe, root)[0] == "passed":
             return True
-    return _scan(root, tests)
+    return scan and _scan(root, tests)
