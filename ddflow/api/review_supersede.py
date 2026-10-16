@@ -10,7 +10,7 @@ import re
 
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
 _FILE = re.compile(r"^--- (?:a/)?(.+?)\s*$")
-_LOC = re.compile(r"([\w./+@-]+\.\w+)(?::(\d+)(?:\s*[-–]\s*(\d+))?)?")
+_LOC = re.compile(r"([\w./+@-]+\.\w+)(?::(\d+)(?:\s*[-\u2013]\s*(\d+))?)?")
 
 
 def changed_old_lines(diff: str) -> dict[str, list[tuple[int, int]]]:

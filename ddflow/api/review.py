@@ -39,11 +39,11 @@ from ..services.enforce import SELF_MANAGED
 from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
 from ..views import human
+from . import review_supersede as SS
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import _lease_keeper, item_tree
 from .lifecycle import callers_tree
-from . import review_supersede as SS
 from .review_finding_ref import resolve as resolve_finding
 
 
