@@ -409,5 +409,5 @@ def cmd_replay(a, c: Ctx) -> int:
     if out.data["files"]:
         c.out(out.data["text"], out.body(("files",)))
         return OK
-    print(out.data["text"])
+    c.out(out.data["text"], {"text": out.data["text"], "files": []})
     return OK
