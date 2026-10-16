@@ -29,7 +29,7 @@ class CiConfig:
     )
     timeout_s: int = knob(
         3600,
-        doc="Seconds the CI command may run before the gate records UNAVAILABLE. Default 3600: the pre-push set includes the whole test suite.",
+        doc="Seconds the CI command may run before the gate records UNAVAILABLE. Default 3600: sized for the whole test suite (`ci run --full`, the merge queue's batch); an item's selected run is far shorter.",
     )
     keep_env: list[str] = knob(
         factory=list,
