@@ -54,9 +54,10 @@ def is_superseded(location: str, changed: dict[str, list[tuple[int, int]]]) -> b
     m = _LOC.search(location or "")
     if not m:
         return False
-    ranges = next(
-        (r for p, r in changed.items() if p == m.group(1) or p.endswith("/" + m.group(1))), None
-    )
+    want = m.group(1)
+    ranges = changed.get(want)
+    if ranges is None:  # a citation may drop the leading directories
+        ranges = next((r for p, r in changed.items() if p.endswith("/" + want)), None)
     if not ranges:
         return False
     lo = int(m.group(2))
