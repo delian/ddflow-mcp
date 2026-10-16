@@ -650,6 +650,7 @@
   "payload": [
    "id",
    "regression_verified",
+   "regression_verify",
    "lesson_captured",
    "lesson_capture"
   ],
@@ -661,6 +662,7 @@
     },
     "id": {},
     "regression_verified": {},
+    "regression_verify": {},
     "lesson_captured": {},
     "lesson_capture": {},
     "export_refresh": {},
