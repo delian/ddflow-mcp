@@ -1,6 +1,5 @@
-"""The `report` command, declared once. CLI-ONLY for now: a read of the log that an agent ends
-its run with, `ddflow report ITEM`; its MCP face costs tools/list bytes the budget does not have
-(DX-report-mcp-tool)."""
+"""The `report` command, declared once. A read of the log that an agent ends its run with. It has
+no tool of its own (tools/list is at its byte budget): over MCP it is `ddflow_show report=true`."""
 
 from __future__ import annotations
 
@@ -18,8 +17,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="the completion report of an item, from the log (shas, tests, gates, overrides)",
         tool="",
         reason=(
-            "CLI-only: tools/list is within a few bytes of its budget; an MCP agent reads the "
-            "same facts through ddflow_show and ddflow_gate_status"
+            "tools/list is at its byte budget: over MCP the same report is ddflow_show with report=true"
         ),
         call=lambda repo, a, agent: _api().report(
             repo, item=a["item"], by_agent=a.get("by_agent") or "", agent=agent

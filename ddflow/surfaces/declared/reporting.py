@@ -188,10 +188,9 @@ COMMANDS: tuple[Command, ...] = (
         path=("show",),
         tool="ddflow_show",
         description=(
-            "Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared "
-            "globs, the lease and who holds it, the worktree path you can cd to, and "
-            "every gate's outcome with its evidence. Use it to check your own work "
-            "before calling ddflow_complete."
+            "Everything known about one phase, task or bug: state, dependencies, globs, "
+            "the lease holder, the worktree path, and every gate's outcome with evidence. "
+            "Check your work with it before ddflow_complete."
         ),
         params=(
             Param(
@@ -201,8 +200,15 @@ COMMANDS: tuple[Command, ...] = (
                 required=True,
                 cli_help="",
             ),
+            Param(
+                "report", type="boolean", help="Its completion report.", cli_help="", default=False
+            ),
         ),
-        call=lambda repo, a, agent: _api().show(repo, a["id"], agent=agent),
+        call=lambda repo, a, agent: (
+            _api().show_report(repo, a["id"], agent=agent)
+            if a.get("report")
+            else _api().show(repo, a["id"], agent=agent)
+        ),
         payload="item",
     ),
     Command(

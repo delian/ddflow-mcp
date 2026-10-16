@@ -93,7 +93,7 @@ def test_the_json_has_the_same_sections(done):
 
 def test_what_was_filed_and_what_is_still_open_are_reported(done):
     out = report(done)
-    assert "BX1 (bug, open)" in out.split("## Filed during the item")[1]
+    assert "BX1 (bug, open)" in out.split("## Filed during the item")[1].split("##")[0]
     assert "BX1 (bug, open)" in out.split("## Open follow-ups")[1]
 
 
@@ -171,3 +171,32 @@ def test_a_gate_that_ran_before_the_last_commit_is_marked_as_an_earlier_tree(rep
 
 def test_a_gate_that_ran_on_the_landed_tree_is_not(done):
     assert "earlier tree" not in report(done)
+
+
+def test_the_report_is_reachable_over_mcp_as_show_with_report(done):
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(done).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_show", "arguments": {"id": "T1", "report": True}},
+        }
+    )
+    body = json.dumps(reply["result"])
+    assert "Recorded by hand" in body and "rubber_duck" in body
+
+
+def test_landing_without_listed_commits_prints_no_dangling_count():
+    d = {
+        "item": {"id": "I", "title": "t", "agent": "a", "state": "done"},
+        "landing": {
+            "merge_sha": "0123456789abcdef", "base": "main", "branch": "b", "branch_head": "",
+            "commits": [], "commits_total": 3, "completed_at": "", "completed_by": "",
+        },
+        "regression": {"bugs": [], "test_files": []},
+        "gates": [], "overrides": [], "filed": {"bugs": [], "tasks": []},
+        "follow_ups": [], "not_done": [],
+    }  # fmt: skip
+    assert "(+3 more)" not in RT.variables(d)["landing"]

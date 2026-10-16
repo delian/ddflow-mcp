@@ -2175,13 +2175,14 @@
 # ---
 # name: test_help[ddflow show]
   '''
-  usage: ddflow show [-h] id
+  usage: ddflow show [-h] [--report] id
   
   positional arguments:
     id
   
   options:
     -h, --help  show this help message and exit
+    --report
   
   '''
 # ---

@@ -150,7 +150,7 @@ from .operations import (
     relevant_tests,
 )
 from .plan import plan_check
-from .report import report
+from .report import report, show_report
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -353,6 +353,7 @@ __all__ = [
     "session_prompt",
     "session_start",
     "show",
+    "show_report",
     "similar",
     "split",
     "stale_server_facts",
