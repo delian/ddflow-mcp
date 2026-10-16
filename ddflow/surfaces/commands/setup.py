@@ -622,13 +622,13 @@ def _report_init(c: Ctx, tree: Path | None = None, *, quiet: bool = False) -> in
                 "leaving your own prose alone."
             )
         )
-    body = {"root": str(d), "config": str(cfgp), "rules_drift": [r.state for r in drift]}
-    if quiet:  # `adopt --json`: the caller folds this into its one document
-        return body
-    c.out(
+    text = (
         f"Initialised ddflow in {d}\n"
         f"  config: {cfgp}\n"
-        f"  Next: `ddflow phase add P1 --title 'First phase'`" + commit_hint + rules_hint,
-        body,
+        f"  Next: `ddflow phase add P1 --title 'First phase'`" + commit_hint + rules_hint
     )
+    body = {"root": str(d), "config": str(cfgp), "rules_drift": [r.state for r in drift]}
+    if quiet:  # `adopt --json`: the caller folds this into its one document
+        return {**body, "report": text}
+    c.out(text, body)
     return OK
