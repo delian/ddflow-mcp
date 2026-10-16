@@ -35,6 +35,13 @@ def shared_globs(cfg: Any) -> list[str]:
     ]
 
 
+def new_file_globs(cfg: Any) -> list[str]:
+    """`[lease] new_file_globs`: files an item adds under its own name (an upgrade-manifest
+    fragment). A claim glob inside one overlaps nothing; the commit hook covers a staged NEW
+    file matching one for any live lease holder, never an edit of an existing one."""
+    return list(cfg.lease.new_file_globs)
+
+
 def is_shared(glob: str, shared: list[str]) -> bool:
     """Is ``glob`` (a claim's glob or a staged path) INSIDE one of the ``shared`` globs?
 
@@ -92,7 +99,7 @@ def glob_conflict(
     ``shared_globs`` overlap nothing.
     """
     mine = line_key(state, it, cfg)
-    shared = shared_globs(cfg)
+    shared = [*shared_globs(cfg), *new_file_globs(cfg)]
     if against == "live":
         for other_id, lease in (live or {}).items():
             if other_id == it.id or lease.holder == holder:

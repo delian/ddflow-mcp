@@ -486,6 +486,15 @@
           file interleaves it. Regenerate it after merging, or declare a driver
           yourself in .gitattributes; doctor notes a shared glob that has none. For
           append-only files (a changelog) use append_only_globs instead.
+      lease.new_file_globs = ['ddflow/templates/upgrade/unreleased/*.toml']   [default]
+          Files each item ADDS as a new file named after its own work -- an upgrade-
+          manifest fragment (`unreleased/knob_added.<section>.<knob>.toml`), one per
+          knob. A NEW file matching one of these needs no lease of its own beyond
+          holding some live lease (and a claim glob inside one overlaps nothing), so
+          two tasks adding different knobs never collide on the directory. An EDIT,
+          rename or delete of an existing file still needs a lease that covers it:
+          another agent's fragment stays theirs. Set [] to require the directory in
+          the task globs again.
       lease.append_only_globs = []   [default]
           Files every item APPENDS to -- a changelog, a research log:
           ["docs/CHANGELOG.md"]. Shared like shared_globs (no lease-overlap check;
