@@ -408,6 +408,7 @@ GUARDS = [
     "tests/test_architecture_guards.py",
     "tests/test_lifecycle_layout.py",
     "tests/test_packaging.py",
+    "tests/test_module_splits.py",
 ]
 
 
@@ -417,7 +418,10 @@ GUARDS = [
         ("ddflow/api/lifecycle/claim.py", {GUARDS[0], GUARDS[1]}),
         ("ddflow/api/lifecycle/__init__.py", {GUARDS[0], GUARDS[1]}),
         ("ddflow/surfaces/tools/lifecycle.py", {GUARDS[0]}),
-        ("ddflow/services/gates/evidence.py", {GUARDS[0]}),
+        ("ddflow/services/gates/evidence.py", {GUARDS[0], GUARDS[3]}),
+        ("ddflow/services/gates/regression_collect.py", {GUARDS[0], GUARDS[3]}),
+        ("ddflow/api/knowledge/pairs.py", {GUARDS[0], GUARDS[3]}),
+        ("ddflow/api/reporting/health.py", {GUARDS[0], GUARDS[3]}),
         (".importlinter", {GUARDS[0]}),
         ("tests/guard_baselines/unreferenced_functions.toml", {GUARDS[0]}),
         ("pyproject.toml", {GUARDS[2]}),

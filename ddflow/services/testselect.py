@@ -24,6 +24,9 @@ A test is selected when, relative to the item's base:
   guards, a package layout, packaging) imports nothing it checks, so it says what it
   checks with a module-level ``GOVERNS = ("ddflow/api/**", ...)`` of globs, and a change
   to a path matching one selects it (B2a1eaa259e);
+* it LISTS a package a module was added to or removed from (`testidents.listing_tests`): a
+  layout test that walks the package from disk spells its name in quotes, and imports
+  nothing the new module could change;
 * it names a changed DATA file -- a fixture, a golden file, a baseline -- that lives below
   a directory holding tests: a test reads one by its path, never by an import
   (`_data_readers` says how it is matched).
@@ -35,6 +38,7 @@ What it misses, stated so nobody mistakes it for the suite -- the whole run catc
 * a test more than `[gates].unit_tests_max_hops` imports away from the change (it imports C, C imports B,
   B imports the changed A);
 * a test that reaches the change only through a re-exporting package ``__init__``;
+* a package name built at run time, for the listing rule;
 * a test that builds a changed data file's path at run time, when another test spells
   the file's name together with its directory: only that most specific match is taken.
 
@@ -193,6 +197,7 @@ def select(
     changed: list[str] | None = None,
     listed: list[str] | None = None,
     idents: dict[str, str] | None = None,
+    membership: list[str] | None = None,
 ) -> Selection | None:
     """The tests ``tree``'s change reaches since ``base``, each with why and how near. None
     when git could not say what changed.
@@ -203,7 +208,7 @@ def select(
     `unit_tests_name_max_tests`. ``max_files`` (`[gates].unit_tests_max_files`, 0 = unlimited) bounds the
     selection: the farthest tests are moved to ``cut`` until it fits, never a changed test.
     ``changed``, ``listed`` and ``idents`` stand in for git's answers (and
-    `testidents.changed_identifiers`), to select over a checkout of an older commit that
+    `testidents.changed_identifiers`; ``membership`` the added and removed paths), to select over a checkout of an older commit that
     has no history of its own (the recall replay)."""
     changed = changed_files(tree, base) if changed is None else changed
     listed = _listed(tree) if listed is None else listed
@@ -234,13 +239,27 @@ def select(
     pick.many(governed(tree, changed, tests), RANK_DECLARED)
     if idents is None:
         idents = TI.changed_identifiers(tree, base, [c for c in changed if c in py])
-    if idents:
-        pick.many(
-            TI.spelling_tests(idents, {t: _read(tree / t) for t in tests}, name_max_tests),
-            RANK_DECLARED,
-        )
+    if membership is None:
+        membership = _membership(tree, base)
+        if membership is None:  # nobody looked is never "nothing was added"
+            sel.full = (
+                sel.full or f"git could not say which files were added or removed since {base}"
+            )
+    packages = TI.listed_packages(membership or [])
+    if idents or packages:  # no changed name or listing, nothing to read the tests for
+        texts = {t: _read(tree / t) for t in tests}
+        pick.many(TI.spelling_tests(idents, texts, name_max_tests), RANK_DECLARED)
+        pick.many(TI.listing_tests(packages, texts, name_max_tests), RANK_DECLARED)
     _bounded(sel, pick, max_files)
     return sel
+
+
+def _membership(tree: Path, base: str) -> list[str] | None:
+    """The paths ADDED or REMOVED since ``base`` (committed, staged, unstaged, untracked):
+    the changes that alter what a package lists. None when git cannot say."""
+    return CH.changed_paths(
+        tree, base, include=("committed", "tracked", "untracked"), diff_filter="AD"
+    )
 
 
 def _read(path: Path) -> str:

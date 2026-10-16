@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git_quiet as _git
 
+from ddflow.services import testidents as TI
 from ddflow.services import testscope as TSC
 from ddflow.services import testselect as T
 
@@ -193,3 +194,94 @@ def test_a_name_spelt_by_too_many_tests_selects_none_of_them(spelled):
     assert sel is not None and sel.tests == [], "four tests spell it: a word, not a name"
     sel = T.select(spelled, "main", name_max_tests=4)
     assert sel is not None and len(sel.tests) == 4
+
+
+@pytest.fixture
+def listed(repo):
+    """pkg.zoo and a test that LISTS it (quoted name), one that imports it, one that mentions it
+    in a comment."""
+    files = {
+        "pkg/__init__.py": "",
+        "pkg/zoo/__init__.py": "",
+        "pkg/zoo/old.py": "OLD = 1\n",
+        "tests/conftest.py": "",
+        "tests/test_layout_of_zoo.py": (
+            "import importlib, pkgutil\nPACKAGE = 'pkg.zoo'\n\n"
+            "def test_each_area():\n"
+            "    for m in pkgutil.iter_modules(importlib.import_module(PACKAGE).__path__):\n"
+            "        assert m.name\n"
+        ),
+        "tests/test_uses_zoo.py": "from pkg.zoo import old\n\ndef test_u():\n    assert old.OLD\n",
+        "tests/test_comment.py": "# the pkg.zoo package\n\ndef test_c():\n    assert True\n",
+    }
+    _write(repo, files)
+    return repo
+
+
+def test_a_module_added_to_a_package_selects_the_test_that_lists_the_package(listed):
+    (listed / "pkg/zoo/brand_new.py").write_text("NEW = 1\n")
+    sel = T.select(listed, "main")
+    assert sel is not None
+    got = {t.path: t.reason for t in sel.tests}
+    assert got == {
+        "tests/test_layout_of_zoo.py": "lists package pkg.zoo (module pkg/zoo/brand_new.py added or removed)"
+    }, got
+
+
+def test_a_module_removed_from_a_package_selects_it_too_and_an_edit_does_not(listed):
+    (listed / "pkg/zoo/old.py").write_text("OLD = 2\n")
+    sel = T.select(listed, "main")
+    assert sel is not None
+    assert "tests/test_layout_of_zoo.py" not in {t.path for t in sel.tests}, (
+        "an edit lists nothing new"
+    )
+    (listed / "pkg/zoo/old.py").unlink()
+    sel = T.select(listed, "main")
+    assert sel is not None
+    assert "tests/test_layout_of_zoo.py" in {t.path for t in sel.tests}
+
+
+def test_a_committed_new_module_counts_as_added(listed):
+    _git(listed, "checkout", "-qb", "work")
+    (listed / "pkg/zoo/brand_new.py").write_text("NEW = 1\n")
+    _git(listed, "add", "-A")
+    _git(listed, "commit", "-qm", "add a module")
+    sel = T.select(listed, "main")
+    assert sel is not None
+    assert "tests/test_layout_of_zoo.py" in {t.path for t in sel.tests}
+
+
+def test_a_new_module_in_this_repositorys_split_packages_selects_the_split_guard():
+    """B0e7199ff32: `services/gates/regression_collect.py` was added and `ddflow tests --item`
+    left out tests/test_module_splits.py, which failed only in the full ci run."""
+    root = Path(__file__).resolve().parents[1]
+    for new in (
+        "ddflow/services/gates/brand_new_area.py",
+        "ddflow/api/knowledge/brand_new_area.py",
+        "ddflow/api/reporting/brand_new_area.py",
+    ):
+        sel = T.select(root, "main", changed=[new], membership=[new], idents={})
+        assert sel is not None
+        assert "tests/test_module_splits.py" in {t.path for t in sel.tests}, new
+    # and by the listing rule alone, without the GOVERNS declaration:
+    text = (root / "tests/test_module_splits.py").read_text("utf-8")
+    packages = TI.listed_packages(["ddflow/services/gates/brand_new_area.py"])
+    assert "tests/test_module_splits.py" in TI.listing_tests(
+        packages, {"tests/test_module_splits.py": text}
+    )
+
+
+def test_a_new_subpackage_changes_what_its_parent_package_lists():
+    packages = TI.listed_packages(["pkg/zoo/newsub/__init__.py"])
+    assert {"pkg.zoo.newsub", "pkg/zoo/newsub", "pkg.zoo", "pkg/zoo"} <= set(packages)
+    assert "pkg" not in packages
+
+
+def test_a_renamed_module_counts_as_a_removal_and_an_addition(listed):
+    """Git's rename detection must not hide the change of what the package lists."""
+    _git(listed, "checkout", "-qb", "work")
+    _git(listed, "mv", "pkg/zoo/old.py", "pkg/zoo/renamed.py")
+    _git(listed, "commit", "-qm", "rename a module")
+    sel = T.select(listed, "main")
+    assert sel is not None
+    assert "tests/test_layout_of_zoo.py" in {t.path for t in sel.tests}
