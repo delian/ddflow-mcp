@@ -15,7 +15,6 @@ leaving only `--skip-regression-verify`. Two honest ways to show the test guards
 
 from __future__ import annotations
 
-import re
 import shutil
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -25,6 +24,7 @@ from ...core import globs as GL
 from ...infra import fsio
 from .. import changes as CH
 from .defs import GateDef
+from .regression_collect import tree_provides
 from .runner import run_command_gate
 
 #: What `verify_regression_test` returns. `verified` is the only plain pass; the caller
@@ -59,25 +59,6 @@ def _ran(ev: dict[str, Any]) -> dict[str, Any]:
     return {k: ev[k] for k in _KEEP if k in ev}
 
 
-def _exists_at_base(ptree: Path, tests: list[str]) -> bool:
-    """Do the named tests exist in the base's own test files? Only then does running
-    them there say anything: an absent test 'fails' by not being collected."""
-    for spec in tests:
-        rel, _, rest = spec.partition("::")
-        src = ptree / rel
-        if not src.is_file():
-            return False
-        name = rest.split("::")[-1].split("[")[0]
-        # A definition, not a substring: a comment or a longer name must not count.
-        if name and not re.search(
-            rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(name)}\b",
-            src.read_text("utf-8", errors="replace"),
-            re.M,
-        ):
-            return False
-    return True
-
-
 def verify_test_only_fix(
     repo: Path,
     cfg: Config,
@@ -108,7 +89,7 @@ def verify_test_only_fix(
     with tools.merge_tree(repo, base_sha, "") as (ptree, why):
         if ptree is None:
             return UNRUN, {**ev, "reason": why}
-        if not _exists_at_base(ptree, tests):
+        if not tree_provides(tools.command_for, defn.command if defn else "", ptree, tests):
             restored = "not run (the test is not in the base's test files)"
         else:
             command = tools.command_for(defn.command if defn else "", tests, ptree)
