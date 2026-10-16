@@ -43,6 +43,12 @@ MUTATION_PARAMS: tuple[Param, ...] = (
 
 MUTATION_ORDER = ("mutation",)
 
+#: For `Command.flag_exempt` (the parity test): the three flags are one MCP JSON parameter.
+MUTATION_FLAG_EXEMPT: dict[str, str] = {
+    f"--mutation-{part}": "the mutation: MCP `mutation` (JSON {file, old, new})"
+    for part in ("file", "old", "new")
+}
+
 
 def mutation_of(a: dict[str, Any]) -> dict[str, str] | None:
     """The `{file, old, new}` the parameters name, None when none was given."""
@@ -50,6 +56,8 @@ def mutation_of(a: dict[str, Any]) -> dict[str, str] | None:
     if raw:
         try:
             got = json.loads(raw) if isinstance(raw, str) else dict(raw)
+            if not isinstance(got, dict):
+                raise TypeError("a mutation is an object")
         except (ValueError, TypeError):
             return {"file": "", "old": "", "new": ""}  # refused downstream: names no `old`
         return {k: str(got.get(k) or "") for k in ("file", "old", "new")}

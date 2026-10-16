@@ -15,7 +15,7 @@ from ..argtypes import GLOBS_HELP, _Globs
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
 from . import lifecycle_cli as L
-from .mutation_params import MUTATION_ORDER, MUTATION_PARAMS, mutation_of
+from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
 #: `api.lifecycle.DEFAULT_CHECK_RECOVERY`, spelled here so declaring the commands does not
 #: import the api (tests/test_uc_surf_loop_brief.py holds the two together).
@@ -619,6 +619,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("complete",),
         summary="finish an item (exit 3 = gates not satisfied)",
         tool="ddflow_complete",
+        flag_exempt=MUTATION_FLAG_EXEMPT,
         description="Finish an item. Refuses (exit 3) when a required gate has not passed, a phase "
         "has open tasks, or no reviewer came from a different model family than the "
         "author. Pass your own 'model'.",
