@@ -127,6 +127,7 @@ COMMANDS: tuple[Command, ...] = (
             resources=a.get("resources", "") or "",
             agent=agent,
             queue=bool(a.get("queue")),
+            break_lease=bool(a.get("break")),
         ),
         # `rebound`/`here`: the item kept its OWN tree from an earlier claim, and whether
         # the caller is standing in it -- over MCP the payload is the only way an agent
@@ -141,6 +142,7 @@ COMMANDS: tuple[Command, ...] = (
             "here",
             "port",
             "port_advice",
+            "broke",
         ),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
@@ -180,8 +182,14 @@ COMMANDS: tuple[Command, ...] = (
                 help="Queue a refused request (FIFO per file).",
                 cli_help="keep a refused claim in the first-in-first-out line for its files",
             ),
+            Param(
+                "break",
+                type="boolean",
+                help="Break a lease on files you need that is CONTENDED and has shown no progress (no commit, gate outcome, note or changed file; heartbeats do not count) for [lease].hold_max_s. The holder keeps its branch and worktree and is told. Refused when the lease is not yet breakable. Needed only when [lease].break_on_timeout is off.",
+                cli_help="break a contended lease that shows no progress for [lease].hold_max_s (its work is kept)",
+            ),
         ),
-        tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "force"),
+        tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "break", "force"),
     ),
     Command(
         path=("heartbeat",),
@@ -192,7 +200,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent, called_from=None: _api().heartbeat(
             repo, a["id"], agent=agent, called_from=called_from
         ),
-        payload=("renewed", "waiters", "globs_withheld"),
+        payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,

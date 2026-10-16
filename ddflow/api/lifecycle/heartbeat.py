@@ -11,6 +11,7 @@ from typing import Any
 from ...core import outcome as O
 from ...core.model import fold
 from ...services import eventcommit as EC
+from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import waits as WT
 from ...services.cleanup import stranded_text
@@ -47,6 +48,7 @@ def heartbeat(
             renewed=False,
             waiters=[],
             globs_withheld="",
+            yield_requested="",
         )
     renewed = L.renew(log, item)
     hint = ""
@@ -60,6 +62,10 @@ def heartbeat(
                 hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again"
             else:
                 renewed = L.renew(log, item, holder=lease.holder)
+    if not renewed:
+        broken = [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
+        if broken:  # the lease was taken from this agent: say so wherever it stands
+            hint = "; " + LB.notice_text(broken[0])
     if renewed:
         withheld = _catch_up_globs(log, cfg, item)
         return O.ok(
@@ -69,6 +75,7 @@ def heartbeat(
             waiters=_waiters(repo, item),
             globs_withheld=withheld,
             new_reports=_new_report_count(st, item),
+            yield_requested=_yield_request(log, cfg, item),
         )
     return O.nothing(
         "lease.renewed",
@@ -77,7 +84,19 @@ def heartbeat(
         renewed=False,
         waiters=[],
         globs_withheld="",
+        yield_requested="",
     )
+
+
+def _yield_request(log, cfg, item: str) -> str:
+    """Why this holder is asked to yield ("" when it is not): another item waits for its
+    files and it has shown no progress for `[lease].idle_max_s` (`services.leasebreak`)."""
+    now = time.time()
+    st = localize(fold(log.read_all(), strict=False), log, now)
+    for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root)):
+        if v.item == item:
+            return LB.yield_text(v)
+    return ""
 
 
 def _catch_up_globs(log, cfg, item: str) -> str:

@@ -202,6 +202,7 @@ def claim(
     resources: str = "",
     agent: str = "",
     queue: bool = False,
+    break_lease: bool = False,
 ) -> O.Outcome:
     """Acquire a lease and (optionally) bind a worktree. Exit 3 if refused.
 
@@ -241,7 +242,8 @@ def claim(
         if early.data.get("queued_behind"):  # in line behind a waiter: that is a wait too
             _record_waiting(log, cfg, item, want, queue)
         return early
-    lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources, queue)
+    broke: list[dict] = []
+    lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources, queue, (break_lease, broke))
     if isinstance(lz, O.Outcome):
         return lz
 
@@ -258,7 +260,9 @@ def claim(
     CHO.adopt_defaults(log, cfg, ["model", "integration"])
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
-    return _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo)
+    out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo)
+    out.data["broke"] = broke
+    return out
 
 
 def _claimed(cfg, st, item: str, lz, bound: _Bound, port, target_item, stands: Path) -> O.Outcome:
@@ -299,7 +303,7 @@ def _claimed(cfg, st, item: str, lz, bound: _Bound, port, target_item, stands: P
 
 
 def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
-    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False
+    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False, breaking=(False, None)
 ):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
@@ -312,11 +316,19 @@ def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
             force=force,
             resources=csv_list(resources) or None,
             offer=alternatives_offer(repo, log, cfg),
+            break_lease=breaking[0],
+            broke=breaking[1],
         )
     except L.LeaseError as exc:
         reason = str(exc)
         if exc.alternatives:
             reason += "\n\nYou could take instead: " + ", ".join(exc.alternatives)
+        if breaking[0]:
+            reason += (
+                f"\n\n--break applies only to a lease that is contended and has shown no "
+                f"progress for [lease].hold_max_s ({cfg.lease.hold_max_s}s; 0 = never); "
+                f"this one is not breakable now."
+            )
         own = prior if prior is not None and prior.holder == exc.holder else None
         lapsed = own is not None and not own.live(time.time(), cfg.lease.grace_s)
         if exc.holder and exc.holder != log.agent_id and not lapsed:

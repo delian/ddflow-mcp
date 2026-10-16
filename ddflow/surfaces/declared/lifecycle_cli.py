@@ -37,6 +37,8 @@ def waiting(rows: list, head: str) -> str:
 
 
 def heartbeat_notes(out, a, ctx) -> Iterator[str]:
+    if out.data.get("yield_requested"):
+        yield f"  YIELD REQUESTED: {out.data['yield_requested']}"
     if out.data.get("globs_withheld"):
         yield f"  lease renewed WITHOUT {a['id']}'s newer globs/resources: {out.data['globs_withheld']}"
 
@@ -247,6 +249,12 @@ def claim_body(out, a) -> Any:
 def claim_text(out, a, ctx) -> str:
     d = out.data
     msg = f"claimed {a['id']} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+    for b in d.get("broke") or []:
+        msg += (
+            f"\n  BROKE {b['item']}'s lease ({b['holder']}): no progress for "
+            f"{b['idle_s']:.0f}s while you waited. Its branch and worktree are kept and "
+            f"{b['holder']} is told."
+        )
     owner = ctx.tree_owner
     if owner and d["worktree"] and not d["rebound"]:
         msg += (
