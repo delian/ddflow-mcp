@@ -39,8 +39,9 @@ def tree_provides(command_for: Any, configured: str, root: Path, tests: list[str
     ``pytest --collect-only`` exit 0 says so: each id resolved to a test, a re-export
     included. Anything else is pytest not confirming it -- the id is absent, OR the file
     cannot be collected at all (an import the base cannot satisfy: pytest then reports the
-    id "not found" too), OR it timed out or has no runner -- and the text scan decides: a
-    test whose file fails to import at the base is the failure the restored check looks for."""
+    id "not found" too), OR it timed out or has no runner -- and the text scan decides. The
+    scan only keeps the test in the restored check; a base file pytest cannot import still
+    ends there as "not run" (exit 4), exactly as before this probe existed."""
     if any(not (root / s.partition("::")[0]).is_file() for s in tests):
         return False
     command = command_for(configured, tests, root)
