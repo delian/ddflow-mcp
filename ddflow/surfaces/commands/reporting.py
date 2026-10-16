@@ -372,7 +372,7 @@ def cmd_doctor(a, c: Ctx) -> int:
         accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
     )
     if c.json:
-        emit_json(out.body(("problems", "notes", "events", "items", "wait_cycles")))
+        emit_json(out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order")))
         return out.exit
     print(out.data["text"])
     return out.exit

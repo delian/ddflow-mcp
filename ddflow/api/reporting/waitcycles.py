@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from ...core import leasewait as LW
+from ...services import autoorder as AOS
 from ...services import waiting as WT
 
 
@@ -32,3 +33,11 @@ def wait_findings(cycles: list[LW.Cycle], cfg) -> list[str]:
     if shown and len(cycles) > shown:
         out.append(f"{len(cycles) - shown} more lease deadlock(s)")
     return out
+
+
+def wait_order(log, st, cfg, cycles: list[LW.Cycle], notes: list[str]) -> dict:
+    """What `[schedule].auto_order` does about ``cycles`` (DX-conflict-autoorder): its
+    lines join ``notes``; the result is the `doctor` data, with the edges standing now."""
+    ordered = AOS.run(log, st, cfg, [c.as_dict() for c in cycles])
+    notes += AOS.lines(ordered)
+    return {**ordered, "standing": AOS.auto_edges(log.read_all(), st)}
