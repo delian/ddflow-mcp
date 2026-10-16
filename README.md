@@ -5412,7 +5412,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=d6fa39acbd0c -->
+<!-- ddflow:begin README/tools sha=99e766bbfd14 -->
 <details><summary>All 117 MCP tools: 32 in the `core` tier, 48 more in `standard`, 37 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5464,7 +5464,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
-| Gates and review | `ddflow_ci` | standard | CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status). |
+| Gates and review | `ddflow_ci` | standard | CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status). |
 | Gates and review | `ddflow_gate_list` | standard | The gates this project defines; with refuted=true, every gate passed ON REFUTATION, to spot-check. |
 | Gates and review | `ddflow_gate_record` | core | Record the outcome of a gate you performed (research, a review, a bug hunt). |
 | Gates and review | `ddflow_gate_run` | core | Execute a command gate (tests, linters) and record the result with its evidence. |
