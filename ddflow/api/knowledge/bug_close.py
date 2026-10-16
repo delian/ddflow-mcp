@@ -9,9 +9,10 @@ import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
 from ...core.events import parse_changelog
-from ...core.model import OPEN, fold
+from ...core.model import ABANDONED, OPEN, fold
 from ...infra import worktree as W
 from ...services import gates as G
+from ...services import leases as L
 from .._base import _load
 from .bugs import _unknown_bug
 from .regression import _looks_like_several, _split_outside_brackets, _unresolved_tests
@@ -243,7 +244,21 @@ def bug_invalid(
         # since `_load` must be seen, or the task is removed under its holder.
         fresh = fold(log.read_all(), strict=False)
         rec = fresh.bugs.get(bug, rec)  # the record the removal is decided from, and reported
-        removed, kept = _drop_fix_task(log, fresh, rec)
+        removed, kept = _drop_fix_task(log, fresh, rec, reason=reason)
+        task = fresh.items.get(rec.fix_task) if rec.fix_task else None
+        holder = task.lease.holder if kept == "held" and task and task.lease else ""
+    # A task ended from the caller's own lease was ABANDONED, not removed (B8f9668d27d). Its
+    # worktree is NOT disposed here: this call cannot see where the caller's shell stands
+    # (over MCP the process cwd is the server's), so the tree stays for `ddflow cleanup`.
+    abandoned = removed if removed and _ended_by_abandon(log, removed) else ""
+    tree = ""
+    if abandoned:
+        wt = fold(log.read_all(), strict=False).items[abandoned].worktree
+        tree = (
+            f"worktree {wt} kept; `ddflow cleanup` reports it and removes it once clean"
+            if wt
+            else ""
+        )
     return O.ok(
         "bug.invalid",
         id=bug,
@@ -251,9 +266,18 @@ def bug_invalid(
         evidence=evidence,
         unchecked=unchecked,
         fix_task=rec.fix_task,
-        fix_task_removed=removed,
+        fix_task_removed="" if abandoned else removed,
+        fix_task_abandoned=abandoned,
         fix_task_kept=kept,
+        fix_task_holder=holder,
+        fix_task_tree=tree,
     )
+
+
+def _ended_by_abandon(log, item: str) -> bool:
+    """Whether the item's last ending event was an abandonment (by this very call)."""
+    it = fold(log.read_all(), strict=False).items.get(item)
+    return it is not None and it.state == ABANDONED
 
 
 #: Why `bug invalid` left a fix task alone (`fix_task_kept`), with the words the surfaces
@@ -272,15 +296,17 @@ NOTHING_TO_REMOVE: dict[str, str] = {
 }
 
 
-def _drop_fix_task(log, st, rec) -> tuple[str, str]:
-    removed, why = _drop_fix_task_unchecked(log, st, rec)
+def _drop_fix_task(log, st, rec, *, reason: str = "") -> tuple[str, str]:
+    removed, why = _drop_fix_task_unchecked(log, st, rec, reason=reason)
     assert not why or why in STILL_QUEUED or why in NOTHING_TO_REMOVE, why
     return removed, why
 
 
-def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
+def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
-    still OPEN, nobody holds it, no other open bug names it, nothing is filed under it and
+    still OPEN -- or, under the CALLER's own lease, in any non-terminal state (RUNNING,
+    BLOCKED), when it is abandoned and released rather than removed (B8f9668d27d); a task
+    held by anyone else stays. No other open bug may name it, nothing is filed under it and
     nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
     one. Returns ``(removed id, "")`` or ``("", why kept)``, the reason a key of
     `STILL_QUEUED` or `NOTHING_TO_REMOVE` (asserted, so a new reason cannot reach the
@@ -295,9 +321,10 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
         return "", "missing"
     if t.removed:
         return "", "removed"
-    if t.lease:  # before the state: a claimed task is RUNNING, and held is the point
+    mine = bool(t.lease) and t.lease.holder == log.agent_id
+    if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
         return "", "held"
-    if t.state != OPEN:
+    if t.terminal or (t.state != OPEN and not mine):
         return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"
@@ -305,7 +332,12 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
         not o.removed and t.id in o.needs for o in st.items.values()
     ):
         return "", "needed"
-    log.append("task.removed", t.id, {"reason": f"bug {rec.id} closed as invalid"})
+    why = f"bug {rec.id} closed as invalid" + (f": {reason}" if reason else "")
+    if mine:  # the caller's own lease: end the task and release it, as `abandon` does
+        log.append("item.abandoned", t.id, {"reason": why, "kind": t.kind})
+        L.release(log, t.id, note=f"abandoned: {why}")
+        return t.id, ""
+    log.append("task.removed", t.id, {"reason": why})
     return t.id, ""
 
 

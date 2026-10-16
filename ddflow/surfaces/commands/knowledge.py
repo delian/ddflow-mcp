@@ -410,8 +410,19 @@ def _fix_task_tail(data: dict) -> str:
     task, why = data.get("fix_task", ""), data.get("fix_task_kept", "")
     if gone:
         return f"\nfix task {gone} removed from the queue"
+    if data.get("fix_task_abandoned"):
+        tree = data.get("fix_task_tree", "")
+        return (
+            f"\nfix task {data['fix_task_abandoned']} ended (abandoned) and released from "
+            f"your lease" + (f"; {tree}" if tree else "")
+        )
     if not task or not why:
         return ""
+    if why == "held" and data.get("fix_task_holder"):
+        return (
+            f"\nfix task {task} stays in the queue: held by {data['fix_task_holder']}, "
+            f"not you; it was not touched"
+        )
     if why in A.STILL_QUEUED:
         return f"\nfix task {task} stays in the queue: {A.STILL_QUEUED[why]}"
     if why in A.NOTHING_TO_REMOVE:
