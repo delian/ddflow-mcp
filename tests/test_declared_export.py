@@ -59,7 +59,7 @@ def test_tests_and_precommit_are_told_where_the_caller_stands():
         TOOLS["ddflow_tests"]["wants_called_from"]
         and TOOLS["ddflow_precommit"]["wants_called_from"]
     )
-    assert "wants_called_from" not in TOOLS["ddflow_ci"]
+    assert TOOLS["ddflow_ci"]["wants_called_from"]
 
 
 def test_the_command_line_halves_keep_their_defaults_and_types():
