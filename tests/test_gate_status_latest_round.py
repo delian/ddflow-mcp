@@ -51,3 +51,29 @@ def test_a_still_failed_round_keeps_its_untriaged_count(repo, tmp_path):
     assert "3 untriaged" in _status_line(repo)
     api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="saw it")
     assert "2 untriaged" in _status_line(repo)
+
+
+def test_a_hand_pass_with_its_own_findings_does_not_settle_them(repo, tmp_path):
+    """Only findings CARRIED from the earlier round are settled by the pass."""
+    from ddflow.core.handlers.gates import _h_gate
+    from ddflow.core.model import State
+
+    st = State()
+    ev = type("E", (), {"ts": "t", "agent": "a", "subject": "T1", "data": {}})
+    first = ev()
+    first.data = {"gate": "critic", "evidence": {"chunk_findings": [{"digest": "a"}]}}
+    _h_gate("failed")(st, first)
+    second = ev()
+    second.data = {"gate": "critic", "evidence": {"chunk_findings": [{"digest": "b"}]}}
+    _h_gate("passed")(st, second)
+    rec = st.items["T1"].gates["critic"]
+    assert rec.evidence["chunk_findings"] == [{"digest": "b"}]
+    assert "findings_carried" not in rec.evidence
+
+
+def test_triage_without_a_verdict_points_at_the_findings(repo, tmp_path):
+    _setup(repo, tmp_path, 2)
+    api.review(repo, gate="critic", item="T1")
+    out = api.triage(repo, "T1", gate="critic", finding=1, verdict="", probe="")
+    assert out.exit != 0
+    assert "ddflow review show T1" in out.reason
