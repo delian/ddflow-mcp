@@ -118,7 +118,7 @@
 # ---
 # name: test_help[ddflow bug fixed]
   '''
-  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
+  usage: ddflow bug fixed [-h] [--regression-test REGRESSION_TEST] [--skip-regression-verify] [--verify-reason VERIFY_REASON] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] [--lesson LESSON] [--lesson-title LESSON_TITLE] [--lesson-rule LESSON_RULE] [--changelog CHANGELOG] id
   
   positional arguments:
     id
@@ -133,6 +133,14 @@
                           (recorded)
     --verify-reason VERIFY_REASON
                           why the pre-fix regression check is skipped (recorded)
+    --mutation-file MUTATION_FILE
+                          fix confined to test files: the changed test file the mutation edits (with
+                          --mutation-old/--mutation-new); the test must fail on it
+    --mutation-old MUTATION_OLD
+                          the text in --mutation-file that --mutation-new replaces (must appear
+                          once)
+    --mutation-new MUTATION_NEW
+                          the replacement that disables the fix
     --lesson LESSON
     --lesson-title LESSON_TITLE
     --lesson-rule LESSON_RULE
@@ -333,7 +341,7 @@
 # ---
 # name: test_help[ddflow complete]
   '''
-  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] id
+  usage: ddflow complete [-h] [--sha SHA] [--model MODEL] [--force] [--changelog CHANGELOG] [--regression-test REGRESSION_TEST] [--mutation-file MUTATION_FILE] [--mutation-old MUTATION_OLD] [--mutation-new MUTATION_NEW] id
   
   positional arguments:
     id
@@ -349,6 +357,14 @@
     --regression-test REGRESSION_TEST
                           for a fix task: the test that now guards the bug(s) it fixes; closes them
                           (as `bug fixed` would) and completes. Repeat for several.
+    --mutation-file MUTATION_FILE
+                          fix confined to test files: the changed test file the mutation edits (with
+                          --mutation-old/--mutation-new); the test must fail on it
+    --mutation-old MUTATION_OLD
+                          the text in --mutation-file that --mutation-new replaces (must appear
+                          once)
+    --mutation-new MUTATION_NEW
+                          the replacement that disables the fix
   
   '''
 # ---
