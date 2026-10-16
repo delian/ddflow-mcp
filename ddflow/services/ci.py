@@ -188,7 +188,7 @@ def run(
             Declared(cmd, "[ci].command"),
             cwd=tree,
             env=child_env(cfg, ci=True),
-            timeout_s=timeout_s or cfg.ci.timeout_s,
+            timeout_s=timeout_s if timeout_s > 0 else cfg.ci.timeout_s,
             check_installed=False,  # checked above, before the scratch worktree was made
         )
         if p.kind == TIMEOUT:

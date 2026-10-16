@@ -27,7 +27,7 @@ from typing import Any
 from ..infra import fsio
 from . import gates as G
 from .completion import changed_paths
-from .jobs import alive
+from .jobs import alive, proc_start
 
 #: Where the queue is kept. Under `.ddflow/local/`, which is never committed.
 QUEUE_DIR = Path(".ddflow") / "local" / "mergequeue"
@@ -36,6 +36,7 @@ QUEUED, RUNNING, MERGED, PARKED = "queued", "running", "merged", "parked"
 STATES = (QUEUED, RUNNING, MERGED, PARKED)
 #: Entries the integrator is finished with (kept for status and the ETA).
 FINISHED = (MERGED, PARKED)
+
 
 @dataclass
 class Entry:
@@ -196,32 +197,39 @@ def integrator(repo: Path, *, agent: str):
         except fsio.LockTimeout:
             yield False
             return
-        info = {"pid": os.getpid(), "agent": agent, "since": time.time()}
+        info = {
+            "pid": os.getpid(),
+            "started": proc_start(os.getpid()),
+            "agent": agent,
+            "since": time.time(),
+        }
         fsio.atomic_write(_info(repo), json.dumps(info) + "\n")
         stack.callback(lambda: _info(repo).unlink(missing_ok=True))
         yield True
 
 
 def holder(repo: Path) -> dict[str, Any] | None:
-    """Who is integrating right now, or None. A lock nobody holds is not a holder, whatever
-    a crashed integrator's info file still says."""
-    try:
-        with fsio.file_lock(_dir(repo) / "integrator.lock", 0):
-            return None
-    except fsio.LockTimeout:
-        pass
-    except OSError:
-        return None
+    """Who is integrating right now, or None. Read from the info file the integrator keeps
+    while it holds the lock, not by trying the lock: a status check that took the lock for an
+    instant would make an integrator starting at that moment think another one was running.
+    A crashed integrator's leftover file names a process that is gone (or one that is not the
+    same process any more), so it is no holder."""
     try:
         info = json.loads(_info(repo).read_text("utf-8"))
-    except (OSError, ValueError):
-        info = {}
-    pid = info.get("pid")
+        pid = info["pid"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not (isinstance(pid, int) and pid > 0 and alive(pid)):
+        return None
+    started = str(info.get("started", ""))
+    now = proc_start(pid)
+    if started and now and started != now:
+        return None
     return {
-        "pid": pid if isinstance(pid, int) else 0,
+        "pid": pid,
         "agent": str(info.get("agent", "")),
         "since": float(info.get("since", 0) or 0),
-        "alive": bool(isinstance(pid, int) and pid > 0 and alive(pid)),
+        "alive": True,
     }
 
 
@@ -231,7 +239,7 @@ def holder(repo: Path) -> dict[str, Any] | None:
 def typical_s(rows: list[Entry], *, window: int, default_s: int) -> float:
     """Seconds one entry usually takes: the mean of the last ``window`` merged entries."""
     took = [e.duration_s for e in rows if e.state == MERGED and e.duration_s > 0]
-    took = took[-window:]
+    took = took[-window:] if window > 0 else []
     return sum(took) / len(took) if took else float(default_s)
 
 
