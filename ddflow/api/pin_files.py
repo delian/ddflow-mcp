@@ -24,6 +24,7 @@ def pins_regenerate(
     target: str = "",
     start: Path | None = None,
     agent: str = "",
+    on_progress=None,
 ) -> O.Outcome:
     """Re-record the stale pin files; with ``check`` list them (exit 1 when any)."""
     if verb == "merge-driver":
@@ -45,7 +46,7 @@ def pins_regenerate(
         note = PM.after_merge(repo, cfg)
         return O.ok("pins", note=note)
     tick = _lease_tick(primary, agent)
-    rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick)
+    rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if rep.problem:
         return O.failed("pins", rep.problem)
     rows = [

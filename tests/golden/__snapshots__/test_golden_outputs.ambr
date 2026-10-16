@@ -1952,6 +1952,15 @@
           are left for you to commit); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      pins.parallel = 4   [default]
+          How many pin checks `ddflow pins regenerate` runs at once (a check only
+          reads). Re-recording is always one recipe after another: a test suite
+          refuses to run while another recipe changes the working tree. 1 runs every
+          check in turn.
+      pins.progress_s = 30   [default]
+          Seconds between the lines `ddflow pins regenerate` prints on stderr while
+          recipes are still running, naming them, so a long regeneration can be told
+          from a hang. 0 prints only a line when a recipe starts and finishes.
       plan.warn_missing_globs = True   [default]
           Whether `claim` and `plan check` WARN about a task whose declared literal
           globs (no wildcard) name files that do not exist, with the nearest existing
