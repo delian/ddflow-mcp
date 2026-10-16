@@ -366,10 +366,14 @@ def _bug_fixed(a, c: Ctx) -> int:
         return out.exit
     verified = out.data.get("regression_verified", "")
     tail = f" [{verified}]" if verified else ""
+    if verified == "could-not-run":
+        tail += "\n  could not check: " + A.could_not_run_text(out.data.get("regression_verify") or {})
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
-        out.body(("id", "regression_verified", "lesson_captured", "lesson_capture")),
+        out.body(
+            ("id", "regression_verified", "regression_verify", "lesson_captured", "lesson_capture")
+        ),
     )
     return OK
 
