@@ -967,7 +967,8 @@ def _superseded(repo, cfg, it, a) -> tuple[set[str], set[str]]:
 def _is_fix_round(cfg, it, a) -> bool:
     """A pure fix round (``[review].fix_round_free``): commits since the reviewed head
     addressed EVERY finding of the last round -- its lines were rewritten, or the author
-    confirmed it fixed -- so re-checking the fixes is no new round of review."""
+    settled it -- and rewrote at least one cited line (else a review with no fix would be
+    a free loop), so re-checking the fixes is no new round of review."""
     if not (cfg.review.fix_round_free and it and a["item"]):
         return False
     if a["chunks"] or a["commit"] or a["base"] or a["full"]:

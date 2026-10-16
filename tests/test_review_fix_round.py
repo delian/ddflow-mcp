@@ -118,6 +118,6 @@ def test_extensionless_files_and_dash_content_lines():
     assert SS.is_superseded("p.py:2", ch)
     assert SS.is_superseded("see Makefile:10", ch) and SS.is_superseded("in p.py:2", ch)
     assert not SS.is_superseded("footer() in Makefile", ch)
-    twin = "--- a/pkg/__init__.py\n+++ b/pkg/__init__.py\n@@ -1,1 +1,1 @@\n-a\n+b\n"
-    twin += "--- a/pkg/api/__init__.py\n+++ b/pkg/api/__init__.py\n@@ -12,1 +12,1 @@\n-a\n+b\n"
-    assert SS.is_superseded("pkg/api/__init__.py:12", SS.changed_old_lines(twin))
+    twin = "--- a/a/pkg/__init__.py\n+++ b/a/pkg/__init__.py\n@@ -5,1 +5,1 @@\n-a\n+b\n"
+    twin += "--- a/pkg/__init__.py\n+++ b/pkg/__init__.py\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+    assert SS.is_superseded("pkg/__init__.py:1", SS.changed_old_lines(twin))
