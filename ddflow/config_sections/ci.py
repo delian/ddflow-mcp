@@ -10,6 +10,8 @@ from ._docs import declare, knob
 
 #: `[ci].on_merge`'s values.
 CI_ON_MERGE_MODES = ("off", "fast", "full")
+#: `[ci].tests_scope`'s values.
+CI_TESTS_SCOPES = ("selected", "full")
 
 
 @declare("ci")
@@ -40,4 +42,10 @@ class CiConfig:
         doc="Health check of the base right after a merge lands: off | fast (default: the project's pre-commit set without the test hooks, `SKIP=tests,scenarios`; an explicit [ci].command runs as written) | full (the whole command). The result is recorded as `ci.result`; each failing check files one bug and fix task while the bug is open. A project with no CI command is left alone.",
         choices=CI_ON_MERGE_MODES,
         strictest=("full", "the whole CI command runs after a merge"),
+    )
+    tests_scope: str = knob(
+        "selected",
+        doc="Which tests `ddflow ci run` runs for ONE item (D-test-economy-r2): selected (default) runs every non-test pre-push hook plus only the tests the change reaches (`ddflow tests --item`), records the scope, the selected count and the cut set in the gate evidence, and falls back to the whole suite when the selector says so (a hub, conftest, pyproject, the pre-commit config, an unknown file type, or no test reaches the change); full runs the whole suite. `ddflow ci run --full`, the merge queue integrator (one run per batch) and a run of a ref that is no item always run the whole suite. Applies to the default pre-push command only: an explicit [ci].command runs as written.",
+        choices=CI_TESTS_SCOPES,
+        strictest=("full", "every item's ci run takes the whole suite"),
     )
