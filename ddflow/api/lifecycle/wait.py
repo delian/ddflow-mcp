@@ -251,6 +251,20 @@ def _wait_globs(globs, item: str) -> tuple[list[str] | None, str]:
     return want, GS.problem(want or [])
 
 
+def _judged(st, item: str, want) -> dict[str, Any]:
+    """What a READY on ``item`` was judged on, when the caller named no globs: the item's
+    declared ones. A claim naming others is judged again, so the verdict says so."""
+    it = st.items.get(item) if item else None
+    if it is None or want:
+        return {}
+    return {
+        "judged_globs": list(it.globs),
+        "judged_note": f" That is judged on {item}'s declared globs"
+        + (f" ({', '.join(it.globs)})" if it.globs else " (none)")
+        + "; to claim with other --globs, wait with the same --globs.",
+    }
+
+
 def wait(
     repo: Path,
     *,
@@ -323,15 +337,8 @@ def wait(
                 f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same "
                 f"release woke too."
             )
-            it = st.items.get(item) if item else None
-            if it is not None and not want:
-                # READY is the verdict for THESE globs; a claim naming others is judged again.
-                data["judged_globs"] = list(it.globs)
-                data["advice"] += (
-                    f" That is judged on {item}'s declared globs"
-                    + (f" ({', '.join(it.globs)})" if it.globs else " (none)")
-                    + "; to claim with other --globs, wait with the same --globs."
-                )
+            data.update(_judged(st, item, want))
+            data["advice"] += data.pop("judged_note", "")
             return O.ok("wait", **data)
         if v["status"] == "hopeless":
             return O.nothing("wait", f"Not waiting: {v['why']}", **data)
