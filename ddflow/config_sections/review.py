@@ -35,7 +35,7 @@ class ReviewConfig:
     )
     fix_round_free: bool = knob(
         True,
-        doc="Whether a pure fix round is free: when commits since the head the last review covered rewrote the lines of, or the author confirmed fixed, EVERY finding of that round, the next `ddflow review` is a delta over just those changes (prior findings whose cited lines were rewritten are marked superseded, not re-raised) and is not counted against review.max_rounds, nor refused past it. Default true; false counts it like any round. Change it for the project (`ddflow config --set review.fix_round_free false`), for this machine (add --local), per run (DDFLOW_REVIEW_FIX_ROUND_FREE), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
+        doc="Whether a pure fix round is free: when commits since the head the last review covered rewrote at least one cited line and every finding of that round is rewritten or settled by the author, the next `ddflow review` is a delta over just those changes (prior findings whose cited lines were rewritten are marked superseded, not re-raised) and is not counted against review.max_rounds, nor refused past it. Default true; false counts it like any round. Change it for the project (`ddflow config --set review.fix_round_free false`), for this machine (add --local), per run (DDFLOW_REVIEW_FIX_ROUND_FREE), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
     )
     combined_under_lines: int = knob(
         150,
