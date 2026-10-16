@@ -82,7 +82,7 @@ def test_a_reviewer_that_edits_the_reviewed_tree_still_did_not_review(tmp_path, 
 
 
 def test_a_reviewer_that_commits_in_the_reviewed_tree_still_did_not_review(tmp_path, monkeypatch):
-    primary, wt = _with_sibling(tmp_path)
+    _primary, wt = _with_sibling(tmp_path)
     monkeypatch.chdir(wt)
     cmd = "echo c >> f.txt; git commit -qam tool; echo LGTM"
     out, err = R._chat(_rev(cmd), "sys", "user", 30, tree=wt)
