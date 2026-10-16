@@ -105,8 +105,8 @@ def complete(
         st = fold(log.read_all(), strict=False)
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
     if umbrella:
-        # No diff of its own to judge (B651a63e574); an open bug or a silent gate holds it.
-        v.blockers = [b for b in v.blockers if b.startswith(UM.KEPT)]
+        # No diff of its own to judge (B651a63e574); every other blocker still holds it.
+        v.blockers = UM.blockers(st, cfg, repo, item, v.blockers)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
