@@ -6,7 +6,7 @@ tools, used by every test that has to wait:
 
 * ``wait_until(pred, timeout)`` -- synchronise on an event (a file, a flag, a line) by
   polling, never by sleeping a guessed time. ``timeout`` is a ceiling for a wedged run, not
-  a measurement: it is scaled up by the machine's load.
+  a measurement: it is scaled up by the machine's load (capped at MAX_FACTOR x).
 * ``scaled(seconds)`` -- a real deadline whose length is not the point of the test (a lock
   or start timeout) made generous, with the same scaling.
 
@@ -19,6 +19,9 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable
+
+#: The most a load can stretch a deadline, so a real hang still ends in minutes, not hours.
+MAX_FACTOR = 16.0
 
 #: Every deadline is at least this many times what a quiet machine needs.
 FLOOR = 4.0
@@ -34,12 +37,12 @@ def slow_factor() -> float:
         per_cpu = os.getloadavg()[0] / (os.cpu_count() or 1)
     except (OSError, AttributeError):
         per_cpu = 1.0
-    return max(1.0, per_cpu) * max(explicit, 0.0)
+    return min(MAX_FACTOR, max(1.0, per_cpu) * max(explicit, 1.0))
 
 
 def scaled(seconds: float) -> float:
     """``seconds`` made generous for a loaded machine."""
-    return seconds * FLOOR * max(slow_factor(), 1.0)
+    return seconds * FLOOR * slow_factor()
 
 
 def wait_until(
