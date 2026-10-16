@@ -37,13 +37,31 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
         # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
         # resolved `t` and accepted the unchecked rest (B227585c781).
-        if (
-            "" in wanted
-            or _looks_like_several(entry)
-            or not any(_defines(_inside(tree, path), wanted) for tree in trees)
+        if "" in wanted or _looks_like_several(entry):
+            missing.append(entry)
+        elif not any(_defines(_inside(tree, path), wanted) for tree in trees) and not (
+            _collected(repo, trees, entry, path)
         ):
             missing.append(entry)
     return missing, unchecked
+
+
+def _collected(repo: Path, trees: list[Path], entry: str, path: str) -> bool:
+    """Does pytest itself collect ``entry`` in any tree? The AST sees only names the file
+    defines; a test the module imports or generates is invisible to it (bug Ba6c8cdeda4).
+    The one mechanism the restored-test check uses (`gates.tree_provides`, B9f3ae012b9)."""
+    from ...config import Config
+    from ...services import gates as G
+    from ...services import testselect as TS
+
+    cfg = Config.load(repo)
+    defn = G.load_gates(repo, cfg).get("unit_tests")
+    configured = defn.command if defn else ""
+    return any(
+        (tree / path).is_file()
+        and G.tree_provides(TS.run_command, configured, tree, [entry], scan=False)
+        for tree in trees
+    )
 
 
 #: A parametrize id: `[` to the nearest `]` that ends a name -- before `::` or the end
