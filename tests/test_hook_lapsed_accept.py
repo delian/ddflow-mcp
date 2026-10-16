@@ -41,6 +41,7 @@ def test_an_expired_untaken_lease_does_not_refuse_its_tree_under_block(repo, cfg
     code, msg = E.check_commit(repo, cfg, agent="derived-from-the-tree")
     assert code == 0, msg
     assert "LAPSED" in msg and "heartbeat" in msg, msg
+    assert "commit again" not in msg and "recover" not in msg, msg
 
 
 def test_an_expired_untaken_lease_does_not_refuse_its_holder_elsewhere(repo, cfg, monkeypatch):
