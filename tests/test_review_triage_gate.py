@@ -10,6 +10,8 @@ import stat
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -17,6 +19,14 @@ import ddflow.api.review as api
 from ddflow.infra.log import EventLog
 
 OK, FAIL = 0, 1
+
+
+@pytest.fixture(autouse=True)
+def _in_repo(repo, monkeypatch):
+    """A command reviewer's git state is watched in the PROCESS cwd (services.review
+    `_chat_command`). Left in the real checkout, any other worktree's commit or stash
+    flips the review to `unavailable` -- the load flake of bug B77b32b1bdb."""
+    monkeypatch.chdir(repo)
 
 
 def _setup(repo: Path, tmp_path: Path, gates=("critic", "rubber_duck")) -> None:
@@ -107,3 +117,21 @@ def test_omitted_gate_with_no_findings_anywhere_is_refused_without_naming_a_defa
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "*.py")
     out = api.triage(repo, "T1", finding=1, verdict="refuted", probe="ran it")
     assert out.exit == FAIL and "any gate" in out.reason and "critic" not in out.reason
+
+
+def test_review_outcome_does_not_depend_on_git_activity_outside_the_repo(repo, tmp_path, monkeypatch):
+    """B77b32b1bdb: forces the path the flake took. A checkout other than the test repo
+    moves while the reviewer runs (a sibling lane's commit or stash); the review must
+    still be `failed` (it found something), not `unavailable`."""
+    import ddflow.services.review as review
+
+    ticks = iter(range(1_000_000))
+    real = review.git_state
+
+    def state(where):
+        if Path(where).resolve() == repo.resolve():
+            return real(where)
+        return {"head": str(next(ticks))}  # any other checkout: a new state on every look
+
+    monkeypatch.setattr(review, "git_state", state)
+    _setup(repo, tmp_path)  # asserts both reviews come back "failed"
