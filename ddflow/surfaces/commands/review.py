@@ -101,11 +101,11 @@ def cmd_review(a, c: Ctx) -> int:
     ids = list(a.id or [])
     if ids[:1] == ["triage"]:
         return _triage_verb(a, c, ids)
-    if ids[:1] == ["show"]:
-        return _show_verb(a, c, ids)
     if message := _stray_triage_flags(a, ids):
         print(message, file=sys.stderr)
         return FAIL
+    if ids[:1] == ["show"]:
+        return _show_verb(a, c, ids)
     if len(ids) > 1:
         print(f"review takes one item id; got {ids}", file=sys.stderr)
         return FAIL

@@ -71,3 +71,40 @@ def test_the_mcp_triage_tool_without_a_finding_lists_them(repo, tmp_path):
     reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call})
     assert not reply["result"].get("isError"), reply
     assert "#1 [HIGH]" in str(reply) and "#2 [LOW]" in str(reply), reply
+
+
+def test_show_does_not_swallow_triage_flags(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    code, _out, err = run_cli(repo, "review", "show", "T1", "--finding", "1", "--refuted")
+    assert code != OK and "triage" in err, err
+
+
+def test_a_round_whose_blob_is_gone_is_named_not_called_missing(repo, tmp_path, monkeypatch):
+    from ddflow.api import review_findings as RF
+    from ddflow.core import blobref as B
+
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    gone = B.Unavailable("abc123", "was pruned")
+    real = RF.LB.full
+
+    def full(ev):
+        got = dict(real(ev))
+        if got.get("chunk_findings"):
+            got["chunk_findings"] = gone
+        return got
+
+    monkeypatch.setattr(RF.LB, "full", full)
+    out = api.review_show(repo, "T1")
+    assert out.exit == FAIL and "blob must be restored" in out.reason, out.reason
+
+
+def test_triage_tool_with_a_finding_but_no_probe_is_still_refused(repo, tmp_path):
+    from ddflow.surfaces.mcp import Server
+
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    call = {"name": "ddflow_review_triage", "arguments": {"id": "T1", "finding": 1}}
+    reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call})
+    assert reply["result"].get("isError") and "probe" in str(reply), reply

@@ -78,15 +78,12 @@ def show(repo: Path, item: str, *, gate: str = "", agent: str = "") -> O.Outcome
     it = st.items.get(item)
     if it is None:
         return bad(f"no such item {item!r}")
-    gates = (
-        [gate]
-        if gate
-        else sorted(
-            g
-            for g, r in it.gates.items()
-            if GD.is_triageable(LB.full(r.evidence or {}).get("chunk_findings"))
-        )
-    )
+
+    def has_round(r) -> bool:
+        found = LB.full(r.evidence or {}).get("chunk_findings")
+        return isinstance(found, B.Unavailable) or GD.is_triageable(found)
+
+    gates = [gate] if gate else sorted(g for g, r in it.gates.items() if has_round(r))
     if not gates:
         return bad(f"{item} has no `ddflow review` with numbered findings on any gate")
     listing: dict[str, list[dict[str, Any]]] = {}
