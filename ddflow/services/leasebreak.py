@@ -105,12 +105,12 @@ def judge(
 
 
 def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
-    """Leased item -> the items whose recorded waits name it."""
+    """Leased item -> the items whose recorded waits name it (the wait-for graph, inverted)."""
     out: dict[str, list[str]] = {}
-    for w in WG.waiters(st, cfg, now):
-        for edge in w.on:
-            if edge["item"] != w.item:
-                out.setdefault(edge["item"], []).append(w.item)
+    for waiter, held in WG.wait_for_graph(st, cfg, now).items():
+        for item_id in held:
+            if item_id != waiter:
+                out.setdefault(item_id, []).append(waiter)
     return out
 
 

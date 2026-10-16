@@ -444,8 +444,13 @@
   },
   "lease.expired": {
    "fields": {
+    "branch": ["str"],
+    "broken_by": ["str"],
+    "broken_for": ["str"],
     "event": ["str"],
+    "files": ["list"],
     "holder": ["str"],
+    "idle_s": ["float"],
     "reason": ["str"],
     "worktree": ["str"]
    },

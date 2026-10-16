@@ -2,7 +2,7 @@
 
 The progress half of the breakable lease (`services.leasebreak`): a heartbeat proves a
 process is alive, not that it is doing anything, so the question is asked of the tree.
-Read-only; an unreadable tree answers 0.0 ("no evidence"), never an error.
+Read-only; an unreadable tree is never read as idle (git could not tell: infinity), never an error.
 """
 
 from __future__ import annotations
@@ -23,10 +23,13 @@ def last_commit_at(tree: Path, base: str, branch: str) -> float:
 
 
 def last_change_at(tree: Path) -> float:
-    """Newest mtime among the tree's uncommitted files, or 0 when it is clean or unreadable."""
+    """Newest mtime among the tree's uncommitted files, 0 when it is clean, and infinity when git
+    could not say (an unreadable tree counts as active, so it is never broken on a guess)."""
     entries = G.status(tree, untracked="all")
+    if entries is None:  # git could not tell: never read that as "idle"
+        return float("inf")
     newest = 0.0
-    for e in entries or []:
+    for e in entries:
         for rel in e.paths:
             try:
                 newest = max(newest, os.stat(tree / rel).st_mtime)
