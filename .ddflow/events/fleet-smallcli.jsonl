@@ -104,3 +104,4 @@
 {"agent":"fleet-smallcli","data":{"ahead":["research","rubber_duck"],"gate":"critic","policy":"warn"},"id":"e5a958657d0b7007108bb5ce6","kind":"gate.out_of_order","lamport":71296,"schema":1,"subject":"DX-plan-globs-exist","ts":"2026-10-16T22:19:40.969001Z"}
 {"agent":"fleet-smallcli","data":{"gate":"critic"},"id":"ea7709618d351435425de9673","kind":"gate.started","lamport":71297,"schema":1,"subject":"DX-plan-globs-exist","ts":"2026-10-16T22:19:41.375993Z"}
 {"agent":"fleet-smallcli","data":{"at":1792189242.1694548,"holder":"fleet-smallcli"},"id":"eafef46b10a3a400a90212143","kind":"lease.renewed","lamport":71304,"schema":1,"subject":"DX-plan-globs-exist","ts":"2026-10-16T22:20:42.181083Z"}
+{"agent":"fleet-smallcli","data":{"at":1792189482.0725508,"holder":"fleet-smallcli"},"id":"e5b606bede5b5c6ecf7e6e133","kind":"lease.renewed","lamport":71322,"schema":1,"subject":"DX-plan-globs-exist","ts":"2026-10-16T22:24:42.107011Z"}
