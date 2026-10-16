@@ -58,8 +58,11 @@ def pins_regenerate(
         }
         for p in rep.pins
     ]
+    extra = {"resolved": rep.resolved} if rep.resolved else {}
     if rep.failed:
-        return O.failed("pins", "; ".join(f"{p.name}: {p.error}" for p in rep.failed), pins=rows)
+        return O.failed(
+            "pins", "; ".join(f"{p.name}: {p.error}" for p in rep.failed), pins=rows, **extra
+        )
     if check and rep.stale:
         return O.failed(
             "pins",
@@ -68,7 +71,7 @@ def pins_regenerate(
             + ". `ddflow pins regenerate` re-records them",
             pins=rows,
         )
-    return O.ok("pins", pins=rows)
+    return O.ok("pins", pins=rows, **extra)
 
 
 def _lease_tick(repo: Path, agent: str):
