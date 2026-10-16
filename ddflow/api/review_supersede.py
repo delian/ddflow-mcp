@@ -43,7 +43,9 @@ def is_superseded(location: str, changed: dict[str, list[tuple[int, int]]]) -> b
     m = _LOC.search(location or "")
     if not m:
         return False
-    ranges = next((r for p, r in changed.items() if p == m.group(1) or p.endswith("/" + m.group(1))), None)
+    ranges = next(
+        (r for p, r in changed.items() if p == m.group(1) or p.endswith("/" + m.group(1))), None
+    )
     if not ranges:
         return False
     if m.group(2) is None:
@@ -61,3 +63,26 @@ def superseded_digests(found: list[dict], diff: str) -> set[str]:
         for f in found
         if f.get("digest") and is_superseded(str(f.get("location") or ""), changed)
     }
+
+
+def carry(ev: dict, prior: dict) -> set[str]:
+    """Fold the superseded digests of the record being replaced into ``ev``; returns all."""
+    gone = set(ev.get("superseded") or []) | set(prior.get("superseded") or [])
+    if gone:
+        ev["superseded"] = sorted(gone)
+    return gone
+
+
+def round_evidence(
+    extra: dict | None, supers: set[str], fix: bool, deltas: int, say
+) -> dict | None:
+    """``extra`` plus what a fix round / superseded findings add to the round's evidence;
+    a fix round keeps the delta count where it was (it is not counted)."""
+    if fix:
+        say(
+            "fix round: the commits since the reviewed head rewrote or confirmed every prior finding; not counted against max_rounds."
+        )
+        extra = {**(extra or {}), "fix_round": True, "delta_rounds": deltas}
+    if supers:
+        extra = {**(extra or {}), "superseded": sorted(supers)}
+    return extra
