@@ -38,6 +38,10 @@ from ddflow.surfaces.tools import TOOLS
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
 
+#: It reads the source of the API, the surfaces and the fold's handlers (an AST scan, not an
+#: import), so a change to any of them selects it (B4067086b6b).
+GOVERNS = ("ddflow/api/**", "ddflow/surfaces/**", "ddflow/core/handlers/**")
+
 #: Event kinds that FILE a record whose text may repeat one already filed -> the API add
 #: function that runs the check for it.
 CHECKED: dict[str, str] = {

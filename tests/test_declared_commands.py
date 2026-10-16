@@ -293,7 +293,7 @@ def test_review_is_one_parser_for_the_run_and_for_triage():
     run = parser.parse_args(["review", "I", "--gate", "critic", "--chunk", "2", "--chunk", "3,4"])
     assert (run.id, run.chunk, run.finding) == (["I"], ["2", "3,4"], None)
     triage = parser.parse_args(["review", "triage", "I", "--finding", "2", "--refuted"])
-    assert (triage.id, triage.finding, triage.refuted) == (["triage", "I"], 2, True)
+    assert (triage.id, triage.finding, triage.refuted) == (["triage", "I"], "2", True)
     assert parser.parse_args(["review"]).id == []  # the handler says what is missing
     entry = TOOLS["ddflow_review"]
     assert entry["wants_called_from"] and entry["wants_progress"] and entry["text"] is True

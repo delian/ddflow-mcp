@@ -216,7 +216,9 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("reason", help="why --force", default="", cli_only=True),
             Param(
-                "finding", type="integer", help="triage: the finding's number (#N)", cli_only=True
+                "finding",
+                help="triage: the finding's number (#N) or a unique digest prefix (6+ hex)",
+                cli_only=True,
             ),
             Param(
                 "refuted",
@@ -262,7 +264,7 @@ COMMANDS: tuple[Command, ...] = (
                 repo,
                 a.get("id", "") or "",
                 gate=a.get("gate") or "",
-                finding=int(a.get("finding") or 0),
+                finding=a.get("finding") or 0,
                 verdict=a.get("verdict", "") or "",
                 probe=a.get("probe", "") or "",
                 agent=agent,
@@ -278,8 +280,7 @@ COMMANDS: tuple[Command, ...] = (
             Param("gate", help="Omit if one gate has findings.", mcp_only=True),
             Param(
                 "finding",
-                type="integer",
-                help="The finding's number (#N) in the recorded review.",
+                help="Finding #N or digest prefix (6+ hex).",
                 mcp_only=True,
             ),
             Param("verdict", help="refuted or confirmed.", mcp_only=True),
