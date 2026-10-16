@@ -304,9 +304,9 @@ def _drop_fix_task(log, st, rec, *, reason: str = "") -> tuple[str, str]:
 
 def _drop_fix_task_unchecked(log, st, rec, *, reason: str = "") -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
-    still OPEN -- or RUNNING under the CALLER's own lease, which is then abandoned and
-    released rather than removed (B8f9668d27d); a task held by anyone else stays -- no other
-    open bug names it, nothing is filed under it and
+    still OPEN -- or, under the CALLER's own lease, in any non-terminal state (RUNNING,
+    BLOCKED), when it is abandoned and released rather than removed (B8f9668d27d); a task
+    held by anyone else stays. No other open bug may name it, nothing is filed under it and
     nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
     one. Returns ``(removed id, "")`` or ``("", why kept)``, the reason a key of
     `STILL_QUEUED` or `NOTHING_TO_REMOVE` (asserted, so a new reason cannot reach the
