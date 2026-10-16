@@ -58,10 +58,14 @@ def heartbeat(
         if lease and _in_leased_tree(repo, lease.worktree, _tree_of(called_from or repo)):
             # Only a LIVE lease. Speaking for an expired one would resurrect a claim its
             # holder abandoned, and lock out whoever `recover` sent to take it over.
-            if not lease.live(time.time(), cfg.lease.grace_s):
+            if not lease.live(time.time(), cfg.lease.grace_s) and not cfg.lease.resume_own:
                 hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again"
             else:
+                # A lapsed lease revives only when no live claim took its files meanwhile
+                # (`renew` refuses then), and only for the tree's own lease.
                 renewed = L.renew(log, item, holder=lease.holder)
+                if not renewed:
+                    hint = f"; its lease (held by {lease.holder}) lapsed and its files were taken"
     if not renewed:
         broken = [n for n in LB.broken_notices(log.read_all(), log.agent_id) if n["item"] == item]
         if broken:  # the lease was taken from this agent: say so wherever it stands
