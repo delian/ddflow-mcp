@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from ...api import ci as A
+from ...api import cirun as AR
 from ...api import surf_setup as SS
 from ..context import Ctx
 from ..render import emit_json
@@ -37,7 +38,7 @@ def cmd_ci(a, c: Ctx) -> int:
     # The default is the HEAD of the tree the command runs in: as a gate it runs in the
     # item's worktree, while c.repo is the primary checkout (whose HEAD is main).
     ref = a.ref or SS.head_here_or_repo(c.repo)
-    out = A.run(c.repo, ref=ref, base=a.base, command=a.command)
+    out = AR.run(c.repo, ref=ref, base=a.base, command=a.command, called_from=c.called_from)
     if c.json:
         emit_json(out.body(""))
         return out.exit
