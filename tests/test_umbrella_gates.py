@@ -40,6 +40,9 @@ def test_closing_the_last_child_gives_every_umbrella_gate_an_outcome(repo):
     assert st.items["P.T"].state == "done"
     evs = _umbrella_gate_events(repo)
     assert evs, "the umbrella completed with its gates silent"
+    code, out, err = run_cli(repo, "--json", "gate", "status", "P.T")
+    assert code == OK, out + err
+    assert {e.data["gate"] for e in evs} >= {"research", "implement", "unit_tests", "merge"}
     for e in evs:
         assert e.kind == "gate.skipped"
         assert "P.T.a" in e.data["reason"] and "P.T.b" in e.data["reason"]
@@ -55,13 +58,21 @@ def test_an_outcome_the_umbrella_already_has_is_kept(repo):
     assert [e.data["reason"] for e in research] == ["mine"]
 
 
-def test_an_ordinary_item_with_silent_gates_is_still_refused(repo):
-    run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P", "--title", "phase")
-    run_cli(repo, "task", "add", "P.T", "--title", "plain", "--globs", "a.py")
-    code, out, err = run_cli(repo, "complete", "P.T")
-    assert code != OK
-    assert "never run" in out + err
+def test_a_gate_cannot_be_recorded_on_a_finished_umbrella(repo):
+    """The guard's umbrella exemption is gone: a done umbrella is as closed as any item."""
+    _split(repo)
+    assert run_cli(repo, "complete", "P.T.a", "--force")[0] == OK
+    assert run_cli(repo, "complete", "P.T.b", "--force")[0] == OK
+    code, out, err = run_cli(
+        repo, "gate", "record", "P.T", "research", "--outcome", "passed", "--evidence", "late"
+    )
+    assert code != OK, out + err
+
+
+def test_a_refused_umbrella_completion_records_no_rolled_up_gates(repo):
+    _split(repo)
+    assert run_cli(repo, "complete", "P.T.a", "--force")[0] == OK
+    assert run_cli(repo, "complete", "P.T")[0] != OK  # P.T.b still open
     assert not _umbrella_gate_events(repo)
 
 

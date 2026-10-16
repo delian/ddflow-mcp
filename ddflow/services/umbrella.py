@@ -18,6 +18,7 @@ from . import gates as G
 
 #: The blockers an umbrella sheds: it has no diff, so a rolled-up skip of implement/merge is
 #: final, and no reviewer of its own exists for independence to be judged against.
+SILENT = "gate(s) never run"
 SHED = ("required gate(s) not passed", "reviewer independence not satisfied")
 
 
@@ -70,8 +71,11 @@ def verdict(
 ):
     """`completion.verdict` for a settled umbrella: its gates rolled up first, then judged
     with the blockers a no-diff item cannot meet shed (B651a63e574)."""
-    roll_up(log, cfg, repo, st, item, kids)
-    st = fold(log.read_all(), strict=False)
+    held = blockers(st, cfg, repo, item, CM.verdict(st, cfg, item, repo=repo, model=model).blockers)
+    # Roll up only a completion that will go through: a refused one records nothing.
+    if not [b for b in held if not b.startswith(SILENT)]:
+        roll_up(log, cfg, repo, st, item, kids)
+        st = fold(log.read_all(), strict=False)
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
     v.blockers = blockers(st, cfg, repo, item, v.blockers)
     return v
