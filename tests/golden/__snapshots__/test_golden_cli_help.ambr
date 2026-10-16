@@ -274,8 +274,7 @@
     --resources RESOURCES
                           the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)
     --queue               keep a refused claim in the first-in-first-out line for its files
-    --break               break a contended lease that shows no progress for [lease].hold_max_s (its
-                          work is kept)
+    --break
   
   '''
 # ---
