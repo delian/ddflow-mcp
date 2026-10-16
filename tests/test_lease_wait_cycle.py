@@ -112,3 +112,27 @@ def test_the_knob_turns_the_report_off(repo):
     cfg.loops.wait_cycle = False
     st = fold(EventLog(repo, "reader").read_all(), strict=False)
     assert wait_cycles(st, cfg, time.time()) == []
+
+
+def test_the_remedy_names_the_lease_the_other_waiter_is_blocked_on():
+    # V holds two leases overlapping *.md; W is blocked on "docs", V waits on W's "w1".
+    held = [
+        LW.Held("readme", "V", ("*.md",)),
+        LW.Held("docs", "V", ("*.md",)),
+        LW.Held("w1", "W", ("src/w.py",)),
+    ]
+    waits = [
+        LW.Wait("w1", "W", 1.0, ("*.md",), (("docs", "V"),)),
+        LW.Wait("docs", "V", 2.0, ("src/w.py",), (("w1", "W"),)),
+    ]
+    (c,) = LW.find(waits, held)
+    assert c.victim == "V" and c.victim_item == "docs"
+    assert "ddflow release docs" in c.remedy and "retries on w1" in c.remedy
+
+
+def test_zero_shown_prints_no_deadlock_line():
+    from ddflow.api.reporting import wait_findings
+
+    cfg = Config()
+    cfg.loops.wait_cycle_shown = 0
+    assert wait_findings(["x", "y"], cfg) == []

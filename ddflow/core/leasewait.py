@@ -111,28 +111,22 @@ def _contested(lease: Held | None, asked: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(sorted({g for g in lease.globs if any(overlap(g, a) for a in asked)}))
 
 
-def _remedy(victim: Link, wanted: tuple[str, ...], held: Held | None, others: list[str]) -> tuple:
-    """(release, keep, text) for ``victim``, who must give up ``wanted``: the globs of its
-    own lease that the previous waiter in the cycle asked for."""
+def _remedy(victim: Link, prev: Link, wanted: tuple[str, ...], held: Held | None) -> tuple:
+    """(release, keep, text) for ``victim``, who must give up ``wanted``: the globs of the
+    lease ``prev`` (the waiter for the victim's lease) is blocked on."""
+    then = (
+        f"then {prev.agent} retries on {prev.item}, and {victim.agent} queues behind it "
+        f"(`ddflow wait --item {victim.blocker}`)"
+    )
     if held is None or not wanted:
-        who = ", ".join(others)
-        return (
-            (),
-            (),
-            (
-                f"{victim.agent} should stop waiting and hand its work to the coordinator "
-                f"(it holds nothing the others asked for); {who} keep waiting with "
-                f"`ddflow wait --item {victim.blocker}`."
-            ),
-        )
+        return (), (), f"{victim.agent} should stop waiting and report to the coordinator; {then}."
     keep = tuple(g for g in held.globs if g not in wanted)
     how = (
         f"`ddflow update {held.item} --globs {','.join(keep)}`"
         if keep
         else f"`ddflow release {held.item}`"
     )
-    tail = f"; {', '.join(others)} then `ddflow wait --item {victim.item}`" if others else ""
-    return wanted, keep, f"{victim.agent} yields {', '.join(wanted)}: {how}{tail}."
+    return wanted, keep, f"{victim.agent} yields {', '.join(wanted)}: {how}; {then}."
 
 
 def _edges(waits: list[Wait], held: dict[str, Held]) -> dict[str, dict[str, Link]]:
@@ -152,14 +146,13 @@ def _edges(waits: list[Wait], held: dict[str, Held]) -> dict[str, dict[str, Link
 
 def _cycle(links: list[Link], waits: list[Wait], leases: list[Held]) -> Cycle:
     """The report for one ring of ``links``: victim, what it releases, the remedy."""
-    # Least progress first: the latest wait, then the later agent id.
+    # Least progress first: the wait that is youngest, then the later agent id.
     vi = max(range(len(links)), key=lambda i: (links[i].since, links[i].agent))
     victim = links[vi]
-    asked = _asked(waits, links[vi - 1])  # what whoever waits for the victim's lease wants
-    own = next((lz for lz in leases if lz.holder == victim.agent and _contested(lz, asked)), None)
-    wanted = _contested(own, asked)
-    others = [lk.item for lk in links if lk is not victim]
-    release, keep, text = _remedy(victim, wanted, own, others)
+    prev = links[vi - 1]  # whoever waits for the victim's lease, and the lease it waits on
+    own = next((lz for lz in leases if lz.item == prev.blocker), None)
+    wanted = _contested(own, _asked(waits, prev))
+    release, keep, text = _remedy(victim, prev, wanted, own)
     return Cycle(
         agents=tuple(lk.agent for lk in links),
         items=tuple(dict.fromkeys(i for lk in links for i in (lk.item, lk.blocker))),

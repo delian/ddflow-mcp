@@ -40,7 +40,7 @@ class LoopsConfig:
     )
     wait_cycle: bool = knob(
         True,
-        doc="Report a cycle of agents waiting on each other's leases (a lock deadlock) in `doctor`, naming the agents, items and files and the globs the latest waiter should drop. Off: waits are still recorded, the cycle is not looked for.",
+        doc="Report a cycle of agents waiting on each other's leases (a lock deadlock) in `doctor`, naming the agents, items and files and the waiter that has waited least (the victim) and the globs it should drop. Off: waits are still recorded, the cycle is not looked for.",
     )
     wait_cycle_shown: int = knob(
         5,

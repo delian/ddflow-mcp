@@ -1371,8 +1371,9 @@
           no events and waiting is not looping.
       loops.wait_cycle = True   [default]
           Report a cycle of agents waiting on each other's leases (a lock deadlock) in
-          `doctor`, naming the agents, items and files and the globs the latest waiter
-          should drop. Off: waits are still recorded, the cycle is not looked for.
+          `doctor`, naming the agents, items and files and the waiter that has waited
+          least (the victim) and the globs it should drop. Off: waits are still
+          recorded, the cycle is not looked for.
       loops.wait_cycle_shown = 5   [default]
           How many wait cycles `doctor` prints in full; the rest are counted. 0 prints
           none.
