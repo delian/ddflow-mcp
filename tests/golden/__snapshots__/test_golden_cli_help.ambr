@@ -252,7 +252,7 @@
 # ---
 # name: test_help[ddflow ci]
   '''
-  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
   
   positional arguments:
     {run,status,record}   run: check the merge result; status (default): what would run, and whether
@@ -263,6 +263,7 @@
     --ref REF             run: the commit or item id (default: HEAD here)
     --base BASE           run: merge this branch in first (default [ci].base)
     --command COMMAND     run: use this instead of [ci].command
+    --full                run: the whole test suite, not only the tests the change reaches
     --stage STAGE         record: gate | merge | pre-push | schedule
     --result {passed,failed}
                           record: how it went
@@ -2299,7 +2300,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2312,9 +2313,16 @@
     --tags TAGS
     --line LINE
     --resources RESOURCES
-    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these; path
-                          globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to
-                          add more -- every value is kept
+    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these -- the
+                          whole list, not an addition (see --add-globs); path globs, comma-separated
+                          (a.py,src/**) or a JSON array; repeat the flag to add more -- every value
+                          is kept
+    --add-globs ADD_GLOBS
+                          ADD these comma-separated globs to the item's current ones (and a claimed
+                          item's lease); the rest are kept
+    --remove-globs REMOVE_GLOBS
+                          REMOVE these comma-separated globs from the item's current ones (and a
+                          claimed item's lease)
     --priority PRIORITY
     --queue               keep a refused --globs widening in the first-in-first-out line for its
                           files

@@ -31,7 +31,7 @@ def test_each_tool_offers_what_it_always_did_in_the_order_it_served_it():
         "limit", "tag", "session", "max_bytes", "diff", "check", "write", "path",
     ]  # fmt: skip
     assert list(TOOLS["ddflow_bisect"]["properties"]) == ["victim", "cmd", "candidates", "timeout"]
-    assert list(TOOLS["ddflow_ci"]["properties"]) == ["action", "ref", "base", "command"]
+    assert list(TOOLS["ddflow_ci"]["properties"]) == ["action", "ref", "base", "command", "full"]
     assert list(TOOLS["ddflow_tests"]["properties"]) == ["item", "base"]
     assert list(TOOLS["ddflow_precommit"]["properties"]) == ["ddflow_cmd", "write"]
 
