@@ -14,6 +14,7 @@ from ...core.outcome import NOTHING, OK
 from ..argtypes import GLOBS_HELP, _Globs
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
+from . import agent_brief_cli as AB
 from . import lifecycle_cli as L
 from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
@@ -67,25 +68,35 @@ COMMANDS: tuple[Command, ...] = (
             "START HERE every session. Returns a budgeted pack: work recoverable after "
             "a crash, the current item, what is ready to start now, why everything else "
             "is blocked, and the past lessons ranked as relevant to this task. Use this "
-            "INSTEAD of reading the project's lesson or rule files — it is the same "
-            "information retrieved for the task at hand, at a fraction of the tokens."
+            "INSTEAD of reading the project's lesson or rule files: the same information, "
+            "ranked for the task at hand, at a fraction of the tokens."
         ),
         kind="brief",
         prose=True,
         prose_reason="a budgeted reading pack — rules, decisions and lessons as text to read",
-        call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().brief(
-            repo,
-            item=a.get("item", "") or "",
-            phase=a.get("phase", "") or "",
-            check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
-            called_from=called_from,
-            shell_cwd=shell_cwd,
-            agent=agent,
+        call=lambda repo, a, agent, called_from=None, shell_cwd=None: (
+            _api().agent_brief(
+                repo,
+                item=a.get("target") or a.get("item") or "",
+                for_agent=a["for_agent"],
+                note=a.get("note") or "",
+                agent=agent,
+            )
+            if a.get("for_agent")
+            else _api().brief(
+                repo,
+                item=a.get("item", "") or "",
+                phase=a.get("phase", "") or "",
+                check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
+                called_from=called_from,
+                shell_cwd=shell_cwd,
+                agent=agent,
+            )
         ),
         payload="text",
         cli=CliPolicy(
             notes=L.brief_notes,
-            body=L.brief_body,
+            body=AB.brief_body,
             human=L.brief_text,
             call_kwargs=L.merge_kwargs,
         ),
@@ -103,9 +114,32 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "check_recovery",
                 type="boolean",
-                help="Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new.",
+                help="Scan for crashed agents' worktrees and lead with them: know it BEFORE new work.",
                 cli_help="",
                 default=DEFAULT_CHECK_RECOVERY,
+            ),
+            Param(
+                "for_agent",
+                help="Render this subagent's launch brief for item.",
+                cli_help="render the standard launch brief of subagent NAME for the item "
+                "(`--item` or the positional id)",
+                default="",
+            ),
+            Param(
+                "note",
+                help="",
+                cli_help="with --for-agent: the coordinator's note for this item",
+                default="",
+                cli_only=True,
+            ),
+            Param(
+                "target",
+                help="",
+                cli_help="with --for-agent: the item id",
+                positional=True,
+                nargs="?",
+                default="",
+                cli_only=True,
             ),
         ),
     ),

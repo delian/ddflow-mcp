@@ -42,6 +42,7 @@ from __future__ import annotations
 from ._base import _load
 from ._dedupe import Answer as DedupeAnswer
 from ._dedupe import check_add as dedupe_check_add
+from .briefing import agent_brief
 from .cirun import ci_tool
 from .completion import completion_verdict
 from .decisions import (
@@ -231,6 +232,7 @@ __all__ = [
     "_load",
     "abandon",
     "adopt_project",
+    "agent_brief",
     "block",
     "board",
     "brief",
