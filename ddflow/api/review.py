@@ -39,11 +39,11 @@ from ..services.enforce import SELF_MANAGED
 from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
 from ..views import human
-from . import review_finding_ref as RF
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import _lease_keeper, item_tree
 from .lifecycle import callers_tree
+from .review_finding_ref import resolve as resolve_finding
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -325,7 +325,7 @@ def triage(
             f"{item}.{gate} has no `ddflow review` with numbered findings on record "
             f"(a hand-recorded gate, a clean review, or one from before triage)"
         )
-    finding, why = RF.resolve(finding, found, f"{item}.{gate}")
+    finding, why = resolve_finding(finding, found, f"{item}.{gate}")
     if not finding:
         return bad(why, findings=len(found))
     f = found[finding - 1]
