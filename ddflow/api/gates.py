@@ -484,6 +484,8 @@ def run(
     scope = TSC.unit_tests_scope(cfg, st, it, gdef.command, cwd) if gate == "unit_tests" else None
     if scope is not None and scope.command:
         gdef = replace(gdef, command=scope.command)
+    if scope is not None and scope.scope == "covered":
+        return _covered_by_ci(log, cfg, repo, it, gate, cwd, scope, gates, forced)
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = run_watching_git(
@@ -523,6 +525,18 @@ def run(
     return O.nothing("gate.run", reason or f"{gate} could not report", **data)
 
 
+def _covered_by_ci(log, cfg, repo, it, gate, cwd, scope, gates, forced) -> O.Outcome:
+    """Record ``gate`` passed without a run: the item's ci gate took every test it would, on
+    this tree (D-test-economy-r2). The evidence names the ci run and the scope."""
+    ev: dict[str, Any] = {
+        **scope.evidence(),
+        "note": f"covered by {scope.covered_by}",
+        "tree_sha": G.tree_identity(cwd),
+    }
+    R.record_measured(log, cfg, repo, it, gate, "passed", evidence=ev, gates=gates, forced=forced)
+    return O.ok("gate.run", gate=gate, outcome="passed", evidence=ev, id=it.id)
+
+
 @dataclass
 class Evidence:
     """What the caller claims it did, as a record rather than five loose arguments.
@@ -545,6 +559,8 @@ class Evidence:
     #: ``model`` was given as `--reviewer-model`: the caller states it IS the reviewer's,
     #: so an author-family name on a reviewer gate is not refused (B1979dac602).
     model_is_reviewer: bool = False
+    #: Which tests a `ci run` took (`ci_scope.Plan.evidence`): recorded as `ci_scope`.
+    ci_scope: dict[str, Any] | None = None
 
 
 @dataclass
@@ -725,6 +741,8 @@ def _evidence_fields(
         ev["exit"] = evidence.exit_code
     if evidence.model:
         ev["model"] = evidence.model
+    if evidence.ci_scope:
+        ev["ci_scope"] = evidence.ci_scope
     if evidence.output_file:
         try:
             txt = Path(evidence.output_file).read_text("utf-8", errors="replace")
