@@ -504,6 +504,8 @@ class Bug:
     #: A report filed against an open fix task links to it here without being one of the
     #: task's `fixes`: that task's completion leaves it open (B7bdcc6b212).
     fix_task: str = ""
+    #: `bug found --globs`: the files its fix touches, carried to the fix task and its claim.
+    globs: list[str] = field(default_factory=list)
     #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
     #: against ddflow itself).
     upstream_url: str = ""

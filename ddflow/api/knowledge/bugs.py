@@ -85,6 +85,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
     # id) does not turn it back to `project`; `--scope project` says it and does.
     extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
+    if globs:
+        extra["globs"] = GS.parse(globs)
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
@@ -349,7 +351,14 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
                     tasks[b.id] = _fix_task_id(st, cfg, b.id, b.item)
                 continue
             fix = _file_fix_task(
-                log, cfg, st, b.id, title=b.title, summary=b.summary, item=b.item, globs=""
+                log,
+                cfg,
+                st,
+                b.id,
+                title=b.title,
+                summary=b.summary,
+                item=b.item,
+                globs=",".join(b.globs),
             )
             # A partial `bug.found` carries the link: the fold merges and never blanks
             # (`_h_bug_found`), and an older ddflow folds it as the record it already has.
