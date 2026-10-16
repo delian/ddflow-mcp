@@ -727,13 +727,22 @@ def upgrade_start(repo: Path, *, agent: str = "", surface: str = "") -> str:
 
 
 def stale_server_note(repo: Path, *, agent: str = "") -> str:
-    """``restart the server`` when the running ddflow is older than the installed package or
-    than the highest version in this project's log, else "". For the MCP server, which says it
-    once per connection (`services.upgrade_notice.stale_server_note`)."""
+    """``restart the server`` when a newer ddflow than the running one is installed, else "".
+    (`services.upgrade_notice.stale_server_note`; the MCP server decides through
+    `stale_server_facts`.)"""
     if not (repo / ".ddflow").is_dir():
         return ""
     _log, _cfg, st = _load(repo, agent)
     return UN.stale_server_note(st, installed=UN.installed_version())
+
+
+def stale_server_facts(repo: Path, *, agent: str = "") -> dict[str, Any] | None:
+    """The facts behind `stale_server_note` (running, newest, where, reexec), or None when the
+    running ddflow is current or the project is not adopted."""
+    if not (repo / ".ddflow").is_dir():
+        return None
+    _log, _cfg, st = _load(repo, agent)
+    return UN.stale_facts(st, installed=UN.installed_version())
 
 
 def _companion_lines(repo: Path) -> list[str]:

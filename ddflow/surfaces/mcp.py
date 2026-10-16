@@ -55,6 +55,7 @@ from ..infra.worktree import repo_root
 # The protocol engine -- revisions, negotiation, the modern envelope, multi round-trip --
 # is `mcp_protocol`; these names are re-exported so `ddflow.surfaces.mcp.<name>` keeps working.
 from . import mcp_protocol as protocol
+from . import mcp_upgrade as _upgrade
 from . import registry as _REGISTRY
 from .mcp_bound import BOUNDS
 from .mcp_protocol import (  # noqa: F401
@@ -518,7 +519,9 @@ class Server:
         #: Old names (aliases) this connection has already been told are deprecated: said
         #: once per session (D-compat).
         self._notices = _REGISTRY.Notices()
-        #: The stale-server note (`_stale_footer`): said once, looked for once a minute.
+        #: The stale-server note (`mcp_upgrade.footer`): said once, looked for once a minute;
+        #: `reexec_pending` asks `serve` to replace the process once it is quiet.
+        self.reexec_pending = False
         self._stale_said = False
         self._stale_checked_at = float("-inf")
         #: Declared identity for this connection; empty means "use the process
@@ -887,6 +890,8 @@ class Server:
             # is a bug, answered as an internal error below.
             code = exit_for(exc)
             if code == REFUSED:
+                if (stale := _upgrade.refusal(self, exc)) is not None:
+                    return _ok(mid, stale)
                 return _ok(mid, _text(str(exc), meta={"exit": REFUSED}))
             if declared_exit(exc) is None and isinstance(exc, (KeyError, TypeError, ValueError)):
                 return _ok(mid, _text(f"bad arguments: {exc}", error=True))
@@ -927,7 +932,7 @@ class Server:
             out["content"].append({"type": "text", "text": deprecation_note(name, call.retired)})
         for alias in self._notices.fresh(call.used):
             out["content"].append({"type": "text", "text": f"note: {alias.notice()}"})
-        for note in (_obligation_footer(self), _stale_footer(self)):
+        for note in (_obligation_footer(self), _upgrade.footer(self, _STALE_CHECK_EVERY_S)):
             if note:
                 out["content"].append({"type": "text", "text": note})
         return _ok(mid, out)
@@ -1042,29 +1047,8 @@ def _modern_identify_note(agent: str) -> str:
     )
 
 
-#: How often a running server looks at the installed package and the log's stamps.
+#: The look interval when `[mcp].stale_check_every_s` cannot be read (the knob's default).
 _STALE_CHECK_EVERY_S = 60.0
-
-
-def _stale_footer(server) -> str:
-    """``restart the server`` once, when this process runs older code than the installed package
-    or the project's log (`services.upgrade_notice.stale_server_note`), else "".
-
-    A server is a long-lived process: one started before an upgrade keeps answering with the old
-    code, and nothing else tells the caller. Checked at most once a minute (the installed version
-    is read from disk), said once, and swallows everything -- a courtesy, never a failure."""
-    if server._stale_said:
-        return ""
-    now = time.monotonic()  # not the wall clock: a clock stepped back must not mute the note
-    if now - server._stale_checked_at < _STALE_CHECK_EVERY_S:
-        return ""
-    server._stale_checked_at = now
-    try:
-        note = _api().stale_server_note(server.repo, agent=server.agent)
-    except Exception:
-        return ""
-    server._stale_said = bool(note)
-    return note
 
 
 def _obligation_footer(server) -> str:
@@ -1509,7 +1493,9 @@ def serve(
     At EOF the loop waits for its workers' answers before returning.
     """
     srv = Server(repo, called_from=called_from)
-    inp = stdin or sys.stdin
+    _upgrade.adopt(srv)
+    # A real stdio session reads its own descriptor, so a re-exec loses no request.
+    inp = stdin or _upgrade.stdio_lines()
     outp = stdout or sys.stdout
     if offload is None:
         offload = stdin is None
@@ -1551,8 +1537,17 @@ def serve(
             reply = _err(msg.get("id"), -32603, f"internal error: {exc}")
         if reply is not None:
             notify(reply)
+        if srv.reexec_pending and _reexec_ready(inp, relays):
+            _upgrade.execute(srv, PROC.replace_process)
     for relay in relays:
         relay.join()
+
+
+def _reexec_ready(inp, relays) -> bool:
+    """May the process replace itself now? Only a real stdio session (`StdinLines`), with no
+    offloaded call running and nothing read-but-unserved or waiting on the pipe."""
+    idle = getattr(inp, "idle", None)
+    return idle is not None and idle() and not any(r.is_alive() for r in relays)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1597,7 +1592,7 @@ def main(argv: list[str] | None = None) -> int:
     # `claim` over MCP never saw that the caller was already isolated, so worktree
     # ADOPTION was unreachable from the one surface the harnesses it was written for
     # actually drive.
-    serve(repo, called_from=start)
+    serve(repo, called_from=_upgrade.called_from() or start)
     return 0
 
 

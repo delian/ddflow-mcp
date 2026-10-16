@@ -15,14 +15,18 @@ A test is selected when, relative to the item's base:
 * it is itself a changed test file;
 * a changed ``conftest.py`` sits in its directory or above it (pytest applies it there
   without any import);
-* it imports a changed module, directly or through modules that import it — read from
-  the Python import graph of the repository, not from names;
+* it imports a changed module, directly or through ONE module that does — read from
+  the Python import graph of the repository, not from names (`testreach`: the walk is cut
+  at a hub, a module that `[gates].unit_tests_hub_importers` or more files import);
 * its file name carries a changed file's stem (``test_gates.py`` for ``gates.py``) — the
   convention that covers languages this module does not parse;
 * it DECLARES it governs the changed path: a test of repo-wide structure (architecture
   guards, a package layout, packaging) imports nothing it checks, so it says what it
   checks with a module-level ``GOVERNS = ("ddflow/api/**", ...)`` of globs, and a change
   to a path matching one selects it (B2a1eaa259e);
+* it LISTS a package a module was added to or removed from (`testidents.listing_tests`): a
+  layout test that walks the package from disk spells its name in quotes, and imports
+  nothing the new module could change;
 * it names a changed DATA file -- a fixture, a golden file, a baseline -- that lives below
   a directory holding tests: a test reads one by its path, never by an import
   (`_data_readers` says how it is matched).
@@ -31,11 +35,17 @@ What it misses, stated so nobody mistakes it for the suite -- the whole run catc
 
 * a test that only drives the program in a SUBPROCESS (`python -m pkg ...`) imports
   nothing it exercises;
-* a test more than `MAX_HOPS` imports away from the change (it imports C, C imports B,
+* a test more than `[gates].unit_tests_max_hops` imports away from the change (it imports C, C imports B,
   B imports the changed A);
 * a test that reaches the change only through a re-exporting package ``__init__``;
+* a package name built at run time, for the listing rule;
 * a test that builds a changed data file's path at run time, when another test spells
   the file's name together with its directory: only that most specific match is taken.
+
+A selection is also bounded: past `[gates].unit_tests_max_files` the farthest tests are
+cut (changed tests, then declared ones, then direct importers, then two-hop ones) and the
+cut set is reported with the selection. A changed hub or test infrastructure selects
+nothing short of the whole suite (`Selection.full`).
 
 The two import bounds are chosen: unbounded, the layer that imports everything (a CLI,
 an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
@@ -55,16 +65,15 @@ from __future__ import annotations
 import ast
 import re
 import shlex
-from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from ..core import globs
-from ..core.bookkeeping import STATE_EXCLUDE, is_state
 from ..infra import git as GIT
-from ..infra import worktree as W
 from . import changes as CH
 from . import gates as G
+from . import testidents as TI
+from . import testreach as TR
 
 #: A test file by name, in the conventions of pytest, Jest/Vitest and Go.
 _TEST_FILE = re.compile(
@@ -86,10 +95,15 @@ def _named(stem: str, test_name: str) -> bool:
     return bool(re.search(rf"(?:^|[_.-]){re.escape(stem)}s?(?:$|[_.-])", test_name))
 
 
+#: How near a test is to the change, nearest first; the budget cuts from the far end.
+RANK_CHANGED, RANK_DECLARED, RANK_DIRECT, RANK_TWO_HOP = 0, 1, 2, 3
+
+
 @dataclass(frozen=True)
 class Selected:
     path: str
     reason: str
+    rank: int = RANK_DECLARED
 
 
 @dataclass
@@ -98,6 +112,9 @@ class Selection:
     changed: list[str] = field(default_factory=list)
     tests: list[Selected] = field(default_factory=list)
     unparsed: list[str] = field(default_factory=list)  #: .py files the graph could not read
+    cut: list[Selected] = field(default_factory=list)  #: over the budget, not selected
+    cut_at: list[str] = field(default_factory=list)  #: hubs the import walk did not pass
+    full: str = ""  #: why only the whole suite is safe (a hub or test infrastructure changed)
 
 
 def changed_files(tree: Path, base: str) -> list[str] | None:
@@ -108,102 +125,148 @@ def changed_files(tree: Path, base: str) -> list[str] | None:
     return CH.changed_paths(tree, base, include=("committed", "tracked", "untracked"))
 
 
-def module_name(path: str) -> str:
-    """``pkg/sub/mod.py`` -> ``pkg.sub.mod``; a package's ``__init__.py`` is the package;
-    a ``src/`` layout's prefix is not part of the name."""
-    parts = list(PurePosixPath(path).with_suffix("").parts)
-    if parts and parts[0] == "src":
-        parts = parts[1:]
-    if parts and parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join(parts)
-
-
-def _imports(path: str, source: str) -> set[str]:
-    """Absolute dotted names ``path`` imports, relative imports resolved."""
-    tree = ast.parse(source, filename=path)
-    here = module_name(path).split(".")
-    package = here if path.endswith("__init__.py") else here[:-1]
-    out: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            out.update(a.name for a in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                anchor = package[: len(package) - (node.level - 1)] if node.level > 1 else package
-                target = ".".join([*anchor, *([node.module] if node.module else [])])
-            else:
-                target = node.module or ""
-            if target:
-                out.add(target)
-            # `from pkg import mod` imports the MODULE when `mod` is one.
-            out.update(f"{target}.{a.name}" if target else a.name for a in node.names)
-    return out
-
-
-def _resolve(name: str, known: set[str]) -> str:
-    """The longest known module that ``name`` is, or lies inside (``pkg.mod.func`` ->
-    ``pkg.mod``); "" when it is not this repository's code."""
-    parts = name.split(".")
-    for n in range(len(parts), 0, -1):
-        cand = ".".join(parts[:n])
-        if cand in known:
-            return cand
-    return ""
-
-
 def _listed(tree: Path) -> list[str] | None:
     """Every tracked and untracked (not ignored) path."""
     paths = GIT.files(tree, "all")
     return None if paths is None else sorted(set(paths))
 
 
-def select(tree: Path, base: str) -> Selection | None:
-    """The tests ``tree``'s change reaches since ``base``, each with why. None when git
-    could not say what changed."""
-    changed = changed_files(tree, base)
-    listed = _listed(tree)
+class _Picks:
+    """Test -> (why, rank); the first reason stays, the nearest rank wins."""
+
+    def __init__(self) -> None:
+        self.by: dict[str, tuple[str, int]] = {}
+
+    def __call__(self, test: str, why: str, rank: int) -> None:
+        if test not in self.by:
+            self.by[test] = (why, rank)
+        elif rank < self.by[test][1]:
+            self.by[test] = (self.by[test][0], rank)
+
+    def many(self, found: dict[str, str], rank: int) -> None:
+        for t, why in found.items():
+            self(t, why, rank)
+
+
+def _by_name(changed: list[str], tests: list[str], pick: _Picks) -> None:
+    stems = {PurePosixPath(c).stem for c in changed if not is_test_file(c)}
+    stems -= {"__init__", "conftest"}
+    for t in tests:
+        name = PurePosixPath(t).stem
+        hit = next((s for s in sorted(stems) if len(s) >= _MIN_STEM and _named(s, name)), "")
+        if hit:
+            pick(t, f"named after {hit}", RANK_DECLARED)
+
+
+def _by_conftest(changed: list[str], tests: list[str], pick: _Picks, budget: int) -> str:
+    """Pick every test under a changed conftest; the reason the whole suite is the only
+    safe answer when that is more than the budget, else ""."""
+    full = ""
+    for c in changed:
+        if PurePosixPath(c).name != "conftest.py":
+            continue
+        scope = str(PurePosixPath(c).parent)
+        under = [t for t in tests if scope in (".", "") or t.startswith(scope + "/")]
+        for t in under:
+            pick(t, f"under changed {c}", RANK_CHANGED)
+        if 0 < budget < len(under):
+            full = f"{c} is test infrastructure for {len(under)} tests (budget {budget})"
+    return full
+
+
+def _bounded(sel: Selection, picks: _Picks, max_files: int) -> None:
+    """Fill ``sel.tests`` from the picks, nearest first; the farthest past ``max_files``
+    go to ``sel.cut`` (a changed test is never one of them)."""
+    ordered = sorted(picks.by, key=lambda t: (picks.by[t][1], t))
+    keep = ordered
+    if max_files > 0 and len(ordered) > max_files:
+        floor = sum(1 for t in ordered if picks.by[t][1] == RANK_CHANGED)
+        keep = ordered[: max(max_files, floor)]
+        sel.cut = [Selected(t, *picks.by[t]) for t in ordered[len(keep) :]]
+    sel.tests = [Selected(t, *picks.by[t]) for t in sorted(keep)]
+
+
+def select(
+    tree: Path,
+    base: str,
+    *,
+    max_files: int = 0,
+    hub_importers: int = 0,
+    max_hops: int = 2,
+    name_max_tests: int = 30,
+    changed: list[str] | None = None,
+    listed: list[str] | None = None,
+    idents: dict[str, str] | None = None,
+    membership: list[str] | None = None,
+) -> Selection | None:
+    """The tests ``tree``'s change reaches since ``base``, each with why and how near. None
+    when git could not say what changed.
+
+    ``hub_importers`` (`[gates].unit_tests_hub_importers`) is the importer count from which
+    a module is a hub (0 = none): the import walk is cut at one, and a changed hub sets
+    ``full``; ``max_hops`` and ``name_max_tests`` are `unit_tests_max_hops` and
+    `unit_tests_name_max_tests`. ``max_files`` (`[gates].unit_tests_max_files`, 0 = unlimited) bounds the
+    selection: the farthest tests are moved to ``cut`` until it fits, never a changed test.
+    ``changed``, ``listed`` and ``idents`` stand in for git's answers (and
+    `testidents.changed_identifiers`; ``membership`` the added and removed paths), to select over a checkout of an older commit that
+    has no history of its own (the recall replay)."""
+    changed = changed_files(tree, base) if changed is None else changed
+    listed = _listed(tree) if listed is None else listed
     if changed is None or listed is None:
         return None
     sel = Selection(base=base, changed=changed)
     py = [p for p in listed if p.endswith(".py") and (tree / p).is_file()]
     tests = [p for p in listed if is_test_file(p) and (tree / p).is_file()]
-    reasons: dict[str, str] = {}
-
-    def pick(test: str, why: str) -> None:
-        reasons.setdefault(test, why)
-
+    pick = _Picks()
     for c in changed:
         if is_test_file(c) and (tree / c).exists():
-            pick(c, "changed")
-    for c in changed:
-        if PurePosixPath(c).name == "conftest.py":
-            scope = str(PurePosixPath(c).parent)
-            for t in tests:
-                if scope in (".", "") or t.startswith(scope + "/"):
-                    pick(t, f"under changed {c}")
+            pick(c, "changed", RANK_CHANGED)
+    sel.full = _by_conftest(changed, tests, pick, max_files)
 
-    for t, why in _import_reach(tree, py, changed, sel).items():
+    graph = TR.build(tree, py, changed)
+    sel.unparsed.extend(graph.unparsed)
+    hubs = graph.hubs(hub_importers)
+    walked = TR.reach(graph, changed, hubs, max_hops)
+    sel.cut_at = sorted(walked.cut_at)
+    if touched := TR.hubs_touched(changed, hubs):
+        sel.full = sel.full or f"a hub module changed: {', '.join(touched)}"
+    for t, (why, hops) in walked.files.items():
         if t in tests:
-            pick(t, why)
+            pick(t, why, RANK_DIRECT if hops == 1 else RANK_TWO_HOP)
 
-    stems = {PurePosixPath(c).stem for c in changed if not is_test_file(c)}
-    stems.discard("__init__")
-    stems.discard("conftest")
-    for t in tests:
-        name = PurePosixPath(t).stem
-        hit = next((s for s in sorted(stems) if len(s) >= _MIN_STEM and _named(s, name)), "")
-        if hit:
-            pick(t, f"named after {hit}")
-
-    for t, why in _data_readers(tree, changed, tests).items():
-        pick(t, why)
-
-    for t, why in governed(tree, changed, tests).items():
-        pick(t, why)
-
-    sel.tests = [Selected(t, reasons[t]) for t in sorted(reasons)]
+    _by_name(changed, tests, pick)
+    pick.many(_data_readers(tree, changed, tests), RANK_DECLARED)
+    pick.many(governed(tree, changed, tests), RANK_DECLARED)
+    if idents is None:
+        idents = TI.changed_identifiers(tree, base, [c for c in changed if c in py])
+    if membership is None:
+        membership = _membership(tree, base)
+        if membership is None:  # nobody looked is never "nothing was added"
+            sel.full = (
+                sel.full or f"git could not say which files were added or removed since {base}"
+            )
+    packages = TI.listed_packages(membership or [])
+    if idents or packages:  # no changed name or listing, nothing to read the tests for
+        texts = {t: _read(tree / t) for t in tests}
+        pick.many(TI.spelling_tests(idents, texts, name_max_tests), RANK_DECLARED)
+        pick.many(TI.listing_tests(packages, texts, name_max_tests), RANK_DECLARED)
+    _bounded(sel, pick, max_files)
     return sel
+
+
+def _membership(tree: Path, base: str) -> list[str] | None:
+    """The paths ADDED or REMOVED since ``base`` (committed, staged, unstaged, untracked):
+    the changes that alter what a package lists. None when git cannot say."""
+    return CH.changed_paths(
+        tree, base, include=("committed", "tracked", "untracked"), diff_filter="AD"
+    )
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def _governs(source: str) -> list[str]:
@@ -306,54 +369,6 @@ def _dirs_below_tests(path: str, homes: set[str]) -> list[str] | None:
     return None
 
 
-#: How far along the import graph a test still counts as reaching a change: it imports
-#: the changed module (1), or imports a module that does (2). Unbounded, the top layer --
-#: a CLI or an MCP registry that imports everything, and tests import -- made every test
-#: "reach" every module: 42 of 87 test files for one leaf module on this repository,
-#: 72 for the event log. Past two hops the edge is an accident of layering, not evidence.
-MAX_HOPS = 2
-
-
-def _import_reach(tree: Path, py: list[str], changed: list[str], sel: Selection) -> dict[str, str]:
-    """File -> why, for every .py file within `MAX_HOPS` imports of a changed module,
-    breadth first so the reason names the nearest changed module and the path to it."""
-    known = {module_name(p): p for p in py}
-    # A deleted (or renamed-away) module is still a name its importers use -- and they are
-    # now broken, the tests most worth running -- so it resolves like a live one.
-    gone = {module_name(c) for c in changed if c.endswith(".py") and c not in py}
-    names_known = set(known) | gone
-    importers: dict[str, set[str]] = {}
-    for p in py:
-        try:
-            names = _imports(p, (tree / p).read_text(encoding="utf-8", errors="replace"))
-        except (OSError, SyntaxError, ValueError):
-            sel.unparsed.append(p)
-            continue
-        for n in names:
-            mod = _resolve(n, names_known)
-            if mod and known.get(mod) != p:
-                importers.setdefault(mod, set()).add(p)
-
-    roots = [module_name(c) for c in changed if c.endswith(".py")]
-    # (module, the changed module it leads to, the reason so far, hops taken)
-    queue = deque((m, m, f"imports {m}", 0) for m in roots if m in names_known)
-    seen_mod: set[str] = {m for m, *_ in queue}
-    reach: dict[str, str] = {}
-    while queue:
-        mod, origin, why, hops = queue.popleft()
-        for f in sorted(importers.get(mod, ())):
-            fm = module_name(f)
-            reach.setdefault(f, why)
-            # A package `__init__` re-exporting everything (an API facade) is the same
-            # accident at a smaller scale: importing the facade is not evidence a test
-            # exercises the module behind it, so the graph does not continue through one.
-            if hops + 1 >= MAX_HOPS or f.endswith("__init__.py") or fm in seen_mod:
-                continue
-            seen_mod.add(fm)
-            queue.append((fm, origin, f"imports {fm}, which imports {origin}", hops + 1))
-    return reach
-
-
 def run_command(configured: str, tests: list[str], root: Path) -> str:
     """A command that runs ``tests`` the way the project runs its suite, in parallel.
 
@@ -409,167 +424,3 @@ def _without_test_locations(args: list[str], root: Path) -> list[str]:
         if t.startswith("-") or value_of_flag or not location:
             out.append(t)
     return out
-
-
-# -- the unit_tests gate's scope (D-gate-economy 1) ------------------------------------
-
-
-@dataclass
-class Scope:
-    """What the unit_tests gate runs for one item, and why: the whole suite, or only the
-    tests the change reaches. ``command`` is the command to run ("" = the gate's own)."""
-
-    scope: str  #: "selected" | "full"
-    why: str
-    command: str = ""
-    tests: list[Selected] = field(default_factory=list)
-    changed_lines: int | None = None
-
-    def evidence(self) -> dict[str, object]:
-        ev: dict[str, object] = {"scope": self.scope, "scope_why": self.why}
-        if self.changed_lines is not None:
-            ev["changed_lines"] = self.changed_lines
-        if self.scope == "selected":
-            ev["selected_tests"] = [{"path": t.path, "reason": t.reason} for t in self.tests]
-        return ev
-
-
-def changed_lines(tree: Path, base: str) -> int | None:
-    """Added plus removed lines since ``base``'s merge-base: committed, uncommitted and
-    untracked, ddflow's own `.ddflow/` bookkeeping excluded. None when git cannot say."""
-    mb = W.git(tree, "merge-base", base, "HEAD")
-    if mb.code != 0:
-        return None
-    num = W.git(tree, "diff", "--numstat", "--no-renames", mb.out, "--", ".", *STATE_EXCLUDE)
-    if num.code != 0:
-        return None
-    n = 0
-    for row in num.out.splitlines():
-        added, removed = [*row.split("\t", 2), "", ""][:2]
-        n += int(added) if added.isdigit() else 0
-        n += int(removed) if removed.isdigit() else 0
-    for p in GIT.files(tree, "untracked") or ():
-        if is_state(p):
-            continue
-        try:
-            n += len((tree / p).read_bytes().splitlines())
-        except OSError:
-            continue
-    return n
-
-
-def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
-    """Whether the unit_tests gate runs the selection or the whole suite for item ``it``.
-
-    The selection (D-gate-economy 1) is for a BUG FIX (the task fixes a bug) or a SMALL
-    task (fewer changed lines than `[gates].unit_tests_small_lines`), and only once the
-    whole suite has PASSED on this very tree: the item's `ci` gate is recorded `passed`
-    on the clean commit this tree holds now (ci runs the whole suite on the committed HEAD
-    merged with the base). A ci recorded over uncommitted edits, skipped, unavailable,
-    failed, run on another commit, or with no tree measured proves nothing about this tree, so the gate runs the whole suite (roborev on
-    7da06042: a selection resting on a ci that never passed let a fix merge with the whole
-    suite never run). Everything else -- a phase, a promotion, a larger task, a project
-    with `[gates].unit_tests_scope = "full"` -- runs the whole suite, and so does a
-    selection that cannot be made: no base, git cannot say what changed, no test reaches
-    the change (running nothing would pass vacuously), or the command does not run
-    pytest. Each answer says why. The base is the item's, else the configured base ref,
-    else the default branch."""
-    if cfg.gates.unit_tests_scope != "selected":
-        return Scope("full", f'[gates].unit_tests_scope = "{cfg.gates.unit_tests_scope}"')
-    if it.kind == "phase" or it.promote_to:
-        what = "phase" if it.kind == "phase" else "promotion"
-        return Scope("full", f"a {what} runs the whole suite")
-    if why := _ci_not_passed_here(cfg, it, tree):
-        return Scope("full", why)
-    try:
-        base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
-    except W.GitError:
-        return Scope("full", "no base to compare the change with")
-    lines = changed_lines(tree, base)
-    kind = _selectable(cfg, it, lines)
-    if kind.startswith("not "):
-        return Scope("full", kind, changed_lines=lines)
-    return _selected(st, it, command, tree, base, kind, lines)
-
-
-def _ci_not_passed_here(cfg, it, tree: Path) -> str:
-    """ "" when the item's ci gate PASSED on exactly the commit ``tree`` holds now, clean;
-    else why not. `ddflow ci run` tests the committed HEAD merged with the base, never
-    uncommitted edits, so a pass counts only when the tree was clean when ci ran and is
-    the same clean commit now (roborev on 5ddf11f7: comparing the dirty source let a pass
-    on an older commit vouch for edits it never ran)."""
-    ci = it.gates.get("ci")
-    if ci is None or ci.outcome != "passed":
-        state = "has no outcome" if ci is None else f"is {ci.outcome}"
-        if "ci" not in G.pipeline_for(it, cfg):
-            return "no ci gate in this item's pipeline runs the whole suite, so this gate runs it"
-        return (
-            f"the ci gate {state}: the whole suite has not passed on this tree, so this "
-            "gate runs it (run ci first, and a bug fix or small task then runs the selection)"
-        )
-    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
-    if not ran:
-        return (
-            "the ci gate's pass carries no measured tree, so which tree it passed on cannot "
-            "be told: this gate runs the whole suite"
-        )
-    if not ran.endswith("+clean"):
-        return (
-            "the ci gate passed on a tree with uncommitted changes, and ci tests only the "
-            "committed HEAD: this gate runs the whole suite (commit, then re-run ci)"
-        )
-    if ran != G.normal_fingerprint(G.tree_identity(tree)):
-        return "the tree changed since the ci gate passed (another commit, or uncommitted edits): this gate runs the whole suite"
-    return ""
-
-
-def _selectable(cfg, it, lines: int | None) -> str:
-    """Why ``it`` may run the selection ("a bug fix (...)", "a small task (...)"), or,
-    starting "not ", why it may not."""
-    small = cfg.gates.unit_tests_small_lines
-    if it.fixes:
-        return f"a bug fix ({', '.join(it.fixes)})"
-    if lines is not None and small > 0 and lines < small:
-        return f"a small task ({lines} changed lines < [gates].unit_tests_small_lines = {small})"
-    size = "its size is unknown" if lines is None else f"{lines} changed lines"
-    return f"not a bug fix, and {size} (small is under {small})"
-
-
-def _selected(st, it, command: str, tree: Path, base: str, kind: str, lines: int | None) -> Scope:
-    """The selection for a selectable item, or the whole suite when none can be made."""
-    sel = select(tree, base)
-    if sel is None:
-        return Scope(
-            "full", f"{kind}, but git could not say what changed since {base}", changed_lines=lines
-        )
-    picked = {s.path for s in sel.tests}
-    # Only what pytest runs: a `scripts/check.sh` regression check is run by no command
-    # built here, and listing it would claim a test that never ran.
-    regression = sorted(
-        {
-            t
-            for b in it.fixes
-            if (bug := st.bugs.get(b)) is not None
-            for t in bug.regression_tests
-            if t.endswith(".py") or "::" in t
-        }
-        - picked
-    )
-    tests = [
-        *sel.tests,
-        *(Selected(t, "a regression test of the bug it fixes") for t in regression),
-    ]
-    if not tests:
-        return Scope("full", f"{kind}, but no test reaches its change", changed_lines=lines)
-    cmd = run_command(command, [t.path for t in tests], tree)
-    if not cmd:
-        return Scope(
-            "full", f"{kind}, but the unit_tests command does not run pytest", changed_lines=lines
-        )
-    return Scope(
-        "selected",
-        f"{kind}: {len(tests)} test(s) its change reaches; the ci gate passed the whole suite on this tree",
-        command=cmd,
-        tests=tests,
-        changed_lines=lines,
-    )

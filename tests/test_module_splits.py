@@ -16,6 +16,10 @@ from pathlib import Path
 
 import pytest
 
+#: It reads the packages' modules from disk (`pkgutil.iter_modules`), so a module ADDED to one
+#: is a change no import reaches: a change under any of them selects this test (B0e7199ff32).
+GOVERNS = ("ddflow/api/reporting/**", "ddflow/services/gates/**", "ddflow/api/knowledge/**")
+
 #: What each single module defined before the split -- the names no caller may lose.
 DEFINED = {
     "ddflow.api.reporting": """
