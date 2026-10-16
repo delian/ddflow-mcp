@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import clock, schedule
 from ..core import globspec as GS
 from ..core import outcome as O
-from ..core import schedule
 from ..core.admission import glob_conflict
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, plan_blocker, resource_shortfall
@@ -440,24 +440,37 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
         return clash
     act = activity or LB.tree_activity(log.root)
     events = log.read_all()
-    while clash:
-        other_id, lease, pair = clash
-        v = LB.judge(cfg, events, other_id, lease, [it.id], now, act)
-        if v is None or not v.breakable:
-            if asked:
-                raise LeaseError(
-                    f"{it.id} writes {pair[0]!r} held by {lease.holder} on {other_id}"
-                    + LB.break_hint(cfg),
-                    holder=lease.holder,
-                    item=it.id,
-                )
-            return clash
+    plan: list[tuple[str, Lease, tuple[str, str], LB.Verdict]] = []
+    stamp = clock.iso_at(now)
+    try:
+        while clash:  # decide ALL of it before any write: a half-broken claim helps no one
+            other_id, lease, pair = clash
+            v = LB.judge(cfg, events, other_id, lease, [it.id], now, act)
+            if v is None or not v.breakable:
+                if asked:
+                    raise LeaseError(
+                        f"{it.id} writes {pair[0]!r} held by {lease.holder} on {other_id}"
+                        + LB.break_hint(cfg),
+                        holder=lease.holder,
+                        item=it.id,
+                    )
+                for _o, held, _p, _v in plan:
+                    held.expired_at = ""
+                return clash
+            plan.append((other_id, lease, pair, v))
+            lease.expired_at = stamp  # this snapshot no longer sees it live
+            clash = glob_clash(state, cfg, it, holder, globs, now)
+    except LeaseError:
+        for _o, lease, _p, _v in plan:
+            lease.expired_at = ""
+        raise
+    if clash is not None:
+        return clash
+    for other_id, lease, pair, v in plan:
         log.append("lease.expired", other_id, LB.breaking_record(lease, it.id, holder, pair, v))
         _remote_drop(log, other_id, lease.holder)
         if broke is not None:
             broke.append({"item": other_id, "holder": lease.holder, "idle_s": round(v.idle_s, 1)})
-        lease.expired_at = "broken"  # this snapshot no longer sees it live
-        clash = glob_clash(state, cfg, it, holder, globs, now)
     return None
 
 

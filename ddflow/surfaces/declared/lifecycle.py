@@ -186,7 +186,7 @@ COMMANDS: tuple[Command, ...] = (
                 "break",
                 type="boolean",
                 help="Break a contended, idle lease (work kept).",
-                cli_help="",
+                cli_help="break a contended lease idle for [lease].hold_max_s (its work is kept)",
             ),
         ),
         tool_order=("id", "globs", "note", "no_worktree", "resources", "queue", "break", "force"),
