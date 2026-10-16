@@ -35,7 +35,11 @@ def _h_gate(outcome: str):
             # before it stay on the gate with their numbers, so `review triage` still
             # addresses them (bug B754cfb0c96). A new `ddflow review` brings its own.
             if prior.get("chunk_findings") and "review_kind" not in evidence:
-                evidence.setdefault("chunk_findings", prior["chunk_findings"])
+                if "chunk_findings" not in evidence:
+                    evidence["chunk_findings"] = prior["chunk_findings"]
+                    # Marked as carried: they belong to the EARLIER round, not to this
+                    # record (bug B29667ba4b4), so a pass over them settles them.
+                    evidence["findings_carried"] = True
             it.gates[gate] = GateRecord(
                 gate=gate,
                 outcome=outcome,
