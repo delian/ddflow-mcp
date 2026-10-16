@@ -100,13 +100,16 @@ def complete(
     # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
-    if umbrella:  # gates get a rolled-up outcome naming the sub-tasks (Bd37a921536)
-        UM.roll_up(log, cfg, repo, st, item, umbrella)
-        st = fold(log.read_all(), strict=False)
-    v = CM.verdict(st, cfg, item, repo=repo, model=model)
-    if umbrella:
-        # No diff of its own to judge (B651a63e574); every other blocker still holds it.
-        v.blockers = UM.blockers(st, cfg, repo, item, v.blockers)
+    # An umbrella's gates get a rolled-up outcome naming its sub-tasks (Bd37a921536).
+    judge = UM.verdict if umbrella else CM.verdict
+    v = judge(
+        st,
+        cfg,
+        item,
+        repo=repo,
+        model=model,
+        **({"log": log, "kids": umbrella} if umbrella else {}),
+    )
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
