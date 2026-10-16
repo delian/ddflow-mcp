@@ -58,6 +58,7 @@ from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
+from .waitcycles import wait_cycles, wait_findings
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
@@ -451,7 +452,7 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-
+    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
@@ -461,6 +462,7 @@ def doctor(
         "repo": str(repo),
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
+        "wait_cycles": [c.as_dict() for c in cycles],
     }
     out = (
         O.failed("doctor", f"{len(problems)} problem(s)", **data)
@@ -553,10 +555,8 @@ def _untitled(st) -> list[str]:
     ]
 
 
-#: The inline duplicate count is bounded on purpose. The sweep is all-pairs, so its cost
-#: grows with the log (measured: ~0.6 s at 640 records, ~3 s at ddflow's own 1559); a
-#: `doctor` that pays seconds at every session start is one people stop running. Above
-#: this many records `doctor` says so and points at `ddflow dupes` instead.
+#: The inline duplicate count is bounded: the all-pairs sweep grows with the log (~3 s at
+#: 1559 records), so above this many records `doctor` points at `ddflow dupes` instead.
 _DOCTOR_SWEEP_MAX = 1000
 #: Stop the count once this many pairs are found; the note then says "at least".
 _DOCTOR_PAIR_CAP = 200
