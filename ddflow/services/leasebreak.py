@@ -153,6 +153,7 @@ def broken_notices(
     for e in events:
         d = e.data
         if e.kind == "lease.expired" and d.get("broken_by") and d.get("holder") == agent:
+            out.pop(e.subject, None)  # a later break moves it to the end
             out[e.subject] = {
                 "item": e.subject,
                 "by": d["broken_by"],
@@ -165,7 +166,7 @@ def broken_notices(
             out.pop(e.subject, None)  # claimed back
     if st is not None:
         out = {k: v for k, v in out.items() if k in st.items and not st.items[k].terminal}
-    return list(out.values())
+    return list(reversed(out.values()))
 
 
 def notice_text(n: dict[str, Any]) -> str:

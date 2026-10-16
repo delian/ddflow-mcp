@@ -134,3 +134,52 @@ def test_an_uncontended_old_lease_survives_an_unrelated_claim(repo):
     time.sleep(1.3)
     assert run_cli(repo, "claim", "T3", "--no-worktree", agent=B)[0] == 0
     assert not _state(repo).items["T1"].lease.expired_at
+
+
+def test_the_holder_is_asked_to_yield_before_anything_is_broken(repo):
+    _setup(repo, hold=100)  # idle_max_s 1: asked after a second, broken only after 100
+    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # records the wait
+    time.sleep(1.3)
+    code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)
+    assert code == 0 and "YIELD REQUESTED" in out + err and "T2" in out + err
+    code, out, _err = run_cli(repo, "brief", agent=A)
+    assert "Yield requested" in out
+    assert not _state(repo).items["T1"].lease.expired_at  # asked, not broken
+
+
+def test_a_claim_that_cannot_break_everything_breaks_nothing(repo):
+    _setup(repo, hold=6)
+    time.sleep(6.3)  # T1 (src/a.py) is now idle; T3 below is fresh
+    run_cli(repo, "task", "add", "T3", "--title", "T3", "--globs", "src/b.py", agent=A)
+    assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 0
+    run_cli(repo, "update", "T2", "--globs", "src/a.py,src/b.py", agent=A)
+    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3
+    assert not _state(repo).items["T1"].lease.expired_at  # no half-broken claim
+
+
+def test_a_deleted_file_is_progress(tmp_path):
+    import subprocess
+
+    from ddflow.infra import treeactivity as TA
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "gone.py").write_text("x")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-qm",
+            "c",
+        ],
+        check=True,
+    )
+    before = TA.last_change_at(tmp_path)
+    (tmp_path / "gone.py").unlink()
+    assert before == 0.0 and TA.last_change_at(tmp_path) > 0.0

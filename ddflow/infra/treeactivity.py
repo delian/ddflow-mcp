@@ -7,6 +7,7 @@ Read-only; an unreadable tree answers 0.0 ("no evidence"), never an error.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 
@@ -29,8 +30,9 @@ def last_change_at(tree: Path) -> float:
         for rel in e.paths:
             try:
                 newest = max(newest, os.stat(tree / rel).st_mtime)
-            except OSError:
-                continue  # a deleted file leaves nothing to date
+            except OSError:  # a deleted file: its directory changed when it went
+                with contextlib.suppress(OSError):
+                    newest = max(newest, os.stat((tree / rel).parent).st_mtime)
     return newest
 
 
