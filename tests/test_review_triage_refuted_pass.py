@@ -106,3 +106,14 @@ def test_complete_does_not_name_the_refuted_gate_as_unmet(repo, tmp_path):
     unmet = [ln for ln in (out + err).splitlines() if ln.lstrip().startswith("- ")]
     assert code != OK or not unmet  # other gates of T1 are unrun: the point is the line below
     assert not any("critic" in ln for ln in unmet), unmet
+
+
+def test_before_the_cap_it_passes_too_and_the_evidence_is_this_rounds(repo, tmp_path):
+    _setup(repo, tmp_path)
+    run_cli(repo, "config", "--set", "review.max_rounds", "2")
+    _full_review(repo)
+    _tri(repo, 1, probe="p1")
+    _tri(repo, 2, probe="p2")
+    flag = _state(repo).gates["critic"].evidence["passed_on_refutation"]
+    assert flag["rounds"] == 1 and flag["max_rounds"] == 2
+    assert [(r["finding"], r["probe"]) for r in flag["refutations"]] == [(1, "p1"), (2, "p2")]

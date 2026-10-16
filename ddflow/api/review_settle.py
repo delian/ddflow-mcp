@@ -4,7 +4,8 @@
 was spent (`review._settle_after_cap`), so agents refuted every finding and then re-recorded
 the gate `passed` by hand -- an unrecorded judgement. Now the triage that gives a failed
 round's LAST open finding its verdict, when all of them were refuted, records the gate
-passed on refutation once, in the log, with each refutation's probe as evidence. A round with
+passed on refutation once, in the log, with each refutation's probe as evidence (when the
+round budget is already spent, `review._settle_after_cap` records the pass first, with counts). A round with
 a confirmed finding is not settled by triage alone (the fix wants a re-review), and a gate
 the budget already settled is left as it is.
 """
@@ -16,6 +17,7 @@ from typing import Any
 
 from ..core import outcome as O
 from ..services import gates as GD
+from ..services import logblobs as LB
 from ._base import _load
 from .review import _rounds_used
 from .review import triage as _triage
@@ -35,10 +37,12 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
     counts = GD.triage_counts(it, gate) or {}
     if counts.get("untriaged", 1) or counts.get("confirmed") or not counts.get("refuted"):
         return out
+    mine = it.triage.get(gate, {})
+    found = LB.full(rec.evidence or {}).get("chunk_findings") or []
     refutations = [
-        {"finding": v.get("n"), "digest": d, "probe": v.get("probe", "")}
-        for d, v in sorted(it.triage.get(gate, {}).items(), key=lambda kv: kv[1].get("n", 0))
-        if v.get("verdict") == "refuted"
+        {"finding": n, "digest": f["digest"], "probe": mine[f["digest"]].get("probe", "")}
+        for n, f in enumerate(found, 1)
+        if mine.get(f["digest"], {}).get("verdict") == "refuted"
     ]
     mark = {
         "passed_on_refutation": {
