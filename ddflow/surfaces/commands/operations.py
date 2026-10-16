@@ -59,7 +59,9 @@ def cmd_cadence(a, c: Ctx) -> int:
         return NOTHING
     for d in out.data["due"]:
         runs = f" -- runs {d['runs']}" if d.get("runs") else ""
-        print(f"DUE: {d['cadence']} — {d['since']} {d['unit']} since last (every {d['every']}){runs}")
+        print(
+            f"DUE: {d['cadence']} — {d['since']} {d['unit']} since last (every {d['every']}){runs}"
+        )
     print("\nRecord one with: ddflow cadence --ran <name>")
     return OK
 

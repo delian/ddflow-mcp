@@ -13,7 +13,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
-from ..ci_scope import parse_marker
+from ..ci_marker import parse_marker
 from ..flakes import failure_evidence
 from ..gateenv import child_env
 from .defs import DEFAULT_GATES, GateDef, command_provenance

@@ -194,34 +194,12 @@ def run(
         if tree is None:
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
-        requested = "selected" if for_item and not full and cfg.ci.tests_scope == "selected" else "full"
-        scope = (
-            CS.plan(cfg, tree, base, requested=requested)
-            if for_item and not command.strip()
-            else None
-        )
-        selected = scope is not None and scope.scope == "selected"
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
-        # The operator's own [ci].command, run as they wrote it; on timeout its whole
-        # process group dies, not just the shell (Bed0f5b6d99).
-        p = CommandRunner().run(
-            Declared(f"SKIP={scope.skip} {cmd}" if selected else cmd, "[ci].command"),
-            cwd=tree,
-            env=child_env(cfg, ci=True),
-            timeout_s=budget,
-            check_installed=False,  # checked above, before the scratch worktree was made
-        )
-        out_prefix = ""
-        if selected and p.ran and p.code == 0:
-            # Same tree, same environment; the hooks above skipped the tests.
-            out_prefix = p.output + f"\n$ {scope.command}\n"
-            p = CommandRunner().run(
-                Declared(scope.command, "the pre-commit `tests` hook"),
-                cwd=tree,
-                env=child_env(cfg, ci=True),
-                timeout_s=budget,
-                check_installed=False,
-            )
+        scope = None
+        if for_item and not command.strip():
+            asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
+            scope = CS.plan(cfg, tree, base, requested=asked)
+        p, out_prefix = _execute(cfg, tree, cmd, scope, budget)
         if p.kind == TIMEOUT:
             return Result(
                 "unavailable",
@@ -231,9 +209,39 @@ def run(
             )
         if p.kind == COULD_NOT_RUN:
             return Result("unavailable", command=cmd, sha=sha, reason=p.reason)
-    out = out_prefix + p.output  # a shell "not found" exit is the command's verdict here: it ran and failed
+    return _result(p, out_prefix, cmd, sha, base, scope)
+
+
+def _execute(cfg: Config, tree: Path, cmd: str, scope, budget: int):
+    """(the run that decided the verdict, the output of the run before it): the command as
+    written, or -- for a selected scope -- the hooks without the suite, then the selected
+    tests on the same tree."""
+    selected = scope is not None and scope.scope == "selected"
+    # The operator's own [ci].command, run as they wrote it; on timeout its whole
+    # process group dies, not just the shell (Bed0f5b6d99).
+    p = CommandRunner().run(
+        Declared(f"SKIP={scope.skip} {cmd}" if selected else cmd, "[ci].command"),
+        cwd=tree,
+        env=child_env(cfg, ci=True),
+        timeout_s=budget,
+        check_installed=False,  # checked before the scratch worktree was made
+    )
+    if not (selected and p.ran and p.code == 0):
+        return p, ""
+    prefix = p.output + f"\n$ {scope.command}\n"
+    return CommandRunner().run(
+        Declared(scope.command, "the pre-commit `tests` hook"),
+        cwd=tree,
+        env=child_env(cfg, ci=True),
+        timeout_s=budget,
+        check_installed=False,
+    ), prefix
+
+
+def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
+    out = out_prefix + p.output  # a shell "not found" exit is the command's verdict: it ran
     checks = parse_checks(out)
-    if selected and out_prefix:
+    if out_prefix:  # the hooks passed and the selected tests ran after them
         checks.append(Check(f"selected tests ({len(scope.tests)} files)", p.code == 0))
     if p.code != 0 and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))

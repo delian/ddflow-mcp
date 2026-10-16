@@ -373,6 +373,10 @@
           "type": "string",
           "description": "Override [ci].command (run)."
          },
+         "full": {
+          "type": "boolean",
+          "description": "Run the whole test suite, not only the tests the change reaches (run)."
+         },
          "as_agent": {
           "type": "string",
           "description": "A subagent's own name, this call only."

@@ -16,7 +16,7 @@ from helpers import git as _git
 from ddflow.api import cirun as A
 from ddflow.config import Config
 from ddflow.services import ci as CI
-from ddflow.services import ci_scope as CS
+from ddflow.services import ci_marker as CM
 
 HOOKS = """\
 repos:
@@ -137,7 +137,10 @@ def test_a_hub_or_suite_configuration_change_falls_back_to_the_whole_suite(proje
 
 def test_an_unknown_file_type_and_no_reaching_test_run_the_whole_suite(project, stubs):
     _branch(project, {"data/blob.bin": "x"})
-    assert "file type" in CI.run(project, Config.load(project), base="main", for_item=True).scope["why"]
+    assert (
+        "file type"
+        in CI.run(project, Config.load(project), base="main", for_item=True).scope["why"]
+    )
     _git(project, "switch", "-q", "main")
     _git(project, "branch", "-q", "-D", "work")
     _branch(project, {"notes/readme.md": "hi\n"})
@@ -176,8 +179,8 @@ class _E:
 
 def test_the_marker_line_carries_the_scope_and_the_gate_reads_it_back():
     ev = {"scope": "selected", "selected": 2, "tests": ["tests/a.py"], "cut": 0}
-    out = "noise\n" + CS.marker_line(ev) + "\nci: passed\n"
-    assert CS.parse_marker(out) == ev and CS.parse_marker("nothing") == {}
+    out = "noise\n" + CM.marker_line(ev) + "\nci: passed\n"
+    assert CM.parse_marker(out) == ev and CM.parse_marker("nothing") == {}
 
 
 def _after(project, ran):

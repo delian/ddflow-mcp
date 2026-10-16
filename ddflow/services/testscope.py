@@ -231,13 +231,7 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
     done = set(ran.get("tests") or ())
     if int(ran.get("selected") or 0) > len(done):  # a truncated list proves nothing about the rest
         return Scope("full", "the ci gate's test list is cut: this gate runs its own selection")
-    regression = {
-        t for b in it.fixes if (bug := st.bugs.get(b)) is not None
-        for t in bug.regression_tests if t.endswith(".py") or "::" in t
-    }  # fmt: skip
-    rest = [t for t in sel.tests if t.path not in done]
-    rest += [Selected(t, "a regression test of the bug it fixes") for t in sorted(regression - done)
-             if t not in {r.path for r in rest}]  # fmt: skip
+    rest = _not_run(sel.tests, _regression(st, it), done)
     if not rest:
         return Scope(
             "covered", f"every test this change reaches ran in the ci gate ({len(done)} files)",
@@ -251,3 +245,22 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
         command=cmd, tests=rest, changed_lines=lines, cut=sel.cut, cut_at=sel.cut_at,
         max_files=cfg.gates.unit_tests_max_files,
     )  # fmt: skip
+
+
+def _regression(st, it) -> set[str]:
+    """What pytest runs of the regression tests of the bugs ``it`` fixes."""
+    return {
+        t
+        for b in it.fixes
+        if (bug := st.bugs.get(b)) is not None
+        for t in bug.regression_tests
+        if t.endswith(".py") or "::" in t
+    }
+
+
+def _not_run(tests: list[Selected], regression: set[str], done: set[str]) -> list[Selected]:
+    """The selected tests and regression tests that are not in ``done``."""
+    rest = [t for t in tests if t.path not in done]
+    seen = {t.path for t in rest}
+    extra = sorted(regression - done - seen)
+    return [*rest, *(Selected(t, "a regression test of the bug it fixes") for t in extra)]

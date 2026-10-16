@@ -11,6 +11,7 @@ from ..core import outcome as O
 from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
+from ..services import ci_marker as CM
 from ._base import _load
 from .ci import status
 from .gates import Evidence, record
@@ -96,6 +97,8 @@ def run(
         for_item=bool(item), full=full,
     )  # fmt: skip
     data = res.as_data()
+    if res.scope:
+        data["scope_line"] = CM.marker_line(res.scope)
     if log_to is not None and not res.ok:  # a pass keeps no log
         log_to.parent.mkdir(parents=True, exist_ok=True)
         fsio.atomic_write(log_to, res.output, fsync=False)  # empty too: a log that says so
