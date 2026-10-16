@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "review.settle_all_refuted"
+new = "true"
+why = "The triage refuting a failed round's last open finding records the gate passed on refutation at once."
+impact = "additive"
