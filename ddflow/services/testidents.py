@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import ast
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from ..infra import worktree as W
+from .testreach import module_name
 
 _MIN_LEN = 8
 _DEFINES = re.compile(
@@ -122,3 +123,36 @@ def spelling_tests(
             for t in hit:
                 found.setdefault(t, []).append(name)
     return {t: f"names {names[0]}, changed in {idents[names[0]]}" for t, names in found.items()}
+
+
+def listed_packages(files: list[str]) -> dict[str, str]:
+    """Package -> an added or removed module of it, for each .py file of ``files`` (the
+    dotted name and the path of its directory, both keys). A module added to or removed from a
+    package changes what the package LISTS, which no import of the new name can reveal."""
+    out: dict[str, str] = {}
+    for f in files:
+        parent = str(PurePosixPath(f).parent)
+        if f.endswith(".py") and parent != ".":
+            out.setdefault(module_name(f"{parent}/__init__.py"), f)
+            out.setdefault(parent, f)
+    return out
+
+
+def listing_tests(
+    packages: dict[str, str], sources: dict[str, str], max_tests: int = 30
+) -> dict[str, str]:
+    """Test path -> why, for each test that spells a changed package as a QUOTED string
+    (``"ddflow.services.gates"``, ``'ddflow/api'``): a layout test, a guard that walks the
+    package. An import statement is not quoted, so the tests that merely use the package are
+    not taken; a package spelt that way by more than ``max_tests`` tests selects none."""
+    found: dict[str, list[str]] = {}
+    for pkg in packages:
+        pat = re.compile(rf"""["']{re.escape(pkg)}/?["']""")
+        hit = [t for t, text in sources.items() if pkg in text and pat.search(text)]
+        if 0 < len(hit) <= max_tests:
+            for t in hit:
+                found.setdefault(t, []).append(pkg)
+    return {
+        t: f"lists package {p[0]} (module {packages[p[0]]} added or removed)"
+        for t, p in found.items()
+    }

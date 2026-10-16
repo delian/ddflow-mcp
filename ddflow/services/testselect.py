@@ -193,6 +193,7 @@ def select(
     changed: list[str] | None = None,
     listed: list[str] | None = None,
     idents: dict[str, str] | None = None,
+    membership: list[str] | None = None,
 ) -> Selection | None:
     """The tests ``tree``'s change reaches since ``base``, each with why and how near. None
     when git could not say what changed.
@@ -203,7 +204,7 @@ def select(
     `unit_tests_name_max_tests`. ``max_files`` (`[gates].unit_tests_max_files`, 0 = unlimited) bounds the
     selection: the farthest tests are moved to ``cut`` until it fits, never a changed test.
     ``changed``, ``listed`` and ``idents`` stand in for git's answers (and
-    `testidents.changed_identifiers`), to select over a checkout of an older commit that
+    `testidents.changed_identifiers`; ``membership`` the added and removed paths), to select over a checkout of an older commit that
     has no history of its own (the recall replay)."""
     changed = changed_files(tree, base) if changed is None else changed
     listed = _listed(tree) if listed is None else listed
@@ -232,15 +233,28 @@ def select(
     _by_name(changed, tests, pick)
     pick.many(_data_readers(tree, changed, tests), RANK_DECLARED)
     pick.many(governed(tree, changed, tests), RANK_DECLARED)
+    texts = {t: _read(tree / t) for t in tests}
     if idents is None:
         idents = TI.changed_identifiers(tree, base, [c for c in changed if c in py])
-    if idents:
-        pick.many(
-            TI.spelling_tests(idents, {t: _read(tree / t) for t in tests}, name_max_tests),
-            RANK_DECLARED,
-        )
+    pick.many(TI.spelling_tests(idents, texts, name_max_tests), RANK_DECLARED)
+    if membership is None:
+        membership = _membership(tree, base)
+    pick.many(
+        TI.listing_tests(TI.listed_packages(membership), texts, name_max_tests), RANK_DECLARED
+    )
     _bounded(sel, pick, max_files)
     return sel
+
+
+def _membership(tree: Path, base: str) -> list[str]:
+    """The paths ADDED or REMOVED since ``base`` (committed, staged, unstaged, untracked):
+    the changes that alter what a package lists. [] when git cannot say."""
+    return (
+        CH.changed_paths(
+            tree, base, include=("committed", "tracked", "untracked"), diff_filter="AD"
+        )
+        or []
+    )
 
 
 def _read(path: Path) -> str:
