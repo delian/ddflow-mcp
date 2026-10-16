@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "enforce.lapsed_lease"
+new = '"accept"'
+why = "The pre-commit hook accepts a commit covered by its own item's lease that lapsed and was not taken over, with a note to heartbeat; 'refuse' restores treating a lapse as no lease."
+impact = "behavior"
