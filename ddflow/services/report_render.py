@@ -59,11 +59,8 @@ def _tests(d: dict[str, Any]) -> str:
 def variables(d: dict[str, Any]) -> dict[str, str]:
     """The template variables of a collected report, all strings."""
     ld, it = d["landing"], d["item"]
-    commits = ", ".join(ld["commits"]) + (
-        f" (+{ld['commits_total'] - len(ld['commits'])} more)"
-        if ld["commits_total"] > len(ld["commits"])
-        else ""
-    )
+    more = ld["commits_total"] - len(ld["commits"])
+    commits = ", ".join(ld["commits"]) + (f" (+{more} more)" if more > 0 and ld["commits"] else "")
     landing = (
         f"merged {ld['merge_sha'][:12]} into {ld['base'] or 'the base'}"
         if ld["merge_sha"]

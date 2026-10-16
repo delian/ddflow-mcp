@@ -24,3 +24,10 @@ def report(repo: Path, *, item: str, by_agent: str = "", agent: str = "") -> O.O
     except P.TemplateError as exc:
         return O.failed("report", str(exc), text="")
     return O.ok("report", text=text, **data)
+
+
+def show_report(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
+    """`report` in the shape of `show` (its body is the ``item`` value): what ``ddflow_show
+    report=true`` returns over MCP, where `report` has no tool of its own."""
+    out = report(repo, item=item, agent=agent)
+    return out if out.exit else O.ok("show", item=dict(out.data))

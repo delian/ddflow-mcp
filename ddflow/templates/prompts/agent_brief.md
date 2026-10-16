@@ -57,4 +57,4 @@ Every ddflow defect or gap you notice becomes a bug (`ddflow bug found`) or a ta
 <!-- section: report -->
 ## Report
 
-End your run with ONLY the output of `ddflow report {{ item }} --agent {{ agent }}`, nothing before or after it. If something it cannot know matters (a caveat, a decision you need), run `ddflow report {{ item }} --agent {{ agent }}` anyway and file that as a task or bug, not as prose.
+File any caveat as a task or bug FIRST. Then end your run with ONLY the output of `ddflow report {{ item }} --agent {{ agent }}` (MCP: `ddflow_show` with `report=true`), nothing before or after it.
