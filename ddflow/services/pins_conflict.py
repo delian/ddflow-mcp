@@ -99,6 +99,16 @@ def settle(path: str, text: str) -> Settled:
     if not found:
         return res
     res.hunks = len(found)
+    # A marker no complete conflict accounts for (a nested or an unclosed one) means the file was
+    # merged over unresolved markers: no hunk of it is ours to settle.
+    known = {i for first, last, _ in found for i in (first, last)}
+    res.refused = [
+        n + 1
+        for n, ln in enumerate(lines)
+        if ln.startswith(("<<<<<<< ", ">>>>>>> ")) and n not in known
+    ]
+    if res.refused:
+        return res
     mixed = any(_BEGIN.search(ln) for ln in lines)
     out: list[str] = []
     pos = 0
