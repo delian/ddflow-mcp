@@ -108,7 +108,7 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
     if chk.refusal is not None:
         return chk.refusal
     if chk.extension:
-        return DD.extend(log, cfg, chk, "decision.recorded")
+        return DD.extend(log, cfg, chk, "decision.recorded", st=st, globs=csv_list(draft.globs))
     fields: dict[str, Any] = {
         "title": draft.title,
         "context": draft.context,
