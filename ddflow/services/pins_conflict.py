@@ -37,6 +37,7 @@ class Settled:
     hunks: int = 0
     text: str | None = None
     refused: list[int] = field(default_factory=list)
+    stray: bool = False  # the refusal is markers that do not pair up, not a prose conflict
 
 
 def _parse(lines: list[str], i: int) -> tuple[int, Hunk] | None:
@@ -105,6 +106,7 @@ def settle(path: str, text: str) -> Settled:
         for n, ln in enumerate(lines)
         if ln.startswith(("<<<<<<< ", ">>>>>>> ")) and n not in known
     ]
+    res.stray = bool(res.refused)
     if res.refused or not found:
         return res
     mixed = any(_BEGIN.search(ln) for ln in lines)
@@ -139,7 +141,7 @@ def settle_files(repo: Path, files: list[str]) -> list[Settled]:
                 text = p.read_text("utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            if "<<<<<<< " not in text:
+            if "<<<<<<< " not in text and ">>>>>>> " not in text:
                 continue
             res = settle(p.relative_to(repo).as_posix(), text)
             res.file = p
