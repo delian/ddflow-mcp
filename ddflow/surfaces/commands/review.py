@@ -17,6 +17,7 @@ import sys
 # form reads `ddflow.api.review` out of sys.modules and cannot be shadowed.
 import ddflow.api.review as A
 import ddflow.api.review_findings as RS
+import ddflow.api.review_settle as ST
 
 from ...api import surf_setup as SS
 from ...api._base import _load
@@ -29,7 +30,7 @@ def _triage(a, c: Ctx, item: str) -> int:
     if a.refuted and a.confirmed:
         print("--refuted and --confirmed are exclusive: one verdict per finding", file=sys.stderr)
         return FAIL
-    out = A.triage(
+    out = ST.triage(
         c.repo,
         item,
         gate=a.gate or "",
