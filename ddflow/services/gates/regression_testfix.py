@@ -23,7 +23,7 @@ from typing import Any, NamedTuple
 from ...config import Config
 from ...core import globs as GL
 from ...infra import fsio
-from ...infra import worktree as W
+from .. import changes as CH
 from .defs import GateDef
 from .runner import run_command_gate
 
@@ -49,17 +49,6 @@ class Tools(NamedTuple):
 
     merge_tree: Any  # ci.merge_tree(repo, ref, base) -> context manager of (path, why)
     command_for: Any  # testselect.run_command(configured, tests, root) -> command
-
-
-def _changed_files(tree: Path, base_sha: str) -> list[str] | None:
-    """Paths the tree changes against ``base_sha`` (committed, uncommitted and untracked),
-    or None when git cannot say -- a diff nobody could read is not 'confined to tests'."""
-    diff = W.git(tree, "diff", "--name-only", "--no-renames", base_sha)
-    if not diff.ok:
-        return None
-    names = {n for n in diff.out.splitlines() if n.strip()}
-    names.update(W.untracked_files(tree))
-    return sorted(names)
 
 
 def _is_test_file(path: str, test_globs: list[str]) -> bool:
@@ -109,7 +98,7 @@ def verify_test_only_fix(
         REGRESSION_PASSES_ON_PREFIX,
         REGRESSION_VERIFIED,
     )
-    changed = _changed_files(tree, base_sha)
+    changed = CH.changed_since(tree, base_sha)
     globs = list(cfg.lessons.test_file_globs)
     if not changed or not all(_is_test_file(p, globs) for p in changed):
         return None
