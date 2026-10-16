@@ -15,6 +15,29 @@ def _count_recording(st: State, gate: str) -> None:
     st.gate_order.setdefault(gate, {"fired": 0, "recorded": 0})["recorded"] += 1
 
 
+#: Who reviewed, as the review recorded it; a hand record without its own keeps them.
+_REVIEWER_KEYS = ("model", "family", "reviewer", "reviewer_digest")
+
+
+def _carry_reviewer(prior: dict, evidence: dict) -> None:
+    """A hand record of a review gate keeps the reviewer of the round it settles (bug
+    Bf065905087): re-recording `passed` after triage must not make the agent the reviewer
+    and break the independence check. An explicit `model` wins, and then no part of the
+    prior reviewer is kept (a stale family would override it). The reviewed sha is kept
+    unless restated."""
+    carried = []
+    if prior.get("model") and "model" not in evidence:
+        for k in _REVIEWER_KEYS:
+            if k in prior and k not in evidence:
+                evidence[k] = prior[k]
+                carried.append(k)
+    if prior.get("reviewed_sha") and "reviewed_sha" not in evidence:
+        evidence["reviewed_sha"] = prior["reviewed_sha"]
+        carried.append("reviewed_sha")
+    if carried:
+        evidence["reviewer_carried"] = carried
+
+
 def _h_gate(outcome: str):
     def handler(st: State, ev: Event) -> None:
         d = ev.data
@@ -40,6 +63,8 @@ def _h_gate(outcome: str):
                     # Marked as carried: they belong to the EARLIER round, not to this
                     # record (bug B29667ba4b4), so a pass over them settles them.
                     evidence["findings_carried"] = True
+            if "review_kind" not in evidence:
+                _carry_reviewer(prior, evidence)
             it.gates[gate] = GateRecord(
                 gate=gate,
                 outcome=outcome,
