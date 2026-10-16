@@ -1961,6 +1961,14 @@
           are left for you to commit); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      plan.warn_missing_globs = True   [default]
+          Whether `claim` and `plan check` WARN about a task whose declared literal
+          globs (no wildcard) name files that do not exist, with the nearest existing
+          paths (default true). A new file the task is meant to create is fine: the
+          warning only fires when the glob's directory does not exist either, or the
+          file is named like an existing sibling (or exists under that name
+          elsewhere). It is a warning, never a refusal: the claim is made and the plan
+          check keeps its exit code. `false`: no such check.
       merge_queue.max_batch = 5   [default]
           How many queue entries one `ddflow queue run` integrates before it returns
           (each merges main into its branch, regenerates the pins, runs the ci gate

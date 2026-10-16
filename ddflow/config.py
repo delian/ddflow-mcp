@@ -123,6 +123,9 @@ from .config_sections.metrics import (
 from .config_sections.pins import (
     PinsConfig,
 )
+from .config_sections.plan import (
+    PlanConfig,
+)
 from .config_sections.prompts import (
     PromptsConfig,
 )
@@ -248,6 +251,7 @@ class Config:
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
+    plan: PlanConfig = field(default_factory=PlanConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
