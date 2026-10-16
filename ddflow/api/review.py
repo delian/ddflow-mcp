@@ -234,6 +234,29 @@ def _say_result(say: Callable[[str], None], res) -> None:
                 say(f"      {line.strip()}")
 
 
+def _finding_listing(it, gate: str) -> str:
+    """The numbered findings a triage can address, one per line with their verdict, for the
+    refusal that asks which verdict (bug B29667ba4b4); "" when none can be read."""
+    gates = (
+        [gate]
+        if gate
+        else sorted(g for g, r in it.gates.items() if (r.evidence or {}).get("chunk_findings"))
+    )
+    lines = []
+    for g in gates:
+        rec = it.gates.get(g)
+        found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
+        if not GD.is_triageable(found):
+            continue
+        mine = it.triage.get(g, {})
+        lines += [
+            f"  {g} #{n} [{f.get('severity', '')}] {f.get('location', '')} "
+            f"{f.get('title', '')} -- {mine.get(f['digest'], {}).get('verdict') or 'untriaged'}"
+            for n, f in enumerate(found, 1)
+        ]
+    return "\nfindings:\n" + "\n".join(lines) if lines else ""
+
+
 def triage(
     repo: Path,
     item: str,
@@ -269,7 +292,10 @@ def triage(
     if it is None:
         return bad(f"no such item {item!r}")
     if verdict not in ("refuted", "confirmed"):
-        return bad("say which: --refuted (the probe shows the finding false) or --confirmed")
+        return bad(
+            "say which: --refuted (the probe shows the finding false) or --confirmed"
+            + _finding_listing(it, gate)
+        )
     if not probe.strip():
         return bad(
             "--probe is required: for --refuted the run that shows the finding false, for "

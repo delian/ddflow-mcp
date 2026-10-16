@@ -14,7 +14,7 @@ from ddflow.services import gates as G
 
 
 def _item(found):
-    rec = SimpleNamespace(evidence={"chunk_findings": found})
+    rec = SimpleNamespace(outcome="failed", evidence={"chunk_findings": found})
     return SimpleNamespace(gates={"critic": rec}, triage={})
 
 
