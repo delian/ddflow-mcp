@@ -34,6 +34,8 @@ from ..config import Config
 from ..infra import proc as P
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
 from .gateenv import REPO_VARS
+from .pins_conflict import apply as apply_settled
+from .pins_conflict import settle_files
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,7 @@ class PinState:
 class Report:
     pins: list[PinState] = field(default_factory=list)
     problem: str = ""
+    resolved: list[str] = field(default_factory=list)  # conflicts settled before regenerating
 
     @property
     def stale(self) -> list[PinState]:
@@ -183,6 +186,8 @@ def regenerate(
     if not chosen:
         rep.problem = f"no pin recipes: {cfg.pins.recipes_file} is missing or has no [[pin]]"
         return rep
+    if not check and _unsettled(repo, chosen, rep):
+        return rep
     limit = cfg.pins.timeout_s
     for r in chosen:
         st = PinState(r.name, r.files)
@@ -204,6 +209,32 @@ def regenerate(
             continue
         st.regenerated = True
     return rep
+
+
+def _unsettled(repo: Path, chosen: list[Recipe], rep: Report) -> bool:
+    """Settle the conflict markers a merge left in the pin files (`pins_conflict`): True, with
+    ``rep.problem`` saying where, when one is in hand-written prose and nothing was changed."""
+    files = sorted({f.rstrip("/") for r in chosen for f in r.files})
+    found = settle_files(repo, files)
+    stuck = [s for s in found if s.refused]
+    if stuck:
+        rep.problem = "; ".join(
+            f"{s.path}: "
+            + (
+                "conflict markers that do not pair up"
+                if not s.hunks or s.stray
+                else "conflict in prose outside the generated regions"
+            )
+            + f" (line {', '.join(map(str, s.refused))}): resolve it by hand, then run this again"
+            for s in stuck
+        )
+        return True
+    apply_settled(found)
+    rep.resolved = [
+        f"{s.path}: {s.hunks} conflict(s) in generated content, our side taken and re-recorded"
+        for s in found
+    ]
+    return False
 
 
 def pin_files(repo: Path, cfg: Config) -> list[str]:
