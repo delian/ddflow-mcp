@@ -76,12 +76,14 @@ def run(
     item's `ci` gate with the commit it ran against, as `gate run <id> ci` does -- unless it
     is being run BY that gate, which records the outcome itself."""
     _log, cfg, st = _load(repo, agent)
+    if ref in ("", "HEAD") and called_from is not None and (here := W.current(called_from)):
+        ref = W.rev(here.path, "HEAD") or ref  # the tree the caller stands in, not the primary's
     item = _item_here(st, ref, called_from, repo)
     if ref in st.items and st.items[ref].branch:  # an item id names its branch
         ref = st.items[ref].branch
     res = CI.run(repo, cfg, ref=ref, base=base, command=command)
     data = res.as_data()
-    if item and not command and not os.environ.get(IN_GATE_ENV):
+    if item and not command and os.environ.get(IN_GATE_ENV) != "ci":
         why = _record_gate(repo, item, res, agent, called_from)
         data["recorded"] = {
             "item": item,
