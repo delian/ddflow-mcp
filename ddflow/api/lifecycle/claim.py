@@ -25,6 +25,7 @@ from ...services.bug_globs import bug_globs_of
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
+from .._globwarn import missing_globs
 from ..reporting import new_reports
 from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
@@ -279,7 +280,10 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     CHO.adopt_defaults(log, cfg, ["model", "integration"])
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
-    return _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    if warned := missing_globs(repo, cfg, lz.globs):
+        out.data["glob_warnings"] = warned
+    return out
 
 
 def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:
