@@ -206,3 +206,13 @@ def test_landing_without_listed_commits_prints_no_dangling_count():
 def test_show_has_no_dead_report_flag_on_the_cli(done):
     """`ddflow show --report` would parse and be ignored: the CLI has `ddflow report`."""
     assert run_cli(done, "show", "T1", "--report")[0] != 0
+
+
+def test_the_work_window_falls_back_to_the_first_claim(done):
+    from ddflow.infra.log import EventLog
+    from ddflow.services import report as R
+
+    events = EventLog(done).read_all()
+    start, end = R._window(events, "T1", "someone-else")
+    assert start and end and start <= end
+    assert R._window(events, "T1", "")[0] == start
