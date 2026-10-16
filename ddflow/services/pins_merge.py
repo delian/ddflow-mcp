@@ -114,9 +114,15 @@ def _wanted(repo: Path, cfg: Config) -> list[str]:
     return [] if cfg.pins.after_merge == "off" else pin_files(repo, cfg)
 
 
-def _driver_set(repo: Path) -> bool:
-    """Whether the driver's command is configured (any launcher: the line falls back by itself)."""
-    return "pins merge-driver" in G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out
+#: Merge attributes that are no choice of a person's: unset, or git's own textual default.
+_SOFT = ("unspecified", "text")
+
+
+def _driver_state(repo: Path) -> str:
+    """ "ours" (a `pins merge-driver` command, from any launcher: the line falls back by itself),
+    "foreign" (a command a person set; never overwritten here) or "missing"."""
+    cur = G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip()
+    return "ours" if "pins merge-driver" in cur else ("foreign" if cur else "missing")
 
 
 def _attr_line(repo: Path, f: str) -> str:
@@ -124,29 +130,36 @@ def _attr_line(repo: Path, f: str) -> str:
     return f'"{pat}" merge={DRIVER}' if " " in pat else f"{pat} merge={DRIVER}"
 
 
-def _unbound(repo: Path, files: list[str]) -> dict[str, str]:
-    """The pin files git would NOT merge with the driver in this tree, with the merge attribute
-    each has now: asked of git itself, whatever `.gitattributes`, `info/attributes` or a
-    worktree config say. A directory is asked about every tracked file in it, and the
-    attribute named is a foreign driver's when one file has it."""
+def _off(repo: Path, files: list[str]) -> dict[str, dict[str, str]]:
+    """Per pin file, the paths git would NOT merge with the driver in this tree and the merge
+    attribute each has: asked of git itself, whatever `.gitattributes`, `info/attributes` or a
+    worktree config say. A directory is asked about every tracked file in it, and about a file
+    it might gain (`dir/x`)."""
     probes: dict[str, list[str]] = {}
     for f in files:
         isdir = f.endswith("/") or (Path(repo) / f).is_dir()
         base = f.rstrip("/")
         found = G.run(repo, "ls-files", "--", base, z=True).paths() if isdir else []
         probes[f] = [*(found or []), base + "/x"] if isdir else [base]
-    every = [q for qs in probes.values() for q in qs]
-    got = G.run(repo, "check-attr", "merge", "--", *every)
+    got = G.run(repo, "check-attr", "merge", "--", *[q for qs in probes.values() for q in qs])
     seen = {}
     for row in got.out.splitlines():
         head, _, val = row.rpartition(": ")
         seen[head.rpartition(": ")[0]] = val
-    out = {}
-    for f, qs in probes.items():
-        bad = [seen.get(q, "unspecified") for q in qs if seen.get(q) != DRIVER]
-        if bad:
-            out[f] = next((v for v in bad if v not in ("unspecified", "text")), bad[0])
-    return out
+    out = {
+        f: {q: seen.get(q, "unspecified") for q in qs if seen.get(q) != DRIVER}
+        for f, qs in probes.items()
+    }
+    return {f: bad for f, bad in out.items() if bad}
+
+
+def _lines_for(repo: Path, f: str, bad: dict[str, str]) -> list[str]:
+    """The `info/attributes` lines that give the driver to what of ``f`` has no choice of a
+    person's: the entry itself, or (a directory with a file another driver was given) each
+    such file alone."""
+    if all(v in _SOFT for v in bad.values()):
+        return [_attr_line(repo, f)]
+    return [_attr_line(repo, q) for q, v in bad.items() if v in _SOFT and q != f.rstrip("/") + "/x"]
 
 
 def ensure_driver(repo: Path, cfg: Config) -> list[str]:
@@ -156,19 +169,18 @@ def ensure_driver(repo: Path, cfg: Config) -> list[str]:
     attributes of a tree that predates the tracked `.gitattributes` lines go in
     `info/attributes`, also shared and read before the tracked file: a merge reads the tree's
     attributes, not the incoming ones, so the first merge of main would otherwise conflict.
-    A file a person gave another merge driver is left alone (`driver_gaps` says so). The actions."""
+    A file a person gave another merge driver, and a driver command a person set, are left
+    alone (`driver_gaps` says so). The actions."""
     files = _wanted(repo, cfg)
     if not files:
         return []
-    acts = []
-    if not _driver_set(repo):
-        acts += _set_driver_config(repo)
-    off = [f for f, now in _unbound(repo, files).items() if now in ("unspecified", "text")]
+    acts = _set_driver_config(repo) if _driver_state(repo) == "missing" else []
+    want = [x for f, bad in _off(repo, files).items() for x in _lines_for(repo, f, bad)]
     path = G.run(repo, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
-    if off and path.ok and path.out.strip():
+    if want and path.ok and path.out.strip():
         f = Path(path.out.strip())
         text = f.read_text("utf-8") if f.exists() else ""
-        add = [a for a in (_attr_line(repo, x) for x in off) if a not in text.splitlines()]
+        add = [a for a in want if a not in text.splitlines()]
         if add:
             f.parent.mkdir(parents=True, exist_ok=True)
             tail = "" if not text or text.endswith("\n") else "\n"
@@ -183,16 +195,19 @@ def driver_gaps(repo: Path, cfg: Config) -> list[str]:
     if not files:
         return []
     gaps: list[str] = []
-    if not _driver_set(repo):
-        gaps.append(f"git config merge.{DRIVER}.driver is not set to a `pins merge-driver` command")
-    off = _unbound(repo, files)
-    if off:
+    state = _driver_state(repo)
+    if state != "ours":
         gaps.append(
-            "no merge="
-            + DRIVER
-            + " attribute for "
-            + ", ".join(f"{f} ({now})" for f, now in off.items())
+            f"git config merge.{DRIVER}.driver is "
+            + (
+                "not set"
+                if state == "missing"
+                else "another command than `ddflow pins merge-driver`"
+            )
         )
+    for f, bad in _off(repo, files).items():
+        vals = sorted(set(bad.values()))
+        gaps.append(f"no merge={DRIVER} attribute for {f} ({', '.join(vals)})")
     return gaps
 
 
