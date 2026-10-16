@@ -2756,7 +2756,7 @@
     'ddflow_review_triage': '''
       {
        "name": "ddflow_review_triage",
-       "description": "Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that shows it false) or confirmed (probe = the fix or test that answers it). The finding number is the #N the review printed. The gate stays failed (D-review-triage) until, after the round cap, the triage of its last finding records it passed on refutation, flagged.",
+       "description": "Record your triage of ONE finding of an item's recorded `ddflow review`: it is refuted (probe = the run that shows it false) or confirmed (probe = the fix or test that answers it). The finding number is the #N the review printed. The gate stays failed (D-review-triage) until, after the round cap, the triage of its last finding records it passed on refutation, flagged. Without finding, verdict and probe it LISTS the recorded findings (#N, severity, digest, state).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -2770,7 +2770,7 @@
          },
          "finding": {
           "type": "integer",
-          "description": "The finding's number: #N in the review's output -- of the RECORDED reviewer's findings, which the output's last lines name when several ran."
+          "description": "The finding's number (#N) in the recorded review."
          },
          "verdict": {
           "type": "string",
@@ -2778,7 +2778,7 @@
          },
          "probe": {
           "type": "string",
-          "description": "The evidence for the verdict. Required."
+          "description": "The evidence for the verdict."
          },
          "as_agent": {
           "type": "string",
@@ -2786,10 +2786,7 @@
          }
         },
         "required": [
-         "id",
-         "finding",
-         "verdict",
-         "probe"
+         "id"
         ],
         "additionalProperties": false
        }

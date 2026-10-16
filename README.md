@@ -507,6 +507,12 @@ You get everything except the judgement. Command gates run themselves; agent gat
 for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
+**Merge queue.** Where several agents land work at once, `ddflow queue add <id>` enqueues an item,
+`ddflow queue run` (any agent may) integrates the head of the queue — one entry's ci at a time,
+`--max-batch N` entries per run, `--unit-tests` / `--no-unit-tests` to run or skip each entry's
+`unit_tests` gate on the merged result — `ddflow queue status` (the default) prints the line, and
+`ddflow queue remove <id>` drops an entry. Defaults live in `[merge_queue]`.
+
 **Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
 `ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on
 `ddflow_complete` / `ddflow_bug_fixed`) records one line for the project's changelog on the
@@ -989,7 +995,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 281 knobs.
+cadences, and the rest of the 282 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1400,6 +1406,11 @@ required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` ar
 Finding numbers are per gate, so `--gate` is never defaulted on `review triage`: omitted, it is
 refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
+
+`ddflow review show <item> [--gate G]` lists the recorded round's numbered findings -- the `#N` that
+`review triage` takes -- each with severity, location, digest, triage state and probe; omit `--gate` for every
+gate that has a round (a gate whose findings blob is gone is named, not hidden). Over MCP,
+`ddflow_review_triage` without `finding`, `verdict` and `probe` lists them.
 
 **The review-round budget (`[review]`).** A shipped default in every project, with no
 configuration: a gate (`rubber_duck`, `critic`) gets **2 review rounds** per item, full and
@@ -5143,7 +5154,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 281): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 282): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5619,6 +5630,7 @@ ddflow session list|show <id>            read sessions back (newest first; --sta
 ddflow search "<text>" [--exact|--regex]  search every record, session, prompt and the log (2 = no match)
 ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
+ddflow queue [add|run|status|remove] [<id>]  the merge queue: enqueue a finished item; one integrator merges in order
 ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
 ddflow cleanup [--apply]        classify ddflow worktrees/branches; --apply lands the safe ones
 ddflow pins <file>              which text of an instruction file a test pins, before you compress it
@@ -5657,7 +5669,7 @@ declared once and persists — see
 
 ## Configuration
 
-281 knobs across 34 sections, every one documented in place and listed, with its default
+282 knobs across 34 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5724,13 +5736,14 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=b53b06490a7e -->
-<details><summary>All 281 knobs across 34 sections</summary>
+<!-- ddflow:begin README/knobs sha=2a616c8b557d -->
+<details><summary>All 282 knobs across 34 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
 | `lease.ttl_s` | `1800` |  |
 | `lease.heartbeat_s` | `300` |  |
+| `lease.renew_long_commands` | `true` |  |
 | `lease.renew_log_min_s` | `120` |  |
 | `lease.grace_s` | `120` |  |
 | `lease.acquire_timeout_s` | `30` |  |
