@@ -374,6 +374,8 @@ def _scope_data(sc: TSC.Scope) -> dict[str, Any]:
         "tests": _rows(sc.tests),
         "command": sc.command,
         "cut": _rows(sc.cut),
+        "cut_at_hubs": sc.cut_at,
+        "max_files": sc.max_files,
     }
 
 

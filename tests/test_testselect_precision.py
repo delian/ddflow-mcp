@@ -70,6 +70,8 @@ def test_the_default_knob_values_cut_the_walk_at_a_hub_of_this_repository():
     assert TSC.limits(Config()) == {
         "max_files": g.unit_tests_max_files,
         "hub_importers": g.unit_tests_hub_importers,
+        "max_hops": g.unit_tests_max_hops,
+        "name_max_tests": g.unit_tests_name_max_tests,
     }
 
 
@@ -151,3 +153,43 @@ def test_a_removed_definition_is_attributed_to_its_neighbours_not_lost():
     diff = "@@ -3 +2,0 @@\n-def gone_function_name():\n"
     assert TI._touched_lines(diff) == {2, 3}
     assert TI._touched_lines("@@ -5,2 +5,3 @@\n") == {5, 6, 7}
+
+
+@pytest.fixture
+def spelled(repo):
+    """pkg.lookup defines one function; `test_reads_by_name` spells it without importing it."""
+    files = {
+        "pkg/__init__.py": "",
+        "pkg/lookup.py": "def other_helper_name():\n    return 1\n",
+        "tests/conftest.py": "",
+        "tests/test_reads_by_name.py": (
+            "def test_r():\n    assert 'compute_unique_lookup_key' in 'compute_unique_lookup_key'\n"
+        ),
+        "tests/test_unrelated.py": "def test_u():\n    assert True\n",
+    }
+    _write(repo, files)
+    return repo
+
+
+def test_a_test_that_spells_a_name_the_change_defines_is_selected(spelled):
+    (spelled / "pkg/lookup.py").write_text(
+        "def other_helper_name():\n    return 1\n\n\ndef compute_unique_lookup_key():\n    return 2\n"
+    )
+    sel = T.select(spelled, "main")
+    assert sel is not None
+    got = {t.path: t.reason for t in sel.tests}
+    assert got == {
+        "tests/test_reads_by_name.py": "names compute_unique_lookup_key, changed in pkg/lookup.py"
+    }, got
+
+
+def test_a_name_spelt_by_too_many_tests_selects_none_of_them(spelled):
+    for i in range(3):
+        (spelled / f"tests/test_also_{i}.py").write_text("X = 'compute_unique_lookup_key'\n")
+    _git(spelled, "add", "-A")
+    _git(spelled, "commit", "-qm", "more spellers")
+    (spelled / "pkg/lookup.py").write_text("def compute_unique_lookup_key():\n    return 2\n")
+    sel = T.select(spelled, "main", name_max_tests=3)
+    assert sel is not None and sel.tests == [], "four tests spell it: a word, not a name"
+    sel = T.select(spelled, "main", name_max_tests=4)
+    assert sel is not None and len(sel.tests) == 4

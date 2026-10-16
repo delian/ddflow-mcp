@@ -25,13 +25,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-#: How far along the import graph a test still counts as reaching a change: it imports
-#: the changed module (1), or imports a module that does (2). Unbounded, the top layer --
-#: a CLI or an MCP registry that imports everything, and tests import -- made every test
-#: "reach" every module: 42 of 87 test files for one leaf module on this repository,
-#: 72 for the event log. Past two hops the edge is an accident of layering, not evidence.
-MAX_HOPS = 2
-
 
 def module_name(path: str) -> str:
     """``pkg/sub/mod.py`` -> ``pkg.sub.mod``; a package's ``__init__.py`` is the package;
@@ -133,8 +126,10 @@ class Reach:
     cut_at: set[str] = field(default_factory=set)
 
 
-def reach(g: Graph, changed: list[str], hubs: dict[str, int]) -> Reach:
-    """Every file within `MAX_HOPS` imports of a changed module, breadth first so the
+def reach(g: Graph, changed: list[str], hubs: dict[str, int], max_hops: int = 2) -> Reach:
+    """Every file within ``max_hops`` imports of a changed module (`[gates].unit_tests_max_hops`:
+    the file imports the changed module (1), or imports a module that does (2); unbounded,
+    the top layer a CLI or an MCP registry makes every test "reach" every module), breadth first so the
     reason names the nearest changed module and the path to it. The walk does not continue
     through a hub (recorded in ``cut_at``) nor through a package `__init__` re-exporting
     everything -- importing the facade is not evidence a test exercises what is behind it."""
@@ -148,7 +143,7 @@ def reach(g: Graph, changed: list[str], hubs: dict[str, int]) -> Reach:
             fm = module_name(f)
             if f not in out.files:
                 out.files[f] = (why, hops)
-            if hops >= MAX_HOPS or fm in seen:
+            if hops >= max_hops or fm in seen:
                 continue
             if fm in hubs:
                 out.cut_at.add(fm)

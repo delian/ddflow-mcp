@@ -6,7 +6,7 @@ called through the facade. Cutting the walk at a hub (`testreach`) removes the f
 and these true ones together, so the true ones come back by what a test SAYS: a test that
 spells an identifier the diff defines or deletes (``test_file_globs``, ``triage_counts``) is
 selected. Only a distinctive identifier counts -- long, and with an underscore or a mixed
-case -- and one that more than `MAX_TESTS` tests spell is noise (a word, not a name).
+case -- and one that more than `[gates].unit_tests_name_max_tests` tests spell is noise (a word, not a name).
 """
 
 from __future__ import annotations
@@ -17,8 +17,6 @@ from pathlib import Path
 
 from ..infra import worktree as W
 
-#: Spelt by more tests than this, an identifier names nothing in particular.
-MAX_TESTS = 30
 _MIN_LEN = 8
 _DEFINES = re.compile(
     r"^\s*(?:async\s+def|def|class)\s+([A-Za-z_]\w*)|^\s*([A-Za-z_]\w*)\s*(?::|=[^=])"
@@ -112,13 +110,15 @@ def changed_identifiers(
     return out
 
 
-def spelling_tests(idents: dict[str, str], sources: dict[str, str]) -> dict[str, str]:
+def spelling_tests(
+    idents: dict[str, str], sources: dict[str, str], max_tests: int = 30
+) -> dict[str, str]:
     """Test path -> why, for each test whose text spells a changed identifier as a whole word."""
     found: dict[str, list[str]] = {}
     for name in idents:
         pat = re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")
         hit = [t for t, text in sources.items() if name in text and pat.search(text)]
-        if 0 < len(hit) <= MAX_TESTS:
+        if 0 < len(hit) <= max_tests:
             for t in hit:
                 found.setdefault(t, []).append(name)
     return {t: f"names {names[0]}, changed in {idents[names[0]]}" for t, names in found.items()}
