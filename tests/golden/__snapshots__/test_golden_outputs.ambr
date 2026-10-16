@@ -1168,8 +1168,8 @@
           Cosine similarity (0-1) at which an add must be answered before it proceeds
           (under on_match = 'ask'). 0.55 from the research: on ddflow's labelled
           records about half of real duplicates score above it and over three quarters
-          of what does is a duplicate or related record. Identical text, or text
-          naming an existing id, asks whatever the score.
+          of what does is a duplicate or related record. Identical text asks whatever
+          the score; naming an existing id only lists that record, it never refuses.
       dedupe.max_candidates = 3   [default]
           Most similar records shown for one add (records whose id the new text names
           are shown as well). The research found the existing record in the top 3 for
