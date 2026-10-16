@@ -31,6 +31,7 @@ from ...services import flowstate as FL
 from ...services import launchers as LA
 from ...services import leases as L
 from ...services import logblobs as LB
+from ...services import pins_merge as PM
 from ...services import rates as RT
 from ...services import repairs as RP
 from ...services import sessions as SS
@@ -337,7 +338,6 @@ def doctor(
     notes += [f"{g.shard}: accepted the new count ({g.now}, was {g.was})" for g in accepted]
     notes.extend(unknown_tier_notes(st.items.values()))
     notes.extend(_orphan_notes(events))
-
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
     notes.extend(RULEVIEW.notes(repo, cfg, st))
@@ -431,7 +431,7 @@ def doctor(
     found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
-    notes += _driver_drift_notes(repo)
+    notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg)
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
