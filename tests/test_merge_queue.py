@@ -228,6 +228,9 @@ def _git(where: Path, *args: str) -> str:
 def proj(repo: Path, monkeypatch) -> Path:
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)  # a pin regeneration refuses xdist
+    monkeypatch.delenv(
+        "DDFLOW_RUNNING_GATE", raising=False
+    )  # inside the ci gate it would not record
     run_cli(repo, "init")
     (repo / "knobs").mkdir()
     (repo / "knobs" / "a.txt").write_text("a\n")
