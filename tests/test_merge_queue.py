@@ -201,9 +201,10 @@ CHECK = """\
 import subprocess, sys, time
 from pathlib import Path
 
-slow = Path({slow!r})
-if slow.exists():
-    time.sleep(float(slow.read_text() or 2))
+hold = Path({hold!r})
+deadline = time.time() + 120  # a test that forgot to release it must not hang the suite
+while hold.exists() and time.time() < deadline:
+    time.sleep(0.05)
 if any("BAD" in p.read_text() for p in Path("knobs").glob("*.txt")):
     sys.exit(1)
 sys.exit(subprocess.run([sys.executable, "gen.py", "--check"]).returncode)
@@ -235,7 +236,7 @@ def proj(repo: Path, monkeypatch) -> Path:
     (repo / "knobs").mkdir()
     (repo / "knobs" / "a.txt").write_text("a\n")
     (repo / "gen.py").write_text(GEN)
-    (repo / "check.py").write_text(CHECK.format(slow=str(repo.parent / "slow")))
+    (repo / "check.py").write_text(CHECK.format(hold=str(repo.parent / "hold")))
     (repo / ".ddflow" / "pins.toml").write_text(RECIPES)
     subprocess.run([sys.executable, "gen.py"], cwd=repo, check=True)
     err, _ = append_config(
@@ -332,7 +333,8 @@ def test_a_failed_entry_is_parked_and_does_not_block_the_next(proj):
 def test_two_integrators_do_not_run_at_once(proj):
     _finish(proj, "T1")
     assert _queue(proj, "T1")[0] == 0
-    (proj.parent / "slow").write_text("3")  # ci takes three seconds
+    hold = proj.parent / "hold"
+    hold.write_text("")  # ci waits here until the test removes the file: no clock involved
     first = subprocess.Popen(
         [sys.executable, "-m", "ddflow", "--repo", str(proj), "--agent", "one", "queue", "run"],
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
@@ -351,6 +353,7 @@ def test_two_integrators_do_not_run_at_once(proj):
         assert "another integrator" in err + out
         assert "running" in run_cli(proj, "queue", "status")[1]
     finally:
+        hold.unlink(missing_ok=True)  # release the first integrator
         first.communicate(timeout=120)
     assert first.returncode == 0
     assert _landed(proj) == ["T1"]
