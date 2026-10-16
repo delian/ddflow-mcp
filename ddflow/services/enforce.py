@@ -1120,7 +1120,9 @@ def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> boo
     return bool(here and leased_tree and leased_tree.resolve() == here)
 
 
-def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
+def _lapsed_lines(
+    item_id: str, lease: Lease, now: float, me: str, *, allowed: bool = False
+) -> list[str]:
     """What to say about a lapsed lease on this work: when it lapsed, and how to renew
     it -- as its holder, since a heartbeat from the tree will not revive an expired one.
 
@@ -1138,6 +1140,12 @@ def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
         f"heartbeat for {idle}, past its {ttl} TTL, and nobody has taken",
         "it over.",
     ]
+    if allowed:
+        return [
+            *lines,
+            f"Renew it so later commits are not on a lapse: ddflow --agent {lease.holder} heartbeat {item_id}",
+            "",
+        ]
     if lease.holder == me:
         lines += ["Renew it, then commit again:"]
     else:
@@ -1387,6 +1395,40 @@ def _lapsed_mine(
     ]
 
 
+def _accepted_lapsed(cfg: Config, lapsed: list, me: str) -> list:
+    """The lapsed leases `[enforce].lapsed_lease` lets this commit stand on: nobody took
+    them over (`_lapsed_mine` already excludes any overlapping a live lease), so
+    refusing the holder, or the agent in the item's own tree, for a lapse only costs a
+    heartbeat it may not know to send (bug B8aa03801a0)."""
+    policy = cfg.enforce.lapsed_lease
+    if policy == "refuse":
+        return []
+    return [(i, lease) for i, lease in lapsed if policy == "accept" or lease.holder == me]
+
+
+def _after_accepting(cfg: Config, uncovered: list[str], lapsed: list, me: str, now: float):
+    """(paths still uncovered, lapsed leases still unaccepted, the note for accepted ones)."""
+    accepted = _accepted_lapsed(cfg, lapsed, me)
+    if not accepted:
+        return uncovered, lapsed, ""
+    left = [p for p in uncovered if not _covered_by(p, accepted)]
+    return left, [x for x in lapsed if x not in accepted], _accepted_note(accepted, now, me)
+
+
+def _covered_by(path: str, leases: list) -> bool:
+    return any(path_in_glob(path, g) for _i, lease in leases for g in lease.globs)
+
+
+def _accepted_note(accepted: list, now: float, me: str) -> str:
+    lines = [
+        "ddflow: allowed on a LAPSED lease nobody has taken over (policy [enforce].lapsed_lease).",
+        "",
+    ]
+    for item_id, lease in accepted:
+        lines += _lapsed_lines(item_id, lease, now, me, allowed=True)
+    return "\n".join(lines).rstrip()
+
+
 def _uncovered_message(
     cfg: Config,
     state,
@@ -1479,7 +1521,11 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
+    uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
+    if not uncovered:
+        return Verdict(OK, note)
     msg = _uncovered_message(cfg, state, uncovered, stolen, lapsed, mine, me, now, mode, agent)
+    msg = f"{note}\n\n{msg}" if note else msg
     if mode == "warn":
         return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
     return Verdict(FAIL, msg)

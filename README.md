@@ -989,7 +989,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 270 knobs.
+cadences, and the rest of the 271 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5143,7 +5143,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 270): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 271): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5656,7 +5656,7 @@ declared once and persists — see
 
 ## Configuration
 
-270 knobs across 33 sections, every one documented in place and listed, with its default
+271 knobs across 33 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5723,8 +5723,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=c3cdb49ae053 -->
-<details><summary>All 270 knobs across 33 sections</summary>
+<!-- ddflow:begin README/knobs sha=0a16cc46a568 -->
+<details><summary>All 271 knobs across 33 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5873,6 +5873,7 @@ long default is left to `ddflow config --explain`.
 | `enforce.generated_views` | `"block"` | `block` \| `warn` \| `off` |
 | `enforce.stale_docs` | `"warn"` | `block` \| `warn` \| `off` |
 | `enforce.merge_commit_scope` | `"own"` | `own` \| `all` |
+| `enforce.lapsed_lease` | `"accept"` | `accept` \| `holder` \| `refuse` |
 | `enforce.environment_commits` | `"block"` | `block` \| `warn` \| `off` |
 | `enforce.doc_globs` | `["**/*.md", "**/*.rst", "**/*.adoc"]` |  |
 | `enforce.doc_exclude` | (long: see `ddflow config --explain`) |  |
@@ -6107,9 +6108,12 @@ part that matters.
   words instead (`trailer_waivers = { "Phase-ships" = ["none", "recon"] }`). It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
   tool-attribution line), merges included, for every agent and every route that runs
   git hooks -- which a harness-side hook reading only the command text cannot promise.
-  The hook's refusals say what to do. A **lapsed lease** on the item whose tree you commit
-  from is named with when it lapsed and its remedy (`ddflow --agent <holder> heartbeat <id>`
-  for its holder; for anyone else `recover --item`, `release --note salvaged`, `claim`). When
+  The hook's refusals say what to do. A **lapsed lease** nobody has taken over, on the item
+  whose tree you commit from (or held by you), is accepted with a note naming when it lapsed
+  and the heartbeat that renews it (`ddflow --agent <holder> heartbeat <id>`);
+  `[enforce].lapsed_lease` = `holder` accepts only the holder's own name, `refuse` restores
+  refusing it with that remedy (and, for anyone else, `recover --item`, `release --note
+  salvaged`, `claim`). Another agent's live lease is never accepted. When
   nothing declared who is committing, it says the name was derived from the tree and how to
   declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
   or a squash that names what it squashes — passes without a lease lookup, and a conflicted
