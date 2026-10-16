@@ -95,13 +95,17 @@ def verify_test_only_fix(
         return None
     ev: dict[str, Any] = {"test_only_fix": True, "changed_files": changed}
 
-    restored = "not run (the test is not in the base's test files)"
+    restored = "not run"
     with CI.merge_tree(repo, base_sha, "") as (ptree, why):
         if ptree is None:
             return UNRUN, {**ev, "reason": why}
-        if _exists_at_base(ptree, tests):
+        if not _exists_at_base(ptree, tests):
+            restored = "not run (the test is not in the base's test files)"
+        else:
             command = _command_for(defn, tests, ptree)
-            if command:
+            if not command:
+                restored = "not run (no runnable pytest command)"
+            else:
                 run = GateDef(id="regression_check", title="regression test", command=command)
                 outcome, rev = run_command_gate(run, ptree)
                 restored = outcome
