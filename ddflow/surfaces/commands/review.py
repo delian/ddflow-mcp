@@ -126,6 +126,7 @@ def _reviewers_detect(a, c: Ctx) -> int:
     )
     if out.exit in (NOTHING, FAIL, REFUSED):
         print(out.reason, file=sys.stderr)
+        c.out(out.reason, {"refusal": {"reason": out.reason, "exit": out.exit}, "text": ""})
         return out.exit
     c.out(out.data["text"], {"text": out.data["text"]})
     return OK
@@ -186,7 +187,9 @@ def _reviewers_test(a, c: Ctx) -> int:
     """
     targets = SS.reviewers_named(c.repo, a.name)
     if not targets:
-        print(f"no reviewer named {a.name!r}; `ddflow reviewers list`", file=sys.stderr)
+        msg = f"no reviewer named {a.name!r}; `ddflow reviewers list`"
+        print(msg, file=sys.stderr)
+        c.out(msg, {"refusal": {"reason": msg, "exit": FAIL}, "reviewers": []})
         return FAIL
     worst = OK
     lines: list[str] = []
