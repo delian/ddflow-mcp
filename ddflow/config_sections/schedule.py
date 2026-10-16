@@ -207,6 +207,12 @@ class ScheduleConfig:
         choices=("note", "problem", "off"),
         strictest=("problem", "an open phase with no task fails doctor"),
     )
+    auto_order: str = knob(
+        "propose",
+        doc="What ddflow does about a lease deadlock (a cycle of agents waiting on each other's files) that nothing declared: 'propose' (default) reports the `needs` edge it would add; 'apply' adds it, as a logged task.updated event marked auto-order, so the circle cannot recur (`ddflow update --needs` drops it); 'off' does nothing. It never touches a done, abandoned or decide item, an item tagged no-auto-order, or adds an edge that would close a needs cycle.",
+        choices=("off", "propose", "apply"),
+        strictest=("propose", "a deadlock is reported, never rewired by a typo"),
+    )
     bugs_first: bool = knob(
         True,
         doc="Offer bug fixes before features (default true). A task is a bug fix when it carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record names it (`ddflow bug found --item`). Priority still orders bugs among themselves and features among themselves, and the parallelism cap hands its slots to bugs first -- so a standing bug is fixed before more features are built on it. `false` orders by priority alone.",
