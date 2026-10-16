@@ -14,6 +14,7 @@ from pathlib import Path
 from ..config import Config
 from ..infra import git as G
 from ..infra.fsio import atomic_write, replace_text
+from . import shared_files as SF
 from .enforce import command_line, hooks_dir
 from .pins import pin_files, regenerate
 from .pins_text import merge_into
@@ -134,25 +135,20 @@ def _attr_line(repo: Path, f: str) -> str:
 
 def _off(repo: Path, files: list[str]) -> dict[str, dict[str, str]]:
     """Per pin file, the paths git would NOT merge with the driver in this tree and the merge
-    attribute each has: asked of git itself, whatever `.gitattributes`, `info/attributes` or a
-    worktree config say. A directory is asked about every tracked file in it, and about a file
-    it might gain (`dir/x`)."""
-    probes: dict[str, list[str]] = {}
+    attribute each has: asked of git itself (`shared_files.drivers`), whatever `.gitattributes`,
+    `info/attributes` or a worktree config say. A directory is asked about every tracked file in
+    it, and about a file it might gain."""
+    out: dict[str, dict[str, str]] = {}
     for f in files:
-        isdir = f.endswith("/") or (Path(repo) / f).is_dir()
         base = f.rstrip("/")
-        found = G.run(repo, "ls-files", "--", base, z=True).paths() if isdir else []
-        probes[f] = [*(found or []), base + _NEW] if isdir else [base]
-    got = G.run(repo, "check-attr", "merge", "--", *[q for qs in probes.values() for q in qs])
-    seen = {}
-    for row in got.out.splitlines():
-        head, _, val = row.rpartition(": ")
-        seen[head.rpartition(": ")[0]] = val
-    out = {
-        f: {q: seen.get(q, "unspecified") for q in qs if seen.get(q) != DRIVER}
-        for f, qs in probes.items()
-    }
-    return {f: bad for f, bad in out.items() if bad}
+        if f.endswith("/") or (Path(repo) / f).is_dir():
+            now = {**SF.drivers(repo, base + "/**"), **SF.drivers(repo, base + _NEW)}
+        else:
+            now = SF.drivers(repo, base)
+        bad = {q: v or "unspecified" for q, v in now.items() if v != DRIVER}
+        if bad:
+            out[f] = bad
+    return out
 
 
 def _lines_for(repo: Path, f: str, bad: dict[str, str]) -> list[str]:
