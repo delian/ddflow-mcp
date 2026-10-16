@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
 from ..infra import worktree as W
@@ -111,18 +112,27 @@ def changed_identifiers(
     return out
 
 
+def _spellers(
+    keys: Iterable[str], pattern: str, sources: dict[str, str], max_tests: int
+) -> dict[str, str]:
+    """Test path -> the first key it spells, for every key spelt (``pattern`` with ``{}`` for
+    the escaped key) by at least one and at most ``max_tests`` tests: more is a word, not a name."""
+    found: dict[str, str] = {}
+    for key in keys:
+        pat = re.compile(pattern.format(re.escape(key)))
+        hit = [t for t, text in sources.items() if key in text and pat.search(text)]
+        if 0 < len(hit) <= max_tests:
+            for t in hit:
+                found.setdefault(t, key)
+    return found
+
+
 def spelling_tests(
     idents: dict[str, str], sources: dict[str, str], max_tests: int = 30
 ) -> dict[str, str]:
     """Test path -> why, for each test whose text spells a changed identifier as a whole word."""
-    found: dict[str, list[str]] = {}
-    for name in idents:
-        pat = re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")
-        hit = [t for t, text in sources.items() if name in text and pat.search(text)]
-        if 0 < len(hit) <= max_tests:
-            for t in hit:
-                found.setdefault(t, []).append(name)
-    return {t: f"names {names[0]}, changed in {idents[names[0]]}" for t, names in found.items()}
+    found = _spellers(idents, r"(?<![\w]){}(?![\w])", sources, max_tests)
+    return {t: f"names {name}, changed in {idents[name]}" for t, name in found.items()}
 
 
 def listed_packages(files: list[str]) -> dict[str, str]:
@@ -150,14 +160,7 @@ def listing_tests(
     (``"ddflow.services.gates"``, ``'ddflow/api'``): a layout test, a guard that walks the
     package. An import statement is not quoted, so the tests that merely use the package are
     not taken; a package spelt that way by more than ``max_tests`` tests selects none."""
-    found: dict[str, list[str]] = {}
-    for pkg in packages:
-        pat = re.compile(rf"""["']{re.escape(pkg)}/?["']""")
-        hit = [t for t, text in sources.items() if pkg in text and pat.search(text)]
-        if 0 < len(hit) <= max_tests:
-            for t in hit:
-                found.setdefault(t, []).append(pkg)
+    found = _spellers(packages, r"""["']{}/?["']""", sources, max_tests)
     return {
-        t: f"lists package {p[0]} (module {packages[p[0]]} added or removed)"
-        for t, p in found.items()
+        t: f"lists package {p} (module {packages[p]} added or removed)" for t, p in found.items()
     }
