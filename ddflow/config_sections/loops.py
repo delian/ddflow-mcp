@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 
 @declare("loops")
@@ -37,6 +37,15 @@ class LoopsConfig:
     no_progress_window: int = knob(
         60,
         doc="How many recent events (version-stamp and upgrade bookkeeping events excluded) with NO completion, gate pass or merge count as a stalled queue. Measured in events, not minutes, because an agent that is thinking produces no events and waiting is not looping.",
+    )
+    wait_cycle: bool = knob(
+        True,
+        doc="Report a cycle of agents waiting on each other's leases (a lock deadlock) in `doctor`, naming the agents, items and files and the globs the latest waiter should drop. Off: waits are still recorded, the cycle is not looked for.",
+    )
+    wait_cycle_shown: int = knob(
+        5,
+        doc="How many wait cycles `doctor` prints in full; the rest are counted. 0 prints none.",
+        check=int_at_least(0),
     )
     #: warn | block
     on_detect: str = knob(
