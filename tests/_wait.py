@@ -10,8 +10,8 @@ tools, used by every test that has to wait:
 * ``scaled(seconds)`` -- a real deadline whose length is not the point of the test (a lock
   or start timeout) made generous, with the same scaling.
 
-``DDFLOW_TEST_TIME_SCALE`` multiplies both (a slow CI runner); ``slow_factor`` is the one
-place a test forces the slow path (monkeypatch it to prove a test survives a slow machine).
+``DDFLOW_TEST_TIME_SCALE`` multiplies both (a slow CI runner); ``slow_factor`` is the one place
+the factor is derived, and a test forces the slow path with ``pretend_saturated(monkeypatch)``.
 """
 
 from __future__ import annotations
@@ -63,3 +63,11 @@ def wait_until(
         if time.monotonic() >= end:
             raise AssertionError(f"{what} did not happen within {ceiling:.0f}s")
         time.sleep(poll)
+
+
+def pretend_saturated(monkeypatch) -> None:
+    """Force the slow path: report a host so loaded that every ``scaled`` deadline gets its
+    full ``MAX_FACTOR``, whatever the real CPU count and load (derived through the real
+    ``slow_factor``, not by replacing it)."""
+    monkeypatch.setattr(os, "getloadavg", lambda: (1e6, 0.0, 0.0))
+    monkeypatch.setattr(os, "cpu_count", lambda: 1)

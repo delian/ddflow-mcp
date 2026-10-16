@@ -139,8 +139,9 @@ def test_a_revived_lease_catches_up_resources_and_keeps_a_claimed_override(repo,
     assert _items(repo)["T1"].resources == ["gpu:1"], "the claim's override is the item's"
     time.sleep(2.5)  # lapsed; an edit now reaches only the item
     assert AI.update(repo, "T1", AI.ItemEdit(resources=["gpu:3"]), agent=HOLDER).ok
-    assert run_cli(repo, "heartbeat", "T1", agent=HOLDER)[0] == O.OK
-    assert _items(repo)["T1"].lease.resources == ["gpu:3"]
+    beat = run_cli(repo, "heartbeat", "T1", agent=HOLDER)
+    assert beat[0] == O.OK, beat
+    assert _items(repo)["T1"].lease.resources == ["gpu:3"], beat  # a refusal says why
 
 
 def test_the_mcp_wait_tool_takes_the_claims_globs(repo):
