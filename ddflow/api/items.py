@@ -94,6 +94,11 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     return _record_update(log, cfg, it, fields, queue=edit.queue)
 
 
+def _held_globs(it) -> list[str]:
+    """The globs an item holds: its own and its lease's, without repeats."""
+    return list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
+
+
 def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
     """Fold ``--add-globs`` / ``--remove-globs`` into ``fields["globs"]``: onto ``--globs``
     when that was given, else onto the item's held globs (its own and its lease's).
@@ -102,7 +107,7 @@ def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
         return ""
     held = fields.get("globs")
     if held is None:
-        held = list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
+        held = _held_globs(it)
     fields["globs"] = GS.adjust(held, edit.add_globs, edit.remove_globs)
     if fields["globs"] == held and edit.globs is None and len(fields) == 1:
         return (
@@ -292,8 +297,7 @@ def _dropped(it, globs: list[str] | None) -> list[str]:
     """
     if globs is None:
         return []
-    before = [*it.globs, *(it.lease.globs if it.lease else [])]
-    return [g for g in dict.fromkeys(before) if g not in globs]
+    return [g for g in _held_globs(it) if g not in globs]
 
 
 #: Splitting into one piece is a rename, not a split.
