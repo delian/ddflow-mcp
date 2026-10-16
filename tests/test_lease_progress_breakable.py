@@ -190,3 +190,9 @@ def test_a_deleted_file_is_progress(tmp_path):
     before = TA.last_change_at(tmp_path)
     (tmp_path / "gone.py").unlink()
     assert before == 0.0 and TA.last_change_at(tmp_path) > 0.0
+
+
+def test_an_unreadable_tree_is_never_read_as_idle(tmp_path):
+    from ddflow.infra import treeactivity as TA
+
+    assert TA.last_change_at(tmp_path) == float("inf")  # not a git tree: git cannot say
