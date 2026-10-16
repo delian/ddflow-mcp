@@ -1398,6 +1398,15 @@ def _accepted_lapsed(cfg: Config, lapsed: list, me: str) -> list:
     return [(i, lease) for i, lease in lapsed if policy == "accept" or lease.holder == me]
 
 
+def _after_accepting(cfg: Config, uncovered: list[str], lapsed: list, me: str, now: float):
+    """(paths still uncovered, lapsed leases still unaccepted, the note for accepted ones)."""
+    accepted = _accepted_lapsed(cfg, lapsed, me)
+    if not accepted:
+        return uncovered, lapsed, ""
+    left = [p for p in uncovered if not _covered_by(p, accepted)]
+    return left, [x for x in lapsed if x not in accepted], _accepted_note(accepted, now, me)
+
+
 def _covered_by(path: str, leases: list) -> bool:
     return any(path_in_glob(path, g) for _i, lease in leases for g in lease.globs)
 
@@ -1504,12 +1513,9 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
     lapsed = _lapsed_mine(repo, state, uncovered, others, me, here, now, cfg.lease.grace_s)
-    accepted = _accepted_lapsed(cfg, lapsed, me)
-    if accepted:
-        uncovered = [p for p in uncovered if not _covered_by(p, accepted)]
-        if not uncovered:
-            return Verdict(OK, _accepted_note(accepted, now, me))
-        lapsed = [x for x in lapsed if x not in accepted]
+    uncovered, lapsed, note = _after_accepting(cfg, uncovered, lapsed, me, now)
+    if not uncovered:
+        return Verdict(OK, note)
     msg = _uncovered_message(cfg, state, uncovered, stolen, lapsed, mine, me, now, mode, agent)
     if mode == "warn":
         return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
