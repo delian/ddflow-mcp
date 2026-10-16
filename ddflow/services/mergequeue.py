@@ -20,7 +20,7 @@ import contextlib
 import json
 import os
 import time
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +53,11 @@ class Entry:
     sha: str = ""
     #: How many times the integrator has taken this entry.
     attempts: int = 0
+    #: For a parked entry: the checks (hooks, tests) that failed, the last lines of the ci
+    #: output, and the file that holds all of it (relative to the repo).
+    failed: list[str] = field(default_factory=list)
+    tail: str = ""
+    log: str = ""
 
     @property
     def duration_s(self) -> float:
@@ -125,6 +130,7 @@ def add(
             return waiting, False
         for old in (e for e in every if e.item == item):
             _path(repo, old.seq).unlink(missing_ok=True)
+            log_path(repo, old).unlink(missing_ok=True)
         seq = max((e.seq for e in every), default=0) + 1
         e = Entry(item=item, seq=seq, agent=agent, queued_at=time.time())
         _write(repo, e)
@@ -136,6 +142,7 @@ def _prune(repo: Path, keep: int) -> None:
     done = [e for e in entries(repo) if e.state in FINISHED]
     for old in done[: max(0, len(done) - keep)]:
         _path(repo, old.seq).unlink(missing_ok=True)
+        log_path(repo, old).unlink(missing_ok=True)
 
 
 def save(repo: Path, e: Entry) -> None:
@@ -151,6 +158,7 @@ def remove(repo: Path, item: str) -> Entry | None:
         if e is None or e.state == RUNNING:
             return None
         _path(repo, e.seq).unlink(missing_ok=True)
+        log_path(repo, e).unlink(missing_ok=True)
         return e
 
 
@@ -167,13 +175,23 @@ def take(repo: Path, e: Entry) -> Entry | None:
         if now is None or now.state != QUEUED:
             return None
         now.state, now.started_at, now.finished_at, now.reason = RUNNING, time.time(), 0.0, ""
+        now.failed, now.tail, now.log = [], "", ""
         now.attempts += 1
         _write(repo, now)
         return now
 
 
-def finish(repo: Path, e: Entry, state: str, *, reason: str = "", sha: str = "") -> Entry:
+def log_path(repo: Path, e: Entry) -> Path:
+    """Where the full ci output of ``e``'s last run is kept."""
+    return _dir(repo) / "logs" / f"{e.seq:08d}-{e.item}.log"
+
+
+def finish(
+    repo: Path, e: Entry, state: str, *, reason: str = "", sha: str = "", detail: dict | None = None
+) -> Entry:
     e.state, e.finished_at, e.reason, e.sha = state, time.time(), reason, sha
+    d = detail or {}
+    e.failed, e.tail, e.log = list(d.get("failed") or []), d.get("tail", ""), d.get("log", "")
     _write(repo, e)
     return e
 
@@ -274,6 +292,9 @@ def board(repo: Path, *, window: int, default_s: int, now: float | None = None) 
             "reason": e.reason,
             "sha": e.sha,
             "attempts": e.attempts,
+            "failed": e.failed,
+            "tail": e.tail,
+            "log": e.log,
             "waited_s": round(max(0.0, (e.started_at or e.finished_at or now) - e.queued_at), 1),
             "position": 0,
             "eta_s": 0,
