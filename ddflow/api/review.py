@@ -44,6 +44,7 @@ from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import _lease_keeper, item_tree
 from .lifecycle import callers_tree
 from .review_finding_ref import resolve as resolve_finding
+from .review_supersede import carry, round_evidence, superseded_digests
 
 
 def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
@@ -484,6 +485,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         if f.get("digest") not in have:
             kept.append(f)
             have[f.get("digest")] = len(kept)
+    gone = carry(ev, prior)
     ev["chunk_findings"] = kept
     ev["findings"] = len(kept)
     ev["titles"] = [f.get("title", "") for f in kept[:10]]
@@ -494,7 +496,12 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
     verdicts = it.triage.get(gate, {})
-    return sum(1 for f in kept if verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED)
+    return sum(
+        1
+        for f in kept
+        if f.get("digest") not in gone
+        and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
+    )
 
 
 _SETTLED = ("refuted", "confirmed")
@@ -876,7 +883,9 @@ def _full_rounds(it, gate: str) -> int:
     return sum(
         1
         for r in _review_runs(it, gate)
-        if r.evidence.get("review_kind") == "full" and not _settled_pass(r)
+        if r.evidence.get("review_kind") == "full"
+        and not _settled_pass(r)
+        and not r.evidence.get("fix_round")
     )
 
 
@@ -889,6 +898,7 @@ def _delta_rounds(it, gate: str) -> int:
         if r.evidence.get("review_kind") == "delta"
         and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
         and not _settled_pass(r)
+        and not r.evidence.get("fix_round")
     )
 
 
@@ -934,16 +944,60 @@ def _item_intent(it) -> str:
     return f"{it.title}. {it.body}".strip() if it else ""
 
 
+def _superseded(repo, cfg, it, a) -> tuple[set[str], set[str]]:
+    """(newly, earlier): digests of the gate's recorded findings whose cited lines the
+    commits since the reviewed head rewrote, and those an earlier round already marked.
+    Nothing new without a usable head (none recorded, or no longer an ancestor)."""
+    last = _last_review(it, a["gate"])
+    found = last.get("chunk_findings")
+    head = str(last.get("reviewed_head") or "")
+    if not head or not found or isinstance(found, B.Unavailable):
+        return set(), set()
+    old = {str(d) for d in last.get("superseded") or []}
+    tip = _head_of(repo, it, a["branch"], "")
+    if not tip or not W.git(repo, "merge-base", "--is-ancestor", head, tip).ok:
+        return set(), old
+    try:
+        diff = _delta_diff(repo, it, a["branch"], head, cfg.worktree.base_ref or "")
+    except RuntimeError:
+        return set(), old
+    return superseded_digests(list(found), diff) - old, old
+
+
+def _is_fix_round(cfg, it, a) -> bool:
+    """A pure fix round (``[review].fix_round_free``): commits since the reviewed head
+    addressed EVERY finding of the last round -- its lines were rewritten, or the author
+    settled it -- and rewrote at least one cited line (else a review with no fix would be
+    a free loop), so re-checking the fixes is no new round of review."""
+    if not (cfg.review.fix_round_free and it and a["item"]):
+        return False
+    if a["chunks"] or a["commit"] or a["base"] or a["full"]:
+        return False
+    found = _last_review(it, a["gate"]).get("chunk_findings")
+    if not found or isinstance(found, B.Unavailable) or not a["supers_new"]:
+        return False
+    mine = it.triage.get(a["gate"], {})
+    return all(
+        f.get("digest") in a["supers"]
+        or mine.get(str(f.get("digest")), {}).get("verdict") in _SETTLED
+        for f in found
+    )
+
+
 def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     """(kind, rounds done, forced reason, diff, how, why refused): what this call reviews
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
     delta = _wants_delta(repo, cfg, it, a, say)
+    new, old = _superseded(repo, cfg, it, a) if it and item and not a["chunks"] else (set(), set())
+    a["supers"], a["supers_new"] = new | old, new
+    a["fix"] = not delta and _is_fix_round(cfg, it, a)
+    delta = delta or a["fix"]
     kind = _kind(repo, cfg, it, item, gate, a["chunks"], delta, a["commit"], a["base"])
     done = _full_rounds(it, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
-    if kind in ("full", "delta") and item:
+    if kind in ("full", "delta") and item and not a["fix"]:
         # Delta rounds count too (D-gate-economy 2): a delta after the cap was the way
         # around it, and each one was another reviewer request at the same item.
         used = _rounds_used(it, gate)
@@ -1016,7 +1070,17 @@ _PREVIOUS_PROBE = 300
 
 
 def _with_previous_findings(
-    context: str, log, it, item: str, gate: str, say, *, kind: str, rerun: dict
+    context: str,
+    log,
+    it,
+    item: str,
+    gate: str,
+    say,
+    *,
+    kind: str,
+    rerun: dict,
+    supers: set[str] = frozenset(),
+    fix: bool = False,
 ) -> str:
     """``context`` plus the gate's previous findings and the author's triage of each, for a
     full re-review (decision D-gate-economy 3).
@@ -1028,7 +1092,7 @@ def _with_previous_findings(
     commit, reports the fix as absent. Nothing to add for a first review, a delta (it
     merges into the record instead) or a `--chunk` re-run (``rerun``).
     """
-    if kind != "full" or rerun or it is None:
+    if (kind != "full" and not fix) or rerun or it is None:
         return context
     found = _last_review(it, gate).get("chunk_findings")
     if not found or isinstance(found, B.Unavailable):
@@ -1053,6 +1117,12 @@ def _with_previous_findings(
             f"{n}. [{f.get('severity', '')}] {f.get('location') or f.get('title', '')}: "
             f"{detail[:_PREVIOUS_DETAIL]}" + (" ..." if len(detail) > _PREVIOUS_DETAIL else "")
         )
+        if f.get("digest") in supers:
+            lines.append(
+                "   SUPERSEDED: the lines it cites were rewritten since the reviewed commit; "
+                "do NOT report this finding again; report only a NEW defect of the new code"
+            )
+            continue
         lines.append(
             f"   triage: {verdict}" + (f" -- probe: {probe[:_PREVIOUS_PROBE]}" if probe else "")
         )
@@ -1693,28 +1763,24 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
     taken = _head_of(repo, it, branch, commit)
+    sargs: dict[str, Any] = {
+        "item": item,
+        "gate": gate,
+        "chunks": chunks,
+        "delta": delta,
+        "commit": commit,
+        "base": base,
+        "branch": branch,
+        "called_from": called_from,
+        "force": force,
+        "reason": reason,
+        "full": full,
+    }
     kind, done, forced, diff, how, why, rerun = _scope(
-        repo,
-        cfg,
-        st,
-        log,
-        it,
-        say,
-        revs,
-        locals_={
-            "item": item,
-            "gate": gate,
-            "chunks": chunks,
-            "delta": delta,
-            "commit": commit,
-            "base": base,
-            "branch": branch,
-            "called_from": called_from,
-            "force": force,
-            "reason": reason,
-            "full": full,
-        },
+        repo, cfg, st, log, it, say, revs, locals_=sargs
     )
+    supers, fix = sargs.get("supers") or set(), bool(sargs.get("fix"))
+    extra_evidence = round_evidence(extra_evidence, supers, fix, _delta_rounds(it, gate), say)
     if why:
         return O.Outcome(
             kind="review",
@@ -1735,7 +1801,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     context = dispatch.pack(
         context,
         [
-            lambda c: _with_previous_findings(c, log, it, item, gate, say, kind=kind, rerun=prior),
+            lambda c: _with_previous_findings(
+                c, log, it, item, gate, say, kind=kind, rerun=prior, supers=supers, fix=fix
+            ),
             lambda c: _with_guidance(c, cfg, st, item, gate, say),
         ],
     )
