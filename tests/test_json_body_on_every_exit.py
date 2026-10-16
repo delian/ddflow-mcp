@@ -55,11 +55,7 @@ def _argv(path, p):
     return out
 
 
-LEAVES = [
-    (path, _argv(path, p))
-    for path, p in _leaves(build_parser())
-    if path not in LONG_RUNNING
-]
+LEAVES = [(path, _argv(path, p)) for path, p in _leaves(build_parser()) if path not in LONG_RUNNING]
 
 
 def _run(repo, argv):
