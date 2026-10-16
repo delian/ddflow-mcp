@@ -83,7 +83,18 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
     with _checkout(sha) as (raw, listed):
         py = [f for f in src if f.endswith(".py")]
         idents = TI.changed_identifiers(ROOT, f"{sha}^1", py, tip=sha, source=raw)
-        new = T.select(raw, "x", changed=src, listed=listed, idents=idents, **TSC.limits(Config()))
+        added = git_raw(
+            ROOT, "diff", "--name-only", "--no-renames", "--diff-filter=AD", f"{sha}^1", sha
+        ).splitlines()
+        new = T.select(
+            raw,
+            "x",
+            changed=src,
+            listed=listed,
+            idents=idents,
+            membership=added,
+            **TSC.limits(Config()),
+        )
         co = [c for c in co if (raw / c).exists()]
         assert new is not None
         if new.full:
@@ -95,7 +106,7 @@ def _replayed(sha: str, src: list[str], co: list[str]) -> tuple[int, int, list[s
         missed = [c for c in co if c not in got]
         if not missed:
             return len(co), len(co), []
-        old = T.select(raw, "x", changed=src, listed=listed, idents={})
+        old = T.select(raw, "x", changed=src, listed=listed, idents={}, membership=[])
         assert old is not None
         before = {t.path for t in old.tests}
         return len(co), len(co) - len(missed), [f"{sha[:8]} {c}" for c in missed if c in before]

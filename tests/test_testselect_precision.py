@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git_quiet as _git
 
+from ddflow.services import testidents as TI
 from ddflow.services import testscope as TSC
 from ddflow.services import testselect as T
 
@@ -262,6 +263,18 @@ def test_a_new_module_in_this_repositorys_split_packages_selects_the_split_guard
         sel = T.select(root, "main", changed=[new], membership=[new], idents={})
         assert sel is not None
         assert "tests/test_module_splits.py" in {t.path for t in sel.tests}, new
+    # and by the listing rule alone, without the GOVERNS declaration:
+    text = (root / "tests/test_module_splits.py").read_text("utf-8")
+    packages = TI.listed_packages(["ddflow/services/gates/brand_new_area.py"])
+    assert "tests/test_module_splits.py" in TI.listing_tests(
+        packages, {"tests/test_module_splits.py": text}
+    )
+
+
+def test_a_new_subpackage_changes_what_its_parent_package_lists():
+    packages = TI.listed_packages(["pkg/zoo/newsub/__init__.py"])
+    assert {"pkg.zoo.newsub", "pkg/zoo/newsub", "pkg.zoo", "pkg/zoo"} <= set(packages)
+    assert "pkg" not in packages
 
 
 def test_a_renamed_module_counts_as_a_removal_and_an_addition(listed):
