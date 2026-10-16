@@ -401,6 +401,10 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
             ),
         ),
+        flag_exempt={
+            "--add-globs": "CLI only: over MCP `globs` replaces the list (tools/list byte budget)",
+            "--remove-globs": "CLI only: over MCP `globs` replaces the list (tools/list byte budget)",
+        },
         tool_order=(
             "id",
             "globs",
