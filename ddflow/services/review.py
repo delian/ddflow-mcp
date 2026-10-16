@@ -728,7 +728,9 @@ def chunk_files(chunk: str) -> list[str]:
     return list(dict.fromkeys(f.path for f in unidiff.files(chunk)))
 
 
-def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
+def _chat(
+    rev: Reviewer, system: str, user: str, timeout_s: float, tree: Path | None = None
+) -> tuple[str, str]:
     """One completion, whatever the backend. Returns (content, error). Never raises.
 
     Four backends, because "any LLM" means four wire formats in practice: the
@@ -738,7 +740,7 @@ def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str,
     API at all usable as a reviewer.
     """
     if rev.kind == "command":
-        return _chat_command(rev, system, user, timeout_s)
+        return _chat_command(rev, system, user, timeout_s, tree)
     if rev.kind == "anthropic":
         return _chat_anthropic(rev, system, user, timeout_s)
     if rev.kind == "gemini":
@@ -751,12 +753,14 @@ def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str,
     return _chat_openai(rev, system, user, timeout_s)
 
 
-def _tool_moved(before: dict[str, str] | None) -> str:
+def _tool_moved(before: dict[str, str] | None, tree: Path | None) -> str:
     """Did a command reviewer, now finished or killed, leave git changed? (B5ce30dd94d)"""
-    return git_state_change(before, git_state(os.getcwd()))
+    return git_state_change(before, git_state(tree or os.getcwd()))
 
 
-def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
+def _chat_command(
+    rev: Reviewer, system: str, user: str, timeout_s: float, tree: Path | None = None
+) -> tuple[str, str]:
     """Run a CLI, prompt on stdin, reply on stdout.
 
     Deliberately dumb and therefore universal. A non-zero exit is an error (the review
@@ -771,11 +775,14 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     # as a missing `FOO=bar`, had no builtin allowlist and let an unbalanced quote escape a
     # function whose contract is to turn every way of not-reviewing into a reported one).
     env = {**os.environ, **rev.env}
-    # A reviewer must leave git as it found it (B5ce30dd94d); its cwd is this process's.
-    state_before = git_state(os.getcwd())
+    # A reviewer must leave the tree under review as it found it (B5ce30dd94d). That is
+    # `tree` -- not this process's cwd, which may be any checkout where a sibling lane
+    # commits (B708761957b); with none given, the cwd; the tool runs in the tree it is watched in.
+    state_before = git_state(tree or os.getcwd())
     started = _RUNNER.start(
         Declared(cmd, f"reviewer {rev.name!r} command"),
         env=env,
+        cwd=tree,
         stdin=P.PIPE,
     )
     if started.unavailable is not None:
@@ -793,11 +800,11 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     except P.TimeoutExpired:
         _abort(p)
         p.communicate()
-        return "", _tool_moved(state_before) or f"command timed out after {timeout_s:.0f}s"
+        return "", _tool_moved(state_before, tree) or f"command timed out after {timeout_s:.0f}s"
     except OSError as exc:
         _abort(p)
-        return "", _tool_moved(state_before) or f"could not execute: {exc}"
-    moved = _tool_moved(state_before)
+        return "", _tool_moved(state_before, tree) or f"could not execute: {exc}"
+    moved = _tool_moved(state_before, tree)
     if moved:
         return "", moved
     out = (stdout or "").strip()
@@ -1167,6 +1174,7 @@ def _race(
     on_settled: Callable[[int, tuple[str, str]], None] | None = None,
     on_tick: Callable[[list[int]], None] | None = None,
     tick_s: float = 0,
+    tree: Path | None = None,
 ) -> list[tuple[str, str]]:
     """(content, error) for every chunk: chunks in parallel, ``rev.hedge`` copies each.
 
@@ -1203,7 +1211,7 @@ def _race(
             return "", f"total budget {rev.total_budget_s}s exhausted before it started"
         _running.cancel = tokens[(i, c)]
         try:
-            return _chat(rev, system, users[i], min(rev.timeout_s, remaining))
+            return _chat(rev, system, users[i], min(rev.timeout_s, remaining), tree)
         finally:
             _running.cancel = None
 
@@ -1434,6 +1442,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     *,
     context: str = "",
     repo: Path | None = None,
+    tree: Path | None = None,
     prompt_overrides: dict[str, str] | None = None,
     only: list[int] | None = None,
     on_progress: Callable[[str], None] | None = None,
@@ -1448,6 +1457,8 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     cadence, on the caller's thread (the api renews the caller's lease there).
     ``on_chunk(n, reply)`` gets each chunk's whole reply the moment it arrives, so a
     caller can keep the finding bodies even if the run is cut short (bug B206).
+    ``tree`` is the working tree under review: a command reviewer must leave it as it
+    found it, and only it is watched (B708761957b).
     ``only`` names the chunks (1-based, as a full run numbers them) to send; the rest
     are neither sent nor counted as lost -- `merge_rerun` folds such a run into the
     record of the full one.
@@ -1521,6 +1532,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         on_settled=lambda k, got: (_keep(wanted[k], got), progress.settled(wanted[k] - 1, got)),
         on_tick=lambda waiting: progress.tick([wanted[k] - 1 for k in waiting]),
         tick_s=tick_s,
+        tree=tree,
     )
     # The retry races PARTS of the lost chunks, so its indices are not chunk numbers:
     # its ticks name the chunks being retried instead (critic).
@@ -1533,6 +1545,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         lambda chunk, k: render(chunk, wanted[k - 1]),
         started,
         on_tick=lambda _parts: progress.tick(retried, " on retry"),
+        tree=tree,
         tick_s=tick_s,
     )
     for k, (before, after) in enumerate(zip(first, results, strict=True)):

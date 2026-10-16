@@ -397,6 +397,14 @@
       lease.heartbeat_s = 300   [default]
           How often a live agent renews its lease. Must be comfortably below ttl_s (a
           6x margin is the default) or a slow turn looks like a crash.
+      lease.renew_long_commands = True   [default]
+          A long command (`gate run`, `review`, `ci run`, `pins regenerate`) renews
+          the caller's own lease every heartbeat_s while it runs, on the thread
+          running it, so a 20-minute run does not lapse a 30-minute lease. The renewal
+          is liveness only: it is lease bookkeeping and never counts as progress, so
+          an idle holder still reads as idle to progress-based breaking (D-lease-hold-
+          limit). Off: nothing renews during a command and the agent heartbeats
+          itself.
       lease.renew_log_min_s = 120   [default]
           A heartbeat is written to the log only when the lease's last written renewal
           is at least this many seconds old; closer ones are acknowledged and not

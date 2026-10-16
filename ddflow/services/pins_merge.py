@@ -1,9 +1,10 @@
 """The git side of pin regeneration: a merge driver and a post-merge hook (DX-pins-regenerate).
 
-Two branches that each re-record the same pin file conflict in it. The driver keeps our side
-so the merge does not stop (the tree is not complete while it runs, so it cannot regenerate);
-the post-merge hook, which runs once the tree is final, regenerates the stale pins and folds
-them into the merge commit.
+Two branches that each re-record the same pin file conflict in it. The driver merges the prose
+of a mixed file normally and keeps our side of the generated regions, so the merge does not stop
+over them (the tree is not complete while it runs, so it cannot regenerate); a prose conflict
+both sides made stays a conflict. The post-merge hook, which runs once the tree is final,
+regenerates the stale pins and folds them into the merge commit.
 """
 
 from __future__ import annotations
@@ -15,16 +16,25 @@ from ..infra import git as G
 from ..infra.fsio import atomic_write, replace_text
 from .enforce import command_line, hooks_dir
 from .pins import pin_files, regenerate
+from .pins_text import merge_into
 
 #: The merge driver's name in `.gitattributes` and `git config merge.<name>.driver`.
 DRIVER = "pinsregen"
 HOOK_MARK = "# DDFLOW-PINS-HOOK v1 -- managed by `ddflow pins regenerate --install`"
 
 
-def merge_driver(ours: str) -> int:
-    """`git merge` driver for a pin file: keep our side (the file at `ours` is the result) so
-    the merge does not stop; the post-merge hook then re-records every stale pin."""
-    return 0 if Path(ours).exists() else 1
+def merge_driver(paths: str | list[str]) -> int:
+    """`git merge` driver for a pin file (the file at `ours` is the result): the prose of the
+    three versions merged, our side of the generated regions kept; the post-merge hook then
+    re-records every stale pin. ``paths`` is what git passes (`%A %O %B`: ours, the common
+    ancestor, theirs); a lone path keeps ours. 1 (a conflict) only for prose both sides edited."""
+    given = [paths] if isinstance(paths, str) else list(paths)
+    ours, base, theirs = [*given, "", "", ""][:3]
+    if not Path(ours or "-").exists():
+        return 1
+    if not (base and theirs and Path(base).exists() and Path(theirs).exists()):
+        return 0
+    return 1 if merge_into(Path(ours), Path(base), Path(theirs)) else 0
 
 
 def _fold_into_merge(repo: Path, files: list[str], done: list[str]) -> str:
@@ -102,9 +112,9 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
         body = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(new) + "\n"
         replace_text(attrs, body)
         actions += [f"added '{a}' to .gitattributes" for a in new]
-    driver = line("pins merge-driver", extra="%A")
+    driver = line("pins merge-driver", extra="%A %O %B")
     for key, val in (
-        (f"merge.{DRIVER}.name", "ddflow pin file: keep ours, regenerate after the merge"),
+        (f"merge.{DRIVER}.name", "ddflow pin file: merge the prose, regenerate after the merge"),
         (f"merge.{DRIVER}.driver", driver),
     ):
         cur = G.run(repo, "config", "--local", "--get", key)
