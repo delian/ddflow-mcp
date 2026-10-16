@@ -85,3 +85,24 @@ def test_the_cli_triage_says_so(repo, tmp_path):
         )  # fmt: skip
         assert code == OK, err
     assert "passed ON REFUTATION" in out, out
+
+
+def test_a_confirmed_first_finding_keeps_the_gate_failed_whatever_the_order(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    _tri(repo, 1, "confirmed", "fixed in abc, tests/test_x.py::t")
+    last = _tri(repo, 2)
+    assert "ON REFUTATION" not in last.data["text"]
+    assert _state(repo).gates["critic"].outcome == "failed"
+
+
+def test_complete_does_not_name_the_refuted_gate_as_unmet(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    _tri(repo, 1)
+    _tri(repo, 2)
+    assert _state(repo).gates["critic"].outcome == "passed"
+    code, out, err = run_cli(repo, "complete", "T1")
+    unmet = [ln for ln in (out + err).splitlines() if ln.lstrip().startswith("- ")]
+    assert code != OK or not unmet  # other gates of T1 are unrun: the point is the line below
+    assert not any("critic" in ln for ln in unmet), unmet
