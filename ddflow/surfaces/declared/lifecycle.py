@@ -619,9 +619,9 @@ COMMANDS: tuple[Command, ...] = (
         path=("complete",),
         summary="finish an item (exit 3 = gates not satisfied)",
         tool="ddflow_complete",
-        description="Finish an item. Refuses (exit 3) when a required gate has not passed, when a "
-        "phase still has open tasks, or when no reviewer came from a different model "
-        "family than the author. Pass your own model as 'model'.",
+        description="Finish an item. Refuses (exit 3) when a required gate has not passed, a phase "
+        "has open tasks, or no reviewer came from a different model family than the "
+        "author. Pass your own 'model'.",
         call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().complete(
             repo,
             a["id"],
@@ -670,7 +670,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Complete over unmet conditions; each is recorded as overridden, forever. Prefer `ddflow_gate_skip` with a reason: it drops one named step.",
+                help="Complete over unmet conditions, each recorded as overridden forever. Prefer `ddflow_gate_skip` with a reason.",
                 cli_help="",
             ),
             Param(
@@ -681,7 +681,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "regression_test",
-                help="For a fix task: the test that now guards its bug(s); closes them.",
+                help="Fix task: the test guarding its bug(s); closes them.",
                 cli_help="for a fix task: the test that now guards the bug(s) it fixes; closes them (as `bug fixed` would) and completes. Repeat for several.",
                 action="append",
                 default=[],

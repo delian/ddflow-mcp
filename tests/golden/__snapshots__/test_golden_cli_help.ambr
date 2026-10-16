@@ -135,10 +135,10 @@
                           why the pre-fix regression check is skipped (recorded)
     --mutation-file MUTATION_FILE
                           fix confined to test files: the changed test file the mutation edits (with
-                          --mutation-old/--mutation-new); the test must fail on it
+                          --mutation-old/--mutation-new); ddflow applies it and the test must fail
+                          on it
     --mutation-old MUTATION_OLD
-                          the text in --mutation-file that --mutation-new replaces (must appear
-                          once)
+                          the text in --mutation-file (once) that --mutation-new replaces
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
     --lesson LESSON
@@ -359,10 +359,10 @@
                           (as `bug fixed` would) and completes. Repeat for several.
     --mutation-file MUTATION_FILE
                           fix confined to test files: the changed test file the mutation edits (with
-                          --mutation-old/--mutation-new); the test must fail on it
+                          --mutation-old/--mutation-new); ddflow applies it and the test must fail
+                          on it
     --mutation-old MUTATION_OLD
-                          the text in --mutation-file that --mutation-new replaces (must appear
-                          once)
+                          the text in --mutation-file (once) that --mutation-new replaces
     --mutation-new MUTATION_NEW
                           the replacement that disables the fix
   

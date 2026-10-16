@@ -13,7 +13,14 @@ from ...core.model import Item, State
 from ...infra import fsio
 from ...infra import worktree as W
 from .defs import GateDef, load_gates
-from .regression_testfix import verify_test_only_fix
+from .regression_testfix import (
+    REGRESSION_COULD_NOT_RUN,
+    REGRESSION_FAILS_ON_FIX,
+    REGRESSION_PASSES_ON_PREFIX,
+    REGRESSION_VERIFIED,
+    Tools,
+    verify_test_only_fix,
+)
 from .runner import run_command_gate
 
 
@@ -260,14 +267,6 @@ def verify(
     return [_try_mutation(gdef, cwd, mut) for mut in mutations], ""
 
 
-#: What `verify_regression_test` returns. `verified` is the only pass; the caller REFUSES
-#: `passed-on-prefix`/`failed-on-fix` and records `could-not-run` as the gap it is.
-REGRESSION_VERIFIED = "verified"
-REGRESSION_PASSES_ON_PREFIX = "passed-on-prefix"
-REGRESSION_FAILS_ON_FIX = "failed-on-fix"
-REGRESSION_COULD_NOT_RUN = "could-not-run"
-
-
 def verify_regression_test(
     repo: Path,
     cfg: Config,
@@ -385,7 +384,14 @@ def verify_regression_test(
         }
     if pre_outcome == "passed":
         testfix = verify_test_only_fix(
-            repo, cfg, tree=tree, base_sha=base_sha, tests=tests, defn=defn, mutation=mutation
+            repo,
+            cfg,
+            tree=tree,
+            base_sha=base_sha,
+            tests=tests,
+            defn=defn,
+            mutation=mutation,
+            tools=Tools(CI.merge_tree, TS.run_command),
         )
         if testfix is not None:
             return testfix[0], {**evidence, **testfix[1]}
