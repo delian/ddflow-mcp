@@ -45,10 +45,9 @@ COMMANDS: tuple[Command, ...] = (
         summary="the merge queue: add an item, run the integrator, show the line, remove an entry",
         tool="ddflow_queue",
         description=(
-            "Merge queue. add: line up a finished item (all gates but ci/merge done). "
-            "run: the integrator (any agent; one at a time, else exit 2): per entry merges base, "
-            "regenerates pins, runs ci once, lands it; failures are parked. "
-            "status: order and ETA. remove."
+            "Merge queue. add: line up an item (gates done but ci/merge). run: the "
+            "integrator (any agent, one at a time, else exit 2): per entry merges base, "
+            "regenerates pins, runs ci once, lands it; failures park. status. remove."
         ),
         call=_call,
         payload="",
@@ -62,7 +61,7 @@ COMMANDS: tuple[Command, ...] = (
                 nargs="?",
                 default="status",
                 choices=ACTIONS,
-                help="add | run | status (default) | remove.",
+                help="add|run|status (default)|remove.",
                 cli_help="add ITEM: enqueue it; run: integrate the head (any agent may); "
                 "status (default): the line; remove ITEM: drop an entry",
             ),
@@ -84,7 +83,7 @@ COMMANDS: tuple[Command, ...] = (
                 "unit_tests",
                 type="boolean",
                 default=None,
-                help="Also run unit_tests on the merged result.",
+                help="Also run unit_tests.",
                 cli_help="run/add: also run each entry's unit_tests gate on the merged result",
             ),
             Param(
@@ -96,7 +95,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "timeout",
                 type="integer",
-                help="run: ci seconds per entry.",
+                help="run: ci seconds.",
                 cli_help="run: seconds one entry's ci may run (default [merge_queue].timeout_s)",
             ),
         ),

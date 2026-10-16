@@ -45,8 +45,10 @@ def _keep_ours_in_hunks(tree: Path, path: str) -> bool:
     """Resolve a conflicted pin file by taking OUR side of the hunks that conflict and keeping
     every other change of both sides (`git merge-file --ours`), then stage it. Not our side of
     the whole file: a pin file can hold prose too (a README with a generated table), and the
-    other side's edit of that prose must survive. The conflicting hunks are the generated ones,
-    and the recipe re-records them next. False when git cannot (a delete against an edit)."""
+    other side's edit of prose elsewhere in it must survive. The conflicting hunks are taken to
+    be the generated ones, which the recipe re-records next; a prose edit that overlaps a
+    generated hunk is the one thing this loses. False when git cannot (a delete against an
+    edit)."""
     with fsio.scratch_dir("ddflow-mq.") as d:
         for name, stage in (("ours", 2), ("base", 1), ("theirs", 3)):
             blob = G.run(tree, "show", f":{stage}:{path}", binary=True)

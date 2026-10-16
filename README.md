@@ -990,7 +990,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 277 knobs.
+cadences, and the rest of the 279 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1680,7 +1680,7 @@ Landing is the part that serialises a wave: every agent that merged re-merged ma
 re-ran a long ci, and the pin files conflicted each time. With the queue an agent whose item
 is finished (every gate but `ci` and `merge` already carrying an outcome) does not land it:
 
-    ddflow merge <id> --queue           # or: ddflow queue add <id>; returns at once, keep working
+    ddflow queue add <id>               # returns at once: keep working
     ddflow queue run                    # the integrator; any agent, a scheduled job or the operator
     ddflow queue status                 # order, state, reason and ETA of every entry
     ddflow queue remove <id>            # drop an entry (a parked one, or one still waiting)
@@ -5169,7 +5169,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 277): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 279): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5427,7 +5427,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=c30d8b800f69 -->
+<!-- ddflow:begin README/tools sha=d6fa39acbd0c -->
 <details><summary>All 117 MCP tools: 32 in the `core` tier, 48 more in `standard`, 37 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
@@ -5493,7 +5493,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Gates and review | `ddflow_reviewers_list` | standard | Show the configured reviewers, their families and which gates they serve. |
 | Gates and review | `ddflow_tests` | standard | AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly… |
 | Landing it | `ddflow_cleanup` | standard | Classify every ddflow worktree and branch: merged (safe to remove), unmerged (carries commits nobody… |
-| Landing it | `ddflow_merge` | core | Land an item's branch without switching any checkout's branch. |
+| Landing it | `ddflow_merge` | core | Land an item's branch without ever switching a checkout's branch. |
 | Landing it | `ddflow_pr_status` | standard | Every item's pull request as last recorded — review, checks, target, rounds of changes and when it was last… |
 | Landing it | `ddflow_pr_sync` | core | Ask the forge (GitHub/GitLab) what reviewers did with every request in REVIEW and record it: a merged… |
 | Landing it | `ddflow_pr_threads` | standard | An item's review threads, read live from the forge. |
@@ -5596,7 +5596,6 @@ ddflow tests [--item <id>]      tests the change reaches + a parallel command  (
 ddflow merge <id>               merge from the primary checkout, no checkout
 ddflow merge <id> --allow-empty land a branch with nothing ahead of its target (refused otherwise)
 ddflow merge <id> --branch <b>  an item claimed --no-worktree: land <b> (default: your tree's branch)
-ddflow merge <id> --queue        do not land: put it in the merge queue for the integrator
 ddflow queue add|run|status|remove [<id>]  the merge queue: line up a finished item; the integrator lands the line in order (run: --max-batch, --unit-tests, --timeout; 2 = empty or another integrator running)
                                 ([flow].integration=pr: push + open/update a PR instead)
 ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
@@ -5685,7 +5684,7 @@ declared once and persists — see
 
 ## Configuration
 
-277 knobs across 34 sections, every one documented in place and listed, with its default
+279 knobs across 34 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5752,8 +5751,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=bc76b82290e6 -->
-<details><summary>All 277 knobs across 34 sections</summary>
+<!-- ddflow:begin README/knobs sha=b53a7ecc3430 -->
+<details><summary>All 279 knobs across 34 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|

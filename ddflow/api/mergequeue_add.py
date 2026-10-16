@@ -1,4 +1,4 @@
-"""`queue add`, `queue status`, `queue remove` and `merge --queue`: the agent's half of the
+"""`queue add`, `queue status` and `queue remove`: the agent's half of the
 merge queue. The integrator's half is `api.mergequeue_run`; the store and the order are
 `services.mergequeue`.
 

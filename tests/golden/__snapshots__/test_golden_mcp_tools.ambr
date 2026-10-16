@@ -1873,7 +1873,7 @@
     'ddflow_merge': '''
       {
        "name": "ddflow_merge",
-       "description": "Land an item's branch without switching any checkout's branch. With [flow].integration = 'pr' it opens (or updates) a pull request, releases your lease and parks the item in REVIEW; `ddflow_pr_sync` completes it after a person merges.",
+       "description": "Land an item's branch without ever switching a checkout's branch. With [flow].integration = 'pr' it pushes and opens (or updates) a pull request instead, releases your lease and parks the item in REVIEW — take the next item; `ddflow_pr_sync` completes it once a person merges it.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1889,25 +1889,21 @@
           "type": "boolean",
           "description": "Keep the worktree after merging, for inspection."
          },
-         "queue": {
-          "type": "boolean",
-          "description": "Queue it for the integrator (`ddflow_queue`) instead of landing it now."
-         },
          "model": {
           "type": "string",
-          "description": "The AUTHOR's model; PR mode completes later at `ddflow_pr_sync`, which needs it."
+          "description": "The AUTHOR's model. In PR mode the item completes later, at `ddflow_pr_sync`, and the reviewer-independence check needs it then."
          },
          "allow_dirty": {
           "type": "boolean",
-          "description": "Merge although the worktree is dirty; the changes are NOT included. Only once you have seen what is dirty."
+          "description": "Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output."
          },
          "allow_empty": {
           "type": "boolean",
-          "description": "Land a branch with nothing ahead of its target (refused by default: wrong tree? rebind with ddflow_update worktree)."
+          "description": "Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree)."
          },
          "branch": {
           "type": "string",
-          "description": "For a no_worktree item: the branch to land (default: the one checked out here); paths outside its globs come back as outside_globs."
+          "description": "For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs."
          },
          "as_agent": {
           "type": "string",
@@ -2377,13 +2373,13 @@
     'ddflow_queue': '''
       {
        "name": "ddflow_queue",
-       "description": "Merge queue. add: line up a finished item (all gates but ci/merge done). run: the integrator (any agent; one at a time, else exit 2): per entry merges base, regenerates pins, runs ci once, lands it; failures are parked. status: order and ETA. remove.",
+       "description": "Merge queue. add: line up an item (gates done but ci/merge). run: the integrator (any agent, one at a time, else exit 2): per entry merges base, regenerates pins, runs ci once, lands it; failures park. status. remove.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "action": {
           "type": "string",
-          "description": "add | run | status (default) | remove."
+          "description": "add|run|status (default)|remove."
          },
          "id": {
           "type": "string",
@@ -2395,11 +2391,11 @@
          },
          "unit_tests": {
           "type": "boolean",
-          "description": "Also run unit_tests on the merged result."
+          "description": "Also run unit_tests."
          },
          "timeout": {
           "type": "integer",
-          "description": "run: ci seconds per entry."
+          "description": "run: ci seconds."
          },
          "as_agent": {
           "type": "string",
