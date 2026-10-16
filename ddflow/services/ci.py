@@ -50,6 +50,8 @@ class Result:
     merged_with: str = ""
     command: str = ""
     output_tail: str = ""
+    #: the whole output of the command (not part of `as_data`: it can be megabytes)
+    output: str = ""
     #: failing test ids (and their reasons / failure tails) read from ALL of the output
     failures: dict = field(default_factory=dict)
 
@@ -212,6 +214,7 @@ def run(
         command=cmd,
         reason="" if p.code == 0 else f"{cmd} exited {p.code}",
         output_tail=out[-TAIL_CHARS:],
+        output=out,
         failures=failure_evidence(out) if p.code != 0 else {},
     )
 
