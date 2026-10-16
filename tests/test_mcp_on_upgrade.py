@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ def stale(repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     stamp_newer(repo, NEWER)
     monkeypatch.setattr(UN, "installed_version", lambda: NEWER)
     monkeypatch.delenv(mcp_upgrade.HANDOFF_ENV, raising=False)
+    monkeypatch.delenv("DDFLOW_MCP_ON_UPGRADE", raising=False)
     return repo
 
 
@@ -68,6 +70,15 @@ def test_a_genuinely_old_install_keeps_the_plain_refusal(
     res = _write(Server(stale))
     assert res["_meta"]["exit"] == 3 and "restart_required" not in res["_meta"]
     assert "REFUSED: this project's log has been worked on by ddflow" in res["content"][0]["text"]
+
+
+def test_no_restart_note_when_nothing_newer_is_installed(
+    stale: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the log is ahead: reconnecting would run the same code, so say nothing of it."""
+    monkeypatch.setattr(UN, "installed_version", lambda: "0.0.1")
+    res = _call(Server(stale), "ddflow_status")
+    assert not [c for c in res["content"] if "restart the server" in c["text"]]
 
 
 def test_off_shows_the_refusal_as_it_is(stale: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -136,6 +147,8 @@ def test_the_connection_survives_the_exec(stale: Path, monkeypatch: pytest.Monke
         "dev",
     )
     assert mcp_upgrade.called_from() == srv.called_from
+    monkeypatch.setenv(mcp_upgrade.HANDOFF_ENV, json.dumps({"called_from": ""}))
+    assert mcp_upgrade.called_from() is None
 
 
 def test_stdin_lines_are_idle_only_when_nothing_is_waiting() -> None:
@@ -199,6 +212,7 @@ def test_serve_only_replaces_itself_when_quiet(
     assert ran == ["exec"]
 
 
+@pytest.mark.skipif(not Path("/proc/self/cmdline").exists(), reason="needs /proc")
 def test_a_real_server_replaces_itself_on_the_same_stdio(tmp_path: Path, stale: Path) -> None:
     """End to end over pipes: the second call, sent with no `initialize`, is answered by the
     NEW process (which, being at the same version, falls back to the note: proof it ran)."""
@@ -214,9 +228,14 @@ def test_a_real_server_replaces_itself_on_the_same_stdio(tmp_path: Path, stale: 
     )
     (stale / ".ddflow" / "config.toml").write_text('[mcp]\non_upgrade = "reexec"\n')
     root = str(Path(__file__).resolve().parents[1])
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(site), root])}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DDFLOW_MCP")}
+    env = {**env, "PYTHONPATH": os.pathsep.join([str(site), root])}
     proc = subprocess.Popen(
-        [sys.executable, "-m", "ddflow.surfaces.mcp", "--repo", str(stale)],
+        [
+            sys.executable,
+            "-c",
+            f"from ddflow.surfaces.mcp import main; main(['--repo', {str(stale)!r}])",
+        ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -245,6 +264,13 @@ def test_a_real_server_replaces_itself_on_the_same_stdio(tmp_path: Path, stale: 
         }
         first = ask(call)["result"]["content"]
         assert not [c for c in first if "restart the server" in c["text"]]
+        # The exec keeps the pid but changes the command line (`-c` -> `-m`): wait for it, so
+        # the next request cannot be served by the old process.
+        cmdline = Path(f"/proc/{proc.pid}/cmdline")
+        for _ in range(300):
+            if b"-m" in cmdline.read_bytes().split(b"\0"):
+                break
+            time.sleep(0.1)
         second = ask({**call, "id": 3})["result"]["content"]
         assert [c for c in second if "restart the server" in c["text"]], second
     finally:

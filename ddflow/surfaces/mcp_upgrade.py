@@ -116,8 +116,8 @@ def footer(srv) -> str:
     try:
         mode = policy(srv.repo)
         f = facts(srv) if mode != "off" else None
-        if f is None:
-            return ""
+        if f is None or not f["reexec"]:
+            return ""  # nothing newer is installed: "restart" would be a dead end
         if mode == "reexec" and can_reexec(f):
             srv.reexec_pending = True
             return ""
@@ -164,7 +164,7 @@ def execute(srv) -> None:
         "protocol": srv.protocol,
         "client_info": srv.client_info,
         "agent": srv.agent,
-        "called_from": str(srv.called_from),
+        "called_from": str(srv.called_from) if srv.called_from else "",
     }
     env = dict(os.environ)
     env[HANDOFF_ENV] = json.dumps(state)
