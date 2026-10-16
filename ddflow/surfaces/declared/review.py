@@ -19,6 +19,7 @@ _REVIEW_EPILOG = (
     "                  a gate gets [review].max_rounds (default 2) rounds, full or delta, then triage\n"
     "  ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...\n"
     "                                            record what became of one finding\n"
+    "  ddflow review show <id> [--gate G]        list the recorded round's numbered findings\n"
     "--finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the\n"
     "`triage` verb: without it they are refused, never run as a review."
 )
@@ -252,17 +253,24 @@ COMMANDS: tuple[Command, ...] = (
         "refuted (probe = the run that shows it false) or confirmed (probe = the fix or "
         "test that answers it). The finding number is the #N the review printed. The "
         "gate stays failed (D-review-triage) until, after the round cap, the triage of "
-        "its last finding records it passed on refutation, flagged.",
+        "its last finding records it passed on refutation, flagged. Without finding, "
+        "verdict and probe it LISTS the recorded findings (#N, severity, digest, state).",
         kind="review.triage",
         prose=True,
-        call=lambda repo, a, agent: _api().review_triage(
-            repo,
-            a.get("id", "") or "",
-            gate=a.get("gate") or "",
-            finding=int(a.get("finding") or 0),
-            verdict=a.get("verdict", "") or "",
-            probe=a.get("probe", "") or "",
-            agent=agent,
+        call=lambda repo, a, agent: (
+            _api().review_triage(
+                repo,
+                a.get("id", "") or "",
+                gate=a.get("gate") or "",
+                finding=int(a.get("finding") or 0),
+                verdict=a.get("verdict", "") or "",
+                probe=a.get("probe", "") or "",
+                agent=agent,
+            )
+            if a.get("finding") or a.get("verdict") or a.get("probe")
+            else _api().review_show(
+                repo, a.get("id", "") or "", gate=a.get("gate") or "", agent=agent
+            )
         ),
         payload="text",
         params=(
@@ -271,17 +279,11 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "finding",
                 type="integer",
-                help="The finding's number: #N in the review's output -- of the RECORDED reviewer's findings, which the output's last lines name when several ran.",
-                required=True,
+                help="The finding's number (#N) in the recorded review.",
                 mcp_only=True,
             ),
-            Param("verdict", help="refuted or confirmed.", required=True, mcp_only=True),
-            Param(
-                "probe",
-                help="The evidence for the verdict. Required.",
-                required=True,
-                mcp_only=True,
-            ),
+            Param("verdict", help="refuted or confirmed.", mcp_only=True),
+            Param("probe", help="The evidence for the verdict.", mcp_only=True),
         ),
     ),
     Command(

@@ -165,6 +165,7 @@ from .reporting import (
 from .review import review as run_review
 from .review import reviewers_detect, reviewers_list
 from .review import triage as review_triage
+from .review_findings import show as review_show
 from .rules import (
     Rule,
     RuleDedupAnswer,
@@ -326,6 +327,7 @@ __all__ = [
     "replay",
     "research_add",
     "resolve",
+    "review_show",
     "review_triage",
     "reviewers_detect",
     "reviewers_list",
