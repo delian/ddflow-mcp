@@ -72,3 +72,16 @@ def test_reason_keeps_a_below_floor_named_row_out_of_the_cause():
     lines = reason([near, cited], 0.5).splitlines()
     assert "P-view" in lines[1] and lines[2].startswith("Also named") and "P-acp" in lines[3]
     assert "Also named" not in reason([near], 0.5)
+
+
+def test_the_ask_threshold_doc_agrees_with_what_a_named_id_does(repo):
+    """Bug B243613aae0: the knob doc claimed naming an id asks whatever the score."""
+    from ddflow.config_sections._docs import KNOB_DOCS
+
+    doc = KNOB_DOCS["dedupe.ask_threshold"]
+    low = A.phase_add(
+        repo, "P-low", title="Telemetry", body="Uses P-acp for plumbing, nothing else.", agent="a"
+    )
+    assert low.exit == 0, low  # a named id below the threshold does not ask
+    assert "naming an existing id, asks" not in doc
+    assert "never refuses" in doc
