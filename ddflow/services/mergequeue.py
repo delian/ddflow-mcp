@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import time
 from dataclasses import asdict, dataclass, field, fields
@@ -307,7 +308,7 @@ def board(repo: Path, *, window: int, default_s: int, now: float | None = None) 
             else:
                 left = each
             ahead += left
-            row["eta_s"] = round(ahead)
+            row["eta_s"] = max(1, math.ceil(ahead))  # unfinished work: at least a second
         out.append(row)
     return out
 

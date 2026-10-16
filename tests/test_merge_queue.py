@@ -343,7 +343,7 @@ def test_two_integrators_do_not_run_at_once(proj):
         text=True,
     )
     try:
-        for _ in range(200):
+        for _ in range(1200):  # up to a minute: a loaded box starts a process slowly
             if MQ.holder(proj):
                 break
             time.sleep(0.05)
