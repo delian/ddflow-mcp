@@ -114,6 +114,11 @@ def _wanted(repo: Path, cfg: Config) -> list[str]:
     return [] if cfg.pins.after_merge == "off" else pin_files(repo, cfg)
 
 
+def _driver_set(repo: Path) -> bool:
+    """Whether the driver's command is configured (any launcher: the line falls back by itself)."""
+    return "pins merge-driver" in G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out
+
+
 def _attr_line(repo: Path, f: str) -> str:
     pat = f.rstrip("/") + ("/**" if f.endswith("/") or (Path(repo) / f).is_dir() else "")
     return f'"{pat}" merge={DRIVER}' if " " in pat else f"{pat} merge={DRIVER}"
@@ -122,17 +127,26 @@ def _attr_line(repo: Path, f: str) -> str:
 def _unbound(repo: Path, files: list[str]) -> dict[str, str]:
     """The pin files git would NOT merge with the driver in this tree, with the merge attribute
     each has now: asked of git itself, whatever `.gitattributes`, `info/attributes` or a
-    worktree config say."""
-    probe = {
-        f: f.rstrip("/") + ("/x" if f.endswith("/") or (Path(repo) / f).is_dir() else "")
-        for f in files
-    }
-    got = G.run(repo, "check-attr", "merge", "--", *probe.values())
+    worktree config say. A directory is asked about every tracked file in it, and the
+    attribute named is a foreign driver's when one file has it."""
+    probes: dict[str, list[str]] = {}
+    for f in files:
+        isdir = f.endswith("/") or (Path(repo) / f).is_dir()
+        base = f.rstrip("/")
+        found = G.run(repo, "ls-files", "--", base, z=True).paths() if isdir else []
+        probes[f] = [*(found or []), base + "/x"] if isdir else [base]
+    every = [q for qs in probes.values() for q in qs]
+    got = G.run(repo, "check-attr", "merge", "--", *every)
     seen = {}
     for row in got.out.splitlines():
         head, _, val = row.rpartition(": ")
         seen[head.rpartition(": ")[0]] = val
-    return {f: seen.get(q, "unspecified") for f, q in probe.items() if seen.get(q) != DRIVER}
+    out = {}
+    for f, qs in probes.items():
+        bad = [seen.get(q, "unspecified") for q in qs if seen.get(q) != DRIVER]
+        if bad:
+            out[f] = next((v for v in bad if v not in ("unspecified", "text")), bad[0])
+    return out
 
 
 def ensure_driver(repo: Path, cfg: Config) -> list[str]:
@@ -147,7 +161,7 @@ def ensure_driver(repo: Path, cfg: Config) -> list[str]:
     if not files:
         return []
     acts = []
-    if not G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip():
+    if not _driver_set(repo):
         acts += _set_driver_config(repo)
     off = [f for f, now in _unbound(repo, files).items() if now in ("unspecified", "text")]
     path = G.run(repo, "rev-parse", "--path-format=absolute", "--git-path", "info/attributes")
@@ -169,8 +183,8 @@ def driver_gaps(repo: Path, cfg: Config) -> list[str]:
     if not files:
         return []
     gaps: list[str] = []
-    if not G.run(repo, "config", "--get", f"merge.{DRIVER}.driver").out.strip():
-        gaps.append(f"git config merge.{DRIVER}.driver is not set")
+    if not _driver_set(repo):
+        gaps.append(f"git config merge.{DRIVER}.driver is not set to a `pins merge-driver` command")
     off = _unbound(repo, files)
     if off:
         gaps.append(

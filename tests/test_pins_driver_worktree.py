@@ -106,6 +106,37 @@ def test_a_file_with_another_merge_driver_is_left_alone(tmp_path):
     assert not any("transcript.json" in g for g in gaps)  # given the driver, README.md was not
 
 
+def test_a_wrong_driver_command_is_a_gap_and_is_corrected(tmp_path):
+    repo, wt = _history(tmp_path)
+    _install(repo)
+    _git(repo, "config", "--local", "merge.pinsregen.driver", "/gone/bin/other %A")
+    assert any("not set" in g for g in PM.driver_gaps(wt, Config()))
+    assert PM.ensure_driver(wt, Config())
+    assert PM.driver_gaps(wt, Config()) == []
+
+
+def test_a_directory_pin_with_a_file_of_another_driver_is_left_alone(tmp_path):
+    repo = tmp_path / "r"
+    (repo / "docs" / "pins").mkdir(parents=True)
+    _git(repo, "init", "-q")
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "a"\nfiles = ["docs/pins/"]\ncheck = ["true"]\nregen = ["true"]\n'
+    )
+    (repo / "docs" / "pins" / "notes.md").write_text("x\n")
+    (repo / "docs" / "pins" / "other.md").write_text("x\n")
+    (repo / ".gitattributes").write_text("docs/pins/notes.md merge=union\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "x")
+    PM.ensure_driver(repo, Config())
+    assert any("(union)" in g for g in PM.driver_gaps(repo, Config()))
+    assert (
+        "docs/pins" not in (repo / ".git" / "info" / "attributes").read_text()
+        if (repo / ".git" / "info" / "attributes").exists()
+        else True
+    )
+
+
 def test_a_pin_file_with_a_space_in_its_name_is_recognised(tmp_path):
     repo = tmp_path / "r"
     repo.mkdir()
