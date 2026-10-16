@@ -116,6 +116,8 @@ def _wanted(repo: Path, cfg: Config) -> list[str]:
 
 #: Merge attributes that are no choice of a person's: unset, or git's own textual default.
 _SOFT = ("unspecified", "text")
+#: The name a file a directory pin might gain is asked about as (no tracked file has it).
+_NEW = "/.ddflow-new-file"
 
 
 def _driver_state(repo: Path) -> str:
@@ -140,7 +142,7 @@ def _off(repo: Path, files: list[str]) -> dict[str, dict[str, str]]:
         isdir = f.endswith("/") or (Path(repo) / f).is_dir()
         base = f.rstrip("/")
         found = G.run(repo, "ls-files", "--", base, z=True).paths() if isdir else []
-        probes[f] = [*(found or []), base + "/x"] if isdir else [base]
+        probes[f] = [*(found or []), base + _NEW] if isdir else [base]
     got = G.run(repo, "check-attr", "merge", "--", *[q for qs in probes.values() for q in qs])
     seen = {}
     for row in got.out.splitlines():
@@ -159,7 +161,7 @@ def _lines_for(repo: Path, f: str, bad: dict[str, str]) -> list[str]:
     such file alone."""
     if all(v in _SOFT for v in bad.values()):
         return [_attr_line(repo, f)]
-    return [_attr_line(repo, q) for q, v in bad.items() if v in _SOFT and q != f.rstrip("/") + "/x"]
+    return [_attr_line(repo, q) for q, v in bad.items() if v in _SOFT and q != f.rstrip("/") + _NEW]
 
 
 def ensure_driver(repo: Path, cfg: Config) -> list[str]:
@@ -218,7 +220,7 @@ def driver_notes(repo: Path, cfg: Config) -> list[str]:
         return []
     return [
         "pin files will conflict on a merge: " + "; ".join(gaps) + " -- `ddflow pins regenerate"
-        " --install` sets the driver up (a claim re-sets the git config)"
+        " --install` sets the driver up (a claim sets a missing git config; `--install` also replaces another command)"
     ]
 
 
