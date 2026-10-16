@@ -120,3 +120,23 @@ def test_lesson_extends_unions_the_globs(repo):
     out = A.lesson_add(repo, second, agent="a")
     assert out.exit == 0 and out.data["extended"] == "L-old", out
     assert state(repo).lessons["L-old"].globs == ["src/a.py", "src/b.py"]
+
+
+def test_a_scalar_globs_field_in_the_log_is_one_glob_not_characters(repo):
+    seed_decision(repo, "src/a.py")
+    EventLog(repo, "a").append("record.extended", "D-old", {"text": "t", "globs": "src/s.py"})
+    assert state(repo).decisions["D-old"].globs == ["src/a.py", "src/s.py"]
+
+
+def test_a_patternless_lesson_takes_no_globs(repo):
+    from ddflow.api.knowledge.lessons import LessonDraft as LDraft
+
+    run_cli(repo, "init")
+    assert A.lesson_add(repo, LDraft(id="L-old", title=FIRST, rule=FIRST), agent="a").exit == 0
+    second = LDraft(
+        id="L-new", title=SECOND, rule=SECOND, pattern="TODO", globs="src/b.py",
+        answer=DD.Answer("extends", "L-old"),
+    )  # fmt: skip
+    out = A.lesson_add(repo, second, agent="a")
+    assert out.exit == 0 and out.data["globs_added"] == []
+    assert state(repo).lessons["L-old"].globs == []
