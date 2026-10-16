@@ -18,6 +18,17 @@ def _span(s: float) -> str:
     return f"{s / 3600:.1f}h"
 
 
+def _failure_lines(r: dict) -> list[str]:
+    """What a parked entry keeps of its failed ci: the checks by name, the last lines, the log."""
+    lines = []
+    if r.get("failed"):
+        lines.append("        failed: " + ", ".join(r["failed"]))
+    lines += ["        | " + ln for ln in (r.get("tail") or "").splitlines()]
+    if r.get("log"):
+        lines.append(f"        full output: {r['log']}")
+    return lines
+
+
 def status_text(d: dict) -> str:
     rows = d["entries"]
     who = d.get("integrator")
@@ -34,6 +45,7 @@ def status_text(d: dict) -> str:
         eta = f"  lands in ~{_span(r['eta_s'])}" if r["position"] else ""
         why = f"  -- {r['reason']}" if r["reason"] else ""
         lines.append(f"  {where:>3} {r['item']}  {r['state']}{eta}{why}")
+        lines += _failure_lines(r)
     return "\n".join(lines)
 
 
@@ -43,6 +55,7 @@ def run_text(d: dict) -> str:
         sha = f" ({p['sha'][:8]})" if p["sha"] else ""
         why = f": {p['reason']}" if p["reason"] else ""
         lines.append(f"  {p['item']}  {p['state']}{sha}{why}")
+        lines += _failure_lines(p)
     lines.append(
         f"{d['merged']} merged, {d['parked']} parked, {d['left']} still waiting"
         + (" -- `ddflow complete` each merged item" if d["merged"] else "")
