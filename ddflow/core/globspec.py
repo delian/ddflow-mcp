@@ -51,6 +51,16 @@ def parse(raw: str | Iterable[str] | None) -> list[str]:
     return out
 
 
+def adjust(
+    current: Iterable[str], add: Iterable[str] | str | None, remove: Iterable[str] | str | None
+) -> list[str]:
+    """``current`` with the globs of ``add`` appended (no repeats) and those of ``remove``
+    taken out, each given as ``parse`` reads them: widening or narrowing a list without
+    repeating the rest of it."""
+    gone = set(parse(remove))
+    return [g for g in dict.fromkeys([*current, *parse(add)]) if g not in gone]
+
+
 def problem(globs: Iterable[str]) -> str:
     """Why ``globs`` cannot be what the caller meant, or "".
 

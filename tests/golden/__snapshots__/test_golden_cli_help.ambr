@@ -96,13 +96,20 @@
 # ---
 # name: test_help[ddflow brief]
   '''
-  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery]
+  usage: ddflow brief [-h] [--item ITEM] [--phase PHASE] [--check-recovery] [--for-agent FOR_AGENT] [--note NOTE] [target]
+  
+  positional arguments:
+    target                the item id (as --item; required with --for-agent)
   
   options:
-    -h, --help        show this help message and exit
+    -h, --help            show this help message and exit
     --item ITEM
     --phase PHASE
     --check-recovery
+    --for-agent FOR_AGENT
+                          render the standard launch brief of subagent NAME for the item (`--item`
+                          or the positional id)
+    --note NOTE           with --for-agent: the coordinator's note for this item
   
   '''
 # ---
@@ -151,25 +158,31 @@
 # ---
 # name: test_help[ddflow bug found]
   '''
-  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
+  usage: ddflow bug found [-h] [--id ID] --summary SUMMARY [--item ITEM] [--title TITLE] [--severity SEVERITY] [--scope SCOPE] [--globs GLOBS] [--no-task] [--repro-cmd REPRO_CMD] [--test TEST] [--repro-capture REPRO_CAPTURE] [--new | --extends ID | --duplicate-of ID | --related ID | --check]
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --id ID
     --summary SUMMARY
     --item ITEM
-    --title TITLE        a short headline for the bug
-    --severity SEVERITY  low | medium | high | critical (optional)
-    --scope SCOPE        project (default), or ddflow for a bug in ddflow itself
-    --globs GLOBS        the fix task's files (comma-separated); default: the item's own globs
-    --no-task            file no fix task: the bug is fixed in the commit that found it
-    --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- appended to ID while it is open and
-                         unclaimed, else filed as a new record linked to it
-    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
-    --related ID         answer it: a different record that is related to ID; linked both ways
-    --check              dry run: print the existing records this would be refused as a duplicate of
-                         and write nothing (exit 0 with candidates, 2 with none)
+    --title TITLE         a short headline for the bug
+    --severity SEVERITY   low | medium | high | critical (optional)
+    --scope SCOPE         project (default), or ddflow for a bug in ddflow itself
+    --globs GLOBS         the fix task's files (comma-separated); default: the item's own globs
+    --no-task             file no fix task: the bug is fixed in the commit that found it
+    --repro-cmd REPRO_CMD
+                          the command that shows the bug, kept in the repro bundle (never run)
+    --test TEST           a pytest id: run once, its output tail goes in the repro bundle
+    --repro-capture REPRO_CAPTURE
+                          off | basic | full: how much repro bundle to store (default [bugs]
+                          repro_capture)
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- appended to ID while it is open and
+                          unclaimed, else filed as a new record linked to it
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
   
   '''
 # ---
@@ -245,7 +258,7 @@
 # ---
 # name: test_help[ddflow ci]
   '''
-  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
+  usage: ddflow ci [-h] [--ref REF] [--base BASE] [--command COMMAND] [--full] [--stage STAGE] [--result {passed,failed}] [--report REPORT] [--sha SHA] [{run,status,record}]
   
   positional arguments:
     {run,status,record}   run: check the merge result; status (default): what would run, and whether
@@ -256,6 +269,7 @@
     --ref REF             run: the commit or item id (default: HEAD here)
     --base BASE           run: merge this branch in first (default [ci].base)
     --command COMMAND     run: use this instead of [ci].command
+    --full                run: the whole test suite, not only the tests the change reaches
     --stage STAGE         record: gate | merge | pre-push | schedule
     --result {passed,failed}
                           record: how it went
@@ -2292,7 +2306,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--needs NEEDS] [--tags TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -2305,9 +2319,16 @@
     --tags TAGS
     --line LINE
     --resources RESOURCES
-    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these; path
-                          globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to
-                          add more -- every value is kept
+    --globs GLOBS         REPLACES the item's globs (and a claimed item's lease) with these -- the
+                          whole list, not an addition (see --add-globs); path globs, comma-separated
+                          (a.py,src/**) or a JSON array; repeat the flag to add more -- every value
+                          is kept
+    --add-globs ADD_GLOBS
+                          ADD these comma-separated globs to the item's current ones (and a claimed
+                          item's lease); the rest are kept
+    --remove-globs REMOVE_GLOBS
+                          REMOVE these comma-separated globs from the item's current ones (and a
+                          claimed item's lease)
     --priority PRIORITY
     --queue               keep a refused --globs widening in the first-in-first-out line for its
                           files
