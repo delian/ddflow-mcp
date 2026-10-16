@@ -90,6 +90,7 @@
     "duplicate_of": ["str"],
     "extends": ["str"],
     "fix_task": ["str"],
+    "globs": ["list"],
     "item": ["str"],
     "key": ["str"],
     "related": ["str"],
