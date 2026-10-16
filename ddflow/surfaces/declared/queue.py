@@ -15,6 +15,14 @@ from ..tools._common import _answer, _api, _list_or_none
 from . import queue_cli as L
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 
+
+def _raw_globs(a: dict, key: str) -> list[str] | None:
+    """A globs argument as the api reads it (`globspec.parse`): None when absent, else the
+    values whole -- a list as given, a single string as one value."""
+    v = a.get(key)
+    return None if v is None else list(v) if isinstance(v, list) else [v]
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("init",),
@@ -324,13 +332,9 @@ COMMANDS: tuple[Command, ...] = (
                 needs=_list_or_none(a, "needs"),
                 # Raw, for the api's single read: split on commas here first, a JSON
                 # array (or a glob holding a comma inside one) was lost (roborev).
-                globs=(
-                    None
-                    if a.get("globs") is None
-                    else list(a["globs"])
-                    if isinstance(a["globs"], list)
-                    else [a["globs"]]
-                ),
+                globs=_raw_globs(a, "globs"),
+                add_globs=_raw_globs(a, "add_globs"),
+                remove_globs=_raw_globs(a, "remove_globs"),
                 tags=_list_or_none(a, "tags"),
                 priority=a.get("priority"),
                 line=a.get("line"),
@@ -359,8 +363,24 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "globs",
                 help="Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped.",
-                cli_help="REPLACES the item's globs (and a claimed item's lease) with these; "
-                + GLOBS_HELP,
+                cli_help="REPLACES the item's globs (and a claimed item's lease) with these -- the "
+                "whole list, not an addition (see --add-globs); " + GLOBS_HELP,
+                action=_Globs,
+            ),
+            Param(
+                "add_globs",
+                help="",
+                cli_help="ADD these comma-separated globs to the item's current ones (and a "
+                "claimed item's lease); the rest are kept",
+                cli_only=True,
+                action=_Globs,
+            ),
+            Param(
+                "remove_globs",
+                help="",
+                cli_help="REMOVE these comma-separated globs from the item's current ones (and "
+                "a claimed item's lease)",
+                cli_only=True,
                 action=_Globs,
             ),
             Param(
@@ -381,6 +401,10 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
             ),
         ),
+        flag_exempt={
+            "--add-globs": "CLI only: over MCP `globs` replaces the list (tools/list byte budget)",
+            "--remove-globs": "CLI only: over MCP `globs` replaces the list (tools/list byte budget)",
+        },
         tool_order=(
             "id",
             "globs",
