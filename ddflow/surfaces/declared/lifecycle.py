@@ -15,6 +15,7 @@ from ..argtypes import GLOBS_HELP, _Globs
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import MCP_WAIT_DEFAULT_S, MCP_WAIT_MAX_S, _api, _wait_timeout
 from . import lifecycle_cli as L
+from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
 #: `api.lifecycle.DEFAULT_CHECK_RECOVERY`, spelled here so declaring the commands does not
 #: import the api (tests/test_uc_surf_loop_brief.py holds the two together).
@@ -618,9 +619,10 @@ COMMANDS: tuple[Command, ...] = (
         path=("complete",),
         summary="finish an item (exit 3 = gates not satisfied)",
         tool="ddflow_complete",
-        description="Finish an item. Refuses (exit 3) when a required gate has not passed, when a "
-        "phase still has open tasks, or when no reviewer came from a different model "
-        "family than the author. Pass your own model as 'model'.",
+        flag_exempt=MUTATION_FLAG_EXEMPT,
+        description="Finish an item. Refuses (exit 3) when a required gate has not passed, a phase "
+        "has open tasks, or no reviewer came from a different model family than the "
+        "author. Pass your own 'model'.",
         call=lambda repo, a, agent, called_from=None, shell_cwd=None: _api().complete(
             repo,
             a["id"],
@@ -629,6 +631,7 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
             regression_test=a.get("regression_test", "") or "",
+            mutation=mutation_of(a),
             called_from=called_from,
             shell_cwd=shell_cwd,
             agent=agent,
@@ -668,7 +671,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Complete over unmet conditions; each is recorded as overridden, forever. Prefer `ddflow_gate_skip` with a reason: it drops one named step.",
+                help="Complete over unmet conditions, each recorded as overridden forever. Prefer `ddflow_gate_skip` with a reason.",
                 cli_help="",
             ),
             Param(
@@ -679,13 +682,14 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "regression_test",
-                help="For a fix task: the test that now guards its bug(s); closes them.",
+                help="Fix task: the test guarding its bug(s); closes them.",
                 cli_help="for a fix task: the test that now guards the bug(s) it fixes; closes them (as `bug fixed` would) and completes. Repeat for several.",
                 action="append",
                 default=[],
             ),
+            *MUTATION_PARAMS,
         ),
-        tool_order=("id", "sha", "model", "changelog", "regression_test", "force"),
+        tool_order=("id", "sha", "model", "changelog", "regression_test", *MUTATION_ORDER, "force"),
     ),
     Command(
         path=("abandon",),

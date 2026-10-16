@@ -18,6 +18,7 @@ from ...core import provenance as PV
 from ...core.events import OLDER_MARK, stamp_text
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
+from ..declared.mutation_params import mutation_of
 from ..declared.records import BUG_INVALID_FIELDS
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
@@ -355,6 +356,7 @@ def _bug_fixed(a, c: Ctx) -> int:
         changelog=getattr(a, "changelog", "") or "",
         verify_regression=not getattr(a, "skip_regression_verify", False),
         verify_reason=getattr(a, "verify_reason", "") or "",
+        mutation=mutation_of(vars(a)),
         agent=c.requested_agent,
     )
     # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print

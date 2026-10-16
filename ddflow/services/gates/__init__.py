@@ -118,6 +118,11 @@ from .outcomes import (  # noqa: F401
     triage_line,
     untriaged_note,
 )
+from .regression_testfix import (  # noqa: F401
+    VERIFIED_BY_MUTATION,
+    Tools,
+    verify_test_only_fix,
+)
 from .reviewers import (  # noqa: F401
     REVIEWER_GATES,
     family_for,
