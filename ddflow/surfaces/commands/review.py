@@ -214,7 +214,9 @@ def _reviewers_test(a, c: Ctx) -> int:
                 "coverage": res.coverage(),
                 "elapsed_s": round(res.elapsed_s, 1),
                 "reason": res.reason or "",
-                "findings": [{"severity": f.severity, "title": f.title[:90]} for f in res.findings[:3]],
+                "findings": [
+                    {"severity": f.severity, "title": f.title[:90]} for f in res.findings[:3]
+                ],
             }
         )
         worst = max(worst, 0 if res.status == SS.REVIEWED else res.status)
