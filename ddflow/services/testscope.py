@@ -26,11 +26,16 @@ class Scope:
     cut: list[Selected] = field(default_factory=list)  #: over `max_files`, not run
     cut_at: list[str] = field(default_factory=list)  #: hubs the import walk did not pass
     max_files: int = 0
+    #: "covered by ci ...": the item's ci gate already ran every test this gate would, on
+    #: this very tree, so there is nothing to run (scope is then "covered").
+    covered_by: str = ""
 
     def evidence(self) -> dict[str, object]:
         ev: dict[str, object] = {"scope": self.scope, "scope_why": self.why}
         if self.changed_lines is not None:
             ev["changed_lines"] = self.changed_lines
+        if self.covered_by:
+            ev["covered_by"] = self.covered_by
         if self.scope == "selected":
             ev["selected_tests"] = [{"path": t.path, "reason": t.reason} for t in self.tests]
             ev["max_files"] = self.max_files
@@ -101,6 +106,8 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     except W.GitError:
         return Scope("full", "no base to compare the change with")
     lines = changed_lines(tree, base)
+    if ran := (it.gates["ci"].evidence or {}).get("ci_scope"):
+        return _after_ci(cfg, st, it, command, tree, base, lines, ran)
     kind = _selectable(cfg, it, lines)
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
@@ -168,16 +175,7 @@ def _selected(
     picked = {s.path for s in sel.tests}
     # Only what pytest runs: a `scripts/check.sh` regression check is run by no command
     # built here, and listing it would claim a test that never ran.
-    regression = sorted(
-        {
-            t
-            for b in it.fixes
-            if (bug := st.bugs.get(b)) is not None
-            for t in bug.regression_tests
-            if t.endswith(".py") or "::" in t
-        }
-        - picked
-    )
+    regression = sorted(_regression(st, it) - picked)
     tests = [
         *sel.tests,
         *(Selected(t, "a regression test of the bug it fixes") for t in regression),
@@ -205,3 +203,55 @@ def _selected(
         cut_at=sel.cut_at,
         max_files=cfg.gates.unit_tests_max_files,
     )
+
+
+def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict) -> Scope:
+    """The scope when the item's ci gate passed HERE and recorded which tests it took
+    (D-test-economy-r2): nothing when ci's scope is this gate's or wider, else only the
+    difference -- the tests this gate's selection holds that ci did not run."""
+    sha = str(ran.get("sha", ""))[:12]
+    if ran.get("scope") == "full":
+        return Scope(
+            "covered", "the ci gate ran the whole suite on this tree", changed_lines=lines,
+            covered_by=f"ci full run {sha}",
+        )  # fmt: skip
+    sel = select(tree, base, **limits(cfg))
+    if sel is None or sel.full:
+        why = "git could not say what changed" if sel is None else sel.full
+        return Scope("full", f"{why}: only the whole suite keeps recall", changed_lines=lines)
+    done = set(ran.get("tests") or ())
+    if int(ran.get("selected") or 0) > len(done):  # a truncated list proves nothing about the rest
+        return Scope("full", "the ci gate's test list is cut: this gate runs its own selection")
+    rest = _not_run(sel.tests, _regression(st, it), done)
+    if not rest:
+        return Scope(
+            "covered", f"every test this change reaches ran in the ci gate ({len(done)} files)",
+            changed_lines=lines, covered_by=f"ci selected run {sha}",
+        )  # fmt: skip
+    cmd = run_command(command, [t.path for t in rest], tree)
+    if not cmd:
+        return Scope("full", "the unit_tests command does not run pytest", changed_lines=lines)
+    return Scope(
+        "selected", f"{len(rest)} test(s) the ci selected run {sha} did not take",
+        command=cmd, tests=rest, changed_lines=lines, cut=sel.cut, cut_at=sel.cut_at,
+        max_files=cfg.gates.unit_tests_max_files,
+    )  # fmt: skip
+
+
+def _regression(st, it) -> set[str]:
+    """What pytest runs of the regression tests of the bugs ``it`` fixes."""
+    return {
+        t
+        for b in it.fixes
+        if (bug := st.bugs.get(b)) is not None
+        for t in bug.regression_tests
+        if t.endswith(".py") or "::" in t
+    }
+
+
+def _not_run(tests: list[Selected], regression: set[str], done: set[str]) -> list[Selected]:
+    """The selected tests and regression tests that are not in ``done``."""
+    rest = [t for t in tests if t.path not in done]
+    seen = {t.path for t in rest}
+    extra = sorted(regression - done - seen)
+    return [*rest, *(Selected(t, "a regression test of the bug it fixes") for t in extra)]
