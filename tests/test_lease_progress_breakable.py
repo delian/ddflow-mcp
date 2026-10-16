@@ -36,7 +36,9 @@ def _cfg(idle: int = 900, hold: int = 3600):
 
 
 def _beats(n: int) -> list[Event]:
-    return [Event("lease.renewed", "T1", {"holder": A}, ts=clock_iso(NOW - i * 60)) for i in range(n)]
+    return [
+        Event("lease.renewed", "T1", {"holder": A}, ts=clock_iso(NOW - i * 60)) for i in range(n)
+    ]
 
 
 def clock_iso(t: float) -> str:
@@ -59,7 +61,9 @@ def test_a_heartbeat_only_holder_is_yield_requested_then_breakable():
 
 def test_a_progressing_holder_is_never_asked_or_broken():
     gate = Event("gate.passed", "T1", {"gate": "research"}, ts=clock_iso(NOW - 60))
-    assert LB.judge(_cfg(), [*_beats(50), gate], "T1", _lease(NOW - 9000), ["T2"], NOW, _none) is None
+    assert (
+        LB.judge(_cfg(), [*_beats(50), gate], "T1", _lease(NOW - 9000), ["T2"], NOW, _none) is None
+    )
     # a commit or a changed file in the worktree is progress too
     assert LB.judge(_cfg(), [], "T1", _lease(NOW - 9000), ["T2"], NOW, lambda _l: NOW - 30) is None
 
@@ -77,7 +81,10 @@ def _setup(repo, hold: int = 1) -> None:
     run_cli(repo, "config", "lease.hold_max_s", str(hold), agent=A)
     run_cli(repo, "config", "lease.idle_max_s", "1", agent=A)
     for item in ("T1", "T2"):
-        assert run_cli(repo, "task", "add", item, "--title", item, "--globs", "src/a.py", agent=A)[0] == 0
+        assert (
+            run_cli(repo, "task", "add", item, "--title", item, "--globs", "src/a.py", agent=A)[0]
+            == 0
+        )
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent=A)[0] == 0
 
 
@@ -105,7 +112,9 @@ def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
 def test_a_progressing_holder_keeps_its_lease_against_a_claim(repo):
     _setup(repo, hold=4)
     time.sleep(4.5)  # the lease is older than hold_max_s ...
-    EventLog(repo, A).append("gate.passed", "T1", {"gate": "research"})  # ... but real work just landed
+    EventLog(repo, A).append(
+        "gate.passed", "T1", {"gate": "research"}
+    )  # ... but real work just landed
     code, _out, err = run_cli(repo, "claim", "T2", "--no-worktree", agent=B)
     assert code == 3 and "held by" in err
     assert not _state(repo).items["T1"].lease.expired_at

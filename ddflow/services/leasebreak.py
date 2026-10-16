@@ -81,7 +81,7 @@ def progress_at(events: Iterable[Any], item_id: str, lease: Lease, activity: Act
     return best
 
 
-def judge(  # noqa: PLR0913 -- the lease, what contends it and the clock
+def judge(
     cfg,
     events: Iterable[Any],
     item_id: str,
@@ -144,7 +144,9 @@ def breaking_record(
     }
 
 
-def broken_notices(events: Iterable[Any], agent: str, st: State | None = None) -> list[dict[str, Any]]:
+def broken_notices(
+    events: Iterable[Any], agent: str, st: State | None = None
+) -> list[dict[str, Any]]:
     """The leases of ``agent`` that were broken and not claimed back since: item, by, for,
     idle_s, branch, worktree, newest first. For the holder's heartbeat and brief."""
     out: dict[str, dict[str, Any]] = {}
@@ -167,7 +169,9 @@ def broken_notices(events: Iterable[Any], agent: str, st: State | None = None) -
 
 
 def notice_text(n: dict[str, Any]) -> str:
-    where = f" Your branch {n['branch']} and worktree {n['worktree']} are kept." if n["branch"] else ""
+    where = (
+        f" Your branch {n['branch']} and worktree {n['worktree']} are kept." if n["branch"] else ""
+    )
     return (
         f"your lease on {n['item']} was BROKEN by {n['by']} for {n['for'] or 'a waiting claim'}: "
         f"no progress for {clock.fmt_age(n['idle_s'])} while it waited for your files.{where} "
@@ -179,7 +183,14 @@ def yield_text(v: Verdict) -> str:
     return (
         f"{', '.join(v.waiters)} waits for the files {v.item} holds and it has shown no "
         f"progress for {clock.fmt_age(v.idle_s)}: commit, narrow its globs, or `ddflow "
-        f"release {v.item}`. "
-        + ("It can now be broken (its work is kept)." if v.breakable else "")
+        f"release {v.item}`. " + ("It can now be broken (its work is kept)." if v.breakable else "")
     )
 
+
+def break_hint(cfg) -> str:
+    """Why `claim --break` was refused: the lease is not (yet) breakable."""
+    return (
+        f"\n\n--break applies only to a lease that is contended and has shown no progress "
+        f"for [lease].hold_max_s ({cfg.lease.hold_max_s}s; 0 = never); this one is not "
+        f"breakable now."
+    )

@@ -20,11 +20,11 @@ from ...services import flow as FS
 from ...services import leases as L
 from ...services import ports as PT
 from ...services import waiting as WG
-from ...services import waits as WT
 from ...services.guidance import inject as GI
 from ...services.leaseclock import localize
 from .._base import _load
 from ..reporting import new_reports
+from .claim_line import _join_line, _leave_line
 from .planning import alternatives_offer
 from .reservations import _reserved_for, _reserved_msg
 
@@ -190,7 +190,7 @@ class _Bound(NamedTuple):
     was_adopted: bool = False
 
 
-def claim(
+def claim(  # noqa: PLR0913 -- the door's own flags
     repo: Path,
     item: str,
     *,
@@ -242,8 +242,21 @@ def claim(
         if early.data.get("queued_behind"):  # in line behind a waiter: that is a wait too
             _record_waiting(log, cfg, item, want, queue)
         return early
-    broke: list[dict] = []
-    lz = _acquire(repo, log, cfg, st, item, want, prior, note, force, resources, queue, (break_lease, broke))
+    broke: list = []
+    lz = _acquire(
+        repo,
+        log,
+        cfg,
+        st,
+        item,
+        want,
+        prior,
+        note,
+        force,
+        resources,
+        queue,
+        {"break_lease": break_lease, "broke": broke},
+    )
     if isinstance(lz, O.Outcome):
         return lz
 
@@ -260,12 +273,10 @@ def claim(
     CHO.adopt_defaults(log, cfg, ["model", "integration"])
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
-    out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo)
-    out.data["broke"] = broke
-    return out
+    return _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
 
 
-def _claimed(cfg, st, item: str, lz, bound: _Bound, port, target_item, stands: Path) -> O.Outcome:
+def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, broke) -> O.Outcome:
     """The success answer of a claim: the lease, the tree and what governs the item."""
     wt = bound.wt
     guidance = GI.for_work(
@@ -299,11 +310,12 @@ def _claimed(cfg, st, item: str, lz, bound: _Bound, port, target_item, stands: P
         # What the lease now covers, so the caller need not read the log to learn it
         # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
         globs=list(lz.globs),
+        broke=broke,
     )
 
 
 def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
-    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False, breaking=(False, None)
+    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False, brk=None
 ):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
@@ -316,19 +328,12 @@ def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
             force=force,
             resources=csv_list(resources) or None,
             offer=alternatives_offer(repo, log, cfg),
-            break_lease=breaking[0],
-            broke=breaking[1],
+            **(brk or {}),
         )
     except L.LeaseError as exc:
         reason = str(exc)
         if exc.alternatives:
             reason += "\n\nYou could take instead: " + ", ".join(exc.alternatives)
-        if breaking[0]:
-            reason += (
-                f"\n\n--break applies only to a lease that is contended and has shown no "
-                f"progress for [lease].hold_max_s ({cfg.lease.hold_max_s}s; 0 = never); "
-                f"this one is not breakable now."
-            )
         own = prior if prior is not None and prior.holder == exc.holder else None
         lapsed = own is not None and not own.live(time.time(), cfg.lease.grace_s)
         if exc.holder and exc.holder != log.agent_id and not lapsed:
@@ -577,30 +582,3 @@ def _blocking_items(st, cfg, item: str, want, me: str) -> list[str]:
     now = time.time()
     clash = L.glob_clash(st, cfg, it, me, list(want if want is not None else it.globs), now)
     return [clash[0]] if clash else [item]
-
-
-def _join_line(repo: Path, cfg, agent: str, item: str, waiting_on: list[str], why: str) -> None:
-    """A refused claim is a place in line (`waits.queue`). Never fails the refusal."""
-
-    if cfg.lease.waiter_reservation_s <= 0:
-        return
-    try:
-        WT.queue(
-            repo,
-            agent,
-            item,
-            waiting_on=waiting_on,
-            reason=why,
-            window_s=cfg.lease.waiter_reservation_s,
-        )
-    except (OSError, ValueError, TypeError):
-        pass  # advisory: no queue place is better than no refusal
-
-
-def _leave_line(repo: Path, agent: str, item: str) -> None:
-    """The claim landed: the place in line it held is spent."""
-
-    try:
-        WT.clear(repo, agent, item)
-    except (OSError, ValueError, TypeError):
-        pass  # advisory
