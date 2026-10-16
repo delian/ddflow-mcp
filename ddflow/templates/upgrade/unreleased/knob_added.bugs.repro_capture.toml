@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "bugs.repro_capture"
+new = "\"full\""
+why = "How much of a reproduction bundle `bug found` stores with the bug: off, basic or full."
+impact = "additive"
