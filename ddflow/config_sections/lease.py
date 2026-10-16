@@ -69,6 +69,10 @@ class LeaseConfig:
         choices=("report", "auto"),
         strictest=("report", "never steals a lease, so a crashed agent's work survives"),
     )
+    resume_own: bool = knob(
+        True,
+        doc="The agent whose lease LAPSED resumes it with a plain `ddflow claim` (no --force), with its full glob set, when no live lease overlaps those files; files taken meanwhile are named and refuse the claim. Another agent's lapsed lease is still `recover`'s. Off: the holder needs --force too, as before.",
+    )
     #: Paths many items may hold at once (D-shared-globs).
     shared_globs: list[str] = knob(
         factory=list,

@@ -59,7 +59,7 @@ def heartbeat(
             # Only a LIVE lease. Speaking for an expired one would resurrect a claim its
             # holder abandoned, and lock out whoever `recover` sent to take it over.
             if not lease.live(time.time(), cfg.lease.grace_s):
-                hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again"
+                hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again as {lease.holder}"
             else:
                 renewed = L.renew(log, item, holder=lease.holder)
     if not renewed:
