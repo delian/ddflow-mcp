@@ -1407,6 +1407,11 @@ Finding numbers are per gate, so `--gate` is never defaulted on `review triage`:
 refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
 
+`ddflow review show <item> [--gate G]` lists the recorded round's numbered findings -- the `#N` that
+`review triage` takes -- each with severity, location, digest, triage state and probe; omit `--gate` for every
+gate that has a round (a gate whose findings blob is gone is named, not hidden). Over MCP,
+`ddflow_review_triage` without `finding`, `verdict` and `probe` lists them.
+
 **The review-round budget (`[review]`).** A shipped default in every project, with no
 configuration: a gate (`rubber_duck`, `critic`) gets **2 review rounds** per item, full and
 delta alike (decision D-gate-economy 2: a delta after the cap was the way around it), then a

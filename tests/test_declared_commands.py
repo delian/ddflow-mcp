@@ -298,7 +298,8 @@ def test_review_is_one_parser_for_the_run_and_for_triage():
     entry = TOOLS["ddflow_review"]
     assert entry["wants_called_from"] and entry["wants_progress"] and entry["text"] is True
     assert entry["properties"]["id"][2] is True  # required on the tool, not on the command line
-    assert TOOLS["ddflow_review_triage"]["properties"]["probe"][2] is True
+    # optional: without finding/verdict/probe the tool LISTS the recorded findings
+    assert TOOLS["ddflow_review_triage"]["properties"]["probe"][2] is False
 
 
 def test_verify_takes_an_optional_id_and_the_sweep_flags():
