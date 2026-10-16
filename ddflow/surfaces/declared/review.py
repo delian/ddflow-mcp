@@ -248,7 +248,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=(),
         tool="ddflow_review_triage",
-        prose_reason="one confirmation line, which is the whole answer",
+        prose_reason="a confirmation line, or the findings listing",
         description="Record your triage of ONE finding of an item's recorded `ddflow review`: it is "
         "refuted (probe = the run that shows it false) or confirmed (probe = the fix or "
         "test that answers it). The finding number is the #N the review printed. The "
