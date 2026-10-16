@@ -419,3 +419,39 @@ def test_the_knobs_are_overridable_per_run_and_by_config(proj):
     assert _landed(proj) == ["T1"]
     # bad numbers are refused, not clamped
     assert run_cli(proj, "queue", "run", "--max-batch", "0")[0] == 3
+
+
+def test_a_crashed_integrators_leftover_is_no_holder_and_does_not_block_the_line(proj):
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    here = proj / MQ.QUEUE_DIR
+    here.mkdir(parents=True, exist_ok=True)
+    (here / "integrator.json").write_text(json.dumps({"pid": gone.pid, "agent": "x", "since": 1}))
+    assert MQ.holder(proj) is None
+    _finish(proj, "T1")
+    assert _queue(proj, "T1")[0] == 0
+    assert run_cli(proj, "queue", "run", agent="integrator")[0] == 0
+    assert _landed(proj) == ["T1"]
+
+
+def test_a_status_check_never_makes_an_integrator_think_it_is_alone_no_more(proj):
+    import threading
+
+    stop = threading.Event()
+    reader = threading.Thread(target=lambda: [MQ.holder(proj) for _ in iter(stop.is_set, True)])
+    reader.start()
+    try:
+        for _ in range(300):
+            with MQ.integrator(proj, agent="x") as got:
+                assert got, "status took the lock out from under an integrator"
+    finally:
+        stop.set()
+        reader.join()
+
+
+def test_an_eta_window_of_zero_ignores_history_and_a_negative_timeout_is_refused(proj):
+    done = MQ.Entry(item="a", seq=1, state=MQ.MERGED, started_at=1.0, finished_at=11.0)
+    assert MQ.typical_s([done], window=1, default_s=60) == 10.0
+    assert MQ.typical_s([done], window=0, default_s=60) == 60.0
+    code, out, err = run_cli(proj, "queue", "run", "--timeout", "-5")
+    assert code == 3, out + err
