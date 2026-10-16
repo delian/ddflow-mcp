@@ -50,8 +50,27 @@ class LessonsConfig:
         doc="How many items may finish with NO lesson ever recorded before ddflow says so. One task finishing without a lesson is normal and reporting it would be noise; several in a row is the pattern the rule exists for. 0 disables the check.",
     )
     test_file_globs: list[str] = knob(
-        factory=lambda: ["tests/**", "test/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"],
-        doc="Path globs naming TEST files. When a bug's fix changes only files matching these, the regression check cannot expect the test to fail on a pre-fix tree (the fix is in the test file itself): it runs the base's own test files, or applies the mutation given with the close (verified-by-mutation).",
+        factory=lambda: [
+            "**/tests/**",
+            "**/test/**",
+            "**/spec/**",
+            "**/specs/**",
+            "**/__tests__/**",
+            "**/test_*.py",
+            "**/*_test.py",
+            "**/conftest.py",
+            "**/*.test.[jt]s",
+            "**/*.test.[jt]sx",
+            "**/*.test.[mc]js",
+            "**/*.spec.[jt]s",
+            "**/*.spec.[jt]sx",
+            "**/*.spec.[mc]js",
+            "**/*_test.go",
+            "**/*_spec.rb",
+            "**/*_test.rb",
+            "**/test_*.rb",
+        ],
+        doc="Path globs naming TEST files: the tests/, test/, spec/, specs/ and __tests__/ trees at any depth (Rust's tests/**/*.rs among them), and by name Python (test_*.py, conftest.py), JS/TS (*.test.ts, *.spec.js), Go (*_test.go) and Ruby (*_spec.rb). Deliberately not extension-agnostic: api.spec.yaml is a specification, not a test. When a bug's fix changes only files matching these, the regression check cannot expect the test to fail on a pre-fix tree (the fix is in the test file itself): it runs the base's own test files, or applies the mutation given with the close (verified-by-mutation).",
     )
     verify_output_lines: int = knob(
         12,
