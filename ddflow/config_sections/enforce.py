@@ -93,6 +93,13 @@ class EnforceConfig:
         choices=BLOCK_WARN_OFF,
         strictest=("block", "the hook refuses"),
     )
+    #: own | all
+    merge_commit_scope: str = knob(
+        "own",
+        doc="Which staged paths the pre-commit hook judges (the lease, generated-view and stale-doc checks) when the commit concludes a merge. 'own' (default) judges only what the branch itself changed: a path that arrives from the merged parent unchanged, such as main's files when main is merged into an item's branch, is never held against the branch, while a hand-resolved conflict in a file outside the lease is still refused. 'all' judges every path the merge stages, as before. A merge that is exactly git's automatic merge is exempt from the lease check either way.",
+        choices=("own", "all"),
+        strictest=("all", "every path the merge stages is judged"),
+    )
     #: block | warn | off
     environment_commits: str = knob(
         "block",

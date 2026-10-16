@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "enforce.merge_commit_scope"
+new = '"own"'
+why = "A merge commit is checked only against the paths the branch changed, not the ones that arrive from the merged parent; 'all' restores judging every staged path."
+impact = "additive"

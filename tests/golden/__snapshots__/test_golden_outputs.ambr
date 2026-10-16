@@ -1255,6 +1255,19 @@
           refuses); `config --set`, `ddflow_configure` and the environment refuse it,
           and so does loading ddflow's own source tree, where the file and the code
           are one commit.
+      enforce.merge_commit_scope = 'own'   [default]
+          Which staged paths the pre-commit hook judges (the lease, generated-view and
+          stale-doc checks) when the commit concludes a merge. 'own' (default) judges
+          only what the branch itself changed: a path that arrives from the merged
+          parent unchanged, such as main's files when main is merged into an item's
+          branch, is never held against the branch, while a hand-resolved conflict in
+          a file outside the lease is still refused. 'all' judges every path the merge
+          stages, as before. A merge that is exactly git's automatic merge is exempt
+          from the lease check either way. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'all', the strictest
+          (every path the merge stages is judged); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
       enforce.environment_commits = 'block'   [default]
           What the pre-commit hook does with a commit made directly on a branch listed
           in [flow].environments (GitLab flow's upstream-first): 'block' (default)
