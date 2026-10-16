@@ -56,7 +56,7 @@ class DedupeConfig:
     )
     ask_threshold: float = knob(
         0.55,
-        doc="Cosine similarity (0-1) at which an add must be answered before it proceeds (under on_match = 'ask'). 0.55 from the research: on ddflow's labelled records about half of real duplicates score above it and over three quarters of what does is a duplicate or related record. Identical text, or text naming an existing id, asks whatever the score.",
+        doc="Cosine similarity (0-1) at which an add must be answered before it proceeds (under on_match = 'ask'). 0.55 from the research: on ddflow's labelled records about half of real duplicates score above it and over three quarters of what does is a duplicate or related record. Identical text asks whatever the score; naming an existing id only lists that record, it never refuses.",
         check=_unit_interval,
     )
     max_candidates: int = knob(
