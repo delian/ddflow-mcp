@@ -119,11 +119,13 @@ def test_omitted_gate_with_no_findings_anywhere_is_refused_without_naming_a_defa
     assert out.exit == FAIL and "any gate" in out.reason and "critic" not in out.reason
 
 
-def test_review_outcome_does_not_depend_on_git_activity_outside_the_repo(repo, tmp_path, monkeypatch):
+def test_review_outcome_does_not_depend_on_git_activity_outside_the_repo(
+    repo, tmp_path, monkeypatch
+):
     """B77b32b1bdb: forces the path the flake took. A checkout other than the test repo
     moves while the reviewer runs (a sibling lane's commit or stash); the review must
     still be `failed` (it found something), not `unavailable`."""
-    import ddflow.services.review as review
+    from ddflow.services import review
 
     ticks = iter(range(1_000_000))
     real = review.git_state
