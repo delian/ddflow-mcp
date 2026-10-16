@@ -126,25 +126,29 @@ def _reviewers_detect(a, c: Ctx) -> int:
     )
     if out.exit in (NOTHING, FAIL, REFUSED):
         print(out.reason, file=sys.stderr)
+        c.out(out.reason, {"refusal": {"reason": out.reason, "exit": out.exit}, "text": ""})
         return out.exit
-    print(out.data["text"])
+    c.out(out.data["text"], {"text": out.data["text"]})
     return OK
 
 
 def _reviewers_list(a, c: Ctx) -> int:
     out = A.reviewers_list(c.repo, agent=c.requested_agent)
     if out.exit == NOTHING:
-        print(out.reason)
+        c.out(out.reason, {"reviewers": [], "message": out.reason})
         return NOTHING
-    print(out.data["text"])
+    c.out(out.data["text"], {"text": out.data["text"]})
     return OK
 
 
-def _reviewers_presets(_a, _c: Ctx) -> int:
-    for name, spec in sorted(SS.reviewer_presets().items()):
-        where = spec.get("base_url") or spec.get("command", "")
-        print(f"  {name:<12} {spec['kind']:<9} {where}")
-    print("\nAdd one with:  ddflow reviewers add --preset <name> [--model M]")
+def _reviewers_presets(_a, c: Ctx) -> int:
+    rows = [
+        (name, spec["kind"], spec.get("base_url") or spec.get("command", ""))
+        for name, spec in sorted(SS.reviewer_presets().items())
+    ]
+    hint = "Add one with:  ddflow reviewers add --preset <name> [--model M]"
+    text = "\n".join(f"  {n:<12} {k:<9} {w}" for n, k, w in rows) + f"\n\n{hint}"
+    c.out(text, {"hint": hint, "presets": [{"name": n, "kind": k, "where": w} for n, k, w in rows]})
     return OK
 
 
@@ -183,9 +187,13 @@ def _reviewers_test(a, c: Ctx) -> int:
     """
     targets = SS.reviewers_named(c.repo, a.name)
     if not targets:
-        print(f"no reviewer named {a.name!r}; `ddflow reviewers list`", file=sys.stderr)
+        msg = f"no reviewer named {a.name!r}; `ddflow reviewers list`"
+        print(msg, file=sys.stderr)
+        c.out(msg, {"refusal": {"reason": msg, "exit": FAIL}, "reviewers": []})
         return FAIL
     worst = OK
+    lines: list[str] = []
+    rows: list[dict] = []
     for r in targets:
         res = SS.probe_reviewer(
             r,
@@ -194,13 +202,25 @@ def _reviewers_test(a, c: Ctx) -> int:
             "+    return sum(items) / len(items) if items else 0\n",
             intent="guard the empty-list case in the mean helper",
         )
-        print(
+        lines.append(
             f"  {r.name}: {res.label} ({res.coverage()}, {res.elapsed_s:.1f}s)"
             + (f" — {res.reason}" if res.reason else "")
         )
-        for f in res.findings[:3]:
-            print(f"      [{f.severity}] {f.title[:90]}")
+        lines += [f"      [{f.severity}] {f.title[:90]}" for f in res.findings[:3]]
+        rows.append(
+            {
+                "name": r.name,
+                "label": res.label,
+                "coverage": res.coverage(),
+                "elapsed_s": round(res.elapsed_s, 1),
+                "reason": res.reason or "",
+                "findings": [
+                    {"severity": f.severity, "title": f.title[:90]} for f in res.findings[:3]
+                ],
+            }
+        )
         worst = max(worst, 0 if res.status == SS.REVIEWED else res.status)
+    c.out("\n".join(lines), {"reviewers": rows})
     return worst
 
 
