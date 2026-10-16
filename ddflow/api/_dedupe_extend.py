@@ -22,13 +22,19 @@ def _table(st, kind: str):
     }.get(kind)
 
 
-def _new_globs(st, target: str, kind: str, globs: list[str]) -> list[str]:
-    """The ``globs`` the extended record does not carry yet, in the order given. A lesson
-    takes them only when it already declares a pattern: its globs scope that inventory."""
+def _takes_globs(st, target: str, kind: str) -> bool:
+    """May the extended record carry globs? A lesson only when it already declares a
+    pattern: its globs scope that inventory."""
     table = _table(st, kind)
     rec = table.get(target) if table is not None else None
-    if rec is None or (kind == "lesson" and not rec.pattern):
+    return rec is not None and not (kind == "lesson" and not rec.pattern)
+
+
+def _new_globs(st, target: str, kind: str, globs: list[str]) -> list[str]:
+    """The ``globs`` the extended record does not carry yet, in the order given."""
+    if not _takes_globs(st, target, kind):
         return []
+    rec = _table(st, kind)[target]
     have = set(rec.globs or [])
     return [g for g in dict.fromkeys(globs) if g not in have]
 
@@ -45,6 +51,8 @@ def extend(
     ex = chk.extension
     assert ex is not None
     added = _new_globs(st, ex["target"], ex["kind"], globs) if globs and st is not None else []
+    # Said, not dropped: globs this kind of record cannot carry (a bug, a patternless lesson).
+    ignored = [] if not globs or _takes_globs(st, ex["target"], ex["kind"]) else list(globs)
     log.append(
         "record.extended",
         ex["target"],
@@ -68,4 +76,5 @@ def extend(
         auto=ex["auto"],
         candidates=chk.shown,
         globs_added=added,
+        globs_ignored=ignored,
     )
