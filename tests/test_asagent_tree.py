@@ -148,6 +148,7 @@ def test_agent_x_claim_from_another_identitys_tree_makes_its_own(repo):
     assert "leased to sub-1" in out, out
     t1 = _item(repo, "T1")
     assert not t1.adopted, f"sub-1 adopted the parent's tree: {t1.worktree}"
+    assert t1.lease.holder == "sub-1", t1.lease  # the message says so
     assert "parent-tree" not in (t1.worktree or ""), t1.worktree
     assert t1.branch != "parent-work" and (t1.branch or "").endswith("T1"), t1.branch
 
