@@ -23,6 +23,9 @@ TEST_FILES = [
     "web/src/__tests__/app.js",
     "__tests__/app.js",
     "spec/helper.rb",
+    "packages/api/specs/spec_helper.rb",
+    "lib/test_engine.rb",
+    "web/src/app.test.mjs",
 ]
 SOURCE_FILES = [
     "src/main.rs",
@@ -31,6 +34,9 @@ SOURCE_FILES = [
     "ddflow/services/gates/runner.py",
     "docs/inspector.md",
     "lib/contest.py",
+    "api/openapi.spec.yaml",
+    "config/application.test.yml",
+    "docs/load_test.md",
 ]
 
 
