@@ -353,7 +353,7 @@
     'ddflow_ci': '''
       {
        "name": "ddflow_ci",
-       "description": "CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status).",
+       "description": "CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -372,6 +372,10 @@
          "command": {
           "type": "string",
           "description": "Override [ci].command (run)."
+         },
+         "full": {
+          "type": "boolean",
+          "description": "Whole suite (run)."
          },
          "as_agent": {
           "type": "string",
