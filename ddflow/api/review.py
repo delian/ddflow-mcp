@@ -39,6 +39,7 @@ from ..services.enforce import SELF_MANAGED
 from ..services.gates import measured as GR
 from ..services.guidance import inject as GI
 from ..views import human
+from . import review_finding_ref as RF
 from ._base import _load
 from .gate_guard import closed_item_refusal, wrong_tree_refusal
 from .gates import _lease_keeper, item_tree
@@ -262,15 +263,15 @@ def triage(
     item: str,
     *,
     gate: str = "",
-    finding: int = 0,
+    finding: int | str = 0,
     verdict: str = "",
     probe: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Record the author's triage of ONE finding of a gate's recorded `ddflow review`.
 
-    ``finding`` is the number `ddflow review` printed (#N): the finding's place in the
-    recorded review's per-chunk findings. ``verdict`` is ``refuted`` -- ``probe`` is the
+    ``finding`` is the number `ddflow review` printed (#N) -- the finding's place in the
+    recorded review's per-chunk findings -- or a unique digest prefix (6+ hex characters). ``verdict`` is ``refuted`` -- ``probe`` is the
     run that shows the finding false -- or ``confirmed`` -- ``probe`` is the fix or test
     that answers it. Appends a `review.triaged` event; the gate's outcome is untouched
     (decision D-review-triage: a review that reported findings stays `failed`, and that
@@ -324,10 +325,9 @@ def triage(
             f"{item}.{gate} has no `ddflow review` with numbered findings on record "
             f"(a hand-recorded gate, a clean review, or one from before triage)"
         )
-    if not 1 <= finding <= len(found):
-        return bad(
-            f"no finding #{finding}: {item}.{gate} has #1..#{len(found)}", findings=len(found)
-        )
+    finding, why = RF.resolve(finding, found, f"{item}.{gate}")
+    if not finding:
+        return bad(why, findings=len(found))
     f = found[finding - 1]
     log.append(
         "review.triaged",
