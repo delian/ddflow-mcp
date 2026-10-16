@@ -12,6 +12,7 @@ from ..commands.operations import cmd_cadence, cmd_pins, cmd_precommit
 from ..commands.setup import cmd_config, cmd_upgrade
 from ..declared.cadence import COMMANDS as COMMANDS_CADENCE
 from ..declared.export import BY_TOOL as EXPORT_BY_TOOL
+from ..declared.mergequeue import COMMANDS as COMMANDS_MERGEQUEUE
 from ..declared.setup import COMMANDS as SETUP_COMMANDS
 from ..registry import add_commands
 
@@ -145,6 +146,7 @@ def register(s: argparse._SubParsersAction) -> None:
     )
 
     add_commands(s, COMMANDS_CADENCE, handlers={("cadence",): cmd_cadence, ("pins",): cmd_pins})
+    add_commands(s, COMMANDS_MERGEQUEUE, executor=cliexec.handler)
 
     add_commands(
         s,

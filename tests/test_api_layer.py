@@ -325,6 +325,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_render": (["render", "--show", "board"], {"show": "board"}),
     "ddflow_gate_status": (["gate", "status", "T1"], {"id": "T1"}),
     "ddflow_gate_list": (["gate", "list"], {}),
+    "ddflow_queue": (["queue", "status"], {"action": "status"}),
     "ddflow_next": (["next"], {}),
     # timeout 0: the question without the sleep, so both surfaces answer the same moment.
     "ddflow_wait": (["wait", "--timeout", "0"], {"timeout": 0}),

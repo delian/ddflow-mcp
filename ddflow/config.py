@@ -113,6 +113,9 @@ from .config_sections.mcp import (  # noqa: F401 -- re-exported, as before the m
 from .config_sections.memory import (
     MemoryConfig,
 )
+from .config_sections.merge_queue import (
+    MergeQueueConfig,
+)
 from .config_sections.metrics import (
     MetricsConfig,
 )
@@ -244,6 +247,7 @@ class Config:
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
+    merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     ci: CiConfig = field(default_factory=CiConfig)

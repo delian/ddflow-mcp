@@ -33,3 +33,9 @@ name = "readme-toc"
 files = ["README.md"]
 check = ["{python}", "-m", "pytest", "tests/test_readme_toc.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "ddflow.views.readme_toc", "README.md"]
+
+[[pin]]
+name = "readme-tool-table"
+files = ["README.md"]
+check = ["{python}", "-m", "pytest", "tests/test_readme_tool_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
+regen = ["{python}", "-m", "ddflow.surfaces.tool_table", "README.md"]
