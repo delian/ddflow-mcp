@@ -73,3 +73,16 @@ def test_the_hint_reads_the_parsed_words_not_the_process_argv(monkeypatch, capsy
     with pytest.raises(SystemExit):
         build_parser().parse_args(["update", "T1", "--globs", "a.py", "b.py"])
     assert "--globs a.py,b.py" in capsys.readouterr().err
+
+
+def test_only_the_words_next_to_the_globs_value_join_the_hint(repo):
+    _task(repo)
+    code, _o, err = run_cli(repo, "update", "T1", "--globs", "a.py", "b.py", "--tags", "x", "y")
+    assert code != 0 and "--globs a.py,b.py)" in err and "b.py,y" not in err
+
+
+def test_a_one_shot_iterator_still_parses(monkeypatch):
+    from ddflow.surfaces.cli import build_parser
+
+    ns, extra = build_parser().parse_known_args(iter(["update", "T1", "--globs", "a.py"]))
+    assert ns.globs == ["a.py"] and extra == []

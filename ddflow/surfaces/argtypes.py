@@ -56,10 +56,15 @@ def glob_list_hint(message: str, argv: list[str]) -> str:
             value, first = tok.split("=", 1)[1], i + 1
         else:
             value, first = (argv[i + 1] if i + 1 < len(argv) else ""), i + 2
-        if argv[first : first + 1] == stray[:1] and not stray[0].startswith("-") and value:
+        run: list[str] = []
+        for k, word in enumerate(stray):
+            if argv[first + k : first + k + 1] != [word] or word.startswith("-"):
+                break
+            run.append(word)
+        if run and value:
             return (
                 f"{message}\n{flag} takes ONE value, a comma-separated list "
-                f"({flag} {','.join([value, *stray])}), or the flag repeated; "
+                f"({flag} {','.join([value, *run])}), or the flag repeated; "
                 f"not space-separated words"
             )
     return message
