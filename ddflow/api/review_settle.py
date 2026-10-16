@@ -24,7 +24,7 @@ from .review import triage as _triage
 def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
     """`review.triage`, then the pass-on-refutation when this triage settled the round."""
     out = _triage(repo, item, **kw)
-    if out.exit != O.OK or out.data.get("passed_on_refutation"):
+    if out.exit != O.OK:
         return out
     gate = out.data.get("gate", "")
     log, cfg, st = _load(repo, kw.get("agent", ""))
