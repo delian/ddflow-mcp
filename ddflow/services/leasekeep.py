@@ -75,13 +75,5 @@ def for_holder(log, cfg, st: Any) -> tuple[Callable[[], None] | None, float]:
     return tick, _tick_s(cfg)
 
 
-def tick_for(log, cfg, it) -> tuple[Callable[[], None] | None, float]:
-    """(a throttled tick renewing the caller's lease on ``it``, its interval); ``(None, 0)``."""
-    k = keeper(log, cfg, it)
-    if k is None:
-        return None, 0.0
-    return throttled(k, it.lease.renewed_at, cfg.lease.heartbeat_s, _tick_s(cfg)), _tick_s(cfg)
-
-
 def _tick_s(cfg) -> float:
     return float(max(1, cfg.lease.heartbeat_s))
