@@ -955,6 +955,26 @@
           hook hands it back after compaction. The hook gets no summary from Claude
           Code, so this digest is the record of what the session was doing. 0 turns it
           off.
+      session.agent_brief_max_chars = 9000   [default]
+          Ceiling, in characters, on the launch brief `ddflow brief --for-agent NAME
+          ITEM` renders for a subagent. Over it, the lessons and then the decisions
+          are cut (down to a pointer); the standard sections are only ever left out by
+          `agent_brief_off`. 0 means no ceiling.
+      session.agent_brief_off = []   [default]
+          Sections of the launch brief to leave out: identity, item, decisions,
+          lessons, start, tests, reviews, gates, finish, forbidden, filing, project,
+          report. Turning one off removes that standing rule from every launch brief:
+          only for a project whose own instruction file already says it.
+      session.agent_brief_decisions = 6   [default]
+          How many of the decisions that govern the item's files the launch brief
+          quotes (pinned ones first); `ddflow decision applicable ITEM` lists all.
+      session.agent_brief_lessons = 3   [default]
+          How many task-relevant lessons the launch brief carries.
+      session.agent_brief_extra = ''   [default]
+          Project text added to every launch brief as its `project` section: the
+          commands and rules that hold only here (how to run the full test suite, a
+          forbidden path). The standard text stays in one place; this is the project's
+          addition to it.
       schedule.parallel = 'fixed'   [file]
           'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts
           between `max_parallel_min` and `max_parallel_max`, starting at
@@ -2099,6 +2119,12 @@
           the workflow, the reporting duties and the companion tools it should use.
           This is the file to edit to change how the project works. `ddflow prompts
           eject mcp_instructions` writes an editable copy into .ddflow/prompts/.
+      prompts.agent_brief = ''   [default]
+          Path to the launch-brief template `ddflow brief --for-agent` renders for a
+          subagent: sections split by `<!-- section: NAME -->` lines. Variables:
+          agent, item, title, body, globs, needs, base, lease_s, heartbeat_s,
+          decisions_text, lessons_text, note, extra. `ddflow prompts eject
+          agent_brief` writes an editable copy.
       export.documents = []   [default]
           The documents `ddflow export --all` writes and keeps (roadmap, bugs, status,
           worklog, sessions, decisions, rules, changelog). EMPTY by default: nothing
