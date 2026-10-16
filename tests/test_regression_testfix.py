@@ -180,3 +180,37 @@ def test_a_name_that_only_appears_as_a_substring_in_the_base_is_not_a_pre_fix_fa
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_h.py::test_h")
     assert out.exit == REFUSED, out
     assert "not in the base's test files" in out.reason, out.reason
+
+
+def test_a_run_that_collected_no_test_is_not_a_failure_of_the_test(repo, monkeypatch):
+    from ddflow.services.gates import regression_testfix as RT
+
+    wt = _repo(repo, FLAKY_BASE, "test_h.py")
+    (wt / "tests" / "test_h.py").write_text(GUARDED)
+    _commit(wt, "guard")
+    monkeypatch.setattr(RT, "run_command_gate", lambda *a, **k: ("failed", {"exit": 5}))
+    restored = api.bug_fixed(repo, "B1", regression_test="tests/test_h.py::test_h")
+    assert restored.exit == REFUSED, restored
+    assert "not run (pytest exited 5" in restored.reason, restored.reason
+    mutated = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test="tests/test_h.py::test_h",
+        mutation={"file": "tests/test_h.py", "old": "def test_h():", "new": "# def test_h():"},
+    )
+    assert mutated.exit == REFUSED and "ran no test" in mutated.reason, mutated
+    assert not _fixed_events(repo)
+
+
+def test_the_mcp_mutation_is_one_json_parameter_read_like_the_flags():
+    from ddflow.surfaces.declared.mutation_params import mutation_of
+
+    want = {"file": "tests/t.py", "old": "A", "new": "B"}
+    assert mutation_of({"mutation": '{"file": "tests/t.py", "old": "A", "new": "B"}'}) == want
+    assert mutation_of({"mutation": want}) == want
+    assert (
+        mutation_of({"mutation_file": "tests/t.py", "mutation_old": "A", "mutation_new": "B"})
+        == want
+    )
+    assert mutation_of({}) is None
+    assert mutation_of({"mutation": "not json"})["old"] == "", "refused downstream"
