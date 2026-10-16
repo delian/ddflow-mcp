@@ -50,10 +50,11 @@ def settings(repo: Path, fallback_every_s: float = 60.0) -> tuple[str, float]:
     """`[mcp].on_upgrade` and `[mcp].stale_check_every_s`, read per call; an unknown policy or
     an unreadable config is notify at the caller's fallback interval."""
     try:
-        mcp = Config.load(repo).mcp
+        cfg = Config.load(repo)
     except Exception:
         return "notify", fallback_every_s
-    return (mcp.on_upgrade if mcp.on_upgrade in ON_UPGRADE else "notify"), mcp.stale_check_every_s
+    mode = cfg.mcp.on_upgrade if cfg.mcp.on_upgrade in ON_UPGRADE else "notify"
+    return mode, cfg.mcp.stale_check_every_s
 
 
 def policy(repo: Path) -> str:
