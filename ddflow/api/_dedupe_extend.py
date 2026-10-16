@@ -3,13 +3,10 @@ onto the existing record. Re-exported as ``_dedupe.extend``."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 from ..config import Config
 from ..core import outcome as O
-
-if TYPE_CHECKING:
-    from ._dedupe import Checked
 
 
 def _table(st, kind: str):
@@ -40,7 +37,7 @@ def _new_globs(st, target: str, kind: str, globs: list[str]) -> list[str]:
 
 
 def extend(
-    log, cfg: Config, chk: Checked, event_kind: str, *, st=None, globs: list[str] | None = None
+    log, cfg: Config, chk: Any, event_kind: str, *, st=None, globs: list[str] | None = None
 ) -> O.Outcome:
     """Append the text to the record it was answered onto. No new id is made; the
     outcome names the record that received it. The original text is never touched.
