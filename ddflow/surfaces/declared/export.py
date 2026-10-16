@@ -37,6 +37,24 @@ def _bisect_text(out, a) -> str:
     return "\n".join(lines)
 
 
+_CUT_SHOWN = 8
+
+
+def _bound_notes(d: dict) -> list[str]:
+    """What bounded the selection: the tests cut at the budget, the hubs the import walk did
+    not pass, and a change that is only safe as the whole suite."""
+    notes: list[str] = []
+    if cut := d.get("cut"):
+        names = ", ".join(t["path"] for t in cut[:_CUT_SHOWN])
+        more = ", ..." if len(cut) > _CUT_SHOWN else ""
+        notes.append(f"  ({len(cut)} farther test file(s) cut at the budget: {names}{more})")
+    if d.get("cut_at_hubs"):
+        notes.append(f"  (import walk not continued through hub(s): {', '.join(d['cut_at_hubs'])})")
+    if d.get("full_reason"):
+        notes.append(f"  WHOLE SUITE: {d['full_reason']}")
+    return notes
+
+
 def _tests_text(out, a) -> str:
     """`tests`: what the change reaches, the command to run it, and the unit_tests gate's mode."""
     d = out.data
@@ -49,6 +67,7 @@ def _tests_text(out, a) -> str:
             f"{len(d['tests'])} test file(s) reach {len(d['changed'])} changed file(s) since {d['base']}:"
         ]
         lines += [f"  {t['path']}  -- {t['reason']}" for t in d["tests"]]
+        lines += _bound_notes(d)
         if d["command"]:
             lines.append(f"\nRun them now, in parallel:\n  {d['command']}")
     g = d.get("unit_tests_gate") or {}
