@@ -120,7 +120,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "target",
                 help="",
-                cli_help="with --for-agent: the item id",
+                cli_help="the item id (as --item; required with --for-agent)",
                 positional=True,
                 nargs="?",
                 default="",

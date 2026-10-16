@@ -106,7 +106,9 @@ def _sections(tmpl, f: Facts, off: set[str], n_dec: int, n_les: int) -> dict[str
 
 
 def render(tmpl, f: Facts, *, off: set[str] | tuple[str, ...] = (), max_chars: int = 0) -> dict:
-    """The brief: ``{"text", "sections", "cut"}``. ``max_chars`` 0 is no ceiling.
+    """The brief: ``{"text", "sections", "decisions_shown", "lessons_shown", "over"}``.
+
+    ``max_chars`` 0 is no ceiling.
 
     Over the ceiling the last lesson goes first, then the last decision; the rest is the
     standard text, which is never cut, so a ceiling below it is simply exceeded
