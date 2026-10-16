@@ -13,6 +13,7 @@ from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
+from ..ci_marker import parse_marker
 from ..flakes import failure_evidence
 from ..gateenv import child_env
 from .defs import DEFAULT_GATES, GateDef, command_provenance
@@ -217,6 +218,8 @@ def run_command_gate(
         "exit": p.code,
         "elapsed_s": round(p.elapsed_s, 1),
         **output_evidence(out),
+        # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
+        **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
         # WHICH tree this is evidence about. Without it "the tests passed" names
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe

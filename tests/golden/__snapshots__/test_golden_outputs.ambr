@@ -803,20 +803,23 @@
           `ddflow tests --item <id>`, plus the regression tests of the bugs it fixes
           -- and lists in the evidence which ran and why; 'full' runs the whole suite
           as every other item does. Selected only once the item's `ci` gate -- the
-          whole suite on the branch merged with the base -- has PASSED on the clean
-          commit its tree holds now (ci tests the committed HEAD) (a fix spent about
-          2.1 full-suite runs of 12 minutes each before this). A ci with no outcome,
-          skipped, unavailable, failed, run over uncommitted edits or on another
-          commit, a phase, a promotion, a larger task, and a selection that cannot be
-          made (git cannot say what changed, no test reaches the change, the command
-          does not run pytest) run the whole suite, and the evidence says why. Change
-          it for the project (`ddflow config gates.unit_tests_scope full`), for this
-          machine (add --local), per run (DDFLOW_GATES_UNIT_TESTS_SCOPE), or over MCP
-          with `ddflow_configure`. An unrecognised value in a config file is warned
-          about, reported by `doctor` and falls back to 'full', the strictest (runs
-          the whole suite at the gate, so nothing a selection misses can pass it);
-          `config --set`, `ddflow_configure` and the environment refuse it, and so
-          does loading ddflow's own source tree, where the file and the code are one
+          whole suite, or with `[ci].tests_scope = 'selected'` its own selection (this
+          gate then runs only the tests of ITS selection that ci did not take,
+          normally none; with a scoped ci any item, not only a bug fix or small task),
+          on the branch merged with the base -- has PASSED on the clean commit its
+          tree holds now (ci tests the committed HEAD) (a fix spent about 2.1 full-
+          suite runs of 12 minutes each before this). A ci with no outcome, skipped,
+          unavailable, failed, run over uncommitted edits or on another commit, a
+          phase, a promotion, a larger task, and a selection that cannot be made (git
+          cannot say what changed, no test reaches the change, the command does not
+          run pytest) run the whole suite, and the evidence says why. Change it for
+          the project (`ddflow config gates.unit_tests_scope full`), for this machine
+          (add --local), per run (DDFLOW_GATES_UNIT_TESTS_SCOPE), or over MCP with
+          `ddflow_configure`. An unrecognised value in a config file is warned about,
+          reported by `doctor` and falls back to 'full', the strictest (runs the whole
+          suite at the gate, so nothing a selection misses can pass it); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
           commit.
       gates.unit_tests_small_lines = 150   [default]
           A task with fewer changed lines than this (added plus removed since its
@@ -1265,8 +1268,11 @@
           tell' is a transient fact and caching it would make a blip stick for the
           whole window. 0 disables the cache.
       cadence.integration_tests_every_tasks = 5   [default]
-          Run the integration suite after this many completed tasks. Unit gates are
-          per-task and cannot see cross-task interaction regressions.
+          Run the FULL test suite (`ddflow ci run --full`) after this many completed
+          tasks. An item's ci and unit_tests gates run only the tests its change
+          reaches (D-test-economy-r2), so this pass, the merge queue's batch run and
+          the phase-end acceptance are where the whole suite runs and cross-task
+          interaction regressions show.
       cadence.architecture_review_every_phases = 2   [default]
           How often to run a whole-repo architecture/complexity review. Catches
           structural drift no per-diff reviewer can see.
@@ -2042,7 +2048,8 @@
           effect). Empty (default): the repository's default branch.
       ci.timeout_s = 3600   [default]
           Seconds the CI command may run before the gate records UNAVAILABLE. Default
-          3600: the pre-push set includes the whole test suite.
+          3600: sized for the whole test suite (`ci run --full`, the merge queue's
+          batch); an item's selected run is far shorter.
       ci.keep_env = []   [default]
           Variables the CI command keeps although `[gates].scrub_env` removes them
           from a gate's or the CI command's environment (the caller's identity
@@ -2059,6 +2066,21 @@
           merge); `config --set`, `ddflow_configure` and the environment refuse it,
           and so does loading ddflow's own source tree, where the file and the code
           are one commit.
+      ci.tests_scope = 'selected'   [default]
+          Which tests `ddflow ci run` runs for ONE item (D-test-economy-r2), selected
+          | full. selected (default) runs every non-test pre-push hook plus only the
+          tests the change reaches (`ddflow tests --item`), records the scope, the
+          selected count and the cut set in the gate evidence, and runs the whole
+          suite instead when the selector says so (a hub, conftest, pyproject, the
+          pre-commit config, an unknown file type, or no test reaches the change);
+          full runs the whole suite. `ddflow ci run --full`, the merge queue
+          integrator (one run per batch) and a run of a ref that is no item always run
+          the whole suite. Applies to the default pre-push command only: an explicit
+          [ci].command runs as written. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'full', the strictest
+          (every item's ci run takes the whole suite); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       prompts.review_system = ''   [default]
           Path to the reviewer's system prompt template, replacing the shipped one.
           `ddflow prompts eject` writes an editable copy into .ddflow/prompts/ to
