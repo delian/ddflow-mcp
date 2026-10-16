@@ -69,11 +69,26 @@ def _is_open(st, rec: dict) -> bool:
     return kind == "research"
 
 
+def _derived_from(st, x: str, y: str) -> bool:
+    """Is record ``x`` made from record ``y`` by construction? A fix task is filed FOR the
+    bug it fixes (``item.fixes``), and a generated summary lesson (tagged `summary`) cites
+    the lessons it summarises in ``seen_in``. Such a companion is the record's own
+    projection, never a possible duplicate of it."""
+    it = st.items.get(x)
+    if it is not None and y in (getattr(it, "fixes", None) or ()):
+        return True
+    ls = st.lessons.get(x)
+    return bool(ls is not None and "summary" in ls.tags and y in ls.seen_in)
+
+
 def _settled(st, a: str, b: str) -> bool:
     """Has this pair already been answered, in either direction? A recorded link
-    (extends / duplicate_of / related), a `distinct` dismissal, or one lesson superseding
-    the other. A pair answered once must never be offered again."""
+    (extends / duplicate_of / related), a `distinct` dismissal, one lesson superseding
+    the other, or one record being the other's generated companion (`_derived_from`).
+    A pair answered once must never be offered again."""
     for x, y in ((a, b), (b, a)):
+        if _derived_from(st, x, y):
+            return True
         lk = st.links.get(x)
         if lk is not None and (y in lk.linked() or y in lk.dismissed()):
             return True

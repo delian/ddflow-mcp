@@ -104,6 +104,37 @@ def test_a_pair_marked_distinct_never_returns(repo):
     assert "distinct" in out and "different defect" in out
 
 
+def _pair_ids(repo: Path, *args: str) -> set[frozenset[str]]:
+    code, out, err = run_cli(repo, "--json", "dupes", "--floor", "0", *args)
+    assert code in (0, 2), err
+    return {frozenset((r["a"], r["b"])) for r in json.loads(out)["pairs"]}
+
+
+def test_a_bug_is_not_paired_with_its_own_fix_task_but_real_duplicates_are(repo):
+    """B623baa4359: `bug found` files fix-<id> for the bug; the two are linked by
+    construction and must never be offered as a possible duplicate."""
+    run_cli(repo, "init")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", BUG_A)
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", BUG_B, "--no-task")
+    pairs = _pair_ids(repo)
+    assert frozenset(("B1", "fix-B1")) not in pairs, "a bug was paired with its own fix task"
+    assert frozenset(("B1", "B2")) in pairs, "a real duplicate was lost"
+
+
+def test_a_summary_lesson_is_not_paired_with_the_lesson_it_cites(repo):
+    """B3c0f7128e0: a generated LS-* summary record is its source lesson's companion."""
+    run_cli(repo, "init")
+    run_cli(repo, "lesson", "add", "--id", "L1", "--title", "Rebase first", "--rule", LESSON)
+    run_cli(
+        repo, "lesson", "add", "--id", "LS-rebase", "--title", "Rebase first",
+        "--rule", LESSON, "--tags", "summary", "--seen-in", "L1",
+    )  # fmt: skip
+    run_cli(repo, "lesson", "add", "--id", "L2", "--title", "Rebase first", "--rule", LESSON)
+    pairs = _pair_ids(repo)
+    assert frozenset(("L1", "LS-rebase")) not in pairs, "a summary was paired with its source"
+    assert frozenset(("L1", "L2")) in pairs, "a real duplicate was lost"
+
+
 def test_a_related_link_also_settles_the_pair(repo):
     _two_bugs(repo)
     assert run_cli(repo, "link", "B2", "--related", "B1")[0] == 0
