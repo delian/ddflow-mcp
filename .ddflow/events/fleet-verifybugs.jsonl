@@ -187,3 +187,4 @@
 {"agent":"fleet-verifybugs","data":{"at":1792167958.0389576,"holder":"fleet-verifybugs"},"id":"ebfbd030e101fe8cdc8eb4684","kind":"lease.renewed","lamport":70093,"schema":1,"subject":"fix-Ba6c8cdeda4","ts":"2026-10-16T16:25:58.150804Z"}
 {"agent":"fleet-verifybugs","data":{"at":1792168259.1793756,"holder":"fleet-verifybugs"},"id":"e1bfe9dd87b0d86c318fe4f02","kind":"lease.renewed","lamport":70101,"schema":1,"subject":"fix-Ba6c8cdeda4","ts":"2026-10-16T16:30:59.510242Z"}
 {"agent":"fleet-verifybugs","data":{"at":1792168560.372547,"holder":"fleet-verifybugs"},"id":"e95745e0ffb4fa035f7c20aa1","kind":"lease.renewed","lamport":70111,"schema":1,"subject":"fix-Ba6c8cdeda4","ts":"2026-10-16T16:36:00.514335Z"}
+{"agent":"fleet-verifybugs","data":{"gate":"ci"},"id":"eaef50207878ed586334da9c0","kind":"gate.started","lamport":70132,"schema":1,"subject":"fix-Ba6c8cdeda4","ts":"2026-10-16T16:40:21.764473Z"}
