@@ -53,19 +53,21 @@ def test_a_failed_fix_run_shows_the_verdict_the_exit_code_and_the_last_lines(rep
 
 def test_a_loaded_machine_is_named_and_the_rerun_advised(repo, monkeypatch):
     _case(repo)
-    monkeypatch.setattr(os, "getloadavg", lambda: (200.0, 150.0, 90.0))
+    monkeypatch.setattr(os, "getloadavg", lambda: (192.0, 150.0, 90.0))
     monkeypatch.setattr(os, "cpu_count", lambda: 48)
     _fix_run_returns(monkeypatch, "failed", {"exit": 1, "tail": "boom\n"})
     out = api.bug_fixed(repo, "B1", regression_test=TEST)
     assert out.exit == REFUSED
-    assert "under load (load average 200.0 on 48 CPUs)" in out.reason, out.reason
+    assert "under load (load average 192.0 on 48 CPUs)" in out.reason, out.reason
     assert "re-run when it is quieter" in out.reason
 
 
 def test_a_timeout_is_not_called_a_failure(repo, monkeypatch):
     _case(repo)
     _fix_run_returns(
-        monkeypatch, "unavailable", {"reason": "timed out after 600s", "elapsed_s": 600.0}
+        monkeypatch,
+        "unavailable",
+        {"reason": "timed out after 600s", "elapsed_s": 600.0, "timed_out": True},
     )
     out = api.bug_fixed(repo, "B1", regression_test=TEST)
     assert out.exit == OK and out.data["regression_verified"] == "could-not-run", out
@@ -81,7 +83,7 @@ def test_the_recorded_evidence_keeps_the_exit_the_output_and_the_load(repo, monk
     _fix_run_returns(
         monkeypatch,
         "unavailable",
-        {"reason": "timed out after 5s", "exit": 124, "tail": "a\nb\nc\n"},
+        {"reason": "timed out after 5s", "timed_out": True, "exit": 124, "tail": "a\nb\nc\n"},
     )
     out = api.bug_fixed(repo, "B1", regression_test=TEST)
     assert out.exit == OK, out
@@ -105,3 +107,40 @@ def test_describe_run_cuts_the_output_to_the_configured_lines(monkeypatch):
         "output_tail"
         not in RD.describe_run("failed", {"exit": 1, "tail": "a\n"}, cfg, where="x")[1]
     )
+
+
+def test_a_failure_whose_text_says_timed_out_is_not_called_a_timeout():
+    from ddflow.config import Config
+
+    why, _ = RD.describe_run(
+        "failed",
+        {"exit": 1, "reason": "the output matches fail_output /timed out/"},
+        Config.load(),
+        where="x",
+    )
+    assert "a timeout, not" not in why and "a timeout is not a verdict" not in why
+
+
+def test_a_prefix_run_that_could_not_run_keeps_its_evidence(repo, monkeypatch):
+    from test_bug_regression_verified import _fixed_events
+
+    _case(repo)
+    real = M.run_command_gate
+    calls = []
+
+    def fake(gdef, cwd, **kw):
+        calls.append(cwd)
+        if len(calls) == 2:
+            return "unavailable", {
+                "reason": "timed out after 5s",
+                "timed_out": True,
+                "exit": 124,
+                "tail": "x\n",
+            }
+        return real(gdef, cwd, **kw)
+
+    monkeypatch.setattr(M, "run_command_gate", fake)
+    out = api.bug_fixed(repo, "B1", regression_test=TEST)
+    assert out.exit == OK, out
+    ev = _fixed_events(repo)[0]["regression_verify"]
+    assert ev["pre_exit"] == 124 and ev["pre_output_tail"] == ["x"] and "pre_load_1m" in ev, ev

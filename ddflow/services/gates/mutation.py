@@ -350,9 +350,25 @@ def verify_regression_test(
         base_sha = W.rev(repo, base)
     except W.GitError as exc:
         return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": f"no base ref {base!r}: {exc}"}
+    return _prefix_check(repo, cfg, tree, base_sha, tests, defn, evidence, mutation, CI, TS)
 
+
+def _prefix_check(
+    repo: Path,
+    cfg: Config,
+    tree: Path,
+    base_sha: str,
+    tests: list[str],
+    defn: GateDef | None,
+    evidence: dict[str, Any],
+    mutation: dict[str, str] | None,
+    ci: Any,
+    ts: Any,
+) -> tuple[str, dict[str, Any]]:
+    """The second half of `verify_regression_test`: the named test on the pre-fix tree,
+    which it must FAIL (the fix passed already)."""
     paths = sorted({e.split("::", 1)[0] for e in tests})
-    with CI.merge_tree(repo, base_sha, "") as (ptree, why):
+    with ci.merge_tree(repo, base_sha, "") as (ptree, why):
         if ptree is None:
             return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": why}
         for rel in paths:
@@ -369,7 +385,7 @@ def verify_regression_test(
         # builder does must resolve against `ptree`, not `tree`, or the "pre-fix" run
         # would collect the fixed source and a genuinely failing-first test would read
         # as passing on the pre-fix tree (rubber_duck finding #2).
-        pre_command = TS.run_command(defn.command if defn else "", tests, ptree)
+        pre_command = ts.run_command(defn.command if defn else "", tests, ptree)
         if not pre_command:
             return REGRESSION_COULD_NOT_RUN, {
                 **evidence,
@@ -383,9 +399,11 @@ def verify_regression_test(
         pre_outcome, pre_ev = run_command_gate(pre_run, ptree)
     evidence["prefix_outcome"] = pre_outcome
     if pre_outcome == "unavailable":
+        pre_why, pre_extra = describe_run(pre_outcome, pre_ev, cfg, where="the pre-fix tree")
         return REGRESSION_COULD_NOT_RUN, {
             **evidence,
-            "reason": describe_run(pre_outcome, pre_ev, cfg, where="the pre-fix tree")[0],
+            "reason": pre_why,
+            **{f"pre_{k}": v for k, v in pre_extra.items()},
         }
     if pre_outcome == "passed":
         testfix = verify_test_only_fix(
@@ -396,7 +414,7 @@ def verify_regression_test(
             tests=tests,
             defn=defn,
             mutation=mutation,
-            tools=Tools(CI.merge_tree, TS.run_command),
+            tools=Tools(ci.merge_tree, ts.run_command),
         )
         if testfix is not None:
             return testfix[0], {**evidence, **testfix[1]}
