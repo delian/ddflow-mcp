@@ -13,20 +13,20 @@ import os
 from typing import Any
 
 from ...config import Config
+from .. import flakes as FL
 
 
 def load_snapshot(cfg: Config) -> dict[str, Any]:
-    """The 1-minute load average, the CPU count, and whether the machine is over
-    `lessons.verify_load_ratio` per CPU. `{}` where the platform has no load average."""
-    try:
-        load = os.getloadavg()[0]
-    except (OSError, AttributeError):
+    """The machine's load (`flakes.load_average`: 1-minute, per CPU), the CPU count, and
+    whether it is over `lessons.verify_load_ratio` per CPU. `{}` where there is none."""
+    per_cpu = FL.load_average()
+    if per_cpu is None:
         return {}
     cpus = os.cpu_count() or 1
     return {
-        "load_1m": round(load, 1),
+        "load_1m": round(per_cpu * cpus, 1),
         "cpus": cpus,
-        "under_load": load > cpus * cfg.lessons.verify_load_ratio,
+        "under_load": per_cpu > cfg.lessons.verify_load_ratio,
     }
 
 
@@ -53,7 +53,7 @@ def describe_run(
     if lines:
         extra["output_tail"] = lines
     why = str(ev.get("reason") or "")
-    timed_out = "timed out" in why
+    timed_out = bool(ev.get("timed_out"))
     if outcome == "unavailable":
         head = f"the named test produced no verdict on {where}: {why or 'it could not run'}"
         if timed_out:
