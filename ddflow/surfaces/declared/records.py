@@ -11,6 +11,7 @@ from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
 from ..tools._common import _answer, _api, _bug_reopen, _regression_tests, _reopening
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
+from .mutation_params import MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
 #: The body of `bug invalid`, on both surfaces (`ddflow bug invalid --json` and the tool).
 BUG_INVALID_FIELDS = (
@@ -214,6 +215,7 @@ COMMANDS: tuple[Command, ...] = (
             changelog=a.get("changelog", "") or "",
             verify_regression=not a.get("skip_regression_verify", False),
             verify_reason=a.get("verify_reason", "") or "",
+            mutation=mutation_of(a),
             agent=agent,
         ),
         payload=("id", "regression_verified", "lesson_captured", "lesson_capture"),
@@ -238,6 +240,7 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="why the pre-fix regression check is skipped (recorded)",
                 default="",
             ),
+            *MUTATION_PARAMS,
             Param(
                 "lesson",
                 help="Id of an EXISTING lesson this bug belongs to.",
@@ -276,6 +279,7 @@ COMMANDS: tuple[Command, ...] = (
             "changelog",
             "skip_regression_verify",
             "verify_reason",
+            *MUTATION_ORDER,
         ),
     ),
     Command(

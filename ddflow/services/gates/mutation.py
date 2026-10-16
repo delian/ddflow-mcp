@@ -13,6 +13,7 @@ from ...core.model import Item, State
 from ...infra import fsio
 from ...infra import worktree as W
 from .defs import GateDef, load_gates
+from .regression_testfix import verify_test_only_fix
 from .runner import run_command_gate
 
 
@@ -276,6 +277,7 @@ def verify_regression_test(
     tests: list[str],
     gates: dict[str, GateDef] | None = None,
     after: str = "",
+    mutation: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Run the named test on the PRE-FIX source (it must FAIL) and on the fixed tree (it
     must PASS). Returns (status, evidence).
@@ -295,6 +297,10 @@ def verify_regression_test(
     would not materialise -- is `could-not-run`, RECORDED as such and never a pass: the
     caller closes the bug with the gap on the record rather than locking it open on an
     environment that cannot test.
+
+    A fix confined to test files has no pre-fix tree the new test fails on (B Bc262739f62):
+    see `regression_testfix`. ``mutation`` ({file, old, new}) is the agent's edit that
+    disables such a fix; ddflow applies it and the test must then fail.
     """
     # Function-level, not top-level: ci and testselect import gates back.
     from .. import ci as CI
@@ -305,7 +311,7 @@ def verify_regression_test(
             if landed is None:
                 return REGRESSION_COULD_NOT_RUN, {"reason": why}
             status, ev = verify_regression_test(
-                repo, cfg, tree=landed, base=base, tests=tests, gates=gates
+                repo, cfg, tree=landed, base=base, tests=tests, gates=gates, mutation=mutation
             )
         # The scratch checkout is gone once this returns: record the commit it was.
         return status, {**ev, "tree": after}
@@ -378,6 +384,11 @@ def verify_regression_test(
             "reason": f"the pre-fix tree could not run the test: {pre_ev.get('reason', '')}",
         }
     if pre_outcome == "passed":
+        testfix = verify_test_only_fix(
+            repo, cfg, tree=tree, base_sha=base_sha, tests=tests, defn=defn, mutation=mutation
+        )
+        if testfix is not None:
+            return testfix[0], {**evidence, **testfix[1]}
         return REGRESSION_PASSES_ON_PREFIX, {
             **evidence,
             "reason": "the named test PASSES on the pre-fix tree (the base with the test "
