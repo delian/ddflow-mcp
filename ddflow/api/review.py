@@ -485,9 +485,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         if f.get("digest") not in have:
             kept.append(f)
             have[f.get("digest")] = len(kept)
-    gone = set(ev.get("superseded") or []) | set(prior.get("superseded") or [])
-    if gone:
-        ev["superseded"] = sorted(gone)
+    gone = SS.carry(ev, prior)
     ev["chunk_findings"] = kept
     ev["findings"] = len(kept)
     ev["titles"] = [f.get("title", "") for f in kept[:10]]
@@ -1772,11 +1770,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         repo, cfg, st, log, it, say, revs, locals_=sargs
     )
     supers, fix = sargs.get("supers") or set(), bool(sargs.get("fix"))
-    if fix:
-        say(f"fix round: the commits since the reviewed head rewrote or confirmed every prior {gate} finding; not counted against max_rounds.")
-        extra_evidence = {**(extra_evidence or {}), "fix_round": True, "delta_rounds": _delta_rounds(it, gate)}
-    if supers:
-        extra_evidence = {**(extra_evidence or {}), "superseded": sorted(supers)}
+    extra_evidence = SS.round_evidence(extra_evidence, supers, fix, _delta_rounds(it, gate), say)
     if why:
         return O.Outcome(
             kind="review",
