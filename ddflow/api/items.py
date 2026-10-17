@@ -118,8 +118,7 @@ def _adjust_list(it, edit: ItemEdit, fields: dict[str, Any], name: str) -> None:
     held = fields.get(name)
     if held is None:
         held = list(getattr(it, name))
-    gone = set(rem or [])
-    fields[name] = [n for n in dict.fromkeys([*held, *(add or [])]) if n not in gone]
+    fields[name] = GS.adjust(held, add, rem)
 
 
 def _nothing_to_change(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
