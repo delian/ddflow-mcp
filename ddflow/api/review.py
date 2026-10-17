@@ -1106,9 +1106,11 @@ def _with_previous_findings(
         return context
     mine = it.triage.get(gate, {})
     seen = (
-        "You are shown only the commits since the reviewed head, not the whole change: the "
-        "fix for a `confirmed` finding is in them or already in the code you do not see, so "
-        "do not report a finding as unfixed from this diff alone."
+        "You are shown only the commits since the reviewed head, not the whole change: an "
+        "earlier fix may sit in code you do not see. A `confirmed` finding is the author's "
+        "claim, not proof: report it if these commits show it still holds or contradict the "
+        "claim; where the delta alone cannot tell, say it cannot be verified from a delta "
+        "instead of calling it fixed or unfixed."
         if kind == "delta" and not fix
         else ""
     )
