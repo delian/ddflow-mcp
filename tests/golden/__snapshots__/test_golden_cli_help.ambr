@@ -1251,7 +1251,7 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
@@ -1259,6 +1259,8 @@
   options:
     -h, --help         show this help message and exit
     --message MESSAGE
+    --queue            enqueue the item in the merge queue instead of landing it (`ddflow queue
+                       add`)
     --keep
     --allow-dirty
     --allow-empty      land a branch with no commits ahead of its target (refused by default: it
@@ -1409,6 +1411,21 @@
   
   '''
 # ---
+# name: test_help[ddflow plan apply]
+  '''
+  usage: ddflow plan apply [-h] [--apply] [--hash HASH] [--plan-id PLAN_ID] source
+  
+  positional arguments:
+    source             the plan file, or - for stdin
+  
+  options:
+    -h, --help         show this help message and exit
+    --apply            File the plan (default: a dry run).
+    --hash HASH        The hash the dry run printed; a changed plan is refused.
+    --plan-id PLAN_ID  The plan's label (default: from the hash).
+  
+  '''
+# ---
 # name: test_help[ddflow plan check]
   '''
   usage: ddflow plan check [-h] source
@@ -1421,16 +1438,33 @@
   
   '''
 # ---
-# name: test_help[ddflow plan]
+# name: test_help[ddflow plan confirm]
   '''
-  usage: ddflow plan [-h] {check} ...
+  usage: ddflow plan confirm [-h] [--yes] [--reason REASON] plan_id
   
   positional arguments:
-    {check}
-      check     check a proposed plan before filing it (globs, cycles, collisions)
+    plan_id          The plan's label.
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help       show this help message and exit
+    --yes            The operator's consent.
+    --reason REASON  Why the operator accepts the plan.
+  
+  '''
+# ---
+# name: test_help[ddflow plan]
+  '''
+  usage: ddflow plan [-h] {check,apply,confirm} ...
+  
+  positional arguments:
+    {check,apply,confirm}
+      check               check a proposed plan before filing it (globs, cycles, collisions)
+      apply               file a checked plan as PROPOSED tasks, in one step (dry run unless
+                          --apply)
+      confirm             the operator confirms a plan: its proposed tasks become ready
+  
+  options:
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -2596,7 +2630,7 @@
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
                           record
       update              change an item's fields
-      plan                check a plan before filing it
+      plan                check, file (proposed) and confirm a plan
       next                what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)
       claim               lease an item + create its worktree (exit 3 = refused)
       heartbeat           renew a lease
@@ -2793,7 +2827,9 @@
     'ddflow phase list',
     'ddflow pins',
     'ddflow plan',
+    'ddflow plan apply',
     'ddflow plan check',
+    'ddflow plan confirm',
     'ddflow pr',
     'ddflow pr status',
     'ddflow pr sync',
