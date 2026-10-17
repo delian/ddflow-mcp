@@ -302,11 +302,11 @@ def test_restore_returns_the_chosen_version_and_history_says_where_from(repo):
     entries = LC.record_history(repo, NOTE, "n1").data["entries"]
     second = next(e for e in entries if e.get("version") == 2)
     R.record_remove(repo, NOTE, "n1", reason="again")
-    LC.record_restore(repo, NOTE, "n1", to=second["lamport"], reason="r")
+    LC.record_restore(repo, NOTE, "n1", to=f"lamport:{second['lamport']}", reason="r")
     assert R.record_show(repo, NOTE, "n1").data["fields"]["body"] == "two"
     R.record_remove(repo, NOTE, "n1", reason="again")
-    bad = LC.record_restore(repo, NOTE, "n1", to=999999, reason="r")
-    assert bad.exit == O.REFUSED and "no version" in bad.reason
+    bad = LC.record_restore(repo, NOTE, "n1", to="lamport:999999", reason="r")
+    assert bad.exit == O.REFUSED and "no such version" in bad.reason
 
 
 def test_restore_of_a_merged_record_leaves_the_absorber_and_of_a_split_says_parts_stay(two):
@@ -347,7 +347,7 @@ def test_every_lifecycle_verb_gives_the_same_body_on_the_cli_and_the_tool(two, c
     code, _ = cli("note", "split", "n1", "--part", PARTS[0], "--part", PARTS[1], "--reason", "r")
     assert code == O.OK
     code, out = cli("note", "restore", "n1", "--to", "1", "--reason", "r")
-    assert code == O.OK and "parts stay" in capsys.readouterr().out + "parts stay"
+    assert code == O.OK and "parts_stay" in out
     code, _ = cli("note", "supersede", "p1", "--by", "p2", "--reason", "r")
     assert code == O.OK
     got = via_tool(verb="supersede", id="p2", superseded_by="p1", reason="r")
@@ -439,3 +439,30 @@ def test_a_part_that_repeats_another_record_is_refused_naming_it_but_not_the_ori
         reason="r",
     )
     assert fine.exit == O.OK, fine.reason
+
+
+def test_a_version_number_is_never_read_as_a_lamport(repo):
+    _add(repo, "n1", "t", "v1")
+    R.record_edit(repo, NOTE, "n1", {"body": "v2"})
+    R.record_edit(repo, NOTE, "n1", {"body": "v3"})
+    entries = LC.record_history(repo, NOTE, "n1").data["entries"]
+    lamports = [e["lamport"] for e in entries]
+    # the trap: a version number that is also the lamport of ANOTHER entry
+    clash = next(lam for lam in lamports if lam <= len(lamports) and lamports.index(lam) + 1 != lam)
+    R.record_remove(repo, NOTE, "n1", reason="gone")
+    assert LC.record_restore(repo, NOTE, "n1", to=clash, reason="r").exit == O.OK
+    assert R.record_show(repo, NOTE, "n1").data["fields"]["body"] == f"v{clash}"
+    R.record_remove(repo, NOTE, "n1", reason="gone")
+    for bad in ("two", "x:3", "0", "99"):
+        assert LC.record_restore(repo, NOTE, "n1", to=bad, reason="r").exit == O.REFUSED
+
+
+def test_a_parts_file_that_is_not_text_is_a_refusal_and_a_reason_is_one_quoted_line(two, capsys):
+    (two / "blob.bin").write_bytes(b"\xff\xfe\x00\x01")
+    out = LC.record_split(two, NOTE, "n1", from_file="blob.bin", reason="r")
+    assert out.exit == O.FAIL and "cannot read parts" in out.reason
+    LC.record_supersede(two, NOTE, "n1", by="n2", reason="a\nNOTE: forged line")
+    a = _parser().parse_args(["--repo", str(two), "note", "history", "n1"])
+    assert a.fn(a, Ctx(a)) == O.OK
+    text = capsys.readouterr().out
+    assert 'reason="a\\nNOTE: forged line"' in text and "\nNOTE:" not in text
