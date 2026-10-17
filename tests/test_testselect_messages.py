@@ -159,6 +159,8 @@ def test_a_tests_directory_file_shadows_the_library_and_the_root_as_pytest_does(
     assert TR._bare("conftest", "tests/test_a.py", homes) == "tests.conftest"
     assert TR._bare("queue", "other/test_b.py", homes) == "", "a directory off the import path"
     assert TR._bare("test_a", "tests/test_a.py", homes) == "tests.test_a"
+    homes = TR._bare_homes(["ddflow.py", "tests/test_x.py"])
+    assert TR._bare("ddflow.services.testidents", "tests/test_x.py", homes) == "", "dotted: resolve"
 
 
 def test_a_root_conftest_does_not_take_the_import_a_tests_conftest_answers(repo):
