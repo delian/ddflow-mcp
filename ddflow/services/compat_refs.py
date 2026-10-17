@@ -347,16 +347,30 @@ def _read(path: Path) -> str | None:
         return None
 
 
-_YAML_KEY = re.compile(r"^\s*(?:-\s+)*([A-Za-z_][\w-]*)\s*:")
+_YAML_KEY = re.compile(r"^(\s*(?:-\s+)*)([A-Za-z_][\w-]*)\s*:")
 #: the pre-commit keys whose value is a command; every other key is prose or config
 _COMMAND_KEYS = frozenset({"entry", "args"})
 
 
-def _is_prose_key(line: str) -> bool:
-    """A pre-commit config line that opens a key other than the ones that run a command
-    (a hook's ``name:`` is a sentence that may begin ``ddflow lease ...``)."""
-    m = _YAML_KEY.match(line)
-    return m is not None and m.group(1) not in _COMMAND_KEYS
+def _prose_lines(lines: list[str]) -> set[int]:
+    """The 0-based lines of a pre-commit config that are not command lines: a key other than
+    ``entry``/``args`` (a hook's ``name:`` is a sentence that may begin ``ddflow lease ...``)
+    and the lines folded under it."""
+    out: set[int] = set()
+    under: int | None = None  # the column of the prose key whose value we are inside
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        m = _YAML_KEY.match(line)
+        if m:
+            under = len(m.group(1)) if m.group(2) not in _COMMAND_KEYS else None
+            if under is not None:
+                out.add(i)
+        elif under is not None and len(line) - len(line.lstrip()) > under:
+            out.add(i)
+        else:
+            under = None
+    return out
 
 
 def _text_findings(
@@ -367,17 +381,18 @@ def _text_findings(
     *,
     code: bool,
     whole: bool = False,
-    skip: Callable[[str], bool] | None = None,
+    skip: Callable[[list[str]], set[int]] | None = None,
 ) -> list[Finding]:
     lines = text.splitlines()
     owned = _owned_spans(text)
     fenced = False
     out: list[Finding] = []
+    skipped = skip(lines) if skip is not None else set()
     for i, line in enumerate(lines):
         if not code and _FENCE.match(line):
             fenced = not fenced
             continue
-        if skip is not None and skip(line):
+        if i in skipped:
             continue
         managed = whole or any(sp.first <= i < sp.last for sp in owned)
         for ref in refs_in(line, vocab, code=code or fenced):
@@ -462,7 +477,7 @@ def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
                 artifact,
                 vocab,
                 code=code,
-                skip=_is_prose_key if pattern == ".pre-commit-config.yaml" else None,
+                skip=_prose_lines if pattern == ".pre-commit-config.yaml" else None,
             )
     return sorted(out, key=lambda f: (f.path, f.line, f.ref.start))
 
