@@ -216,7 +216,8 @@ def test_regenerate_adds_a_new_recipes_attribute_without_the_hook(tmp_path):
 
     repo, _wt = _history(tmp_path, installed=True)
     (repo / ".ddflow" / "pins.toml").write_text(
-        RECIPES + '[[pin]]\nname = "extra"\nfiles = ["extra.json"]\ncheck = ["true"]\nregen = ["true"]\n'
+        RECIPES
+        + '[[pin]]\nname = "extra"\nfiles = ["extra.json"]\ncheck = ["true"]\nregen = ["true"]\n'
     )
     (repo / "extra.json").write_text("{}\n")
     hook = repo / ".git" / "hooks" / "post-merge"
