@@ -152,9 +152,11 @@ def run(sc: Scenario) -> None:
     code, _, err = _while_live(
         sc, lambda: sc.ddflow("claim", "P1.T1", agent="epsilon", expect=None)
     )
+    # Past the 2 s TTL (a slow start) the refusal words it as "ran out ... grace period":
+    # still a refusal by the live (grace) lease, which is what is asserted.
     sc.check(
         "another agent is refused while the lease is still live",
-        code == 3 and "is held by delta" in err,
+        code == 3 and ("is held by delta" in err or "delta's lease ran out" in err),
         err,
     )
     code = _while_live(sc, lambda: sc.ddflow("recover", expect=None))[0]
