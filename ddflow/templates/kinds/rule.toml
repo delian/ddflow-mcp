@@ -1,0 +1,48 @@
+# A project rule: a constraint agents are held to. A record kind declared as data.
+name = "rule"
+def_kind = "rule"
+summary = "a project rule: a constraint agents are held to"
+title = "title"
+text = ["content", "tags"]
+columns = ["title", "scope", "priority", "tags"]
+filters = ["tags", "scope"]
+aliases = ["rules"]
+verbs = ["list", "show", "add", "edit", "remove", "search", "revise"]
+declined_other = "offered when the rules move onto the record surface (B-rules-onto-record-surface)"
+# rules keep their own search source, and are not yet recalled or served as resources
+# (their output is pinned); B-rules-onto-record-surface turns these on
+recall = false
+resource = false
+
+[[field]]
+name = "title"
+help = "One line saying what the rule is."
+required = true
+
+[[field]]
+name = "content"
+help = "The rule's text."
+default = ""
+
+[[field]]
+name = "tags"
+type = "array"
+help = "Labels, to find the rule by."
+default = []
+
+[[field]]
+name = "scope"
+help = "Where it applies: project, phase, task or global."
+default = "project"
+
+[[field]]
+name = "priority"
+type = "integer"
+help = "Higher is read first."
+default = 50
+
+[[field]]
+name = "globs"
+type = "array"
+help = "Paths it applies to."
+default = []
