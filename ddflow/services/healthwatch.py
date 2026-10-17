@@ -59,10 +59,15 @@ def limits(cfg) -> H.Limits:
 def modes(cfg, override: str = "") -> dict[str, str]:
     """The mode of every finding kind: ``override`` for all, else `mode_<kind>` or `mode`."""
     h = cfg.health
-    out = {}
-    for k in H.KINDS:
-        own = getattr(h, f"mode_{k}")
-        out[k] = override or (h.mode if own == "inherit" else own)
+    own = {
+        H.IDLE: h.mode_idle,
+        H.STALLED: h.mode_stalled,
+        H.UNRESPONSIVE: h.mode_unresponsive,
+        H.LOCKED: h.mode_locked,
+        H.CRASHED: h.mode_crashed,
+        H.RUNAWAY: h.mode_runaway,
+    }
+    out = {k: override or (h.mode if own[k] == "inherit" else own[k]) for k in H.KINDS}
     return out
 
 
