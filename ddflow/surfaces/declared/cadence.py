@@ -10,6 +10,15 @@ from __future__ import annotations
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
 
+
+def _pins_regenerate():
+    """`api.pin_files.pins_regenerate`: `api` does not re-export it, so `_api().pins_regenerate`
+    raised AttributeError over MCP. Imported at call time like `_api` (flat import graph)."""
+    from ...api.pin_files import pins_regenerate
+
+    return pins_regenerate
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("cadence",),
@@ -44,7 +53,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         wants_progress=True,
         call=lambda repo, a, agent, on_progress=None: (
-            _api().pins_regenerate(
+            _pins_regenerate()(
                 repo,
                 on_progress=on_progress,
                 only=a.get("only") or "",
@@ -53,6 +62,7 @@ COMMANDS: tuple[Command, ...] = (
                 after_merge=bool(a.get("after_merge")),
                 verb=a["document"],
                 target=a.get("target") or "",
+                agent=agent,
             )
             if a["document"] in ("regenerate", "merge-driver")
             else _api().pins(
