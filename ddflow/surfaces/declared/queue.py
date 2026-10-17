@@ -330,6 +330,8 @@ COMMANDS: tuple[Command, ...] = (
                 title=a.get("title"),
                 body=a.get("body"),
                 needs=_list_or_none(a, "needs"),
+                add_needs=_list_or_none(a, "add_needs"),
+                remove_needs=_list_or_none(a, "remove_needs"),
                 # Raw, for the api's single read: split on commas here first, a JSON
                 # array (or a glob holding a comma inside one) was lost (roborev).
                 globs=_raw_globs(a, "globs"),
@@ -352,6 +354,18 @@ COMMANDS: tuple[Command, ...] = (
                 "needs",
                 help="Comma-separated ids it depends on. Pass an EMPTY string to clear them — that is how you break a dependency cycle the loop detector found.",
                 cli_help="",
+            ),
+            Param(
+                "add_needs",
+                help="",
+                cli_help="ADD these comma-separated ids to the item's needs; the rest are kept",
+                cli_only=True,
+            ),
+            Param(
+                "remove_needs",
+                help="",
+                cli_help="REMOVE these comma-separated ids from the item's needs",
+                cli_only=True,
             ),
             Param("tags", help="Comma-separated tags.", cli_help=""),
             Param("line", help="Move it to another release line.", cli_help=""),
@@ -404,6 +418,8 @@ COMMANDS: tuple[Command, ...] = (
         flag_exempt={
             "--add-globs": "CLI only: over MCP `globs` replaces the list (tools/list byte budget)",
             "--remove-globs": "CLI only: over MCP `globs` replaces the list (tools/list byte budget)",
+            "--add-needs": "CLI only: over MCP `needs` replaces the list (tools/list byte budget)",
+            "--remove-needs": "CLI only: over MCP `needs` replaces the list (tools/list byte budget)",
         },
         tool_order=(
             "id",

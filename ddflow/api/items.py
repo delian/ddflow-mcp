@@ -39,6 +39,9 @@ class ItemEdit:
     title: str | None = None
     body: str | None = None
     needs: list[str] | None = None
+    #: Ids added to / taken from the item's current needs (or from ``needs`` when given too).
+    add_needs: list[str] | None = None
+    remove_needs: list[str] | None = None
     globs: list[str] | None = None
     #: Globs added to / taken from the item's current ones (or from ``globs`` when that is
     #: given too), so widening a lease never repeats the whole list (`--add-globs`).
@@ -76,7 +79,7 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             return O.refused("item.updated", moved, id=item)
 
     fields = _edit_fields(edit)
-    unchanged = _adjust_globs(it, edit, fields)
+    unchanged = _adjust_needs(it, edit, fields) or _adjust_globs(it, edit, fields)
     if unchanged:
         return O.nothing("item.updated", unchanged, id=item)
     bad = GS.problem(fields.get("globs", []))
@@ -97,6 +100,25 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
 def _held_globs(it) -> list[str]:
     """The globs an item holds: its own and its lease's, without repeats."""
     return list(dict.fromkeys([*it.globs, *(it.lease.globs if it.lease else [])]))
+
+
+def _adjust_needs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
+    """Fold ``--add-needs`` / ``--remove-needs`` into ``fields["needs"]``: onto ``--needs``
+    when given, else onto the item's current ones. Returns why there is nothing to change
+    when that is all the edit was, else ""."""
+    if edit.add_needs is None and edit.remove_needs is None:
+        return ""
+    held = fields.get("needs")
+    if held is None:
+        held = list(it.needs)
+    gone = set(edit.remove_needs or [])
+    fields["needs"] = [n for n in dict.fromkeys([*held, *(edit.add_needs or [])]) if n not in gone]
+    if fields["needs"] == list(it.needs) and len(fields) == 1:
+        return (
+            f"nothing to change: --add-needs are all held already and --remove-needs name "
+            f"none of {', '.join(held) or '(no needs)'}."
+        )
+    return ""
 
 
 def _adjust_globs(it, edit: ItemEdit, fields: dict[str, Any]) -> str:
@@ -272,6 +294,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         fields=fields,
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, globs),
+        needs_dropped=[n for n in it.needs if n not in fields["needs"]] if "needs" in fields else [],
     )
 
 
