@@ -53,7 +53,7 @@ def test_two_doors_committing_at_once_do_not_commit_each_others_stage(repo):
     _git(repo, "commit", "-qm", "adopt", "--no-verify")
     hook = repo / ".git" / "hooks" / "pre-commit"
     started = repo / "hook-started"
-    hook.write_text(f"#!/bin/sh\ntouch {started}\nsleep 1\n")
+    hook.write_text(f"#!/bin/sh\ntouch {str(started)!r}\nsleep 1\n")
     hook.chmod(0o755)
     outs: dict[str, object] = {}
 
