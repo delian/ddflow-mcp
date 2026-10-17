@@ -35,6 +35,7 @@ a `RecordKind`.
 from __future__ import annotations
 
 import string
+import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -288,7 +289,7 @@ def forget(name: str) -> None:
 from .record_kind_data import load_packaged  # noqa: E402  (needs RecordKind above)
 
 #: The rule kind is data: ``ddflow/templates/kinds/rule.toml``.
-RULE = load_packaged("rule")
+RULE = load_packaged("rule", sys.modules[__name__])
 
 
 # -- shared helpers ------------------------------------------------------------------

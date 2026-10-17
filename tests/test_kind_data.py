@@ -133,3 +133,16 @@ def test_either_module_imports_first(first):
 
     done = subprocess.run([sys.executable, "-c", f"import {first}"], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
+
+
+def test_a_failed_descriptor_leaves_no_def_kind():
+    bad = MINIMAL.replace('filters = ["colour"]', 'filters = ["nope"]').replace("gizmo", "widget")
+    with pytest.raises(ValueError, match="no such field"):
+        KDA.parse_kind(bad)
+    assert "widget" not in D.DEF_KINDS
+
+
+def test_kind_from_data_refuses_code_keys():
+    desc = KD.parse(MINIMAL)
+    with pytest.raises(KD.KindDataError, match="ops is code"):
+        KDA.kind_from_data({**desc, "ops": {}})

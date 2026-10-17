@@ -41,7 +41,6 @@ DEF_KINDS: dict[str, str] = {
 }
 
 
-
 def register_kind(name: str, summary: str) -> None:
     """Add a definition kind a data-declared record kind (`core.kinddata`) files under. A name
     already there is left as it is, so a built-in cannot be redefined by a descriptor."""
