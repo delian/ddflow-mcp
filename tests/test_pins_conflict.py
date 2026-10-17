@@ -250,9 +250,7 @@ def test_a_killed_regeneration_while_settling_a_conflict_puts_every_owned_file_b
     assert (tmp_path / "snap.txt").read_text() == "orig\n"
 
 
-def test_files_that_cannot_be_put_back_are_reported_as_possibly_half_written(
-    tmp_path, monkeypatch
-):
+def test_files_that_cannot_be_put_back_are_reported_as_possibly_half_written(tmp_path, monkeypatch):
     """Bug Bf9fac3e4ea: put_back ignored _restore's result, so the person was told only to
     resolve the conflict, not that the pin files may be half written."""
     recipe = (
