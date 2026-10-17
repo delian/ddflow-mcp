@@ -191,7 +191,7 @@ def with_tripwires_on_the_diff(command: str, tree: Path, since: str) -> str:
     first = f'SKIP="${{SKIP:+$SKIP,}}{skip}" {rest}'
     base_args = rest.split(" --all-files")[0]  # `pre-commit run --hook-stage pre-push`
     # The command's own SKIP= is the operator's skip: it applies to the named runs as well.
-    mine = f"SKIP={lead['ids']} " if lead else ""
+    mine = f'SKIP="${{SKIP:+$SKIP,}}{lead["ids"]}" ' if lead else ""
     ranged = [f"{mine}{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
     steps = [f"{first} || rc=1", *(f"{r} || rc=1" for r in ranged)]
     return "rc=0; " + "; ".join(steps) + "; exit $rc"
