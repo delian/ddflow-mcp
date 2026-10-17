@@ -1073,6 +1073,13 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
 #: whole essay a reviewer may have written.
 _PREVIOUS_DETAIL = 500
 _PREVIOUS_PROBE = 300
+_DELTA_CAVEAT = (
+    "You are shown only the commits since the reviewed head, not the whole change: an "
+    "earlier fix may sit in code you do not see. A `confirmed` finding is the author's "
+    "claim, not proof: report it if these commits show it still holds or contradict the "
+    "claim; where the delta alone cannot tell, say it cannot be verified from a delta "
+    "instead of calling it fixed or unfixed."
+)
 
 
 def _with_previous_findings(
@@ -1105,19 +1112,10 @@ def _with_previous_findings(
     if not found or isinstance(found, B.Unavailable):
         return context
     mine = it.triage.get(gate, {})
-    seen = (
-        "You are shown only the commits since the reviewed head, not the whole change: an "
-        "earlier fix may sit in code you do not see. A `confirmed` finding is the author's "
-        "claim, not proof: report it if these commits show it still holds or contradict the "
-        "claim; where the delta alone cannot tell, say it cannot be verified from a delta "
-        "instead of calling it fixed or unfixed."
-        if kind == "delta" and not fix
-        else ""
-    )
     lines = [
         "## Previous findings on this change, and the author's triage",
         "",
-        *([seen, ""] if seen else []),
+        *([_DELTA_CAVEAT, ""] if kind == "delta" and not fix else []),
         "An earlier review of this item reported the findings below. For each: if the "
         "diff now answers it (a `confirmed` one should be fixed; a `refuted` one should stay "
         "refuted by its probe), do not report it again; report it only if it still holds, "
@@ -1126,28 +1124,35 @@ def _with_previous_findings(
         "",
     ]
     for n, f in enumerate(found, 1):
-        t = mine.get(str(f.get("digest") or ""), {})
-        verdict = t.get("verdict") or "untriaged"
-        detail = " ".join(str(f.get("detail") or f.get("title") or "").split())
-        probe = " ".join(str(t.get("probe") or "").split())
-        lines.append(
-            f"{n}. [{f.get('severity', '')}] {f.get('location') or f.get('title', '')}: "
-            f"{detail[:_PREVIOUS_DETAIL]}" + (" ..." if len(detail) > _PREVIOUS_DETAIL else "")
-        )
-        if f.get("digest") in supers:
-            lines.append(
-                "   SUPERSEDED: the lines it cites were rewritten since the reviewed commit; "
-                "do NOT report this finding again; report only a NEW defect of the new code"
-            )
-            continue
-        lines.append(
-            f"   triage: {verdict}" + (f" -- probe: {probe[:_PREVIOUS_PROBE]}" if probe else "")
-        )
+        lines.extend(_finding_lines(n, f, mine, supers))
     say(
         f"re-review: the whole diff of {item}, with {len(found)} previous {gate} finding(s) "
         "and their triage (D-gate-economy)"
     )
     return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)
+
+
+def _finding_lines(n: int, f: dict, mine: dict, supers) -> list[str]:
+    """One previous finding for the prompt: what it said, then the author's triage of it
+    (or that its lines were rewritten since)."""
+    t = mine.get(str(f.get("digest") or ""), {})
+    verdict = t.get("verdict") or "untriaged"
+    detail = " ".join(str(f.get("detail") or f.get("title") or "").split())
+    probe = " ".join(str(t.get("probe") or "").split())
+    head = (
+        f"{n}. [{f.get('severity', '')}] {f.get('location') or f.get('title', '')}: "
+        f"{detail[:_PREVIOUS_DETAIL]}" + (" ..." if len(detail) > _PREVIOUS_DETAIL else "")
+    )
+    if f.get("digest") in supers:
+        return [
+            head,
+            "   SUPERSEDED: the lines it cites were rewritten since the reviewed commit; "
+            "do NOT report this finding again; report only a NEW defect of the new code",
+        ]
+    return [
+        head,
+        f"   triage: {verdict}" + (f" -- probe: {probe[:_PREVIOUS_PROBE]}" if probe else ""),
+    ]
 
 
 def _last_review(it, gate: str) -> dict:
