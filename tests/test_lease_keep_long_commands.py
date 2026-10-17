@@ -145,3 +145,17 @@ def test_a_keeper_that_ticks_late_still_renews_during_a_long_recipe(repo, tmp_pa
     """The slow path forced: the first renewal is 3 s late. The old fixed 2.4 s recipe ended
     before it and counted (0, 1)."""
     _regenerate_until_renewed(repo, tmp_path, monkeypatch, 2, first_renewal_delay=3.0)
+
+
+def test_the_mcp_pins_tool_hands_the_caller_to_regenerate(repo, monkeypatch):
+    """`ddflow_pins regenerate` over MCP named no caller, so its minutes-long run never
+    renewed the caller's lease (DX-lease-renew-ci-run-and-mcp-pins)."""
+    from ddflow.surfaces.declared.cadence import COMMANDS
+
+    seen: dict = {}
+    monkeypatch.setattr(
+        "ddflow.api.pin_files.pins_regenerate", lambda r, **kw: seen.update(kw) or "ran"
+    )
+    cmd = next(c for c in COMMANDS if c.tool == "ddflow_pins")
+    assert cmd.call(repo, {"document": "regenerate"}, "me") == "ran"
+    assert seen["agent"] == "me"
