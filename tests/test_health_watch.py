@@ -479,3 +479,10 @@ def test_unresponsive_after_reply_s_parks_then_breaks_and_keeps_the_work(repo):
     assert _state(repo).items["T1"].lease.expired_at
     assert _records(repo, "health_park:") == ["health_park:T1"]
     assert (tree / "unfinished.py").read_text() == "# only copy\n"
+
+
+def test_doctor_omits_a_kind_whose_mode_is_off(repo):
+    _contended(repo)
+    assert "health: STALLED T1" in run_cli(repo, "doctor", agent=A)[1]
+    run_cli(repo, "config", "health.mode_stalled", "off", agent=A)
+    assert "health: STALLED T1" not in run_cli(repo, "doctor", agent=A)[1]

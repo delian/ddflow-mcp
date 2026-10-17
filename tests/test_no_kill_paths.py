@@ -43,20 +43,19 @@ DELETERS = {"remove", "unlink", "rmtree", "rmdir", "removedirs", "move", "rename
 
 def _calls(path: Path):
     tree = ast.parse(path.read_text())
+    aliases = {
+        a.asname: a.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ImportFrom) and n.module in {"os", "signal", "subprocess"}
+        for a in n.names
+        if a.asname and a.name in KILLERS
+    }
     stack: list[str] = []
 
     def walk(node):
         named = isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
         if named:
             stack.append(node.name)
-        if isinstance(node, ast.ImportFrom) and node.module in {"os", "signal", "subprocess"}:
-            for alias in node.names:  # `from os import killpg as _kp` hides the call name
-                if alias.name in KILLERS and alias.asname:
-                    yield (
-                        alias.name,
-                        ast.Call(ast.Name(alias.name), [], []),
-                        (stack[-1] if stack else ""),
-                    )
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "getattr":
             arg = node.args[1] if len(node.args) > 1 else None
             if isinstance(arg, ast.Constant) and arg.value in KILLERS:  # getattr(os, "kill")
@@ -64,6 +63,7 @@ def _calls(path: Path):
         if isinstance(node, ast.Call):
             f = node.func
             name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            name = aliases.get(name, name)  # `from os import killpg as _kp`; `_kp(...)`
             yield name, node, (stack[-1] if stack else "")
         for child in ast.iter_child_nodes(node):
             yield from walk(child)
