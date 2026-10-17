@@ -55,8 +55,14 @@ def merge_log(root: Path) -> list[str]:
     parent, so a first-parent walk saw an older window than main does and the replay failed
     on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161). Only ``merge <id>:``
     subjects: a hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
-    log = git_proc(root, "log", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H")
-    return log.stdout.split() if log.returncode == 0 else []
+    log = git_proc(
+        root, "log", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
+    )
+    if log.returncode != 0:
+        return []
+    rows = [ln.split(" ", 1) for ln in log.stdout.splitlines() if ln.strip()]
+    # `merge main: ...` still reads like an item id to the grep, and is a sync merge
+    return [r[0] for r in rows if len(r) < 2 or not r[1].startswith("merge main:")]
 
 
 def _merges() -> list[str]:
@@ -181,6 +187,7 @@ def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
         ("a", "merge T1: real"),
         ("b", "merge main"),
         ("c", "merge main from origin"),
+        ("d", "merge main: sync with main"),
     ):
         g("commit", "-q", "--allow-empty", "-m", "base" + branch)
         g("checkout", "-q", "-b", "side" + branch)
