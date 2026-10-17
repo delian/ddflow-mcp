@@ -44,6 +44,7 @@ from ..services.schedule import calendar as schedule_calendar
 from ..services.schedule import count_unit, done_counts
 from ._base import _load
 from .lifecycle.claim import _tree_of
+from .pin_files import pins_regenerate  # noqa: F401 -- `pins`' sibling: the MCP tool calls it here
 
 
 def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
