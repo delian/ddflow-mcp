@@ -147,3 +147,10 @@ def test_kind_from_data_refuses_code_keys():
     desc = KD.parse(MINIMAL)
     with pytest.raises(KD.KindDataError, match="ops is code"):
         KDA.kind_from_data({**desc, "ops": {}})
+
+
+def test_declined_must_be_a_table_and_a_typo_verb_is_refused():
+    with pytest.raises(KD.KindDataError, match="declined must be a table"):
+        KD.parse(MINIMAL.replace('name = "gizmo"', 'name = "gizmo"\ndeclined = 3'))
+    with pytest.raises(ValueError, match="unknown verb 'histroy'"):
+        KDA.parse_kind(MINIMAL + '\n[declined]\nhistroy = "x"\n')

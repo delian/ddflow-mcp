@@ -248,8 +248,6 @@ class RecordKind:
 
 #: The verbs every kind has had since the surface began, and why a family not yet on the
 #: surface does not offer the others.
-_EVERYDAY = VERBS[:7]
-_UNWIRED = "offered when the rules move onto the record surface (B-rules-onto-record-surface)"
 
 # -- the descriptors -----------------------------------------------------------------
 

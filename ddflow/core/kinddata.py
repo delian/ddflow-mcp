@@ -15,6 +15,7 @@ from __future__ import annotations
 import tomllib
 from typing import Any
 
+#: Keep in step with `api.records.FIELD_TYPES`, which a field is finally checked against.
 FIELD_TYPES = ("string", "integer", "boolean", "array")
 _FIELD_KEYS = {"name", "type", "help", "required", "choices", "default"}
 _LISTS = ("text", "columns", "filters", "verbs", "aliases", "applies")
@@ -109,11 +110,10 @@ def _scalars(raw: dict[str, Any], out: dict[str, Any]) -> None:
             raise KindDataError("recall_cap must be a whole number")
         out["recall_cap"] = cap
     if "declined" in raw:
-        why = _table(
-            "declined",
-            raw["declined"],
-            set(raw["declined"]) if isinstance(raw["declined"], dict) else set(),
-        )
+        why = raw["declined"]
+        if not isinstance(why, dict):
+            raise KindDataError("declined must be a table of verb = reason")
+        # the verb names are `api.records.VERBS`; RecordKind refuses an unknown one
         out["declined"] = {str(v): str(r) for v, r in why.items()}
 
 
