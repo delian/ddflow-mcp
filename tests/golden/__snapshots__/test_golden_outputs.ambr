@@ -1108,6 +1108,27 @@
           themselves and features among themselves, and the parallelism cap hands its
           slots to bugs first -- so a standing bug is fixed before more features are
           built on it. `false` orders by priority alone.
+      schedule.dx_priority = 8   [default]
+          The priority a task gets when filed with none and it is a DX task: tagged
+          one of dx_tags, or its id starts with dx_id_prefix (default 8, lower is
+          offered first). Before this, DX and fix tasks filed without `--priority`
+          landed at 100, behind all feature work (26 DX and 6 fix tasks, 2026-10-16).
+          An explicit `--priority`, 100 included, is never changed.
+      schedule.bug_priority = 10   [default]
+          The priority a task gets when filed with none and it is a bug fix: tagged
+          one of `[flow] bugfix_tags` or `hotfix_tags` (default 10, lower is offered
+          first). The fix task `bug found` files takes the item's priority when it is
+          not the generic 100, else this. An explicit `--priority` is never changed;
+          `plan check` warns about one filed at the generic 100.
+      schedule.dx_tags = ['dx']   [default]
+          Tags that make a task a DX task for dx_priority (default ["dx"]); an id
+          starting with dx_id_prefix counts too. `plan check` warns about one filed at
+          the generic priority 100.
+      schedule.dx_id_prefix = 'DX-'   [default]
+          An id starting with this makes a task a DX task for dx_priority (default
+          `DX-`, the convention for ddflow defects and developer-experience tasks); ""
+          turns the id rule off and leaves dx_tags alone. A task that is both a DX
+          task and a bug fix takes dx_priority.
       schedule.resources = []   [default]
           Capacities of the physical resources work may declare with `--resources`, as
           `name=capacity`: ["gpu=8", "vllm-fleet=1"]. A claim is refused (exit 3) when
@@ -1982,6 +2003,20 @@
           Seconds between the lines `ddflow pins regenerate` prints on stderr while
           recipes are still running, naming them, so a long regeneration can be told
           from a hang. 0 prints only a line when a recipe starts and finishes.
+      pins.merge_check = 'fast'   [default]
+          What `ddflow merge` says about the pin files once a merge has landed. 'fast'
+          (default): it CHECKS the pins the post-merge hook may run (read-only, each
+          bounded by after_merge_timeout_s), reports the stale ones, and NAMES the
+          pins the hook never runs (a recipe with `after_merge = false` runs a test
+          suite) so a stale golden pin is never silent. 'all': it also checks those
+          suite recipes, which makes the merge wait for them (each bounded by
+          after_merge_timeout_s; a check that times out is reported as not finished,
+          never as stale). 'off': it says nothing about pins. An unrecognised value in
+          a config file is warned about, reported by `doctor` and falls back to
+          'fast', the strictest (checks the pins the hook may run and names the rest,
+          without making a merge wait for a test suite); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       plan.warn_missing_globs = True   [default]
           Whether `claim` and `plan check` WARN about a task whose declared literal
           globs (no wildcard) name files that do not exist, with the nearest existing

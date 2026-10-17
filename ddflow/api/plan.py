@@ -27,6 +27,7 @@ from ..services import items as IT
 from ..services import leases as L
 from ..services import plan_apply as PA
 from ..services import plancheck as PC
+from ..services import priority as PRI
 from ._base import _load
 from ._globwarn import missing_globs
 
@@ -149,6 +150,14 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
         {"id": iid, "detail": w}
         for iid in sorted(plan)
         for w in missing_globs(repo, cfg, [str(g) for g in plan[iid].get("globs", [])], tracked)
+    ]
+    warnings += [
+        {"id": iid, "detail": w}
+        for iid in sorted(plan)
+        if "priority" in plan[iid]
+        and (
+            w := PRI.left_generic(cfg, iid, PA._list(plan[iid], "tags"), int(plan[iid]["priority"]))
+        )
     ]
     data: dict[str, Any] = {
         "source": source,

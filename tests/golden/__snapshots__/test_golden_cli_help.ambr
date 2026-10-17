@@ -2337,7 +2337,8 @@
     --resources RESOURCES
                           physical resources the work RUNS on, as `ddflow update --resources` takes
                           them: 'gpu:4,vllm-fleet'
-    --priority PRIORITY
+    --priority PRIORITY   lower is offered first (default 100; a task tagged dx or a bug fix gets
+                          its [schedule] band)
     --line LINE           release line (default: the current one)
     --readd               file a REMOVED item's id again. An id still in the queue is always
                           refused: change it with `ddflow update`
