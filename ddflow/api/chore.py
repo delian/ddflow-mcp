@@ -95,6 +95,18 @@ def _select(repo: Path, cfg, st, files: list[str], message: str):
             f" Code takes the normal pipeline (`ddflow task add`, claim, review).",
             outside=bad,
         )
+    # A staged change the chore does not name (the source of a rename into the list, say)
+    # rides along nowhere and makes the merge refuse over it: say so before any task exists.
+    staged = W.git(
+        repo, "-c", "core.quotePath=false", "diff", "--cached", "--no-renames", "--name-only"
+    )
+    if stray := [n for n in (staged.out or "").splitlines() if n.strip() and n.strip() not in todo]:
+        return O.refused(
+            KIND,
+            f"staged changes outside this chore: {', '.join(stray[:5])}. A chore lands only "
+            f"what it names; unstage them (`git restore --staged`) or commit them the normal way.",
+            outside=stray,
+        )
     approved = CO.standing(st, cfg)
     if not approved.ok:
         return O.refused(

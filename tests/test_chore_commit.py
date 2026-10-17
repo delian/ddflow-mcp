@@ -188,3 +188,17 @@ def test_a_tagged_task_outside_the_list_gets_a_warning_not_a_second_blocker(proj
     cfg = Config.load(proj)
     excused, note, warnings = CO.judge(_state(proj), cfg, _state(proj).items["T1"], ["app.py"])
     assert excused is None and note == "" and "not a chore" in warnings[0]
+
+
+def test_a_rename_into_the_list_is_refused_before_a_task_exists(proj):
+    """The source of a staged rename is outside the list and not named: refuse, rather
+    than fail in the merge with the work half done."""
+    (proj / "foo.py").write_text("x = 1\n")
+    _git(proj, "add", "foo.py")
+    _git(proj, "commit", "-qm", "code")
+    _approve(proj)
+    (proj / "docs" / "ddflow" / "decisions").mkdir(parents=True)
+    _git(proj, "mv", "foo.py", "docs/ddflow/decisions/foo.py")
+    code, out, err = run_cli(proj, "chore", "commit", "docs/ddflow/decisions/foo.py", "-m", "mv")
+    assert code == 3 and "foo.py" in out + err
+    assert _chore_items(proj) == []
