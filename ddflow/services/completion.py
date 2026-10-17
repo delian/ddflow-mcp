@@ -30,6 +30,7 @@ from ..core.admission import is_shared
 from ..core.model import Item, State
 from ..infra import worktree as W
 from . import changes as CH
+from . import chore as CO
 from . import gates as G
 from . import testselect as TS
 from .cadence import phase_overdue
@@ -67,6 +68,9 @@ class Verdict:
     #: and patterns it was judged on. Recorded on the completion event, so a gate that did
     #: not run is accounted for rather than silently absent (B-na-required-gate).
     na_evidence: list[str] = field(default_factory=list)
+    #: Set when the item is a chore (`services.chore`): why it needs no reviewer. Recorded
+    #: on the completion event with the approval it rests on.
+    chore: str = ""
 
     @property
     def may_complete(self) -> bool:
@@ -154,10 +158,24 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     )
     required = G.required_gates(cfg)
 
+    # A chore (D-chore-class) is judged on the paths it ACTUALLY changed and a person's
+    # approval of the chore list -- never on its tag. It is excused the gates it skipped
+    # on the record, even a required one, and the reviewer.
+    excused, not_chore = (
+        CO.exemption(state, cfg, it, changed_paths(repo, it)) if it.kind == "task" else (None, "")
+    )
+    if excused is not None:
+        v.chore = excused.note()
+    elif not_chore:
+        v.blockers.append(not_chore)
+
+    def _settled(g: str) -> bool:
+        if excused is not None and g in cfg.chore.skip_gates and it.gate_outcome(g) == "skipped":
+            return True
+        return it.gate_satisfied(g, True)
+
     missing = [
-        g
-        for g in s.pipeline
-        if g in required and g not in s.not_applicable and not it.gate_satisfied(g, True)
+        g for g in s.pipeline if g in required and g not in s.not_applicable and not _settled(g)
     ]
     if missing:
         v.blockers.append(
@@ -244,7 +262,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # merge between environment branches blocked every promotion, since its pipeline
     # (rightly) has no review gate to satisfy it with.
     if cfg.agent.reviewer_family_must_differ and not ok and it.kind == "task" and not it.promote_to:
-        v.blockers.append(f"reviewer independence not satisfied: {why}")
+        if excused is None:
+            v.blockers.append(f"reviewer independence not satisfied: {why}")
 
     if s.unavailable:
         v.coverage_note = _coverage_note(it, s.unavailable)
