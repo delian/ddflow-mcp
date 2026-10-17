@@ -134,7 +134,10 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("task", "add"),
         tool="ddflow_task_add",
-        flag_exempt=ANSWER_FLAG_EXEMPT,
+        flag_exempt={
+            **ANSWER_FLAG_EXEMPT,
+            "--kind": "CLI only (tools/list byte budget): a doc is made by a person or driver",
+        },
         description="Add a task to a phase. ALWAYS set globs to the paths this task will write: "
         "they are what lets two agents work in parallel safely, and an unset glob "
         "means the conflict detector cannot protect you.",
@@ -152,6 +155,7 @@ COMMANDS: tuple[Command, ...] = (
             lines=a.get("lines", "") or "",
             port_of=a.get("port_of", "") or "",
             resources=a.get("resources", "") or "",
+            kind=a.get("kind", "") or "",
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
@@ -169,6 +173,14 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("tags", help="Comma-separated tags.", cli_help=""),
             Param("body", help="Detail and acceptance criteria.", cli_help=""),
+            Param(
+                "kind",
+                help="",
+                cli_help="what kind of work: task (default), doc, research or job. A kind runs "
+                "the gate pipeline [gates].kind_pipelines gives it (doc ships without the code "
+                "gates), so docs-only work completes without unit_tests",
+                cli_only=True,
+            ),
             Param(
                 "resources",
                 help="Resources it runs on: gpu:4,vllm.",
