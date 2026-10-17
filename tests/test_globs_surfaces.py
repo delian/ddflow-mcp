@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _wait import wait_until
 from conftest import run_cli
 from helpers import items_of as _items
 
@@ -137,7 +138,9 @@ def test_a_revived_lease_catches_up_resources_and_keeps_a_claimed_override(repo,
     assert code == O.OK, out + err
     monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
     assert _items(repo)["T1"].resources == ["gpu:1"], "the claim's override is the item's"
-    time.sleep(2.5)  # lapsed; an edit now reaches only the item
+    wait_until(  # lapsed; an edit now reaches only the item
+        lambda: not _items(repo)["T1"].lease.live(time.time(), 0), 10, what="the lease to lapse"
+    )
     assert AI.update(repo, "T1", AI.ItemEdit(resources=["gpu:3"]), agent=HOLDER).ok
     beat = run_cli(repo, "heartbeat", "T1", agent=HOLDER)
     assert beat[0] == O.OK, beat

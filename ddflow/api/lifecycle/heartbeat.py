@@ -50,6 +50,7 @@ def heartbeat(
             globs_withheld="",
             yield_requested="",
         )
+    began = time.time()  # before the renewal: the lease is live at this instant once renewed
     renewed = L.renew(log, item)
     hint = ""
     if not renewed:
@@ -67,7 +68,7 @@ def heartbeat(
         if broken:  # the lease was taken from this agent: say so wherever it stands
             hint = "; " + LB.notice_text(broken[0])
     if renewed:
-        withheld = _catch_up_globs(log, cfg, item)
+        withheld = _catch_up_globs(log, cfg, item, began)
         return O.ok(
             "lease.renewed",
             id=item,
@@ -99,7 +100,7 @@ def _yield_request(log, cfg, item: str) -> str:
     return ""
 
 
-def _catch_up_globs(log, cfg, item: str) -> str:
+def _catch_up_globs(log, cfg, item: str, now: float) -> str:
     """Point a just-renewed lease at the item's CURRENT globs and resources; "" or why
     it could not.
 
@@ -112,12 +113,17 @@ def _catch_up_globs(log, cfg, item: str) -> str:
     Resources the same way, through the capacity check (B7f8060f2f5); each is caught up
     on its own, so a refusal of one does not hold back the other. A claim records its
     globs and resources on the item, so this never undoes the claim itself.
+
+    ``now`` is when the renewal began. The revived lease keeps the TTL it was claimed with,
+    so a process that took longer than that between renewing and catching up (a loaded
+    machine, a short TTL) judged it lapsed again and silently caught up nothing
+    (B8eb33fe297); the catch-up is judged at the renewal instead.
     """
 
     why: list[str] = []
     for field in ("globs", "resources"):
         with log.transaction():
-            it = localize(fold(log.read_all(), strict=False), log, time.time()).items.get(item)
+            it = localize(fold(log.read_all(), strict=False), log, now).items.get(item)
             lease = it.lease if it else None
             # Cleared to none is caught up too: a revived lease left on the old values
             # would keep holding them against every other agent.
@@ -125,7 +131,7 @@ def _catch_up_globs(log, cfg, item: str) -> str:
                 continue
             new = list(getattr(it, field))
             args = (new, None) if field == "globs" else (None, new)
-            live, refusal = L.plan_retarget(log, cfg, item, *args)
+            live, refusal = L.plan_retarget(log, cfg, item, *args, now=now)
             if refusal:
                 why.append(refusal)
             elif live is not None:
