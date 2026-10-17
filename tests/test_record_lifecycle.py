@@ -453,7 +453,7 @@ def test_a_version_number_is_never_read_as_a_lamport(repo):
     assert LC.record_restore(repo, NOTE, "n1", to=clash, reason="r").exit == O.OK
     assert R.record_show(repo, NOTE, "n1").data["fields"]["body"] == f"v{clash}"
     R.record_remove(repo, NOTE, "n1", reason="gone")
-    for bad in ("two", "x:3", "0", "99"):
+    for bad in ("two", "x:3", "0", "99", "\u00b2", "lamport:\u00b2"):
         assert LC.record_restore(repo, NOTE, "n1", to=bad, reason="r").exit == O.REFUSED
 
 
