@@ -30,12 +30,9 @@ def _record(log, stage: str, res: CI.Result, subject: str = "ci") -> None:
 def lease_tick(log, cfg, st, item: str) -> tuple[Callable[[], None], float] | None:
     """``tick`` for `CI.run`: renews the caller's own lease on ``item`` every
     `[lease].heartbeat_s` while the command runs (DX-long-op-renew). None when it holds none."""
-    keep = LK.keeper(log, cfg, st.items.get(item)) if item else None
-    if keep is None:
-        return None
     every = float(max(1, cfg.lease.heartbeat_s))
-    renewed = st.items[item].lease.renewed_at
-    return LK.throttled(keep, renewed, cfg.lease.heartbeat_s, every), every
+    tick = LK.ticker(log, cfg, st.items.get(item), every) if item else None
+    return (tick, every) if tick else None
 
 
 def file_failures(
