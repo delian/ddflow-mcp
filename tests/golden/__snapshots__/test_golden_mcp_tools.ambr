@@ -3232,13 +3232,17 @@
     'ddflow_show': '''
       {
        "name": "ddflow_show",
-       "description": "Everything known about one phase, task or bug (a bug id works too): state, dependencies, declared globs, the lease and who holds it, the worktree path you can cd to, and every gate's outcome with its evidence. Use it to check your own work before calling ddflow_complete.",
+       "description": "Everything known about one phase, task or bug: state, dependencies, globs, the lease holder, the worktree path, and every gate's outcome with evidence. Check your work with it before ddflow_complete.",
        "inputSchema": {
         "type": "object",
         "properties": {
          "id": {
           "type": "string",
           "description": "Item id (phase, task) or bug id."
+         },
+         "report": {
+          "type": "boolean",
+          "description": "Its completion report."
          },
          "as_agent": {
           "type": "string",
