@@ -211,12 +211,16 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     removed_tree, kept_reason = _dispose_tree(
         repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
     )
-    if landed_note:
-        kept_reason = "; ".join(filter(None, [kept_reason, landed_note]))
-    if back_failed:
-        kept_reason = "; ".join(
-            filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
+    kept_reason = "; ".join(
+        filter(
+            None,
+            [
+                kept_reason,
+                landed_note,
+                ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else "",
+            ],
         )
+    )
 
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent)
     # Last: the after-merge check may record a result of its own.
@@ -238,7 +242,6 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         **_scope_fields(outside, listed=borrowed),
         # The merge gate is a person's to clear here; nothing was recorded for it.
         merge_gate_human=human_gate,
-        **({"note": landed_note} if landed_note else {}),
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
     )
