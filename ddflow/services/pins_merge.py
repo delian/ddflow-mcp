@@ -154,7 +154,7 @@ def merge_lines(report: dict[str, list[str]]) -> list[str]:
         )
     if "unknown" in report:
         lines.append(
-            f"pins not checked after this merge (the check did not finish): {names['unknown']}"
+            f"pins not checked after this merge: {names['unknown']}"
             " -- `ddflow pins regenerate --check`"
         )
     if "unchecked" in report:

@@ -199,7 +199,11 @@ def regenerate(
     ``unavailable``, never failed (a run asked for on the command line keeps `timeout_s` and
     reports it failed, as it always has). Two runs never overlap in one tree: the second is
     ``unavailable`` too, because a recipe re-records files the other is reading or writing
-    (README.md left with thousands of duplicated lines, snapshots deleted: Bf965d87b66)."""
+    (README.md left with thousands of duplicated lines, snapshots deleted: Bf965d87b66).
+
+    ``bounded`` gives a run the same bound and the same soft timeout without restricting it to
+    the hook's recipes: `ddflow merge`'s check (`[pins].merge_check`) runs every recipe it
+    chooses that way, so a check that timed out or could not start is ``unavailable``."""
     rep = Report()
     if os.environ.get("PYTEST_XDIST_WORKER"):
         rep.problem = (
@@ -321,6 +325,11 @@ def _run_all(
         st = states[r.name]
         st.stale, st.output = not ok, ("" if ok else _tail(c))
         st.seconds = time.monotonic() - began
+        if c.error is not None and not c.timed_out and soft:  # the check never started
+            st.stale, st.output = False, ""
+            st.unavailable = f"the check could not start: {c.error}"
+            say(f"pins: {r.name}: unavailable, {st.unavailable}")
+            return False
         if c.timed_out and soft:  # not answered: neither current nor stale
             st.stale, st.output = False, ""
             st.unavailable = f"the check did not finish in {limit}s (timed out)"
