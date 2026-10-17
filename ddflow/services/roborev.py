@@ -43,6 +43,10 @@ class Review:
         return self.model or self.agent
 
 
+#: Job states that will still become a review; failed/canceled never will.
+_UNFINISHED = ("queued", "running")
+
+
 def _covers(git_ref: str, sha: str) -> bool:
     """A job of ``sha`` itself, or of a range ending at it (`roborev review --since`).
     roborev records full shas; an abbreviated one (7+ hex) is matched as a prefix."""
@@ -52,6 +56,42 @@ def _covers(git_ref: str, sha: str) -> bool:
         and all(c in "0123456789abcdef" for c in end)
         and sha.startswith(end)
     )
+
+
+def _unfinished_note(jobs: list, sha: str) -> str:
+    """Why a covering review job is not a review: still queued/running (wait for it), or
+    ended failed/canceled (re-run it). '' when no review job covers ``sha``."""
+    covering = [
+        j for j in jobs
+        if isinstance(j, dict) and j.get("job_type", "review") in _REVIEW_JOBS
+        and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
+    ]  # fmt: skip
+    live = [j for j in covering if j.get("status") in _UNFINISHED]
+    pool = live or covering
+    if not pool:
+        return ""
+    # `roborev show --job N` of an unfinished job says "no review found", which reads as a
+    # vanished job (B08da521f70); the job is there, just not done.
+    j = max(pool, key=lambda x: _job_id(x) or 0)
+    if not live:
+        return (
+            f"roborev job {_job_id(j)} for {sha[:10]} ended {j.get('status') or 'unfinished'}, "
+            f"so it holds no review of it: re-run `roborev review {sha[:10]}`; "
+            "the reviewer is unchecked"
+        )
+    return (
+        f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status')}, not done: "
+        f"`roborev wait {_job_id(j)}` first (`roborev show --job` of an unfinished job "
+        "says 'no review found'); the reviewer is unchecked"
+    )
+
+
+def _no_review_note(jobs: list, sha: str) -> str:
+    """Why ``sha`` has no finished review: an unfinished or ended job, or none in the list."""
+    if note := _unfinished_note(jobs, sha):
+        return note
+    where_ = f"among its last {_LIMIT} jobs" if len(jobs) >= _LIMIT else "on this branch"
+    return f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
 
 
 def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
@@ -82,10 +122,7 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
         and _job_id(j) is not None
     ]  # fmt: skip
     if not done:
-        where_ = f"among its last {_LIMIT} jobs" if len(jobs) >= _LIMIT else "on this branch"
-        return None, (
-            f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
-        )
+        return None, _no_review_note(jobs, sha)
     job, j = max(done, key=lambda pair: pair[0])
     return Review(job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")), ""
 
