@@ -63,6 +63,7 @@ from ..infra.store import Store
 from ..views.markdown import GENERATED_PREFIX, VIEWS, render_views, view_difference
 from . import changes as CH
 from . import docsync
+from . import pins_written as PW
 from . import upgrade_written as UW
 from .backups import make_backup
 from .enforce_committed import committed_log
@@ -1560,12 +1561,15 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
 
 def _beyond_upgrade_output(repo: Path, state, paths: list[str]) -> list[str]:
     """``paths`` less the ones whose staged bytes are exactly what an `upgrade --apply`
-    recorded as written (`upgrade.applied` ``written``): the tool's own output needs no lease,
+    recorded as written (`upgrade.applied` ``written``, or `pins regenerate`'s local record): the tool's own output needs no lease,
     but a file edited after the upgrade has another digest and does."""
     wrote: dict[str, set[str]] = {}
     for run in state.upgrade_runs.values():
         for rel, digest in (run.get("written") or {}).items():
             wrote.setdefault(rel, set()).add(digest)
+    # A regenerated pin file is the same kind of output (bug B1579b8a1a9).
+    for rel, digests in PW.load(repo).items():
+        wrote.setdefault(rel, set()).update(digests)
     out = []
     for p in paths:
         data = staged_bytes(repo, p) if p in wrote else None
