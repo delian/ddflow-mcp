@@ -125,6 +125,15 @@ def test_an_unfinished_job_is_named_as_unfinished_not_as_missing(repo, fake_robo
     assert "no finished review" not in why
 
 
+def test_a_failed_job_is_not_told_to_wait(repo, fake_roborev):
+    head = _item(repo)
+    fake_roborev([_job(7, head, "kilo", status="failed")])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    why = _gate(repo).evidence["roborev"]["why"]
+    assert "roborev wait" not in why and "no finished review" in why, why
+
+
 def test_no_review_of_the_sha_keeps_the_typed_model_with_a_note(repo, fake_roborev):
     head = _item(repo)
     fake_roborev([_job(7, "0" * 40, "claude-code")])
