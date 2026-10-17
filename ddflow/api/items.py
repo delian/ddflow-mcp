@@ -299,7 +299,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
             return O.refused(
                 "item.updated", refusal + _waiting(log, cfg, it, lease, globs, queue), id=it.id
             )
-        log.append(f"{it.kind}.updated", it.id, fields)
+        log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, globs, resources)
     return O.ok(
@@ -778,7 +778,7 @@ def _apply_resolution(
         )
     log.append("item.resolved", item, data)
     for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
-        log.append(f"{it.kind}.added", nid, d["data"])
+        log.append(f"{it.family}.added", nid, d["data"])
 
 
 def _no_such_item(item: str, it) -> O.Outcome:
