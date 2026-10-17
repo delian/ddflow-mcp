@@ -572,26 +572,50 @@ def run(
     started_on = G.tree_identity(cwd)
     started_at = clock.now_iso()
     log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+    done = _guarded(
+        log,
+        cfg,
+        repo,
+        agent,
+        it,
+        item,
+        gate,
+        gdef=gdef,
+        gates=gates,
+        cwd=cwd,
+        scope=scope,
+        forced=forced,
+        rerun_failed=rerun_failed,
+        started_on=started_on,
+        started_at=started_at,
+    )
+    if isinstance(done, O.Outcome):
+        return done
+    result, ev, reason = done
+    data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
+    if failing := FK.failure_text(ev):
+        data["failure_text"] = failing  # for the terminal; the evidence carries the same facts
+    exit_code = OUTCOME_EXIT[result]
+    if exit_code == O.OK:
+        return O.ok("gate.run", **data)
+    if exit_code == O.FAIL:
+        return O.failed("gate.run", reason or f"{gate} failed", **data)
+    return O.nothing("gate.run", reason or f"{gate} could not report", **data)
+
+
+def _guarded(log, cfg, repo, agent, it, item, gate, **run):
+    """`_execute` with the started-marker held and a SIGTERM/SIGHUP turned into a recorded
+    `unavailable` (B58842554a7). ``run`` is `_execute`'s keywords."""
+    started_on, started_at, gates, forced = (
+        run["started_on"],
+        run["started_at"],
+        run["gates"],
+        run["forced"],
+    )
     marker = RUN.mark_started(repo, item, gate)
     try:
         with RUN.terminating():
-            done = _execute(
-                log,
-                cfg,
-                repo,
-                agent,
-                it,
-                item,
-                gate,
-                gdef=gdef,
-                gates=gates,
-                cwd=cwd,
-                scope=scope,
-                forced=forced,
-                rerun_failed=rerun_failed,
-                started_on=started_on,
-                started_at=started_at,
-            )
+            return _execute(log, cfg, repo, agent, it, item, gate, **run)
     except RUN.RunTerminated as stop:
         reason = f"the run was terminated by {stop.signame} before its command finished"
         _log, _cfg, now = _load(repo, agent)
@@ -614,18 +638,6 @@ def run(
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     finally:
         RUN.clear_started(marker)
-    if isinstance(done, O.Outcome):
-        return done
-    result, ev, reason = done
-    data: dict[str, Any] = {"gate": gate, "outcome": result, "evidence": ev, "id": item}
-    if failing := FK.failure_text(ev):
-        data["failure_text"] = failing  # for the terminal; the evidence carries the same facts
-    exit_code = OUTCOME_EXIT[result]
-    if exit_code == O.OK:
-        return O.ok("gate.run", **data)
-    if exit_code == O.FAIL:
-        return O.failed("gate.run", reason or f"{gate} failed", **data)
-    return O.nothing("gate.run", reason or f"{gate} could not report", **data)
 
 
 def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
