@@ -22,6 +22,7 @@ two branches that each changed a pin merge into green pins with no manual step.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shlex
 import sys
@@ -34,8 +35,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..infra import git as G
 from ..infra import proc as P
-from ..infra.fsio import replace_text
+from ..infra.fsio import LockTimeout, file_lock, replace_text
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
 from .gateenv import REPO_VARS
 from .pins_conflict import apply as apply_settled
@@ -49,6 +51,9 @@ class Recipe:
     check: tuple[str, ...]
     regen: tuple[str, ...]
     env: tuple[tuple[str, str], ...] = ()
+    #: Whether the post-merge hook may run this recipe. A recipe that runs a test suite
+    #: (golden snapshots) says false: a merge must never wait for it (Bf965d87b66).
+    after_merge: bool = True
 
 
 @dataclass
@@ -58,6 +63,9 @@ class PinState:
     stale: bool = False
     regenerated: bool = False
     error: str = ""
+    #: The recipe could not finish (it timed out, or another run holds the tree): neither
+    #: current nor stale nor failed -- unknown, and said so.
+    unavailable: str = ""
     output: str = ""
     seconds: float = 0.0
 
@@ -75,6 +83,10 @@ class Report:
     @property
     def failed(self) -> list[PinState]:
         return [p for p in self.pins if p.error]
+
+    @property
+    def unavailable(self) -> list[PinState]:
+        return [p for p in self.pins if p.unavailable and not p.error]
 
 
 def _argv(raw: object, label: str) -> tuple[str, ...]:
@@ -102,6 +114,11 @@ def load_recipes(repo: Path, cfg: Config) -> list[Recipe]:
         files = t.get("files", [])
         if not (isinstance(files, list) and all(isinstance(f, str) for f in files)):
             raise ValueError(f"{cfg.pins.recipes_file}: pin {name!r}: files must be strings")
+        later = t.get("after_merge", True)
+        if not isinstance(later, bool):
+            raise ValueError(
+                f"{cfg.pins.recipes_file}: pin {name!r}: after_merge must be a boolean"
+            )
         env = t.get("env", {})
         if not isinstance(env, dict):
             raise ValueError(f"{cfg.pins.recipes_file}: pin {name!r}: env must be a table")
@@ -112,6 +129,7 @@ def load_recipes(repo: Path, cfg: Config) -> list[Recipe]:
                 _argv(t.get("check"), f"{name}: check"),
                 _argv(t.get("regen"), f"{name}: regen"),
                 tuple((str(k), str(v)) for k, v in env.items()),
+                later,
             )
         )
     return out
@@ -171,8 +189,15 @@ def regenerate(
     recipes: list[Recipe] | None = None,
     tick: Tick | None = None,
     on_progress: Callable[[str], None] | None = None,
+    after_merge: bool = False,
 ) -> Report:
-    """Check every pin (or `only`), and unless `check`, re-record the stale ones."""
+    """Check every pin (or `only`), and unless `check`, re-record the stale ones.
+
+    ``after_merge`` is the post-merge hook's run: only the recipes that allow it, each command
+    bounded by `[pins].after_merge_timeout_s`; one that cannot finish in time is
+    ``unavailable``, never failed or stale. Two runs never overlap in one tree: the second is
+    ``unavailable`` too, because a recipe re-records files the other is reading or writing
+    (README.md left with thousands of duplicated lines, snapshots deleted: Bf965d87b66)."""
     rep = Report()
     if os.environ.get("PYTEST_XDIST_WORKER"):
         rep.problem = (
@@ -192,9 +217,35 @@ def regenerate(
     if not chosen:
         rep.problem = f"no pin recipes: {cfg.pins.recipes_file} is missing or has no [[pin]]"
         return rep
-    if not check and _unsettled(repo, chosen, rep, cfg.pins.timeout_s, tick):
-        return rep
+    if after_merge:
+        chosen = [r for r in chosen if r.after_merge]
+        if not chosen:
+            return rep
     limit = cfg.pins.timeout_s
+    if after_merge:
+        limit = min(limit, cfg.pins.after_merge_timeout_s)
+    held = contextlib.ExitStack()
+    try:
+        held.enter_context(_exclusive(repo, write=not check))
+    except LockTimeout:
+        why = "another pins regeneration is running in this tree; nothing was run"
+        rep.pins.extend(PinState(r.name, r.files, unavailable=why) for r in chosen)
+        return rep
+    with held:
+        return _regenerate_locked(repo, cfg, chosen, rep, check, tick, on_progress, limit)
+
+
+def _exclusive(repo: Path, *, write: bool):
+    """The per-tree lock a re-recording holds; a check only reads and takes none."""
+    git_dir = G.run(repo, "rev-parse", "--absolute-git-dir")
+    if not write or not git_dir.ok or not git_dir.out.strip():
+        return contextlib.nullcontext()
+    return file_lock(Path(git_dir.out.strip()) / "ddflow-pins.lock", 0)
+
+
+def _regenerate_locked(repo, cfg, chosen, rep, check, tick, on_progress, limit) -> Report:
+    if not check and _unsettled(repo, chosen, rep, limit, tick):
+        return rep
     shown = threading.Lock()  # the checks run on threads: one line is written at a time
 
     def say(line: str) -> None:
@@ -260,6 +311,11 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         st = states[r.name]
         st.stale, st.output = not ok, ("" if ok else _tail(c))
         st.seconds = time.monotonic() - began
+        if c.timed_out:  # not answered: neither current nor stale
+            st.stale, st.output = False, ""
+            st.unavailable = f"the check did not finish in {limit}s (timed out)"
+            say(f"pins: {r.name}: unavailable, {st.unavailable}")
+            return False
         say(f"pins: {r.name}: {'current' if ok else 'stale'} ({st.seconds:.0f}s)")
         return ok
 
@@ -270,6 +326,8 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         if ok:
             st.stale, st.output = was
             st.regenerated = True
+        elif st.unavailable:  # the re-check did not finish: nothing is known to be wrong
+            st.stale, st.output = was
         else:
             st.error = f"still stale after regeneration: {st.output}"
         return ok
@@ -283,7 +341,13 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         say(f"pins: {r.name}: re-recording")
         began = time.monotonic()
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        if done.error is not None or done.returncode != 0:
+        if done.timed_out:
+            states[r.name].unavailable = (
+                f"the regeneration did not finish in {limit}s (timed out): its files may be "
+                f"half written, check `git status` for {', '.join(r.files)}"
+            )
+            say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
+        elif done.error is not None or done.returncode != 0:
             states[r.name].error = f"regeneration failed: {_tail(done)}"
             say(f"pins: {r.name}: FAILED ({time.monotonic() - began:.0f}s)")
         else:

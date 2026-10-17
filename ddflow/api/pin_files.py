@@ -56,6 +56,7 @@ def pins_regenerate(
             "stale": p.stale,
             "regenerated": p.regenerated,
             "error": p.error,
+            **({"unavailable": p.unavailable} if p.unavailable else {}),
         }
         for p in rep.pins
     ]
@@ -63,6 +64,13 @@ def pins_regenerate(
     if rep.failed:
         return O.failed(
             "pins", "; ".join(f"{p.name}: {p.error}" for p in rep.failed), pins=rows, **extra
+        )
+    if rep.unavailable and not rep.stale:
+        return O.nothing(
+            "pins",
+            "could not finish: " + "; ".join(f"{p.name}: {p.unavailable}" for p in rep.unavailable),
+            pins=rows,
+            **extra,
         )
     if check and rep.stale:
         return O.failed(
