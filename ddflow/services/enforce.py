@@ -2167,7 +2167,8 @@ def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> 
 def _concludes_merge_of(here: Path, base: str) -> bool:
     """Is the commit being made the conclusion of `git merge <base>`?
 
-    MERGE_HEAD exists and the base tip is contained in it (or is it). That commit IS the
+    MERGE_HEAD exists and is the base tip or an earlier tip of the base (the base may have
+    moved on since the merge began; the next commit is judged afresh). That commit IS the
     remedy this gate asks for: refusing it would make the refusal impossible to clear,
     and a conflicting merge is exactly the case that needs a commit. HEAD still reads as
     behind until the commit lands, so this is asked before the drift is judged. A stale
@@ -2177,7 +2178,9 @@ def _concludes_merge_of(here: Path, base: str) -> bool:
     head = W.git(here, "rev-parse", "-q", "--verify", "MERGE_HEAD")
     if not head.ok or not head.out:
         return False
-    return W.git(here, "merge-base", "--is-ancestor", base, head.out).ok
+    if W.git(here, "merge-base", "--is-ancestor", base, head.out).ok:
+        return True
+    return W.git(here, "merge-base", "--is-ancestor", head.out, base).ok
 
 
 def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = None) -> Verdict:

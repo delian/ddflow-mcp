@@ -150,6 +150,21 @@ def test_the_commit_concluding_git_merge_base_is_never_refused(forked):
     assert _commit_in(wt).returncode == 0
 
 
+def test_a_merge_of_an_earlier_base_tip_may_conclude_after_the_base_moved(forked):
+    """Bug Bff82f56207: MERGE_HEAD was main's tip when the merge began; main then gained a
+    rules commit. The staged merge is still the remedy and must be committable."""
+    repo, wt = forked
+    _land(wt, "src/app.py", "x = 'feat'\n")
+    _land(repo, "src/app.py", "x = 'main'\n")
+    merge = _git(wt, "merge", "main")
+    assert merge.returncode != 0 and "CONFLICT" in merge.stdout, merge.stdout
+    _land(repo, "AGENTS.md", "# rules v2\n")  # the base moves after MERGE_HEAD was taken
+    _write(wt, "src/app.py", "x = 'both'\n")
+    _git(wt, "add", "src/app.py")
+    r = _git(wt, "commit", "--no-edit")
+    assert r.returncode == 0, f"the staged merge was refused: {r.stderr}"
+
+
 def test_merging_something_other_than_the_base_is_not_exempt(forked):
     repo, wt = forked
     _git(repo, "checkout", "-q", "-b", "side")
