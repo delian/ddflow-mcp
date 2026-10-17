@@ -119,16 +119,11 @@ def _queue(repo: Path, agent: str = ""):
         return None
 
 
-def _live(st: State | None) -> list[str]:
-    return PA.live_ids(st) if st else []
-
-
 def _report(repo: Path, plan: dict[str, Any], queue) -> tuple[PC.Report, Config]:
     tracked = _tracked(repo)
-    cfg = queue[1] if queue else Config.load(repo)
-    similar = _hunt(repo, queue[0], cfg, queue[2], set(plan)) if queue else None
-    known = _live(queue[2]) if queue else None
-    return PC.check(plan, tracked=tracked, similar=similar, known=known), cfg
+    log, cfg, st = queue
+    similar = _hunt(repo, log, cfg, st, set(plan))
+    return PC.check(plan, tracked=tracked, similar=similar, known=PA.live_ids(st)), cfg
 
 
 def plan_check(repo: Path, source: str) -> O.Outcome:
@@ -138,6 +133,10 @@ def plan_check(repo: Path, source: str) -> O.Outcome:
         assert bad is not None
         return bad
     queue = _queue(repo)
+    if queue is None:
+        # "Could not tell" is never a clean plan: a `needs` outside the plan is a queued id
+        # or a typo, and without the queue the two cannot be told apart.
+        return O.refused("plan.check", "the queue cannot be read, so the plan cannot be checked")
     report, cfg = _report(repo, plan, queue)
     tracked = _tracked(repo)
     # Warnings, not findings: a path the plan does not find may be a file it creates.
@@ -351,4 +350,4 @@ def plan_confirm(
             plan=plan_id,
             waiting=waiting,
         )
-    return O.nothing("plan.confirm", f"plan {plan_id} was confirmed meanwhile", plan=plan_id)
+    return O.refused("plan.confirm", "needs --yes and --reason", plan=plan_id)
