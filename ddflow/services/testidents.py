@@ -141,6 +141,9 @@ def spelling_tests(
 
 _LITERAL = re.compile(r"\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'")
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}|\\[ntr]")
+_FLAG = re.compile(
+    r"(?<![\w-])--[a-z0-9]+(?:-[a-z0-9]+)+(?![\w-])"
+)  #: `--add-needs`, not `--force`
 _PHRASE_WORDS = 4  #: consecutive words that make a phrase
 _PHRASE_MIN = 16  #: characters a phrase has, so four short words are not one
 _PHRASE_CAP = 1500  #: phrases kept per change; a rewrite of every message is not a signal
@@ -148,10 +151,12 @@ _PHRASE_CAP = 1500  #: phrases kept per change; a rewrite of every message is no
 
 def _phrases(lines: Iterable[str]) -> set[str]:
     """Runs of ``_PHRASE_WORDS`` words inside the string literals of ``lines``, split at an
-    interpolation (``{x}``) or a newline escape: the text a message is made of."""
+    interpolation (``{x}``) or a newline escape: the text a message is made of; and each
+    command-line flag with a hyphen in its name (``--add-needs``) a literal spells."""
     out: set[str] = set()
     for line in lines:
         for m in _LITERAL.finditer(line):
+            out.update(_FLAG.findall(m.group(1) or m.group(2) or ""))
             for part in _PLACEHOLDER.split(m.group(1) or m.group(2) or ""):
                 words = part.split()
                 for i in range(len(words) - _PHRASE_WORDS + 1):

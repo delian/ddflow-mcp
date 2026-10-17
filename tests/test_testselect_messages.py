@@ -147,6 +147,13 @@ def test_phrases_of_many_files_come_from_one_diff_not_three_git_calls_each(messa
     assert len(calls) <= 4, f"{len(calls)} git calls for {len(files)} files"
 
 
+def test_a_hyphenated_command_line_flag_a_literal_names_is_a_phrase():
+    got = TI._phrases(
+        ['    "--add-needs": "CLI only", "--force": "x", "a--b": 1, \'--no-task\': 2\n']
+    )
+    assert {"--add-needs", "--no-task"} <= got and "--force" not in got and "a--b" not in got, got
+
+
 def test_a_one_word_change_is_no_phrase():
     assert TI._phrases(['    f.read_text(encoding="UTF-8")\n']) == set()
 
