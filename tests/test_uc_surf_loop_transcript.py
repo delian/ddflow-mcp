@@ -6,6 +6,8 @@ seconds) are normalised."""
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -15,6 +17,8 @@ from pathlib import Path
 import pytest
 from conftest import append_config, run_cli, write_config
 
+from ddflow.surfaces import cli
+from ddflow.surfaces.registry import Notices
 from tests.pin_norm import rerecord, stable
 
 ME = "u5pin"
@@ -215,7 +219,21 @@ def _worktree(repo: Path, item: str) -> Path:
     return repo / ".ddflow" / "worktrees" / item
 
 
-def transcript(repo: Path) -> list[tuple[tuple[str, ...], int, str, str]]:
+def run_inproc(repo: Path, *words: str, agent: str) -> tuple[int, str, str]:
+    """`run_cli` without the interpreter start: the same argv through ``cli.main`` with the
+    streams captured. One CLI process is one session, so the once-per-process alias notices
+    are reset per call. The real-process path is `test_a_real_process_agrees_with_in_process`."""
+    cli._NOTICES = Notices()
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code = cli.main(["--repo", str(repo), "--agent", agent, *words])
+        except SystemExit as exc:  # argparse's own usage errors
+            code = exc.code if isinstance(exc.code, int) else 1
+    return code, out.getvalue(), err.getvalue()
+
+
+def transcript(repo: Path, run=run_inproc) -> list[tuple[tuple[str, ...], int, str, str]]:
     out = []
     # The parallelism limit adapts to the machine's load; a fixed one keeps the pin stable.
     err, _ = write_config(repo, [("schedule.parallel", "fixed")])
@@ -238,7 +256,7 @@ def transcript(repo: Path) -> list[tuple[tuple[str, ...], int, str, str]]:
             (_worktree(repo, argv[1]) / argv[2]).write_text("wip\n")
             continue
         who, words = (argv[0][1:], argv[1:]) if argv[0].startswith("@") else (ME, argv)
-        code, so, se = run_cli(repo, *words, agent=who)
+        code, so, se = run(repo, *words, agent=who)
         out.append((words, code, normalise(so, repo), normalise(se, repo)))
     return out
 
@@ -246,9 +264,6 @@ def transcript(repo: Path) -> list[tuple[tuple[str, ...], int, str, str]]:
 EXPECTED = Path(__file__).with_suffix(".json")
 
 
-#: ~600 sequential ddflow subprocesses: 110 s alone, and past the suite-wide 420 s on a host
-#: under heavy load (B-loop-transcript-slow). Its own, generous, bound; a hang still ends.
-@pytest.mark.timeout(1800)
 def test_the_loop_cli_transcript_is_unchanged(repo):
     """The recorded transcript is `test_uc_surf_loop_transcript.json`, re-recorded on purpose
     only, by `ddflow pins regenerate` (which sets DDFLOW_UPDATE_GOLDEN=1): the rows that differ
@@ -263,3 +278,19 @@ def test_the_loop_cli_transcript_is_unchanged(repo):
     assert len(got) == len(want)
     for g, e in zip(got, want, strict=True):
         assert stable(g) == stable(e), f"{g[0]}:\n got {g[1:]}\nwant {e[1:]}"
+
+
+#: Steps whose process boundary matters: an argparse refusal, a JSON body, a plain listing.
+REAL = (("--json", "next"), ("claim", "nope"), ("nosuchverb",), ("--json", "version", "show"))
+
+
+def test_a_real_process_agrees_with_in_process(repo):
+    """The transcript runs in this process; a fresh interpreter must say the same."""
+    for words in REAL:
+        a = run_cli(repo, *words, agent=ME)
+        b = run_inproc(repo, *words, agent=ME)
+        assert (a[0], normalise(a[1], repo), normalise(a[2], repo)) == (
+            b[0],
+            normalise(b[1], repo),
+            normalise(b[2], repo),
+        ), words
