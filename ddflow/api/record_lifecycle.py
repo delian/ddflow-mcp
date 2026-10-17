@@ -532,7 +532,7 @@ def _version(chain: Sequence[Any], to: str | int | None) -> tuple[Any, dict[str,
     chosen = content[-1]
     if to is not None:
         word, _, num = str(to).strip().rpartition(":")
-        if word not in ("", "lamport") or not num.isdigit():
+        if word not in ("", "lamport") or not (num.isascii() and num.isdigit()):
             return None, {}, f"--to wants a version number or lamport:N; got {to!r}"
         n = int(num)
         if word:
