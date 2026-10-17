@@ -164,6 +164,8 @@ def _stage_list(lines: list[str], key: str, *, top: bool) -> list[str] | None:
             return [x.strip(" \"'") for x in m["inline"].strip("[]").split(",") if x.strip()]
         out = []
         for nxt in lines[i + 1 :]:
+            if not nxt.strip() or nxt.lstrip().startswith("#"):
+                continue  # a comment or a blank line inside the list is not its end
             item = _LIST_ITEM.match(nxt)
             if not item:
                 break
@@ -188,7 +190,9 @@ def with_tripwires_on_the_diff(command: str, tree: Path, since: str) -> str:
     # The environment's own SKIP (the selected-tests plan sets one) stays in front.
     first = f'SKIP="${{SKIP:+$SKIP,}}{skip}" {rest}'
     base_args = rest.split(" --all-files")[0]  # `pre-commit run --hook-stage pre-push`
-    ranged = [f"{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
+    # The command's own SKIP= is the operator's skip: it applies to the named runs as well.
+    mine = f"SKIP={lead['ids']} " if lead else ""
+    ranged = [f"{mine}{base_args} --from-ref {since} --to-ref HEAD {i}" for i in ids]
     steps = [f"{first} || rc=1", *(f"{r} || rc=1" for r in ranged)]
     return "rc=0; " + "; ".join(steps) + "; exit $rc"
 
@@ -348,6 +352,7 @@ def _default_with_tripwires(
     against its first parent."""
     if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
         return cmd
+    # (`merge` always says where its range began; this is for a caller that does not.)
     since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
     return with_tripwires_on_the_diff(cmd, tree, since)
 
