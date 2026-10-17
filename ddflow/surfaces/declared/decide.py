@@ -3,14 +3,13 @@ decide task from its decision record -- writes the document, commits, lands, com
 
 from __future__ import annotations
 
+from ...api.decide import decide
 from ..registry import CliPolicy, Command, Param
 
 PAYLOAD = ("item", "decision", "path", "sha", "skipped_gates", "stage")
 
 
 def _call(repo, a, agent, called_from=None, shell_cwd=None):
-    from ...api.decide import decide
-
     return decide(
         repo,
         a["id"],
