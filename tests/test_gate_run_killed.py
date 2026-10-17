@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -61,7 +62,7 @@ def _start(repo: Path, began: Path) -> subprocess.Popen:
 
 
 def _gate(repo: Path) -> dict:
-    code, out, err = run_cli(repo, "--json", "show", "T1")
+    _code, out, _err = run_cli(repo, "--json", "show", "T1")
     return json.loads(out)["gates"].get("unit_tests", {})
 
 
@@ -86,3 +87,25 @@ def test_a_sigterm_run_records_unavailable_before_it_exits(repo, tmp_path):
     assert gate.get("outcome") == "unavailable", gate
     assert "SIGTERM" in gate["reason"], gate
     assert not list(tmp_path.rglob("*.running.*.json"))
+
+
+def test_a_dead_marker_for_a_gate_that_is_gone_is_dropped_without_a_record(repo, tmp_path):
+    tree, _began = _setup(repo, tmp_path)
+    d = next(tmp_path.rglob(".ddflow")) / "runs" / "T1"
+    d.mkdir(parents=True, exist_ok=True)
+    stale = d / "no_such_gate.running.1.json"
+    stale.write_text(
+        json.dumps(
+            {
+                "item": "T1",
+                "gate": "no_such_gate",
+                "pid": 2**22,
+                "pid_start": "",
+                "host": socket.gethostname(),
+                "at": "2026-01-01T00:00:00.000000Z",
+                "path": "",
+            }
+        )
+    )
+    assert run_cli(tree, "gate", "status", "T1")[0] == OK
+    assert not stale.exists()
