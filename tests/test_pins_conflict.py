@@ -206,3 +206,20 @@ def test_a_differing_number_the_generators_do_not_own_is_still_refused(tmp_path)
     rep = PN.regenerate(repo, Config())
     assert "prose" in rep.problem and "line 5" in rep.problem
     assert (repo / "README.md").read_text() == readme  # put back as it was
+
+
+def test_a_malformed_file_does_not_hide_a_decidable_conflict_elsewhere(tmp_path):
+    readme = (
+        "intro\n"
+        + _block("good")
+        + _conflict("the rest of the 308 knobs\n", "the rest of the 310 knobs\n")
+    )
+    repo = _count_repo(tmp_path, readme)
+    (repo / "guide.md").write_text("<<<<<<< HEAD\nnever closed\n")
+    toml = (repo / ".ddflow" / "pins.toml").read_text()
+    (repo / ".ddflow" / "pins.toml").write_text(
+        toml + toml.replace('name = "count"', 'name = "guide"').replace("README.md", "guide.md")
+    )
+    rep = PN.regenerate(repo, Config())
+    assert "guide.md" in rep.problem and "do not pair up" in rep.problem
+    assert "9 knobs" in (repo / "README.md").read_text()  # the count was still decided
