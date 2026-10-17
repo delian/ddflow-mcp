@@ -40,6 +40,14 @@ DEF_KINDS: dict[str, str] = {
     "rule": "a project rule: a constraint agents are held to",
 }
 
+
+
+def register_kind(name: str, summary: str) -> None:
+    """Add a definition kind a data-declared record kind (`core.kinddata`) files under. A name
+    already there is left as it is, so a built-in cannot be redefined by a descriptor."""
+    DEF_KINDS.setdefault(name, summary)
+
+
 ACTIVE = "active"
 RETIRED = "retired"
 SUPERSEDED = "superseded"
