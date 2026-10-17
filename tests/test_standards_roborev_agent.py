@@ -113,6 +113,18 @@ def test_a_range_review_ending_at_the_head_counts_and_the_newest_wins(repo, fake
     assert "was reviewed by" not in out + err, "kilo ran as asked: nothing to say"
 
 
+def test_an_unfinished_job_is_named_as_unfinished_not_as_missing(repo, fake_roborev):
+    """B08da521f70: a job still running made the gate say roborev held no review, which read
+    as a job that vanished; it names the job, its status and `roborev wait`."""
+    head = _item(repo)
+    fake_roborev([_job(7, head, "kilo", status="running")])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    why = _gate(repo).evidence["roborev"]["why"]
+    assert "job 7" in why and "running" in why and "roborev wait 7" in why, why
+    assert "no finished review" not in why
+
+
 def test_no_review_of_the_sha_keeps_the_typed_model_with_a_note(repo, fake_roborev):
     head = _item(repo)
     fake_roborev([_job(7, "0" * 40, "claude-code")])

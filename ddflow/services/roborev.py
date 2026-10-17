@@ -82,6 +82,19 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
         and _job_id(j) is not None
     ]  # fmt: skip
     if not done:
+        pending = [
+            j for j in jobs
+            if isinstance(j, dict) and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
+        ]  # fmt: skip
+        if pending:
+            # `roborev show --job N` of an unfinished job says "no review found", which
+            # reads as a vanished job (B08da521f70); the job is there, just not done.
+            j = max(pending, key=lambda x: _job_id(x) or 0)
+            return None, (
+                f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status') or 'not finished'}, "
+                f"not done: `roborev wait {_job_id(j)}` first (`roborev show --job` of an "
+                "unfinished job says 'no review found'); the reviewer is unchecked"
+            )
         where_ = f"among its last {_LIMIT} jobs" if len(jobs) >= _LIMIT else "on this branch"
         return None, (
             f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
