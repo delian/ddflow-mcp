@@ -56,8 +56,10 @@ def test_the_warning_reaches_the_gate_evidence_and_no_item_adds_none(repo: Path)
     said: list[str] = []
     ev = R._name_the_item(repo, cfg, st, "T1", "rubber_duck", "bob", said.append, {"keep": 1})
     assert ev == {"keep": 1, "reviewed_for_holder": "bob reviewed alice's T1"}
+    assert len(said) == 1 and "leased to alice, and you are bob" in said[0]
     assert R._name_the_item(repo, cfg, st, "T1", "rubber_duck", "alice", said.append, None) is None
     assert R._name_the_item(repo, cfg, st, "", "rubber_duck", "alice", said.append, None) is None
+    assert len(said) == 2 and "no item named" in said[1], "the holder's own review says nothing"
 
 
 def test_an_item_with_no_live_lease_is_said_to_have_none(repo: Path):
