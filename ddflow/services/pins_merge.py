@@ -17,7 +17,7 @@ from ..infra import git as G
 from ..infra.fsio import atomic_write, replace_text
 from . import shared_files as SF
 from .enforce import command_line, hooks_dir
-from .pins import pin_files, regenerate
+from .pins import load_recipes, pin_files, regenerate
 from .pins_text import merge_into
 
 #: The merge driver's name in `.gitattributes` and `git config merge.<name>.driver`.
@@ -268,3 +268,37 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
         actions.append(f"{hook} is not ddflow's; add `ddflow pins regenerate --after-merge` to it")
 
     return actions
+
+
+def hook_notes(repo: Path, cfg: Config) -> list[str]:
+    """`doctor`'s notes when a plain `git merge` would leave a pin stale with nothing to
+    re-record it (bug B09da3e0b13): the hook is off or not installed, or a recipe is one the
+    hook never runs (it runs a suite). `ddflow merge` checks the pins either way."""
+    try:
+        recipes = load_recipes(repo, cfg)
+    except ValueError:
+        return []  # the recipes file itself is `pins regenerate`'s to report
+    if not recipes:
+        return []
+    notes: list[str] = []
+    hook = hooks_dir(repo) / "post-merge"
+    if cfg.pins.after_merge == "off":
+        why = "[pins].after_merge is off"
+    elif not hook.is_file() or HOOK_MARK not in hook.read_text("utf-8", errors="replace"):
+        why = "the post-merge hook is not installed"
+    else:
+        why = ""
+    if why:
+        notes.append(
+            f"pin files are not re-recorded after a git merge: {why}, so two branches that each "
+            "regenerated a generated table can merge into a stale one -- `ddflow pins regenerate "
+            "--install` installs the hook; `ddflow merge` reports stale pins either way"
+        )
+    skipped = [r.name for r in recipes if not r.after_merge]
+    if skipped:
+        notes.append(
+            f"the post-merge hook never re-records {', '.join(skipped)} (they run a suite): "
+            "after a merge that changes a knob or a command's output run `ddflow pins "
+            "regenerate --check`, then `ddflow pins regenerate`"
+        )
+    return notes
