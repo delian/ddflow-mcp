@@ -17,8 +17,8 @@ def conflicting_files(tree: Path) -> list[str]:
 
 def cause(tree: Path, base: str, pins: Callable[[], Iterable[str]] | None = None) -> str:
     """ "; conflicting files: ...; <remedy>", or "" when git names none. A conflict in a pin
-    file is not hand-merged: it is regenerated (`ddflow pins regenerate`, which the
-    post-merge hook runs under `[pins].after_merge`)."""
+    file is not hand-merged: after merging the base into the branch, `ddflow pins regenerate`
+    settles the conflicted pin and re-records it."""
     files = conflicting_files(tree)
     if not files:
         return ""
@@ -28,8 +28,8 @@ def cause(tree: Path, base: str, pins: Callable[[], Iterable[str]] | None = None
     if mine:
         out += (
             f"; {', '.join(mine)} {'is a pin file' if len(mine) == 1 else 'are pin files'}: "
-            f"merge {base} into the branch and run `ddflow pins regenerate` "
-            f"(or set [pins].after_merge so the post-merge hook does), never hand-merge it"
+            f"merge {base} into the branch, then run `ddflow pins regenerate` "
+            f"to settle and re-record it; never hand-merge it"
         )
     rest = [f for f in files if f not in pinned]
     if rest:
