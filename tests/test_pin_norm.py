@@ -93,16 +93,3 @@ def test_whitespace_after_a_usage_block_still_matters():
     assert argparse_stable(base) != argparse_stable(base.replace("error: one", "error:  one"))
     assert argparse_stable(base) != argparse_stable(base.replace("\nddflow link", "\n ddflow link"))
     assert argparse_stable(base + "\n\n  indented  help\n").endswith("\n\n  indented  help\n")
-
-
-def test_the_slow_loop_transcript_carries_its_own_timeout():
-    """B-loop-transcript-slow: ~600 sequential subprocesses outlast the suite-wide 420 s
-    on a loaded host, with no output differing."""
-    from tests import test_uc_surf_loop_transcript as loop
-
-    marks = [
-        m
-        for m in getattr(loop.test_the_loop_cli_transcript_is_unchanged, "pytestmark", [])
-        if m.name == "timeout"
-    ]
-    assert marks and marks[0].args[0] >= 1200
