@@ -123,3 +123,12 @@ def test_a_reworded_conflict_message_is_still_failed(repo, passing_precommit, mo
     monkeypatch.setattr(CI, "NOT_MERGEABLE", "clashes with")
     res = CI.run(repo, Config.load(repo), base=default)
     assert res.status == "failed" and "clashes with" in res.reason, res
+
+
+def test_a_failure_survives_copy_and_pickle():
+    import copy
+    import pickle
+
+    f = CI.Failure("boom", CI.CONFLICT)
+    for g in (copy.deepcopy(f), pickle.loads(pickle.dumps(f))):
+        assert g == "boom" and g.kind == CI.CONFLICT

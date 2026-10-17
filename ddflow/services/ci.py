@@ -48,6 +48,9 @@ class Failure(str):
         obj.kind = kind
         return obj
 
+    def __getnewargs__(self) -> tuple[str, str]:  # copy / pickle rebuild with the kind
+        return (str(self), self.kind)
+
 
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
