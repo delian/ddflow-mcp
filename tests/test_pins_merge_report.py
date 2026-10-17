@@ -66,3 +66,12 @@ def test_ddflow_merge_reports_the_pins(repo):
     text = out + err
     assert "pins STALE after this merge: fast-table" in text, text
     assert "never re-records (they run a suite): golden-suite" in text, text
+
+
+def test_a_broken_recipes_file_is_said_not_silent(repo):
+    """rubber_duck on this fix: an unreadable recipe must not read as 'nothing to say'."""
+    _project(repo)
+    (repo / ".ddflow" / "pins.toml").write_text('[[pin]]\nname = "x"\n')  # no check, no regen
+    report = PM.merge_report(repo, Config.load(repo))
+    assert list(report) == ["unknown"] and "check" in report["unknown"][0], report
+    assert "not checked after this merge" in "\n".join(PM.merge_lines(report))
