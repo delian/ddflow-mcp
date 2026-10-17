@@ -484,7 +484,7 @@ def _f_lease(ctx: PlanCtx, it: Item) -> Blocked | None:
         return Blocked(
             it.id,
             "conflict",
-            f"leased by {held.holder} {held.left_text(ctx.now, unit='another')}",
+            f"leased by {held.holder} {held.left_text(ctx.now, ctx.cfg.lease.grace_s, unit='another')}",
             [it.id],
         )
     return None

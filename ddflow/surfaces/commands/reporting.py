@@ -234,7 +234,7 @@ def cmd_show(a, c: Ctx) -> int:
         # an operator could otherwise only learn from the event log (Bd8038b08a1).
         held = f" on {', '.join(it.lease.globs)}" if it.lease.globs else " on no globs"
         print(
-            f"  lease {it.lease.holder} ({it.lease.left_text(time.time())}){held}"
+            f"  lease {it.lease.holder} ({it.lease.left_text(time.time(), c.cfg.lease.grace_s)}){held}"
             + taken_over_note(it)
         )
     if it.worktree:
