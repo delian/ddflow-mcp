@@ -50,6 +50,7 @@ from . import enforce as E
 from . import migrations as MG
 from . import repairs as RP
 from . import upgrade_plan as UP
+from . import upgrade_written as UW
 from .backups import (  # noqa: F401 -- the backups' home
     BACKUPS,
     MANIFEST,
@@ -328,7 +329,8 @@ def apply(
         return _not_saved(results, todo, why, refused, frm)
 
     saved = {p.resolve() for p in files} if backup_dir else set()
-    late_backup = _late_saver(repo, cfg, backup, (frm, to), saved)
+    before = UW.digests(repo, files)  # what the run changes is what it records as written
+    late_backup = _late_saver(repo, cfg, backup, (frm, to), saved, repo_before=before)
 
     run = _start(log, watch, todo, (frm, to), backup_dir, confirm)
     results += _execute(
@@ -340,7 +342,8 @@ def apply(
     done_cats = _with_earlier(done_cats, plan, earlier, results)
     new_to = (frm or UNSTAMPED) if _unresolved(plan, ok) else to
     lags = _lags(results, plan, frm, to)
-    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons, lags)
+    wrote = UW.written(repo, before, [repo / rel for rel in before])
+    _close(log, run, selected, ok, (frm, new_to, to), done_cats, backup_dir, reasons, lags, wrote)
     return _finish(results, backup_dir, frm, new_to, done_cats, reasons)
 
 
@@ -401,13 +404,20 @@ def _with_earlier(
 
 
 def _late_saver(
-    repo: Path, cfg: Config, mode: str, versions: tuple[str, str], saved: set[Path]
+    repo: Path,
+    cfg: Config,
+    mode: str,
+    versions: tuple[str, str],
+    saved: set[Path],
+    repo_before: dict[str, str | None],
 ) -> Callable[[list[Path]], str]:
     """The function a migration calls with files its own detect now plans that the plan's did
     not name (earlier steps of a run can change what it finds): they are saved too, in the same
     mode, so none is rewritten without a copy."""
 
     def late_backup(more: list[Path]) -> str:
+        for rel, d in UW.digests(repo, more).items():
+            repo_before.setdefault(rel, d)  # untouched until now: its bytes are the "before"
         fresh = [p for p in more if p.resolve() not in saved]
         if not fresh or mode == "none":
             return ""
@@ -439,12 +449,13 @@ def _close(
     backup_dir: str,
     reasons: dict[str, str],
     stamp_only: bool = False,
+    wrote: dict[str, str] | None = None,
 ) -> None:
     """End the run's record: the upgrade itself when something was settled (or only the
     stamp was left to move), else a failure."""
     frm, new_to, to = versions
     if ok or stamp_only:
-        _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run)
+        _record(log, todo, ok, frm, new_to, cats, backup_dir, reasons, run, wrote)
     elif run:
         _note(log, run, "failed", summary=f"upgrade {frm or 'unstamped'} -> {to}: nothing settled")
 
@@ -544,6 +555,7 @@ def _record(
     backup_dir: str,
     reasons: dict[str, str],
     run: str = "",
+    wrote: dict[str, str] | None = None,
 ) -> None:
     """Append the closing `upgrade.applied` event: replay's account of this upgrade."""
     log.append(
@@ -557,6 +569,7 @@ def _record(
             "backup": backup_dir,
             "items": sorted(ok),
             "confirmed": reasons,
+            "written": wrote or {},
             "config_changes": [
                 {k: i[k] for k in ("key", "change", "old", "new")}
                 for i in todo

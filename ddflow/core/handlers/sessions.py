@@ -198,6 +198,11 @@ def _h_upgrade_applied(st: State, ev: Event) -> None:
             "items": [i for i in d.get("items") or [] if isinstance(i, str)],
             "confirmed": dict(d["confirmed"]) if isinstance(d.get("confirmed"), dict) else {},
             "config_changes": [c for c in d.get("config_changes") or [] if isinstance(c, dict)],
+            "written": (
+                {k: v for k, v in d["written"].items() if isinstance(k, str) and isinstance(v, str)}
+                if isinstance(d.get("written"), dict)
+                else {}
+            ),
             "summary": str(d.get("summary", "")),
             "run": run_id,
             "agent": ev.agent,

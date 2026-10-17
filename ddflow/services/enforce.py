@@ -29,6 +29,7 @@ where the agent is not the one running it.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import itertools
 import os
 import re
@@ -1527,6 +1528,9 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     state = localize(fold(log.read_all(), strict=False), log, time.time())
+    paths = _beyond_upgrade_output(repo, state, paths)
+    if not paths:
+        return Verdict(OK, "")
     now = time.time()
     me = log.agent_id
     here = _committing_tree(repo)
@@ -1552,6 +1556,22 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
     if mode == "warn":
         return Verdict(OK, msg + '\n\n(warning only; set the policy to "block" to refuse)')
     return Verdict(FAIL, msg)
+
+
+def _beyond_upgrade_output(repo: Path, state, paths: list[str]) -> list[str]:
+    """``paths`` less the ones whose staged bytes are exactly what an `upgrade --apply`
+    recorded as written (`upgrade.applied` ``written``): the tool's own output needs no lease,
+    but a file edited after the upgrade has another digest and does."""
+    wrote: dict[str, set[str]] = {}
+    for up in state.upgrades:
+        for rel, digest in (up.get("written") or {}).items():
+            wrote.setdefault(rel, set()).add(digest)
+    out = []
+    for p in paths:
+        data = staged_bytes(repo, p) if p in wrote else None
+        if data is None or hashlib.sha256(data).hexdigest() not in wrote[p]:
+            out.append(p)
+    return out
 
 
 def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | None:
