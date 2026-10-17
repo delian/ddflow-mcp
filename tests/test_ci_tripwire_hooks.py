@@ -140,6 +140,8 @@ def test_merge_passes_the_range_it_added_to_the_after_merge_check(repo, monkeypa
         ("        stages: [pre-push]\n", ["frozen-workflow-files"]),
         ("        stages:\n          - pre-commit\n          - push\n", ["frozen-workflow-files"]),
         ("        stages:\n          - pre-commit\n", []),
+        ("        stages:\n        - pre-commit\n", []),  # a list at its key's own indent
+        ("        stages:\n        - pre-push\n", ["frozen-workflow-files"]),
     ],
 )
 def test_a_tripwire_kept_to_another_stage_is_not_run_at_pre_push(tmp_path, extra, expected):
@@ -154,3 +156,22 @@ def test_a_tripwire_kept_to_another_stage_is_not_run_at_pre_push(tmp_path, extra
 def test_default_stages_without_pre_push_keep_an_unstaged_tripwire_out(tmp_path):
     (tmp_path / ".pre-commit-config.yaml").write_text("default_stages: [pre-commit]\n" + CONFIG)
     assert CI.tripwire_ids(tmp_path) == []
+
+
+def test_default_stages_as_a_list_at_the_left_margin_are_read(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text("default_stages:\n- pre-commit\n" + CONFIG)
+    assert CI.tripwire_ids(tmp_path) == []
+
+
+def test_the_after_merge_check_without_a_range_still_checks_the_last_commit(repo):
+    """No `changed_from` on the base itself: the commit just made against its first parent, so
+    a merge that touched the frozen paths still fires the tripwire."""
+    default = _project(repo)
+    _git(repo, "switch", "-q", "-c", "work")
+    _commit(repo, {"frozen/new.txt": "touched\n"}, "touches the frozen paths")
+    _git(repo, "switch", "-q", default)
+    _git(repo, "merge", "-q", "--no-ff", "work", "-m", "merge work")
+    cfg = Config.load(repo)
+    cmd, _ = CI.main_command(repo, cfg)
+    res = CI.run(repo, cfg, ref="HEAD", command=cmd)
+    assert res.status == "failed" and [c.id for c in res.checks if not c.ok], res
