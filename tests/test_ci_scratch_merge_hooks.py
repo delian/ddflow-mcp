@@ -98,3 +98,28 @@ def test_a_merge_git_refused_for_another_reason_is_not_a_conflict_either(
     res = CI.run(repo, Config.load(repo), base=default)
     assert res.status == "unavailable", res
     assert "not something we can merge" in res.reason
+
+
+def test_merge_tree_yields_a_structured_kind_not_prose(repo, passing_precommit):
+    """Bug Baf8f6a7c74: run() told a conflict from a merge it could not do by its wording."""
+    default = _diverged(repo)
+    sha = CI.W.rev(repo, "HEAD")
+    with CI.merge_tree(repo, sha, default) as (tree, why):
+        assert tree is not None and why.kind == "ok"
+    with CI.merge_tree(repo, sha, "no-such-base") as (tree, why):
+        assert tree is None and why.kind == "cannot-merge"
+    _git(repo, "switch", "-q", default)
+    _commit(repo, {"b.txt": "other\n"}, "main edits b")
+    _git(repo, "switch", "-q", "work")
+    with CI.merge_tree(repo, sha, default) as (tree, why):
+        assert tree is None and why.kind == "conflict"
+
+
+def test_a_reworded_conflict_message_is_still_failed(repo, passing_precommit, monkeypatch):
+    default = _diverged(repo)
+    _git(repo, "switch", "-q", default)
+    _commit(repo, {"b.txt": "other\n"}, "main edits b")
+    _git(repo, "switch", "-q", "work")
+    monkeypatch.setattr(CI, "NOT_MERGEABLE", "clashes with")
+    res = CI.run(repo, Config.load(repo), base=default)
+    assert res.status == "failed" and "clashes with" in res.reason, res

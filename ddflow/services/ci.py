@@ -34,6 +34,21 @@ DEFAULT_COMMAND = "pre-commit run --hook-stage pre-push --all-files"
 #: What `merge_tree` says of a base that conflicts with the ref, and what `run` reads back to
 #: tell that FAILED from a merge git could not finish (UNAVAILABLE): one constant for both.
 NOT_MERGEABLE = "does not merge with"
+CONFLICT = "conflict"  # Failure.kind: git merged and the branches disagree
+CANNOT_MERGE = "cannot-merge"  # Failure.kind: the merge could not be done (timeout, lock, bad ref)
+
+
+class Failure(str):
+    """Why merge_tree has no tree: the prose, plus a structured ``kind`` callers branch on."""
+
+    kind: str
+
+    def __new__(cls, text: str, kind: str) -> Failure:
+        obj = super().__new__(cls, text)
+        obj.kind = kind
+        return obj
+
+
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
 
@@ -206,13 +221,26 @@ def tool_missing(command: str) -> str:
 def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, str]]:
     """A scratch worktree of `ref` with `base` merged in: (path, "") or (None, why not).
 
+    The "why" is a ``Failure`` (a str) whose ``kind`` is "ok", "conflict" or "cannot-merge".
+
     Removed on exit. A base already contained in `ref` needs no merge; a base that
     conflicts with `ref` is reported as the failure it is."""
     with W.scratch_tree(repo, ref, detach=True, prefix="ddflow-ci.", quiet=True) as s:
         if s.path is None:
-            yield None, f"could not create a scratch worktree of {ref}: {s.error}"
+            yield (
+                None,
+                Failure(f"could not create a scratch worktree of {ref}: {s.error}", CANNOT_MERGE),
+            )
             return
         tree = s.path
+        if base and not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
+            yield (
+                None,
+                Failure(
+                    f"could not merge {base} into {ref}: {base!r} is not a commit", CANNOT_MERGE
+                ),
+            )
+            return
         if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
             # No hook of the repository runs in the scratch merge (core.hooksPath): the
             # post-merge hook regenerated pins by running the golden suite, which outlived
@@ -236,12 +264,20 @@ def merge_tree(repo: Path, ref: str, base: str) -> Iterator[tuple[Path | None, s
             # exit 128) is a merge it could not do, which the gate cannot call a conflict.
             conflict = m.code == 1 or "unrelated histories" in said
             if not m.ok and not conflict:
-                yield None, f"could not merge {base} into {ref}: {m.err or m.out}"[-400:]
+                yield (
+                    None,
+                    Failure(
+                        f"could not merge {base} into {ref}: {m.err or m.out}"[-400:], CANNOT_MERGE
+                    ),
+                )
                 return
             if not m.ok:
-                yield None, f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}"
+                yield (
+                    None,
+                    Failure(f"{ref} {NOT_MERGEABLE} {base}: {(m.out or m.err)[-400:]}", CONFLICT),
+                )
                 return
-        yield tree, ""
+        yield tree, Failure("", "ok")
 
 
 def parse_checks(output: str) -> list[Check]:
@@ -315,7 +351,7 @@ def run(
         return refused
     with merge_tree(repo, sha, base) as (tree, failure):
         if tree is None:
-            status = "failed" if NOT_MERGEABLE in failure else "unavailable"
+            status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         cmd = _default_with_tripwires(repo, cfg, cmd, tree, sha, base, changed_from)
