@@ -682,6 +682,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
             tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
             keep_output=G.run_log_writer(repo, item, gate),
             log_host=log.agent_id,
+            cfg=cfg,
         ),
     )
     if scope is not None:
@@ -693,7 +694,11 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
 
     def rerun(g):
         return G.run_command_gate(
-            g, cwd, on_tick=keeper, tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0
+            g,
+            cwd,
+            on_tick=keeper,
+            tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
+            cfg=cfg,
         )
 
     _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)

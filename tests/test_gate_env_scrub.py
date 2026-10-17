@@ -67,3 +67,24 @@ def test_the_ci_command_does_not_see_the_callers_identity(repo, monkeypatch):
 
 def test_child_env_leaves_everything_else(monkeypatch):
     assert child_env(None, {"A": "1", "DDFLOW_AGENT": "x"}) == {"A": "1"}
+
+
+def test_a_machine_local_scrub_env_reaches_a_gate_run_in_the_items_worktree(repo, monkeypatch):
+    """The local layer is git-ignored, so it is absent from the item's worktree: the gate
+    must take the pipeline's resolved config, not re-read the worktree's."""
+    import json
+
+    run_cli(repo, "init")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "adopt"], check=True)
+    local = repo / ".ddflow" / "local"
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "config.toml").write_text('[gates]\nscrub_env = ["DDFLOW_AGENT", "KEEPME"]\n')
+    (repo / ".ddflow" / "gates.toml").write_text(f"[gate.unit_tests]\ncommand = {SHOW!r}\n")
+    monkeypatch.setenv("KEEPME", "x")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == 0, (out, err)
+    code, out, err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")
+    assert code == 0, (out, err)
+    assert "|unset]" in json.loads(out)["evidence"]["tail"], out
