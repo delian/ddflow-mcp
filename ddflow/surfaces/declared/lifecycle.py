@@ -218,7 +218,7 @@ COMMANDS: tuple[Command, ...] = (
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
         call=lambda repo, a, agent, called_from=None: _api().heartbeat(
-            repo, a["id"], agent=agent, called_from=called_from
+            repo, a.get("id", ""), agent=agent, called_from=called_from
         ),
         payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
         render=L.heartbeat_text,

@@ -12,8 +12,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from helpers import rpc_call
 
 from ddflow.infra.log import EventLog
+from ddflow.surfaces.mcp import Server
 
 
 def _seed(repo: Path, *ids: str) -> None:
@@ -56,3 +58,10 @@ def test_another_agents_lease_is_not_listed_as_the_callers(repo):
     assert run_cli(repo, "claim", "T2", "--no-worktree", agent="w")[0] == 0
     code, out, err = run_cli(repo, "heartbeat", agent="w")
     assert code == 0 and "renewed T2" in out, out + err
+
+
+def test_the_mcp_tool_without_an_id_renews_the_held_item(repo):
+    _seed(repo, "T1")
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="w")[0] == 0
+    out = rpc_call(Server(repo), "ddflow_heartbeat", as_agent="w")
+    assert out["_meta"]["exit"] == 0 and "bad arguments" not in str(out), out
