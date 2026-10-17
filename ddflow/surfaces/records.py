@@ -150,7 +150,9 @@ def _common(name: str, kind: R.RecordKind) -> Param:
         ),
         "all": Param("all", type="boolean", help="Include retired records."),
         "limit": Param(
-            "limit", type="integer", help=f"Rows shown (default {R.DEFAULT_LIMIT}; 0 = the most)."
+            "limit",
+            type="integer",
+            help=f"Rows shown (default {R.DEFAULT_LIMIT}; 0 = the most); history: the newest N.",
         ),
         "reason": Param("reason", help="Why; kept in the history.", required=True),
         "unset": Param("unset", type="array", help="Fields to remove.", repeat=True),
@@ -183,9 +185,8 @@ def _common(name: str, kind: R.RecordKind) -> Param:
         "from_file": Param("from_file", help="TOML file of [[part]] tables."),
         "to_version": Param(
             "to_version",
-            type="integer",
             flag="--to",
-            help="Version number or lamport.",
+            help="Version number, or lamport:N.",
         ),
         "relation": Param(
             "relation",
@@ -497,8 +498,8 @@ def _history_text(data: Mapping[str, Any]) -> str:
         v = f" v{h['version']}" if "version" in h else ""
         head = f"  {h['at']}  {h['event']}{v}  {h['by']}"
         for key in ("session", "reason", "successor", "split_into", "split_from", "restored_from"):
-            if h.get(key):
-                head += f"  {key}={h[key]}"
+            if h.get(key):  # json: the reason is a person's text, one line, no control codes
+                head += f"  {key}={json.dumps(h[key]) if key == 'reason' else h[key]}"
         lines.append(head)
         for name, ch in (h.get("changes") or {}).items():
             before = json.dumps(ch["before"]) if "before" in ch else "(none)"

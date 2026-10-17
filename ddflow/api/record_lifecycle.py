@@ -385,7 +385,7 @@ def parts_from_file(repo: Path, path: str, kind: RecordKind) -> tuple[list[tuple
         return [], f"{path}: the parts file must be inside the repository"
     try:
         doc = tomllib.loads(target.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, ValueError) as exc:  # ValueError: not UTF-8, or not TOML
         return [], f"{path}: cannot read parts: {exc}"
     rows = doc.get("part")
     if not isinstance(rows, list) or not all(isinstance(r, dict) and r.get("id") for r in rows):
@@ -521,25 +521,27 @@ def _vet_parts(
 # -- restore -------------------------------------------------------------------------
 
 
-def _version(chain: Sequence[Any], to: int | None) -> tuple[Any, dict[str, Any], str]:
-    """The content event chosen by ``to`` (a lamport, else a version number; None: the last)
-    and the fields as of it, or a reason."""
+def _version(chain: Sequence[Any], to: str | int | None) -> tuple[Any, dict[str, Any], str]:
+    """The content event chosen by ``to`` and the fields as of it, or a reason. ``to`` is a
+    version number of the history (``3``), or the lamport of one of its entries
+    (``lamport:42``); None is the last version. The two never mix: a lamport is a counter of
+    the whole log and often equals a small version number."""
     content = [e for e in chain if e.kind in ("def.recorded", "def.updated")]
     if not content:
         return None, {}, "no earlier version in the log"
     chosen = content[-1]
     if to is not None:
-        by_lamport = [e for e in content if e.lamport == to]
-        if by_lamport:
-            chosen = by_lamport[0]
-        elif 1 <= to <= len(content):
-            chosen = content[to - 1]
+        word, _, num = str(to).strip().rpartition(":")
+        if word not in ("", "lamport") or not num.isdigit():
+            return None, {}, f"--to wants a version number or lamport:N; got {to!r}"
+        n = int(num)
+        if word:
+            found = [e for e in content if e.lamport == n]
         else:
-            return (
-                None,
-                {},
-                f"no version {to}: versions 1..{len(content)}, or a lamport of one of them",
-            )
+            found = content[n - 1 : n] if n >= 1 else []
+        if not found:
+            return None, {}, f"no such version {to}: versions 1..{len(content)}"
+        chosen = found[0]
     fields: dict[str, Any] = {}
     for e in content:
         fields = _apply(fields, e)
@@ -553,12 +555,12 @@ def record_restore(
     kind: RecordKind,
     rid: str,
     *,
-    to: int | None = None,
+    to: str | int | None = None,
     reason: str,
     agent: str = "",
 ) -> O.Outcome:
     """Bring back a retired, superseded or merged record (a split one too: its parts stay)
-    with the fields of ``to`` (a version number of its history or the lamport of one; default
+    with the fields of ``to`` (a version number of its history, or ``lamport:N``; default
     the last version). Recorded as a new version that says what it restored."""
     ev = _event(kind, "restore")
     if (pre := _pre(kind, "restore", repo, id=rid, to=to, reason=reason, agent=agent)) is not None:
