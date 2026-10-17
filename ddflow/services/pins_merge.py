@@ -295,15 +295,13 @@ def driver_notes(repo: Path, cfg: Config) -> list[str]:
     ]
 
 
-def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
-    """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
-    line = line or command_line
-    files = pin_files(repo, cfg)
-    # Keeping our side is only safe while the post-merge hook re-records the other side's
-    # pins: with after_merge off nothing would, so nothing is installed.
-    if not files or cfg.pins.after_merge == "off":
-        return []
+def sync_attributes(repo: Path, cfg: Config) -> list[str]:
+    """Add the `merge=pinsregen` line of every recipe file `.gitattributes` lacks; the actions.
+    Touches neither the git config nor the post-merge hook (DX-pins-attributes-follow-recipes)."""
+    files = _wanted(repo, cfg)
     actions: list[str] = []
+    if not files:
+        return actions
     attrs = Path(repo) / ".gitattributes"
     text = attrs.read_text("utf-8") if attrs.exists() else ""
     have = set(text.splitlines())
@@ -313,6 +311,18 @@ def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
         body = text + ("" if not text or text.endswith("\n") else "\n") + "\n".join(new) + "\n"
         replace_text(attrs, body)
         actions += [f"added '{a}' to .gitattributes" for a in new]
+    return actions
+
+
+def install(repo: Path, cfg: Config, *, line=None) -> list[str]:
+    """Write the merge driver for the recipes' files, and the post-merge hook; the actions."""
+    line = line or command_line
+    files = pin_files(repo, cfg)
+    # Keeping our side is only safe while the post-merge hook re-records the other side's
+    # pins: with after_merge off nothing would, so nothing is installed.
+    if not files or cfg.pins.after_merge == "off":
+        return []
+    actions = sync_attributes(repo, cfg)
     actions += _set_driver_config(repo, line)
     hook = hooks_dir(repo) / "post-merge"
     body = f"#!/bin/sh\n{HOOK_MARK}\n{line('pins regenerate --after-merge')}\n"
