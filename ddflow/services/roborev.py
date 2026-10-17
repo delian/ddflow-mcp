@@ -58,6 +58,33 @@ def _covers(git_ref: str, sha: str) -> bool:
     )
 
 
+def _unfinished_note(jobs: list, sha: str) -> str:
+    """Why a covering job is not yet a review, when it is queued or running ('' if none)."""
+    pending = [
+        j for j in jobs
+        if isinstance(j, dict) and j.get("status") in _UNFINISHED
+        and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
+    ]  # fmt: skip
+    if not pending:
+        return ""
+    # `roborev show --job N` of an unfinished job says "no review found", which reads as a
+    # vanished job (B08da521f70); the job is there, just not done.
+    j = max(pending, key=lambda x: _job_id(x) or 0)
+    return (
+        f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status')}, not done: "
+        f"`roborev wait {_job_id(j)}` first (`roborev show --job` of an unfinished job "
+        "says 'no review found'); the reviewer is unchecked"
+    )
+
+
+def _no_review_note(jobs: list, sha: str) -> str:
+    """Why ``sha`` has no finished review: an unfinished job, or none within the list."""
+    if note := _unfinished_note(jobs, sha):
+        return note
+    where_ = f"among its last {_LIMIT} jobs" if len(jobs) >= _LIMIT else "on this branch"
+    return f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
+
+
 def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
     """(the newest finished review of ``sha``, a note). ``(None, note)`` when roborev is
     not installed, could not be asked, or holds no finished review of ``sha``. Searched from ``where`` (the item's
@@ -86,23 +113,7 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
         and _job_id(j) is not None
     ]  # fmt: skip
     if not done:
-        pending = [
-            j for j in jobs
-            if isinstance(j, dict) and j.get("status") in _UNFINISHED and _covers(str(j.get("git_ref") or ""), sha) and _job_id(j) is not None
-        ]  # fmt: skip
-        if pending:
-            # `roborev show --job N` of an unfinished job says "no review found", which
-            # reads as a vanished job (B08da521f70); the job is there, just not done.
-            j = max(pending, key=lambda x: _job_id(x) or 0)
-            return None, (
-                f"roborev job {_job_id(j)} for {sha[:10]} is {j.get('status') or 'not finished'}, "
-                f"not done: `roborev wait {_job_id(j)}` first (`roborev show --job` of an "
-                "unfinished job says 'no review found'); the reviewer is unchecked"
-            )
-        where_ = f"among its last {_LIMIT} jobs" if len(jobs) >= _LIMIT else "on this branch"
-        return None, (
-            f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
-        )
+        return None, _no_review_note(jobs, sha)
     job, j = max(done, key=lambda pair: pair[0])
     return Review(job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")), ""
 
