@@ -144,6 +144,68 @@ def test_scan_reads_the_pre_commit_config_slash_commands_and_driver_docs(tmp_pat
     }
 
 
+def test_a_pre_commit_hook_name_is_prose_only_its_entry_is_a_command(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n"
+        "  - repo: local\n"
+        "    hooks:\n"
+        "      - id: lease\n"
+        "        name: ddflow lease covers the staged paths\n"
+        "        description: ddflow item trailer (Phase / Phase-ships)\n"
+        "        name: >-\n"
+        "          https://example.com/x\n"
+        "          ddflow lease folded onto a continuation line\n"
+        "        entry: scripts/ddflow_hook.sh hooks check-commit\n"
+        "      - id: bad\n"
+        "        name: ddflow lease\n"
+        "        entry: ddflow gate bogus\n"
+    )
+    found = C.scan(tmp_path, VOCAB)
+    assert [(f.line, f.ref.text) for f in found] == [(13, "gate bogus")]
+
+
+def test_a_block_scalar_pre_commit_entry_and_an_args_list_are_still_read(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n- repo: local\n  hooks:\n  - id: a\n    name: ddflow lease\n"
+        "    entry: >-\n      ddflow gate bogus\n"
+        "  - id: c\n    name: x\n    entry: sh\n    args:\n    - ddflow gate bogus2\n"
+    )
+    assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [
+        (7, "gate bogus"),
+        (12, "gate bogus2"),
+    ]
+
+
+def test_a_hook_name_that_quotes_its_own_command_is_not_scanned(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n- repo: local\n  hooks:\n  - id: a\n"
+        "    name: scripts/hook.sh hooks check-commit (ddflow lease)\n"
+        "    entry: scripts/hook.sh hooks check-commit (ddflow lease)\n"
+    )
+    assert [f.line for f in C.scan(tmp_path, VOCAB)] == [6]
+
+
+def test_a_flow_mapping_hook_name_beside_its_entry_is_not_scanned(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n- repo: local\n  hooks:\n"
+        "  - {id: a, name: ddflow lease covers it, entry: scripts/hook.sh check}\n"
+        "  - {id: b, name: ddflow lease, entry: ddflow gate bogus}\n"
+    )
+    assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [(5, "gate bogus")]
+
+
+def test_a_config_the_reader_cannot_parse_still_has_its_entries_read(tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "anchor: &a 1\nrepos:\n- repo: local\n  hooks:\n  - id: a\n    name: ddflow lease\n"
+        "    entry: >-\n      ddflow gate bogus\n"
+        "  - id: b\n    name: x\n    entry: ddflow gate bogus2\n"
+    )
+    assert [(f.line, f.ref.text) for f in C.scan(tmp_path, VOCAB)] == [
+        (8, "gate bogus"),
+        (11, "gate bogus2"),
+    ]
+
+
 def test_the_report_makes_a_broken_managed_reference_a_problem(tmp_path):
     (tmp_path / "AGENTS.md").write_text(
         _managed_md("rules/work-queue", "Run `ddflow nosuch` and `ddflow doc show`.\n")
