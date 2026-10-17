@@ -86,9 +86,20 @@ def test_a_test_that_failed_and_errored_in_teardown_is_listed_as_both():
     text = F.failure_text(ev)
     assert "FAILED t.py::test_y - AssertionError: assert 1 == 2" in text
     assert "ERROR t.py::test_y [teardown] - RuntimeError: boom" in text
+    assert "--- ERROR at teardown of test_y ---" in text
+    assert "E       RuntimeError: boom" in text  # the section body, not only the summary
 
 
 def test_the_more_line_does_not_pretend_to_be_about_errors():
     ev = F.failure_evidence(OUT)
     ev["failed_tests_more"] = 10
     assert "... and 10 more (failures or errors)" in F.failure_text(ev)
+
+
+def test_an_error_after_more_failures_than_the_cap_is_still_listed():
+    fails = "".join(f"FAILED t.py::test_{n} - x\n" for n in range(F.MAX_FAILED_TESTS + 5))
+    ev = F.failure_evidence(
+        OUT.split("ERROR test_longnames", maxsplit=1)[0] + fails + f"ERROR {TID}\n"
+    )
+    assert TID in ev["errored_tests"] and TID in ev["failed_tests"]
+    assert ev["failed_tests_more"] == 5
