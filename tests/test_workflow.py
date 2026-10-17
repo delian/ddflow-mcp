@@ -326,9 +326,7 @@ def test_every_workflow_command_is_reachable_over_mcp(repo):
 
     # And an edit that would leave the workflow incoherent is REFUSED, before writing.
     # `exit` 1 with a reason is the answer here, not a crash and not a silent success.
-    broken = call(
-        "ddflow_workflow_pipeline", {"which": "task", "gates": "unit_tests", "dry_run": True}
-    )
+    broken = call("ddflow_workflow_pipeline", {"which": "task", "gates": "tasks", "dry_run": True})
     assert broken["isError"] is True, broken
     # Across ALL blocks: the reason is its own content block, not a prefix on the JSON,
     # because prepending it made `json.loads(content[0].text)` fail at character 0 for
