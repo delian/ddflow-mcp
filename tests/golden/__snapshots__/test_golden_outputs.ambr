@@ -1647,10 +1647,10 @@
           where the file and the code are one commit.
       health.stall_s = 3600   [default]
           A lane whose lease is current but which has shown no progress (an event on
-          its item other than lease bookkeeping, a commit, a test job in flight, a
-          change in its worktree since the lease began) for this many seconds is
-          STALLED. 0 turns the stalled check off. A heartbeat is not progress, and
-          neither is a file that was changed once and never again.
+          its item other than lease bookkeeping, a commit, a test job in flight, or
+          the newest change in its worktree) for this many seconds is STALLED. Only
+          the NEWEST change counts: a file written once, long ago, is not progress
+          now. 0 turns the stalled check off. A heartbeat is not progress.
       health.runaway_s = 14400   [default]
           A job started for an item whose process is still running after this many
           seconds is a RUNAWAY. It is only reported: the watchdog never signals a

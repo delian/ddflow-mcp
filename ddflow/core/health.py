@@ -175,7 +175,9 @@ def _unresponsive(lane: Lane, waiters: list[str], now: float) -> Finding:
 
 
 def _dead(ln: Lane, now: float) -> Finding:
-    held = "unmeasurable work" if ln.work is None else "unmerged or uncommitted work"
+    held = {None: "unmeasurable work", False: "no work to lose"}.get(
+        ln.work, "unmerged or uncommitted work"
+    )
     pids = ", ".join(map(str, ln.pids))
     return Finding(
         CRASHED,
@@ -284,8 +286,7 @@ def _judge(
     """One lane's own findings: into ``out``, and its STALLED one also into ``stalled``."""
     age = now - ln.progress_at
     if ln.live and ln.gone and limits.crash_s > 0 and now - ln.renewed_at >= limits.crash_s:
-        if ln.work is not False:
-            out.append(_dead(ln, now))
+        out.append(_dead(ln, now))
         return
     if ln.live and limits.stall_s > 0 and age >= limits.stall_s:
         stalled[ln.item] = _stalled(ln, waiters, age)

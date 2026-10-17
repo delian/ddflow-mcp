@@ -22,7 +22,7 @@ class HealthConfig:
     )
     stall_s: int = knob(
         3600,
-        doc="A lane whose lease is current but which has shown no progress (an event on its item other than lease bookkeeping, a commit, a test job in flight, a change in its worktree since the lease began) for this many seconds is STALLED. 0 turns the stalled check off. A heartbeat is not progress, and neither is a file that was changed once and never again.",
+        doc="A lane whose lease is current but which has shown no progress (an event on its item other than lease bookkeeping, a commit, a test job in flight, or the newest change in its worktree) for this many seconds is STALLED. Only the NEWEST change counts: a file written once, long ago, is not progress now. 0 turns the stalled check off. A heartbeat is not progress.",
         check=int_at_least(0),
     )
     runaway_s: int = knob(

@@ -296,6 +296,9 @@ def _records(repo, prefix: str) -> list[str]:
 def test_a_finding_is_reported_once_per_key_and_acted_on_once(repo):
     _contended(repo, reply_s=300)
     first = _health(repo, "--run", "--mode", "propose")
+    again = _health(repo, "--run", "--mode", "propose")
+    ident = lambda d: [(f["kind"], f["item"], f["holder"], f["detail"]) for f in d["findings"]]  # noqa: E731
+    assert ident(again) == ident(first)  # a read-only pass reports the same, not more
     keys = [(f["kind"], f["item"], f["holder"]) for f in first["findings"]]
     assert keys and len(keys) == len(set(keys))  # one finding per (kind, item, holder)
     assert _records(repo, "health_stop:") == []  # propose writes no request
@@ -384,7 +387,8 @@ def test_a_live_lease_whose_process_is_gone_is_crashed_within_crash_s():
     assert f.kind == H.CRASHED and "pid 42" in f.detail and f.evidence["pids"] == [42]
     assert H.inspect([gone(90)], [], [], [], NOW, H.Limits(crash_s=0)) == []
     clean = H.Lane("T1", A, True, NOW - 30, work=False, renewed_at=NOW - 90, gone=True)
-    assert H.inspect([clean], [], [], [], NOW, LIM2) == []  # nothing to lose
+    (f,) = H.inspect([clean], [], [], [], NOW, LIM2)  # reported; nothing to lose, so no expiry
+    assert f.kind == H.CRASHED and "no work to lose" in f.detail
 
 
 def test_a_dead_harness_is_crashed_in_a_real_repo_and_apply_records_the_expiry(repo):

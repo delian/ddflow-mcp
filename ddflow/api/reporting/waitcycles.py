@@ -53,10 +53,14 @@ def health_lines(log, st, cfg, repo, cycles, now: float | None = None, activity=
     if all(m == "off" for m in HW.modes(cfg).values()):
         return []
     at = time.time() if now is None else now
+    by_kind = HW.modes(cfg)
     found = [
         f
         for f in HW.inspect(log, st, cfg, repo, at, cycles, activity=activity)
-        if f.kind != H.CRASHED and f.evidence.get("via") != "cycle"
+        # a lapsed lease is shown by `recover`'s notes; a live lease whose process is gone is not
+        if by_kind[f.kind] != "off"
+        and (f.kind != H.CRASHED or f.evidence.get("pids"))
+        and f.evidence.get("via") != "cycle"
     ]
     shown = cfg.health.shown
     out = [f"health: {f.render()}" for f in found[:shown]]
