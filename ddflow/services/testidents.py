@@ -157,32 +157,60 @@ def _phrases(lines: Iterable[str]) -> set[str]:
     return out
 
 
+_FILE_HEAD = re.compile(r"^diff --git a/.* b/(.*)$")
+_BATCH = 200  #: files per git call, so the command line stays short
+
+
+def _added_removed(diff: str) -> dict[str, list[str]]:
+    """File -> the lines a ``-U0`` diff of several files adds or removes. Only lines after a
+    file's first hunk header count: the ``---`` / ``+++`` headers come before it, and a
+    content line that begins ``--`` is not one."""
+    out: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in diff.splitlines():
+        if m := _FILE_HEAD.match(line):
+            current = out.setdefault(m.group(1), [])
+            started = False
+        elif current is None:
+            continue
+        elif line.startswith("@@"):
+            started = True
+        elif started and line[:1] in "+-":
+            current.append(line[1:])
+    return out
+
+
 def changed_phrases(
     tree: Path, base: str, files: list[str], tip: str = "HEAD", source: Path | None = None
 ) -> dict[str, str]:
     """Phrase -> a changed .py file whose string literals gained or lost it: the message a
-    test asserts on, which the import graph cannot see (B-selectrecall: a CLI message reworded
+    test asserts on, which the import graph cannot see (Bb5b8b17161: a CLI message reworded
     in ``claim_text`` broke ``test_asagent_tree.py``, reached only through a hub). From the
     committed change (``base...tip``) and the working tree against HEAD (when ``tip`` is
-    HEAD); every phrase of an untracked file. {} when git cannot say."""
+    HEAD); every phrase of an untracked file. {} when git cannot say. A few git calls for
+    all the files, not three per file."""
     root = source or tree
+    py = [f for f in files if f.endswith(".py")]
+    lines: dict[str, list[str]] = {f: [] for f in py}
+    untracked = set(py)
+    for i in range(0, len(py), _BATCH):
+        part = py[i : i + _BATCH]
+        specs = ([f"{base}...{tip}"] if base else []) + (["HEAD"] if tip == "HEAD" else [])
+        for spec in specs:
+            for f, got in _added_removed(_diff(tree, spec, "--", *part)).items():
+                if f in lines:
+                    lines[f] += got
+        tracked = W.git(tree, "ls-files", "--", *part)
+        if tracked.code == 0:
+            untracked -= set(tracked.out.splitlines())
     out: dict[str, str] = {}
-    for f in (f for f in files if f.endswith(".py")):
-        diffs = [_diff(tree, f"{base}...{tip}", "--", f)] if base else []
-        if tip == "HEAD":
-            diffs.append(_diff(tree, "HEAD", "--", f))
-        lines = [
-            ln[1:]
-            for d in diffs
-            for ln in d.splitlines()
-            if ln[:1] in "+-" and ln[:3] not in ("---", "+++")
-        ]
-        if W.git(tree, "ls-files", "--error-unmatch", "--", f).code != 0:
+    for f in py:
+        if f in untracked:
             try:
-                lines += (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
+                lines[f] += (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
             except OSError:
                 pass
-        for phrase in sorted(_phrases(lines)):
+        for phrase in sorted(_phrases(lines[f])):
             if len(out) < _PHRASE_CAP:
                 out.setdefault(phrase, f)
     return out
