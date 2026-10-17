@@ -122,13 +122,15 @@ def merge_report(repo: Path, cfg: Config) -> dict[str, list[str]]:
         return {}
     try:
         recipes = load_recipes(repo, cfg)
-    except ValueError as exc:  # an unreadable recipes file is not "nothing to say"
-        return {"unknown": [str(exc)]}
+    except Exception as exc:  # an unreadable recipes file is not "nothing to say"
+        return {"unknown": [str(exc) or type(exc).__name__]}
     if not recipes:
         return {}
     everything = mode == "all"
     try:
-        rep = regenerate(repo, cfg, check=True, after_merge=not everything, recipes=recipes)
+        rep = regenerate(
+            repo, cfg, check=True, after_merge=not everything, bounded=True, recipes=recipes
+        )
     except Exception as exc:  # a line of advice never stops a merge that has landed, or goes quiet
         return {"unknown": [f"the pin check failed: {type(exc).__name__}: {exc}"]}
     if rep.problem:

@@ -88,3 +88,27 @@ def test_a_broken_recipes_file_is_said_not_silent(repo):
     report = PM.merge_report(repo, Config.load(repo))
     assert list(report) == ["unknown"] and "check" in report["unknown"][0], report
     assert "not checked after this merge" in "\n".join(PM.merge_lines(report))
+
+
+def test_a_suite_check_that_times_out_at_merge_is_unknown_not_stale(repo):
+    """critic on this fix: a check that did not finish is not a verdict."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "slow-suite"\nafter_merge = false\nfiles = ["g.json"]\n'
+        'check = ["{python}", "-c", "import time; time.sleep(30)"]\n'
+        'regen = ["{python}", "-c", "pass"]\n'
+    )
+    cfg = Config.load(repo)
+    cfg.pins.merge_check = "all"
+    cfg.pins.after_merge_timeout_s = 1
+    assert PM.merge_report(repo, cfg) == {"unknown": ["slow-suite"]}
+
+
+def test_any_failure_loading_the_recipes_is_said_not_raised(repo, monkeypatch):
+    _project(repo)
+
+    def boom(*_a, **_k):
+        raise PermissionError("pins.toml: permission denied")
+
+    monkeypatch.setattr(PM, "load_recipes", boom)
+    assert PM.merge_report(repo, Config.load(repo)) == {"unknown": ["pins.toml: permission denied"]}
