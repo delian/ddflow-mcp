@@ -25,7 +25,7 @@ def _cfg(**pins) -> Config:
 
 
 def _py(code: str) -> str:
-    return f'["{sys.executable}", "-c", {_toml_str(code)}]'
+    return f'[{_toml_str(sys.executable)}, "-c", {_toml_str(code)}]'
 
 
 def _toml_str(s: str) -> str:
@@ -129,3 +129,15 @@ def test_the_command_prints_progress_on_stderr(repo):
     code, out, err = run_cli(repo, "pins", "regenerate")
     assert code == 0, out + err
     assert "pins: ok: checking" in err and "ok: current" in out
+
+
+def test_a_re_recorded_pin_keeps_the_reason_it_was_stale(tmp_path):
+    done = str(tmp_path / "done")
+    check = f"import os, sys; sys.exit(0 if os.path.exists({done!r}) else 1)"
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "pins.toml").write_text(
+        f'[[pin]]\nname = "a"\nfiles = ["a"]\ncheck = {_py(check)}\n'
+        f"regen = {_py(f'open({done!r}, chr(119)).close()')}\n"
+    )
+    (rep,) = PN.regenerate(tmp_path, _cfg()).pins
+    assert rep.regenerated and rep.stale  # it WAS stale, and now is current

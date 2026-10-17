@@ -257,10 +257,12 @@ def _run_all(repo, cfg, chosen: list[Recipe], check: bool, tick, say, limit) -> 
         return ok
 
     def again(r: Recipe) -> bool:
-        ok = checked(r)
         st = states[r.name]
+        was = (st.stale, st.output)  # why it was re-recorded: kept once it is current again
+        ok = checked(r)
         if ok:
-            st.stale, st.regenerated = False, True
+            st.stale, st.output = was
+            st.regenerated = True
         else:
             st.error = f"still stale after regeneration: {st.output}"
         return ok
